@@ -1,0 +1,477 @@
+module Std.Http.Server
+
+import Std.Bytes as ByteSeq
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Http as Http
+import Std.Http.Message as Message
+import Std.Http.Safe as Safe
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Reply {text}
+import Std.Http.Server.Route as Route
+import Std.Http.Server.Route {dispatch}
+import Std.Net as Net
+import Std.Net.Read as Read
+import Std.Option as Option
+import Std.Result as Result
+import Std.Signal as Signal
+import Std.Sync as Sync
+
+/// Why a server could not start or could not keep serving.
+export type ServerError
+  = Bind(Str)
+  | Accept(Str)
+  | Stopped
+  | Other(Str)
+
+/// A server, ready to be given an address.
+export type Server = {
+  router: Route.Router,
+  middleware: Array[Route.Middleware],
+  headLimit: Int,
+  bodyLimit: Int,
+  readMillis: Int,
+  writeMillis: Int,
+  drainMillis: Int,
+  workers: Int,
+  queueCapacity: Int
+}
+
+/// A running server, and the switch that stops it.
+export type Running = {
+  listener: Net.Listener,
+  port: Int,
+  stopping: Sync.Cell[Bool]
+}
+
+/// The largest head a request may have before it is refused.
+/// A limit is not a tuning choice: without one, a client that opens a
+/// connection and never sends the blank line that ends the head can make the
+/// server hold everything it did send, and enough such clients are the whole
+/// of the attack.
+const HEAD_LIMIT: Int = 65536
+
+/// The largest body a request may carry before it is refused.
+const BODY_LIMIT: Int = 8388608
+
+/// A server over a router, with no middleware and the default limits.
+export fn server(base: &Route.Router) -> Server {
+  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000, drainMillis: 10000, workers: 16, queueCapacity: 64}
+}
+
+/// The handler a server presents, with every step wrapped around it.
+///
+/// Built once rather than per request: the chain is the same for every
+/// request, and rebuilding it on each one would put the whole of the server's
+/// configuration inside its hot path.
+export fn handlerOf(target: &Server) -> Route.Handler {
+  let routed = target.router
+  var next: Route.Handler = fn(request: Route.Request) -> Http.Response { dispatch(&routed, request) }
+  var index = target.middleware.length() - 1
+  while index >= 0 {
+    let outer = target.middleware[index]
+    let inner = next
+    next = fn(request: Route.Request) -> Http.Response { outer(request, inner) }
+    index = index - 1
+  }
+  next
+}
+
+/// A request built from what a connection carried, or the reason it was not
+/// one. The reason is a response rather than an error, because a server that
+/// was handed a malformed message is working correctly when it says so.
+fn readRequest(
+  connection: &Net.Connection,
+  headLimit: Int,
+  bodyLimit: Int,
+  readMillis: Int,
+  peer: Str
+) -> Result[Route.Request, Http.Response] {
+  let expires = clock() + readMillis
+  let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
+  if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
+  let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
+  let Ok(head) = ByteSeq.toText(&pair[0]) else { return Err(badRequest("the head is not UTF-8 text")) }
+  let parsed = Message.parseHead(head)
+  if let Err(problem) = parsed { return Err(badRequest(Message.explain(&problem))) }
+  let message = Result.unwrapOr(parsed, emptyRequest())
+  let framing = Safe.framing(&message.headers)
+  if let Err(problem) = framing { return Err(badRequest(Safe.explain(&problem))) }
+  let framingPair = Result.unwrapOr(framing, (0, false))
+  let needed = framingPair[0]
+  if framingPair[1] {
+    return Err(badRequest("this server does not read a chunked body"))
+  }
+  if needed > bodyLimit { return Err(tooLarge()) }
+  let carried = pair[1]
+  var payload = carried.take(needed)
+  if carried.length() < needed {
+    let more = Read.exactly(connection, needed - carried.length(), expires)
+    if let Err(_) = more { return Err(badRequest("the body did not arrive")) }
+    payload = carried.concat(Result.unwrapOr(more, ByteSeq.empty()))
+  }
+  // A body that is UTF-8 text arrives as text; any other body — an uploaded
+  // image, a compressed payload — arrives as its exact bytes, with the text body
+  // empty. `Route.bodyBytes` answers the bytes either way.
+  let whole = match ByteSeq.toText(&payload) {
+    case Ok(body) => Http.Request{..message, body: body, binaryBody: None}
+    case Err(_) => Http.Request{..message, body: "", binaryBody: Some(payload)}
+  }
+  Ok(
+    Route.Request {
+      message: whole,
+      path: Route.pathOf(whole.target),
+      params: mapOf([]),
+      query: Route.queryOf(whole.target),
+      peer: peer
+    }
+  )
+}
+
+/// Serve one connection: read a request, answer it, and say whether the
+/// connection may carry another.
+///
+/// A connection is kept open unless something said otherwise, because opening
+/// one costs a round trip and a client fetching a page makes many requests.
+/// The response always states its own length, so the client knows where the
+/// body ends without the connection closing to tell it.
+export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool {
+  let peer = Result.unwrapOr(Net.peerOf(connection), "")
+  serveWith(target, connection, handlerOf(target), peer)
+}
+
+fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler, peer: Str) -> Bool {
+  let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis, peer)
+  if let Err(refusal) = read {
+    let _sent = sendResponse(connection, &withLength(&closing(&refusal)), target.writeMillis)
+    false
+  } else {
+    let request = Result.unwrapOr(read, emptyServerRequest())
+    let answer = handle(request)
+    let keeping = wantsKeepAlive(&request.message)
+    let framed = withLength(&answer)
+    let selected = if request.message.method == Http.Head { Http.Response{..framed, body: "", binaryBody: None} } else { framed }
+    let finished = if keeping { selected } else { closing(&selected) }
+    let sent = sendResponse(connection, &finished, target.writeMillis)
+    keeping && Result.isOk(&sent)
+  }
+}
+
+/// Write a response, having first refused one that could not be written.
+///
+/// A line break in a header value would end the header and begin whatever
+/// followed it, which is a response this program did not write. A response
+/// carrying one is replaced rather than escaped: escaping guesses at an intent
+/// no legitimate value has.
+fn sendResponse(connection: &Net.Connection, answer: &Http.Response, millis: Int) -> Result[(), Net.NetError] {
+  if answer.status.reason.contains("\r") || answer.status.reason.contains("\n") || answer.status.code < 100 || answer.status.code > 599 {
+    return Net.sendWithin(connection, &Message.renderResponseBytes(&withLength(&text(500, "invalid response status"))), millis)
+  }
+  if let Err(_) = Safe.headersWritable(&answer.headers) {
+    Net.sendWithin(connection, &Message.renderResponseBytes(&withLength(&text(500, "the response could not be written"))), millis)
+  } else {
+    Net.sendWithin(connection, &Message.renderResponseBytes(answer), millis)
+  }
+}
+
+/// Whether the client asked to keep the connection open.
+/// The protocol's later versions keep it open unless the request says
+/// otherwise, which is the default assumed here.
+fn wantsKeepAlive(message: &Http.Request) -> Bool {
+  for entry in message.headers {
+    if entry[0].toLower() == "connection" {
+      if entry[1].trim().toLower() == "close" { return false }
+    }
+  }
+  true
+}
+
+fn closing(answer: &Http.Response) -> Http.Response {
+  Http.Response {
+    binaryBody: answer.binaryBody, status: answer.status,
+    headers: answer.headers.push(("Connection", "close")),
+    body: answer.body
+  }
+}
+
+/// A response stating its own length.
+///
+/// Added here rather than left to a handler, because a response without it
+/// leaves the client reading until the connection closes: the body arrives,
+/// but only after a wait that looks like the server being slow.
+fn withLength(answer: &Http.Response) -> Http.Response {
+  var headers: Array[(Str, Str)] = []
+  for entry in answer.headers {
+    let name = entry[0].toLower()
+    if name != "content-length" && name != "transfer-encoding" { headers = headers.push(entry) }
+  }
+  let code = answer.status.code
+  if code < 200 || code == 204 || code == 304 {
+    return Http.Response{..*answer, headers: headers, body: "", binaryBody: None}
+  }
+  if code == 205 {
+    return Http.Response{..*answer, headers: headers.push(("Content-Length", "0")), body: "", binaryBody: None}
+  }
+  Http.Response{..*answer, headers: headers.push(("Content-Length", show(Http.responseBytes(answer).length())))}
+}
+
+/// Start listening, and answer what is needed to stop.
+export fn start(host: Str, port: Int) -> Result[Running, ServerError] {
+  let opened = Net.listen(host, port)
+  if let Err(problem) = opened {
+    Err(Bind(show(problem)))
+  } else {
+    let listener = Result.unwrapOr(opened, Net.Listener{token: 0})
+    let actual = Result.unwrapOr(Net.portOf(&listener), port)
+    Ok(Running{listener: listener, port: actual, stopping: Sync.cell(false)})
+  }
+}
+
+/// Which port a running server is on.
+/// Worth asking even when a port was named, because a server started on port
+/// zero was given one by the machine and this is the only way to learn it.
+export fn portOf(running: &Running) -> Int { running.port }
+
+/// Ask a server to stop.
+///
+/// Closing the listener is what ends the accept loop, because accepting does
+/// not answer until a connection arrives and a flag alone would not be read
+/// until one did. The flag is what tells the loop the failure was asked for
+/// rather than a fault.
+export fn stop(running: &Running) -> Result[(), ServerError] {
+  let _flagged = Sync.set(&running.stopping, true)
+  Result.mapErr(Net.closeListener(&running.listener), fn(problem: Net.NetError) -> ServerError {
+      Other(show(problem))
+    })
+}
+
+/// Stop the server when the supervisor asks the program to stop.
+///
+/// The drain below is careful and, until something calls `stop`, unreachable
+/// in the one case it exists for: a deployment, where the request to stop
+/// arrives as a signal. This is the wire between the two.
+///
+/// A thread does the waiting because accepting blocks: the loop is inside
+/// `accept` when the signal arrives, and only closing the listener brings it
+/// out. Closing is what `stop` already does, so the drain that follows is the
+/// ordinary one and nothing here has to know how it works.
+///
+/// Answers whether the program can hear the request at all. `false` means this
+/// platform has no such signal and the server will run until something else
+/// stops it — worth reporting rather than assuming a drain that cannot happen.
+export fn stopOnSignal(running: &Running) -> Bool {
+  if !Signal.listen() {
+    return false
+  }
+  let held = *running
+  let _watcher = Concurrent.start(fn() -> () {
+      var waiting = true
+      while waiting {
+        if Signal.requested() {
+          waiting = false
+        } else {
+          let _slept = Concurrent.sleep(SIGNAL_POLL_MILLIS)
+        }
+      }
+      let _stopped = stop(&held)
+    })
+  true
+}
+
+/// How often the watcher asks whether a stop has been requested.
+///
+/// Short enough that a supervisor's grace period is not spent waiting for this
+/// loop to come round, long enough that an idle server is not busy asking.
+const SIGNAL_POLL_MILLIS: Int = 50
+
+/// Accept connections into a bounded queue consumed by a fixed worker pool.
+///
+/// A connection is handled on its own thread, so one slow request does not
+/// hold up every other client. That is the difference between a server and a
+/// queue: without it, a handler that waits on a database stops the whole
+/// program for as long as it waits.
+///
+/// `limit` bounds how many connections are accepted before the loop ends, so a
+/// caller wanting one does not have to arrange to stop the server. A limit of
+/// zero or less accepts until the server is stopped.
+export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, ServerError] {
+  let listener = running.listener
+  let stopping = running.stopping
+  let serving = *target
+  let queue: Channel.Channel[Net.Connection] = Channel.channel(target.queueCapacity)
+  var workers: Array[Concurrent.Task] = []
+  var failure: Option[ServerError] = None
+  var index = 0
+  let workerCount = if target.workers < 1 { 1 } else { target.workers }
+  while index < workerCount {
+    let started = Concurrent.start(fn() -> () {
+        let handle = handlerOf(&serving)
+        var receiving = true
+        while receiving {
+          match Channel.receive(&queue) {
+            case Ok(Some(connection)) => {
+              let peer = Result.unwrapOr(Net.peerOf(&connection), "")
+              var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
+              while keeping {
+                keeping = serveWith(&serving, &connection, handle, peer)
+                  && !Result.unwrapOr(Sync.get(&stopping), true)
+              }
+              let _closed = Net.close(&connection)
+            }
+            case Ok(None) => { receiving = false }
+            case Err(_) => { receiving = false }
+          }
+        }
+      })
+    match started {
+      case Ok(worker) => { workers = workers.push(worker) }
+      case Err(problem) => {
+        failure = Some(Other("worker startup failed: " + show(problem)))
+        break
+      }
+    }
+    index = index + 1
+  }
+  var served = 0
+  var going = Option.isNone(&failure)
+  while going {
+    match Net.accept(&listener) {
+      case Err(problem) => {
+        if !Result.unwrapOr(Sync.get(&stopping), false) { failure = Some(Accept(show(problem))) }
+        going = false
+      }
+      case Ok(connection) => {
+        match Channel.send(&queue, connection) {
+          case Err(problem) => {
+            let _closed = Net.close(&connection)
+            failure = Some(Other("connection admission failed: " + show(problem)))
+            going = false
+          }
+          case Ok(_) => {
+            served = served + 1
+            going = limit <= 0 || served < limit
+          }
+        }
+      }
+    }
+  }
+  let closed = Channel.close(&queue)
+  let drainLimit = if target.drainMillis < 1 { 1 } else { target.drainMillis }
+  let drainChan: Channel.Channel[Result[(), Concurrent.ConcurrentError]] = Channel.channel(2)
+  let _joiner = Concurrent.start(fn() -> () {
+      let r = Concurrent.joinAll(&workers)
+      let _s = Channel.send(&drainChan, r)
+    })
+  let _timer = Concurrent.start(fn() -> () {
+      let _slept = Concurrent.sleep(drainLimit)
+      let _s = Channel.send(&drainChan, Err(Concurrent.Other("drain deadline exceeded")))
+    })
+  let joined = match Channel.receive(&drainChan) {
+    case Ok(Some(outcome)) => outcome
+    case _ => Err(Concurrent.Other("drain wait failed"))
+  }
+  if let Some(problem) = failure { return Err(problem) }
+  if let Err(problem) = closed { return Err(Other("queue close failed: " + show(problem))) }
+  if let Err(problem) = joined { return Err(Other("worker failed: " + show(problem))) }
+  Ok(served)
+}
+
+/// Start, serve, and stop, for a caller that wants one call.
+export fn listenAndServe(
+  target: &Server,
+  host: Str,
+  port: Int,
+  limit: Int
+) -> Result[Int, ServerError] {
+  let running = start(host, port) ?
+  let served = run(target, &running, limit)
+  let _stopped = stop(&running)
+  served
+}
+
+fn badRequest(reason: Str) -> Http.Response { text(400, reason) }
+
+fn tooLarge() -> Http.Response { text(413, "the body is larger than this server accepts") }
+
+fn emptyRequest() -> Http.Request {
+  Http.Request{method: Http.Get, target: "/", headers: [], body: "", binaryBody: None}
+}
+
+fn emptyServerRequest() -> Route.Request {
+  Route.Request {
+    message: emptyRequest(),
+    path: "/",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: ""
+  }
+}
+
+/// A step that writes a line about every request once its answer is known.
+///
+/// Given as an example of the shape as much as for its own sake: it calls on,
+/// times what it wrapped, and reports afterwards, which is what a step that
+/// only ran before could not do.
+export fn logging(write: fn(Str) -> ()) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let started = clock()
+    let answer = next(request)
+    write(
+      Http.methodName(&request.message.method) + " " + request.path + " -> "
+        + show(answer.status.code) + " in " + show(clock() - started) + "ms"
+    )
+    answer
+  }
+}
+
+/// A server with one decision changed, each answering the server rather than
+/// taking it apart.
+///
+/// Methods, so a server that differs from the default in four ways reads down
+/// the page in the order the decisions are made. As functions taking the
+/// server first, each call had to be wrapped in the next and the server a
+/// reader looks for first ended up furthest in.
+export trait Configuring {
+  fn using(self: &Self, step: Route.Middleware) -> Self
+  fn withLimits(self: &Self, head: Int, payload: Int) -> Self
+  fn withReadDeadline(self: &Self, millis: Int) -> Self
+  fn withWriteDeadline(self: &Self, millis: Int) -> Self
+  fn withWorkers(self: &Self, count: Int, capacity: Int) -> Self
+  fn withDrainDeadline(self: &Self, millis: Int) -> Self
+}
+
+impl Configuring for Server {
+  /// A server with one more step wrapped around every handler it has.
+  fn using(self: &Self, step: Route.Middleware) -> Self {
+    Server{..*self, middleware: self.middleware.push(step)}
+  }
+
+  /// A server with different limits on what a request may be.
+  fn withLimits(self: &Self, head: Int, payload: Int) -> Self {
+    Server{..*self, headLimit: head, bodyLimit: payload}
+  }
+
+  /// Bound socket reading so a connection that stops speaking is not held.
+  fn withReadDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, readMillis: if millis < 1 { 1 } else { millis }}
+  }
+
+  /// Bound socket sending without renewing the budget for partial writes.
+  fn withWriteDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, writeMillis: if millis < 1 { 1 } else { millis }}
+  }
+
+  /// Bound both active connection consumers and queued accepted connections.
+  fn withWorkers(self: &Self, count: Int, capacity: Int) -> Self {
+    Server {
+      ..*self,
+      workers: if count < 1 { 1 } else { count },
+      queueCapacity: if capacity < 1 { 1 } else { capacity }
+    }
+  }
+
+  /// Bound how long draining in-flight connections may take at shutdown.
+  fn withDrainDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, drainMillis: if millis < 1 { 1 } else { millis }}
+  }
+}

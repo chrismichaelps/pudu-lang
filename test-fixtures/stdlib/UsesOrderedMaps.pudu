@@ -1,0 +1,148 @@
+module UsesOrderedMaps
+
+import Std.EnumMap as EnumMap
+import Std.LinkedMap as LinkedMap
+import Std.SortedMap as SortedMap
+
+/// What the three ordered maps promise, including the cases that are easy to
+/// get wrong: an empty structure, a key that is absent, a boundary that falls
+/// exactly on an entry, and a re-insertion that must not move anything.
+///
+/// Each check answers 1, so the total names how many held and a failure says
+/// how far short rather than only that something broke.
+export fn main() -> Int {
+  var held = 0
+
+  // A postage table: the rate for a weight is the heaviest bracket at or below
+  // it, which is the question `Map` cannot ask.
+  let ascending = fn(left: Int, right: Int) -> Bool => left < right
+  let rates = SortedMap.fromPairs(&[(0, "free"), (100, "small"), (500, "large")], ascending)
+
+  match SortedMap.floor(&rates, 250) {
+    case Some(found) => { if found[1] == "small" { held = held + 1 } }
+    case None => {}
+  }
+  // A weight landing exactly on a bracket takes that bracket, not the one below.
+  match SortedMap.floor(&rates, 500) {
+    case Some(found) => { if found[1] == "large" { held = held + 1 } }
+    case None => {}
+  }
+  // Below every bracket there is no answer, rather than a wrong one.
+  match SortedMap.floor(&rates, -1) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  match SortedMap.ceiling(&rates, 250) {
+    case Some(found) => { if found[1] == "large" { held = held + 1 } }
+    case None => {}
+  }
+  // `lower` is strict where `floor` is not: on an exact hit they differ.
+  match SortedMap.lower(&rates, 500) {
+    case Some(found) => { if found[1] == "small" { held = held + 1 } }
+    case None => {}
+  }
+  match SortedMap.higher(&rates, 100) {
+    case Some(found) => { if found[1] == "large" { held = held + 1 } }
+    case None => {}
+  }
+
+  // Keys come back in the caller's order however they were inserted.
+  if SortedMap.keys(&rates) == [0, 100, 500] { held = held + 1 }
+  if SortedMap.size(&rates) == 3 { held = held + 1 }
+
+  // The range is half-open, so the upper bound is excluded.
+  if SortedMap.range(&rates, 0, 500).length() == 2 { held = held + 1 }
+  // An empty range is empty rather than reversed.
+  if SortedMap.range(&rates, 500, 0).length() == 0 { held = held + 1 }
+
+  // Re-inserting a key replaces its value without adding an entry.
+  let replaced = SortedMap.insert(&rates, 100, "medium")
+  if SortedMap.size(&replaced) == 3 { held = held + 1 }
+  if SortedMap.getOr(&replaced, 100, "none") == "medium" { held = held + 1 }
+
+  // Removing a key the map lacks leaves it alone.
+  if SortedMap.size(&SortedMap.remove(&rates, 7)) == 3 { held = held + 1 }
+
+  // An empty ordered map answers nothing rather than failing.
+  let vacant = SortedMap.empty(ascending)
+  if SortedMap.isEmpty(&vacant) { held = held + 1 }
+  match SortedMap.first(&vacant) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // A descending order is the caller's to choose, and the map obeys it.
+  let descending = SortedMap.fromPairs(
+      &[(1, "a"), (3, "c"), (2, "b")],
+    fn(left: Int, right: Int) -> Bool => left > right
+  )
+  if SortedMap.keys(&descending) == [3, 2, 1] { held = held + 1 }
+
+  // Insertion order survives, which is what `Map` gives up.
+  let written = LinkedMap.fromPairs(&[("host", "local"), ("port", "80"), ("auth", "none")])
+  if LinkedMap.keys(&written) == ["host", "port", "auth"] { held = held + 1 }
+
+  // Rewriting a key changes its value and leaves its position alone.
+  let edited = LinkedMap.insert(&written, "host", "remote")
+  if LinkedMap.keys(&edited) == ["host", "port", "auth"] { held = held + 1 }
+  if LinkedMap.getOr(&edited, "host", "none") == "remote" { held = held + 1 }
+  if LinkedMap.size(&edited) == 3 { held = held + 1 }
+
+  // `touch` is the recency order, and does move the key it writes.
+  let touched = LinkedMap.touch(&written, "host", "remote")
+  if LinkedMap.keys(&touched) == ["port", "auth", "host"] { held = held + 1 }
+
+  // Removing closes the gap rather than leaving a hole in the order.
+  let shortened = LinkedMap.remove(&written, "port")
+  if LinkedMap.keys(&shortened) == ["host", "auth"] { held = held + 1 }
+  // Removing an absent key leaves the map alone.
+  if LinkedMap.size(&LinkedMap.remove(&written, "nothing")) == 3 { held = held + 1 }
+
+  match LinkedMap.oldest(&written) {
+    case Some(pair) => { if pair[0] == "host" { held = held + 1 } }
+    case None => {}
+  }
+  match LinkedMap.newest(&written) {
+    case Some(pair) => { if pair[0] == "auth" { held = held + 1 } }
+    case None => {}
+  }
+  match LinkedMap.oldest(&LinkedMap.empty()) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // Values follow their keys' order, not the keys' spelling.
+  if LinkedMap.values(&written) == ["local", "80", "none"] { held = held + 1 }
+
+  // Every key in the domain has a value, so `get` answers a value.
+  let levels = EnumMap.filled(&["debug", "info", "error"], 0)
+  if EnumMap.get(&levels, "info") == 0 { held = held + 1 }
+  if EnumMap.size(&levels) == 3 { held = held + 1 }
+
+  let counted = EnumMap.set(&levels, "error", 5)
+  if EnumMap.get(&counted, "error") == 5 { held = held + 1 }
+  // Setting one key leaves the others alone.
+  if EnumMap.get(&counted, "debug") == 0 { held = held + 1 }
+
+  // The domain keeps the order it was written in, not a sorted one.
+  if EnumMap.keys(&levels) == ["debug", "info", "error"] { held = held + 1 }
+
+  // The domain does not grow: writing an unknown key changes nothing.
+  if EnumMap.size(&EnumMap.set(&levels, "trace", 1)) == 3 { held = held + 1 }
+  match EnumMap.find(&levels, "trace") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // A key listed twice becomes one slot rather than two.
+  if EnumMap.size(&EnumMap.filled(&["a", "b", "a"], 0)) == 2 { held = held + 1 }
+
+  // `from` computes each key's starting value.
+  let widths = EnumMap.from(&["ab", "cde"], fn(name: Str) -> Int => name.length())
+  if EnumMap.get(&widths, "cde") == 3 { held = held + 1 }
+
+  if EnumMap.countValues(&counted, fn(n: Int) -> Bool => n > 0) == 1 { held = held + 1 }
+  if EnumMap.keysWhere(&counted, fn(n: Int) -> Bool => n == 0) == ["debug", "info"] { held = held + 1 }
+
+  held
+}

@@ -1,0 +1,50 @@
+module UsesForeignRecords
+
+/// A record crossing a foreign boundary by value.
+///
+/// Nearly every library worth calling passes its colours, points, and
+/// rectangles this way, so a boundary that admits only scalars admits almost
+/// nothing real. These are ordinary Pudu records — built, read, and matched the
+/// ordinary way — and the declaration says which ones cross.
+type Tint = { red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8 }
+
+/// A record whose fields are of different classes and need padding between
+/// them, which is the case a boundary laying out its own bytes gets wrong.
+type Span = { start: Float64, count: Int32 }
+
+foreign "c" {
+  fn tintSum symbol "pudu_ffi_cpp_tint_sum" (tint: Tint) -> Int32
+  fn tintMake symbol "pudu_ffi_cpp_tint_make" (base: Int32) -> Tint
+  fn spanEnd symbol "pudu_ffi_cpp_span_end" (span: Span) -> Float64
+  fn spanMake symbol "pudu_ffi_cpp_span_make" (start: Float64, count: Int32) -> Span
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    // Four bytes going out, packed into a register by the platform's rule.
+    if tintSum(Tint{red: 1u8, green: 2u8, blue: 3u8, alpha: 4u8}) == 10i32 { held = held + 1 }
+    if tintSum(Tint{red: 0u8, green: 0u8, blue: 0u8, alpha: 0u8}) == 0i32 { held = held + 1 }
+    if tintSum(Tint{red: 255u8, green: 255u8, blue: 255u8, alpha: 255u8}) == 1020i32 {
+      held = held + 1
+    }
+
+    // And coming back, field by field.
+    let made = tintMake(10i32)
+    if made.red == 10u8 { held = held + 1 }
+    if made.green == 11u8 { held = held + 1 }
+    if made.blue == 12u8 { held = held + 1 }
+    if made.alpha == 13u8 { held = held + 1 }
+
+    // A record of two classes with padding between them, out and back.
+    if spanEnd(Span{start: 2.5f64, count: 3i32}) == 5.5f64 { held = held + 1 }
+    if spanEnd(Span{start: 0.0f64, count: 0i32}) == 0.0f64 { held = held + 1 }
+    let stretch = spanMake(1.25f64, 7i32)
+    if stretch.start == 1.25f64 { held = held + 1 }
+    if stretch.count == 7i32 { held = held + 1 }
+
+    // A field written out of order still crosses in the order declared.
+    if tintSum(Tint{alpha: 4u8, blue: 3u8, green: 2u8, red: 1u8}) == 10i32 { held = held + 1 }
+  }
+  held
+}

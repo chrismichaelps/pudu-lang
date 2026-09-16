@@ -1,0 +1,102 @@
+module Db.Comments
+
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Option as Option
+
+/// Replies to a post, oldest first.
+///
+/// Oldest first because a conversation is read in the order it happened; the
+/// feed is newest first because a feed is a list of what is new. The two orders
+/// are different questions, not an inconsistency.
+export type Comment = { id: Int, post: Int, author: Str, body: Str, written: Int }
+
+export type CommentError = { message: Str }
+
+export fn under(db: &Database.Database, post: Int) -> Result[Array[Comment], CommentError] {
+  read(
+    db,
+    "SELECT id, post, author, body, written FROM comment WHERE post = ? ORDER BY written ASC, id ASC",
+      &[Driver.IntegerValue(big(post))]
+  )
+}
+
+export fn add(
+  db: &Database.Database,
+  post: Int,
+  author: Str,
+  body: Str,
+  at: Int
+) -> Result[Comment, CommentError] {
+  match Database.query(
+    db,
+    "INSERT INTO comment (post, author, body, written) VALUES (?, ?, ?, ?)",
+      &[
+      Driver.IntegerValue(big(post)),
+      Driver.TextValue(author),
+      Driver.TextValue(body),
+      Driver.IntegerValue(big(at))
+    ]
+  ) {
+    case Err(problem) => Err(CommentError{message: problem.message})
+    case Ok(_) => {
+      let recent = read(
+        db,
+        "SELECT id, post, author, body, written FROM comment ORDER BY id DESC LIMIT 1",
+          &[]
+      ) ?
+      if recent.length() == 0 {
+        Err(CommentError{message: "the reply was written and could not be read back"})
+      } else {
+        Ok(recent[0])
+      }
+    }
+  }
+}
+
+export fn remove(db: &Database.Database, id: Int) -> Result[Bool, CommentError] {
+  let existing = read(
+    db,
+    "SELECT id, post, author, body, written FROM comment WHERE id = ?",
+      &[Driver.IntegerValue(big(id))]
+  ) ?
+  if existing.length() == 0 {
+    return Ok(false)
+  }
+  match Database.query(db, "DELETE FROM comment WHERE id = ?", &[Driver.IntegerValue(big(id))]) {
+    case Err(problem) => Err(CommentError{message: problem.message})
+    case Ok(_) => Ok(true)
+  }
+}
+
+fn read(
+  db: &Database.Database,
+  sql: Str,
+  values: &Array[Driver.Value]
+) -> Result[Array[Comment], CommentError] {
+  match Database.query(db, sql, values) {
+    case Err(problem) => Err(CommentError{message: problem.message})
+    case Ok(rows) => {
+      let mapped = Row.map(&rows, fn(found: Driver.Rows, index: Int) -> Result[Comment, Row.RowError] {
+          Ok(
+            Comment {
+              id: small(Row.integer(&found, index, "id") ?),
+              post: small(Row.integer(&found, index, "post") ?),
+              author: Row.text(&found, index, "author") ?,
+              body: Row.text(&found, index, "body") ?,
+              written: small(Row.integer(&found, index, "written") ?)
+            }
+          )
+        })
+      match mapped {
+        case Err(_) => Err(CommentError{message: "a reply row could not be read"})
+        case Ok(found) => Ok(found)
+      }
+    }
+  }
+}
+
+fn big(value: Int) -> Int64 { Option.unwrapOr(convertInteger[Int64](value), 0i64) }
+
+fn small(value: Int64) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }

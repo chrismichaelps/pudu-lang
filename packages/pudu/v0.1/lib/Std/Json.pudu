@@ -1,0 +1,443 @@
+module Std.Json
+
+import Std.Io as Io
+import Std.Io {IoError}
+import Std.Option as Option
+/// Aliased away from `Text` because this module declares a variant of that
+/// name, and a qualifier and a constructor cannot share one.
+import Std.Text as Reading
+/// A JSON value.
+/// Numbers are whole here: the language's floating types exist, but a decoder
+/// that silently turned `1` into a float would lose the distinction a caller
+/// cares about. A fractional literal decodes as `Fractional`, keeping its text
+/// so nothing is rounded on the way through.
+export type Json
+  = Null
+  | Boolean(Bool)
+  | Number(Int)
+  | Fractional(Str)
+  | Text(Str)
+  | List(Array[Json])
+  | Object(Array[(Str, Json)])
+
+/// What went wrong while reading JSON.
+export type JsonError
+  = Unexpected(Int, Str)
+  | Unterminated(Str)
+  | Trailing(Int)
+  | Empty
+  | TooDeep(Int)
+
+/// The most lists and objects one value may nest.
+///
+/// Reading recurses once per level, and the evaluator bounds how deep calls
+/// may go, so text nested past that bound would stop the whole program rather
+/// than answer an error. Text arriving from outside a program is exactly where
+/// such nesting comes from; this bound refuses it as `TooDeep` well inside the
+/// evaluator's own limit.
+const MAX_DEPTH: Int = 512
+
+/// A value read from text, or what stopped the reader.
+///
+/// The runtime's `jsonDecode` reads the text first, natively. It answers only
+/// for text it reads exactly as the reader below does, and leaves everything
+/// else, including every text that is not JSON, to that reader, so a failure is
+/// described at the same position and in the same words either way.
+export fn decode(source: Str) -> Result[Json, JsonError] {
+  if let Some(value) = jsonDecode(source) { return Ok(value) }
+  if source.trim().isEmpty() { Err(Empty) } else {
+    let read = readValue(Cursor{rest: source, at: 0}, 0) ?
+    let after = skipSpace(read[1])
+    if !after.rest.isEmpty() { Err(Trailing(after.at)) } else { Ok(read[0]) }
+  }
+}
+
+/// Why the values of a JSON Lines file could not all be read.
+/// A file that cannot be read and a line that does not hold a value call for
+/// different answers, and the second names the line, counting from one.
+export type JsonLinesError
+  = Unreadable(IoError)
+  | Malformed(Int, JsonError)
+
+/// Combine every value of a JSON Lines file, one value to a line, holding one
+/// chunk of the file at a time.
+///
+/// A line holding only whitespace is skipped, so a file that ends with a blank
+/// line is still read. Values before a malformed line have already reached
+/// `step`; after it, the rest of the file is read without further work.
+export fn foldLines[T](file: Str, seed: T, step: fn(T, Json) -> T) -> Result[T, JsonLinesError] {
+  let folded = Io.foldLines(file, (seed, 0, None), fn(state: (T, Int, Option[JsonLinesError]), line: Str) -> (T, Int, Option[JsonLinesError]) {
+      let number = state[1] + 1
+      if Option.isSome(&state[2]) || line.trim().isEmpty() { return (state[0], number, state[2]) }
+      match decode(line) {
+        case Ok(value) => (step(state[0], value), number, None)
+        case Err(problem) => (state[0], number, Some(Malformed(number, problem)))
+      }
+    })
+  match folded {
+    case Err(reason) => Err(Unreadable(reason))
+    case Ok(state) => {
+      if let Some(reason) = state[2] { Err(reason) } else { Ok(state[0]) }
+    }
+  }
+}
+
+/// A value written as compact text, with no spaces between its parts.
+///
+/// The runtime's `jsonEncode` writes it: one walk over the value into UTF-8
+/// bytes, each string written as runs between the characters that need an
+/// escape, so the cost is the size of the text and nothing interpreted per
+/// character.
+export fn encode(value: &Json) -> Str { jsonEncode(value, false) }
+
+/// A value written across lines, each level indented by two spaces.
+export fn encodePretty(value: &Json) -> Str { jsonEncode(value, true) }
+
+/// The value stored under a key, or `None` when the value is not an object or
+/// has no such key.
+export fn field(value: &Json, key: Str) -> Option[Json] {
+  match value {
+    case Object(entries) => {
+      for entry in entries {
+        if entry[0] == key { return Some(entry[1]) }
+      }
+      None
+    }
+    case _ => None
+  }
+}
+
+/// The value at a position in a list, or `None`.
+export fn at(value: &Json, index: Int) -> Option[Json] {
+  match value {
+    case List(members) => {
+      if index < 0 || index >= members.length() { None } else { Some(members[index]) }
+    }
+    case _ => None
+  }
+}
+
+/// The value reached by following a path of object keys.
+export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
+  var current = *value
+  for key in steps {
+    current = field(&current, key) ?
+  }
+  Some(current)
+}
+
+/// The text a value holds, or `None` when it holds something else.
+export fn asText(value: &Json) -> Option[Str] {
+  match value {
+    case Text(content) => Some(content)
+    case _ => None
+  }
+}
+
+/// The whole number a value holds, or `None`.
+export fn asInt(value: &Json) -> Option[Int] {
+  match value {
+    case Number(number) => Some(number)
+    case _ => None
+  }
+}
+
+/// The truth value a value holds, or `None`.
+export fn asBool(value: &Json) -> Option[Bool] {
+  match value {
+    case Boolean(flag) => Some(flag)
+    case _ => None
+  }
+}
+
+/// The members a list holds, or `None`.
+export fn asList(value: &Json) -> Option[Array[Json]] {
+  match value {
+    case List(members) => Some(members)
+    case _ => None
+  }
+}
+
+/// The entries an object holds, or `None`.
+export fn asObject(value: &Json) -> Option[Array[(Str, Json)]] {
+  match value {
+    case Object(entries) => Some(entries)
+    case _ => None
+  }
+}
+
+/// Whether a value is null.
+export fn isNull(value: &Json) -> Bool {
+  match value {
+    case Null => true
+    case _ => false
+  }
+}
+
+/// An object built from key and value pairs.
+export fn object(entries: &Array[(Str, Json)]) -> Json { Object(*entries) }
+
+/// A list built from values.
+export fn list(members: &Array[Json]) -> Json { List(*members) }
+
+/// An object with one key added or replaced.
+export fn withField(value: &Json, key: Str, held: Json) -> Json {
+  match value {
+    case Object(entries) => {
+      var out = []
+      var replaced = false
+      for entry in entries {
+        if entry[0] == key {
+          out = out.push((key, held))
+          replaced = true
+        } else { out = out.push(entry) }
+      }
+      if replaced { Object(out) } else { Object(out.push((key, held))) }
+    }
+    case _ => *value
+  }
+}
+
+/// Every key an object has, in the order they were written.
+export fn keys(value: &Json) -> Array[Str] {
+  match value {
+    case Object(entries) => {
+      var out = []
+      for entry in entries { out = out.push(entry[0]) }
+      out
+    }
+    case _ => []
+  }
+}
+
+/// A reader's failure explained in the terms a caller can report.
+export fn explain(problem: &JsonError) -> Str {
+  match problem {
+    case Unexpected(position, wanted) => "expected " + wanted + " at " + show(position)
+    case Unterminated(what) => "unterminated " + what
+    case Trailing(position) => "unexpected text after the value at " + show(position)
+    case Empty => "no value at all"
+    case TooDeep(position) =>
+    "nesting deeper than " + show(MAX_DEPTH) + " levels at " + show(position)
+  }
+}
+
+/// The unread remainder of the source and the scalar position it begins at.
+///
+/// Reading takes characters from the front of the remainder and drops what it
+/// consumed. Text is UTF-8, so reaching a character by its position walks every
+/// character before it: a reader indexing the whole source repeated that walk
+/// for every character it examined, and a 538-kilobyte document took nine
+/// seconds. Dropping from the front walks each character once.
+type Cursor = { rest: Str, at: Int }
+
+/// The characters a plain run inside a string stops at: the closing quote, the
+/// escape, and every control that must be escaped.
+const STRING_STOPS: Str = "\"\\\0\u{1}\u{2}\u{3}\u{4}\u{5}\u{6}\u{7}\u{8}\u{9}\u{A}\u{B}\u{C}\u{D}\u{E}\u{F}\u{10}\u{11}\u{12}\u{13}\u{14}\u{15}\u{16}\u{17}\u{18}\u{19}\u{1A}\u{1B}\u{1C}\u{1D}\u{1E}\u{1F}"
+
+const SPACE: Str = " \t\r\n"
+
+const DIGITS: Str = "0123456789"
+
+/// A cursor moved past `count` characters.
+fn advanced(cursor: &Cursor, count: Int) -> Cursor {
+  Cursor{rest: cursor.rest.drop(count), at: cursor.at + count}
+}
+
+/// A cursor moved past any whitespace.
+fn skipSpace(cursor: Cursor) -> Cursor { advanced(&cursor, cursor.rest.spanOf(SPACE)) }
+
+/// One value read at a cursor, with the cursor just after it.
+///
+/// `depth` counts the lists and objects already open around the value.
+fn readValue(from: Cursor, depth: Int) -> Result[(Json, Cursor), JsonError] {
+  let cursor = skipSpace(from)
+  if cursor.rest.isEmpty() { return Err(Unexpected(cursor.at, "a value")) }
+  let character = cursor.rest.charAt(0)
+  if character == '"' { return readText(&cursor) }
+  let opens = character == '[' || character.code() == 123
+  if opens && depth >= MAX_DEPTH { return Err(TooDeep(cursor.at)) }
+  if character == '[' { return readList(&cursor, depth + 1) }
+  if character.code() == 123 { return readObject(&cursor, depth + 1) }
+  if character == '-' || isDigitChar(character) { return readNumber(&cursor) }
+  readKeyword(&cursor)
+}
+
+fn isDigitChar(value: Char) -> Bool { value >= '0' && value <= '9' }
+
+/// `true`, `false`, or `null`, whichever begins at the cursor.
+fn readKeyword(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
+  if cursor.rest.startsWith("true") { return Ok((Boolean(true), advanced(cursor, 4))) }
+  if cursor.rest.startsWith("false") { return Ok((Boolean(false), advanced(cursor, 5))) }
+  if cursor.rest.startsWith("null") { return Ok((Null, advanced(cursor, 4))) }
+  Err(Unexpected(cursor.at, "a value"))
+}
+
+/// A number, kept whole when it has no fraction or exponent and kept as written
+/// when it has, so nothing is rounded on the way through.
+fn readNumber(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
+  let rest = cursor.rest
+  var width = if rest.startsWith("-") { 1 } else { 0 }
+  var fractional = false
+  width = width + rest.drop(width).spanOf(DIGITS)
+  if rest.drop(width).startsWith(".") {
+    fractional = true
+    width = width + 1
+    width = width + rest.drop(width).spanOf(DIGITS)
+  }
+  let exponent = rest.drop(width)
+  if exponent.startsWith("e") || exponent.startsWith("E") {
+    fractional = true
+    width = width + 1
+    let sign = rest.drop(width)
+    if sign.startsWith("+") || sign.startsWith("-") { width = width + 1 }
+    width = width + rest.drop(width).spanOf(DIGITS)
+  }
+  let numeral = rest.take(width)
+  if numeral.isEmpty() || numeral == "-" { return Err(Unexpected(cursor.at, "a number")) }
+  if fractional { return Ok((Fractional(numeral), advanced(cursor, width))) }
+  let Some(number) = Reading.wholeOf(numeral) else {
+    return Err(Unexpected(cursor.at, "a number"))
+  }
+  Ok((Number(number), advanced(cursor, width)))
+}
+
+/// A quoted string, with the escapes the format defines.
+///
+/// Characters that need no escape are taken as one run, and the decoded pieces
+/// are joined once at the closing quote, so the text is copied a bounded number
+/// of times however many characters or escapes it holds.
+fn readText(open: &Cursor) -> Result[(Json, Cursor), JsonError] {
+  var rest = open.rest.drop(1)
+  var offset = open.at + 1
+  var pieces: Array[Str] = []
+  while !rest.isEmpty() {
+    let run = rest.spanNotOf(STRING_STOPS)
+    let stop = rest.drop(run)
+    if stop.isEmpty() { return Err(Unterminated("string")) }
+    let character = stop.charAt(0)
+    if character == '"' {
+      let text = pieces.push(rest.take(run)).join("")
+      return Ok((Text(text), Cursor{rest: stop.drop(1), at: offset + run + 1}))
+    }
+    if character != '\\' { return Err(Unexpected(offset + run, "an escaped control character")) }
+    let slash = Cursor{rest: stop, at: offset + run}
+    let escaped = readEscape(&slash) ?
+    pieces = pieces.push(rest.take(run)).push(escaped[0])
+    rest = escaped[1].rest
+    offset = escaped[1].at
+  }
+  Err(Unterminated("string"))
+}
+
+/// One escape beginning at its backslash, decoded, with the cursor after it.
+fn readEscape(slash: &Cursor) -> Result[(Str, Cursor), JsonError] {
+  let escapedAt = slash.at + 1
+  let body = slash.rest.drop(1)
+  if body.isEmpty() { return Err(Unterminated("string")) }
+  let next = Cursor{rest: body.drop(1), at: escapedAt + 1}
+  match body.charAt(0) {
+    case '"' => Ok(("\"", next))
+    case '\\' => Ok(("\\", next))
+    case '/' => Ok(("/", next))
+    case 'b' => scalarEscape(8, next, escapedAt)
+    case 'f' => scalarEscape(12, next, escapedAt)
+    case 'n' => Ok(("\n", next))
+    case 'r' => Ok(("\r", next))
+    case 't' => Ok(("\t", next))
+    case 'u' => {
+      let marker = Cursor{rest: body, at: escapedAt}
+      readUnicodeEscape(&marker)
+    }
+    case _ => Err(Unexpected(escapedAt, "a valid escape"))
+  }
+}
+
+/// A `\u` escape beginning at its `u`, composing a surrogate pair when the
+/// first unit is a high surrogate.
+fn readUnicodeEscape(marker: &Cursor) -> Result[(Str, Cursor), JsonError] {
+  let escapedAt = marker.at
+  if marker.rest.take(5).length() < 5 { return Err(Unterminated("escape")) }
+  let Some(first) = hexOf(marker.rest.drop(1).take(4)) else {
+    return Err(Unexpected(escapedAt, "four hex digits"))
+  }
+  if first >= 56320 && first <= 57343 {
+    return Err(Unexpected(escapedAt, "a scalar value"))
+  }
+  if first < 55296 || first > 56319 {
+    return scalarEscape(first, advanced(marker, 5), escapedAt)
+  }
+  let low = marker.rest.drop(5)
+  if low.take(6).length() < 6 || low.charAt(0) != '\\' || low.charAt(1) != 'u' {
+    return Err(Unexpected(escapedAt, "a low surrogate escape"))
+  }
+  let lowAt = escapedAt + 6
+  let Some(second) = hexOf(low.drop(2).take(4)) else {
+    return Err(Unexpected(lowAt, "four hex digits"))
+  }
+  if second < 56320 || second > 57343 {
+    return Err(Unexpected(lowAt, "a low surrogate"))
+  }
+  let codepoint = 65536 + (first - 55296) * 1024 + (second - 56320)
+  scalarEscape(codepoint, advanced(marker, 11), lowAt)
+}
+
+fn scalarEscape(code: Int, next: Cursor, position: Int) -> Result[(Str, Cursor), JsonError] {
+  let Some(found) = charFromCode(code) else { return Err(Unexpected(position, "a scalar value")) }
+  Ok((found.toText(), next))
+}
+
+fn hexOf(digits: Str) -> Option[Int] {
+  var total = 0
+  for character in digits.toLower().chars() {
+    let found = "0123456789abcdef".indexOf(character.toText())
+    if found < 0 { return None }
+    total = total * 16 + found
+  }
+  Some(total)
+}
+
+/// A bracketed list of values, beginning at its opening bracket.
+fn readList(open: &Cursor, depth: Int) -> Result[(Json, Cursor), JsonError] {
+  var cursor = skipSpace(advanced(open, 1))
+  var members = []
+  if cursor.rest.startsWith("]") { return Ok((List(members), advanced(&cursor, 1))) }
+  while !cursor.rest.isEmpty() {
+    let pair = readValue(cursor, depth) ?
+    members = members.push(pair[0])
+    cursor = skipSpace(pair[1])
+    if cursor.rest.isEmpty() { return Err(Unterminated("list")) }
+    let character = cursor.rest.charAt(0)
+    if character == ']' { return Ok((List(members), advanced(&cursor, 1))) }
+    if character != ',' { return Err(Unexpected(cursor.at, "a comma or a closing bracket")) }
+    cursor = skipSpace(advanced(&cursor, 1))
+  }
+  Err(Unterminated("list"))
+}
+
+/// A braced object of key and value pairs, beginning at its opening brace.
+fn readObject(open: &Cursor, depth: Int) -> Result[(Json, Cursor), JsonError] {
+  var cursor = skipSpace(advanced(open, 1))
+  var entries = []
+  if !cursor.rest.isEmpty() && cursor.rest.charAt(0).code() == 125 {
+    return Ok((Object(entries), advanced(&cursor, 1)))
+  }
+  while !cursor.rest.isEmpty() {
+    if cursor.rest.charAt(0) != '"' { return Err(Unexpected(cursor.at, "a key")) }
+    let keyPair = readText(&cursor) ?
+    let Text(key) = keyPair[0] else { return Err(Unexpected(cursor.at, "a key")) }
+    let afterKey = skipSpace(keyPair[1])
+    if afterKey.rest.isEmpty() || afterKey.rest.charAt(0) != ':' {
+      return Err(Unexpected(afterKey.at, "a colon"))
+    }
+    let valuePair = readValue(advanced(&afterKey, 1), depth) ?
+    entries = entries.push((key, valuePair[0]))
+    cursor = skipSpace(valuePair[1])
+    if cursor.rest.isEmpty() { return Err(Unterminated("object")) }
+    let character = cursor.rest.charAt(0)
+    if character.code() == 125 { return Ok((Object(entries), advanced(&cursor, 1))) }
+    if character != ',' { return Err(Unexpected(cursor.at, "a comma or a closing brace")) }
+    cursor = skipSpace(advanced(&cursor, 1))
+  }
+  Err(Unterminated("object"))
+}

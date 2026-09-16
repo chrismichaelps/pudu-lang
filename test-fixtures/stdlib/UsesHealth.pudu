@@ -1,0 +1,132 @@
+module UsesHealth
+
+import Std.App.Health {Degraded, Unwell, Well}
+import Std.App.Health as Health
+
+/// What a health check promises.
+///
+/// The claim under test is that the two questions something outside the
+/// process asks are two different questions, kept apart by the types, and that
+/// an aggregate is as healthy as its unhealthiest part.
+export fn main() -> Int {
+  var held = 0
+
+  // A reading is what the process can see about itself, and is what a liveness
+  // judgement is given instead of a connection.
+  let seen = Health.flagging(
+      &Health.counting(&Health.counting(&Health.reading("shop"), "workers", 4), "queue", 2),
+    "wedged",
+    false
+  )
+  if Health.countOf(&seen, "workers") == 4 { held = held + 1 }
+  if Health.countOf(&seen, "queue") == 2 { held = held + 1 }
+  if !Health.flagOf(&seen, "wedged") { held = held + 1 }
+
+  // A count or flag nothing set reads as nothing rather than failing, so a
+  // judgement written before the reading it wants exists still runs.
+  if Health.countOf(&seen, "absent") == 0 { held = held + 1 }
+  if !Health.flagOf(&seen, "absent") { held = held + 1 }
+
+  // A liveness judgement declared comptime cannot reach a clock, a socket, or
+  // a file: the language refuses the body. That turns "must not consult
+  // anything outside the process" from a note in review into a compile error.
+  let living = [Health.liveness("not wedged", notWedged), Health.liveness("has workers", hasWorkers)]
+  let alive = Health.alive(&living, &seen)
+  if Health.healthy(&alive) { held = held + 1 }
+  if alive.findings.length() == 2 { held = held + 1 }
+  if Health.statusOf(&alive) == 200 { held = held + 1 }
+
+  // A process that has gone wrong in a way only a restart fixes says so.
+  let wedged = Health.flagging(&seen, "wedged", true)
+  let stuck = Health.alive(&living, &wedged)
+  if !Health.healthy(&stuck) { held = held + 1 }
+  if stuck.verdict == Unwell { held = held + 1 }
+  if Health.statusOf(&stuck) == 503 { held = held + 1 }
+
+  // Every check sees the same reading, so two checks cannot disagree about
+  // what the process looked like when they were asked.
+  let starved = Health.counting(&seen, "workers", 0)
+  if Health.alive(&living, &starved).verdict == Unwell { held = held + 1 }
+
+  // Readiness may consult whatever it needs, because removing an instance from
+  // rotation is cheap and reversible in a way that restarting it is not.
+  let serving = [Health.readiness("database", databaseReachable), Health.readiness("cache", cacheWarm)]
+  let ready = Health.ready(&serving)
+  if ready.findings.length() == 2 { held = held + 1 }
+
+  // The worst verdict wins. Every other rule is a way of arranging for a
+  // failure not to count, and the failure still happened.
+  if Health.worstOf(&[
+      Health.detailed("a", Well, ""),
+      Health.detailed("b", Degraded, ""),
+      Health.detailed("c", Well, "")
+    ])
+    == Degraded
+  {
+    held = held + 1
+  }
+  if Health.worstOf(&[
+      Health.detailed("a", Degraded, ""),
+      Health.detailed("b", Unwell, ""),
+      Health.detailed("c", Well, "")
+    ])
+    == Unwell
+  {
+    held = held + 1
+  }
+  if Health.worstOf(&[Health.detailed("a", Well, "")]) == Well { held = held + 1 }
+
+  // A degraded service still answers, so it is not removed from rotation for
+  // being imperfect; an unwell one says the service is the problem.
+  if Health.statusOf(&Health.reporting(&[Health.detailed("a", Degraded, "")])) == 200 {
+    held = held + 1
+  }
+  if Health.statusOf(&Health.reporting(&[Health.detailed("a", Unwell, "")])) == 503 {
+    held = held + 1
+  }
+
+  // A program that declared no checks has nothing wrong with it.
+  if Health.healthy(&Health.nothingToCheck()) { held = held + 1 }
+  if Health.alive(&[], &seen).verdict == Well { held = held + 1 }
+  if Health.ready(&[]).verdict == Well { held = held + 1 }
+
+  // A report reads worst first, so an operator seeing a truncated one sees the
+  // part that matters.
+  let mixed = Health.reporting(&[
+      Health.detailed("fine", Well, ""),
+      Health.detailed("broken", Unwell, "cannot reach it"),
+      Health.detailed("slow", Degraded, "")
+    ])
+  let written = Health.render(&mixed)
+  if written.indexOf("broken") < written.indexOf("slow") { held = held + 1 }
+  if written.indexOf("slow") < written.indexOf("fine") { held = held + 1 }
+  if written.contains("cannot reach it") { held = held + 1 }
+  if written.startsWith("unwell") { held = held + 1 }
+
+  // A verdict is named the same way wherever it is written.
+  if Health.verdictName(&Well) == "well" { held = held + 1 }
+  if Health.verdictName(&Unwell) == "unwell" { held = held + 1 }
+
+  // A truth is the commonest judgement, so it converts without ceremony.
+  if Health.fromTruth(true) == Well { held = held + 1 }
+  if Health.fromTruth(false) == Unwell { held = held + 1 }
+
+  held
+}
+
+/// A liveness judgement, declared comptime so the language refuses a body that
+/// reaches anything outside this process. Adding a call to the clock here is a
+/// compile error rather than something a reviewer has to notice.
+comptime fn notWedged(seen: Health.Reading) -> Health.Verdict {
+  if Health.flagOf(&seen, "wedged") { Unwell } else { Well }
+}
+
+comptime fn hasWorkers(seen: Health.Reading) -> Health.Verdict {
+  if Health.countOf(&seen, "workers") > 0 { Well } else { Unwell }
+}
+
+/// A readiness judgement, which may consult whatever it needs. Standing in for
+/// one here, since this fixture reaches nothing.
+fn databaseReachable() -> Health.Verdict { Well }
+
+fn cacheWarm() -> Health.Verdict { Degraded }

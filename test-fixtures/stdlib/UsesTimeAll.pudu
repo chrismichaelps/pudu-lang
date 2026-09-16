@@ -1,0 +1,111 @@
+module UsesTimeAll
+
+import Std.Result as Result
+import Std.Time as Time
+
+/// A moment with a known place in the calendar: the first second of 2021, in
+/// milliseconds since the epoch.
+///
+/// Stated rather than read from the clock, so every answer below is a fixed
+/// one. Two of the exports do read the clock, and they are asked only for what
+/// is true of any reading.
+const EPOCH_2021: Int = 1609459200000
+
+export fn main() -> Int {
+  var held = 0
+  let moment: Time.Instant = Time.instantOf(EPOCH_2021)
+
+  // A moment, in each unit it can be said in.
+  if Time.toMillis(&moment) == EPOCH_2021 { held = held + 1 }
+  if Time.toSeconds(&moment) == EPOCH_2021 / 1000 { held = held + 1 }
+
+  // A length of time, built from each unit.
+  if Time.durationMillis(&Time.millis(5)) == 5 { held = held + 1 }
+  if Time.durationMillis(&Time.seconds(1)) == 1000 { held = held + 1 }
+  if Time.durationMillis(&Time.minutes(1)) == 60000 { held = held + 1 }
+  if Time.durationMillis(&Time.hours(1)) == 3600000 { held = held + 1 }
+  if Time.durationMillis(&Time.days(1)) == 86400000 { held = held + 1 }
+  if Time.durationSeconds(&Time.minutes(2)) == 120 { held = held + 1 }
+
+  // Moving a moment, and the length between two.
+  let later: Time.Instant = Time.add(&moment, &Time.hours(1))
+  if Time.toMillis(&later) == EPOCH_2021 + 3600000 { held = held + 1 }
+  if Time.toMillis(&Time.subtract(&later, &Time.hours(1))) == EPOCH_2021 { held = held + 1 }
+  if Time.durationMillis(&Time.between(&moment, &later)) == 3600000 { held = held + 1 }
+  // Measured backwards it is the same length the other way.
+  if Time.durationMillis(&Time.between(&later, &moment)) == 0 - 3600000 { held = held + 1 }
+
+  // Which of two came first.
+  if Time.isBefore(&moment, &later) && !Time.isBefore(&later, &moment) { held = held + 1 }
+  if Time.isAfter(&later, &moment) && !Time.isAfter(&moment, &later) { held = held + 1 }
+  if !Time.isBefore(&moment, &moment) && !Time.isAfter(&moment, &moment) { held = held + 1 }
+  if Time.toMillis(&Time.earliest(&moment, &later)) == EPOCH_2021 { held = held + 1 }
+  if Time.toMillis(&Time.latest(&moment, &later)) == EPOCH_2021 + 3600000 { held = held + 1 }
+
+  // Lengths put together and taken apart.
+  let hour: Time.Duration = Time.hours(1)
+  if Time.durationMillis(&Time.plus(&hour, &Time.minutes(30))) == 5400000 { held = held + 1 }
+  if Time.durationMillis(&Time.minus(&hour, &Time.minutes(30))) == 1800000 { held = held + 1 }
+  if Time.durationMillis(&Time.scale(&hour, 2)) == 7200000 { held = held + 1 }
+  if Time.durationMillis(&Time.absolute(&Time.millis(0 - 5))) == 5 { held = held + 1 }
+  if Time.durationMillis(&Time.absolute(&Time.millis(5))) == 5 { held = held + 1 }
+
+  // The calendar, read out of a moment.
+  let date: Time.Date = Result.unwrapOr(Time.toDate(&moment), Time.Date{year: 0, month: 0, day: 0})
+  if date.year == 2021 && date.month == 1 && date.day == 1 { held = held + 1 }
+  let clockFace: Time.TimeOfDay = Result.unwrapOr(
+    Time.toTimeOfDay(&moment),
+    Time.TimeOfDay{hour: 0 - 1, minute: 0, second: 0}
+  )
+  if clockFace.hour == 0 && clockFace.minute == 0 && clockFace.second == 0 { held = held + 1 }
+
+  // Built back from the calendar, giving the moment it came from.
+  if Result.unwrapOr(Result.map(Time.atUtc(&date, &clockFace), fn(i: Time.Instant) -> Int => Time.toMillis(&i)), 0)
+    == EPOCH_2021 {
+    held = held + 1
+  }
+
+  // Written out, and read back.
+  if Time.renderDate(&date) == "2021-01-01" { held = held + 1 }
+  if Time.renderTime(&clockFace) == "00:00:00" { held = held + 1 }
+  if Result.unwrapOr(Result.map(Time.parseDate("2021-01-01"), fn(d: Time.Date) -> Int => d.year), 0)
+    == 2021 {
+    held = held + 1
+  }
+  if Result.isErr(&Time.parseDate("not a date")) { held = held + 1 }
+  if Result.unwrapOr(Time.toRfc3339(&moment), "").startsWith("2021-01-01T00:00:00") {
+    held = held + 1
+  }
+  if Result.unwrapOr(
+    Result.map(Time.fromRfc3339("2021-01-01T00:00:00Z"), fn(i: Time.Instant) -> Int => Time.toMillis(&i)),
+    0
+  ) == EPOCH_2021 {
+    held = held + 1
+  }
+  if Result.isErr(&Time.fromRfc3339("not a moment")) { held = held + 1 }
+
+  // Formatted to a pattern, and read back from one.
+  if Result.unwrapOr(Time.format(&moment, "%Y-%m-%d"), "") == "2021-01-01" { held = held + 1 }
+  if Result.isOk(&Time.formatLocal(&moment, "%Y")) { held = held + 1 }
+  if Result.unwrapOr(
+    Result.map(Time.parse("%Y-%m-%d", "2021-01-01"), fn(i: Time.Instant) -> Int => Time.toMillis(&i)),
+    0
+  ) == EPOCH_2021 {
+    held = held + 1
+  }
+  if Result.isErr(&Time.parse("%Y-%m-%d", "nonsense")) { held = held + 1 }
+
+  // A length said the way somebody would say it.
+  if !Time.describe(&Time.hours(2)).isEmpty() { held = held + 1 }
+
+  // The two that read the machine's own clock, asked only what holds of any
+  // reading: a moment is a number, and the offset is a whole count of minutes
+  // within a day either side of noon.
+  let reading: Time.Instant = Time.currentInstant()
+  if Time.toMillis(&reading) > 0 { held = held + 1 }
+  if Time.elapsed() >= 0 { held = held + 1 }
+  let offset = Time.localOffsetMinutes()
+  if offset > 0 - 1441 && offset < 1441 { held = held + 1 }
+
+  held
+}

@@ -1,0 +1,22 @@
+module Domain.Entry
+
+export type Entry = {
+  name: Str,
+  kind: Str,
+  moduleName: Str,
+  signature: Str,
+  documentation: Array[Str]
+}
+
+export type Hit = { entry: Entry, score: Int }
+
+export fn qualifiedName(entry: &Entry) -> Str { entry.moduleName + "." + entry.name }
+
+export fn category(entry: &Entry) -> Str {
+  if entry.kind.startsWith("fn") { "fn" } else { entry.kind }
+}
+
+export fn summary(entry: &Entry) -> Str {
+  if entry.documentation.length() == 0 { "No description is available." }
+    else { entry.documentation[0] }
+}

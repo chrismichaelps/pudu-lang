@@ -1,0 +1,308 @@
+module UsesNestedArrays
+
+import Std.List as List
+import Std.Num {Add, Zero}
+import Std.Option as Option
+
+/// A grid of a stated shape, every cell holding the sum of its two positions.
+///
+/// Built rather than written out so the shape is a number the checks can vary,
+/// and so the value in a cell says where it came from: a builder that filled
+/// rows in the wrong order answers the same shape and the wrong contents.
+fn gridOf(rows: Int, columns: Int) -> Array[Array[Int]] {
+  var out: Array[Array[Int]] = []
+  var row = 0
+  while row < rows {
+    var line: Array[Int] = []
+    var column = 0
+    while column < columns {
+      line = line.push(row * 10 + column)
+      column = column + 1
+    }
+    out = out.push(line)
+    row = row + 1
+  }
+  out
+}
+
+/// A cube of a stated shape, every cell holding the three positions that reach
+/// it, so an index taken in the wrong order is visible in the value.
+fn cubeOf(depth: Int, rows: Int, columns: Int) -> Array[Array[Array[Int]]] {
+  var out: Array[Array[Array[Int]]] = []
+  var plane = 0
+  while plane < depth {
+    var face: Array[Array[Int]] = []
+    var row = 0
+    while row < rows {
+      var line: Array[Int] = []
+      var column = 0
+      while column < columns {
+        line = line.push(plane * 100 + row * 10 + column)
+        column = column + 1
+      }
+      face = face.push(line)
+      row = row + 1
+    }
+    out = out.push(face)
+    plane = plane + 1
+  }
+  out
+}
+
+/// One row of a grid replaced, and one cell of that row replaced, both by
+/// building the new value rather than by writing into the old one.
+fn withCell(grid: &Array[Array[Int]], row: Int, column: Int, held: Int) -> Array[Array[Int]] {
+  List.set(grid, row, List.set(&grid[row], column, held))
+}
+
+/// The sum of every cell of a nested collection, written over the element type
+/// rather than over `Int`.
+///
+/// The bound is what is being checked: a caller nesting their own numeric type
+/// gets this, and a function that reached for the built-in operator would work
+/// at one type and nowhere else.
+fn totalOf[T: Zero + Add](rows: &Array[Array[T]]) -> Option[T] {
+  List.sum(&List.flatten(rows))
+}
+
+/// Two grids multiplied the way matrices are, which is the operation that
+/// cannot be written without indexing two levels down on both sides.
+fn multiplied(left: &Array[Array[Int]], right: &Array[Array[Int]]) -> Array[Array[Int]] {
+  var out: Array[Array[Int]] = []
+  var row = 0
+  while row < left.length() {
+    var line: Array[Int] = []
+    var column = 0
+    while column < right[0].length() {
+      var total = 0
+      var step = 0
+      while step < right.length() {
+        total = total + left[row][step] * right[step][column]
+        step = step + 1
+      }
+      line = line.push(total)
+      column = column + 1
+    }
+    out = out.push(line)
+    row = row + 1
+  }
+  out
+}
+
+/// Arrays nested inside arrays, at every depth a program reaches for.
+///
+/// A grid is written as `Array[Array[T]]` rather than as a type of its own, so
+/// what has to hold is that nothing about the element type stops it being an
+/// array in turn: the literal, the annotation, indexing, iteration, passing by
+/// reference, the generic bound, and every collection call must all keep
+/// working when the element is itself a collection.
+///
+/// Every value in a built grid says where it came from, so an index taken in
+/// the wrong order is caught: a reader that answered `m[column][row]` gives the
+/// right shape and the wrong cell, and a check that only asked for shapes would
+/// pass. The grids are deliberately not square, since a square one is exactly
+/// the shape where transposing wrongly, or swapping the two indices, cannot be
+/// told apart from doing it right.
+///
+/// Ragged nesting is checked beside rectangular nesting, because nothing in the
+/// type says the rows are the same length, and a call that assumed they were
+/// would work on every example that happened to be square.
+export fn main() -> Int {
+  var held = 0
+
+  // A grid written out, annotated with the nested type it has.
+  let square: Array[Array[Int]] = [[1, 2], [3, 4]]
+  if square.length() == 2 && square[0].length() == 2 { held = held + 1 }
+  if square[0][0] == 1 && square[0][1] == 2 { held = held + 1 }
+  if square[1][0] == 3 && square[1][1] == 4 { held = held + 1 }
+  // A whole row read out as a value in its own right.
+  if square[1] == [3, 4] { held = held + 1 }
+  // Two nested values compare as one value rather than as their addresses.
+  if square == [[1, 2], [3, 4]] { held = held + 1 }
+  if square != [[1, 2], [4, 3]] { held = held + 1 }
+
+  // A grid that is not square, where the two indices cannot be swapped without
+  // the answer changing.
+  let wide = gridOf(2, 3)
+  if wide.length() == 2 && wide[0].length() == 3 { held = held + 1 }
+  if wide[0] == [0, 1, 2] && wide[1] == [10, 11, 12] { held = held + 1 }
+  if wide[1][2] == 12 { held = held + 1 }
+  // The value names its own position, so an index read the other way round
+  // answers something else rather than something plausible.
+  if wide[1][0] != wide[0][1] { held = held + 1 }
+
+  // Three levels, where each index is a different one of the three positions.
+  let cube: Array[Array[Array[Int]]] = cubeOf(2, 3, 4)
+  if cube.length() == 2 { held = held + 1 }
+  if cube[0].length() == 3 && cube[0][0].length() == 4 { held = held + 1 }
+  if cube[0][0][0] == 0 { held = held + 1 }
+  if cube[1][2][3] == 123 { held = held + 1 }
+  if cube[1][0][0] == 100 && cube[0][1][0] == 10 && cube[0][0][1] == 1 {
+    held = held + 1
+  }
+  // A whole plane and a whole row taken out of the middle of it.
+  if cube[1][2] == [120, 121, 122, 123] { held = held + 1 }
+  if cube[0][1] == [10, 11, 12, 13] { held = held + 1 }
+
+  // Four levels, written out rather than built, since what is being checked is
+  // that the notation itself nests as far as a program needs.
+  let deep: Array[Array[Array[Array[Int]]]] = [
+    [[[1, 2], [3, 4]], [[5, 6], [7, 8]]],
+    [[[9, 10], [11, 12]], [[13, 14], [15, 16]]]
+  ]
+  if deep.length() == 2 && deep[0].length() == 2 { held = held + 1 }
+  if deep[0][0].length() == 2 && deep[0][0][0].length() == 2 { held = held + 1 }
+  if deep[0][0][0][0] == 1 && deep[1][1][1][1] == 16 { held = held + 1 }
+  if deep[1][0][1][0] == 11 { held = held + 1 }
+  if deep[0][1] == [[5, 6], [7, 8]] { held = held + 1 }
+  // Five levels, which is past anything ordinary and still only nesting.
+  let deeper: Array[Array[Array[Array[Array[Int]]]]] = [[[[[7]]]]]
+  if deeper[0][0][0][0][0] == 7 { held = held + 1 }
+  if deeper[0][0][0][0] == [7] { held = held + 1 }
+
+  // Rows of different lengths. Nothing in the type says they agree, so a call
+  // that assumed they did would work on every square example above.
+  let ragged: Array[Array[Int]] = [[1], [2, 3], [], [4, 5, 6]]
+  if ragged.length() == 4 { held = held + 1 }
+  if ragged[0].length() == 1 && ragged[2].length() == 0 { held = held + 1 }
+  if ragged[3][2] == 6 { held = held + 1 }
+  if List.isEmpty(&ragged[2]) { held = held + 1 }
+
+  // The two ways of holding nothing, which are different values: no rows at
+  // all, and one row holding nothing.
+  let noRows: Array[Array[Int]] = []
+  let oneEmptyRow: Array[Array[Int]] = [[]]
+  if noRows.length() == 0 && oneEmptyRow.length() == 1 { held = held + 1 }
+  if noRows != oneEmptyRow { held = held + 1 }
+  if oneEmptyRow[0] == [] { held = held + 1 }
+
+  // Walking two levels with nested loops, which is how a grid is read.
+  var total = 0
+  for row in wide {
+    for cell in row {
+      total = total + cell
+    }
+  }
+  if total == 36 { held = held + 1 }
+  // And three levels.
+  var cubeTotal = 0
+  for plane in cube {
+    for row in plane {
+      for cell in row {
+        cubeTotal = cubeTotal + cell
+      }
+    }
+  }
+  if cubeTotal == 1476 { held = held + 1 }
+
+  // Walking by index rather than by element, which is what an algorithm
+  // reaching two positions at once has to do.
+  var diagonal = 0
+  var step = 0
+  while step < 2 {
+    diagonal = diagonal + wide[step][step]
+    step = step + 1
+  }
+  if diagonal == 11 { held = held + 1 }
+
+  // A nested value threaded through a variable, where each write is a new
+  // value rather than a change to the old one.
+  var building: Array[Array[Int]] = []
+  var made = 0
+  while made < 3 {
+    building = building.push([made, made * 2])
+    made = made + 1
+  }
+  if building == [[0, 0], [1, 2], [2, 4]] { held = held + 1 }
+  if building.length() == 3 && building[2][1] == 4 { held = held + 1 }
+
+  // One cell replaced two levels down. The grid it came from is unchanged,
+  // which is what makes threading one through a loop safe.
+  let changed = withCell(&wide, 1, 2, 99)
+  if changed[1][2] == 99 { held = held + 1 }
+  if wide[1][2] == 12 { held = held + 1 }
+  if changed[0] == wide[0] { held = held + 1 }
+  // A whole row replaced.
+  if List.set(&wide, 0, [7, 8, 9])[0] == [7, 8, 9] { held = held + 1 }
+
+  // A grid passed by reference and read two levels down through the reference.
+  if Option.unwrapOr(totalOf(&wide), 0) == 36 { held = held + 1 }
+  if Option.unwrapOr(totalOf(&ragged), 0) == 21 { held = held + 1 }
+  if Option.isNone(&totalOf(&noRows)) { held = held + 1 }
+  // A row holding nothing is still a row, so a grid of them holds nothing to
+  // add up.
+  if Option.isNone(&totalOf(&oneEmptyRow)) { held = held + 1 }
+  // The same at another width, which is the point of writing it against the
+  // bound rather than against a numeric type.
+  let narrow: Array[Array[Int8]] = [[1i8, 2i8], [3i8, 4i8]]
+  if Option.unwrapOr(totalOf(&narrow), 0i8) == 10i8 { held = held + 1 }
+
+  // A nested value inside a nested value of another shape: rows of pairs, and
+  // rows of text.
+  let pairs: Array[Array[(Int, Str)]] = [[(1, "a")], [(2, "b"), (3, "c")]]
+  if pairs[1][0][0] == 2 && pairs[1][1][1] == "c" { held = held + 1 }
+  let words: Array[Array[Str]] = [["a", "b"], ["c"]]
+  if words[0][1] == "b" && words[1].length() == 1 { held = held + 1 }
+
+  // The collection calls, over a collection whose element is a collection.
+  if List.flatten(&wide) == [0, 1, 2, 10, 11, 12] { held = held + 1 }
+  if List.flatten(&ragged) == [1, 2, 3, 4, 5, 6] { held = held + 1 }
+  if List.flatten(&noRows) == [] { held = held + 1 }
+  if List.length(&wide) == 2 { held = held + 1 }
+  if List.first(&wide) == Some([0, 1, 2]) { held = held + 1 }
+  if List.contains(&wide, [10, 11, 12]) { held = held + 1 }
+  if !List.contains(&wide, [10, 11]) { held = held + 1 }
+  if List.reversed(&wide) == [[10, 11, 12], [0, 1, 2]] { held = held + 1 }
+
+  // Transforming the rows, and transforming inside them, which are different
+  // operations at different depths.
+  let rowLengths = List.map(&ragged, fn(row: Array[Int]) -> Int => row.length())
+  if rowLengths == [1, 2, 0, 3] { held = held + 1 }
+  let doubled = List.map(
+      &wide,
+    fn(row: Array[Int]) -> Array[Int] => List.map(&row, fn(n: Int) -> Int => n * 2)
+  )
+  if doubled == [[0, 2, 4], [20, 22, 24]] { held = held + 1 }
+  // The rows kept, rather than the cells.
+  if List.filter(&ragged, fn(row: Array[Int]) -> Bool => row.length() > 1)
+    == [[2, 3], [4, 5, 6]] {
+    held = held + 1
+  }
+  // A fold whose running value is itself a nested value.
+  let stacked = List.fold(
+      &[1, 2, 3],
+    fn(rows: Array[Array[Int]], n: Int) -> Array[Array[Int]] => rows.push([n, n]),
+    noRows
+  )
+  if stacked == [[1, 1], [2, 2], [3, 3]] { held = held + 1 }
+
+  // Cutting a flat run into rows, and flattening it back, which must agree.
+  let cut = List.chunksOf(&[1, 2, 3, 4, 5], 2)
+  if cut == [[1, 2], [3, 4], [5]] { held = held + 1 }
+  if List.flatten(&cut) == [1, 2, 3, 4, 5] { held = held + 1 }
+  // Running windows, which share their cells rather than dividing them.
+  if List.windows(&[1, 2, 3, 4], 2) == [[1, 2], [2, 3], [3, 4]] { held = held + 1 }
+
+  // Turning a grid on its side. The grid is not square, so a transpose that
+  // did nothing, or that swapped the wrong pair, cannot pass.
+  let turned = List.transpose(&wide)
+  if turned.length() == 3 && turned[0].length() == 2 { held = held + 1 }
+  if turned == [[0, 10], [1, 11], [2, 12]] { held = held + 1 }
+  // Turned twice is what it started as.
+  if List.transpose(&turned) == wide { held = held + 1 }
+
+  // Multiplying two grids, which reaches two levels down on both sides and is
+  // wrong in a different way for every index taken in the wrong order. The
+  // shapes differ, so a version that swapped a pair of them could not even
+  // produce an answer of the right shape.
+  let left: Array[Array[Int]] = [[1, 2, 3], [4, 5, 6]]
+  let right: Array[Array[Int]] = [[7, 8], [9, 10], [11, 12]]
+  let product = multiplied(&left, &right)
+  if product.length() == 2 && product[0].length() == 2 { held = held + 1 }
+  if product == [[58, 64], [139, 154]] { held = held + 1 }
+  // Multiplying by the grid that changes nothing gives back what went in.
+  let identity: Array[Array[Int]] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  if multiplied(&left, &identity) == left { held = held + 1 }
+
+  held
+}

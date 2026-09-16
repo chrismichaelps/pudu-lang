@@ -1,0 +1,208 @@
+module UsesFlatMap
+
+import Std.FlatMap as FlatMap
+import Std.Option as Option
+
+fn buildBulk(count: Int) -> Option[FlatMap.FlatMap[Int]] {
+  var bulk: FlatMap.FlatMap[Int] = FlatMap.empty(16)
+  var i = 0
+  while i < count {
+    let k = convertInteger[UInt64](i) ?
+    bulk = FlatMap.insert(&bulk, k, i * 10)
+    i = i + 1
+  }
+  Some(bulk)
+}
+
+fn verifyBulk(bulk: &FlatMap.FlatMap[Int], count: Int) -> Option[Bool] {
+  var j = 0
+  while j < count {
+    let k = convertInteger[UInt64](j) ?
+    if FlatMap.getOr(bulk, k, -1) != j * 10 { return Some(false) }
+    if !FlatMap.containsKey(bulk, k) { return Some(false) }
+    j = j + 1
+  }
+  Some(true)
+}
+
+fn deleteEvens(bulk: &FlatMap.FlatMap[Int], count: Int) -> Option[FlatMap.FlatMap[Int]] {
+  var current = *bulk
+  var j = 0
+  while j < count {
+    let k = convertInteger[UInt64](j) ?
+    current = FlatMap.remove(&current, k)
+    j = j + 2
+  }
+  Some(current)
+}
+
+fn verifyEvensDeletedOddsRetained(target: &FlatMap.FlatMap[Int], count: Int) -> Option[Bool] {
+  var j = 0
+  while j < count {
+    let k = convertInteger[UInt64](j) ?
+    if j % 2 == 0 {
+      if FlatMap.containsKey(target, k) { return Some(false) }
+      if Option.isSome(&FlatMap.get(target, k)) { return Some(false) }
+    } else {
+      if !FlatMap.containsKey(target, k) { return Some(false) }
+      if FlatMap.getOr(target, k, -1) != j * 10 { return Some(false) }
+    }
+    j = j + 1
+  }
+  Some(true)
+}
+
+fn verifyEntries(bulk: &FlatMap.FlatMap[Int]) -> Bool {
+  let es = FlatMap.entries(bulk)
+  if es.length() != FlatMap.size(bulk) { return false }
+  for pair in es {
+    if FlatMap.getOr(bulk, pair[0], -1) != pair[1] { return false }
+  }
+  true
+}
+
+fn testBoundaryKeys() -> Bool {
+  let map: FlatMap.FlatMap[Int] = FlatMap.empty(16)
+  let zeroKey = 0u64
+  let maxKey = 18446744073709551615u64
+
+  let m1 = FlatMap.insert(&map, zeroKey, 111)
+  let m2 = FlatMap.insert(&m1, maxKey, 999)
+
+  if FlatMap.size(&m2) != 2 { return false }
+  if FlatMap.getOr(&m2, zeroKey, 0) != 111 { return false }
+  if FlatMap.getOr(&m2, maxKey, 0) != 999 { return false }
+
+  let m3 = FlatMap.remove(&m2, zeroKey)
+  if FlatMap.size(&m3) != 1 { return false }
+  if FlatMap.containsKey(&m3, zeroKey) { return false }
+  if !FlatMap.containsKey(&m3, maxKey) { return false }
+
+  let m4 = FlatMap.remove(&m3, maxKey)
+  if FlatMap.size(&m4) != 0 { return false }
+  if !FlatMap.isEmpty(&m4) { return false }
+  true
+}
+
+fn testTombstoneRecycling() -> Bool {
+  let empty: FlatMap.FlatMap[Int] = FlatMap.empty(16)
+  let m1 = FlatMap.insert(&empty, 10u64, 100)
+  let m2 = FlatMap.remove(&m1, 10u64)
+  if FlatMap.size(&m2) != 0 || !FlatMap.isEmpty(&m2) { return false }
+  if FlatMap.containsKey(&m2, 10u64) { return false }
+
+  // Insert new key into table that has a tombstone
+  let m3 = FlatMap.insert(&m2, 20u64, 200)
+  if FlatMap.size(&m3) != 1 || FlatMap.isEmpty(&m3) { return false }
+  if !FlatMap.containsKey(&m3, 20u64) { return false }
+  if FlatMap.containsKey(&m3, 10u64) { return false }
+  if FlatMap.getOr(&m3, 20u64, 0) != 200 { return false }
+
+  // Re-insert key 10
+  let m4 = FlatMap.insert(&m3, 10u64, 150)
+  if FlatMap.size(&m4) != 2 { return false }
+  if FlatMap.getOr(&m4, 10u64, 0) != 150 { return false }
+  if FlatMap.getOr(&m4, 20u64, 0) != 200 { return false }
+  true
+}
+
+fn testGenericTextValues() -> Bool {
+  let map: FlatMap.FlatMap[Str] = FlatMap.empty(16)
+  let m1 = FlatMap.insert(&map, 1u64, "alpha")
+  let m2 = FlatMap.insert(&m1, 2u64, "beta")
+  let m3 = FlatMap.insert(&m2, 3u64, "gamma")
+
+  if FlatMap.size(&m3) != 3 { return false }
+  if FlatMap.getOr(&m3, 1u64, "") != "alpha" { return false }
+  if FlatMap.getOr(&m3, 2u64, "") != "beta" { return false }
+  if FlatMap.getOr(&m3, 3u64, "") != "gamma" { return false }
+  if FlatMap.getOr(&m3, 99u64, "fallback") != "fallback" { return false }
+  if Option.unwrapOr(FlatMap.get(&m3, 1u64), "") != "alpha" { return false }
+  if Option.isSome(&FlatMap.get(&m3, 99u64)) { return false }
+
+  let es = FlatMap.entries(&m3)
+  if es.length() != 3 { return false }
+
+  let m4 = FlatMap.remove(&m3, 2u64)
+  if FlatMap.size(&m4) != 2 { return false }
+  if FlatMap.containsKey(&m4, 2u64) { return false }
+  if FlatMap.getOr(&m4, 1u64, "") != "alpha" { return false }
+  if FlatMap.getOr(&m4, 3u64, "") != "gamma" { return false }
+  true
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Empty table invariants across capacity requests
+  let cap0: FlatMap.FlatMap[Int] = FlatMap.empty(0)
+  if FlatMap.isEmpty(&cap0) && FlatMap.size(&cap0) == 0 { held = held + 1 }
+
+  let cap64: FlatMap.FlatMap[Int] = FlatMap.empty(64)
+  if FlatMap.isEmpty(&cap64) && FlatMap.size(&cap64) == 0 { held = held + 1 }
+
+  let table: FlatMap.FlatMap[Int] = FlatMap.empty(16)
+  if FlatMap.isEmpty(&table) { held = held + 1 }
+  if FlatMap.size(&table) == 0 { held = held + 1 }
+  if !FlatMap.containsKey(&table, 42u64) { held = held + 1 }
+  if Option.isNone(&FlatMap.get(&table, 42u64)) { held = held + 1 }
+  if FlatMap.getOr(&table, 42u64, 999) == 999 { held = held + 1 }
+  if FlatMap.entries(&table) == [] { held = held + 1 }
+
+  // Removing from empty table is safe
+  let emptyAfterRemove = FlatMap.remove(&table, 42u64)
+  if FlatMap.size(&emptyAfterRemove) == 0 { held = held + 1 }
+
+  // 2. Single insertion and lookup
+  let t1 = FlatMap.insert(&table, 42u64, 100)
+  if !FlatMap.isEmpty(&t1) { held = held + 1 }
+  if FlatMap.size(&t1) == 1 { held = held + 1 }
+  if FlatMap.containsKey(&t1, 42u64) { held = held + 1 }
+  if Option.unwrapOr(FlatMap.get(&t1, 42u64), 0) == 100 { held = held + 1 }
+  if FlatMap.getOr(&t1, 42u64, 0) == 100 { held = held + 1 }
+  if FlatMap.getOr(&t1, 99u64, 777) == 777 { held = held + 1 }
+
+  // 3. Update existing key (replaces value, preserves count)
+  let t2 = FlatMap.insert(&t1, 42u64, 200)
+  if FlatMap.size(&t2) == 1 { held = held + 1 }
+  if FlatMap.getOr(&t2, 42u64, 0) == 200 { held = held + 1 }
+
+  // 4. Deletion of absent and present keys
+  let absentRemove = FlatMap.remove(&t2, 9999u64)
+  if FlatMap.size(&absentRemove) == 1 { held = held + 1 }
+
+  let t3 = FlatMap.remove(&t2, 42u64)
+  if FlatMap.size(&t3) == 0 { held = held + 1 }
+  if FlatMap.isEmpty(&t3) { held = held + 1 }
+  if !FlatMap.containsKey(&t3, 42u64) { held = held + 1 }
+  if Option.isNone(&FlatMap.get(&t3, 42u64)) { held = held + 1 }
+
+  // 5. Boundary keys: 0 and max UInt64
+  if testBoundaryKeys() { held = held + 1 }
+
+  // 6. Tombstone recycling and probe retention
+  if testTombstoneRecycling() { held = held + 1 }
+
+  // 7. Generic polymorphic Str values
+  if testGenericTextValues() { held = held + 1 }
+
+  // 8. Bulk insertion (60 items) triggering multiple doublings and rehashing
+  let bulkOpt = buildBulk(60)
+  if Option.isSome(&bulkOpt) {
+    let bulk = Option.unwrapOr(bulkOpt, FlatMap.empty(16))
+    if FlatMap.size(&bulk) == 60 { held = held + 1 }
+    if Option.unwrapOr(verifyBulk(&bulk, 60), false) { held = held + 1 }
+    if verifyEntries(&bulk) { held = held + 1 }
+
+    // 9. Tombstone probe traversal after deleting 30 entries (evens)
+    let prunedOpt = deleteEvens(&bulk, 60)
+    if Option.isSome(&prunedOpt) {
+      let pruned = Option.unwrapOr(prunedOpt, FlatMap.empty(16))
+      if FlatMap.size(&pruned) == 30 { held = held + 1 }
+      if Option.unwrapOr(verifyEvensDeletedOddsRetained(&pruned, 60), false) { held = held + 1 }
+      if verifyEntries(&pruned) { held = held + 1 }
+    }
+  }
+
+  held
+}

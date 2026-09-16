@@ -1,0 +1,143 @@
+module View.Docs
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Constants as Constants
+import Service.Docs as Docs
+import View.Layout as Layout
+import View.Markdown as Markdown
+
+/// Where the documentation begins.
+export const INDEX_PATH: Str = "/docs"
+
+/// The address of one documentation page.
+export fn pathOf(slug: Str) -> Str { INDEX_PATH + "/" + slug }
+
+/// Every documentation page, each with the sentence that opens it.
+export fn index(siteUrl: Str, docs: &Docs.Docs, version: Str) -> Html.Html {
+  var cards: Array[H.Node] = []
+  var number = 1
+  for entry in docs.pages {
+    let read = Markdown.parse(&entry.lines)
+    cards = cards.push(
+      H.li().class("docs-card").holding([
+          H.span().class("meta").says("Chapter " + show(number)),
+          H.a().href(pathOf(entry.slug)).says(entry.title),
+          H.p().says(read.summary)
+        ])
+    )
+    number = number + 1
+  }
+  let article = H.article().class("docs-article").holding([
+      H.span().class("kind").says("Documentation"),
+      H.h1().says("Learn Pudu"),
+      metadata(version, None),
+      H.p().class("section-lead").says("The language from a first program to traits, ownership, concurrency, and the standard library. Read the chapters in order, or start with the topic you need. Every example on these pages is a complete program that runs as written."),
+      H.ol().class("docs-cards").holding(cards)
+    ])
+  let layout = H.div().class("docs-layout docs-layout-index").holding([sidebar(docs, ""), H.div().holding([mobileNavigation(docs, ""), article])])
+  Layout.page(siteUrl, "Pudu documentation", "Learn the Pudu programming language: syntax, types, errors, ownership, traits, concurrency, the standard library, and tooling.", INDEX_PATH, true, None, layout.html())
+}
+
+/// One documentation page, or nothing when no page has that address.
+export fn page(siteUrl: Str, docs: &Docs.Docs, slug: Str, version: Str) -> Option[Html.Html] {
+  let found = Docs.find(docs, slug) ?
+  let read = Markdown.parse(&found.lines)
+  let opening = [
+    mobileNavigation(docs, slug),
+    H.p().class("docs-crumb").holding([H.a().href(INDEX_PATH).says("Documentation")]),
+    H.h1().says(found.title),
+    metadata(version, Some(found.file))
+  ]
+  let article = H.article().class("docs-article").holding(opening.concat(read.blocks).concat([pager(Docs.neighbours(docs, slug))]))
+  let layout = H.div().class("docs-layout").holding([sidebar(docs, slug), article, contents(&read.headings)])
+  let description = if read.summary.isEmpty() { found.title + " in the Pudu documentation." } else { read.summary }
+  Some(Layout.page(siteUrl, found.title + " · Pudu documentation", description, pathOf(slug), true, None, layout.html()))
+}
+
+/// Who wrote the documentation, which release it describes, and where the page
+/// being read can be changed.
+fn metadata(version: Str, file: Option[Str]) -> H.Node {
+  var rows: Array[H.Node] = [
+    H.dt().says("Author"),
+    H.dd().says(Constants.AUTHOR_NAME),
+    H.dt().says("Version"),
+    H.dd().says(version)
+  ]
+  if let Some(name) = file {
+    rows = rows.concat([
+        H.dt().says("Source"),
+        H.dd().holding([H.a().href(Constants.DOCS_SOURCE_URL + name).at("rel", "external noopener noreferrer").says("Edit this page on GitHub")])
+      ])
+  }
+  H.dl().class("docs-meta").holding(rows)
+}
+
+/// The list of pages beside the one being read, on a screen wide enough for it.
+fn sidebar(docs: &Docs.Docs, current: Str) -> H.Node {
+  H.nav().class("docs-sidebar").label("Documentation pages").holding([
+      H.p().class("docs-sidebar-title").holding([H.a().href(INDEX_PATH).says("Overview")]),
+      H.ol().holding(pageLinks(docs, current))
+    ])
+}
+
+/// The same list on a narrow screen, folded away until it is asked for so the
+/// page being read comes first. It needs no script: the summary is the control.
+fn mobileNavigation(docs: &Docs.Docs, current: Str) -> H.Node {
+  H.details().class("docs-nav-mobile").holding([
+      H.summary().says("All documentation pages"),
+      H.nav().label("Documentation pages on a narrow screen").holding([
+          H.ol().holding([H.li().holding([H.a().href(INDEX_PATH).says("Overview")])].concat(pageLinks(docs, current)))
+        ])
+    ])
+}
+
+fn pageLinks(docs: &Docs.Docs, current: Str) -> Array[H.Node] {
+  var links: Array[H.Node] = []
+  for entry in docs.pages {
+    let link = H.a().href(pathOf(entry.slug)).says(entry.title)
+    let marked = if entry.slug == current { link.at("aria-current", "page") } else { link }
+    links = links.push(H.li().holding([marked]))
+  }
+  links
+}
+
+/// The sections of the page being read.
+fn contents(headings: &Array[Markdown.Heading]) -> H.Node {
+  var links: Array[H.Node] = []
+  for heading in *headings {
+    if heading.level <= 3 {
+      links = links.push(
+        H.li().class("toc-level-" + show(heading.level)).holding([
+            H.a().href("#" + heading.anchor).says(heading.text)
+          ])
+      )
+    }
+  }
+  H.aside().class("docs-toc").label("On this page").holding([
+      H.p().class("docs-toc-title").says("On this page"),
+      H.ul().holding(links)
+    ])
+}
+
+/// Links to the pages before and after this one.
+fn pager(around: (Option[Docs.Page], Option[Docs.Page])) -> H.Node {
+  var links: Array[H.Node] = []
+  if let Some(before) = around[0] {
+    links = links.push(
+      H.a().class("pager-previous").href(pathOf(before.slug)).holding([
+          H.span().says("Previous"),
+          H.strong().says(before.title)
+        ])
+    )
+  }
+  if let Some(after) = around[1] {
+    links = links.push(
+      H.a().class("pager-next").href(pathOf(after.slug)).holding([
+          H.span().says("Next"),
+          H.strong().says(after.title)
+        ])
+    )
+  }
+  H.nav().class("docs-pager").label("Previous and next pages").holding(links)
+}

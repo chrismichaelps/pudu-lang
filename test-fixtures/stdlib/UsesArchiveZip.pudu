@@ -1,0 +1,127 @@
+module UsesArchiveZip
+
+import Std.Archive.Zip as Zip
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+
+fn repeated(times: Int) -> Str {
+  var out = ""
+  var index = 0
+  while index < times {
+    out = out + "repeated content for the compressor "
+    index = index + 1
+  }
+  out
+}
+
+fn archiveOf(entries: &Array[Zip.Entry]) -> Bytes {
+  match Zip.writeArchive(entries) {
+    case Ok(bytes) => bytes
+    case Err(_) => ByteSeq.empty()
+  }
+}
+
+fn readBack(archive: &Bytes) -> Array[Zip.Entry] {
+  match Zip.readArchive(archive) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  let big = repeated(200)
+  let entries = [Zip.file("notes/readme.txt", "hello".toBytes()), Zip.file("big.txt", big.toBytes())]
+  let archive = archiveOf(&entries)
+  let back = readBack(&archive)
+
+  // 1. Both entries come back, in the order the directory lists them
+  if back.length() == 2 {
+    held = held + 1
+  }
+
+  // 2. Names survive, path separators and all
+  let names = Zip.names(&back)
+  if names.length() == 2 && names[0] == "notes/readme.txt" {
+    held = held + 1
+  }
+
+  // 3. Short content round-trips exactly
+  let readme = Option.unwrapOr(Zip.find(&back, "notes/readme.txt"), ByteSeq.empty())
+  if ByteSeq.toText(&readme) == Ok("hello") {
+    held = held + 1
+  }
+
+  // 4. So does content large enough to be worth compressing
+  let recovered = Option.unwrapOr(Zip.find(&back, "big.txt"), ByteSeq.empty())
+  if ByteSeq.toText(&recovered) == Ok(big) {
+    held = held + 1
+  }
+
+  // 5. And it was actually compressed rather than merely copied
+  if archive.length() < big.length() / 4 {
+    held = held + 1
+  }
+
+  // 6. A name no entry carries is not found
+  match Zip.find(&back, "absent.txt") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // 7. Content that does not compress is stored rather than made larger
+  var noise = ""
+  var seed = 7
+  var index = 0
+  while index < 300 {
+    seed = (seed * 1103515245 + 12345) % 2147483647
+    match charFromCode(32 + seed % 90) {
+      case Some(character) => { noise = noise + character.toText() }
+      case None => {}
+    }
+    index = index + 1
+  }
+  let noisy = readBack(&archiveOf(&[Zip.file("noise.bin", noise.toBytes())]))
+  if noisy.length() == 1 {
+    let sameBack = Option.unwrapOr(Zip.find(&noisy, "noise.bin"), ByteSeq.empty())
+    if ByteSeq.toText(&sameBack) == Ok(noise) {
+      held = held + 1
+    }
+  }
+
+  // 8. Bytes that hold no directory are refused rather than read as empty
+  match Zip.readArchive(&"not an archive at all".toBytes()) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 9. A truncated archive is refused
+  let clipped = ByteSeq.slice(&archive, 0, archive.length() / 2)
+  match Zip.readArchive(&clipped) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 10. An entry stored as it stands round-trips too
+  let plain = readBack(&archiveOf(&[Zip.stored("as-is.txt", "kept exactly".toBytes())]))
+  if plain.length() == 1 {
+    let kept = Option.unwrapOr(Zip.find(&plain, "as-is.txt"), ByteSeq.empty())
+    if ByteSeq.toText(&kept) == Ok("kept exactly") && plain[0].stored {
+      held = held + 1
+    }
+  }
+
+  // 11. An empty archive is an archive, and holds nothing
+  let none = readBack(&archiveOf(&[]))
+  if none.length() == 0 {
+    held = held + 1
+  }
+
+  // 12. An empty file inside an archive is not an empty archive
+  let blank = readBack(&archiveOf(&[Zip.file("blank.txt", ByteSeq.empty())]))
+  if blank.length() == 1 && blank[0].path == "blank.txt" {
+    held = held + 1
+  }
+
+  held
+}

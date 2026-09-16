@@ -1,0 +1,73 @@
+module UsesRegistry
+
+import Std.Decimal as D
+import Std.List as L
+import Std.Option as O
+
+/// A plugin registry: traits, dynamic values, and generics together.
+trait Renderer {
+  fn render(self: &Self, value: Int) -> Str
+  fn priority(self: &Self) -> Int
+}
+
+type Plain = {}
+type Padded = { width: Int }
+type Money = {}
+
+impl Renderer for Plain {
+  fn render(self: &Self, value: Int) -> Str { display(value) }
+  fn priority(self: &Self) -> Int { 1 }
+}
+
+impl Renderer for Padded {
+  fn render(self: &Self, value: Int) -> Str {
+    var text = display(value)
+    while text.length() < self.width {
+      text = "0" + text
+    }
+    text
+  }
+  fn priority(self: &Self) -> Int { 2 }
+}
+
+impl Renderer for Money {
+  fn render(self: &Self, value: Int) -> Str {
+    D.toText(D.rescale(O.unwrapOr(D.divideHalfEven(D.fromInt(value), 100d, 2), 0d), 2))
+  }
+  fn priority(self: &Self) -> Int { 3 }
+}
+
+/// A bounded generic over the trait, used alongside the dynamic form.
+fn renderWith[R: Renderer](renderer: &R, value: Int) -> Str {
+  Renderer.render(renderer, value)
+}
+
+fn renderAll(renderers: &Array[dynamic Renderer], value: Int) -> Array[Str] {
+  var out = []
+  for renderer in renderers {
+    out = out.push(renderer.render(value))
+  }
+  out
+}
+
+fn highest(renderers: &Array[dynamic Renderer]) -> Int {
+  var best = 0
+  for renderer in renderers {
+    let p = renderer.priority()
+    if p > best { best = p }
+  }
+  best
+}
+
+export fn main() -> Int {
+  let registry: Array[dynamic Renderer] = [Plain{}, Padded{width: 5}, Money{}]
+  var passed = 0
+  let rendered = renderAll(&registry, 1234)
+  if rendered.length() == 3 { passed = passed + 1 }
+  if rendered[0] == "1234" { passed = passed + 1 }
+  if rendered[1] == "01234" { passed = passed + 1 }
+  if rendered[2] == "12.34" { passed = passed + 1 }
+  if highest(&registry) == 3 { passed = passed + 1 }
+  if renderWith(&Padded{width: 3}, 7) == "007" { passed = passed + 1 }
+  passed
+}

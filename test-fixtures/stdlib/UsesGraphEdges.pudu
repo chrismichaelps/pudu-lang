@@ -1,0 +1,54 @@
+module UsesGraphEdges
+
+import Std.Graph as Graph
+
+/// The edge behaviour that must not have changed when the adjacency became a
+/// `MultiMap`, checked directly rather than inferred from the walks.
+///
+/// A multi-valued map is a reasonable place to deduplicate, and `MultiMap`
+/// deliberately does not — so these pin the parts where that decision shows.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  // The same edge added twice stays two edges, because the edges are a bag.
+  let doubled = Graph.fromEdges(&[("a", "b"), ("a", "b")])
+  if Graph.outDegree(&doubled, "a") == 2 { held = held + 1 }
+  if Graph.neighbours(&doubled, "a") == ["b", "b"] { held = held + 1 }
+  if Graph.inDegree(&doubled, "b") == 2 { held = held + 1 }
+  // It is still one node at each end.
+  if Graph.order(&doubled) == 2 { held = held + 1 }
+
+  // Neighbours keep the order the edges were added in, not a sorted order.
+  let ordered = Graph.fromEdges(&[("a", "z"), ("a", "m"), ("a", "b")])
+  if Graph.neighbours(&ordered, "a") == ["z", "m", "b"] { held = held + 1 }
+
+  // A node with no outgoing edges is still a node, which is why membership is
+  // kept apart from the edges.
+  let leaf = Graph.addNode(&Graph.fromEdges(&[("a", "b")]), "c")
+  if Graph.order(&leaf) == 3 { held = held + 1 }
+  if Graph.neighbours(&leaf, "c") == [] { held = held + 1 }
+  if Graph.outDegree(&leaf, "c") == 0 { held = held + 1 }
+  if Graph.hasNode(&leaf, "c") { held = held + 1 }
+  // A node the edges never mention still appears in a topological order.
+  match Graph.topologicalOrder(&leaf) {
+    case Some(order) => { if order.length() == 3 { held = held + 1 } }
+    case None => {}
+  }
+
+  // An edge to an undeclared node declares it.
+  let implied = Graph.fromEdges(&[("a", "b")])
+  if Graph.hasNode(&implied, "b") { held = held + 1 }
+
+  // Asking about a node that is not there answers empty rather than failing.
+  if Graph.neighbours(&implied, "missing") == [] { held = held + 1 }
+  if !Graph.hasEdge(&implied, "b", "a") { held = held + 1 }
+
+  // Reversing keeps every edge, including the duplicated one.
+  let back = Graph.reversed(&doubled)
+  if Graph.outDegree(&back, "b") == 2 { held = held + 1 }
+  if Graph.order(&back) == 2 { held = held + 1 }
+
+  held
+}

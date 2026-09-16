@@ -1,0 +1,84 @@
+module UsesHex
+
+import Std.Hex as Hex
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Empty byte array encoding and decoding
+  let encEmpty = Hex.encode(&[])
+  let decEmpty = Hex.decode("")
+  if encEmpty == "" && decEmpty == Some([]) {
+    held = held + 1
+  }
+
+  // 2. Lowercase hex encoding
+  let bytes1: Array[UInt8] = [0x00u8, 0x01u8, 0x0fu8, 0x10u8, 0xffu8]
+  let encLower = Hex.encode(&bytes1)
+  if encLower == "00010f10ff" {
+    held = held + 1
+  }
+
+  // 3. Uppercase hex encoding
+  let encUpper = Hex.encodeUpper(&bytes1)
+  if encUpper == "00010F10FF" {
+    held = held + 1
+  }
+
+  // 4. Lowercase hex decoding
+  let decLower = Hex.decode("00010f10ff")
+  if decLower == Some(bytes1) {
+    held = held + 1
+  }
+
+  // 5. Uppercase hex decoding
+  let decUpper = Hex.decode("00010F10FF")
+  if decUpper == Some(bytes1) {
+    held = held + 1
+  }
+
+  // 6. Prefix decoding with 0x and 0X
+  let decPref1 = Hex.decodeWithPrefix("0xdeadbeef")
+  let decPref2 = Hex.decodeWithPrefix("0XCAFE")
+  let decNoPref = Hex.decodeWithPrefix("1234")
+  if decPref1 == Some([0xdeu8, 0xadu8, 0xbeu8, 0xefu8])
+    && decPref2 == Some([0xcau8, 0xfeu8])
+    && decNoPref == Some([0x12u8, 0x34u8]) {
+    held = held + 1
+  }
+
+  // 7. Strict hex validation
+  let v1 = Hex.isValid("0123456789abcdefABCDEF")
+  let v2 = Hex.isValid("deadbeef")
+  let v3 = Hex.isValid("cafebabe")
+  if v1 && v2 && v3 {
+    held = held + 1
+  }
+
+  // 8. Odd-length inputs rejected
+  let odd1 = Hex.decode("a")
+  let odd2 = Hex.decode("123")
+  let oddVal = Hex.isValid("12345")
+  if odd1 == None && odd2 == None && !oddVal {
+    held = held + 1
+  }
+
+  // 9. Non-hex characters rejected
+  let bad1 = Hex.decode("zz")
+  let bad2 = Hex.decode("12g4")
+  let badVal = Hex.isValid("12xy")
+  if bad1 == None && bad2 == None && !badVal {
+    held = held + 1
+  }
+
+  // 10. String roundtrip
+  let original = "Pudu language hex codec"
+  let bOrig = original.toBytes().toArray()
+  let hexText = Hex.encode(&bOrig)
+  let decOrig = Hex.decode(hexText)
+  if decOrig == Some(bOrig) {
+    held = held + 1
+  }
+
+  held
+}

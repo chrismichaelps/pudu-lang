@@ -1,0 +1,374 @@
+module Std.Html.Build
+
+import Std.Html as Html
+
+/// Builds HTML by naming a tag as a function and its attributes as methods.
+///
+/// ```
+/// button().class("send").submit().says("Post")
+/// ```
+///
+/// renders `<button class="send" type="submit">Post</button>`.
+///
+/// A node holds a tag name, its attributes in the order they were given, and
+/// its children. Every method answers a new node, so a partly built node may
+/// be kept and finished more than once.
+export type Node = { name: Str, attributes: Array[(Str, Str)], children: Array[Html.Html] }
+
+/// The attributes and content a node accepts.
+///
+/// Common attributes have a method of their own; `at` sets any other.
+export trait Building {
+  /// Sets an attribute to a value.
+  fn at(self: &Self, name: Str, value: Str) -> Self
+
+  /// Sets an attribute whose value is its own name, such as `required`.
+  fn flag(self: &Self, name: Str) -> Self
+
+  fn class(self: &Self, value: Str) -> Self
+  fn id(self: &Self, value: Str) -> Self
+  fn href(self: &Self, value: Str) -> Self
+  fn src(self: &Self, value: Str) -> Self
+  fn alt(self: &Self, value: Str) -> Self
+  fn name(self: &Self, value: Str) -> Self
+  fn value(self: &Self, value: Str) -> Self
+  fn placeholder(self: &Self, value: Str) -> Self
+  fn action(self: &Self, value: Str) -> Self
+  fn method(self: &Self, value: Str) -> Self
+  fn rel(self: &Self, value: Str) -> Self
+  fn lang(self: &Self, value: Str) -> Self
+  fn title(self: &Self, value: Str) -> Self
+  fn target(self: &Self, value: Str) -> Self
+  fn role(self: &Self, value: Str) -> Self
+  fn rows(self: &Self, value: Int) -> Self
+  fn cols(self: &Self, value: Int) -> Self
+
+  /// Sets the `type` attribute. Named `kind` because `type` is a keyword.
+  fn kind(self: &Self, value: Str) -> Self
+
+  /// Sets `type="submit"`.
+  fn submit(self: &Self) -> Self
+
+  fn required(self: &Self) -> Self
+  fn disabled(self: &Self) -> Self
+  fn checked(self: &Self) -> Self
+
+  /// Sets `aria-label`, the name assistive software reads.
+  fn label(self: &Self, value: Str) -> Self
+
+  /// Sets a `data-` attribute. The name is given without the prefix.
+  fn data(self: &Self, name: Str, value: Str) -> Self
+
+  /// Appends text as a child. The text is escaped.
+  fn says(self: &Self, content: Str) -> Self
+
+  /// Appends markup as a child without escaping it.
+  ///
+  /// Only for markup the program produced. Text that came from a request or a
+  /// database belongs in `says`.
+  fn raw(self: &Self, markup: Str) -> Self
+
+  /// Appends nodes as children, in the order given.
+  fn holding(self: &Self, children: Array[Node]) -> Self
+
+  /// Appends an already-rendered view as a child.
+  fn holds(self: &Self, view: Html.Html) -> Self
+
+  /// Appends a child only when the condition holds.
+  fn when(self: &Self, condition: Bool, child: Node) -> Self
+
+  /// The view this node describes.
+  fn html(self: &Self) -> Html.Html
+}
+
+impl Building for Node {
+  fn at(self: &Self, name: Str, value: Str) -> Self {
+    Node{name: self.name, attributes: self.attributes.push((name, value)), children: self.children}
+  }
+
+  fn flag(self: &Self, name: Str) -> Self { self.at(name, name) }
+
+  fn class(self: &Self, value: Str) -> Self { self.at("class", value) }
+
+  fn id(self: &Self, value: Str) -> Self { self.at("id", value) }
+
+  fn href(self: &Self, value: Str) -> Self { self.at("href", value) }
+
+  fn src(self: &Self, value: Str) -> Self { self.at("src", value) }
+
+  fn alt(self: &Self, value: Str) -> Self { self.at("alt", value) }
+
+  fn name(self: &Self, value: Str) -> Self { self.at("name", value) }
+
+  fn value(self: &Self, value: Str) -> Self { self.at("value", value) }
+
+  fn placeholder(self: &Self, value: Str) -> Self { self.at("placeholder", value) }
+
+  fn action(self: &Self, value: Str) -> Self { self.at("action", value) }
+
+  fn method(self: &Self, value: Str) -> Self { self.at("method", value) }
+
+  fn rel(self: &Self, value: Str) -> Self { self.at("rel", value) }
+
+  fn lang(self: &Self, value: Str) -> Self { self.at("lang", value) }
+
+  fn title(self: &Self, value: Str) -> Self { self.at("title", value) }
+
+  fn target(self: &Self, value: Str) -> Self { self.at("target", value) }
+
+  fn role(self: &Self, value: Str) -> Self { self.at("role", value) }
+
+  fn rows(self: &Self, value: Int) -> Self { self.at("rows", show(value)) }
+
+  fn cols(self: &Self, value: Int) -> Self { self.at("cols", show(value)) }
+
+  fn kind(self: &Self, value: Str) -> Self { self.at("type", value) }
+
+  fn submit(self: &Self) -> Self { self.at("type", "submit") }
+
+  fn required(self: &Self) -> Self { self.flag("required") }
+
+  fn disabled(self: &Self) -> Self { self.flag("disabled") }
+
+  fn checked(self: &Self) -> Self { self.flag("checked") }
+
+  fn label(self: &Self, value: Str) -> Self { self.at("aria-label", value) }
+
+  fn data(self: &Self, name: Str, value: Str) -> Self { self.at("data-" + name, value) }
+
+  fn says(self: &Self, content: Str) -> Self { self.holds(Html.text(content)) }
+
+  fn raw(self: &Self, markup: Str) -> Self { self.holds(Html.trusted(markup)) }
+
+  fn holds(self: &Self, view: Html.Html) -> Self {
+    Node{name: self.name, attributes: self.attributes, children: self.children.push(view)}
+  }
+
+  fn holding(self: &Self, children: Array[Node]) -> Self {
+    var built = self.children
+    for child in children {
+      built = built.push(child.html())
+    }
+    Node{name: self.name, attributes: self.attributes, children: built}
+  }
+
+  fn when(self: &Self, condition: Bool, child: Node) -> Self {
+    if condition { self.holds(child.html()) } else { *self }
+  }
+
+  /// A node with no tag name renders as its children alone, with no element
+  /// around them. That is what `words` and `nothing` produce.
+  fn html(self: &Self) -> Html.Html {
+    if self.name.isEmpty() {
+      Html.fragment(&self.children)
+    } else {
+      Html.element(self.name, &self.attributes, &self.children)
+    }
+  }
+}
+
+/// An element with the given tag name, for tags without a function here.
+export fn tag(name: Str) -> Node { Node{name: name, attributes: [], children: []} }
+
+/// Text as a node, so it can appear in a list beside elements. Escaped.
+export fn words(content: Str) -> Node {
+  Node{name: "", attributes: [], children: [Html.text(content)]}
+}
+
+/// A node that renders nothing.
+export fn nothing() -> Node { Node{name: "", attributes: [], children: []} }
+
+// One function per tag. Each answers an empty node with that tag name;
+// attributes and children are added by the methods above.
+
+/// The root element of a document.
+export fn html() -> Node { tag("html") }
+
+/// The document's metadata, which is not rendered.
+export fn head() -> Node { tag("head") }
+
+/// The document's rendered content.
+export fn body() -> Node { tag("body") }
+
+/// A piece of document metadata, such as the character set.
+export fn meta() -> Node { tag("meta") }
+
+/// A relationship to another resource, such as a stylesheet.
+export fn link() -> Node { tag("link") }
+
+/// A stylesheet written into the document.
+export fn style() -> Node { tag("style") }
+
+/// A script written into the document, or a reference to one.
+export fn script() -> Node { tag("script") }
+
+/// The content particular to this page.
+export fn main() -> Node { tag("main") }
+
+/// Introductory content for the page or the section around it.
+export fn header() -> Node { tag("header") }
+
+/// Closing content for the page or the section around it.
+export fn footer() -> Node { tag("footer") }
+
+/// A group of navigation links.
+export fn nav() -> Node { tag("nav") }
+
+/// A themed grouping of content, usually with a heading.
+export fn section() -> Node { tag("section") }
+
+/// Content that stands on its own, such as a post or a comment.
+export fn article() -> Node { tag("article") }
+
+/// Content related to what surrounds it but separable from it.
+export fn aside() -> Node { tag("aside") }
+
+/// A grouping with no meaning of its own, for layout or styling.
+export fn div() -> Node { tag("div") }
+
+/// A run of inline content with no meaning of its own.
+export fn span() -> Node { tag("span") }
+
+/// A paragraph.
+export fn p() -> Node { tag("p") }
+
+/// A first-level heading.
+export fn h1() -> Node { tag("h1") }
+
+/// A second-level heading.
+export fn h2() -> Node { tag("h2") }
+
+/// A third-level heading.
+export fn h3() -> Node { tag("h3") }
+
+/// A fourth-level heading.
+export fn h4() -> Node { tag("h4") }
+
+/// A fifth-level heading.
+export fn h5() -> Node { tag("h5") }
+
+/// A sixth-level heading.
+export fn h6() -> Node { tag("h6") }
+
+/// A list whose order carries no meaning.
+export fn ul() -> Node { tag("ul") }
+
+/// A list whose order carries meaning.
+export fn ol() -> Node { tag("ol") }
+
+/// One item of a list.
+export fn li() -> Node { tag("li") }
+
+/// A list of terms and their descriptions.
+export fn dl() -> Node { tag("dl") }
+
+/// A term in a description list.
+export fn dt() -> Node { tag("dt") }
+
+/// The description of the term before it.
+export fn dd() -> Node { tag("dd") }
+
+/// A table of rows and columns.
+export fn table() -> Node { tag("table") }
+
+/// The group of rows that head a table.
+export fn thead() -> Node { tag("thead") }
+
+/// The group of rows that make up a table's body.
+export fn tbody() -> Node { tag("tbody") }
+
+/// The group of rows that summarise a table.
+export fn tfoot() -> Node { tag("tfoot") }
+
+/// One row of a table.
+export fn tr() -> Node { tag("tr") }
+
+/// A header cell, naming a row or a column.
+export fn th() -> Node { tag("th") }
+
+/// A data cell.
+export fn td() -> Node { tag("td") }
+
+/// A group of controls submitted together.
+export fn form() -> Node { tag("form") }
+
+/// A group of related controls within a form.
+export fn fieldset() -> Node { tag("fieldset") }
+
+/// The caption for a fieldset.
+export fn legend() -> Node { tag("legend") }
+
+/// A caption for a control. Named `labelFor` because `label` sets an attribute.
+export fn labelFor() -> Node { tag("label") }
+
+/// A form control. Its kind is set with `kind`.
+export fn input() -> Node { tag("input") }
+
+/// A control for text of more than one line.
+export fn textarea() -> Node { tag("textarea") }
+
+/// A control offering a list of options.
+export fn select() -> Node { tag("select") }
+
+/// One choice within a select.
+export fn option() -> Node { tag("option") }
+
+/// A button. Use `submit` to make it submit its form.
+export fn button() -> Node { tag("button") }
+
+/// A link, whose destination is set with `href`.
+export fn a() -> Node { tag("a") }
+
+/// An image, whose source is set with `src` and description with `alt`.
+export fn img() -> Node { tag("img") }
+
+/// Self-contained content with an optional caption.
+export fn figure() -> Node { tag("figure") }
+
+/// The caption for a figure.
+export fn figcaption() -> Node { tag("figcaption") }
+
+/// A line break.
+export fn br() -> Node { tag("br") }
+
+/// A thematic break between sections of content.
+export fn hr() -> Node { tag("hr") }
+
+/// Text whose whitespace and line breaks are kept as written.
+export fn pre() -> Node { tag("pre") }
+
+/// A fragment of code.
+export fn code() -> Node { tag("code") }
+
+/// A quotation from another source.
+export fn blockquote() -> Node { tag("blockquote") }
+
+/// Content with strong importance.
+export fn strong() -> Node { tag("strong") }
+
+/// Content with stress emphasis.
+export fn em() -> Node { tag("em") }
+
+/// Side comments such as small print.
+export fn small() -> Node { tag("small") }
+
+/// A time or a date, machine-readable through `at("datetime", ...)`.
+export fn time() -> Node { tag("time") }
+
+/// A disclosure that a reader can open and close.
+export fn details() -> Node { tag("details") }
+
+/// The visible heading of a disclosure.
+export fn summary() -> Node { tag("summary") }
+
+/// A dialogue box or other interactive component.
+export fn dialog() -> Node { tag("dialog") }
+
+/// The progress of a task.
+export fn progress() -> Node { tag("progress") }
+
+/// Renders a node as a whole document, prefixed with `<!DOCTYPE html>`.
+export fn document(root: &Node) -> Str { "<!DOCTYPE html>" + Html.render(&root.html()) }
+
+/// Renders a node on its own, without a doctype.
+export fn render(node: &Node) -> Str { Html.render(&node.html()) }

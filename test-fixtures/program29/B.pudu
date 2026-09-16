@@ -1,0 +1,5 @@
+module B
+
+import A {User, Show}
+
+fn display(user: User) -> Str { user.show() }

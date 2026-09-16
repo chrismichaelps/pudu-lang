@@ -1,0 +1,227 @@
+module Std.Ui.Live
+
+import Std.Html as Html
+import Std.Json as Json
+import Std.Json {Number, Text}
+import Std.Option as Option
+import Std.Set as Set
+import Std.Ui as Ui
+
+/// A viewer's screen, held here.
+///
+/// The component is the state and how it renders; `shown` is what this end
+/// last sent, which is the only thing a difference can be computed against.
+/// `accepted` names the events this session will act on — what arrives is text
+/// from whoever is on the other end, and the other end is not necessarily the
+/// page this server rendered.
+export type Session[S, E] = {
+  component: Ui.Component[S, E],
+  shown: Html.Html,
+  accepted: Set[Str],
+  discarded: Int
+}
+
+/// What this end sends after an event.
+///
+/// A whole page or a difference, never both, because they answer different
+/// questions: the first says what the screen is, the second says what it
+/// became.
+export type Update
+  = Whole(Str)
+  | Changed(Array[Ui.Change])
+  | Nothing
+
+/// What a viewer sent.
+export type Event = { name: Str, value: Str }
+
+/// A session over a component, accepting the events it names.
+///
+/// The screen is rendered immediately, so what this end believes is on the
+/// viewer's screen is true from the first moment rather than after the first
+/// event.
+export fn session[S, E](
+  component: Ui.Component[S, E],
+  accepted: &Array[Str]
+) -> Session[S, E] {
+  Session {
+    component: component,
+    shown: Ui.render(&component),
+    accepted: Set.fromArray(accepted),
+    discarded: 0
+  }
+}
+
+/// The first thing a viewer receives: the whole page.
+export fn firstAnswer[S, E](held: &Session[S, E]) -> Update { Whole(Html.render(&held.shown)) }
+
+/// The page as markup, for the response that carries it.
+export fn markupOf[S, E](held: &Session[S, E]) -> Str { Html.render(&held.shown) }
+
+/// What the session currently believes is on the viewer's screen.
+export fn shownBy[S, E](held: &Session[S, E]) -> Html.Html { held.shown }
+
+/// What the component knows.
+export fn stateOf[S, E](held: &Session[S, E]) -> S { Ui.stateOf(&held.component) }
+
+/// How many messages were discarded for naming an event this session does not
+/// accept.
+///
+/// Kept rather than dropped silently, so a page being probed is visible rather
+/// than merely unaffected.
+export fn discardedCount[S, E](held: &Session[S, E]) -> Int { held.discarded }
+
+/// Whether this session acts on an event by that name.
+export fn accepts[S, E](held: &Session[S, E], name: Str) -> Bool {
+  Set.contains(&held.accepted, name)
+}
+
+/// The session after a viewer's event, and what to send them.
+///
+/// An event the session does not accept changes nothing and is counted. The
+/// component's update function is written against the events the program has;
+/// handing it arbitrary text would make every component responsible for its
+/// own filtering, differently.
+export fn given[S, E](
+  held: &Session[S, E],
+  arrived: &Event,
+  understood: fn(Event) -> Option[E]
+) -> (Update, Session[S, E]) {
+  if !accepts(held, arrived.name) {
+    (Nothing, discarding(held))
+  } else {
+    if let Some(sent) = understood(*arrived) {
+      advanced(held, sent)
+    } else {
+      (Nothing, discarding(held))
+    }
+  }
+}
+
+/// The session after an event the caller already made sense of.
+export fn advanced[S, E](held: &Session[S, E], sent: E) -> (Update, Session[S, E]) {
+  let moved = Ui.given(&held.component, sent)
+  let now = Ui.render(&moved)
+  let edits = Ui.changes(&held.shown, &now)
+  (
+    if edits.length() == 0 { Nothing } else { Changed(edits) },
+    Session {
+      component: moved,
+      shown: now,
+      accepted: held.accepted,
+      discarded: held.discarded
+    }
+  )
+}
+
+/// A session that discarded one message.
+fn discarding[S, E](held: &Session[S, E]) -> Session[S, E] {
+  Session {
+    component: held.component,
+    shown: held.shown,
+    accepted: held.accepted,
+    discarded: held.discarded + 1
+  }
+}
+
+/// What a viewer receives when they rejoin after the connection dropped.
+///
+/// A whole page, never a difference. The state is known; what is unknown is
+/// what the viewer's screen currently shows, and a difference against an
+/// unknown screen produces a wrong screen that renders plausibly.
+export fn rejoined[S, E](held: &Session[S, E]) -> (Update, Session[S, E]) {
+  let now = Ui.render(&held.component)
+  (
+    Whole(Html.render(&now)),
+    Session {
+      component: held.component,
+      shown: now,
+      accepted: held.accepted,
+      discarded: held.discarded
+    }
+  )
+}
+
+/// Whether an update has anything to send.
+export fn worthSending(held: &Update) -> Bool { *held != Nothing }
+
+/// An update as the message that carries it.
+export fn encode(held: &Update) -> Str {
+  match held {
+    case Nothing => Json.encode(&Json.object(&[("kind", Text("nothing"))]))
+    case Whole(markup) =>
+    Json.encode(&Json.object(&[("kind", Text("whole")), ("html", Text(markup))]))
+    case Changed(edits) =>
+    Json.encode(
+        &Json.object(&[("kind", Text("changed")), ("edits", Json.list(&encoded(&edits)))])
+    )
+  }
+}
+
+fn encoded(edits: &Array[Ui.Change]) -> Array[Json.Json] {
+  var built: Array[Json.Json] = []
+  for edit in edits { built = built.push(encodeChange(&edit)) }
+  built
+}
+
+fn encodeChange(edit: &Ui.Change) -> Json.Json {
+  match edit {
+    case Ui.Replaced(spot, node) =>
+    Json.object(&[
+        ("at", pathJson(&spot)),
+        ("kind", Text("replaced")),
+        ("html", Text(Html.render(&node)))
+      ])
+    case Ui.Retexted(spot, content) =>
+    Json.object(&[
+        ("at", pathJson(&spot)),
+        ("kind", Text("retexted")),
+        ("text", Text(content))
+      ])
+    case Ui.Reattributed(spot, attributes) =>
+    Json.object(&[
+        ("at", pathJson(&spot)),
+        ("kind", Text("reattributed")),
+        ("attributes", Json.list(&attributeJson(&attributes)))
+      ])
+  }
+}
+
+fn pathJson(spot: &Ui.Path) -> Json.Json {
+  var steps: Array[Json.Json] = []
+  for step in spot.steps { steps = steps.push(Number(step)) }
+  Json.list(&steps)
+}
+
+fn attributeJson(attributes: &Array[(Str, Str)]) -> Array[Json.Json] {
+  var built: Array[Json.Json] = []
+  for entry in attributes {
+    built = built.push(Json.object(&[("name", Text(entry[0])), ("value", Text(entry[1]))]))
+  }
+  built
+}
+
+/// What a viewer sent, read from the message that carried it.
+///
+/// A message that is not an event at all answers nothing rather than a
+/// half-read one, because a half-read event dispatches something the viewer
+/// did not do.
+export fn decode(message: Str) -> Option[Event] {
+  if let Ok(parsed) = Json.decode(message) {
+    let name = textAt(&parsed, "event")
+    if let Some(named) = name {
+      Some(Event{name: named, value: Option.unwrapOr(textAt(&parsed, "value"), "")})
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+}
+
+/// An event, for a caller building one directly.
+export fn event(name: Str, value: Str) -> Event { Event{name: name, value: value} }
+
+/// One text field of an object, or nothing when it is absent or is not text.
+fn textAt(value: &Json.Json, key: Str) -> Option[Str] {
+  if let Some(held) = Json.field(value, key) { Json.asText(&held) } else { None }
+}

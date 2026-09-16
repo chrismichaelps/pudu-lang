@@ -1,0 +1,262 @@
+module Std.Mime
+
+import Std.List as List
+
+/// Structured representation of a MIME Media Type.
+export type MediaType = {
+  primaryType: Str,
+  subType: Str,
+  parameters: Array[(Str, Str)]
+}
+
+/// Parses a MIME media type string into a structured MediaType.
+export fn parse(input: Str) -> Option[MediaType] {
+  let cleaned = input.trim()
+  if cleaned.isEmpty() { return None }
+  let parts = cleaned.split(";")
+  let mainType = parts[0].trim()
+  let slashIdx = mainType.indexOf("/")
+  if slashIdx <= 0 || slashIdx >= mainType.length() - 1 { return None }
+
+  let prim = mainType.slice(0, slashIdx).trim().toLower()
+  let sub = mainType.slice(slashIdx + 1, mainType.length()).trim().toLower()
+  if prim.isEmpty() || sub.isEmpty() { return None }
+
+  var params: Array[(Str, Str)] = []
+  var pIdx = 1
+  while pIdx < parts.length() {
+    let seg = parts[pIdx].trim()
+    if !seg.isEmpty() {
+      let eqIdx = seg.indexOf("=")
+      if eqIdx > 0 {
+        let k = seg.slice(0, eqIdx).trim().toLower()
+        var v = seg.slice(eqIdx + 1, seg.length()).trim()
+        if v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"") {
+          v = v.slice(1, v.length() - 1)
+        }
+        params = params.push((k, v))
+      }
+    }
+    pIdx = pIdx + 1
+  }
+
+  Some(MediaType{primaryType: prim, subType: sub, parameters: params})
+}
+
+/// Serializes a MediaType to its canonical wire format.
+export fn format(media: &MediaType) -> Str {
+  var out = media.primaryType + "/" + media.subType
+  for param in media.parameters {
+    out = out + "; " + param[0] + "=" + param[1]
+  }
+  out
+}
+
+/// Extracts a named parameter value from a MediaType.
+export fn parameter(media: &MediaType, name: Str) -> Option[Str] {
+  let target = name.trim().toLower()
+  for param in media.parameters {
+    if param[0] == target {
+      return Some(param[1])
+    }
+  }
+  None
+}
+
+/// The media type each file extension names, lower case and without its dot.
+const EXTENSION_TYPES: Map[Str, Str] = mapOf([
+    ("html", "text/html"),
+    ("htm", "text/html"),
+    ("css", "text/css"),
+    ("js", "text/javascript"),
+    ("mjs", "text/javascript"),
+    ("json", "application/json"),
+    ("xml", "application/xml"),
+    ("txt", "text/plain"),
+    ("text", "text/plain"),
+    ("csv", "text/csv"),
+    ("md", "text/markdown"),
+    ("markdown", "text/markdown"),
+    ("yaml", "application/yaml"),
+    ("yml", "application/yaml"),
+    ("toml", "application/toml"),
+    ("wasm", "application/wasm"),
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("webp", "image/webp"),
+    ("avif", "image/avif"),
+    ("svg", "image/svg+xml"),
+    ("ico", "image/x-icon"),
+    ("bmp", "image/bmp"),
+    ("tiff", "image/tiff"),
+    ("tif", "image/tiff"),
+    ("mp3", "audio/mpeg"),
+    ("wav", "audio/wav"),
+    ("ogg", "audio/ogg"),
+    ("flac", "audio/flac"),
+    ("mp4", "video/mp4"),
+    ("webm", "video/webm"),
+    ("mov", "video/quicktime"),
+    ("mkv", "video/x-matroska"),
+    ("woff2", "font/woff2"),
+    ("woff", "font/woff"),
+    ("ttf", "font/ttf"),
+    ("otf", "font/otf"),
+    ("pdf", "application/pdf"),
+    ("zip", "application/zip"),
+    ("gz", "application/gzip"),
+    ("gzip", "application/gzip"),
+    ("tar", "application/x-tar"),
+    ("7z", "application/x-7z-compressed"),
+    ("rar", "application/vnd.rar"),
+    ("doc", "application/msword"),
+    ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ("xls", "application/vnd.ms-excel"),
+    ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ("ppt", "application/vnd.ms-powerpoint"),
+    ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+  ])
+
+/// Maps a file extension to its canonical MIME media type.
+export fn fromExtension(ext: Str) -> Str {
+  let lowered = ext.trim().toLower()
+  let clean = if lowered.startsWith(".") { lowered.slice(1, lowered.length()) } else { lowered }
+  match EXTENSION_TYPES.get(clean) {
+    case Some(found) => found
+    case None => "application/octet-stream"
+  }
+}
+
+/// The primary extension each canonical media type is saved with.
+const TYPE_EXTENSIONS: Map[Str, Str] = mapOf([
+    ("text/html", "html"),
+    ("text/css", "css"),
+    ("text/javascript", "js"),
+    ("application/json", "json"),
+    ("application/xml", "xml"),
+    ("text/plain", "txt"),
+    ("text/csv", "csv"),
+    ("text/markdown", "md"),
+    ("application/yaml", "yaml"),
+    ("application/toml", "toml"),
+    ("application/wasm", "wasm"),
+    ("image/png", "png"),
+    ("image/jpeg", "jpg"),
+    ("image/gif", "gif"),
+    ("image/webp", "webp"),
+    ("image/avif", "avif"),
+    ("image/svg+xml", "svg"),
+    ("image/x-icon", "ico"),
+    ("audio/mpeg", "mp3"),
+    ("audio/wav", "wav"),
+    ("video/mp4", "mp4"),
+    ("video/webm", "webm"),
+    ("font/woff2", "woff2"),
+    ("font/woff", "woff"),
+    ("application/pdf", "pdf"),
+    ("application/zip", "zip"),
+    ("application/gzip", "gz"),
+    ("application/x-tar", "tar"),
+    ("application/octet-stream", "bin")
+  ])
+
+/// Maps a canonical MIME media type to its primary file extension.
+export fn toExtension(mime: Str) -> Option[Str] {
+  let clean = mime.trim().toLower()
+  let base = match clean.indexOf(";") {
+    case -1 => clean
+    case idx => clean.slice(0, idx).trim()
+  }
+  TYPE_EXTENSIONS.get(base)
+}
+
+/// Tests if a target media type satisfies a pattern (e.g. */* or type/*).
+export fn matches(pattern: Str, target: Str) -> Bool {
+  let p = pattern.trim().toLower()
+  let t = target.trim().toLower()
+  if p == "*/*" || p == "*" { return true }
+  let baseT = match t.indexOf(";") {
+    case -1 => t
+    case idx => t.slice(0, idx)
+  }
+  let baseP = match p.indexOf(";") {
+    case -1 => p
+    case idx => p.slice(0, idx)
+  }
+  if baseP == "*/*" { return true }
+  if baseP == baseT { return true }
+  if baseP.endsWith("/*") {
+    let pPrefix = baseP.slice(0, baseP.length() - 2)
+    let tSlash = baseT.indexOf("/")
+    if tSlash > 0 {
+      let tPrefix = baseT.slice(0, tSlash)
+      return pPrefix == tPrefix
+    }
+  }
+  false
+}
+
+fn parseQuality(item: Str) -> (Str, Int) {
+  let parts = item.split(";")
+  let pat = parts[0].trim()
+  var q = 1000
+  var i = 1
+  while i < parts.length() {
+    let seg = parts[i].trim()
+    if seg.startsWith("q=") || seg.startsWith("Q=") {
+      let rawQ = seg.slice(2, seg.length()).trim()
+      if rawQ == "1" || rawQ == "1.0" || rawQ == "1.00" || rawQ == "1.000" {
+        q = 1000
+      } else if rawQ.startsWith("0.") {
+        let decStr = rawQ.slice(2, rawQ.length())
+        var num = 0
+        var dIdx = 0
+        var multiplier = 100
+        while dIdx < decStr.length() && dIdx < 3 {
+          let code = decStr.charAt(dIdx).code() - '0'.code()
+          if code >= 0 && code <= 9 {
+            num = num + code * multiplier
+          }
+          multiplier = multiplier / 10
+          dIdx = dIdx + 1
+        }
+        q = num
+      } else if rawQ == "0" {
+        q = 0
+      }
+    }
+    i = i + 1
+  }
+  (pat, q)
+}
+
+/// Negotiates the best matching media type from available candidates using an RFC 7231 Accept header.
+export fn negotiate(acceptHeader: Str, available: Array[Str]) -> Option[Str] {
+  if acceptHeader.isEmpty() || available.length() == 0 { return None }
+  let rawOffers = acceptHeader.split(",")
+  var offers: Array[(Str, Int)] = []
+  for ro in rawOffers {
+    let trimmed = ro.trim()
+    if !trimmed.isEmpty() {
+      offers = offers.push(parseQuality(trimmed))
+    }
+  }
+  if offers.length() == 0 { return None }
+
+  // Highest quality first. The sort is stable, so offers of equal quality
+  // keep the order the client wrote them in; a swapping sort reordered them.
+  let sortedOffers = List.sortOn(&offers, fn(offer: (Str, Int)) -> Int => 0 - offer[1])
+
+  for offer in sortedOffers {
+    if offer[1] > 0 {
+      for cand in available {
+        if matches(offer[0], cand) {
+          return Some(cand)
+        }
+      }
+    }
+  }
+  None
+}

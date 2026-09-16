@@ -1,0 +1,199 @@
+module UsesStoreDriver
+
+import Std.App.Database as Database
+import Std.Db.Driver {DollarNumber}
+import Std.Db.Driver as Driver
+import Std.Db.Query as Query
+import Std.Db.Repository as Repository
+import Std.Db.Store {Refused}
+import Std.Db.Store as Store
+import Std.Map as Map
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// A person the program keeps.
+type Person = { id: Int, name: Str }
+
+/// Something that belongs to a person.
+type Note = { id: Int, personId: Int, body: Str }
+
+/// What keeping a value promises through any driver, against a real SQLite
+/// database.
+///
+/// The statements are checked as text elsewhere. What only a database shows is
+/// checked here: that a write reports how many rows it changed on a backend
+/// whose driver states no count, that a key naming nothing changes nothing,
+/// that a value spelling a statement is kept as that value, and that what
+/// belongs to many parents comes back grouped from one statement.
+export fn main() -> Int {
+  var held = 0
+  let people = Store.stored("people", "id", &["id", "name"], personRow, personAt)
+  let notes = Store.stored("notes", "id", &["id", "person_id", "body"], noteRow, noteAt)
+  let hostile = "'; drop table people; --"
+
+  match Database.create("sqlite::memory:", 1) {
+    case Err(_) => {}
+    case Ok(db) => {
+      // A database that is not started is refused rather than opened.
+      if Result.isErr(&Database.storeTarget(&db)) { held = held + 1 }
+      let _started = Database.start(&db)
+      let _people = Database.execute(&db, "create table people (id integer primary key, name text not null)")
+      let _notes = Database.execute(
+          &db,
+        "create table notes (id integer primary key, person_id integer not null, body text not null)"
+      )
+      match Database.storeTarget(&db) {
+        case Err(_) => {}
+        case Ok(target) => {
+          // A write says how many rows it changed, although SQLite's driver
+          // answers every statement with no count of its own.
+          if Store.saveIn(&target, &people, Person{id: 1, name: "ada"}) == Ok(1) { held = held + 1 }
+          if Store.saveIn(&target, &people, Person{id: 2, name: "grace"}) == Ok(1) { held = held + 1 }
+
+          // A key already taken is refused, and the refusal names the driver.
+          match Store.saveIn(&target, &people, Person{id: 1, name: "again"}) {
+            case Err(Refused(reason)) => { if reason.startsWith("sqlite: ") { held = held + 1 } }
+            case _ => {}
+          }
+
+          // A value that spells a statement is kept as that value.
+          if Store.saveIn(&target, &people, Person{id: 3, name: hostile}) == Ok(1) { held = held + 1 }
+
+          match Store.loadIn(&target, &people, Some("1")) {
+            case Ok(Some(who)) => { if who.name == "ada" { held = held + 1 } }
+            case _ => {}
+          }
+          match Store.loadIn(&target, &people, Some("9")) {
+            case Ok(None) => { held = held + 1 }
+            case _ => {}
+          }
+
+          let everyone = Result.unwrapOr(Store.loadAllIn(&target, &people), [])
+          if everyone.length() == 3 { held = held + 1 }
+          if everyone.length() == 3 && everyone[2].name == hostile { held = held + 1 }
+
+          // A change to a key that names nothing changes nothing, and says so
+          // rather than reporting success as though a row had been written.
+          if Store.changeIn(&target, &people, Some("2"), Person{id: 2, name: "grace hopper"}) == Ok(1) {
+            held = held + 1
+          }
+          if Store.changeIn(&target, &people, Some("9"), Person{id: 9, name: "nobody"}) == Ok(0) {
+            held = held + 1
+          }
+          match Store.loadIn(&target, &people, Some("2")) {
+            case Ok(Some(who)) => { if who.name == "grace hopper" { held = held + 1 } }
+            case _ => {}
+          }
+
+          if Store.removeIn(&target, &people, Some("3")) == Ok(1) { held = held + 1 }
+          if Store.removeIn(&target, &people, Some("3")) == Ok(0) { held = held + 1 }
+          if Result.unwrapOr(Store.loadAllIn(&target, &people), []).length() == 2 { held = held + 1 }
+
+          // The driver waits for another connection's lock rather than refusing
+          // at once, which is what lets two processes share one file, and a
+          // violated constraint is filed as one rather than as a number.
+          match Database.query(&db, "PRAGMA busy_timeout", &[]) {
+            case Ok(rows) => {
+              if rows.rows.length() == 1 && rows.rows[0][0] == Driver.IntegerValue(5000i64) { held = held + 1 }
+            }
+            case Err(_) => {}
+          }
+          match Database.execute(&db, "insert into people (id, name) values (1, 'twice')") {
+            case Err(problem) => { if problem.category == "constraint" { held = held + 1 } }
+            case Ok(_) => {}
+          }
+
+          // A statement a caller built reads through the same target, spelled
+          // for this driver's placeholders.
+          let base = Result.unwrapOr(Query.selecting(&["id", "name"], "people"), Query.empty())
+          let named = Result.unwrapOr(Query.matching(&base, "name", "=", Query.textValue("ada")), Query.empty())
+          if Result.unwrapOr(Store.loadWhereIn(&target, &people, &named), []).length() == 1 { held = held + 1 }
+
+          // What belongs to many parents comes back grouped from one statement.
+          let first = Store.saveIn(&target, &notes, Note{id: 10, personId: 1, body: "first"})
+          let second = Store.saveIn(&target, &notes, Note{id: 11, personId: 1, body: "second"})
+          let third = Store.saveIn(&target, &notes, Note{id: 12, personId: 2, body: "third"})
+          if first == Ok(1) && second == Ok(1) && third == Ok(1) { held = held + 1 }
+          let grouped = Result.unwrapOr(
+            Store.loadForParentsIn(&target, &notes, "person_id", &[Some("1"), Some("2")]),
+            Map.empty()
+          )
+          if Map.size(&grouped) == 2 { held = held + 1 }
+          if Store.belongingTo(&grouped, Some("1")).length() == 2 { held = held + 1 }
+          let ofGrace = Store.belongingTo(&grouped, Some("2"))
+          if ofGrace.length() == 1 && ofGrace[0].body == "third" { held = held + 1 }
+        }
+      }
+      let _stopped = Database.stop(&db)
+    }
+  }
+
+  // On PostgreSQL the count comes from the command tag, the statement is
+  // spelled with numbered placeholders, and no transaction is opened for it.
+  let log = Sync.cell("")
+  match Database.withDriver(recording(log), "postgresql://here/app", 1) {
+    case Err(_) => {}
+    case Ok(db) => {
+      let _started = Database.start(&db)
+      match Database.storeTarget(&db) {
+        case Err(_) => {}
+        case Ok(target) => {
+          if Store.saveIn(&target, &people, Person{id: 1, name: "ada"}) == Ok(1) { held = held + 1 }
+          let heard = Result.unwrapOr(Sync.get(&log), "")
+          if heard == "query insert into people (id, name) values ($1, $2) with 2\n" { held = held + 1 }
+          if !heard.contains("begin") { held = held + 1 }
+        }
+      }
+    }
+  }
+
+  held
+}
+
+fn personRow(who: Person) -> Array[Option[Str]] { [Some(show(who.id)), Some(who.name)] }
+
+fn personAt(result: Driver.Rows, row: Int) -> Result[Person, Repository.RowError] {
+  let id = Repository.whole(&result, row, "id") ?
+  let name = Repository.text(&result, row, "name") ?
+  Ok(Person{id: id, name: name})
+}
+
+fn noteRow(note: Note) -> Array[Option[Str]] {
+  [Some(show(note.id)), Some(show(note.personId)), Some(note.body)]
+}
+
+fn noteAt(result: Driver.Rows, row: Int) -> Result[Note, Repository.RowError] {
+  let id = Repository.whole(&result, row, "id") ?
+  let personId = Repository.whole(&result, row, "person_id") ?
+  let body = Repository.text(&result, row, "body") ?
+  Ok(Note{id: id, personId: personId, body: body})
+}
+
+/// A driver named as PostgreSQL that records what it is asked and answers an
+/// insert's command tag.
+fn recording(into: Sync.Cell[Str]) -> Driver.Driver {
+  Driver.Driver {
+    name: "postgresql",
+    schemes: ["postgresql"],
+    placeholders: DollarNumber,
+    open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
+      Ok(
+        Driver.Client {
+          query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+            let _said = Sync.set(&into,
+              Result.unwrapOr(Sync.get(&into), "") + "query " + sql + " with " + show(values.length()) + "\n")
+            Ok(Driver.Rows{columns: [], rows: [], command: "INSERT 0 1"})
+          },
+          execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+            Ok(Driver.Rows{columns: [], rows: [], command: "OK"})
+          },
+          transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+            let _began = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "begin\n")
+            Err(Driver.error("postgresql", "unexpected", "no transaction was expected"))
+          },
+          close: fn() -> Result[(), Driver.Error] { Ok(()) }
+        }
+      )
+    }
+  }
+}

@@ -1,0 +1,135 @@
+module UsesCache
+
+import Std.App.Cache as Cache
+import Std.App.Cache {Fresh, KnownAbsent, Missing, Stale}
+import Std.Option as Option
+
+/// What a cache promises.
+///
+/// The claim that matters is the three-state answer. An interface answering a
+/// value or nothing forces a caller to treat an expired entry as an absent
+/// one, and that is what makes every request for a much-read key recompute it
+/// at the same moment.
+export fn main() -> Int {
+  var held = 0
+
+  let empty = Cache.holding(3, 100)
+  if Cache.size(&empty) == 0 { held = held + 1 }
+  if Cache.capacity(&empty) == 3 { held = held + 1 }
+  if Cache.lifetimeOf(&empty) == 100 { held = held + 1 }
+
+  // An absence is remembered for less time than an answer, because being wrong
+  // about one costs less and a key that does not exist yet is the thing most
+  // likely to start existing.
+  if Cache.absentLifetimeOf(&empty) < Cache.lifetimeOf(&empty) { held = held + 1 }
+  if Cache.absentLifetimeOf(&Cache.rememberingAbsence(&empty, 7)) == 7 { held = held + 1 }
+
+  // Nothing kept is nothing found.
+  if Cache.lookup(&empty, "a", 0)[0] == Missing { held = held + 1 }
+
+  // Something kept is found, and is fresh within its lifetime.
+  let kept = Cache.keeping(&empty, "a", "one", 0)
+  if Cache.size(&kept) == 1 { held = held + 1 }
+  if Cache.lookup(&kept, "a", 0)[0] == Fresh("one") { held = held + 1 }
+  if Cache.lookup(&kept, "a", 99)[0] == Fresh("one") { held = held + 1 }
+
+  // Past its lifetime it is stale rather than gone — which is the whole point.
+  // A caller told the entry is stale hands back the old answer and refreshes
+  // once, instead of every request recomputing at the same moment.
+  if Cache.lookup(&kept, "a", 100)[0] == Stale("one") { held = held + 1 }
+  if Cache.lookup(&kept, "a", 10000)[0] == Stale("one") { held = held + 1 }
+
+  // And both answers carry the value, so a caller serving stale has one to
+  // serve.
+  if Option.unwrapOr(Cache.valueOf(&Cache.lookup(&kept, "a", 100)[0]), "") == "one" {
+    held = held + 1
+  }
+  if Option.unwrapOr(Cache.valueOf(&Cache.lookup(&kept, "a", 0)[0]), "") == "one" {
+    held = held + 1
+  }
+  if Option.isNone(&Cache.valueOf(&Cache.lookup(&empty, "a", 0)[0])) { held = held + 1 }
+
+  // Which of the three it was decides what a caller does next.
+  if !Cache.worthRefreshing(&Fresh("one")) { held = held + 1 }
+  if Cache.worthRefreshing(&Stale("one")) { held = held + 1 }
+  if Cache.worthRefreshing(&Missing) { held = held + 1 }
+  if !Cache.worthRefreshing(&KnownAbsent) { held = held + 1 }
+  if Cache.usable(&Stale("one")) { held = held + 1 }
+  if Cache.usable(&KnownAbsent) { held = held + 1 }
+  if !Cache.usable(&Missing) { held = held + 1 }
+
+  // An absence is remembered too. A key that is not there, looked up
+  // repeatedly, is a hot path to whatever would have answered, and the answer
+  // never changes.
+  let absent = Cache.keepingAbsence(&empty, "b", 0)
+  if Cache.lookup(&absent, "b", 0)[0] == KnownAbsent { held = held + 1 }
+  if Cache.lookup(&absent, "b", 10)[0] == KnownAbsent { held = held + 1 }
+
+  // And it expires sooner than an answer would.
+  if Cache.lookup(&absent, "b", 25)[0] == Missing { held = held + 1 }
+
+  // A remembered absence carries no value, since there was none.
+  if Option.isNone(&Cache.valueOf(&Cache.lookup(&absent, "b", 0)[0])) { held = held + 1 }
+
+  // What was asked for is counted, so a program can say how much the cache is
+  // earning.
+  let asked = Cache.lookup(&Cache.lookup(&kept, "a", 0)[1], "a", 0)[1]
+  if Cache.hitsOf(&asked) == 2 { held = held + 1 }
+  if Cache.missesOf(&asked) == 0 { held = held + 1 }
+  if Cache.hitRate(&asked) == 100 { held = held + 1 }
+
+  let mixed = Cache.lookup(&Cache.lookup(&kept, "a", 0)[1], "nothing", 0)[1]
+  if Cache.hitsOf(&mixed) == 1 { held = held + 1 }
+  if Cache.missesOf(&mixed) == 1 { held = held + 1 }
+  if Cache.hitRate(&mixed) == 50 { held = held + 1 }
+
+  // A stale answer counts as an answer, because it was one and the request it
+  // saved is the point.
+  let served = Cache.lookup(&kept, "a", 200)[1]
+  if Cache.staleHitsOf(&served) == 1 { held = held + 1 }
+  if Cache.hitRate(&served) == 100 { held = held + 1 }
+
+  // Nothing asked yet is nothing to report, rather than a rate of nothing over
+  // nothing.
+  if Cache.hitRate(&empty) == 0 { held = held + 1 }
+
+  // A program that knows an answer changed can say so.
+  if Cache.lookup(&Cache.forgetting(&kept, "a"), "a", 0)[0] == Missing { held = held + 1 }
+  if Cache.size(&Cache.forgetting(&kept, "a")) == 0 { held = held + 1 }
+
+  // And can empty it while keeping what it was told about lifetimes.
+  let cleared = Cache.emptied(&kept)
+  if Cache.size(&cleared) == 0 { held = held + 1 }
+  if Cache.lifetimeOf(&cleared) == 100 { held = held + 1 }
+  if Cache.capacity(&cleared) == 3 { held = held + 1 }
+
+  // The bound is real: a cache without one is a leak whose speed depends on
+  // how many distinct keys arrive, which is a property of the traffic.
+  var crowded = Cache.holding(2, 100)
+  for key in ["a", "b", "c", "d"] { crowded = Cache.keeping(&crowded, key, key, 0) }
+  if Cache.size(&crowded) == 2 { held = held + 1 }
+  if Cache.lookup(&crowded, "d", 0)[0] == Fresh("d") { held = held + 1 }
+  if Cache.lookup(&crowded, "a", 0)[0] == Missing { held = held + 1 }
+
+  // Looking something up keeps it, which is what makes the bound evict what is
+  // least wanted rather than what is oldest.
+  var busy = Cache.holding(2, 100)
+  busy = Cache.keeping(&Cache.keeping(&busy, "x", "1", 0), "y", "2", 0)
+  busy = Cache.lookup(&busy, "x", 0)[1]
+  busy = Cache.keeping(&busy, "z", "3", 0)
+  if Cache.lookup(&busy, "x", 0)[0] == Fresh("1") { held = held + 1 }
+  if Cache.lookup(&busy, "y", 0)[0] == Missing { held = held + 1 }
+
+  // Reading a cache to report on it does not change what it reports.
+  let watched = Cache.keeping(&empty, "a", "one", 0)
+  if Cache.peek(&watched, "a", 0) == Fresh("one") { held = held + 1 }
+  if Cache.peek(&watched, "a", 500) == Stale("one") { held = held + 1 }
+  if Cache.peek(&watched, "missing", 0) == Missing { held = held + 1 }
+  if Cache.hitsOf(&watched) == 0 { held = held + 1 }
+
+  // What it has been doing reads out.
+  if Cache.render(&served).contains("stale") { held = held + 1 }
+  if Cache.render(&served).contains("of 3") { held = held + 1 }
+
+  held
+}

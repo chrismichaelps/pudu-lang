@@ -1,0 +1,18 @@
+module View.Donation
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Constants as Constants
+import View.Layout as Layout
+
+export fn page(siteUrl: Str) -> Html.Html {
+  Layout.page(siteUrl, "Support Pudu", "Support the Pudu programming language and its documentation.", "/donate", true, None, H.article().class("doc support").holding([
+        H.span().class("kind").says("support"),
+        H.h1().says("Support Pudu"),
+        H.p().says("Pudu and its documentation take focused design, writing, and testing. If this work helps you, you can support its continued development."),
+        H.p().says("Donations are optional. The language, guide, and API search remain available to every reader."),
+        H.p().holding([
+            H.a().class("support-link").href(Constants.DONATION_URL).at("rel", "external noopener noreferrer").says("Donate with PayPal")
+          ])
+      ]).html())
+}

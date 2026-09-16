@@ -1,0 +1,260 @@
+module UsesTree
+
+import Std.Tree as Tree
+
+/// What a hierarchy promises: the counting rules, the three traversal orders,
+/// the transformations, and what search answers when there is nothing to find.
+///
+/// The cases weighted here are the ones a hand-written hierarchy gets wrong: a
+/// leaf counted as height zero, a traversal that loses child order, a prune
+/// that promotes the children of a node it removed, and a search that cannot
+/// tell "found at the root" from "not found".
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  //        1
+  //      / | \
+  //     2  3  4
+  //       / \
+  //      5   6
+  let deep = Tree.node(3, &[Tree.leaf(5), Tree.leaf(6)])
+  let root = Tree.node(1, &[Tree.leaf(2), deep, Tree.leaf(4)])
+  let only = Tree.leaf(9)
+
+  // A leaf is a node, not an absence.
+  if Tree.isLeaf(&only) { held = held + 1 }
+  if Tree.size(&only) == 1 { held = held + 1 }
+  if Tree.height(&only) == 1 { held = held + 1 }
+  if Tree.degree(&only) == 0 { held = held + 1 }
+  if Tree.childrenOf(&only) == [] { held = held + 1 }
+  if Tree.valueOf(&only) == 9 { held = held + 1 }
+
+  // Counting the branching tree.
+  if Tree.size(&root) == 6 { held = held + 1 }
+  if Tree.height(&root) == 3 { held = held + 1 }
+  if Tree.degree(&root) == 3 { held = held + 1 }
+  if !Tree.isLeaf(&root) { held = held + 1 }
+
+  // The three orders, each keeping child order.
+  if Tree.preorder(&root) == [1, 2, 3, 5, 6, 4] { held = held + 1 }
+  if Tree.postorder(&root) == [2, 5, 6, 3, 4, 1] { held = held + 1 }
+  if Tree.breadthFirst(&root) == [1, 2, 3, 4, 5, 6] { held = held + 1 }
+  if Tree.levels(&root) == [[1], [2, 3, 4], [5, 6]] { held = held + 1 }
+  if Tree.levels(&only) == [[9]] { held = held + 1 }
+
+  // Leaves in preorder, the interior nodes left out.
+  if Tree.leaves(&root) == [2, 5, 6, 4] { held = held + 1 }
+  if Tree.leaves(&only) == [9] { held = held + 1 }
+
+  // Transformation keeps the shape and the order.
+  let doubled = Tree.map(&root, fn(n: Int) -> Int => n * 2)
+  if Tree.preorder(&doubled) == [2, 4, 6, 10, 12, 8] { held = held + 1 }
+  if Tree.size(&doubled) == 6 { held = held + 1 }
+  if Tree.sameShape(&doubled, &root) { held = held + 1 }
+
+  // A transform told where it is. The root is given the empty path, so its
+  // depth is zero and every child is one deeper.
+  let depths = Tree.mapWithPath(&root, fn(path: Array[Int], n: Int) -> Int => path.length())
+  if Tree.preorder(&depths) == [0, 1, 1, 2, 2, 1] { held = held + 1 }
+
+  // The general fold: each node sees what its children answered. Summing this
+  // way agrees with summing the flat reading.
+  let total = Tree.foldTree(&root, fn(n: Int, below: Array[Int]) -> Int => {
+      var sum = n
+      for b in below { sum = sum + b }
+      sum
+    })
+  if total == 21 { held = held + 1 }
+  if Tree.fold(&root, fn(a: Int, n: Int) -> Int => a + n, 0) == 21 { held = held + 1 }
+  // Size and height are folds, and answer what the direct versions answer.
+  let counted = Tree.foldTree(&root, fn(_node: Int, below: Array[Int]) -> Int => {
+      var sum = 1
+      for b in below { sum = sum + b }
+      sum
+    })
+  if counted == Tree.size(&root) { held = held + 1 }
+
+  // Paths lead back to the node they name; the root's path is empty.
+  match Tree.pathTo(&root, fn(n: Int) -> Bool => n == 6) {
+    case Some(path) => {
+      if path == [1, 1] { held = held + 1 }
+      match Tree.at(&root, &path) {
+        case Some(found) => { if Tree.valueOf(&found) == 6 { held = held + 1 } }
+        case None => {}
+      }
+    }
+    case None => {}
+  }
+  match Tree.pathTo(&root, fn(n: Int) -> Bool => n == 1) {
+    case Some(path) => { if path == [] { held = held + 1 } }
+    case None => {}
+  }
+  // Found at the root is a found path, not a missing one.
+  match Tree.at(&root, &[]) {
+    case Some(found) => { if Tree.valueOf(&found) == 1 { held = held + 1 } }
+    case None => {}
+  }
+  // A path that leads nowhere answers nothing rather than the nearest node.
+  match Tree.at(&root, &[9]) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  match Tree.at(&root, &[0, 0]) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // The trail is the headings above what was found, the found one last.
+  match Tree.trailTo(&root, fn(n: Int) -> Bool => n == 5) {
+    case Some(trail) => { if trail == [1, 3, 5] { held = held + 1 } }
+    case None => {}
+  }
+
+  // Search that finds nothing says so.
+  match Tree.find(&root, fn(n: Int) -> Bool => n == 99) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  match Tree.pathTo(&root, fn(n: Int) -> Bool => n == 99) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  match Tree.find(&root, fn(n: Int) -> Bool => n > 4) {
+    case Some(found) => { if found == 5 { held = held + 1 } }
+    case None => {}
+  }
+  if Tree.contains(&root, 6) { held = held + 1 }
+  if !Tree.contains(&root, 99) { held = held + 1 }
+  if Tree.count(&root, fn(n: Int) -> Bool => n > 3) == 3 { held = held + 1 }
+
+  // Pruning removes a node with everything under it, rather than promoting its
+  // children into a parent they never had.
+  match Tree.prune(&root, fn(n: Int) -> Bool => n != 3) {
+    case Some(kept) => {
+      if Tree.preorder(&kept) == [1, 2, 4] { held = held + 1 }
+      if Tree.size(&kept) == 3 { held = held + 1 }
+    }
+    case None => {}
+  }
+  // A rejected root leaves no tree, because a tree with no nodes is not one.
+  match Tree.prune(&root, fn(n: Int) -> Bool => n != 1) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  // Keeping everything changes nothing.
+  match Tree.prune(&root, fn(_any: Int) -> Bool => true) {
+    case Some(kept) => { if Tree.size(&kept) == 6 { held = held + 1 } }
+    case None => {}
+  }
+
+  // Growing a tree, and stopping it at a depth.
+  let grown = Tree.unfoldTo(1, fn(n: Int) -> (Int, Array[Int]) => (n, [n * 2, n * 2 + 1]), 3)
+  if Tree.size(&grown) == 7 { held = held + 1 }
+  if Tree.height(&grown) == 3 { held = held + 1 }
+  if Tree.preorder(&grown) == [1, 2, 4, 5, 3, 6, 7] { held = held + 1 }
+  // A depth of one is a leaf, and less than one is a leaf as well.
+  if Tree.size(&Tree.unfoldTo(1, fn(n: Int) -> (Int, Array[Int]) => (n, [n + 1]), 1)) == 1 {
+    held = held + 1
+  }
+  if Tree.size(&Tree.unfoldTo(1, fn(n: Int) -> (Int, Array[Int]) => (n, [n + 1]), 0)) == 1 {
+    held = held + 1
+  }
+  // Growing that answers no seeds ends on its own.
+  let finite = Tree.unfold(3, fn(n: Int) -> (Int, Array[Int]) => (n, if n <= 1 { [] } else { [n - 1] }))
+  if Tree.preorder(&finite) == [3, 2, 1] { held = held + 1 }
+
+  // A forest is several trees with no root above them.
+  let forest = Tree.unfoldForest(&[1, 2], fn(n: Int) -> (Int, Array[Int]) => (n, []))
+  if forest.length() == 2 { held = held + 1 }
+
+  // A transformation that can fail stops at the first failure.
+  match Tree.mapResult(&root, fn(n: Int) -> Result[Int, Str] => Ok(n + 1)) {
+    case Ok(shifted) => { if Tree.preorder(&shifted) == [2, 3, 4, 6, 7, 5] { held = held + 1 } }
+    case Err(_) => {}
+  }
+  match Tree.mapResult(&root, fn(n: Int) -> Result[Int, Str] =>
+    if n == 5 { Err("five") } else { Ok(n) }) {
+    case Ok(_) => {}
+    case Err(why) => { if why == "five" { held = held + 1 } }
+  }
+
+  // Adding a child puts it after the ones already there.
+  let grownRoot = Tree.withChild(&only, &Tree.leaf(10))
+  if Tree.preorder(&grownRoot) == [9, 10] { held = held + 1 }
+  if Tree.height(&grownRoot) == 2 { held = held + 1 }
+
+  // Reversing turns the children round at every depth.
+  if Tree.preorder(&Tree.reversed(&root)) == [1, 4, 3, 6, 5, 2] { held = held + 1 }
+  // Reversing twice is the tree it started as.
+  if Tree.preorder(&Tree.reversed(&Tree.reversed(&root))) == Tree.preorder(&root) {
+    held = held + 1
+  }
+
+  // Two trees combined node by node, truncating where one has fewer children.
+  let paired = Tree.zipWith(&root, &doubled, fn(a: Int, b: Int) -> Int => a + b)
+  if Tree.preorder(&paired) == [3, 6, 9, 15, 18, 12] { held = held + 1 }
+  // Zipping against a leaf keeps only the roots, because nothing pairs below.
+  if Tree.size(&Tree.zipWith(&root, &only, fn(a: Int, b: Int) -> Int => a + b)) == 1 {
+    held = held + 1
+  }
+
+  // Grafting: a transform answering a leaf is exactly a map.
+  let grafted = Tree.flatMap(&root, fn(n: Int) -> Tree.Tree[Int] => Tree.leaf(n * 10))
+  if Tree.preorder(&grafted) == Tree.preorder(&Tree.map(&root, fn(n: Int) -> Int => n * 10)) {
+    held = held + 1
+  }
+  // A transform answering a deeper tree expands in place, and the node's own
+  // children follow what the produced tree brought.
+  let expanded = Tree.flatMap(&only, fn(n: Int) -> Tree.Tree[Int] =>
+    Tree.node(n, &[Tree.leaf(n + 1)]))
+  if Tree.preorder(&expanded) == [9, 10] { held = held + 1 }
+
+  // A transformation that may answer nothing stops at the first absence.
+  match Tree.mapOption(&root, fn(n: Int) -> Option[Int] => Some(n)) {
+    case Some(kept) => { if Tree.size(&kept) == 6 { held = held + 1 } }
+    case None => {}
+  }
+  match Tree.mapOption(&root, fn(n: Int) -> Option[Int] =>
+    if n == 5 { None } else { Some(n) }) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // A tree of carriers turned inside out.
+  let allOk = Tree.map(&root, fn(n: Int) -> Result[Int, Str] => Ok(n))
+  match Tree.sequenceResult(&allOk) {
+    case Ok(kept) => { if Tree.preorder(&kept) == [1, 2, 3, 5, 6, 4] { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let oneErr = Tree.map(&root, fn(n: Int) -> Result[Int, Str] =>
+    if n == 6 { Err("six") } else { Ok(n) })
+  match Tree.sequenceResult(&oneErr) {
+    case Ok(_) => {}
+    case Err(why) => { if why == "six" { held = held + 1 } }
+  }
+  let allSome = Tree.map(&root, fn(n: Int) -> Option[Int] => Some(n))
+  match Tree.sequenceOption(&allSome) {
+    case Some(kept) => { if Tree.size(&kept) == 6 { held = held + 1 } }
+    case None => {}
+  }
+
+  // Growing that may fail: the first failure depth first is the answer.
+  match Tree.unfoldResult(1, fn(n: Int) -> Result[(Int, Array[Int]), Str] =>
+    if n > 3 { Ok((n, [])) } else { Ok((n, [n + 1])) }) {
+    case Ok(grownOk) => { if Tree.preorder(&grownOk) == [1, 2, 3, 4] { held = held + 1 } }
+    case Err(_) => {}
+  }
+  match Tree.unfoldResult(1, fn(n: Int) -> Result[(Int, Array[Int]), Str] =>
+    if n == 3 { Err("three") } else { Ok((n, [n + 1])) }) {
+    case Ok(_) => {}
+    case Err(why) => { if why == "three" { held = held + 1 } }
+  }
+
+  // The outline indents by depth, deepest last within each branch.
+  if Tree.outline(&root) == ["1", "  2", "  3", "    5", "    6", "  4"] { held = held + 1 }
+  if Tree.outline(&only) == ["9"] { held = held + 1 }
+
+  held
+}

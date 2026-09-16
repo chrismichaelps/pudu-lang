@@ -1,0 +1,395 @@
+module Std.Html
+
+import Std.Option as Option
+import Std.Set as Set
+
+/// A page, as a value.
+///
+/// Text and markup are different things here, and the only way to obtain the
+/// second is to build a node. A template language solves escaping repeatedly
+/// and gets it wrong at each new context because it lets a string become markup
+/// by being interpolated; a string cannot become markup at all, so the failure
+/// has no way to occur rather than being prevented by a rule to remember.
+///
+/// `Trusted` is the one exception, named so it cannot be reached by accident
+/// and cannot be missed in review. A caller who genuinely holds markup — the
+/// output of a document converter, a fragment from elsewhere — says so, and the
+/// word appears where they said it.
+export type Html
+  = Element(Str, Array[(Str, Str)], Array[Html])
+  | Text(Str)
+  | Fragment(Array[Html])
+  | Trusted(Str)
+
+/// A destination an attribute may carry.
+///
+/// There is no way to make one except through a call that checked it, which is
+/// the same arrangement text has and for the same reason. Escaping text does
+/// nothing for a destination: `href="javascript:..."` contains no character
+/// that escaping touches, and it runs. A page builder that escapes text and
+/// takes any string as a destination has closed one door and left the other
+/// open — which is where the established template engines are.
+export type Destination = { written: Str }
+
+/// Why a destination or an attribute was refused.
+export type Unsafe
+  = BadScheme(Str)
+  | Handler(Str)
+  | Control(Str)
+
+/// The schemes a destination may name.
+///
+/// A stated set rather than a list of refusals, because the refusals are the
+/// ones somebody thought of and the permissions are the ones that work. What
+/// is not here is refused, so a scheme invented next year is refused until
+/// somebody decides otherwise.
+const PERMITTED_SCHEMES: Set[Str] = setOf(["http", "https", "mailto", "tel", "ftp"])
+
+/// The elements written without a closing tag.
+///
+/// A table rather than a rule, because there is no rule: nothing about the
+/// name of an element says whether it may hold children.
+const VOID_ELEMENTS: Set[Str] = setOf([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr"
+  ])
+
+/// An element with a name, attributes, and children.
+export fn element(name: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element(name, *attributes, *children)
+}
+
+/// An element with children and no attributes, which most elements are.
+export fn tag(name: Str, children: &Array[Html]) -> Html { Element(name, [], *children) }
+
+/// An element with attributes and nothing inside it.
+export fn empty(name: Str, attributes: &Array[(Str, Str)]) -> Html {
+  Element(name, *attributes, [])
+}
+
+/// Text, which is text: whatever it holds, it renders as that and not as
+/// markup.
+export fn text(content: Str) -> Html { Text(content) }
+
+/// Several views with no element around them.
+export fn fragment(children: &Array[Html]) -> Html { Fragment(*children) }
+
+/// Nothing, for a branch that renders no view.
+export fn nothing() -> Html { Fragment([]) }
+
+/// Markup the caller has taken responsibility for.
+///
+/// The only way text becomes markup. Named rather than convenient on purpose:
+/// an escape hatch that is easy to reach is the same as no escaping, while one
+/// that must be named is a decision somebody made and a reviewer can find.
+export fn trusted(markup: Str) -> Html { Trusted(markup) }
+
+/// A view for each item of a list.
+export fn each[T](items: &Array[T], view: fn(T) -> Html) -> Html {
+  var built: Array[Html] = []
+  for item in items { built = built.push(view(item)) }
+  Fragment(built)
+}
+
+/// One view or the other, for a branch that renders either.
+export fn when(condition: Bool, view: Html) -> Html {
+  if condition { view } else { Fragment([]) }
+}
+
+/// The class attribute, from the classes rather than from their spelling, so a
+/// caller adding one does not also maintain the separators.
+export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", names.join(" ")) }
+
+/// The style attribute, from its declarations.
+export fn style(declarations: &Array[(Str, Str)]) -> (Str, Str) {
+  var pieces: Array[Str] = []
+  for entry in declarations { pieces = pieces.push(entry[0] + ": " + entry[1]) }
+  ("style", pieces.join("; "))
+}
+
+/// An attribute whose presence is its meaning, written as its own name.
+export fn flag(name: Str) -> (Str, Str) { (name, name) }
+
+/// The root element, with attributes and children.
+export fn html(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("html", *attributes, *children)
+}
+
+/// The metadata section, holding the given children.
+export fn head(children: &Array[Html]) -> Html { Element("head", [], *children) }
+
+/// The rendered section, with attributes and children.
+export fn body(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("body", *attributes, *children)
+}
+
+/// The document title, from its text.
+export fn title(content: Str) -> Html { Element("title", [], [Text(content)]) }
+
+/// A metadata element, from its attributes alone.
+export fn meta(attributes: &Array[(Str, Str)]) -> Html { Element("meta", *attributes, []) }
+
+/// A relationship to another resource, from its attributes alone.
+export fn link(attributes: &Array[(Str, Str)]) -> Html { Element("link", *attributes, []) }
+
+/// A grouping with no meaning of its own.
+export fn div(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("div", *attributes, *children)
+}
+
+/// A run of inline content with no meaning of its own.
+export fn span(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("span", *attributes, *children)
+}
+
+/// A paragraph, with attributes and children.
+export fn paragraph(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("p", *attributes, *children)
+}
+
+/// A heading of the given level, from 1 to 6.
+export fn heading(level: Int, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  let bounded = if level < 1 { 1 } else { if level > 6 { 6 } else { level } }
+  Element("h" + show(bounded), *attributes, *children)
+}
+
+/// A link to a destination, with attributes and children.
+export fn anchor(href: &Destination, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("a", attributes.push(("href", href.written)), *children)
+}
+
+/// An image from a destination, with the description screen readers read.
+export fn image(src: &Destination, description: Str, attributes: &Array[(Str, Str)]) -> Html {
+  Element("img", attributes.push(("src", src.written)).push(("alt", description)), [])
+}
+
+/// A list. Ordered when the first argument holds, unordered when it does not.
+export fn list(ordered: Bool, attributes: &Array[(Str, Str)], items: &Array[Html]) -> Html {
+  var built: Array[Html] = []
+  for item in items { built = built.push(Element("li", [], [item])) }
+  Element(if ordered { "ol" } else { "ul" }, *attributes, built)
+}
+
+/// A form posting to a destination by the given method.
+export fn form(action: &Destination, method: Str, children: &Array[Html]) -> Html {
+  Element("form", [("action", action.written), ("method", method)], *children)
+}
+
+/// A form control, from its attributes alone.
+export fn input(attributes: &Array[(Str, Str)]) -> Html { Element("input", *attributes, []) }
+
+/// A button, with attributes and children.
+export fn button(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("button", *attributes, *children)
+}
+
+/// A table, with attributes and children.
+export fn table(attributes: &Array[(Str, Str)], rows: &Array[Html]) -> Html {
+  Element("table", *attributes, *rows)
+}
+
+/// One table row, holding the given cells.
+export fn row(cells: &Array[Html]) -> Html { Element("tr", [], *cells) }
+
+/// One table cell. A header cell when the first argument holds.
+export fn cell(heads: Bool, children: &Array[Html]) -> Html {
+  Element(if heads { "th" } else { "td" }, [], *children)
+}
+
+/// A destination, checked, or the reason it is refused.
+///
+/// A path within this site is always admitted. Anything naming a scheme must
+/// name one of the few that carry a destination rather than a program. Nothing
+/// is unescaped first: what arrives is what was written, and undoing an
+/// encoding before checking is how a check is bypassed.
+export fn destination(written: Str) -> Result[Destination, Unsafe] {
+  let trimmed = written.trim()
+  if hasControl(trimmed) {
+    Err(Control(written))
+  } else {
+    let mark = schemeEnd(trimmed)
+    if mark < 0 {
+      Ok(Destination{written: trimmed})
+    } else {
+      let scheme = trimmed.take(mark).toLower()
+      if Set.contains(&PERMITTED_SCHEMES, scheme) {
+        Ok(Destination{written: trimmed})
+      } else {
+        Err(BadScheme(scheme))
+      }
+    }
+  }
+}
+
+/// A destination within this site, which names no scheme and so needs no
+/// scheme check.
+export fn here(path: Str) -> Result[Destination, Unsafe] { destination(if path.startsWith("/") { path } else { "/" + path }) }
+
+/// A destination the caller has taken responsibility for.
+///
+/// The only way an unchecked destination is written, named so it cannot be
+/// reached by accident and appears in the source where somebody chose it.
+export fn trustedDestination(written: Str) -> Destination { Destination{written: written} }
+
+/// How a destination is written.
+export fn destinationText(held: &Destination) -> Str { held.written }
+
+/// An attribute, checked.
+///
+/// An attribute whose name begins the way a handler's does is refused
+/// outright: its value is a program, not text, and no amount of escaping makes
+/// a program safe. A page needing behaviour attaches it from a script the page
+/// loaded, which is what a policy permitting only the page's own origin is
+/// for.
+export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
+  let lowered = name.trim().toLower()
+  if lowered.startsWith("on") {
+    Err(Handler(name))
+  } else {
+    if hasControl(name) || hasControl(value) { Err(Control(name)) } else { Ok((name, value)) }
+  }
+}
+
+/// Whether an attribute name is one whose value would be a program.
+export fn isHandler(name: Str) -> Bool { name.trim().toLower().startsWith("on") }
+
+/// Where a scheme ends in a destination, or nothing when it names none.
+///
+/// A colon after anything that is not a name is not a scheme — `/a:b` is a
+/// path — so only a leading run of scheme characters counts.
+fn schemeEnd(written: Str) -> Int {
+  var index = 0
+  var found = -1
+  var going = true
+  while index < written.length() && going {
+    let character = written.slice(index, index + 1)
+    if character == ":" {
+      found = index
+      going = false
+    } else {
+      if !SCHEME_CHARACTERS.contains(character.toLower()) { going = false }
+    }
+    index = index + 1
+  }
+  found
+}
+
+const SCHEME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyz0123456789+-."
+
+/// Whether text carries a character that would break out of where it is
+/// written, including the ones that are invisible.
+fn hasControl(value: Str) -> Bool {
+  var found = false
+  var index = 0
+  while index < value.length() && !found {
+    let character = value.slice(index, index + 1)
+    if character == "\n" || character == "\r" || character == "\t" { found = true }
+    index = index + 1
+  }
+  found
+}
+
+/// What a refusal says.
+export fn explainUnsafe(problem: &Unsafe) -> Str {
+  match problem {
+    case BadScheme(scheme) => "a destination may not name the scheme " + scheme
+    case Handler(_name) => "an attribute whose value would be a program is not written here"
+    case Control(_name) => "that carries a character which would break out of where it is written"
+  }
+}
+
+/// A view as markup.
+///
+/// The only thing here that produces text. It reads nothing outside the value
+/// it was given, so two renders of equal views are equal and a page can be
+/// compared in a test rather than matched against a pattern.
+export fn render(view: &Html) -> Str { renderChunks(view).join("") }
+
+/// Buffered output fragments, in document order, without joining child subtrees.
+export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
+
+/// One step of writing a view: a node still to write, or text already decided.
+type Writing
+  = Pending(Html)
+  | Written(Str)
+
+/// A view's markup appended to what was written before it.
+///
+/// Written with its own stack rather than by recursion, because nesting depth
+/// is decided by whatever data a page was built from, and recursing once per
+/// level let a deep enough document stop the program.
+fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
+  var out = pieces
+  var pending: Array[Writing] = [Pending(*view)]
+  while pending.length() > 0 {
+    let last = pending.length() - 1
+    let step = pending[last]
+    pending = pending.slice(0, last)
+    match step {
+      case Written(piece) => { out = out.push(piece) }
+      case Pending(node) => {
+        match node {
+          case Text(content) => { out = out.push(escape(content)) }
+          case Trusted(markup) => { out = out.push(markup) }
+          case Fragment(children) => { pending = withChildren(pending, &children) }
+          case Element(name, attributes, children) => {
+            out = appendAttributes(&attributes, out.push("<" + name))
+            if VOID_ELEMENTS.contains(name) {
+              out = out.push(" />")
+            } else {
+              out = out.push(">")
+              pending = withChildren(pending.push(Written("</" + name + ">")), &children)
+            }
+          }
+        }
+      }
+    }
+  }
+  out
+}
+
+/// Children placed on the stack so the first is written first.
+fn withChildren(pending: Array[Writing], children: &Array[Html]) -> Array[Writing] {
+  var held = pending
+  var index = children.length() - 1
+  while index >= 0 {
+    held = held.push(Pending(children[index]))
+    index = index - 1
+  }
+  held
+}
+
+/// A whole document, with the declaration that says which one it is.
+export fn document(view: &Html) -> Str { appendRendered(view, ["<!DOCTYPE html>\n"]).join("") }
+
+/// Text with the characters that would otherwise start markup written as
+/// themselves.
+///
+export fn escape(content: Str) -> Str { content.escapeHtml() }
+
+/// The attributes of an element, written.
+///
+/// An attribute whose value would be a program is not written, whatever put it
+/// there. This is a backstop rather than the defence — `attribute` refuses one
+/// where a program writes it — but a backstop that drops is better than a page
+/// that runs what somebody smuggled into a record.
+fn appendAttributes(attributes: &Array[(Str, Str)], initial: Array[Str]) -> Array[Str] {
+  var pieces = initial
+  for entry in attributes {
+    if !isHandler(entry[0]) {
+      pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
+    }
+  }
+  pieces
+}

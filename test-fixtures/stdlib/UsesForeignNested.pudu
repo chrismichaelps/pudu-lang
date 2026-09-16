@@ -1,0 +1,51 @@
+module UsesForeignNested
+
+/// A record inside a record, crossing by value.
+///
+/// A camera holds two points, a font holds a texture, and a sound holds a
+/// stream — a boundary admitting only flat records admits almost none of what a
+/// library passes about. What crosses is the leaves: a record is described to
+/// the platform by the scalars it flattens to, in order, which is the same
+/// description the platform derives for the nesting itself.
+type Pair = { x: Float32, y: Float32 }
+
+type Frame = { offset: Pair, target: Pair, rotation: Float32, zoom: Float32 }
+
+/// Fields of different classes with padding between them, nested one deep.
+type Mixed = { tag: UInt8, point: Pair, weight: Float64 }
+
+foreign "c" {
+  fn frameSum symbol "pudu_ffi_cpp_frame_sum" (frame: Frame) -> Float32
+  fn frameMake symbol "pudu_ffi_cpp_frame_make" (base: Float32) -> Frame
+  fn mixedSum symbol "pudu_ffi_cpp_mixed_sum" (mixed: Mixed) -> Float64
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    // Two levels going out, six leaves in declaration order.
+    let frame = Frame {
+      offset: Pair{x: 1.0f32, y: 2.0f32},
+      target: Pair{x: 3.0f32, y: 4.0f32},
+      rotation: 5.0f32,
+      zoom: 6.0f32
+    }
+    if frameSum(frame) == 21.0f32 { held = held + 1 }
+
+    // And a record whose nesting sits between fields that need padding around
+    // it, which is where a boundary laying out its own bytes goes wrong.
+    let mixed = Mixed{tag: 2u8, point: Pair{x: 3.0f32, y: 4.0f32}, weight: 5.5f64}
+    if mixedSum(mixed) == 14.5f64 { held = held + 1 }
+
+    // Coming back, the leaves arrive flat and the declaration says where each
+    // nesting begins and ends.
+    let made = frameMake(10.0f32)
+    if made.offset.x == 10.0f32 { held = held + 1 }
+    if made.offset.y == 11.0f32 { held = held + 1 }
+    if made.target.x == 12.0f32 { held = held + 1 }
+    if made.target.y == 13.0f32 { held = held + 1 }
+    if made.rotation == 14.0f32 { held = held + 1 }
+    if made.zoom == 15.0f32 { held = held + 1 }
+  }
+  held
+}

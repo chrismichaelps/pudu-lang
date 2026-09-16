@@ -1,0 +1,61 @@
+module Std.Signal
+
+/// A request from outside the program to stop.
+///
+/// A supervisor — a container runtime, an init system, a terminal — stops a
+/// service by asking rather than by killing: it sends a signal, waits a
+/// configured moment, and only then kills. That moment is the whole
+/// opportunity to finish the requests already in flight, close what is open,
+/// and leave nothing half-written.
+///
+/// A program that cannot hear the request spends the moment unaware and is
+/// killed in the middle of whatever it was doing. Every deployment then drops
+/// live traffic, and nothing in the program says why, because from inside it
+/// looks like being switched off at the wall.
+///
+/// Two signals are heard, and they mean the same thing here: the one a
+/// supervisor sends, and the one a terminal sends when a person presses
+/// Ctrl-C. The signal that cannot be heard by anything, which a supervisor
+/// sends when the waiting is over, is not among them — which is why the
+/// waiting is worth using.
+///
+/// The request is recorded, not acted on. What to do about it belongs to the
+/// program: a server drains its connections, a worker finishes the job in
+/// hand, a batch writes what it has. Acting inside the handler would mean
+/// acting at a moment nothing chose, in the middle of any statement at all.
+
+/// Begin listening, and say whether listening is possible here.
+///
+/// `false` means this platform has no signals of this kind, so no request will
+/// ever arrive and `requested` will answer `false` forever. A service should
+/// report that rather than announce a graceful shutdown it cannot perform.
+///
+/// Calling this more than once is allowed and does nothing after the first
+/// time, so a component may make sure it is listening without knowing whether
+/// something else already did.
+export fn listen() -> Bool { signalWatchStop() }
+
+/// Whether a stop has been asked for.
+///
+/// Asking costs a read, so this belongs at the top of a loop, between one unit
+/// of work and the next — which is exactly where a program is able to stop
+/// cleanly. It never becomes false again: a request once made stands, and a
+/// program that resumed after being asked to stop would simply be killed a
+/// moment later.
+export fn requested() -> Bool { signalStopRequested() }
+
+/// Whether the program may keep going.
+///
+/// The same question the other way round, for the loop that reads better as a
+/// condition than as a test and a break.
+export fn running() -> Bool { !signalStopRequested() }
+
+/// Listen, and say whether the program is already being asked to stop.
+///
+/// The two things a service does at startup, in the order it must do them: a
+/// request that arrives between listening and the first check is not missed,
+/// because the flag it sets is the one this reads.
+export fn start() -> Bool {
+  let heard = signalWatchStop()
+  heard && !signalStopRequested()
+}

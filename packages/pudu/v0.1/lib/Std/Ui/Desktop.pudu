@@ -1,0 +1,185 @@
+module Std.Ui.Desktop
+
+import Std.Num {Integer}
+import Std.Ui.Canvas as Canvas
+
+/// Why a desktop session could not do what was requested.
+export type DesktopError
+  = EmptyCaption
+  | InvalidExtent(Int, Int)
+  | InvalidPixelBudget(Int)
+  | PixelBudgetExceeded(Int, Int, Int)
+  | InvalidPumpDuration(Int)
+  | SurfaceExtentMismatch(Int, Int, Int, Int)
+  | SurfaceMalformed(Canvas.CanvasError)
+  | UnsupportedPlatform
+  | SessionClosed
+  | PlatformFailure(Str)
+
+/// Everything decided before a native window resource is acquired.
+export type WindowPlan = {
+  caption: Str,
+  extent: Canvas.Size,
+  resizable: Bool,
+  maxPixels: Int
+}
+
+/// One evaluation-owned connection to a real desktop window.
+///
+/// The token has no meaning outside the runtime. Copying this value does not
+/// copy the window; closing through either copy invalidates both.
+export type Session = { token: Int, extent: Canvas.Size }
+
+/// A checked window plan with an explicit framebuffer budget.
+export fn plan(
+  caption: Str,
+  width: Int,
+  height: Int,
+  resizable: Bool,
+  maxPixels: Int
+) -> Result[WindowPlan, DesktopError] {
+  if caption.isEmpty() {
+    Err(EmptyCaption)
+  } else if width <= 0 || height <= 0 {
+    Err(InvalidExtent(width, height))
+  } else if maxPixels < 0 {
+    Err(InvalidPixelBudget(maxPixels))
+  } else {
+    let pixels = width.toBigInt() * height.toBigInt()
+    if pixels > maxPixels.toBigInt() {
+      Err(PixelBudgetExceeded(width, height, maxPixels))
+    } else {
+      Ok(WindowPlan {
+          caption: caption,
+          extent: Canvas.size(width, height),
+          resizable: resizable,
+          maxPixels: maxPixels
+        })
+    }
+  }
+}
+
+/// Acquire a real platform window for this evaluation.
+export fn open(target: &WindowPlan) -> Result[Session, DesktopError] {
+  validate(target) ?
+  match desktopOpen(
+    target.caption,
+    target.extent.width,
+    target.extent.height,
+    target.resizable
+  ) {
+    case Ok(token) => Ok(Session{token: token, extent: target.extent})
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Replace the pixels shown by a session with one exact Canvas surface.
+export fn present(target: &Session, surface: &Canvas.Surface) -> Result[(), DesktopError] {
+  let extent = match Canvas.surfaceSize(surface) {
+    case Ok(value) => value
+    case Err(problem) => { return Err(SurfaceMalformed(problem)) }
+  }
+  if extent != target.extent {
+    Err(SurfaceExtentMismatch(
+        target.extent.width,
+        target.extent.height,
+        extent.width,
+        extent.height
+      ))
+  } else {
+    let pixels = match Canvas.rgbaBytes(surface) {
+      case Ok(value) => value
+      case Err(problem) => { return Err(SurfaceMalformed(problem)) }
+    }
+    match desktopPresent(target.token, extent.width, extent.height, pixels) {
+      case Ok(_) => Ok(())
+      case Err(message) => Err(classified(message))
+    }
+  }
+}
+
+/// Pump platform events for at most `milliseconds`.
+///
+/// `true` reports that the person requested the window to close. The caller
+/// still closes the session, which keeps destruction ordered and testable.
+export fn pump(target: &Session, milliseconds: Int) -> Result[Bool, DesktopError] {
+  if milliseconds < 0 {
+    Err(InvalidPumpDuration(milliseconds))
+  } else {
+    match desktopPump(target.token, milliseconds) {
+      case Ok(requested) => Ok(requested)
+      case Err(message) => Err(classified(message))
+    }
+  }
+}
+
+/// Release a desktop session. A second close is reported as `SessionClosed`.
+export fn close(target: &Session) -> Result[(), DesktopError] {
+  match desktopClose(target.token) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Open, present, pump, and close a real window within a bounded interval.
+///
+/// The session is closed on every ordinary failure after acquisition.
+export fn showFor(
+  target: &WindowPlan,
+  surface: &Canvas.Surface,
+  milliseconds: Int
+) -> Result[Bool, DesktopError] {
+  if milliseconds < 0 { return Err(InvalidPumpDuration(milliseconds)) }
+  let session = open(target) ?
+  match present(&session, surface) {
+    case Err(problem) => {
+      let _closed = close(&session)
+      Err(problem)
+    }
+    case Ok(_) =>
+    match pump(&session, milliseconds) {
+      case Err(problem) => {
+        let _closed = close(&session)
+        Err(problem)
+      }
+      case Ok(requested) => {
+        close(&session) ?
+        Ok(requested)
+      }
+    }
+  }
+}
+
+fn validate(target: &WindowPlan) -> Result[(), DesktopError] {
+  if target.caption.isEmpty() {
+    Err(EmptyCaption)
+  } else if target.extent.width <= 0 || target.extent.height <= 0 {
+    Err(InvalidExtent(target.extent.width, target.extent.height))
+  } else if target.maxPixels < 0 {
+    Err(InvalidPixelBudget(target.maxPixels))
+  } else if target.extent.width.toBigInt() * target.extent.height.toBigInt() >
+  target.maxPixels.toBigInt()
+  {
+    Err(PixelBudgetExceeded(
+        target.extent.width,
+        target.extent.height,
+        target.maxPixels
+      ))
+  } else {
+    Ok(())
+  }
+}
+
+/// The error each fixed runtime message names. Any other message is a platform
+/// failure carrying the text the adapter reported.
+const RUNTIME_ERRORS: Map[Str, DesktopError] = mapOf([
+    ("desktop presentation is unsupported on this platform", UnsupportedPlatform),
+    ("desktop session is closed or unknown", SessionClosed)
+  ])
+
+fn classified(message: Str) -> DesktopError {
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
+  }
+}

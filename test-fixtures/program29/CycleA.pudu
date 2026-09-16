@@ -1,0 +1,5 @@
+module CycleA
+
+import CycleB {BType}
+
+export type AType = { b: BType }

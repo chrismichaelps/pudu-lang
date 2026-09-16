@@ -1,0 +1,134 @@
+module View.Board
+
+import Std.Html.Build as H
+import Db.Tasks as Tasks
+import Service.Queries as Queries
+
+/// The page, rendered on the server.
+///
+/// Written with `Std.Html.Build`, so a tag is a function and an attribute is a
+/// method; the only nesting left is the document's own.
+///
+/// Every value that came from a person goes through `says`, which escapes it,
+/// so a task called `<script>alert(1)</script>` shows those characters instead
+/// of running them. That is not a rendering detail: a page that renders what a
+/// visitor typed is a way into the page, and the defence that holds is the one
+/// that happens without being remembered.
+///
+/// The forms post and the server answers with a redirect, so a reload repeats
+/// the reading rather than the writing. Without it, refreshing after adding a
+/// task adds it again.
+export fn page(view: &Queries.Board) -> Str {
+  H.document(
+      &H.html()
+      .lang("en")
+      .holding(
+      [
+        H.head()
+          .holding(
+          [
+            H.meta().at("charset", "utf-8"),
+            H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
+            H.tag("title").says("Tasks"),
+            H.link().rel("stylesheet").href("/style.css")
+          ]
+        ),
+        H.body().holding([H.main().holding([H.h1().says("Tasks"), counts(view), addForm(), list(view)])])
+      ]
+    )
+  )
+}
+
+/// The three figures, read from the view rather than counted here.
+fn counts(view: &Queries.Board) -> H.Node {
+  H.section()
+    .class("counts")
+    .holding(
+    [
+      figure("total", display(view.total)),
+      figure("done", display(view.done)),
+      figure("left", display(view.remaining))
+    ]
+  )
+}
+
+fn figure(name: Str, value: Str) -> H.Node {
+  H.div()
+    .class("figure")
+    .holding([H.span().class("n").says(value), H.span().class("k").says(name)])
+}
+
+fn addForm() -> H.Node {
+  H.form()
+    .class("add")
+    .method("post")
+    .action("/tasks")
+    .holding(
+    [
+      H.input().name("title").placeholder("What needs doing?").at("autocomplete", "off").required(),
+      H.button().submit().says("Add")
+    ]
+  )
+}
+
+fn list(view: &Queries.Board) -> H.Node {
+  if view.tasks.length() == 0 {
+    return H.p().class("empty").says("Nothing yet. Add the first one.")
+  }
+  var items: Array[H.Node] = []
+  for entry in view.tasks {
+    items = items.push(row(&entry))
+  }
+  H.ul().class("tasks").holding(items)
+}
+
+fn row(entry: &Tasks.Task) -> H.Node {
+  H.li()
+    .class(if entry.done { "task done" } else { "task" })
+    .holding(
+    [
+      button("/tasks/" + display(entry.id) + "/toggle", "mark", "toggle", if entry.done { "✓" } else { "○" }),
+      H.span().class("title").says(entry.title),
+      button("/tasks/" + display(entry.id) + "/delete", "remove", "delete", "×")
+    ]
+  )
+}
+
+/// A one-button form, which is what every action on this page is.
+fn button(target: Str, shape: Str, said: Str, mark: Str) -> H.Node {
+  H.form()
+    .method("post")
+    .action(target)
+    .holding([H.button().class(shape).submit().label(said).says(mark)])
+}
+
+export fn stylesheet() -> Str {
+  [
+    ":root \{ color-scheme: light dark; --bg: #f4f5f2; --card: #fff; --ink: #1b201d; --soft: #6d776f; --line: #dde1db; --moss: #2f6b4f; --brick: #9a4023; \}",
+    "@media (prefers-color-scheme: dark) \{",
+    "  :root \{ --bg: #141713; --card: #1c201a; --ink: #e8ebe4; --soft: #8d968a; --line: #2b312a; --moss: #8fc4a2; --brick: #e0906f; \}",
+    "\}",
+    "* \{ box-sizing: border-box; \}",
+    "body \{ margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; \}",
+    "main \{ max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; \}",
+    "h1 \{ font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 1.5rem; \}",
+    ".counts \{ display: flex; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 1.75rem; \}",
+    ".figure \{ flex: 1; background: var(--card); padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.15rem; \}",
+    ".figure .n \{ font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; \}",
+    ".figure .k \{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--soft); \}",
+    "form.add \{ display: flex; gap: 0.6rem; margin-bottom: 1.5rem; \}",
+    "form.add input \{ flex: 1; padding: 0.7rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; \}",
+    "form.add input:focus \{ outline: 2px solid var(--moss); outline-offset: 1px; \}",
+    "form.add button \{ padding: 0.7rem 1.2rem; border: 0; border-radius: 8px; background: var(--moss); color: var(--card); font: inherit; font-weight: 600; cursor: pointer; \}",
+    "ul.tasks \{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; \}",
+    "li.task \{ display: flex; align-items: center; gap: 0.75rem; background: var(--card); padding: 0.7rem 0.9rem; \}",
+    "li.task form \{ display: flex; margin: 0; \}",
+    "li.task .title \{ flex: 1; word-break: break-word; \}",
+    "li.task.done .title \{ color: var(--soft); text-decoration: line-through; \}",
+    "button.mark, button.remove \{ border: 0; background: none; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0.2rem 0.35rem; border-radius: 6px; color: var(--soft); \}",
+    "button.mark \{ color: var(--moss); \}",
+    "button.remove \{ color: var(--brick); font-size: 1.35rem; \}",
+    "button.mark:hover, button.remove:hover \{ background: var(--bg); \}",
+    "p.empty \{ color: var(--soft); text-align: center; padding: 2.5rem 0; border: 1px dashed var(--line); border-radius: 10px; \}"
+  ].join("\n")
+}

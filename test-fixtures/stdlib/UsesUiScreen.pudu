@@ -1,0 +1,352 @@
+module UsesUiScreen
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Layout as Layout
+import Std.Ui.Screen as Screen
+
+const WHITE: Canvas.Color = Canvas.Color{red: 255u8, green: 255u8, blue: 255u8, alpha: 255u8}
+const GRAY: Canvas.Color = Canvas.Color{red: 128u8, green: 128u8, blue: 128u8, alpha: 255u8}
+const BLUE: Canvas.Color = Canvas.Color{red: 0u8, green: 0u8, blue: 255u8, alpha: 255u8}
+const RED: Canvas.Color = Canvas.Color{red: 255u8, green: 0u8, blue: 0u8, alpha: 255u8}
+
+/// A counter: increment and reset controls over an indicator whose color
+/// follows the count. The reset control is absent while the count is two or
+/// after dismissal.
+fn counter(count: Int) -> Layout.View {
+  let reset = if count == 2 || count == 100 {
+    Layout.box().tall(2)
+  } else {
+    Layout.box().tall(2).filled(GRAY).means(Layout.Button).named("Reset")
+  }
+  Layout.column([
+      Layout.box().tall(2).filled(GRAY).means(Layout.Button).named("Increment").tagged("inc"),
+      reset,
+      Layout.box().tall(2).filled(if count % 2 == 0 { BLUE } else { RED })
+    ])
+}
+
+fn counted(count: Int, event: Screen.Event) -> Int {
+  match event {
+    case Screen.Activated("inc") => count + 1
+    case Screen.Activated(_) => 0
+    case Screen.Dismissed => 100
+    case _ => count
+  }
+}
+
+/// A form: a name field showing what was typed over a clear button.
+fn form(name: Str) -> Layout.View {
+  Layout.column([
+      Layout.column([Layout.text(name)]).tall(9).filled(WHITE).means(Layout.Field).named("Name"),
+      Layout.box().tall(2).filled(GRAY).means(Layout.Button).named("Clear")
+    ])
+}
+
+fn edit(name: Str, event: Screen.Event) -> Str {
+  match event {
+    case Screen.Typed("Name", text) => name + text
+    case Screen.Erased("Name") => if name.isEmpty() { name } else { name.slice(0, name.length() - 1) }
+    case Screen.Activated("Clear") => ""
+    case _ => name
+  }
+}
+
+/// A list of six rows in a four-high window whose scroll position is the state.
+fn feed(offset: Int) -> Layout.View {
+  Layout.column([
+      Layout.box().tall(2).filled(GRAY),
+      Layout.scrollColumn([
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE),
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE),
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE)
+        ]).tall(4).tagged("feed").scrolledTo(offset),
+      Layout.scrollColumn([Layout.box().tall(9).filled(RED)]).tall(2)
+    ]).filled(WHITE)
+}
+
+fn scrolledTo(offset: Int, event: Screen.Event) -> Int {
+  match event {
+    case Screen.ScrolledTo("feed", next) => next
+    case _ => offset
+  }
+}
+
+fn unnamed(count: Int) -> Layout.View { Layout.column([Layout.box().means(Layout.Button)]) }
+
+fn twins(count: Int) -> Layout.View {
+  Layout.column([
+      Layout.box().means(Layout.Button).named("Go"),
+      Layout.box().means(Layout.Button).named("Go")
+    ])
+}
+
+/// The pixels a frame must hold, built from layout and canvas directly rather
+/// than through the screen: the counter at a count, with a ring of one color
+/// around a frame when one is given.
+fn reference(count: Int, ring: Option[Canvas.Rect], color: Canvas.Color) -> Option[Bytes] {
+  if let Ok(placed) = Layout.place(&counter(count), Canvas.size(4, 6)) {
+    if let Ok(blank) = Canvas.canvas(4, 6, WHITE) {
+      if let Ok(painted) = Layout.paint(&placed, &blank) {
+        var held = painted
+        if let Some(area) = ring {
+          let edges = [
+            Canvas.rect(area.x - 1, area.y - 1, area.width + 2, 1),
+            Canvas.rect(area.x - 1, area.y + area.height, area.width + 2, 1),
+            Canvas.rect(area.x - 1, area.y, 1, area.height),
+            Canvas.rect(area.x + area.width, area.y, 1, area.height)
+          ]
+          for edge in edges {
+            if let Ok(next) = Canvas.fill(&held, edge, color) { held = next }
+          }
+        }
+        if let Ok(surface) = Canvas.render(&held) {
+          if let Ok(bytes) = Canvas.rgbaBytes(&surface) { return Some(bytes) }
+        }
+      }
+    }
+  }
+  None
+}
+
+fn shows(target: &Screen.Screen[Int], expected: Option[Bytes]) -> Bool {
+  let surface = Screen.surfaceOf(target)
+  if let Some(bytes) = expected { Canvas.rgbaBytes(&surface) == Ok(bytes) } else { false }
+}
+
+fn colorAt(target: &Screen.Screen[Int], x: Int, y: Int) -> Option[Canvas.Color] {
+  let surface = Screen.surfaceOf(target)
+  if let Ok(found) = Canvas.pixelAt(&surface, Canvas.point(x, y)) { found } else { None }
+}
+
+/// Input routing, focus rings, and damage-driven frames without a window.
+export fn main() -> Int {
+  var held = 0
+  let viewport = Canvas.size(4, 6)
+  let ring = Screen.defaultRing()
+  let incFrame = Some(Canvas.rect(0, 0, 4, 2))
+  let resetFrame = Some(Canvas.rect(0, 2, 4, 2))
+
+  if let Err(Screen.Placement(Layout.UnnamedRole(1))) =
+  Screen.start(0, unnamed, counted, viewport, WHITE)
+  {
+    held = held + 1
+  }
+  if let Err(Screen.Placement(Layout.DuplicateTag(2))) =
+  Screen.start(0, twins, counted, viewport, WHITE)
+  {
+    held = held + 1
+  }
+  if let Err(Screen.Drawing(Canvas.OpaqueBackgroundRequired(0u8))) =
+  Screen.start(0, counter, counted, viewport, Canvas.rgba(0u8, 0u8, 0u8, 0u8))
+  {
+    held = held + 1
+  }
+
+  if let Ok(first) = Screen.start(0, counter, counted, viewport, WHITE) {
+    if Screen.stateOf(&first) == 0 && Screen.damagedOf(&first) == [Canvas.rect(0, 0, 4, 6)] &&
+    Screen.focusOf(&first) == None && shows(&first, reference(0, None, ring))
+    {
+      held = held + 1
+    }
+
+    if let Ok(one) = Screen.handle(&first, Screen.Pressed(Canvas.point(1, 1))) {
+      if Screen.stateOf(&one) == 1 &&
+      Screen.damagedOf(&one) == [Canvas.rect(0, 4, 4, 2), Canvas.rect(0, 0, 4, 3)] &&
+      Screen.focusOf(&one) == Some("inc") && Layout.nodeCount(&Screen.layoutOf(&one)) == 4
+      {
+        held = held + 1
+      }
+      if shows(&one, reference(1, incFrame, ring)) { held = held + 1 }
+      if colorAt(&one, 0, 2) == Some(ring) && colorAt(&one, 0, 3) == Some(GRAY) { held = held + 1 }
+    }
+
+    if let Ok(still) = Screen.handle(&first, Screen.Pressed(Canvas.point(1, 5))) {
+      if Screen.stateOf(&still) == 0 && Screen.damagedOf(&still) == [] { held = held + 1 }
+    }
+    if let Ok(outside) = Screen.handle(&first, Screen.Pressed(Canvas.point(-1, 9))) {
+      if Screen.stateOf(&outside) == 0 && Screen.damagedOf(&outside) == [] { held = held + 1 }
+    }
+
+    if let Ok(a) = Screen.handle(&first, Screen.KeyPressed(Screen.Next)) {
+      if let Ok(b) = Screen.handle(&a, Screen.KeyPressed(Screen.Next)) {
+        if let Ok(c) = Screen.handle(&b, Screen.KeyPressed(Screen.Next)) {
+          if Screen.focusOf(&a) == Some("inc") && Screen.focusOf(&b) == Some("Reset") &&
+          Screen.focusOf(&c) == Some("inc") &&
+          Screen.damagedOf(&a) == [Canvas.rect(0, 0, 4, 3)] &&
+          Screen.damagedOf(&b) == [Canvas.rect(0, 0, 4, 3), Canvas.rect(0, 1, 4, 4)] &&
+          Screen.damagedOf(&c) == [Canvas.rect(0, 1, 4, 4), Canvas.rect(0, 0, 4, 3)]
+          {
+            held = held + 1
+          }
+          if shows(&b, reference(0, resetFrame, ring)) && shows(&c, reference(0, incFrame, ring)) {
+            held = held + 1
+          }
+        }
+      }
+
+      if let Ok(recolored) = Screen.focusRing(&a, RED) {
+        if Screen.damagedOf(&recolored) == [Canvas.rect(0, 0, 4, 3)] &&
+        colorAt(&recolored, 0, 2) == Some(RED) && shows(&recolored, reference(0, incFrame, RED))
+        {
+          held = held + 1
+        }
+      }
+    }
+
+    if let Ok(unfocused) = Screen.focusRing(&first, RED) {
+      if Screen.damagedOf(&unfocused) == [] && shows(&unfocused, reference(0, None, ring)) {
+        held = held + 1
+      }
+    }
+
+    if let Ok(back) = Screen.handle(&first, Screen.KeyPressed(Screen.Previous)) {
+      if Screen.focusOf(&back) == Some("Reset") { held = held + 1 }
+    }
+
+    if let Ok(nothing) = Screen.handle(&first, Screen.KeyPressed(Screen.Activate)) {
+      if Screen.stateOf(&nothing) == 0 && Screen.damagedOf(&nothing) == [] { held = held + 1 }
+    }
+    if let Ok(dismissed) = Screen.handle(&first, Screen.KeyPressed(Screen.Dismiss)) {
+      if Screen.stateOf(&dismissed) == 100 { held = held + 1 }
+      if let Ok(again) = Screen.handle(&dismissed, Screen.KeyPressed(Screen.Dismiss)) {
+        if Screen.stateOf(&again) == 100 && Screen.damagedOf(&again) == [] &&
+        shows(&again, reference(100, None, ring))
+        {
+          held = held + 1
+        }
+      }
+    }
+
+    let sequence = [
+      Screen.Pressed(Canvas.point(0, 0)),
+      Screen.KeyPressed(Screen.Previous),
+      Screen.KeyPressed(Screen.Activate)
+    ]
+    if let Ok(reset) = Screen.handleAll(&first, &sequence) {
+      if Screen.stateOf(&reset) == 0 && Screen.focusOf(&reset) == Some("Reset") &&
+      Screen.damagedOf(&reset).length() > 0 && shows(&reset, reference(0, resetFrame, ring))
+      {
+        held = held + 1
+      }
+    }
+
+    let toTwo = [
+      Screen.KeyPressed(Screen.Previous),
+      Screen.Pressed(Canvas.point(0, 1)),
+      Screen.KeyPressed(Screen.Next)
+    ]
+    if let Ok(lost) = Screen.handleAll(&first, &toTwo) {
+      if Screen.stateOf(&lost) == 1 && Screen.focusOf(&lost) == Some("Reset") { held = held + 1 }
+    }
+
+    let hide = [
+      Screen.Pressed(Canvas.point(0, 0)),
+      Screen.KeyPressed(Screen.Next),
+      Screen.Pressed(Canvas.point(0, 0))
+    ]
+    if let Ok(hidden) = Screen.handleAll(&first, &hide) {
+      if Screen.stateOf(&hidden) == 2 && Screen.focusOf(&hidden) == Some("inc") &&
+      shows(&hidden, reference(2, incFrame, ring))
+      {
+        held = held + 1
+      }
+    }
+
+    let focusReset = [Screen.KeyPressed(Screen.Previous), Screen.KeyPressed(Screen.Dismiss)]
+    if let Ok(dropped) = Screen.handleAll(&first, &focusReset) {
+      if Screen.stateOf(&dropped) == 100 && Screen.focusOf(&dropped) == None &&
+      shows(&dropped, reference(100, None, ring))
+      {
+        held = held + 1
+      }
+    }
+  }
+
+  let formSize = Canvas.size(20, 12)
+  if let Ok(blank) = Screen.start("", form, edit, formSize, WHITE) {
+    if let Ok(unfocused) = Screen.handle(&blank, Screen.TypedText("x")) {
+      if Screen.stateOf(&unfocused) == "" && Screen.damagedOf(&unfocused) == [] { held = held + 1 }
+    }
+    if let Ok(named) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Next),
+        Screen.TypedText("ab")
+      ])
+    {
+      if Screen.stateOf(&named) == "ab" && Screen.focusOf(&named) == Some("Name") &&
+      Screen.damagedOf(&named).length() > 0
+      {
+        held = held + 1
+      }
+      if let Ok(fresh) = Screen.start("ab", form, edit, formSize, WHITE) {
+        if let Ok(focused) = Screen.handle(&fresh, Screen.KeyPressed(Screen.Next)) {
+          let left = Screen.surfaceOf(&named)
+          let right = Screen.surfaceOf(&focused)
+          if Canvas.rgbaBytes(&left) == Canvas.rgbaBytes(&right) { held = held + 1 }
+        }
+      }
+      if let Ok(shorter) = Screen.handle(&named, Screen.KeyPressed(Screen.Erase)) {
+        if Screen.stateOf(&shorter) == "a" { held = held + 1 }
+      }
+    }
+    if let Ok(empty) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Next),
+        Screen.KeyPressed(Screen.Erase)
+      ])
+    {
+      if Screen.stateOf(&empty) == "" && Screen.damagedOf(&empty).length() == 1 { held = held + 1 }
+    }
+    if let Ok(onButton) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Previous),
+        Screen.TypedText("z"),
+        Screen.TypedText("")
+      ])
+    {
+      if Screen.stateOf(&onButton) == "" && Screen.focusOf(&onButton) == Some("Clear") &&
+      Screen.damagedOf(&onButton).length() == 1
+      {
+        held = held + 1
+      }
+    }
+  }
+
+  let feedSize = Canvas.size(4, 8)
+  if let Ok(top) = Screen.start(0, feed, scrolledTo, feedSize, WHITE) {
+    if let Ok(down) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 3), 3)) {
+      if let Ok(fresh) = Screen.start(3, feed, scrolledTo, feedSize, WHITE) {
+        let left = Screen.surfaceOf(&down)
+        let right = Screen.surfaceOf(&fresh)
+        if Screen.stateOf(&down) == 3 && Screen.damagedOf(&down).length() > 0 &&
+        Canvas.rgbaBytes(&left) == Canvas.rgbaBytes(&right)
+        {
+          held = held + 1
+        }
+      }
+      if let Ok(far) = Screen.handle(&down, Screen.Scrolled(Canvas.point(1, 3), 50)) {
+        if let Ok(again) = Screen.handle(&far, Screen.Scrolled(Canvas.point(1, 3), 1)) {
+          if Screen.stateOf(&far) == 8 && Screen.stateOf(&again) == 8 &&
+          Screen.damagedOf(&again) == []
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+    if let Ok(header) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 1), 3)) {
+      if let Ok(untagged) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 7), 3)) {
+        if Screen.stateOf(&header) == 0 && Screen.damagedOf(&header) == [] &&
+        Screen.stateOf(&untagged) == 0 && Screen.damagedOf(&untagged) == []
+        {
+          held = held + 1
+        }
+      }
+    }
+    if let Ok(up) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 3), -2)) {
+      if Screen.stateOf(&up) == 0 && Screen.damagedOf(&up) == [] { held = held + 1 }
+    }
+  }
+
+  held
+}

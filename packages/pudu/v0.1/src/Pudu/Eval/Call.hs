@@ -1,0 +1,494 @@
+{-| @Eval.Call — calling something, reaching a name through a path, and the
+    scopes a task is joined in.
+
+    A call's arguments are expressions and an expression may be a call, so what
+    this module needs of the evaluator arrives as a record rather than an
+    import. -}
+module Pudu.Eval.Call
+  ( CallNeeds (..)
+  , applyFunction
+  , awaitTask
+  , callClosure
+  , evaluateCall
+  , evaluateCallee
+  , evaluateScope
+  , lastPathSegment
+  , pathValue
+  , readPath
+  , runClosure
+  , scopeTo
+  ) where
+
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Eval.Builtin
+  ( callArrayMethod
+  , callCharFromCode
+  , callCharMethod
+  , callConvertInteger
+  , callDecimal
+  , callDisplay
+  , callEffect
+  , callMapMethod
+  , callMapOf
+  , callPanic
+  , callHashing
+  , callSetMethod
+  , Apply
+  , callSetOf
+  , callShow
+  , callStringMethod
+  , callStringMethodFast
+  , isDecimalBuiltin
+  , isHashingBuiltin
+  )
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar)
+import Control.Exception (SomeException, try)
+import Pudu.Diagnostic (diagnosticMessage)
+import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
+import Pudu.Eval.Call.Path
+  ( lastPathSegment
+  , pathValue
+  , qualifiedCallee
+  , readPath
+  , typeArgumentNames
+  )
+import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
+import Pudu.Eval.Concurrent (threadRegister)
+import Pudu.Eval.Foreign (callForeign)
+import Pudu.Eval.Env
+  ( tally
+  , currentConcurrentStore
+  , withCaptured
+  , adoptChild
+  , closeScope
+  , openScope
+  , releaseChild
+  , Eval (..)
+  , Evaluator (..)
+  , abortAt
+  , effectsAdmitted
+  , ascend
+  , catchUnwind
+  , descend
+  , lookupName
+  , unwind
+  , Unwind (..)
+  , withFrame
+  )
+import Pudu.Eval.Loop
+  ( firstBound
+  , receiverOwners
+  )
+import Pudu.Eval.Operator (readMember, unwrapTry)
+import Pudu.Eval.Place
+  ( Lent (..)
+  , Place
+  , exclusiveParameters
+  , noneLent
+  , placeOf
+  , plainPlace
+  , readPlace
+  , storePlace
+  , withFrameKeeping
+  )
+import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.Value
+  ( Builtin (..)
+  , Closure (..)
+  , intOf
+  , Value (..)
+  )
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Block (..)
+  , Expression (..)
+  , Function (..)
+  , FunctionBody (..)
+  , Parameter (..)
+  )
+import Pudu.Source (Span)
+
+{-| @Eval.Call.Needs — what a call needs of the evaluator around it.
+
+    An argument is an expression and a function's body is a block. Both reach
+    calls again, which is why they arrive rather than being imported. -}
+data CallNeeds = CallNeeds
+  { callEvaluate :: Located Expression -> Evaluator Value
+  , callBlock :: Located Block -> Evaluator Value
+  }
+
+{-| A member in callee position prefers a method over a field of the same name,
+    matching how the same call is typed: `value.name()` reads as a call, and a
+    field holding a function must be parenthesized to be called. -}
+evaluateCall :: CallNeeds -> Span -> Located Expression -> [Located Expression] -> Evaluator Value
+evaluateCall needs spanValue callee arguments = do
+  given <- mapM (argumentOf needs) arguments
+  let values = map snd given
+      lent = noneLent{lentArguments = map fst given}
+  {-| A type argument is not erased before the call that carries it. Types have
+      no run-time form, but the *syntax* the reader wrote is still here, and a
+      conversion needs to know which type it was asked for. Reading it is not
+      the evaluator knowing about types; it is the evaluator reading the call it
+      was given. -}
+  case typeArgumentNames (locatedValue callee) of
+    Just (names, inner) -> do
+      {-| The callee under a type application is read as an ordinary expression
+          rather than as a callee, because a qualified name is what carries type
+          arguments and reading it as a path is what resolves it. -}
+      target <- callEvaluate needs inner
+      case target of
+        BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
+        _ -> dispatchCall needs spanValue lent target values
+    Nothing -> do
+      qualified <- qualifiedCallee callee values
+      case qualified of
+        Just found -> dispatchCall needs spanValue lent found values
+        Nothing -> case locatedValue callee of
+          MemberExpression target (Located _ member) -> do
+            (receiverPlace, receiver) <- receiverOf needs target
+            let lentHere = lent{lentSelf = receiverPlace}
+            case receiver of
+              StrValue text -> case callStringMethodFast spanValue member text values of
+                Just direct -> direct
+                Nothing -> fallbackWith lentHere receiver member values
+              _ -> fallbackWith lentHere receiver member values
+          _ -> do
+            target <- evaluateCallee needs callee
+            dispatchCall needs spanValue lent target values
+ where
+  fallbackWith lentHere receiver member vals = do
+    owners <- receiverOwners receiver
+    method <- firstBound (\owner -> lookupName (owner <> "." <> member)) owners
+    calleeVal <- case method of
+      Just (FunctionValue closure) ->
+        pure (FunctionValue closure{closureSelf = Just receiver})
+      _ -> readMember (locatedSpan callee) receiver member
+    dispatchCall needs spanValue lentHere calleeVal vals
+
+{-| An argument's value, and the place it was lent from when the argument is
+    `&mut place` or names a binding that may itself be an exclusive reference
+    being lent on. Which of those a call hands back to is decided by the
+    parameters of the function it reaches. -}
+argumentOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
+argumentOf needs argument = case locatedValue argument of
+  UnaryExpression "&mut" operand -> lentFrom needs operand
+  NameExpression names | length names == 1 -> do
+    value <- callEvaluate needs argument
+    pure (plainPlace argument, value)
+  _ -> do
+    value <- callEvaluate needs argument
+    pure (Nothing, value)
+
+{-| A receiver chosen by an element is read through its place, so the index is
+    evaluated once whether or not the method turns out to change the receiver. -}
+receiverOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
+receiverOf needs target
+  | chosenByElement (locatedValue target) = lentFrom needs target
+  | otherwise = do
+      value <- callEvaluate needs target
+      pure (plainPlace target, value)
+ where
+  chosenByElement expression = case expression of
+    IndexExpression _ _ -> True
+    MemberExpression inner _ -> chosenByElement (locatedValue inner)
+    UnaryExpression "*" operand -> chosenByElement (locatedValue operand)
+    _ -> False
+
+lentFrom :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
+lentFrom needs operand = do
+  found <- placeOf (callEvaluate needs) operand
+  case found of
+    Just place -> do
+      value <- readPlace place
+      pure (Just place, value)
+    Nothing -> do
+      value <- callEvaluate needs operand
+      pure (Nothing, value)
+
+{-| The type arguments a callee carries, and the callee under them. -}
+
+{-| Apply an evaluated callee to evaluated arguments. -}
+dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
+dispatchCall needs spanValue lent target values =
+  case target of
+    FunctionValue closure -> callClosureLending needs closure values lent (Just spanValue)
+    ForeignValue binding -> callForeign spanValue binding values
+    VariantValue name [] -> pure (VariantValue name values)
+    BuiltinValue PanicBuiltin -> callPanic spanValue values
+    BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
+    BuiltinValue MapOfBuiltin -> callMapOf spanValue values
+    BuiltinValue SetOfBuiltin -> callSetOf spanValue values
+    BuiltinValue BytesOfBuiltin -> callBytesOf spanValue values
+    BuiltinValue BucketsOfBuiltin -> callBucketsOf spanValue values
+    BuiltinValue SpawnThreadBuiltin -> callSpawnThread (applyFunction needs) spanValue values
+    BuiltinValue hashing
+      | isHashingBuiltin hashing -> callHashing spanValue hashing values
+    BuiltinValue ShowBuiltin -> callShow spanValue values
+    BuiltinValue DisplayBuiltin -> callDisplay spanValue values
+    BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
+    BuiltinValue builtin
+      | isDecimalBuiltin builtin -> callDecimal spanValue builtin values
+    BuiltinValue effect -> callEffect spanValue effect values
+    ArrayMethodValue method receiver -> callArrayMethod (applyFunction needs) spanValue method receiver values
+    StringMethodValue method receiver -> callStringMethod spanValue method receiver values
+    MapMethodValue method receiver -> callMapMethod spanValue method receiver values
+    SetMethodValue method receiver -> callSetMethod spanValue method receiver values
+    CharMethodValue method receiver -> callCharMethod spanValue method receiver values
+    BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
+    BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
+    _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+
+{-| A two-segment path in callee position may select a method explicitly: by the
+    type that implements it, as in `Bot.label(bot)`, or by the trait that
+    declares it, as in `A.label(bot)`. The trait form dispatches on the first
+    argument's type, which is the receiver the method is being called on. -}
+
+{-| Supplied arguments bind left to right; a parameter with no argument uses its
+    default, evaluated in the environment the earlier parameters already
+    extended. -}
+bindArguments :: CallNeeds -> [Located Parameter] -> [Value] -> Maybe Span -> Evaluator [(Text, Value)]
+bindArguments needs parameters arguments callSpan = go parameters arguments []
+ where
+  go [] [] collected = pure (reverse collected)
+  go [] (_ : _) collected =
+    abortAt callSpan "E7003" "too many arguments in call"
+      (Just "pass one argument per declared parameter") >> pure (reverse collected)
+  go (Located _ parameter : rest) supplied collected = case supplied of
+    value : remaining ->
+      go rest remaining ((locatedValue (parameterName parameter), value) : collected)
+    [] -> case parameterDefault parameter of
+      Just expression -> do
+        value <- withFrame (reverse collected) (callEvaluate needs expression)
+        go rest [] ((locatedValue (parameterName parameter), value) : collected)
+      Nothing -> do
+        _ <-
+          abortAt callSpan "E7003"
+            ("missing argument for parameter " <> locatedValue (parameterName parameter))
+            (Just "supply the argument or give the parameter a default")
+        pure (reverse collected)
+
+{-| A block evaluates its statements in order and yields its trailing
+    expression, or unit when it has none. A control transfer inside it travels
+    outward untouched. -}
+
+evaluateCallee :: CallNeeds -> Located Expression -> Evaluator Value
+evaluateCallee needs located@(Located calleeSpan expression) = case expression of
+  MemberExpression target member -> do
+    receiver <- callEvaluate needs target
+    owners <- receiverOwners receiver
+    method <- firstBound (\owner -> lookupName (owner <> "." <> locatedValue member)) owners
+    case method of
+      Just (FunctionValue closure) ->
+        pure (FunctionValue closure{closureSelf = Just receiver})
+      _ -> readMember calleeSpan receiver (locatedValue member)
+  _ -> callEvaluate needs located
+
+
+{-| Await starts the retained async body. The tree evaluator has no scheduler,
+    but preserving this cold boundary keeps calls and awaits observably ordered. -}
+awaitTask :: CallNeeds -> Span -> Value -> Evaluator Value
+awaitTask needs spanValue task = case task of
+  TaskValue closure bindings callSpan -> do
+    releaseChild task
+    result <- runClosure needs closure bindings callSpan
+    case result of
+      VariantValue "Ok" _ -> unwrapTry spanValue result
+      VariantValue "Err" _ -> unwrapTry spanValue result
+      _ -> pure result
+  _ -> abortAt (Just spanValue) "E7008" ("cannot await a " <> valueKind task)
+    (Just "await a task returned by an async function")
+
+{-| Apply a predicate function and interpret the result as a boolean. -}
+{-| A field written without a value takes the binding with the field's own
+    name, exactly as the record pattern's shorthand binds it. -}
+
+{-| Evaluate a structured scope.
+
+    Every task started inside becomes a child of the scope. On normal exit the
+    children that were never awaited are joined in the order they started, so no
+    task outlives the region that began it and a failure among them is selected
+    by position rather than by a race. On a control transfer out of the body the
+    children are joined first, which is the cleanup the semantics require before
+    the transfer continues. -}
+evaluateScope :: CallNeeds -> Span -> Located Block -> Evaluator Value
+evaluateScope needs spanValue body = do
+  openScope
+  outcome <- catchUnwind (callBlock needs body)
+  children <- closeScope
+  mapM_ (joinChild needs spanValue) children
+  case outcome of
+    Right value -> pure value
+    Left transfer -> unwind transfer
+
+{-| Join one child. A child that already failed propagates its failure, which is
+    what keeps a scope from reporting success while a task it owned did not. -}
+
+scopeTo :: [Map Text Value] -> Value -> Value
+scopeTo environment value = case value of
+  FunctionValue closure
+    | closureCaptured closure == Nothing ->
+        FunctionValue closure{closureCaptured = Just environment}
+  other -> other
+
+
+{-| Start a prepared closure body. Async calls retain these bindings in a cold
+    task; ordinary calls enter here immediately. -}
+runClosure :: CallNeeds -> Closure -> [(Text, Value)] -> Maybe Span -> Evaluator Value
+runClosure needs closure bindings callSpan = do
+  deeper <- descend callSpan
+  outcome <- withCaptured (closureCaptured closure) $ withFrame bindings $ closureOutcome needs closure
+  ascend deeper
+  settled callSpan outcome
+
+{-| Run a body the same way, answering the final values of the named parameters
+    as well. The frame is read after `return` and `?` have been caught, so every
+    way the body finishes answers them. -}
+runClosureKeeping
+  :: CallNeeds -> Closure -> [(Text, Value)] -> [Text] -> Maybe Span -> Evaluator (Value, [Value])
+runClosureKeeping needs closure bindings kept callSpan = do
+  deeper <- descend callSpan
+  (outcome, finals) <-
+    withCaptured (closureCaptured closure) $ withFrameKeeping bindings kept $ closureOutcome needs closure
+  ascend deeper
+  result <- settled callSpan outcome
+  pure (result, finals)
+
+closureOutcome :: CallNeeds -> Closure -> Evaluator (Either Unwind Value)
+closureOutcome needs closure = catchUnwind $ case functionBody (closureFunction closure) of
+  Nothing -> pure UnitValue
+  Just (Located _ body) -> case body of
+    BlockBody block -> callBlock needs block
+    ExpressionBody expression -> callEvaluate needs expression
+
+settled :: Maybe Span -> Either Unwind Value -> Evaluator Value
+settled callSpan outcome = case outcome of
+  Right result -> pure result
+  Left (ReturnUnwind result) -> pure result
+  Left _ ->
+    abortAt callSpan "E7006" "break or continue outside a loop"
+      (Just "use break and continue inside while, loop, or for")
+
+{-| Supplied arguments bind left to right; a parameter with no argument uses its
+    default, evaluated in the environment the earlier parameters already
+    extended. -}
+
+applyFunction :: CallNeeds -> Span -> Value -> [Value] -> Evaluator Value
+applyFunction needs spanValue function arguments = case function of
+  FunctionValue closure -> callClosure needs closure arguments (Just spanValue)
+  ArrayMethodValue method receiver -> callArrayMethod (applyFunction needs) spanValue method receiver arguments
+  StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
+  MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
+  SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
+  CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
+  BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
+  BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments
+  _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
+
+{-| Evaluate a structured scope.
+
+    Every task started inside becomes a child of the scope. On normal exit the
+    children that were never awaited are joined in the order they started, so no
+    task outlives the region that began it and a failure among them is selected
+    by position rather than by a race. On a control transfer out of the body the
+    children are joined first, which is the cleanup the semantics require before
+    the transfer continues. -}
+
+{-| Join one child. A child that already failed propagates its failure, which is
+    what keeps a scope from reporting success while a task it owned did not. -}
+joinChild :: CallNeeds -> Span -> Value -> Evaluator ()
+joinChild needs spanValue child = do
+  _ <- awaitTask needs spanValue child
+  pure ()
+
+{-| Await starts the retained async body. The tree evaluator has no scheduler,
+    but preserving this cold boundary keeps calls and awaits observably ordered. -}
+
+
+{-| Apply an evaluated callee to evaluated arguments. -}
+
+callClosure :: CallNeeds -> Closure -> [Value] -> Maybe Span -> Evaluator Value
+callClosure needs closure arguments = callClosureLending needs closure arguments noneLent
+
+{-| Call a closure, handing each `&mut` parameter's final value back to the
+    place its argument was lent from. -}
+callClosureLending :: CallNeeds -> Closure -> [Value] -> Lent -> Maybe Span -> Evaluator Value
+callClosureLending needs closure arguments lent callSpan = do
+  tally "closure call"
+  let value = closureFunction closure
+      parameters = functionParameters value
+      supplied = maybe arguments (: arguments) (closureSelf closure)
+      places = case closureSelf closure of
+        Just _ -> lentSelf lent : lentArguments lent
+        Nothing -> lentArguments lent
+      returned =
+        [ (locatedValue (parameterName parameter), place)
+        | position <- exclusiveParameters value
+        , (Located _ parameter, Just place) <-
+            take 1 (drop position (zip parameters (places <> repeat Nothing)))
+        ]
+  bindings <- bindArguments needs parameters supplied callSpan
+  if functionAsync value
+    then do
+      let task = TaskValue closure bindings callSpan
+      adoptChild task
+      pure task
+    else case returned of
+      [] -> runClosure needs closure bindings callSpan
+      _ -> do
+        (result, finals) <- runClosureKeeping needs closure bindings (map fst returned) callSpan
+        mapM_ (uncurry storePlace) (zip (map snd returned) finals)
+        pure result
+
+{-| Start a prepared closure body. Async calls retain these bindings in a cold
+    task; ordinary calls enter here immediately. -}
+
+{-| Start a thread running a function, and answer the token naming it.
+
+    Dispatched here rather than beside the other effects because starting one
+    means calling back into evaluation, and the apply that does it is what this
+    module owns. Everything a started thread is afterwards — joining it, and
+    what it reports — belongs to [[Eval Concurrent]].
+
+    The thread is given the environment as it stands at the call. That is the
+    same environment an ordinary call would run in, and it is safe to share
+    because every value in it is immutable: the things two threads can both
+    change are the channel, the lock, and the cell, and each of those is a
+    token into a table rather than a value.
+
+    A thread that failed reports what it said rather than taking the program
+    down with it. A runtime that unwound past a boundary the program cannot see
+    would take away the only decision worth having, which is the same rule
+    every other effect here follows. -}
+callSpawnThread :: Apply -> Span -> [Value] -> Evaluator Value
+callSpawnThread apply spanValue arguments = case arguments of
+  [action] -> do
+    admitted <- effectsAdmitted
+    if not admitted
+      then
+        abortAt (Just spanValue) "E7009" "spawnThread reaches outside the program"
+          ( Just
+              ( "a compile-time constant is folded while the compiler runs, so it "
+                  <> "cannot start a thread"
+              )
+          )
+      else do
+        concurrent <- currentConcurrentStore
+        Evaluator $ \env -> do
+          slot <- newEmptyMVar
+          let Evaluator body = apply spanValue action []
+          threadId <- forkIO $ do
+            outcome <- try (body env) :: IO (Either SomeException (Eval Value))
+            putMVar slot (reported outcome)
+          token <- threadRegister concurrent threadId slot
+          pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)
+  _ -> abortAt (Just spanValue) "E7012" "spawnThread expects one function" Nothing
+ where
+  reported outcome = case outcome of
+    Left problem -> Just (Text.pack (show problem))
+    Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
+    Right _ -> Nothing
+
+

@@ -1,0 +1,183 @@
+module UsesNonEmptyMultiKeyAll
+
+import Std.Map as Map
+import Std.MultiKeyMap as MultiKeyMap
+import Std.NonEmpty as NonEmpty
+import Std.Option as Option
+
+fn sample() -> NonEmpty.NonEmpty[Int] {
+  NonEmpty.make(3, [1, 2])
+}
+
+fn grants() -> MultiKeyMap.MultiKeyMap[Str, Str, Int] {
+  MultiKeyMap.fromEntries(&[("ann", "read", 1), ("ann", "write", 2), ("bob", "read", 3)])
+}
+
+/// Every export of `Std.NonEmpty` and `Std.MultiKeyMap`.
+///
+/// The first is a sequence that always holds something, so what is checked is
+/// that the promise is kept where it is easiest to break: a sequence of one,
+/// where the first element and the last are the same and everything after the
+/// first is nothing. A function reading the last element out of the tail
+/// answers wrongly there and correctly everywhere else.
+///
+/// The second is a map that can be asked about half a key, which is the whole
+/// reason to reach for it. Both halves are asked, and both are asked after a
+/// removal: an index left claiming a key whose entries are gone would answer a
+/// partial question with entries the map no longer holds.
+export fn main() -> Int {
+  var held = 0
+  let nothing: Array[Int] = []
+  let several = sample()
+  let single: NonEmpty.NonEmpty[Int] = NonEmpty.one(7)
+
+  // Built, and read back as ordinary data.
+  if NonEmpty.toArray(&several) == [3, 1, 2] { held = held + 1 }
+  if NonEmpty.toArray(&single) == [7] { held = held + 1 }
+  if NonEmpty.length(&several) == 3 && NonEmpty.length(&single) == 1 { held = held + 1 }
+  // The one place the question is asked at all.
+  if Option.isNone(&NonEmpty.fromArray(&nothing)) { held = held + 1 }
+  if NonEmpty.toArray(&Option.unwrapOr(NonEmpty.fromArray(&[3, 1, 2]), single)) == [3, 1, 2] {
+    held = held + 1
+  }
+
+  // The ends, in a sequence of several and in one of a single element, where
+  // the first and the last are the same and the rest is nothing.
+  if NonEmpty.first(&several) == 3 && NonEmpty.first(&single) == 7 { held = held + 1 }
+  if NonEmpty.last(&several) == 2 && NonEmpty.last(&single) == 7 { held = held + 1 }
+  if NonEmpty.rest(&several) == [1, 2] && NonEmpty.rest(&single) == [] { held = held + 1 }
+
+  // Added to at either end, and joined.
+  if NonEmpty.toArray(&NonEmpty.prepend(&several, 9)) == [9, 3, 1, 2] { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.append(&several, 9)) == [3, 1, 2, 9] { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.concat(&several, &single)) == [3, 1, 2, 7] { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.reversed(&several)) == [2, 1, 3] { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.reversed(&single)) == [7] { held = held + 1 }
+
+  // Over every element.
+  if NonEmpty.toArray(&NonEmpty.map(&several, fn(n: Int) -> Int => n * 10)) == [30, 10, 20] {
+    held = held + 1
+  }
+  // Combining without a starting value, which needs a sequence that holds one.
+  if NonEmpty.reduce(&several, fn(l: Int, r: Int) -> Int => l + r) == 6 { held = held + 1 }
+  if NonEmpty.reduce(&single, fn(l: Int, r: Int) -> Int => l + r) == 7 { held = held + 1 }
+  if NonEmpty.fold(&several, 100, fn(total: Int, n: Int) -> Int => total + n) == 106 {
+    held = held + 1
+  }
+  if NonEmpty.all(&several, fn(n: Int) -> Bool => n > 0) { held = held + 1 }
+  if !NonEmpty.all(&several, fn(n: Int) -> Bool => n > 1) { held = held + 1 }
+  if NonEmpty.any(&several, fn(n: Int) -> Bool => n == 2) { held = held + 1 }
+  if !NonEmpty.any(&several, fn(n: Int) -> Bool => n == 9) { held = held + 1 }
+  // Filtering may leave nothing, so it answers ordinary data.
+  if NonEmpty.filter(&several, fn(n: Int) -> Bool => n > 1) == [3, 2] { held = held + 1 }
+  if NonEmpty.filter(&several, fn(n: Int) -> Bool => n > 9) == [] { held = held + 1 }
+  if Option.unwrapOr(NonEmpty.find(&several, fn(n: Int) -> Bool => n > 1), 0) == 3 {
+    held = held + 1
+  }
+  if Option.isNone(&NonEmpty.find(&several, fn(n: Int) -> Bool => n > 9)) { held = held + 1 }
+  if NonEmpty.contains(&several, 2) && !NonEmpty.contains(&several, 9) { held = held + 1 }
+
+  // The extremes, which answer a value rather than one that may be absent.
+  if NonEmpty.minimum(&several) == 1 && NonEmpty.maximum(&several) == 3 { held = held + 1 }
+  if NonEmpty.minimum(&single) == 7 && NonEmpty.maximum(&single) == 7 { held = held + 1 }
+  if NonEmpty.minimumBy(&several, fn(l: Int, r: Int) -> Bool => l > r) == 3 { held = held + 1 }
+  if NonEmpty.maximumBy(&several, fn(l: Int, r: Int) -> Bool => l > r) == 1 { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.sorted(&several)) == [1, 2, 3] { held = held + 1 }
+  if NonEmpty.toArray(&NonEmpty.sortBy(&several, fn(l: Int, r: Int) -> Bool => l > r))
+    == [3, 2, 1] {
+    held = held + 1
+  }
+
+  // Runs of adjacent equal elements, each known to hold at least one.
+  let runs = NonEmpty.group(&[1, 1, 2, 3, 3, 3])
+  if runs.length() == 3 { held = held + 1 }
+  if NonEmpty.toArray(&runs[0]) == [1, 1] && NonEmpty.toArray(&runs[2]) == [3, 3, 3] {
+    held = held + 1
+  }
+  if NonEmpty.group(&nothing) == [] { held = held + 1 }
+  let byParity = NonEmpty.groupBy(&[2, 4, 1, 3], fn(l: Int, r: Int) -> Bool => l % 2 == r % 2)
+  if byParity.length() == 2 && NonEmpty.toArray(&byParity[0]) == [2, 4] { held = held + 1 }
+
+  // A map keyed by two things, read by the whole key.
+  let permissions = grants()
+  let noGrants: MultiKeyMap.MultiKeyMap[Str, Str, Int] = MultiKeyMap.empty()
+  if Option.unwrapOr(MultiKeyMap.get(&permissions, "ann", "write"), 0) == 2 { held = held + 1 }
+  if Option.isNone(&MultiKeyMap.get(&permissions, "bob", "write")) { held = held + 1 }
+  if MultiKeyMap.getOr(&permissions, "bob", "write", 0 - 1) == 0 - 1 { held = held + 1 }
+  if MultiKeyMap.containsKey(&permissions, "ann", "read") { held = held + 1 }
+  if !MultiKeyMap.containsKey(&permissions, "bob", "write") { held = held + 1 }
+  if MultiKeyMap.size(&permissions) == 3 && MultiKeyMap.size(&noGrants) == 0 { held = held + 1 }
+  if MultiKeyMap.isEmpty(&noGrants) && !MultiKeyMap.isEmpty(&permissions) { held = held + 1 }
+
+  // Read by half a key, in each direction. The question the module exists for.
+  if MultiKeyMap.withFirst(&permissions, "ann") == [("read", 1), ("write", 2)] {
+    held = held + 1
+  }
+  if MultiKeyMap.withSecond(&permissions, "read") == [("ann", 1), ("bob", 3)] {
+    held = held + 1
+  }
+  if MultiKeyMap.secondsFor(&permissions, "ann") == ["read", "write"] { held = held + 1 }
+  if MultiKeyMap.firstsFor(&permissions, "read") == ["ann", "bob"] { held = held + 1 }
+  if MultiKeyMap.withFirst(&permissions, "nobody") == [] { held = held + 1 }
+  if MultiKeyMap.containsFirst(&permissions, "ann") { held = held + 1 }
+  if !MultiKeyMap.containsFirst(&permissions, "nobody") { held = held + 1 }
+  if MultiKeyMap.containsSecond(&permissions, "write") { held = held + 1 }
+  if !MultiKeyMap.containsSecond(&permissions, "delete") { held = held + 1 }
+
+  // Every distinct part, and every entry.
+  if MultiKeyMap.firsts(&permissions) == ["ann", "bob"] { held = held + 1 }
+  if MultiKeyMap.seconds(&permissions) == ["read", "write"] { held = held + 1 }
+  if MultiKeyMap.entries(&permissions)
+    == [("ann", "read", 1), ("ann", "write", 2), ("bob", "read", 3)] {
+    held = held + 1
+  }
+  if MultiKeyMap.values(&permissions) == [1, 2, 3] { held = held + 1 }
+
+  // Writing. Replacing a value leaves the indexes alone; recording the pair
+  // twice would make a later removal drop one copy and leave an index
+  // claiming a key the entries no longer hold.
+  let replaced = MultiKeyMap.insert(&permissions, "ann", "read", 9)
+  if MultiKeyMap.size(&replaced) == 3 { held = held + 1 }
+  if MultiKeyMap.secondsFor(&replaced, "ann") == ["read", "write"] { held = held + 1 }
+  if MultiKeyMap.size(&MultiKeyMap.insert(&permissions, "cat", "read", 4)) == 4 {
+    held = held + 1
+  }
+  if MultiKeyMap.firsts(&MultiKeyMap.insert(&permissions, "cat", "read", 4))
+    == ["ann", "bob", "cat"] {
+    held = held + 1
+  }
+
+  // Removing. A part of a key left naming nothing leaves its index, so a
+  // partial question never answers with a key that has no entries behind it.
+  let withoutAnnRead = MultiKeyMap.remove(&permissions, "ann", "read")
+  if MultiKeyMap.size(&withoutAnnRead) == 2 { held = held + 1 }
+  if MultiKeyMap.secondsFor(&withoutAnnRead, "ann") == ["write"] { held = held + 1 }
+  if MultiKeyMap.firstsFor(&withoutAnnRead, "read") == ["bob"] { held = held + 1 }
+  if MultiKeyMap.size(&MultiKeyMap.remove(&permissions, "nobody", "read")) == 3 {
+    held = held + 1
+  }
+  let withoutAnn = MultiKeyMap.removeFirst(&permissions, "ann")
+  if MultiKeyMap.size(&withoutAnn) == 1 && !MultiKeyMap.containsFirst(&withoutAnn, "ann") {
+    held = held + 1
+  }
+  // Removing every entry under one second part leaves that part naming nothing.
+  let withoutWrite = MultiKeyMap.removeSecond(&permissions, "write")
+  if MultiKeyMap.size(&withoutWrite) == 2 { held = held + 1 }
+  if !MultiKeyMap.containsSecond(&withoutWrite, "write") { held = held + 1 }
+  if MultiKeyMap.seconds(&withoutWrite) == ["read"] { held = held + 1 }
+
+  // Combined, and handed on as an ordinary map keyed by the pair.
+  if MultiKeyMap.fold(
+      &permissions,
+    fn(total: Int, _a: Str, _b: Str, v: Int) -> Int => total + v,
+    0
+  ) == 6 {
+    held = held + 1
+  }
+  if Map.size(&MultiKeyMap.toMap(&permissions)) == 3 { held = held + 1 }
+  if Option.unwrapOr(Map.get(&MultiKeyMap.toMap(&permissions), ("ann", "write")), 0) == 2 {
+    held = held + 1
+  }
+
+  held
+}

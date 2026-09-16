@@ -1,0 +1,197 @@
+module Std.Fs
+
+import Std.Bytes as Bytes
+import Std.Env as Env
+import Std.Io as Io
+import Std.Path as Path
+
+/// What a file permits, as the four questions every operating system can answer.
+///
+/// Portable flags rather than a Unix mode, because a mode is meaningless on a
+/// system that has no owner, group, and other, and a program that set `0o600`
+/// there would be told it succeeded at something that did not happen.
+export type Permissions = { readable: Bool, writable: Bool, executable: Bool, searchable: Bool }
+
+/// What is known about a path without opening it.
+export type Metadata = {
+  size: Int,
+  isDirectory: Bool,
+  isSymbolicLink: Bool,
+  permissions: Permissions
+}
+
+/// Why a filesystem operation did not do what it was asked.
+export type FsError
+  = Failed(Io.IoError)
+  | OutsideBase(Str)
+  | NamesExhausted(Int)
+
+/// How many random names a temporary directory tries before giving up.
+const NAME_ATTEMPTS: Int = 16
+
+const HEX_DIGITS: Str = "0123456789abcdef"
+
+/// A path renamed, replacing whatever the destination held.
+///
+/// On one filesystem the destination names either the old contents or the new,
+/// never a mixture, which is what makes `writeAtomically` possible.
+export fn rename(from: Str, to: Str) -> Result[(), FsError] {
+  refused(renamePath(from, to), from)
+}
+
+/// A file's contents replaced so that no reader ever sees them half written.
+///
+/// The bytes go to a new file beside the destination, created under a name no
+/// other process can claim, and that file is then renamed over the destination.
+/// A crash before the rename leaves the old contents; after it, the new. The
+/// temporary file is removed when any step fails.
+export fn writeAtomically(path: Str, contents: &Bytes) -> Result[(), FsError] {
+  let staged = temporaryFileIn(Path.directoryOf(path), "." + Path.nameOf(path) + ".") ?
+  match Io.writeAllBytes(staged, contents) {
+    case Ok(_) => {}
+    case Err(reason) => {
+      let _removed = removeFile(staged)
+      return Err(Failed(reason))
+    }
+  }
+  match rename(staged, path) {
+    case Ok(_) => Ok(())
+    case Err(reason) => {
+      let _removed = removeFile(staged)
+      Err(reason)
+    }
+  }
+}
+
+/// Text written with the same guarantee as `writeAtomically`.
+export fn writeTextAtomically(path: Str, text: Str) -> Result[(), FsError] {
+  writeAtomically(path, &Bytes.fromText(text))
+}
+
+/// A new empty file in a directory, under a name no other process holds.
+///
+/// Created and named in one step by the operating system, so there is no gap
+/// between choosing a name and claiming it for another program to fill.
+export fn temporaryFileIn(directory: Str, prefix: Str) -> Result[Str, FsError] {
+  refused(createTemporaryFile(directory, prefix), directory)
+}
+
+/// A new empty directory under `parent`, named by `prefix` and random digits.
+///
+/// Creating a directory fails when the name is taken, so a name is claimed by
+/// the attempt itself; a collision tries another name, up to sixteen.
+export fn temporaryDirectoryIn(parent: Str, prefix: Str) -> Result[Str, FsError] {
+  var attempt = 0
+  while attempt < NAME_ATTEMPTS {
+    let candidate = Path.join(parent, prefix + randomDigits() ?)
+    match createDirectoryExclusive(candidate) {
+      case Ok(_) => { return Ok(candidate) }
+      case Err(message) =>
+      match Io.classified(message, candidate) {
+        case Io.AlreadyExists(_) => {}
+        case other => { return Err(Failed(other)) }
+      }
+    }
+    attempt = attempt + 1
+  }
+  Err(NamesExhausted(NAME_ATTEMPTS))
+}
+
+/// An action given a fresh temporary directory that is removed afterwards.
+///
+/// Removed whether the action succeeded or failed, so a failing program does not
+/// leave directories behind; the action's own failure is the one reported.
+export fn withTemporaryDirectory[T](
+  prefix: Str,
+  action: fn(Str) -> Result[T, FsError]
+) -> Result[T, FsError] {
+  let directory = temporaryDirectoryIn(Env.temporaryDirectory(), prefix) ?
+  let outcome = action(directory)
+  let cleared = removeTree(directory)
+  let value = outcome ?
+  cleared ?
+  Ok(value)
+}
+
+/// A path and everything beneath it removed.
+///
+/// A symbolic link is removed as a link and never followed, so removing a tree
+/// that contains a link to somewhere else removes only the link.
+export fn removeTree(path: Str) -> Result[(), FsError] {
+  let link = refused(pathIsSymbolicLink(path), path) ?
+  if !link && directoryExists(path) {
+    let names = refused(listDirectory(path), path) ?
+    for name in names { removeTree(Path.join(path, name)) ? }
+    refused(removeEmptyDirectory(path), path)
+  } else {
+    refused(removeFile(path), path)
+  }
+}
+
+/// What a path permits.
+export fn permissions(path: Str) -> Result[Permissions, FsError] {
+  let mask = refused(permissionsOf(path), path) ?
+  Ok(Permissions {
+      readable: mask % 2 == 1,
+      writable: (mask / 2) % 2 == 1,
+      executable: (mask / 4) % 2 == 1,
+      searchable: (mask / 8) % 2 == 1
+    })
+}
+
+/// A path's permissions set to exactly the flags given.
+export fn setPermissions(path: Str, wanted: &Permissions) -> Result[(), FsError] {
+  let mask = (if wanted.readable { 1 } else { 0 }) + (if wanted.writable { 2 } else { 0 }) +
+  (if wanted.executable { 4 } else { 0 }) + (if wanted.searchable { 8 } else { 0 })
+  refused(setPermissionsOf(path, mask), path)
+}
+
+/// What is known about a path: its size, kind, and permissions.
+export fn metadata(path: Str) -> Result[Metadata, FsError] {
+  let link = refused(pathIsSymbolicLink(path), path) ?
+  let directory = directoryExists(path)
+  let size = if directory { 0 } else { refused(fileSize(path), path) ? }
+  let allowed = permissions(path) ?
+  Ok(Metadata{size: size, isDirectory: directory, isSymbolicLink: link, permissions: allowed})
+}
+
+/// A symbolic link at `link` that names `target`.
+export fn linkTo(target: Str, link: Str) -> Result[(), FsError] {
+  refused(createSymbolicLink(target, link), link)
+}
+
+/// A path with every symbolic link and relative step resolved.
+export fn canonical(path: Str) -> Result[Str, FsError] {
+  refused(canonicalPath(path), path)
+}
+
+/// The real location of `path` within `base`, refused when it lies outside.
+///
+/// Both are resolved through symbolic links first, so a link inside the base
+/// that points elsewhere is caught rather than trusted because of how its name
+/// reads. The path must exist, because a location that does not exist yet has
+/// no links to resolve.
+export fn resolveInside(base: Str, path: Str) -> Result[Str, FsError] {
+  let realBase = canonical(base) ?
+  let realTarget = canonical(Path.resolve(base, path)) ?
+  if Path.isInside(realBase, realTarget) { Ok(realTarget) } else { Err(OutsideBase(path)) }
+}
+
+fn refused[T](outcome: Result[T, Str], path: Str) -> Result[T, FsError] {
+  match outcome {
+    case Ok(value) => Ok(value)
+    case Err(message) => Err(Failed(Io.classified(message, path)))
+  }
+}
+
+fn randomDigits() -> Result[Str, FsError] {
+  let entropy = refused(secureRandomBytes(8), "") ?
+  var text = ""
+  for octet in Bytes.toArray(&entropy) {
+    let value = convertInteger[Int](octet)
+    if let Some(number) = value {
+      text = text + HEX_DIGITS.slice(number / 16, number / 16 + 1) + HEX_DIGITS.slice(number % 16, number % 16 + 1)
+    }
+  }
+  Ok(text)
+}

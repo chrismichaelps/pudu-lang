@@ -1,0 +1,180 @@
+module Std.Random
+
+import Std.Num {Integer}
+
+/// Cryptographically strong bytes from the operating system.
+///
+/// This is separate from `Generator`: deterministic sequences are useful for
+/// tests and simulation, while secrets and protocol nonces must not be
+/// reproducible. Failure is returned and never replaced with clock-seeded
+/// output. Requests above one mebibyte are refused at the runtime boundary.
+export fn secureBytes(count: Int) -> Result[Bytes, Str] { secureRandomBytes(count) }
+
+/// A generator's state: one number that carries everything it remembers.
+/// A value rather than something hidden, so a program that generates the same
+/// sequence twice does so because it asked to and not by accident. Every
+/// operation answers with the next generator beside its value.
+export type Generator = { state: UInt64 }
+
+/// A generator started from a seed.
+/// A seed of nought is replaced, because the algorithm below has nought as a
+/// fixed point and would answer with it forever.
+export fn fromSeed(seed: UInt64) -> Generator {
+  if seed == 0u64 { Generator{state: 88172645463325252u64} } else { Generator{state: seed} }
+}
+
+/// A generator started from the clock.
+/// Not for anything that must be unguessable: the clock is readable by anyone
+/// who can run the program at the same moment. `Std.Crypto` is where a secret
+/// belongs.
+export fn fromClock() -> Generator {
+  match convertInteger[UInt64](clock()) {
+    case Some(seed) => fromSeed(seed)
+    case None => fromSeed(1u64)
+  }
+}
+
+/// The next state and the number it produced.
+/// Xorshift with a multiplying finish: three shifts scramble the state and the
+/// multiply spreads the low bits, which the shifts alone leave weak.
+export fn next(source: &Generator) -> (Generator, UInt64) {
+  var value = source.state
+  value = value ^ (value >> 12)
+  value = value ^ (value << 25)
+  value = value ^ (value >> 27)
+  (Generator{state: value}, value &* 2685821657736338717u64)
+}
+
+/// A number below a bound, and the generator that follows.
+///
+/// The bound's own type is the answer's type: a caller drawing indices for a
+/// `UInt8` array gets a `UInt8` back and never leaves its width. The bound is
+/// the type witness, which is what lets one function serve the whole integer
+/// family without a conversion the caller has to undo.
+///
+/// A bound of nought or less answers nought, because there is no number below
+/// it and refusing would make every caller handle a case they can see is
+/// impossible.
+export fn below[N: Integer](source: &Generator, bound: N) -> (Generator, N) {
+  let limit = bound.toBigInt()
+  if limit <= 0 {
+    (*source, fittedOr(bound, bound.fromBigInt(0)))
+  } else {
+    let stepped = next(source)
+    match convertInteger[BigInt](stepped[1] >> 1) {
+      case Some(drawn) => (stepped[0], fittedOr(bound, bound.fromBigInt(drawn % limit)))
+      case None => (stepped[0], fittedOr(bound, bound.fromBigInt(0)))
+    }
+  }
+}
+
+/// The value when there is one, and the witness when the conversion could not
+/// be made. A drawn number is always below the bound, so the fallback is
+/// unreachable; it is written rather than panicked so a caller never inherits a
+/// failure this function cannot actually produce.
+fn fittedOr[N](fallback: N, value: Option[N]) -> N {
+  match value {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// A number between two bounds, the lower included and the upper excluded.
+/// Both bounds and the answer share the caller's type.
+export fn between[N: Integer](source: &Generator, lower: N, upper: N) -> (Generator, N) {
+  let span = upper.toBigInt() - lower.toBigInt()
+  if span <= 0 {
+    (*source, lower)
+  } else {
+    let stepped = next(source)
+    match convertInteger[BigInt](stepped[1] >> 1) {
+      case Some(drawn) =>
+      (stepped[0], fittedOr(lower, lower.fromBigInt(lower.toBigInt() + drawn % span)))
+      case None => (stepped[0], lower)
+    }
+  }
+}
+
+/// A truth value, true about half the time.
+export fn boolean(source: &Generator) -> (Generator, Bool) {
+  let stepped = next(source)
+  (stepped[0], (stepped[1] & 1u64) == 1u64)
+}
+
+/// A truth value true with the given chance in a hundred.
+export fn chance(source: &Generator, percent: Int) -> (Generator, Bool) {
+  let stepped = below(source, 100)
+  (stepped[0], stepped[1] < percent)
+}
+
+/// One element of an array, or `None` when it is empty.
+export fn pick[T](source: &Generator, items: &Array[T]) -> (Generator, Option[T]) {
+  if items.length() == 0 { (*source, None) } else {
+    let stepped = below(source, items.length())
+    (stepped[0], Some(items[stepped[1]]))
+  }
+}
+
+/// The elements in a shuffled order.
+/// Fisher and Yates, walking from the end so every ordering is equally likely —
+/// the naive version that swaps with any position is not.
+export fn shuffle[T](source: &Generator, items: &Array[T]) -> (Generator, Array[T]) {
+  var out = items.slice(0, items.length())
+  var generator = *source
+  var index = out.length()
+  while index > 1 {
+    index = index - 1
+    let stepped = below(&generator, index + 1)
+    generator = stepped[0]
+    let chosen = stepped[1]
+    if chosen != index {
+      let held = out[index]
+      out = out.remove(index).insert(index, out[chosen])
+      out = out.remove(chosen).insert(chosen, held)
+    }
+  }
+  (generator, out)
+}
+
+/// A number of elements drawn without replacement, in a shuffled order.
+export fn sample[T](source: &Generator, items: &Array[T], count: Int) -> (Generator, Array[T]) {
+  let stepped = shuffle(source, items)
+  let wanted = if count < 0 { 0 } else { count }
+  (stepped[0], stepped[1].slice(0, if wanted > stepped[1].length() { stepped[1].length() } else { wanted }))
+}
+
+/// An array of numbers below a bound.
+export fn numbers[N: Integer](source: &Generator, count: Int, bound: N) -> (Generator, Array[N]) {
+  var out = []
+  var generator = *source
+  var remaining = count
+  while remaining > 0 {
+    let stepped = below(&generator, bound)
+    generator = stepped[0]
+    out = out.push(stepped[1])
+    remaining = remaining - 1
+  }
+  (generator, out)
+}
+
+/// Text of a given length drawn from an alphabet.
+/// An empty alphabet answers with empty text, since there is nothing to draw.
+export fn text(source: &Generator, length: Int, alphabet: Str) -> (Generator, Str) {
+  if alphabet.isEmpty() { (*source, "") } else {
+    var out = ""
+    var generator = *source
+    var remaining = length
+    while remaining > 0 {
+      let stepped = below(&generator, alphabet.length())
+      generator = stepped[0]
+      out = out + alphabet.slice(stepped[1], stepped[1] + 1)
+      remaining = remaining - 1
+    }
+    (generator, out)
+  }
+}
+
+/// Text of lower-case letters and digits, for an identifier a person will read.
+export fn identifier(source: &Generator, length: Int) -> (Generator, Str) {
+  text(source, length, "abcdefghijklmnopqrstuvwxyz0123456789")
+}

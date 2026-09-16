@@ -1,0 +1,21 @@
+module Main
+
+import Shapes
+
+/// An importer names the variant through its module, and the field names come
+/// with it: the declaration is what carries them, not the module that declared
+/// it.
+fn area(shape: Shapes.Shape) -> Int {
+  match shape {
+    case Shapes.Circle{radius} => 3 * radius * radius
+    case Shapes.Rect{width, height} => width * height
+    case Shapes.Point => 0
+  }
+}
+
+export fn main() -> Int {
+  var total = area(Shapes.Circle{radius: 2})
+  total = total + area(Shapes.Rect{width: 3, height: 4})
+  total = total + area(Shapes.Point)
+  total
+}

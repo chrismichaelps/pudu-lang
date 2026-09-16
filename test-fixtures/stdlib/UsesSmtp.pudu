@@ -1,0 +1,151 @@
+module UsesSmtp
+
+import Std.Mail as Mail
+import Std.Mail.Smtp as Smtp
+import Std.Result as Result
+
+/// A client naming itself, proving itself and held to a deadline, set through a
+/// bound naming the configuring trait and nothing else.
+fn submitting[C: Smtp.Configuring](base: &C) -> C {
+  base.identifiedAs("my-app.internal").loggingIn("mailer-bot", "secret-password-123").within(5000)
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Client configuration and builders
+  let settled: Smtp.SmtpClient = submitting(&Smtp.client("smtp.example.com", 587, "sender.example.com"))
+
+  if settled.host == "smtp.example.com" && settled.port == 587 { held = held + 1 }
+  if settled.domain == "my-app.internal" && settled.timeoutMs == 5000 { held = held + 1 }
+  // The port decided the protection before anything was said about it: 465 is
+  // the one that is encrypted from the first byte, and every other port starts
+  // in the clear and has to be upgraded.
+  let implicit: Smtp.SmtpSecurity = Smtp.client("smtp.example.com", 465, "s.example.com").security
+  match implicit { case Smtp.ImplicitTls => { held = held + 1 } case _ => {} }
+  match settled.security { case Smtp.StartTlsRequired => { held = held + 1 } case _ => {} }
+  // And said outright it wins over what the port implied, which is the call a
+  // caller reaches for against a submission host on a port of its own.
+  match settled.protectedBy(Smtp.Plaintext).security {
+    case Smtp.Plaintext => { held = held + 1 }
+    case _ => {}
+  }
+  // The two mechanisms differ in the variant they hold rather than in anything
+  // else, so a client set up for one must not come back holding the other.
+  let login: Option[Smtp.SmtpAuth] = settled.credentials
+  match login {
+    case Some(Smtp.Login(user, secret)) => {
+      if user == "mailer-bot" && secret == "secret-password-123" { held = held + 1 }
+    }
+    case _ => {}
+  }
+  match settled.loggingInPlainly("alice", "pw").credentials {
+    case Some(Smtp.Plain(user, secret)) => {
+      if user == "alice" && secret == "pw" { held = held + 1 }
+    }
+    case _ => {}
+  }
+
+  // 2. Command formatting
+  if Smtp.ehloCommand("mail.example.org") == "EHLO mail.example.org\r\n" {
+    held = held + 1
+  }
+  if Smtp.mailFromCommand("sender@example.org") == "MAIL FROM:<sender@example.org>\r\n" {
+    held = held + 1
+  }
+  if Smtp.rcptToCommand("receiver@example.org") == "RCPT TO:<receiver@example.org>\r\n" {
+    held = held + 1
+  }
+  if Smtp.dataCommand() == "DATA\r\n" {
+    held = held + 1
+  }
+  if Smtp.quitCommand() == "QUIT\r\n" {
+    held = held + 1
+  }
+
+  // 3. Authentication payload encoding
+  let userB64 = Smtp.authLoginUsername("user")
+  let passB64 = Smtp.authLoginPassword("pass")
+  if userB64 == "dXNlcg==\r\n" {
+    held = held + 1
+  }
+  if passB64 == "cGFzcw==\r\n" {
+    held = held + 1
+  }
+
+  let plainAuthPayload = Smtp.authPlainPayload("alice", "secret")
+  if plainAuthPayload.startsWith("AUTH PLAIN ") && plainAuthPayload.endsWith("\r\n") {
+    held = held + 1
+  }
+
+  // 4. Single-line reply parsing
+  let greetingRaw = "220 smtp.example.com ESMTP Postfix\r\n"
+  let parsedGreeting: Result[Smtp.SmtpReply, Smtp.SmtpError] = Smtp.parseReply(greetingRaw)
+  match parsedGreeting {
+    case Ok(r) => {
+      if r.code == 220 && r.lines.length() == 1 && r.lines[0] == "smtp.example.com ESMTP Postfix" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 5. Multi-line reply parsing (EHLO capabilities)
+  let ehloRaw = "250-smtp.example.com\r\n250-PIPELINING\r\n250-SIZE 10240000\r\n250 8BITMIME\r\n"
+  let parsedEhlo = Smtp.parseReply(ehloRaw)
+  match parsedEhlo {
+    case Ok(r) => {
+      if r.code == 250 && r.lines.length() == 4 && r.lines[1] == "PIPELINING" && r.lines[3] == "8BITMIME" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 6. Intermediate and error reply parsing
+  let dataPrompt = Smtp.parseReply("354 Start mail input; end with <CRLF>.<CRLF>\r\n")
+  match dataPrompt {
+    case Ok(r) => {
+      if r.code == 354 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  let mailboxError = Smtp.parseReply("550 5.1.1 <nonexistent@example.com>: Recipient address rejected\r\n")
+  match mailboxError {
+    case Ok(r) => {
+      if r.code == 550 && r.lines[0].contains("Recipient address rejected") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 7. Malformed reply rejection
+  let malformedReply = Smtp.parseReply("bad\r\n")
+  match malformedReply {
+    case Err(Smtp.HandshakeFailed(_, _)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 8. Connection failure handling
+  let deadHostClient = Smtp.client("127.0.0.1", 1, "sender.example.com").within(50)
+  let sender = Result.unwrapOr(Mail.address("outbound@example.com"), Mail.Address{written: ""})
+  let rcpt = Result.unwrapOr(Mail.address("inbound@example.com"), Mail.Address{written: ""})
+  let testMsg = Result.unwrapOr(Mail.message(&sender, &rcpt, "Status update", "Everything is working."), Mail.Message {
+      from: sender,
+      to: [rcpt],
+      copies: [],
+      blindCopies: [],
+      subject: "",
+      body: "",
+    })
+
+  let deliveryResult = Smtp.deliver(&deadHostClient, &testMsg)
+  match deliveryResult {
+    case Err(Smtp.ConnectionFailed(_)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  held
+}

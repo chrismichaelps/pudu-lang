@@ -1,0 +1,9 @@
+module RejectsTypeMember
+
+type Local = { value: Int }
+
+fn builtin() -> Int { Int32.missing }
+fn prelude() -> Int { Sync.cell(7) }
+fn declared() -> Int { Local.missing }
+
+export fn main() -> Int { 0 }

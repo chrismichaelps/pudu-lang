@@ -1,0 +1,152 @@
+module Std.RingBuffer
+
+import Std.List as List
+
+/// A bounded, power-of-two circular FIFO ring buffer with branchless bitmask wrapping.
+export type RingBuffer = {
+  buffer: Array[Option[Int]],
+  head: Int,
+  tail: Int,
+  count: Int,
+  capacity: Int,
+  mask: Int,
+}
+
+/// The result of a successful pop operation containing the updated buffer and the dequeued item.
+export type PopResult = {
+  buffer: RingBuffer,
+  item: Int,
+}
+
+fn fillNones(total: Int) -> Array[Option[Int]] {
+  var arr: Array[Option[Int]] = []
+  var i = 0
+  while i < total {
+    arr = arr.push(None)
+    i = i + 1
+  }
+  arr
+}
+
+fn roundCapacity(req: Int) -> Int {
+  var cap = 4
+  while cap < req && cap < 1073741824 {
+    cap = cap &* 2
+  }
+  cap
+}
+
+/// Creates a ring buffer whose capacity is rounded up to the nearest power of two (min 4).
+export fn create(minCapacity: Int) -> RingBuffer {
+  let cap = roundCapacity(minCapacity)
+  let buf = fillNones(cap)
+  RingBuffer {
+    buffer: buf,
+    head: 0,
+    tail: 0,
+    count: 0,
+    capacity: cap,
+    mask: cap &- 1,
+  }
+}
+
+/// Returns the total power-of-two capacity of the buffer.
+export fn capacity(rb: &RingBuffer) -> Int {
+  rb.capacity
+}
+
+/// Returns the number of elements currently stored.
+export fn size(rb: &RingBuffer) -> Int {
+  rb.count
+}
+
+/// Whether the buffer contains no elements.
+export fn isEmpty(rb: &RingBuffer) -> Bool {
+  rb.count == 0
+}
+
+/// Whether the buffer has reached maximum capacity.
+export fn isFull(rb: &RingBuffer) -> Bool {
+  rb.count == rb.capacity
+}
+
+/// Peeks at the item at the head of the buffer without removing it.
+export fn peek(rb: &RingBuffer) -> Option[Int] {
+  if rb.count == 0 {
+    return None
+  }
+  let slot = rb.head & rb.mask
+  rb.buffer[slot]
+}
+
+/// Enqueues an item at the tail of the buffer. Returns None if the buffer is full.
+export fn push(rb: &RingBuffer, item: Int) -> Option[RingBuffer] {
+  if rb.count >= rb.capacity {
+    return None
+  }
+  let slot = rb.tail & rb.mask
+  let updatedBuffer = List.set(&rb.buffer, slot, Some(item))
+  let nextTail = (rb.tail &+ 1) & rb.mask
+  Some(RingBuffer {
+      buffer: updatedBuffer,
+      head: rb.head,
+      tail: nextTail,
+      count: rb.count + 1,
+      capacity: rb.capacity,
+      mask: rb.mask,
+    })
+}
+
+/// Dequeues an item from the head of the buffer. Returns None if the buffer is empty.
+export fn pop(rb: &RingBuffer) -> Option[PopResult] {
+  if rb.count == 0 {
+    return None
+  }
+  let slot = rb.head & rb.mask
+  let val = match rb.buffer[slot] {
+    case Some(v) => v
+    case None => 0
+  }
+  let updatedBuffer = List.set(&rb.buffer, slot, None)
+  let nextHead = (rb.head &+ 1) & rb.mask
+  let nextCount = rb.count - 1
+  Some(PopResult {
+      buffer: RingBuffer {
+        buffer: updatedBuffer,
+        head: nextHead,
+        tail: rb.tail,
+        count: nextCount,
+        capacity: rb.capacity,
+        mask: rb.mask,
+      },
+      item: val,
+    })
+}
+
+/// Clears all elements from the ring buffer.
+export fn clear(rb: &RingBuffer) -> RingBuffer {
+  RingBuffer {
+    buffer: fillNones(rb.capacity),
+    head: 0,
+    tail: 0,
+    count: 0,
+    capacity: rb.capacity,
+    mask: rb.mask,
+  }
+}
+
+/// Returns the elements in FIFO order from head to tail.
+export fn toArray(rb: &RingBuffer) -> Array[Int] {
+  var out: Array[Int] = []
+  var i = 0
+  while i < rb.count {
+    let slot = (rb.head &+ i) & rb.mask
+    let val = match rb.buffer[slot] {
+      case Some(v) => v
+      case None => 0
+    }
+    out = out.push(val)
+    i = i + 1
+  }
+  out
+}

@@ -1,0 +1,90 @@
+module Sqlite
+
+import Std.Io as Io
+
+/// Bound against the system's own SQLite, with no shim written for it and no
+/// header read: the declarations below are the signatures in `sqlite3.h`.
+///
+/// This is the shape the issue about getting a value back out of a library
+/// named as the hardest blocker — a library that hands its handle back through
+/// a slot the caller provides rather than as a result:
+///
+///     int sqlite3_open(const char *filename, sqlite3 **ppDb);
+///
+/// and it is why that blocker mattered more than a count of functions: without
+/// it SQLite could not be opened at all, and neither could any library that
+/// returns its handle the ordinary C way.
+///
+/// `sqlite3_close` and `sqlite3_finalize` answer `int`, which is what releasing
+/// conventionally looks like in C. A boundary admitting only `void` there binds
+/// none of these libraries directly.
+foreign "sqlite3" version "0" {
+  type Db
+  type Stmt
+
+  fn open symbol "sqlite3_open" (path: Str, out database: owned Db by close) -> Int32
+  fn close symbol "sqlite3_close" (database: Db) -> Int32
+  fn exec symbol "sqlite3_exec"
+    (database: Db, sql: Str, callback: Int64, context: Int64, errors: Int64) -> Int32
+  fn prepare symbol "sqlite3_prepare_v2"
+    (database: Db, sql: Str, length: Int32, out statement: owned Stmt by finalize, out tail: Str) -> Int32
+  fn finalize symbol "sqlite3_finalize" (statement: Stmt) -> Int32
+  fn step symbol "sqlite3_step" (statement: Stmt) -> Int32
+  fn columnInt symbol "sqlite3_column_int" (statement: Stmt, index: Int32) -> Int32
+  fn columnText symbol "sqlite3_column_text" (statement: Stmt, index: Int32) -> Str
+  fn libVersion symbol "sqlite3_libversion" () -> Str
+}
+
+fn say(line: Str) -> () {
+  match Io.writeLine(line) {
+    case Ok(_) => {}
+    case Err(_) => {}
+  }
+}
+
+fn main() -> Int32 {
+  unsafe(foreign) {
+    let version = libVersion()
+    if version.isEmpty() {
+      say("no version")
+      return 1i32
+    }
+
+    let opened = open(":memory:")
+    match opened[1] {
+      case None => {
+        say("open failed")
+        1i32
+      }
+      case Some(database) => {
+        let made = exec(
+          database,
+          "create table t(n integer, s text); insert into t values (41,'a'),(1,'b')",
+          0i64,
+          0i64,
+          0i64
+        )
+        if made != 0i32 {
+          say("exec failed")
+          return 1i32
+        }
+        let prepared = prepare(database, "select sum(n), max(s) from t", 0 - 1i32)
+        match prepared[1] {
+          case None => {
+            say("prepare failed")
+            1i32
+          }
+          case Some(statement) => {
+            let stepped = step(statement)
+            if stepped != 100i32 {
+              say("step did not answer a row")
+              return 1i32
+            }
+            say("sum=" + display(columnInt(statement, 0i32)) + " max=" + columnText(statement, 1i32))
+            0i32
+          }
+        }
+      }
+    }
+  }
+}

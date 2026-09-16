@@ -1,0 +1,6 @@
+module Values
+
+import A {User, displayName, ANSWER}
+
+fn run(user: User) -> Str { displayName(user) }
+fn answerValue() -> Int { ANSWER }

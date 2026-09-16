@@ -1,0 +1,143 @@
+module Service.Commands
+
+import Std.App.Database as Database
+import Db.Approvals as Approvals
+import Db.Comments as Comments
+import Db.Posts as Posts
+
+/// The write side: everything that changes what is true.
+///
+/// Commands are named for what somebody is asking for, not for the rows that
+/// will move. `Approve(3)` says what a reader did; `insert into approval` says
+/// what the database will hold, and a service written in the second cannot be
+/// read without the schema open beside it.
+export type Command
+  = Publish(Str, Str)
+  | Reply(Int, Str, Str)
+  | Approve(Int, Str)
+  | Withdraw(Int, Str)
+  | Retract(Int)
+  | RetractReply(Int)
+
+/// What a command did, or why it did not.
+///
+/// `Refused` is the caller's mistake and `Absent` is the world's. An edge
+/// answers the first as a bad request and the second as a missing thing, and
+/// one outcome covering both would make every caller guess which happened.
+export type Outcome
+  = Done(Str)
+  | Refused(Str)
+  | Absent(Int)
+  | Broke(Str)
+
+/// The longest a post may be.
+///
+/// A limit stated once, here, so the page and the API refuse the same text.
+/// Two limits is one limit and a bug.
+const POST_LIMIT: Int = 500
+
+const REPLY_LIMIT: Int = 300
+
+const NAME_LIMIT: Int = 40
+
+/// Carry out a command.
+///
+/// Every rule about what may be written lives here rather than at an edge, so
+/// a post arriving from a form and the same post arriving as JSON are held to
+/// the same standard. An edge that checked on its own would be a second
+/// opinion, and the two would drift apart.
+export fn apply(db: &Database.Database, request: Command, now: Int) -> Outcome {
+  match request {
+    case Publish(author, body) => publish(db, author, body, now)
+    case Reply(post, author, body) => reply(db, post, author, body, now)
+    case Approve(post, reader) => approve(db, post, reader)
+    case Withdraw(post, reader) => withdraw(db, post, reader)
+    case Retract(post) => retract(db, post)
+    case RetractReply(id) => retractReply(db, id)
+  }
+}
+
+fn publish(db: &Database.Database, author: Str, body: Str, now: Int) -> Outcome {
+  let who = named(author)
+  let said = body.trim()
+  if said.isEmpty() {
+    return Refused("a post needs something in it")
+  }
+  if said.length() > POST_LIMIT {
+    return Refused("a post is at most " + display(POST_LIMIT) + " characters")
+  }
+  match Posts.add(db, who, said, now) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(written) => Done("published " + display(written.id))
+  }
+}
+
+fn reply(db: &Database.Database, post: Int, author: Str, body: Str, now: Int) -> Outcome {
+  let said = body.trim()
+  if said.isEmpty() {
+    return Refused("a reply needs something in it")
+  }
+  if said.length() > REPLY_LIMIT {
+    return Refused("a reply is at most " + display(REPLY_LIMIT) + " characters")
+  }
+  // The post is looked for before the reply is written, so a reply to
+  // something that is gone is refused rather than left pointing at nothing.
+  match Posts.find(db, "", post) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(None) => Absent(post)
+    case Ok(Some(_)) =>
+    match Comments.add(db, post, named(author), said, now) {
+      case Err(problem) => Broke(problem.message)
+      case Ok(written) => Done("replied " + display(written.id))
+    }
+  }
+}
+
+fn approve(db: &Database.Database, post: Int, reader: Str) -> Outcome {
+  match Posts.find(db, "", post) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(None) => Absent(post)
+    case Ok(Some(_)) =>
+    match Approvals.set(db, post, named(reader)) {
+      case Err(problem) => Broke(problem.message)
+      case Ok(_) => Done("approved")
+    }
+  }
+}
+
+fn withdraw(db: &Database.Database, post: Int, reader: Str) -> Outcome {
+  match Approvals.clear(db, post, named(reader)) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(_) => Done("withdrawn")
+  }
+}
+
+fn retract(db: &Database.Database, post: Int) -> Outcome {
+  match Posts.remove(db, post) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(found) => if found { Done("retracted") } else { Absent(post) }
+  }
+}
+
+fn retractReply(db: &Database.Database, id: Int) -> Outcome {
+  match Comments.remove(db, id) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(found) => if found { Done("retracted") } else { Absent(id) }
+  }
+}
+
+/// A name to write beside something.
+///
+/// Somebody who gave no name is written down as a guest rather than as an
+/// empty string: a post whose author is blank reads as a fault in the page,
+/// and every reader has to be somebody for an approval to be one person's.
+fn named(given: Str) -> Str {
+  let trimmed = given.trim()
+  if trimmed.isEmpty() {
+    "guest"
+  } else if trimmed.length() > NAME_LIMIT {
+    trimmed.take(NAME_LIMIT)
+  } else {
+    trimmed
+  }
+}

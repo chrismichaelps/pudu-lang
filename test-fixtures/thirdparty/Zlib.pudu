@@ -1,0 +1,59 @@
+module Zlib
+
+import Std.Io as Io
+
+/// Bound against the system's own zlib.
+///
+/// `crc32` takes a run of bytes the library only reads, with its length beside
+/// it — sixty-three functions across sqlite3, libcurl, zlib and raylib take
+/// that shape, more than the other two buffer shapes together, and it is the
+/// only one of the three with no lifetime question in it.
+foreign "z" version "1" {
+  fn zlibVersion symbol "zlibVersion" () -> Str
+  fn crc32 symbol "crc32" (start: Int64, data: Bytes, length: Int32) -> Int64
+  fn adler32 symbol "adler32" (start: Int64, data: Bytes, length: Int32) -> Int64
+  fn compressBound symbol "compressBound" (size: Int64) -> Int64
+}
+
+fn say(line: Str) -> () {
+  match Io.writeLine(line) {
+    case Ok(_) => {}
+    case Err(_) => {}
+  }
+}
+
+fn sizeOf(payload: &Bytes) -> Int32 {
+  match convertInteger[Int32](payload.length()) {
+    case Some(size) => size
+    case None => 0i32
+  }
+}
+
+fn checksum(payload: &Bytes) -> Int64 {
+  unsafe(foreign) { crc32(0i64, *payload, sizeOf(payload)) }
+}
+
+fn main() -> Int32 {
+  unsafe(foreign) {
+    if zlibVersion().isEmpty() {
+      say("no version")
+      return 1i32
+    }
+  }
+
+  // The published CRC-32 of "hello" is 0x3610A686. A run that crossed short,
+  // long or misaligned answers something else rather than something plausible.
+  say("hello=" + display(checksum(&"hello".toBytes())))
+  // An empty run crosses as a length of zero rather than as nothing at all.
+  say("empty=" + display(checksum(&"".toBytes())))
+  // A nought inside the run is counted like any other byte, which is the whole
+  // difference between a run of bytes and a piece of text.
+  say("embedded=" + display(checksum(&"a\u{0}b".toBytes())))
+  // Lending the run leaves it as it was.
+  let held = "hello".toBytes()
+  let first = checksum(&held)
+  let again = checksum(&held)
+  say("unchanged=" + display(first == again && held.length() == 5))
+  unsafe(foreign) { say("bound=" + display(compressBound(1000i64))) }
+  0i32
+}

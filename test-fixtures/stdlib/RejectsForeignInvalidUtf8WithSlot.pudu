@@ -1,0 +1,20 @@
+module RejectsForeignInvalidUtf8WithSlot
+
+/// A library that made a resource and handed it back beside text nobody can
+/// read. The call fails on the text, and the box it wrote through the slot is
+/// still owed a release: the library's work happened whatever the decoding
+/// turned out to be, and nothing above the boundary ever learns the address to
+/// release it by hand.
+foreign "c" {
+  type Box
+
+  fn produce symbol "pudu_ffi_cpp_invalid_utf8_with_box" (out box: owned Box by deleteBox) -> Str
+  fn deleteBox symbol "pudu_ffi_cpp_box_delete" (box: Box) -> ()
+}
+
+export fn main() -> Int {
+  unsafe(foreign) {
+    let produced = produce()
+    produced[0].length()
+  }
+}

@@ -1,0 +1,7 @@
+module ForeignTarget
+
+import TraitSource {Label}
+
+export type User = { value: Int }
+
+impl Label for User {}

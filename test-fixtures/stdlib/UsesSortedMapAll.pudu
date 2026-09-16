@@ -1,0 +1,108 @@
+module UsesSortedMapAll
+
+import Std.Option as Option
+import Std.SortedMap as SortedMap
+
+/// Every export of `Std.SortedMap`, checked against stated order.
+///
+/// The order is the whole point, so the neighbour lookups are checked at a key
+/// that is present and one that is not: `floor` and `lower` differ only when
+/// the key is there, as do `ceiling` and `higher`, and a pair that confused
+/// them would be right for every key that is missing.
+fn ascending(left: Int, right: Int) -> Bool { left < right }
+
+fn sample() -> SortedMap.SortedMap[Int, Str] {
+  SortedMap.fromPairs(&[(3, "c"), (1, "a"), (5, "e")], ascending)
+}
+
+export fn main() -> Int {
+  var held = 0
+  let items = sample()
+  let none: SortedMap.SortedMap[Int, Str] = SortedMap.empty(ascending)
+
+  // Built in order, whatever order the pairs came in.
+  if SortedMap.pairs(&items) == [(1, "a"), (3, "c"), (5, "e")] { held = held + 1 }
+  if SortedMap.keys(&items) == [1, 3, 5] { held = held + 1 }
+  if SortedMap.values(&items) == ["a", "c", "e"] { held = held + 1 }
+  if SortedMap.size(&items) == 3 && SortedMap.size(&none) == 0 { held = held + 1 }
+  if SortedMap.isEmpty(&none) && !SortedMap.isEmpty(&items) { held = held + 1 }
+
+  // Reading.
+  if Option.unwrapOr(SortedMap.get(&items, 3), "") == "c" { held = held + 1 }
+  if Option.isNone(&SortedMap.get(&items, 9)) { held = held + 1 }
+  if SortedMap.getOr(&items, 9, "none") == "none" { held = held + 1 }
+  if SortedMap.containsKey(&items, 1) && !SortedMap.containsKey(&items, 9) { held = held + 1 }
+
+  // Writing, keeping the order.
+  if SortedMap.keys(&SortedMap.insert(&items, 4, "d")) == [1, 3, 4, 5] { held = held + 1 }
+  if SortedMap.getOr(&SortedMap.insert(&items, 3, "z"), 3, "") == "z" { held = held + 1 }
+  if SortedMap.getOr(&SortedMap.insertIfAbsent(&items, 3, "z"), 3, "") == "c" { held = held + 1 }
+  if SortedMap.getOr(&SortedMap.insertIfAbsent(&items, 4, "d"), 4, "") == "d" { held = held + 1 }
+  if SortedMap.keys(&SortedMap.remove(&items, 3)) == [1, 5] { held = held + 1 }
+  if SortedMap.keys(&SortedMap.remove(&items, 9)) == [1, 3, 5] { held = held + 1 }
+  if SortedMap.getOr(&SortedMap.upsert(&items, 3, "z", fn(v: Str) -> Str => v + "!"), 3, "")
+    == "c!" {
+    held = held + 1
+  }
+  if SortedMap.getOr(&SortedMap.upsert(&items, 9, "z", fn(v: Str) -> Str => v + "!"), 9, "")
+    == "z" {
+    held = held + 1
+  }
+
+  // Position and the ends.
+  if Option.unwrapOr(SortedMap.nth(&items, 1), (0, "")) == (3, "c") { held = held + 1 }
+  if Option.isNone(&SortedMap.nth(&items, 9)) { held = held + 1 }
+  if Option.unwrapOr(SortedMap.first(&items), (0, "")) == (1, "a") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.last(&items), (0, "")) == (5, "e") { held = held + 1 }
+  if Option.isNone(&SortedMap.first(&none)) && Option.isNone(&SortedMap.last(&none)) {
+    held = held + 1
+  }
+
+  // Neighbours, at a key that is there and one that is not.
+  //
+  // At a key that is present, `floor` and `ceiling` answer that key itself
+  // while `lower` and `higher` step past it. That is the only case where the
+  // two pairs differ.
+  if Option.unwrapOr(SortedMap.floor(&items, 3), (0, "")) == (3, "c") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.ceiling(&items, 3), (0, "")) == (3, "c") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.lower(&items, 3), (0, "")) == (1, "a") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.higher(&items, 3), (0, "")) == (5, "e") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.floor(&items, 4), (0, "")) == (3, "c") { held = held + 1 }
+  if Option.unwrapOr(SortedMap.ceiling(&items, 4), (0, "")) == (5, "e") { held = held + 1 }
+  // Past either end there is no neighbour.
+  if Option.isNone(&SortedMap.lower(&items, 1)) { held = held + 1 }
+  if Option.isNone(&SortedMap.higher(&items, 5)) { held = held + 1 }
+  if Option.isNone(&SortedMap.floor(&items, 0)) { held = held + 1 }
+  if Option.isNone(&SortedMap.ceiling(&items, 9)) { held = held + 1 }
+
+  // A run of keys, taken as pairs and as a map.
+  if SortedMap.range(&items, 1, 5) == [(1, "a"), (3, "c")] { held = held + 1 }
+  if SortedMap.keys(&SortedMap.restrictRange(&items, 1, 5)) == [1, 3] { held = held + 1 }
+  if SortedMap.range(&items, 9, 99) == [] { held = held + 1 }
+
+  // Over every entry.
+  if SortedMap.values(&SortedMap.mapValues(&items, fn(v: Str) -> Str => v + "!"))
+    == ["a!", "c!", "e!"] {
+    held = held + 1
+  }
+  if SortedMap.keys(&SortedMap.filter(&items, fn(k: Int, _v: Str) -> Bool => k > 1)) == [3, 5] {
+    held = held + 1
+  }
+  if SortedMap.fold(&items, fn(total: Int, k: Int, _v: Str) -> Int => total + k, 0) == 9 {
+    held = held + 1
+  }
+  if SortedMap.fold(&none, fn(total: Int, k: Int, _v: Str) -> Int => total + k, 0) == 0 {
+    held = held + 1
+  }
+  if SortedMap.all(&items, fn(k: Int, _v: Str) -> Bool => k > 0) { held = held + 1 }
+  if !SortedMap.all(&items, fn(k: Int, _v: Str) -> Bool => k > 1) { held = held + 1 }
+  if SortedMap.any(&items, fn(k: Int, _v: Str) -> Bool => k == 5) { held = held + 1 }
+  if !SortedMap.any(&items, fn(k: Int, _v: Str) -> Bool => k == 9) { held = held + 1 }
+
+  // Two together, and the order turned about.
+  let other: SortedMap.SortedMap[Int, Str] = SortedMap.fromPairs(&[(3, "z"), (7, "g")], ascending)
+  if SortedMap.keys(&SortedMap.merge(&items, &other)) == [1, 3, 5, 7] { held = held + 1 }
+  if SortedMap.keys(&SortedMap.reversed(&items)) == [5, 3, 1] { held = held + 1 }
+
+  held
+}

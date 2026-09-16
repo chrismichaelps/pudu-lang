@@ -1,0 +1,146 @@
+module Std.Hex
+
+import Std.Bytes as Bytes
+
+/// Converts a 4-bit numeric nibble (0..15) into an ASCII character byte.
+export fn nibbleToAscii(n: Int, upper: Bool) -> UInt8 {
+  let code = if n < 10 {
+    n + 48
+  } else if upper {
+    (n - 10) + 65
+  } else {
+    (n - 10) + 97
+  }
+  match convertInteger[UInt8](code) {
+    case Some(b) => b
+    case None => 48u8
+  }
+}
+
+/// Converts an ASCII character byte to its 4-bit numeric nibble value (0..15).
+export fn asciiToNibble(c: UInt8) -> Option[Int] {
+  let code = match convertInteger[Int](c) {
+    case Some(v) => v
+    case None => -1
+  }
+  if code >= 48 && code <= 57 {
+    Some(code - 48)
+  } else if code >= 97 && code <= 102 {
+    Some(code - 87)
+  } else if code >= 65 && code <= 70 {
+    Some(code - 55)
+  } else {
+    None
+  }
+}
+
+/// Splits a byte into two ASCII hex character bytes (high nibble, low nibble).
+export fn byteToHex(b: UInt8, upper: Bool) -> (UInt8, UInt8) {
+  let val = match convertInteger[Int](b) {
+    case Some(v) => v
+    case None => 0
+  }
+  let hi = (val >> 4) & 15
+  let lo = val & 15
+  (nibbleToAscii(hi, upper), nibbleToAscii(lo, upper))
+}
+
+fn encodeImpl(bytes: &Array[UInt8], upper: Bool) -> Str {
+  let len = bytes.length()
+  var outBytes: Array[UInt8] = []
+  var i = 0
+  while i < len {
+    let b = bytes[i]
+    let pair = byteToHex(b, upper)
+    outBytes = outBytes.push(pair[0])
+    outBytes = outBytes.push(pair[1])
+    i = i + 1
+  }
+  let bSeq = Bytes.fromArray(&outBytes)
+  match Bytes.toText(&bSeq) {
+    case Ok(t) => t
+    case Err(_) => ""
+  }
+}
+
+/// Encodes an array of bytes into a lowercase hexadecimal string.
+export fn encode(bytes: &Array[UInt8]) -> Str {
+  encodeImpl(bytes, false)
+}
+
+/// Encodes an array of bytes into an uppercase hexadecimal string.
+export fn encodeUpper(bytes: &Array[UInt8]) -> Str {
+  encodeImpl(bytes, true)
+}
+
+/// Decodes an even-length hexadecimal string into an array of bytes.
+export fn decode(hexStr: Str) -> Option[Array[UInt8]] {
+  let chars = hexStr.toBytes().toArray()
+  let len = chars.length()
+  if len % 2 != 0 {
+    return None
+  }
+  let numBytes = len / 2
+  var out: Array[UInt8] = []
+  var i = 0
+  while i < numBytes {
+    let hi = asciiToNibble(chars[i * 2]) ?
+    let lo = asciiToNibble(chars[(i * 2) + 1]) ?
+    let byteVal = (hi << 4) | lo
+    let u8Val = match convertInteger[UInt8](byteVal) {
+      case Some(b) => b
+      case None => 0u8
+    }
+    out = out.push(u8Val)
+    i = i + 1
+  }
+  Some(out)
+}
+
+/// Decodes a hexadecimal string, skipping an optional leading '0x' or '0X' prefix.
+export fn decodeWithPrefix(hexStr: Str) -> Option[Array[UInt8]] {
+  let chars = hexStr.toBytes().toArray()
+  let len = chars.length()
+  let startIdx = if len >= 2 && chars[0] == 48u8 && (chars[1] == 120u8 || chars[1] == 88u8) {
+    2
+  } else {
+    0
+  }
+  let effectiveLen = len - startIdx
+  if effectiveLen % 2 != 0 {
+    return None
+  }
+  let numBytes = effectiveLen / 2
+  var out: Array[UInt8] = []
+  var i = 0
+  while i < numBytes {
+    let hi = asciiToNibble(chars[startIdx + (i * 2)]) ?
+    let lo = asciiToNibble(chars[startIdx + (i * 2) + 1]) ?
+    let byteVal = (hi << 4) | lo
+    let u8Val = match convertInteger[UInt8](byteVal) {
+      case Some(b) => b
+      case None => 0u8
+    }
+    out = out.push(u8Val)
+    i = i + 1
+  }
+  Some(out)
+}
+
+/// Checks whether `hexStr` consists of an even number of valid hex digits.
+export fn isValid(hexStr: Str) -> Bool {
+  let chars = hexStr.toBytes().toArray()
+  let len = chars.length()
+  if len % 2 != 0 {
+    return false
+  }
+  var i = 0
+  while i < len {
+    let n = asciiToNibble(chars[i])
+    if n == None {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}

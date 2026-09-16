@@ -1,0 +1,948 @@
+module UsesDb
+
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Db as Db
+import Std.Db.Protocol as Wire
+import Std.Db.Session {Active, Auth, Connect, Expired, Failed, Idle, Malformed, Other, Server}
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a database client promises, checked against a server written here that
+/// speaks the protocol rather than against one that has to be installed.
+///
+/// A stub is the right thing to check against for everything except whether a
+/// real server agrees: it makes the client's own behaviour observable — what
+/// it sends, in what order, and what it does with what comes back — and it
+/// fails in the same way on every machine. What it cannot check is that the
+/// protocol is as this program believes, which is why the messages below are
+/// built from the same field layouts the client reads.
+export fn main() -> Int {
+  var held = 0
+
+  // Framing, checked on its own before anything sends one.
+  let framed = Wire.frame("Q", &Wire.cString("select 1"))
+  if Option.unwrapOr(framed.take(1).toText(), "") == "Q" { held = held + 1 }
+  if framed.length() == 14 { held = held + 1 }
+  if let Ok(read) = Wire.readMessage(&framed) {
+    if read[0].kind == "Q" { held = held + 1 }
+    if read[1].isEmpty() { held = held + 1 }
+  }
+
+  // A message cut short is reported as short rather than read as complete.
+  if let Err(_) = Wire.readMessage(&framed.take(6)) { held = held + 1 }
+
+  // A string with no terminator is a truncated message, not a short string.
+  if let Err(_) = Wire.readCString(&ByteSeq.fromText("no terminator")) { held = held + 1 }
+
+  // A value that is absent is written as a length of minus one, which is what
+  // keeps it distinct from a value that is empty.
+  let bound = Wire.bind("", "", &[Some("x"), None])
+  if bound.contains(bytesOf([255u8, 255u8, 255u8, 255u8])) { held = held + 1 }
+
+  // A connection that reaches a server answering nothing at all fails rather
+  // than waiting for a handshake that will not come.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let opened = Session.connect(&settings)
+      if Result.isOk(&opened) { count = count + 1 }
+      if let Ok(stream) = opened {
+        // A query the stub answers with two rows and two columns.
+        let asked = Db.simple(stream, "select id, name from people")
+        if let Ok(pair) = asked {
+          let rows = pair[0]
+          if Db.rowCount(&rows) == 2 { count = count + 1 }
+          if rows.columns.length() == 2 { count = count + 1 }
+          if rows.columns[0].name == "id" { count = count + 1 }
+          if Option.unwrapOr(Db.value(&rows, 0, "name"), "") == "ada" { count = count + 1 }
+          if Option.unwrapOr(Db.value(&rows, 1, "name"), "") == "alan" { count = count + 1 }
+
+          // A column with no value is absent rather than empty, which is the
+          // distinction a caller reading it would otherwise lose.
+          let missing = Db.value(&rows, 1, "id")
+          if Option.isNone(&missing) { count = count + 1 }
+
+          // A column the result does not have answers nothing rather than
+          // reading past the row.
+          let absent = Db.value(&rows, 0, "height")
+          if Option.isNone(&absent) { count = count + 1 }
+
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A statement with values supplied apart from it sends them apart from it:
+  // the stub records the bytes it received, and the value never appears inside
+  // the statement text.
+  held = held + runAgainst(bindingServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        let asked = Db.run(stream, "select $1", &[Some("it's; drop table people")])
+        if let Ok(pair) = asked {
+          if Db.rowCount(&pair[0]) == 1 { count = count + 1 }
+          if Option.unwrapOr(Db.value(&pair[0], 0, "echo"), "") == "bound" { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A failure the server reports carries the code it gave, which is what a
+  // caller acts on rather than the wording of the message.
+  held = held + runAgainst(failingServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        let asked = Db.simple(stream, "select bad")
+        if let Err(Server(_, code, _)) = asked {
+          if code == "42601" { count = count + 1 }
+        }
+      }
+      count
+    })
+
+  // The challenge a server left at its defaults asks for, answered in full:
+  // the password does not cross the wire, and the server's own signature is
+  // checked rather than assumed.
+  held = held + runAgainst(scramServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let opened = Session.connect(&settings)
+      if Result.isOk(&opened) { count = count + 1 }
+      if let Ok(stream) = opened {
+        let asked = Db.simple(stream, "select 1")
+        if Result.isOk(&asked) { count = count + 1 }
+      }
+      count
+    })
+
+  // A transaction that failed is undone rather than left open. The stub
+  // reports the transaction status the server reports, so what is checked is
+  // that the client read it and acted on it.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if Db.statusOf(&stream) == Idle { count = count + 1 }
+
+        // An action that fails is rolled back, and the connection comes back
+        // usable rather than stuck inside a failed transaction.
+        let attempted = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            (Err(Other("the caller gave up")), inside)
+          })
+        if Result.isErr(&attempted[0]) { count = count + 1 }
+        if !Db.inTransaction(&attempted[1]) { count = count + 1 }
+
+        // The stub records what it was sent, so the rollback is checked to have
+        // actually crossed the wire rather than only to have been intended.
+        let asked = Db.simple(attempted[1], "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("BEGIN") { count = count + 1 }
+          if seen.contains("ROLLBACK") { count = count + 1 }
+          if !seen.contains("COMMIT") { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // An action that succeeds is committed, and a savepoint undoes only its own
+  // part rather than the transaction around it.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        let kept = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            let stepped = Db.withSavepoint(inside, "step", fn(deeper: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+                (Err(Other("the optional step failed")), deeper)
+              })
+            (Ok(1), stepped[1])
+          })
+        if Result.unwrapOr(kept[0], 0) == 1 { count = count + 1 }
+        let asked = Db.simple(kept[1], "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("SAVEPOINT") { count = count + 1 }
+          if seen.contains("ROLLBACK TO SAVEPOINT") { count = count + 1 }
+          // The transaction itself was kept, because only the inner step failed.
+          if seen.contains("COMMIT") { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A transaction taken from a pool holds one connection for the whole
+  // operation. This pool has exactly one, so the BEGIN and the COMMIT are
+  // observably on the same session, and the connection comes back afterwards
+  // rather than being lost. A caller reaching for the pool once per statement
+  // would have put the BEGIN on one connection and the work on another.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(pooled) = Db.pool(&settings, 1) {
+        let done = Db.transaction(&pooled, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            (Ok(1), inside)
+          })
+        if Result.unwrapOr(done, 0) == 1 { count = count + 1 }
+        // Asking again can only be answered by a connection the pool still
+        // has, so this is also the check that the transaction gave it back.
+        let after = Db.withConnection(&pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+            let asked = Db.simple(open, "what did you get")
+            match asked {
+              case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")), pair[1])
+              case Err(reason) => (Err(reason), open)
+            }
+          })
+        let seen = Result.unwrapOr(after, "")
+        if seen.contains("BEGIN") { count = count + 1 }
+        if seen.contains("COMMIT") { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
+  // Opening a connection has one time limit, from dialling to the end of the
+  // handshake. A server that accepts and then says nothing is refused once it
+  // passes, rather than holding the caller — and, in a pool, the place it was
+  // filling — for as long as the server stays silent.
+  held = held + runAgainst(silentServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let limited = Session.Config{..settings, connectMillis: 300}
+      if let Err(Connect(message)) = Session.connect(&limited) {
+        if message.contains("time limit") { count = count + 1 }
+      }
+      count
+    })
+  if Session.config("app", "ada", "pw").connectMillis == Session.DEFAULT_CONNECT_MILLISECONDS {
+    held = held + 1
+  }
+
+  // A pool whose connection is lost keeps its place and opens a fresh one for
+  // the next borrower. The stub answers one query on each connection and then
+  // hangs up, so the second request finds the socket gone and the third is
+  // answered by a second connection the pool opened in its place. A pool that
+  // closed itself when a socket dropped refuses the third as closed, and every
+  // request after it, until the program restarts.
+  held = held + runAgainstTimes(2, answerThenListen, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(pooled) = Db.pool(&settings, 1) {
+        if Result.unwrapOr(firstName(&pooled), "") == "ada" { count = count + 1 }
+        if Result.isErr(&firstName(&pooled)) { count = count + 1 }
+        if Result.unwrapOr(firstName(&pooled), "") == "ada" { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
+  // A connection kept past the transaction that lent it is refused rather than
+  // used. The copy the callback keeps names a lending that has ended, and the
+  // connection it points at is back in the pool by then — writing through it
+  // would put a statement into somebody else's conversation.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        // The callback hands its own connection back out as the value of the
+        // transaction, which is how one really escapes: no copying out of a
+        // closure is needed, only returning what was lent.
+        let done = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Session.Connection, Session.DbError], Session.Connection) {
+            (Ok(inside), inside)
+          })
+        if Result.isOk(&done[0]) { count = count + 1 }
+        if let Ok(stale) = done[0] {
+          if let Err(Expired) = Db.simple(stale, "what did you get") { count = count + 1 }
+        }
+        // The same statement through the connection the transaction gave back
+        // still works, so this refuses the stale copy rather than the
+        // connection.
+        let asked = Db.simple(done[1], "what did you get")
+        if let Ok(pair) = asked {
+          if Db.rowCount(&pair[0]) == 1 { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A name written into a statement cannot end it and begin another.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        let marked = Db.savepoint(stream, "odd\"; DROP TABLE people --")
+        if let Ok(after) = marked {
+          let asked = Db.simple(after, "what did you get")
+          if let Ok(pair) = asked {
+            let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+            if !seen.contains("DROP TABLE people --\n") { count = count + 1 }
+            if seen.contains("\"\"") { count = count + 1 }
+            let _closed = Session.close(&pair[1])
+          }
+        }
+      }
+      count
+    })
+
+  // A transaction opened, kept, and undone by hand, with the status read back
+  // at each step. A client that sent the statements without reading the status
+  // cannot tell a transaction it is in from one the server closed under it.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if !Db.inTransaction(&stream) { count = count + 1 }
+        if let Ok(open) = Db.begin(stream) {
+          if Db.inTransaction(&open) { count = count + 1 }
+          if let Ok(back) = Db.rollback(open) {
+            if !Db.inTransaction(&back) { count = count + 1 }
+            if let Ok(again) = Db.begin(back) {
+              if let Ok(done) = Db.commit(again) {
+                if !Db.inTransaction(&done) { count = count + 1 }
+                let asked = Db.simple(done, "what did you get")
+                if let Ok(pair) = asked {
+                  let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+                  // Each one crossed the wire as its own statement, in order.
+                  if seen.contains("BEGIN\nROLLBACK\nBEGIN\nCOMMIT\n") { count = count + 1 }
+                  let _closed = Session.close(&pair[1])
+                }
+              }
+            }
+          }
+        }
+      }
+      count
+    })
+
+  // A level of protection is named rather than written as text. A caller
+  // spelling one wrong would be given the server's default silently, since a
+  // server told an unknown level reports nothing until it matters — so what
+  // goes on the wire is read back for each of the four.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        var carried = stream
+        let levels: Array[Db.Isolation] = [
+          Db.ReadCommitted,
+          Db.RepeatableRead,
+          Db.Serializable,
+          Db.ReadUncommitted
+        ]
+        for level in levels {
+          if let Ok(open) = Db.beginWith(carried, &level) {
+            if let Ok(back) = Db.rollback(open) { carried = back }
+          }
+        }
+        let asked = Db.simple(carried, "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("BEGIN ISOLATION LEVEL READ COMMITTED\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL REPEATABLE READ\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL SERIALIZABLE\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL READ UNCOMMITTED\n") { count = count + 1 }
+          // Four begins, so no two levels were written the same way.
+          if seen.split("BEGIN ISOLATION LEVEL ").length() == 5 { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A marked point returned to, then one forgotten. Returning to a savepoint
+  // keeps the transaction open and releasing one keeps what was done since, so
+  // neither is a rollback and the status says which.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if let Ok(open) = Db.begin(stream) {
+          if let Ok(marked) = Db.savepoint(open, "step") {
+            if let Ok(undone) = Db.rollbackTo(marked, "step") {
+              // Still inside the transaction, which is the difference between
+              // this and a rollback.
+              if Db.inTransaction(&undone) { count = count + 1 }
+              if let Ok(forgotten) = Db.release(undone, "step") {
+                if Db.inTransaction(&forgotten) { count = count + 1 }
+                let asked = Db.simple(forgotten, "what did you get")
+                if let Ok(pair) = asked {
+                  let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+                  if seen.contains("SAVEPOINT \"step\"\n") { count = count + 1 }
+                  if seen.contains("ROLLBACK TO SAVEPOINT \"step\"\n") { count = count + 1 }
+                  if seen.contains("RELEASE SAVEPOINT \"step\"\n") { count = count + 1 }
+                  let _closed = Session.close(&pair[1])
+                }
+              }
+            }
+          }
+        }
+      }
+      count
+    })
+
+  // A pooled transaction at a stated level, which is the form a read that must
+  // not see a write half-applied is written in.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let made: Result[Db.Pool, Session.DbError] = Db.pool(&settings, 1)
+      if let Ok(pooled) = made {
+        let done = Db.transactionWith(&pooled, &Db.Serializable,
+          fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            (Ok(7), inside)
+          })
+        if Result.unwrapOr(done, 0) == 7 { count = count + 1 }
+        let after = Db.withConnection(&pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+            let asked = Db.simple(open, "what did you get")
+            match asked {
+              case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")), pair[1])
+              case Err(reason) => (Err(reason), open)
+            }
+          })
+        let seen = Result.unwrapOr(after, "")
+        if seen.contains("BEGIN ISOLATION LEVEL SERIALIZABLE\n") { count = count + 1 }
+        if seen.contains("COMMIT\n") { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
+  // What a statement that produced no rows changed, which lives only in the
+  // tag the server sends. A caller checking that an update did something reads
+  // this rather than a row count, which for an update is zero either way.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if let Ok(pair) = Db.simple(stream, "update people set name = 'ada'") {
+          if Db.affected(&pair[0]) == 3 { count = count + 1 }
+          if Db.rowCount(&pair[0]) == 0 { count = count + 1 }
+          // And a select reports no change, rather than reporting its row count
+          // as one.
+          if let Ok(selected) = Db.simple(pair[1], "select many") {
+            if Db.rowCount(&selected[0]) == 3 { count = count + 1 }
+
+            // A whole column at once, keeping the absent value absent: a column
+            // read as text would answer three strings and lose which row had
+            // nothing.
+            let names = Db.column(&selected[0], "name")
+            if names.length() == 3 { count = count + 1 }
+            if Option.unwrapOr(names[0], "") == "ada" && Option.isNone(&names[1])
+              && Option.unwrapOr(names[2], "") == "grace" {
+              count = count + 1
+            }
+            // A column the result does not have is no values rather than three
+            // absent ones, which is the answer that tells a caller the column
+            // was missing rather than empty.
+            if Db.column(&selected[0], "height").length() == 0 { count = count + 1 }
+
+            // Where a column sits, and that a column it does not have says so
+            // rather than answering the first.
+            if Db.indexOfColumn(&selected[0], "id") == 0 { count = count + 1 }
+            if Db.indexOfColumn(&selected[0], "name") == 1 { count = count + 1 }
+            if Db.indexOfColumn(&selected[0], "height") < 0 { count = count + 1 }
+            let _closed = Session.close(&selected[1])
+          }
+        }
+      }
+      count
+    })
+
+  // What a server says when it refuses, read out of the message that says it.
+  // The three fields are the ones a caller acts on: how bad it is, the code to
+  // branch on, and the sentence to log. A reader that answered the message for
+  // the code would send a program branching on a sentence.
+  let refusal: Session.DbError = Session.serverFailure(&ByteSeq.join(&[
+        ByteSeq.fromText("S"),
+        Wire.cString("ERROR"),
+        ByteSeq.fromText("C"),
+        Wire.cString("23505"),
+        ByteSeq.fromText("M"),
+        Wire.cString("duplicate key value violates unique constraint"),
+        bytesOf([0u8])
+      ]))
+  match refusal {
+    case Server(severity, code, message) => {
+      if severity == "ERROR" && code == "23505"
+        && message == "duplicate key value violates unique constraint" {
+        held = held + 1
+      }
+    }
+    case _ => {}
+  }
+  // A message with none of those fields in it still answers a failure rather
+  // than refusing to be read, since a server is free to send fields this
+  // program has never heard of and the reason must survive that.
+  match Session.serverFailure(&bytesOf([0u8])) {
+    case Server(severity, code, message) => {
+      if severity.isEmpty() && code.isEmpty() && message.isEmpty() { held = held + 1 }
+    }
+    case _ => {}
+  }
+
+  // A read that found no message answers one carrying nothing, so a caller
+  // folding over messages has a value to fold from.
+  let none = Session.emptyMessage()
+  if none.kind == "?" && none.payload.isEmpty() { held = held + 1 }
+
+  // The budget a message is read under is a stated number rather than whatever
+  // the socket will give: sixteen mebibytes, which is the largest a server is
+  // configured to send.
+  if Session.DEFAULT_MESSAGE_BYTES == 16 * 1024 * 1024 { held = held + 1 }
+
+  // The messages a query answers, read one at a time under the layer that
+  // collects them. This is what `simple` is built on, and a client reading
+  // them in the wrong order would agree with itself and with nothing else.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        // A connection that has just been opened is this value's to write on.
+        if Result.isOk(&Session.live(&stream)) { count = count + 1 }
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          var carried = stream
+          var kinds = ""
+          var reading = true
+          while reading {
+            match Session.nextMessage(carried) {
+              case Err(_) => { reading = false }
+              case Ok(pair) => {
+                kinds = kinds + pair[0].kind
+                carried = pair[1]
+                if pair[0].kind == "Z" {
+                  // The status the server reports with every ready message, which
+                  // is the only place a caller learns where the transaction
+                  // stands.
+                  carried = Session.withStatus(carried, &pair[0].payload)
+                  reading = false
+                }
+              }
+            }
+          }
+          // A description, two rows, the tag, then ready. Read as one string so
+          // the order is checked rather than only the set.
+          if kinds == "TDDCZ" { count = count + 1 }
+          let standing: Session.TransactionStatus = Db.statusOf(&carried)
+          match standing { case Idle => { count = count + 1 } case _ => {} }
+
+          // The two other statuses, from the letters the server sends. A reader
+          // that answered idle for everything it did not recognise would pass a
+          // check that only asked about the one it was given.
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([84u8]))) {
+            case Active => { count = count + 1 }
+            case _ => {}
+          }
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([69u8]))) {
+            case Failed => { count = count + 1 }
+            case _ => {}
+          }
+          // A letter no server sends is idle rather than a fourth state, since
+          // there are three and a caller must not be handed a fourth.
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([90u8]))) {
+            case Idle => { count = count + 1 }
+            case _ => {}
+          }
+
+          // Ending this lending and beginning the next: the connection is
+          // untouched and the right to use it moved, so the copy that named the
+          // old lending stops writing and the new one writes.
+          if let Ok(renewed) = Session.renew(carried) {
+            if Result.isOk(&Session.live(&renewed)) { count = count + 1 }
+            if let Err(Expired) = Session.live(&carried) { count = count + 1 }
+            if let Err(Expired) = Session.write(&carried, &Wire.sync()) { count = count + 1 }
+            let _closed = Session.close(&renewed)
+          }
+        }
+      }
+      count
+    })
+
+  // A budget below the five bytes a head takes is refused before the socket is
+  // touched, because no budget that small can admit any message at all.
+  //
+  // The query goes out first so the stub has its turn and finishes; a client
+  // that asked nothing would leave it waiting for a message that never comes.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          if let Err(Other(_)) = Session.nextMessageLimited(stream, 4) { count = count + 1 }
+        }
+      }
+      count
+    })
+
+  // A message larger than the budget is refused rather than read, which is
+  // what keeps a server — or something claiming to be one — from naming a
+  // length this program then tries to hold.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          if let Err(Malformed(_)) = Session.nextMessageLimited(stream, 6) { count = count + 1 }
+        }
+      }
+      count
+    })
+
+  // A server whose signature does not prove it knows the password is refused,
+  // which is the half of the exchange that stops something in the middle from
+  // impersonating the server.
+  held = held + runAgainst(lyingServer, fn(settings: Session.Config) -> Int {
+      if let Err(Auth(_)) = Session.connect(&settings) { 1 } else { 0 }
+    })
+
+  held
+}
+
+/// Start a stub on a port the machine chooses, run a client against it, and
+/// answer what the client counted.
+/// A server that accepts a connection and never answers, which is what a
+/// stalled database looks like to a client opening a connection. It reads
+/// whatever arrives and stops once a second passes with nothing new.
+fn silentServer(connection: Net.Connection) -> Bool {
+  var listening = true
+  while listening {
+    match Net.receiveWithin(&connection, 65536, 1000) {
+      case Ok(Some(_)) => {}
+      case _ => { listening = false }
+    }
+  }
+  false
+}
+
+/// The same, against a stub that serves several connections one after another.
+///
+/// When the client is done the listener is sent one empty connection, so a
+/// client that opened fewer connections than the stub waits for fails its
+/// checks rather than leaving the stub waiting forever.
+fn runAgainstTimes(times: Int, stub: fn(Net.Connection) -> Bool, client: fn(Session.Config) -> Int) -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, times, stub)
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let counted = client(
+      Session.at(&Session.config("people", "ada", "secret"), "127.0.0.1", port)
+    )
+    if let Ok(nudge) = Net.connect("127.0.0.1", port) { let _hung = Net.close(&nudge) }
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    counted
+  } else {
+    0
+  }
+}
+
+/// A server that answers one query, hangs up, and keeps listening for the next
+/// connection, which is what a restarted server looks like to a pool.
+fn answerThenListen(connection: Net.Connection) -> Bool {
+  let _answered = trustServer(connection)
+  true
+}
+
+/// The name in the first row the stub answers, through a pooled connection.
+fn firstName(pooled: &Db.Pool) -> Result[Str, Session.DbError] {
+  Db.withConnection(pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+      match Db.simple(open, "select id, name from people") {
+        case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "name"), "")), pair[1])
+        case Err(reason) => (Err(reason), open)
+      }
+    })
+}
+
+fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Session.Config) -> Int) -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, stub)
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let counted = client(
+      Session.at(&Session.config("people", "ada", "secret"), "127.0.0.1", port)
+    )
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    counted
+  } else {
+    0
+  }
+}
+
+// The messages a server sends, built from the same field layouts the client
+// reads, so a disagreement about the layout shows up as a failing check rather
+// than as two halves that are wrong together.
+
+fn authenticationOk() -> Bytes { Wire.frame("R", &ByteSeq.putU32Be(0u32)) }
+
+fn readyForQuery() -> Bytes { Wire.frame("Z", &bytesOf([73u8])) }
+
+fn parameterStatus(name: Str, value: Str) -> Bytes {
+  Wire.frame("S", &Wire.cString(name).concat(Wire.cString(value)))
+}
+
+/// A column, as the protocol describes one: its name, then the table it came
+/// from, its position there, its type, that type's width, its modifier, and
+/// the format its values are in.
+fn columnDescription(name: Str, oid: Int) -> Bytes {
+  ByteSeq.join(&[
+      Wire.cString(name),
+      ByteSeq.putU32Be(0u32),
+      ByteSeq.putU16Be(0u16),
+      ByteSeq.putU32Be(Option.unwrapOr(convertInteger[UInt32](oid), 0u32)),
+      ByteSeq.putU16Be(65535u16),
+      ByteSeq.putU32Be(0u32),
+      ByteSeq.putU16Be(0u16)
+    ])
+}
+
+fn rowDescription(columns: &Array[(Str, Int)]) -> Bytes {
+  var body = ByteSeq.putU16Be(Option.unwrapOr(convertInteger[UInt16](columns.length()), 0u16))
+  for entry in columns { body = body.concat(columnDescription(entry[0], entry[1])) }
+  Wire.frame("T", &body)
+}
+
+fn dataRow(values: &Array[Option[Str]]) -> Bytes {
+  var body = ByteSeq.putU16Be(Option.unwrapOr(convertInteger[UInt16](values.length()), 0u16))
+  for value in values {
+    if let Some(text) = value {
+      let payload = text.toBytes()
+      body = body.concat(ByteSeq.putU32Be(Option.unwrapOr(convertInteger[UInt32](payload.length()), 0u32)))
+      body = body.concat(payload)
+    } else {
+      body = body.concat(bytesOf([255u8, 255u8, 255u8, 255u8]))
+    }
+  }
+  Wire.frame("D", &body)
+}
+
+fn commandComplete(tag: Str) -> Bytes { Wire.frame("C", &Wire.cString(tag)) }
+
+fn errorResponse(severity: Str, code: Str, message: Str) -> Bytes {
+  let body = ByteSeq.join(&[
+      ByteSeq.fromText("S"),
+      Wire.cString(severity),
+      ByteSeq.fromText("C"),
+      Wire.cString(code),
+      ByteSeq.fromText("M"),
+      Wire.cString(message),
+      bytesOf([0u8])
+    ])
+  Wire.frame("E", &body)
+}
+
+fn greeting() -> Bytes {
+  ByteSeq.join(&[
+      authenticationOk(),
+      parameterStatus("server_version", "16.0"),
+      readyForQuery()
+    ])
+}
+
+/// Read one message from the client, ignoring what it is.
+fn awaitMessage(connection: &Net.Connection) -> Bytes {
+  let read = Net.receive(connection, 65536)
+  Option.unwrapOr(Result.unwrapOr(read, None), ByteSeq.empty())
+}
+
+/// A server that asks for nothing and answers one query with two rows.
+fn trustServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let _query = awaitMessage(&connection)
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        rowDescription(&[("id", 23), ("name", 25)]),
+        dataRow(&[Some("1"), Some("ada")]),
+        dataRow(&[None, Some("alan")]),
+        commandComplete("SELECT 2"),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that checks the client sent the value apart from the statement.
+fn bindingServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let request = awaitMessage(&connection)
+  // The statement text must not carry the value: a client that pasted it in
+  // would send one message holding both.
+  let pasted = request.contains(ByteSeq.fromText("select it's"))
+  let echoed = if pasted { "pasted" } else { "bound" }
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        Wire.frame("1", &ByteSeq.empty()),
+        Wire.frame("2", &ByteSeq.empty()),
+        rowDescription(&[("echo", 25)]),
+        dataRow(&[Some(echoed)]),
+        commandComplete("SELECT 1"),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that refuses a query with a code.
+fn failingServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let _query = awaitMessage(&connection)
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        errorResponse("ERROR", "42601", "syntax error at or near \"bad\""),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that reports transaction status and remembers what it was sent,
+/// so a client's rollback can be checked to have crossed the wire.
+///
+/// The status it reports is the one the real server would: inside a
+/// transaction after a begin, failed after a failure, idle after a rollback or
+/// a commit. A stub that always said idle would let a client that never read
+/// the status pass.
+fn transactionServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  var seen = ""
+  var status = 73u8
+  var going = true
+  while going {
+    let asked = awaitMessage(&connection)
+    if asked.isEmpty() {
+      going = false
+    } else {
+      let sql = statementIn(&asked)
+      seen = seen + sql + "\n"
+      if sql.startsWith("BEGIN") { status = 84u8 }
+      // Returning to a savepoint keeps the transaction open, which is the whole
+      // difference between it and a rollback. A stub that ended the transaction
+      // here would let a client treating the two alike pass.
+      if sql.startsWith("ROLLBACK TO") {
+        status = 84u8
+      } else if sql.startsWith("ROLLBACK") {
+        status = 73u8
+      }
+      if sql.startsWith("COMMIT") { status = 73u8 }
+      if sql.startsWith("what did you get") {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              rowDescription(&[("seen", 25)]),
+              dataRow(&[Some(seen)]),
+              commandComplete("SELECT 1"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else if sql.startsWith("update ") {
+        // An update reports what it changed in its tag and sends no rows, which
+        // is the only place the number lives.
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              commandComplete("UPDATE 3"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else if sql.startsWith("select many") {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              rowDescription(&[("id", 23), ("name", 25)]),
+              dataRow(&[Some("1"), Some("ada")]),
+              dataRow(&[Some("2"), None]),
+              dataRow(&[Some("3"), Some("grace")]),
+              commandComplete("SELECT 3"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              commandComplete(sql),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      }
+    }
+  }
+  false
+}
+
+/// The statement text out of a simple query message.
+fn statementIn(message: &Bytes) -> Str {
+  let body = message.drop(5)
+  let stop = body.indexOf(bytesOf([0u8]))
+  if stop < 0 { "" } else { Option.unwrapOr(body.take(stop).toText(), "") }
+}
+
+const SALT: Str = "QSXCR+Q6sek8bf92"
+
+const ROUNDS: Int = 4096
+
+/// A server that performs the challenge, checking the client's proof and
+/// answering with one of its own.
+fn scramServer(connection: Net.Connection) -> Bool { challenge(connection, true) }
+
+/// The same, but signing with a key it does not have.
+fn lyingServer(connection: Net.Connection) -> Bool { challenge(connection, false) }
+
+fn challenge(connection: Net.Connection, honest: Bool) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _asked = Net.send(
+      &connection,
+      &Wire.frame("R", &ByteSeq.putU32Be(10u32).concat(Wire.cString("SCRAM-SHA-256")).concat(bytesOf([0u8])))
+  )
+
+  // The client's opening message, whose nonce the server must extend.
+  let first = awaitMessage(&connection)
+  let clientFirst = textAfterMechanism(&first)
+  let clientNonce = fieldIn(clientFirst, "r")
+  let combined = clientNonce + "serverpart"
+  let serverFirst = "r=" + combined + ",s=" + SALT + ",i=" + show(ROUNDS)
+  let _continued = Net.send(
+      &connection,
+      &Wire.frame("R", &ByteSeq.putU32Be(11u32).concat(ByteSeq.fromText(serverFirst)))
+  )
+
+  let final = awaitMessage(&connection)
+  let clientFinal = Option.unwrapOr(final.drop(5).toText(), "")
+  let withoutProof = beforeProof(clientFinal)
+  let firstBare = afterPrefix(clientFirst, "n,,")
+  let authMessage = (firstBare + "," + serverFirst + "," + withoutProof).toBytes()
+
+  let salted = deriveKey(
+    "secret".toBytes(),
+    Result.unwrapOr(ByteSeq.decodeBase64(SALT), ByteSeq.empty()),
+    ROUNDS,
+    32
+  )
+  let serverKey = hmacSha256Of(salted, ("Server Key" + (if honest { "" } else { "!" })).toBytes())
+  let signature = hmacSha256Of(serverKey, authMessage)
+  let _finished = Net.send(
+      &connection,
+      &Wire.frame(
+      "R",
+        &ByteSeq.putU32Be(12u32).concat(ByteSeq.fromText("v=" + ByteSeq.encodeBase64(&signature)))
+    )
+  )
+  // A server that signed with a key it does not have has told the client to
+  // give up, so it does not go on to wait for a query that will never come.
+  if honest {
+    let _done = Net.send(&connection, &ByteSeq.join(&[authenticationOk(), readyForQuery()]))
+    let _query = awaitMessage(&connection)
+    let _answered = Net.send(&connection, &ByteSeq.join(&[
+          rowDescription(&[("one", 23)]),
+          dataRow(&[Some("1")]),
+          commandComplete("SELECT 1"),
+          readyForQuery()
+        ]))
+  }
+  false
+}
+
+/// The client's opening text, after the mechanism name and its length.
+fn textAfterMechanism(message: &Bytes) -> Str {
+  let body = message.drop(5)
+  let stop = body.indexOf(bytesOf([0u8]))
+  if stop < 0 { "" } else { Option.unwrapOr(body.drop(stop + 5).toText(), "") }
+}
+
+fn fieldIn(source: Str, name: Str) -> Str {
+  var found = ""
+  for piece in source.split(",") {
+    if piece.startsWith(name + "=") && found.isEmpty() { found = piece.drop(name.length() + 1) }
+  }
+  found
+}
+
+fn beforeProof(source: Str) -> Str {
+  let mark = source.indexOf(",p=")
+  if mark < 0 { source } else { source.take(mark) }
+}
+
+fn afterPrefix(source: Str, prefix: Str) -> Str {
+  if source.startsWith(prefix) { source.drop(prefix.length()) } else { source }
+}

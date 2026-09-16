@@ -1,0 +1,88 @@
+module Std.Http.Server.Security
+
+import Std.Crypto as Crypto
+import Std.Option as Option
+import Std.Random as Random
+
+/// Generates a hexadecimal nonce for per-request CSP inline script/style authorization.
+///
+/// Uses `seed` when positive for deterministic testing; draws from OS cryptographic
+/// entropy (`Std.Random.secureBytes`) when `seed <= 0`.
+export fn generateNonce(seed: Int) -> Str {
+  if seed > 0 {
+    Crypto.sha256Hex("pudu-nonce-" + show(seed)).slice(0, 32)
+  } else {
+    match Random.secureBytes(16) {
+      case Ok(bytes) => {
+        var hex = ""
+        for b in bytes.toArray() {
+          let hi = Option.unwrapOr(convertInteger[Int](b / 16u8), 0)
+          let lo = Option.unwrapOr(convertInteger[Int](b % 16u8), 0)
+          hex = hex + nibbleToHex(hi) + nibbleToHex(lo)
+        }
+        hex
+      }
+      case Err(_) => {
+        Crypto.sha256Hex("fallback-" + show(clock())).slice(0, 32)
+      }
+    }
+  }
+}
+
+fn nibbleToHex(n: Int) -> Str {
+  match n {
+    case 0 => "0"
+    case 1 => "1"
+    case 2 => "2"
+    case 3 => "3"
+    case 4 => "4"
+    case 5 => "5"
+    case 6 => "6"
+    case 7 => "7"
+    case 8 => "8"
+    case 9 => "9"
+    case 10 => "a"
+    case 11 => "b"
+    case 12 => "c"
+    case 13 => "d"
+    case 14 => "e"
+    case 15 => "f"
+    case _ => "0"
+  }
+}
+
+/// Generates defense-in-depth HTTP security headers with strict CSP.
+export fn strictSecurityHeaders(nonce: Str) -> Array[(Str, Str)] {
+  let csp = "default-src 'self'; script-src 'self' 'nonce-" + nonce + "'; style-src 'self' 'nonce-" + nonce + "'; object-src 'none'; base-uri 'self'; form-action 'self'"
+
+  [
+    ("Content-Security-Policy", csp),
+    ("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+  ]
+}
+
+/// Validates that mutation requests originate from the expected host.
+export fn verifyOrigin(
+  origin: Option[Str],
+  referer: Option[Str],
+  expectedHost: Str
+) -> Bool {
+  if let Some(url) = origin {
+    url.contains(expectedHost)
+  } else {
+    if let Some(url) = referer {
+      url.contains(expectedHost)
+    } else {
+      false
+    }
+  }
+}
+
+/// Compares tokens in constant time to prevent side-channel timing attacks.
+export fn constantTimeCompare(a: &Str, b: &Str) -> Bool {
+  Crypto.secretsMatch(*a, *b)
+}

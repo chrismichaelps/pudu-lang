@@ -1,0 +1,259 @@
+module Studio.Config
+
+import Std.Io as Io
+import Std.Json as Json
+
+export type Waveform
+  = Square
+  | Saw
+  | Triangle
+
+export type Window = {
+  caption: Str,
+  width: Int,
+  height: Int,
+  resizable: Bool,
+  maxPixels: Int
+}
+
+export type AudioPlan = {
+  sampleRate: Int,
+  channels: Int,
+  frames: Int,
+  sliceFrames: Int,
+  period: Int,
+  amplitude: Int,
+  waveform: Waveform,
+  wavName: Str,
+  playToDevice: Bool,
+  deviceFramesPerBuffer: Int,
+  deviceBuffers: Int,
+  deviceTimeoutMilliseconds: Int
+}
+
+export type VideoPlan = {
+  rateFrames: Int,
+  rateSeconds: Int,
+  frames: Int,
+  pumpMilliseconds: Int
+}
+
+export type ReportPlan = { fileName: Str }
+
+export type Configuration = {
+  window: Window,
+  audio: AudioPlan,
+  video: VideoPlan,
+  report: ReportPlan
+}
+
+export type ConfigError
+  = ReadFailed(Str)
+  | InvalidJson(Json.JsonError)
+  | MissingField(Str)
+  | WrongType(Str, Str)
+  | UnsupportedWaveform(Str)
+  | InvalidRange(Str, Int, Int, Int)
+  | AudioTooShort(Int, Int)
+  | InvalidText(Str)
+
+export fn defaults() -> Configuration {
+  Configuration {
+    window: Window {
+      caption: "Pudu Media Studio",
+      width: 320,
+      height: 180,
+      resizable: false,
+      maxPixels: 57600
+    },
+    audio: AudioPlan {
+      sampleRate: 8000,
+      channels: 1,
+      frames: 8000,
+      sliceFrames: 4000,
+      period: 80,
+      amplitude: 5000,
+      waveform: Triangle,
+      wavName: "pudu-media-studio.wav",
+      playToDevice: true,
+      deviceFramesPerBuffer: 256,
+      deviceBuffers: 3,
+      deviceTimeoutMilliseconds: 3000
+    },
+    video: VideoPlan{rateFrames: 24, rateSeconds: 1, frames: 24, pumpMilliseconds: 42},
+    report: ReportPlan{fileName: "pudu-media-studio-report.json"}
+  }
+}
+
+export fn load(path: Option[Str]) -> Result[Configuration, ConfigError] {
+  match path {
+    case None => validate(&defaults())
+    case Some(found) => {
+      let source = read(Io.read(found)) ?
+      decode(source)
+    }
+  }
+}
+
+export fn decode(source: Str) -> Result[Configuration, ConfigError] {
+  let root = json(Json.decode(source)) ?
+  let windowValue = required(&root, "window") ?
+  let audioValue = required(&root, "audio") ?
+  let videoValue = required(&root, "video") ?
+  let reportValue = required(&root, "report") ?
+  let waveName = text(&audioValue, "audio.waveform") ?
+  let configuration = Configuration {
+    window: Window {
+      caption: text(&windowValue, "window.caption") ?,
+      width: integer(&windowValue, "window.width") ?,
+      height: integer(&windowValue, "window.height") ?,
+      resizable: boolean(&windowValue, "window.resizable") ?,
+      maxPixels: integer(&windowValue, "window.maxPixels") ?
+    },
+    audio: AudioPlan {
+      sampleRate: integer(&audioValue, "audio.sampleRate") ?,
+      channels: integer(&audioValue, "audio.channels") ?,
+      frames: integer(&audioValue, "audio.frames") ?,
+      sliceFrames: integer(&audioValue, "audio.sliceFrames") ?,
+      period: integer(&audioValue, "audio.period") ?,
+      amplitude: integer(&audioValue, "audio.amplitude") ?,
+      waveform: waveform(waveName) ?,
+      wavName: text(&audioValue, "audio.wavName") ?,
+      playToDevice: boolean(&audioValue, "audio.playToDevice") ?,
+      deviceFramesPerBuffer: integer(&audioValue, "audio.deviceFramesPerBuffer") ?,
+      deviceBuffers: integer(&audioValue, "audio.deviceBuffers") ?,
+      deviceTimeoutMilliseconds: integer(&audioValue, "audio.deviceTimeoutMilliseconds") ?
+    },
+    video: VideoPlan {
+      rateFrames: integer(&videoValue, "video.rateFrames") ?,
+      rateSeconds: integer(&videoValue, "video.rateSeconds") ?,
+      frames: integer(&videoValue, "video.frames") ?,
+      pumpMilliseconds: integer(&videoValue, "video.pumpMilliseconds") ?
+    },
+    report: ReportPlan{fileName: text(&reportValue, "report.fileName") ?}
+  }
+  validate(&configuration)
+}
+
+export fn validate(configuration: &Configuration) -> Result[Configuration, ConfigError] {
+  nonempty("window.caption", configuration.window.caption) ?
+  range("window.width", configuration.window.width, 160, 1920) ?
+  range("window.height", configuration.window.height, 90, 1080) ?
+  range("window.maxPixels", configuration.window.maxPixels, 14400, 2073600) ?
+  let requiredPixels = configuration.window.width * configuration.window.height
+  if configuration.window.maxPixels < requiredPixels {
+    return Err(InvalidRange("window.maxPixels", configuration.window.maxPixels, requiredPixels, 2073600))
+  }
+
+  range("audio.sampleRate", configuration.audio.sampleRate, 8000, 192000) ?
+  range("audio.channels", configuration.audio.channels, 1, 8) ?
+  range("audio.frames", configuration.audio.frames, 16, 262144) ?
+  range("audio.sliceFrames", configuration.audio.sliceFrames, 1, 4096) ?
+  range("audio.period", configuration.audio.period, 2, 65536) ?
+  range("audio.amplitude", configuration.audio.amplitude, 0, 32767) ?
+  leaf("audio.wavName", configuration.audio.wavName) ?
+  range("audio.deviceFramesPerBuffer", configuration.audio.deviceFramesPerBuffer, 16, 4096) ?
+  range("audio.deviceBuffers", configuration.audio.deviceBuffers, 2, 8) ?
+  range("audio.deviceTimeoutMilliseconds", configuration.audio.deviceTimeoutMilliseconds, 1, 60000) ?
+
+  range("video.rateFrames", configuration.video.rateFrames, 1, 120000) ?
+  range("video.rateSeconds", configuration.video.rateSeconds, 1, 1001) ?
+  range("video.frames", configuration.video.frames, 1, 600) ?
+  range("video.pumpMilliseconds", configuration.video.pumpMilliseconds, 0, 1000) ?
+  let requiredAudio =
+  (configuration.video.frames * configuration.video.rateSeconds * configuration.audio.sampleRate +
+    configuration.video.rateFrames - 1) /
+  configuration.video.rateFrames
+  if configuration.audio.frames < requiredAudio {
+    return Err(AudioTooShort(configuration.audio.frames, requiredAudio))
+  }
+  leaf("report.fileName", configuration.report.fileName) ?
+  Ok(*configuration)
+}
+
+export fn waveformName(value: Waveform) -> Str {
+  match value {
+    case Square => "square"
+    case Saw => "saw"
+    case Triangle => "triangle"
+  }
+}
+
+fn waveform(name: Str) -> Result[Waveform, ConfigError] {
+  match name.toLower() {
+    case "square" => Ok(Square)
+    case "saw" => Ok(Saw)
+    case "triangle" => Ok(Triangle)
+    case other => Err(UnsupportedWaveform(other))
+  }
+}
+
+fn required(value: &Json.Json, path: Str) -> Result[Json.Json, ConfigError] {
+  let key = lastPart(path)
+  match Json.field(value, key) {
+    case Some(found) => Ok(found)
+    case None => Err(MissingField(path))
+  }
+}
+
+fn text(value: &Json.Json, path: Str) -> Result[Str, ConfigError] {
+  let found = required(value, path) ?
+  match Json.asText(&found) {
+    case Some(content) => Ok(content)
+    case None => Err(WrongType(path, "text"))
+  }
+}
+
+fn integer(value: &Json.Json, path: Str) -> Result[Int, ConfigError] {
+  let found = required(value, path) ?
+  match Json.asInt(&found) {
+    case Some(number) => Ok(number)
+    case None => Err(WrongType(path, "whole number"))
+  }
+}
+
+fn boolean(value: &Json.Json, path: Str) -> Result[Bool, ConfigError] {
+  let found = required(value, path) ?
+  match Json.asBool(&found) {
+    case Some(flag) => Ok(flag)
+    case None => Err(WrongType(path, "boolean"))
+  }
+}
+
+fn lastPart(path: Str) -> Str {
+  let pieces = path.split(".")
+  pieces[pieces.length() - 1]
+}
+
+fn range(field: Str, value: Int, low: Int, high: Int) -> Result[(), ConfigError] {
+  if value < low || value > high { Err(InvalidRange(field, value, low, high)) } else { Ok(()) }
+}
+
+fn nonempty(field: Str, value: Str) -> Result[(), ConfigError] {
+  if value.trim().isEmpty() { Err(InvalidText(field)) } else { Ok(()) }
+}
+
+fn leaf(field: Str, value: Str) -> Result[(), ConfigError] {
+  nonempty(field, value) ?
+  if value.length() > 96 || value.contains("/") || value.contains("\\") || value.contains(":") ||
+  value == "." || value == ".."
+  {
+    Err(InvalidText(field))
+  } else {
+    Ok(())
+  }
+}
+
+fn read[T](value: Result[T, Str]) -> Result[T, ConfigError] {
+  match value {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(ReadFailed(problem))
+  }
+}
+
+fn json[T](value: Result[T, Json.JsonError]) -> Result[T, ConfigError] {
+  match value {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(InvalidJson(problem))
+  }
+}

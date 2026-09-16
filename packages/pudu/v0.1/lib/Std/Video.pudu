@@ -1,0 +1,195 @@
+module Std.Video
+
+import Std.Audio as Audio
+import Std.Num {Integer}
+import Std.Option as Option
+import Std.Ui.Canvas as Canvas
+
+/// A frame rate as an exact fraction of frames per second.
+///
+/// Broadcast rates such as 30000/1001 are not whole numbers, and a rate stored
+/// as binary floating point places frames a little wrong on every tick; a
+/// fraction places every frame exactly for as long as a stream runs.
+export type Rate = { frames: Int, seconds: Int }
+
+/// A point on a media timeline: `ticks` counted at `scale` ticks per second.
+export type Timestamp = { ticks: Int, scale: Int }
+
+/// One picture and the span of time it is shown for.
+export type Picture = { presentation: Timestamp, duration: Timestamp, surface: Canvas.Surface }
+
+/// Pictures in presentation order that never overlap.
+export type Track = { rate: Rate, pictures: Array[Picture] }
+
+/// Why a rate, a time, or a track could not be admitted.
+export type VideoError
+  = InvalidRate(Int, Int)
+  | InvalidTimestamp(Int, Int)
+  | NegativeFrame(Int)
+  | OutOfRange
+  | EmptyDuration(Int)
+  | Overlapping(Int)
+  | SizeMismatch(Int)
+  | Sync(Audio.AudioError)
+
+/// The largest tick scale a timestamp may use.
+const MAX_SCALE: Int = 1000000000
+
+/// A rate of `frames` per `seconds`, reduced, with both parts positive.
+export fn rate(frames: Int, seconds: Int) -> Result[Rate, VideoError] {
+  if frames <= 0 || seconds <= 0 || frames > MAX_SCALE || seconds > MAX_SCALE {
+    Err(InvalidRate(frames, seconds))
+  } else {
+    let divisor = greatestCommonDivisor(frames, seconds)
+    Ok(Rate{frames: frames / divisor, seconds: seconds / divisor})
+  }
+}
+
+/// A timestamp of `ticks` at `scale` ticks per second, not before zero.
+export fn timestamp(ticks: Int, scale: Int) -> Result[Timestamp, VideoError] {
+  if ticks < 0 || scale <= 0 || scale > MAX_SCALE {
+    Err(InvalidTimestamp(ticks, scale))
+  } else {
+    Ok(Timestamp{ticks: ticks, scale: scale})
+  }
+}
+
+/// The time a frame begins, reduced to its smallest exact scale.
+export fn timeOfFrame(pace: &Rate, frame: Int) -> Result[Timestamp, VideoError] {
+  admittedRate(pace) ?
+  if frame < 0 {
+    Err(NegativeFrame(frame))
+  } else {
+    reduced(frame.toBigInt() * pace.seconds.toBigInt(), pace.frames.toBigInt())
+  }
+}
+
+/// The frame being shown at a time: the last frame beginning at or before it.
+export fn frameAt(pace: &Rate, time: &Timestamp) -> Result[Int, VideoError] {
+  admittedRate(pace) ?
+  admittedTime(time) ?
+  let exact = time.ticks.toBigInt() * pace.frames.toBigInt() /
+  (time.scale.toBigInt() * pace.seconds.toBigInt())
+  Option.okOr(convertInteger[Int](exact), OutOfRange)
+}
+
+/// Two timestamps added exactly, reduced.
+export fn add(first: &Timestamp, second: &Timestamp) -> Result[Timestamp, VideoError] {
+  admittedTime(first) ?
+  admittedTime(second) ?
+  let numerator = first.ticks.toBigInt() * second.scale.toBigInt() +
+  second.ticks.toBigInt() * first.scale.toBigInt()
+  reduced(numerator, first.scale.toBigInt() * second.scale.toBigInt())
+}
+
+/// Whether the first timestamp is earlier (-1), equal (0), or later (1).
+///
+/// Compared by cross-multiplication, so timestamps at different scales compare
+/// exactly without converting either.
+export fn compare(first: &Timestamp, second: &Timestamp) -> Int {
+  let left = first.ticks.toBigInt() * second.scale.toBigInt()
+  let right = second.ticks.toBigInt() * first.scale.toBigInt()
+  if left < right { -1 } else if left > right { 1 } else { 0 }
+}
+
+/// An empty track at a rate.
+export fn track(pace: Rate) -> Track { Track{rate: pace, pictures: []} }
+
+/// A track with a picture appended.
+///
+/// The picture must begin no earlier than the previous one ends, last a
+/// positive duration, and match the size of the pictures already present, so a
+/// presenter never has to choose between two pictures for one instant.
+export fn appended(target: &Track, picture: Picture) -> Result[Track, VideoError] {
+  admittedTime(&picture.presentation) ?
+  admittedTime(&picture.duration) ?
+  let index = target.pictures.length()
+  if picture.duration.ticks == 0 {
+    Err(EmptyDuration(index))
+  } else if index > 0 {
+    let previous = target.pictures[index - 1]
+    let previousEnd = add(&previous.presentation, &previous.duration) ?
+    if compare(&picture.presentation, &previousEnd) < 0 {
+      Err(Overlapping(index))
+    } else if previous.surface.size != picture.surface.size {
+      Err(SizeMismatch(index))
+    } else {
+      Ok(Track{rate: target.rate, pictures: target.pictures.push(picture)})
+    }
+  } else {
+    Ok(Track{rate: target.rate, pictures: target.pictures.push(picture)})
+  }
+}
+
+/// The position of the picture on screen at a time, or nothing in a gap,
+/// before the first picture, or after the last one ends.
+///
+/// Found by halving over presentation times, which appending keeps ordered.
+export fn pictureAt(target: &Track, time: &Timestamp) -> Option[Int] {
+  var low = 0
+  var high = target.pictures.length()
+  while low < high {
+    let middle = (low + high) / 2
+    if compare(&target.pictures[middle].presentation, time) <= 0 {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+  if low == 0 {
+    None
+  } else {
+    let candidate = target.pictures[low - 1]
+    if let Ok(end) = add(&candidate.presentation, &candidate.duration) {
+      if compare(time, &end) < 0 { Some(low - 1) } else { None }
+    } else {
+      None
+    }
+  }
+}
+
+/// The audio frame that plays at a video timestamp, so sound and picture are
+/// aligned by exact arithmetic rather than by two clocks drifting together.
+export fn audioFrameAt(time: &Timestamp, shape: &Audio.Format) -> Result[Int, VideoError] {
+  admittedTime(time) ?
+  match Audio.framesAt(shape, time.ticks, time.scale) {
+    case Ok(frame) => Ok(frame)
+    case Err(reason) => Err(Sync(reason))
+  }
+}
+
+/// A rate built as a record rather than by `rate` is checked before it divides.
+fn admittedRate(pace: &Rate) -> Result[(), VideoError] {
+  rate(pace.frames, pace.seconds) ?
+  Ok(())
+}
+
+fn admittedTime(time: &Timestamp) -> Result[(), VideoError] {
+  timestamp(time.ticks, time.scale) ?
+  Ok(())
+}
+
+fn reduced(numerator: BigInt, denominator: BigInt) -> Result[Timestamp, VideoError] {
+  var a = numerator
+  var b = denominator
+  while b != 0.toBigInt() {
+    let rest = a % b
+    a = b
+    b = rest
+  }
+  let divisor = if a == 0.toBigInt() { denominator } else { a }
+  let ticks = Option.okOr(convertInteger[Int](numerator / divisor), OutOfRange) ?
+  let scale = Option.okOr(convertInteger[Int](denominator / divisor), OutOfRange) ?
+  if scale > MAX_SCALE { Err(OutOfRange) } else { Ok(Timestamp{ticks: ticks, scale: scale}) }
+}
+
+fn greatestCommonDivisor(first: Int, second: Int) -> Int {
+  var a = first
+  var b = second
+  while b != 0 {
+    let rest = a % b
+    a = b
+    b = rest
+  }
+  a
+}

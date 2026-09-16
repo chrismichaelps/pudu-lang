@@ -1,0 +1,163 @@
+module Main
+
+import Std.App.Database as Database
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Io as Io
+import Std.Option as Option
+import Api.Feed as Api
+import Db.Schema as Schema
+import Service.Commands as Commands
+import Web.Feed as Web
+
+/// Chatter: posts, approvals and replies, rendered on the server.
+///
+/// This module says which address reaches which function and nothing else.
+/// What a post is lives under `Service`, how one is stored under `Db`, how one
+/// looks under `View`, and the two edges under `Web` and `Api`. Somebody who
+/// wants to know what happens when a reader approves something reads one line
+/// here and then one file.
+///
+/// Everything works without a line of script in the browser: approving is a
+/// form that posts and is answered with a redirect. That is not nostalgia — it
+/// is what makes the whole of this example checkable from `curl`, and what
+/// makes it work for a reader whose browser is not running scripts.
+fn main() -> Int {
+  let port = Option.unwrapOr(numberOf(Env.at(0)), 8080)
+  match Database.create("sqlite::memory:", 1) {
+    case Err(problem) => {
+      say("the database could not be prepared: " + problem.message)
+      1
+    }
+    case Ok(db) => {
+      match Database.start(&db) {
+        case Err(problem) => {
+          say("the database could not be started: " + problem.message)
+          1
+        }
+        case Ok(_) => serve(&db, port)
+      }
+    }
+  }
+}
+
+fn serve(db: &Database.Database, port: Int) -> Int {
+  match Schema.apply(db) {
+    case Err(problem) => {
+      say("the schema could not be applied: " + problem.message)
+      1
+    }
+    case Ok(_) => {
+      seed(db)
+      match Server.start("127.0.0.1", port) {
+        case Err(_) => {
+          say("port " + display(port) + " could not be listened on")
+          1
+        }
+        case Ok(live) => {
+          say("listening on http://127.0.0.1:" + display(Server.portOf(&live)))
+          let listening = Server.server(&routes(db))
+          let _served = Server.run(&listening, &live, 100000)
+          let _stopped = Server.stop(&live)
+          0
+        }
+      }
+    }
+  }
+}
+
+/// Every address the service answers, in the order they are tried.
+fn routes(db: &Database.Database) -> Route.Router {
+  Route.withFallback(
+      &Route.routing(
+        &[
+        Route.get("/", fn(request: Route.Request) -> Http.Response { Web.feed(db, &request, 0) }),
+        Route.get("/style.css", fn(request: Route.Request) -> Http.Response { Web.stylesheet() }),
+        Route.get("/posts/:id", fn(request: Route.Request) -> Http.Response { Web.thread(db, &request, 0) }),
+        Route.post("/posts", fn(request: Route.Request) -> Http.Response { Web.publish(db, &request, 0) }),
+        Route.post(
+          "/posts/:id/replies",
+          fn(request: Route.Request) -> Http.Response { Web.reply(db, &request, 0) }
+        ),
+        Route.post(
+          "/posts/:id/approve",
+          fn(request: Route.Request) -> Http.Response { Web.approve(db, &request, 0) }
+        ),
+        Route.post(
+          "/posts/:id/withdraw",
+          fn(request: Route.Request) -> Http.Response { Web.withdraw(db, &request, 0) }
+        ),
+        Route.post(
+          "/posts/:id/retract",
+          fn(request: Route.Request) -> Http.Response { Web.retract(db, &request, 0) }
+        ),
+        Route.post(
+          "/replies/:id/retract",
+          fn(request: Route.Request) -> Http.Response { Web.retractReply(db, &request, 0) }
+        ),
+        Route.get("/api/posts", fn(request: Route.Request) -> Http.Response { Api.feed(db, &request) }),
+        Route.get(
+          "/api/posts/:id",
+          fn(request: Route.Request) -> Http.Response { Api.thread(db, &request) }
+        ),
+        Route.post("/api/posts", fn(request: Route.Request) -> Http.Response { Api.publish(db, &request, 0) }),
+        Route.post(
+          "/api/posts/:id/replies",
+          fn(request: Route.Request) -> Http.Response { Api.reply(db, &request, 0) }
+        ),
+        Route.post(
+          "/api/posts/:id/approve",
+          fn(request: Route.Request) -> Http.Response { Api.approve(db, &request, 0) }
+        ),
+        Route.post(
+          "/api/posts/:id/withdraw",
+          fn(request: Route.Request) -> Http.Response { Api.withdraw(db, &request, 0) }
+        ),
+        Route.post(
+          "/api/posts/:id/retract",
+          fn(request: Route.Request) -> Http.Response { Api.retract(db, &request, 0) }
+        )
+      ]
+    ),
+    fn(request: Route.Request) -> Http.Response { Web.missing() }
+  )
+}
+
+/// A conversation already in progress, so the first page shows what the parts
+/// look like together rather than an empty box.
+fn seed(db: &Database.Database) -> () {
+  let _one = Commands.apply(db, Commands.Publish("ada", "Everything here is rendered on the server."), 0)
+  let _two = Commands.apply(db, Commands.Publish("grace", "Approving is a form that posts. No script anywhere."), 0)
+  let _three = Commands.apply(db, Commands.Reply(1, "grace", "Even the heart button?"), 0)
+  let _four = Commands.apply(db, Commands.Reply(1, "ada", "Even the heart button."), 0)
+  let _five = Commands.apply(db, Commands.Approve(1, "grace"), 0)
+  ()
+}
+
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}
+
+fn say(line: Str) -> () {
+  match Io.writeLine(line) {
+    case Ok(_) => {}
+    case Err(_) => {}
+  }
+}

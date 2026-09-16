@@ -1,0 +1,337 @@
+// A built program runs on a machine that has nothing installed.
+//
+// This cannot be checked from inside the language, and it cannot be checked by
+// running the built file in the shell that built it: what is under test is
+// that the file needs nothing from around it. So the program is run with an
+// empty environment — no PATH, no PUDU_LIB, no working directory it knows —
+// from a directory it was not built in.
+//
+// Usage: node test/build-bundle.mjs [path-to-pudu]
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
+
+const executable = process.argv[2] ?? "pudu";
+const directory = mkdtempSync(join(tmpdir(), "pudu-build-"));
+
+// The program uses the standard library so the bundle has to carry it: a
+// bundle holding only what the author wrote would run here and fail wherever
+// the library happened to be missing.
+const program = `module Bundled
+
+import Std.Io as Io
+import Std.Regex as Regex
+import Std.Text as Text
+
+fn main() -> Int {
+  let pattern = match Regex.compile("^[a-z]+-[0-9]+$") {
+    case Ok(built) => built
+    case Err(_) => Regex.unmatchable()
+  }
+  let matched = Regex.isMatch(&pattern, "order-42")
+  let upper = Text.toTitle("bundled")
+  match Io.writeLine(upper + " " + display(matched)) {
+    case Ok(_) => 0
+    case Err(_) => 1
+  }
+}
+`;
+
+const source = join(directory, "Bundled.pudu");
+const built = join(directory, "bundled");
+writeFileSync(source, program);
+
+const failures = [];
+
+const buildSaid = execFileSync(executable, ["build", source, "-o", built], { stdio: "pipe" })
+  .toString()
+  .trim();
+
+if (!existsSync(built)) {
+  console.error("build-bundle: pudu build wrote no file");
+  process.exit(1);
+}
+
+// A bundle carrying only what the author wrote is not a bundle: it would run
+// here, where the library is on the disk anyway, and fail on the machine this
+// gate exists to speak for. The build says how many modules it carried, and
+// this program imports three library modules, so anything near one means the
+// library was compiled against and then left out — a failure of the build
+// rather than of the running, and worth saying at the build.
+const carried = Number(/\((\d+) modules\)/.exec(buildSaid)?.[1] ?? 0);
+if (carried < 4) {
+  console.error(
+    `build-bundle: the build carried ${carried} modules, so the library was left out: ${JSON.stringify(buildSaid)}`
+  );
+  process.exit(1);
+}
+
+// Run it the way a deployment would: elsewhere, and with nothing inherited.
+const elsewhere = join(mkdtempSync(join(tmpdir(), "pudu-elsewhere-")), "shipped");
+copyFileSync(built, elsewhere);
+
+// A program that fails here fails by saying something, and that something is
+// the whole reason to run it. Node throws for a non-zero exit and puts the
+// output on the error as buffers, which a log renders as a wall of decimal
+// bytes — so the words the program actually printed are returned instead.
+const run = (path, extra = []) => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", path, ...extra], { stdio: "pipe" })
+      .toString()
+      .trim();
+  } catch (problem) {
+    const said = [problem.stdout, problem.stderr]
+      .map((buffer) => (buffer ? buffer.toString().trim() : ""))
+      .filter(Boolean)
+      .join("\n");
+    return said || `exited with ${problem.status ?? "no status"} and said nothing`;
+  }
+};
+
+const first = run(built);
+if (first !== "Bundled true") {
+  failures.push(`the built file printed ${JSON.stringify(first)}`);
+}
+
+const moved = run(elsewhere);
+if (moved !== "Bundled true") {
+  failures.push(`copied elsewhere it printed ${JSON.stringify(moved)}`);
+}
+
+// A bundle is the program, so the compiler's own words are the program's
+// arguments and must not be acted on.
+const withArguments = run(elsewhere, ["--help", "version"]);
+if (withArguments !== "Bundled true") {
+  failures.push(`given compiler-looking arguments it printed ${JSON.stringify(withArguments)}`);
+}
+
+// Text is UTF-8 whatever the machine says its language is.
+//
+// A program decoded text with the locale's encoding, and a machine with no
+// locale set decodes as ASCII — so a file carrying an em dash could not be
+// read, reported as a module that was present and readable. The same applies
+// to what a program reads and writes itself, so both directions are checked
+// here, under a locale that names no encoding at all.
+const encodingDirectory = mkdtempSync(join(tmpdir(), "pudu-encoding-"));
+const roundTripped = "an em dash \u2014 and an accent \u00e9";
+writeFileSync(join(encodingDirectory, "carried.txt"), roundTripped + "\n", "utf8");
+writeFileSync(
+  join(encodingDirectory, "Encoded.pudu"),
+  `module Encoded
+
+import Std.Io as Io
+
+fn main() -> Int {
+  match readFile("carried.txt") {
+    case Err(_) => 1
+    case Ok(text) => {
+      let trimmed = text.trim()
+      match writeFile("answered.txt", trimmed) {
+        case Err(_) => 1
+        case Ok(_) =>
+          match Io.writeLine(display(trimmed.length())) {
+            case Ok(_) => 0
+            case Err(_) => 1
+          }
+      }
+    }
+  }
+}
+`
+);
+const encoded = join(encodingDirectory, "encoded");
+execFileSync(executable, ["build", join(encodingDirectory, "Encoded.pudu"), "-o", encoded], {
+  stdio: "pipe"
+});
+// `LC_ALL=C` names an encoding that cannot hold either character, which is
+// what a container built from a minimal image gives a program.
+//
+// This catches a regression where the locale decides the encoding, which is
+// how the library became unreadable once. It only catches it where the locale
+// actually decides: macOS resolves this to UTF-8 whatever the variables say,
+// so the check passes there either way and does its work on Linux.
+const counted = (() => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", "LC_ALL=C", "LANG=C", encoded], {
+      stdio: "pipe",
+      cwd: encodingDirectory
+    })
+      .toString()
+      .trim();
+  } catch (problem) {
+    return `did not run: ${String(problem.stdout ?? "")}${String(problem.stderr ?? "")}`.trim();
+  }
+})();
+if (counted !== String([...roundTripped].length)) {
+  failures.push(
+    `under a C locale it counted ${JSON.stringify(counted)} characters, wanted ${[...roundTripped].length}`
+  );
+}
+const answered = existsSync(join(encodingDirectory, "answered.txt"))
+  ? readFileSync(join(encodingDirectory, "answered.txt"), "utf8")
+  : "";
+if (answered !== roundTripped) {
+  failures.push(`under a C locale it wrote back ${JSON.stringify(answered)}`);
+}
+
+// The compiler itself must still behave as a compiler.
+const version = execFileSync(executable, ["version"], { stdio: "pipe" }).toString().trim();
+if (!version.startsWith("pudu ")) {
+  failures.push(`the compiler no longer answers version: ${JSON.stringify(version)}`);
+}
+
+// A build that cannot be written must say so and change nothing. The write is
+// the size of the compiler, so it is the step most likely to fail for reasons
+// the program has nothing to do with — and a partial one left at the target
+// would be a file the right name and shape to look built, discovered only by
+// whoever runs it.
+const refused = join(directory, "missing-directory", "app");
+let refusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", refused], { stdio: "pipe" });
+  failures.push("a build into a directory that does not exist was not refused");
+} catch (problem) {
+  refusal = String(problem.stderr ?? "");
+}
+if (!refusal.includes("could not write")) {
+  failures.push(`a refused build did not say it could not write: ${JSON.stringify(refusal.slice(0, 120))}`);
+}
+if (refusal.includes("CallStack") || refusal.includes("ghc-internal")) {
+  failures.push("a refused build reported the failure as a crash rather than as a message");
+}
+
+// The target a failed build was aimed at keeps what it held. Aimed at the
+// program built a moment ago, that program must still run afterwards.
+const guarded = join(directory, "guarded");
+copyFileSync(built, guarded);
+try {
+  execFileSync(executable, ["build", join(directory, "NotThere.pudu"), "-o", guarded], {
+    stdio: "pipe"
+  });
+} catch {
+  // Expected: the program named does not exist.
+}
+if (run(guarded) !== "Bundled true") {
+  failures.push("a failed build left the program that was already there unrunnable");
+}
+if (existsSync(guarded + ".pending")) {
+  failures.push("a failed build left its partial file behind");
+}
+
+// A program can be attached to a runtime other than the one building it, which
+// is what lets one machine build an artefact for a platform it is not.
+//
+// The runtime named here is this same compiler, because what can be checked
+// anywhere is the mechanism rather than the crossing: a real cross-build names a
+// runtime for another kernel, and nothing that runs here could execute one to
+// confirm it. So what is checked is that naming a runtime goes through the same
+// path and produces a file that runs.
+//
+// Each artefact is removed as soon as the check that needed it is done. A bundle
+// is the size of the compiler, so holding four of them at once is most of a
+// gigabyte — enough to fail this gate on a machine that is merely low on space,
+// which would report a full disk as a fault in the build.
+const forget = (path) => {
+  try {
+    rmSync(path, { force: true });
+  } catch {
+    // A file that could not be removed is not a reason to fail the run.
+  }
+};
+
+const onto = join(directory, "onto-named-runtime");
+{
+  const namedRuntime = join(directory, "base-runtime");
+  copyFileSync(executable, namedRuntime);
+  execFileSync(executable, ["build", source, "-o", onto, "--runtime", namedRuntime], { stdio: "pipe" });
+  forget(namedRuntime);
+}
+const ontoSaid = run(onto);
+if (ontoSaid !== "Bundled true") {
+  failures.push(`built onto a named runtime it printed ${JSON.stringify(ontoSaid)}`);
+}
+
+// Naming a runtime that already carries a program replaces that program rather
+// than burying it. The trailer is read from the end of the file, so appending to
+// a built artefact would work and would keep the previous program's bytes for
+// ever — a whole copy of a program nothing can reach. Building twice would
+// double it, and a loop would grow it without bound, so the two are compared
+// byte for byte rather than merely both run.
+{
+  const again = join(directory, "onto-built-artefact");
+  execFileSync(executable, ["build", source, "-o", again, "--runtime", onto], { stdio: "pipe" });
+  const rebuiltSaid = run(again);
+  if (rebuiltSaid !== "Bundled true") {
+    failures.push(`rebuilt onto a built artefact it printed ${JSON.stringify(rebuiltSaid)}`);
+  }
+  if (readFileSync(onto).compare(readFileSync(again)) !== 0) {
+    failures.push("rebuilding onto a built artefact did not answer the same bytes");
+  }
+  forget(again);
+}
+
+// A runtime that is not there is said before the program is written, so the
+// target keeps what it held. Reported as what it is rather than as a failure to
+// write, because a reader told the write failed looks at the disk rather than at
+// the path they named. Aimed at the artefact built a moment ago, which must
+// still run afterwards.
+let runtimeRefusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", onto, "--runtime", join(directory, "no-runtime-here")], {
+    stdio: "pipe"
+  });
+  failures.push("a build onto a runtime that does not exist was not refused");
+} catch (problem) {
+  runtimeRefusal = String(problem.stderr ?? "");
+}
+if (!runtimeRefusal.includes("cannot attach the program to")) {
+  failures.push(`a missing runtime was not named: ${JSON.stringify(runtimeRefusal.slice(0, 160))}`);
+}
+if (run(onto) !== "Bundled true") {
+  failures.push("a build onto a missing runtime damaged the target it was aimed at");
+}
+forget(onto);
+
+// A flag that was misspelled is refused rather than skipped. Skipped, it would
+// produce a plausible artefact built to different settings than the ones asked
+// for, and the place that is discovered is the platform it was deployed to.
+//
+// Refused while reading the arguments, so nothing is written and this costs no
+// space at all.
+let unknownRefusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", join(directory, "never-written"), "--runtimes", onto], {
+    stdio: "pipe"
+  });
+  failures.push("a misspelled option was accepted");
+} catch (problem) {
+  unknownRefusal = String(problem.stderr ?? "");
+}
+if (!unknownRefusal.includes("unknown option")) {
+  failures.push(`a misspelled option was not named: ${JSON.stringify(unknownRefusal.slice(0, 160))}`);
+}
+if (existsSync(join(directory, "never-written"))) {
+  failures.push("a build refused for a misspelled option wrote a file anyway");
+}
+
+// A bundle is the size of the compiler, so a run that leaves two behind costs
+// a developer a gigabyte every few times they run the gates. Removed whatever
+// the outcome, since a failing run leaks just as much as a passing one.
+for (const scratch of [directory, join(elsewhere, ".."), encodingDirectory]) {
+  try {
+    rmSync(scratch, { recursive: true, force: true });
+  } catch {
+    // A directory that could not be removed is not a reason to fail the run.
+  }
+}
+
+if (failures.length > 0) {
+  console.error("build-bundle: a built program must run with nothing installed.\n");
+  for (const failure of failures) console.error("  " + failure + "\n");
+  process.exit(1);
+}
+
+console.log(JSON.stringify({ built: true, ranElsewhere: true, environment: "empty" }));

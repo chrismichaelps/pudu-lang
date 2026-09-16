@@ -1,0 +1,12 @@
+module Main
+
+import Bindings
+
+export fn main() -> Int {
+  unsafe(foreign) {
+    let box = Bindings.pudu_ffi_cpp_box_new(91i32)
+    let value = Bindings.pudu_ffi_cpp_box_read(box)
+    Bindings.pudu_ffi_cpp_box_delete(box)
+    if value == 91i32 { 1 } else { 0 }
+  }
+}

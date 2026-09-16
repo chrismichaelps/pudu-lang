@@ -1,0 +1,284 @@
+module Std.Compress.Gzip
+
+import Std.Bytes as ByteSeq
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Math {min}
+import Std.Option as Option
+import Std.Result as Result
+
+/// Compression optimization profile.
+export type CompressionLevel
+  = NoCompression
+  | Fast
+  | Default
+  | Best
+
+/// Configuration parameters for streaming GZIP compression and HTTP middleware.
+export type GzipConfig = {
+  level: CompressionLevel,
+  chunkSize: Int,
+  minCompressBytes: Int,
+}
+
+/// Structured failure conditions encountered during GZIP stream decompression.
+export type GzipError
+  = InvalidMagic(Int, Int)
+  | UnsupportedCompressionMethod(Int)
+  | CorruptHeader(Str)
+  | TruncatedStream
+  | CorruptBlockHeader
+  | UnsupportedBlockType(Int)
+  | ChecksumMismatch(Int, Int)
+  | SizeMismatch(Int, Int)
+  | NonUtf8Content
+  | CodecFailure(Str)
+  | OutputLimitExceeded(Int)
+
+/// Constructs a default GZIP compression configuration.
+export fn config() -> GzipConfig {
+  GzipConfig {
+    level: Default,
+    chunkSize: 65535,
+    minCompressBytes: 256,
+  }
+}
+
+/// A configuration with one setting changed, each answering the configuration
+/// rather than taking it apart.
+///
+/// Methods, so a configuration that differs from the default in two ways reads
+/// down the page rather than wrapping each call in the next.
+export trait Configuring {
+  fn withLevel(self: &Self, level: CompressionLevel) -> Self
+  fn withChunkSize(self: &Self, chunkSize: Int) -> Self
+  fn withMinCompressBytes(self: &Self, minBytes: Int) -> Self
+}
+
+impl Configuring for GzipConfig {
+  /// Sets the compression level profile.
+  fn withLevel(self: &Self, level: CompressionLevel) -> Self {
+    GzipConfig{..*self, level: level}
+  }
+
+  /// Sets the DEFLATE block chunk size bounded between 1 and 65,535 bytes.
+  fn withChunkSize(self: &Self, chunkSize: Int) -> Self {
+    let bounded = if chunkSize < 1 {
+      1
+    } else if chunkSize > 65535 {
+      65535
+    } else {
+      chunkSize
+    }
+    GzipConfig{..*self, chunkSize: bounded}
+  }
+
+  /// Configures the minimum payload size before HTTP middleware triggers
+  /// compression.
+  fn withMinCompressBytes(self: &Self, minBytes: Int) -> Self {
+    GzipConfig{..*self, minCompressBytes: if minBytes < 0 { 0 } else { minBytes }}
+  }
+}
+
+/// Calculates the standard IEEE 802.3 32-bit Cyclic Redundancy Check (CRC-32) over input bytes.
+export fn crc32(data: &Bytes) -> Int {
+  let table = buildCrcTable()
+  let sum = calcCrc(&table, data)
+  uint32ToInt(sum)
+}
+
+/// Compress bytes using the configured zlib level; checked form exposes host failure.
+export fn compressChecked(data: &Bytes, cfg: &GzipConfig) -> Result[Bytes, GzipError] {
+  let level = match cfg.level {
+    case NoCompression => 0
+    case Fast => 1
+    case Default => 6
+    case Best => 9
+  }
+  Result.mapErr(gzipCompress(*data, level, cfg.chunkSize),
+    fn(problem: Str) -> GzipError { CodecFailure(problem) })
+}
+
+/// Compatibility convenience for callers treating compression failure as fatal.
+export fn compress(data: &Bytes, cfg: &GzipConfig) -> Bytes {
+  match compressChecked(data, cfg) {
+    case Ok(payload) => payload
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+/// Compresses UTF-8 text into an RFC 1952 GZIP stream.
+export fn compressText(text: Str, cfg: &GzipConfig) -> Bytes {
+  compress(&text.toBytes(), cfg)
+}
+
+/// Decode one gzip member with a default 64 MiB decompressed output limit.
+export fn decompress(stream: &Bytes) -> Result[Bytes, GzipError] {
+  decompressWithin(stream, 67108864)
+}
+
+/// Enforce output admission during inflation, including highly compressible inputs.
+export fn decompressWithin(stream: &Bytes, maxBytes: Int) -> Result[Bytes, GzipError] {
+  if stream.length() < 18 { return Err(TruncatedStream) }
+  let id1 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(0), 0u8)), 0)
+  let id2 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(1), 0u8)), 0)
+  if id1 != 31 || id2 != 139 { return Err(InvalidMagic(id1, id2)) }
+  let method = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(2), 0u8)), 0)
+  if method != 8 { return Err(UnsupportedCompressionMethod(method)) }
+  Result.mapErr(gzipDecompress(*stream, maxBytes), fn(problem: Str) -> GzipError {
+      if problem == "decompressed output limit exceeded" { OutputLimitExceeded(maxBytes) }
+        else if problem == "truncated gzip stream" || problem == "TruncatedInput" || problem.contains("premature end") || problem.contains("truncated") { TruncatedStream }
+        else { CodecFailure(problem) }
+    })
+}
+
+/// Decompresses an RFC 1952 GZIP stream and decodes the payload as UTF-8 text.
+export fn decompressText(stream: &Bytes) -> Result[Str, GzipError] {
+  let decompressed = decompress(stream) ?
+  match ByteSeq.toText(&decompressed) {
+    case Ok(text) => Ok(text)
+    case Err(_) => Err(NonUtf8Content)
+  }
+}
+
+/// Compress eligible public responses without changing binary payload bytes on the wire.
+export fn middleware(cfg: &GzipConfig) -> Route.Middleware {
+  let settings = *cfg
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let response = next(request)
+    if !eligible(&request, &response) { return response }
+    let varied = Http.Response{..response, headers: vary(&response.headers)}
+    if !acceptsGzip(&request.message.headers) { return varied }
+    let payload = Http.responseBytes(&response)
+    if payload.length() < settings.minCompressBytes { return varied }
+    let compressed = match compressChecked(&payload, &settings) {
+      case Ok(value) => value
+      case Err(_) => { return varied }
+    }
+    if compressed.length() >= payload.length() { return varied }
+    var headers: Array[(Str, Str)] = []
+    for entry in varied.headers {
+      let name = entry[0].toLower()
+      if name != "content-length" && name != "transfer-encoding" && name != "etag"
+        && name != "content-md5" && name != "digest" && name != "content-digest"
+        && name != "repr-digest" && name != "accept-ranges" {
+        headers = headers.push(entry)
+      }
+    }
+    headers = headers.push(("Content-Encoding", "gzip"))
+      .push(("Content-Length", show(compressed.length())))
+    Http.Response{..varied, headers: headers, body: "", binaryBody: Some(compressed)}
+  }
+}
+
+fn eligible(request: &Route.Request, response: &Http.Response) -> Bool {
+  let code = response.status.code
+  if code < 200 || code == 204 || code == 205 || code == 206 || code == 304 { return false }
+  if request.message.method == Http.Connect { return false }
+  for entry in request.message.headers {
+    let name = entry[0].toLower()
+    if name == "range" || name == "authorization" || name == "cookie" { return false }
+    if name == "cache-control" && entry[1].toLower().contains("no-transform") { return false }
+  }
+  for entry in response.headers {
+    let name = entry[0].toLower()
+    let value = entry[1].toLower()
+    if name == "content-encoding" || name == "content-range" || name == "set-cookie" { return false }
+    if name == "content-type" && value.startsWith("text/event-stream") { return false }
+    if name == "cache-control" && (value.contains("no-transform") || value.contains("private") || value.contains("no-store")) { return false }
+  }
+  true
+}
+
+fn vary(headers: &Array[(Str, Str)]) -> Array[(Str, Str)] {
+  for entry in headers {
+    if entry[0].toLower() == "vary" {
+      for token in entry[1].toLower().split(",") {
+        if token.trim() == "*" || token.trim() == "accept-encoding" { return *headers }
+      }
+    }
+  }
+  headers.push(("Vary", "Accept-Encoding"))
+}
+
+fn buildCrcTable() -> Array[UInt32] {
+  var table: Array[UInt32] = []
+  var i = 0
+  while i < 256 {
+    var c = Option.unwrapOr(convertInteger[UInt32](i), 0u32)
+    var j = 0
+    while j < 8 {
+      if (c & 1u32) != 0u32 {
+        c = 0xedb88320u32 ^ (c >> 1)
+      } else {
+        c = c >> 1
+      }
+      j = j + 1
+    }
+    table = table.push(c)
+    i = i + 1
+  }
+  return table
+}
+
+fn calcCrc(table: &Array[UInt32], data: &Bytes) -> UInt32 {
+  var crc = 0xffffffffu32
+  var i = 0
+  let len = data.length()
+  while i < len {
+    let octet = Option.unwrapOr(data.at(i), 0u8)
+    let octet32 = Option.unwrapOr(convertInteger[UInt32](octet), 0u32)
+    let idx = Option.unwrapOr(convertInteger[Int]((crc ^ octet32) & 0xffu32), 0)
+    let entry = (*table)[idx]
+    crc = entry ^ (crc >> 8)
+    i = i + 1
+  }
+  return crc ^ 0xffffffffu32
+}
+
+fn uint32ToInt(val: UInt32) -> Int {
+  Option.unwrapOr(convertInteger[Int](val), 0)
+}
+
+fn acceptsGzip(headers: &Array[(Str, Str)]) -> Bool {
+  var explicit: Option[Int] = None
+  var wildcard: Option[Int] = None
+  for header in headers {
+    if header[0].toLower() == "accept-encoding" {
+      for entry in header[1].toLower().split(",") {
+        let parts = entry.split(";")
+        let coding = parts[0].trim()
+        if coding == "gzip" || coding == "*" {
+          var weight = 1000
+          var seen = false
+          for parameter in parts.slice(1, parts.length()) {
+            let pair = parameter.trim().split("=")
+            if pair.length() != 2 || pair[0].trim() != "q" || seen { weight = 0 }
+              else { weight = quality(pair[1].trim()) }
+            seen = true
+          }
+          if coding == "gzip" { explicit = Some(min(Option.unwrapOr(explicit, 1000), weight)) }
+            else { wildcard = Some(min(Option.unwrapOr(wildcard, 1000), weight)) }
+        }
+      }
+    }
+  }
+  Option.unwrapOr(explicit, Option.unwrapOr(wildcard, 0)) > 0
+}
+
+fn quality(value: Str) -> Int {
+  if value == "0" { return 0 }
+  if value == "1" { return 1000 }
+  if value.length() < 2 || value.length() > 5 || value.slice(1, 2) != "." { return 0 }
+  let whole = value.take(1)
+  if whole != "0" && whole != "1" { return 0 }
+  var total = 0
+  var scale = 100
+  for digit in value.drop(2).chars() {
+    if digit < '0' || digit > '9' { return 0 }
+    if whole == "1" && digit != '0' { return 0 }
+    total = total + (digit.code() - '0'.code()) * scale
+    scale = scale / 10
+  }
+  if whole == "1" { 1000 } else { total }
+}

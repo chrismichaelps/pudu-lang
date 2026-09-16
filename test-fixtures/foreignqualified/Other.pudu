@@ -1,0 +1,5 @@
+module Other
+
+export foreign "c" {
+  type Box
+}

@@ -1,0 +1,149 @@
+module UsesRelationalMaps
+
+import Std.BiMap as BiMap
+import Std.MultiKeyMap as MultiKeyMap
+import Std.MultiMap as MultiMap
+
+/// What the three relational maps promise, weighted toward the invariants that
+/// are easy to break: a two-way map staying a bijection when a value collides,
+/// a multi-map never reporting a key whose values ran out, and a partial index
+/// staying in step with the entries it indexes.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  let codes = BiMap.fromPairs(&[("usd", "$"), ("gbp", "£"), ("jpy", "¥")])
+
+  // Either side answers the other.
+  match BiMap.getRight(&codes, "gbp") {
+    case Some(found) => { if found == "£" { held = held + 1 } }
+    case None => {}
+  }
+  match BiMap.getLeft(&codes, "¥") {
+    case Some(found) => { if found == "jpy" { held = held + 1 } }
+    case None => {}
+  }
+  if BiMap.size(&codes) == 3 { held = held + 1 }
+
+  // A colliding value displaces the earlier binding rather than leaving both,
+  // so the map does not grow and the old left value is gone entirely.
+  let displaced = BiMap.insert(&codes, "eur", "$")
+  if BiMap.size(&displaced) == 3 { held = held + 1 }
+  if !BiMap.containsLeft(&displaced, "usd") { held = held + 1 }
+  match BiMap.getLeft(&displaced, "$") {
+    case Some(found) => { if found == "eur" { held = held + 1 } }
+    case None => {}
+  }
+
+  // The checked form reports the collision instead of displacing.
+  match BiMap.insertChecked(&codes, "eur", "$") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+  // A pair colliding on neither side is accepted.
+  match BiMap.insertChecked(&codes, "eur", "€") {
+    case Some(grown) => { if BiMap.size(&grown) == 4 { held = held + 1 } }
+    case None => {}
+  }
+  // Input that is not already a bijection is refused as a whole.
+  match BiMap.fromPairsChecked(&[("a", "1"), ("b", "1")]) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // Removing from either side removes the whole pair, leaving no half behind.
+  let cut = BiMap.removeRight(&codes, "£")
+  if BiMap.size(&cut) == 2 { held = held + 1 }
+  if !BiMap.containsLeft(&cut, "gbp") { held = held + 1 }
+  // Removing something absent changes nothing.
+  if BiMap.size(&BiMap.removeLeft(&codes, "nothing")) == 3 { held = held + 1 }
+
+  // Flipping is the operation an ordinary map cannot offer.
+  let flipped = BiMap.flipped(&codes)
+  match BiMap.getRight(&flipped, "£") {
+    case Some(found) => { if found == "gbp" { held = held + 1 } }
+    case None => {}
+  }
+
+  // Several values under one key, in the order they were added.
+  var log = MultiMap.empty()
+  log = MultiMap.add(&log, "error", "disk full")
+  log = MultiMap.add(&log, "info", "started")
+  log = MultiMap.add(&log, "error", "timeout")
+
+  if MultiMap.get(&log, "error") == ["disk full", "timeout"] { held = held + 1 }
+  // size counts keys, total counts values.
+  if MultiMap.size(&log) == 2 { held = held + 1 }
+  if MultiMap.total(&log) == 3 { held = held + 1 }
+  if MultiMap.count(&log, "error") == 2 { held = held + 1 }
+
+  // An absent key is an empty array, not a failure.
+  if MultiMap.get(&log, "debug") == [] { held = held + 1 }
+  if !MultiMap.containsKey(&log, "debug") { held = held + 1 }
+
+  // Duplicates are kept, because the values under a key are a bag.
+  let doubled = MultiMap.add(&MultiMap.add(&MultiMap.empty(), "k", "v"), "k", "v")
+  if MultiMap.count(&doubled, "k") == 2 { held = held + 1 }
+  // Removing takes one occurrence, not every copy.
+  if MultiMap.count(&MultiMap.remove(&doubled, "k", "v"), "k") == 1 { held = held + 1 }
+  // removeAll takes every copy, and the key goes with the last of them.
+  if !MultiMap.containsKey(&MultiMap.removeAll(&doubled, "k", "v"), "k") { held = held + 1 }
+
+  // The invariant that is easiest to break: a key whose values ran out is gone,
+  // rather than present with an empty array behind it.
+  let emptied = MultiMap.remove(&log, "info", "started")
+  if !MultiMap.containsKey(&emptied, "info") { held = held + 1 }
+  if MultiMap.size(&emptied) == 1 { held = held + 1 }
+  // Setting a key to nothing removes it too.
+  if !MultiMap.containsKey(&MultiMap.setAll(&log, "error", &[]), "error") { held = held + 1 }
+  // Filtering everything out of a key drops the key.
+  let none = MultiMap.filterValues(&log, fn(line: Str) -> Bool => false)
+  if MultiMap.size(&none) == 0 { held = held + 1 }
+
+  // Grouping, and the reverse index.
+  let byLength = MultiMap.groupBy(&["ab", "cd", "efg"], fn(s: Str) -> Int => s.length())
+  if MultiMap.count(&byLength, 2) == 2 { held = held + 1 }
+  if MultiMap.size(&MultiMap.inverted(&log)) == 3 { held = held + 1 }
+
+  // A two-part key, asked about the whole key and about either part alone.
+  var grants = MultiKeyMap.empty()
+  grants = MultiKeyMap.insert(&grants, "ana", "repo", "write")
+  grants = MultiKeyMap.insert(&grants, "ana", "wiki", "read")
+  grants = MultiKeyMap.insert(&grants, "bo", "repo", "read")
+
+  match MultiKeyMap.get(&grants, "ana", "wiki") {
+    case Some(found) => { if found == "read" { held = held + 1 } }
+    case None => {}
+  }
+  // Everything for one user, whatever the resource.
+  if MultiKeyMap.withFirst(&grants, "ana").length() == 2 { held = held + 1 }
+  // Everything for one resource, whatever the user.
+  if MultiKeyMap.withSecond(&grants, "repo").length() == 2 { held = held + 1 }
+  if MultiKeyMap.size(&grants) == 3 { held = held + 1 }
+  if MultiKeyMap.secondsFor(&grants, "ana") == ["repo", "wiki"] { held = held + 1 }
+
+  // Replacing a value must not record the key in the indexes twice.
+  let rewritten = MultiKeyMap.insert(&grants, "ana", "repo", "admin")
+  if MultiKeyMap.size(&rewritten) == 3 { held = held + 1 }
+  if MultiKeyMap.withFirst(&rewritten, "ana").length() == 2 { held = held + 1 }
+
+  // Removing an entry drops it from both indexes, and a part left naming
+  // nothing stops being reported.
+  let revoked = MultiKeyMap.remove(&grants, "bo", "repo")
+  if MultiKeyMap.size(&revoked) == 2 { held = held + 1 }
+  if !MultiKeyMap.containsFirst(&revoked, "bo") { held = held + 1 }
+  if MultiKeyMap.withSecond(&revoked, "repo").length() == 1 { held = held + 1 }
+
+  // Removing by a whole part takes every entry under it.
+  let gone = MultiKeyMap.removeFirst(&grants, "ana")
+  if MultiKeyMap.size(&gone) == 1 { held = held + 1 }
+  if !MultiKeyMap.containsFirst(&gone, "ana") { held = held + 1 }
+
+  // Absent lookups answer empty rather than failing.
+  if MultiKeyMap.withFirst(&grants, "nobody") == [] { held = held + 1 }
+  // Removing something absent changes nothing.
+  if MultiKeyMap.size(&MultiKeyMap.remove(&grants, "nobody", "repo")) == 3 { held = held + 1 }
+
+  held
+}

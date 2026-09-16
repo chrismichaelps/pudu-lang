@@ -1,0 +1,62 @@
+module View.About
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Constants as Constants
+import Seo as Seo
+import View.Layout as Layout
+
+export fn page(siteUrl: Str) -> Html.Html {
+  Layout.page(siteUrl, "About Pudu", "What Pudu is, what it is built around, where it stands before its first release, and who makes it.", "/about", true, Some(Seo.aboutSchema(siteUrl)), H.article().class("doc about").holding([
+        H.span().class("kind").says("about"),
+        H.h1().says("About Pudu"),
+        H.p().says("Pudu is a statically typed programming language for programs that are easy to read, safe to change, and honest about failure. A function's signature says what it takes, what it gives back, whether it can fail, and whether it changes what it was given, so a reader can tell what code promises without reading its body."),
+        H.h2().says("What Pudu is built around"),
+        H.ul().holding([
+            point("Failure is a value.", "A function that can fail returns Result[T, E], and the caller decides what happens. There are no exceptions to forget to catch."),
+            point("Absence is a value.", "Option[T] holds Some(value) or None. Ordinary types never hold null."),
+            point("Change is visible.", "let never changes, var may, and &mut T in a signature marks a function that may change what it was lent."),
+            point("Patterns are checked.", "A match must cover every shape a value can have, and an arm that can never run is reported."),
+            point("Imports are explicit.", "There are no wildcard imports, so the origin of every name is in the import list.")
+          ]),
+        H.h2().says("What ships with it"),
+        H.p().says("One command, pudu, runs, checks, tests, formats, lints, and documents programs, and speaks the language server protocol for editors. The standard library ships with the compiler: collections, text, files and processes, JSON, CSV, TOML, YAML and XML, HTTP clients and servers, TLS, SQLite and PostgreSQL, cryptography, concurrency, and a native interface, audio, and video layer written in Pudu itself."),
+        H.p().holding([
+            H.span().says("This website is a Pudu program too: its pages, search, and documentation are rendered by the language it describes. Start with the "),
+            H.a().href("/docs").says("documentation"),
+            H.span().says(" or browse the "),
+            H.a().href("/modules").says("standard library"),
+            H.span().says(".")
+          ]),
+        H.h2().says("Where Pudu stands"),
+        H.p().says("Pudu is pre-release, at version 0.1.0. Programs run on an interpreter, dependencies are local directories, and the language and its standard library may still change before the first release. macOS and Linux x86-64 are tested; Windows is not yet."),
+        H.h2().says("Why Haskell matters"),
+        H.p().holding([
+            H.a().href(Constants.HASKELL_URL).at("rel", "external noopener noreferrer").says("Haskell"),
+            H.span().says(" is important to Pudu. The first Pudu compiler is written in Haskell. Haskell's strong types and functional style help divide compiler work into explicit transformations that can be tested.")
+          ]),
+        H.p().says("Pudu keeps its own syntax and learning path. You do not need to know Haskell to read or write Pudu programs."),
+        H.h2().says("About the author"),
+        H.p().says(Constants.AUTHOR_NAME + " created Pudu and writes its compiler, standard library, documentation, and programming book."),
+        H.ul().class("profile-links").holding([
+            H.li().holding([
+                H.a().href(Constants.AUTHOR_LINKEDIN_URL).at("rel", "external noopener noreferrer me").says("LinkedIn")
+              ]),
+            H.li().holding([
+                H.a().href(Constants.AUTHOR_GITHUB_URL).at("rel", "external noopener noreferrer me").says("GitHub")
+              ])
+          ]),
+        H.h2().says("Take part"),
+        H.p().holding([
+            H.span().says("The source, issues, and discussion live on "),
+            H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub"),
+            H.span().says(". If Pudu is useful to you, you can "),
+            H.a().href("/donate").says("support its development"),
+            H.span().says(".")
+          ])
+      ]).html())
+}
+
+fn point(title: Str, explanation: Str) -> H.Node {
+  H.li().holding([H.strong().says(title), H.span().says(" " + explanation)])
+}

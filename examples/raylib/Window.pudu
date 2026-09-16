@@ -1,0 +1,72 @@
+module Window
+
+/// A window, drawn by a library written elsewhere.
+///
+/// This is the shape a real binding takes. The colour is an ordinary record —
+/// declared here, built here, and read here — and it crosses to raylib by
+/// value, four bytes packed the way the platform packs them. Nothing about it
+/// is special to the boundary except the declaration that names it.
+///
+/// Run it with raylib on the loader's path:
+///
+///     DYLD_LIBRARY_PATH="$(brew --prefix raylib)/lib" pudu run examples/raylib/Window.pudu
+///
+/// It is an example rather than a gate. Opening a window needs a display, and a
+/// check that cannot run everywhere is not one this repository can rely on;
+/// `test-fixtures/integration/UsesRaylib.pudu` is the headless proof that runs
+/// in CI.
+type Color = { r: UInt8, g: UInt8, b: UInt8, a: UInt8 }
+
+/// The raw binding, in a block of its own.
+///
+/// Every one of these needs the foreign capability of whoever calls it, because
+/// the signatures are asserted against raylib and nothing here can check that
+/// assertion. The wrappers below take that on once so the drawing code does not
+/// have to.
+foreign "raylib" version "6" {
+  fn initWindow symbol "InitWindow" (width: Int32, height: Int32, title: Str) -> ()
+  fn closeWindow symbol "CloseWindow" () -> ()
+  fn shouldClose symbol "WindowShouldClose" () -> Bool
+  fn beginDrawing symbol "BeginDrawing" () -> ()
+  fn endDrawing symbol "EndDrawing" () -> ()
+  fn clearBackground symbol "ClearBackground" (color: Color) -> ()
+  fn drawText symbol "DrawText" (text: Str, x: Int32, y: Int32, size: Int32, color: Color) -> ()
+  fn drawRectangle symbol "DrawRectangle" (x: Int32, y: Int32, w: Int32, h: Int32, color: Color) -> ()
+  fn setTargetFps symbol "SetTargetFPS" (fps: Int32) -> ()
+  fn setLogLevel symbol "SetTraceLogLevel" (level: Int32) -> ()
+}
+
+/// Everything below is ordinary. A caller of `runFor` needs no capability,
+/// because the assumption stops here: one region, at the edge, in the module
+/// that made the assertion.
+export fn runFor(frames: Int) -> Int {
+  var drawn = 0
+  unsafe(foreign) {
+    setLogLevel(4i32)
+    initWindow(480i32, 270i32, "Pudu calls raylib")
+    setTargetFps(60i32)
+    while drawn < frames && !shouldClose() {
+      beginDrawing()
+      clearBackground(INK)
+      drawRectangle(20i32, 20i32, 440i32, 60i32, ACCENT)
+      drawText("a window, from Pudu", 40i32, 40i32, 24i32, PAPER)
+      drawText("every colour crossed by value", 40i32, 120i32, 18i32, PAPER)
+      endDrawing()
+      drawn = drawn + 1
+    }
+    closeWindow()
+  }
+  drawn
+}
+
+const INK: Color = Color{r: 30u8, g: 30u8, b: 40u8, a: 255u8}
+
+const PAPER: Color = Color{r: 235u8, g: 235u8, b: 240u8, a: 255u8}
+
+const ACCENT: Color = Color{r: 220u8, g: 90u8, b: 60u8, a: 255u8}
+
+export fn main() -> Int {
+  let drawn = runFor(180)
+  print("frames drawn: " + show(drawn))
+  0
+}

@@ -1,0 +1,142 @@
+---
+type: module
+path: "@root/lib/Std/Db.pudu"
+fidelity: Active
+domain: "[[Standard Library]]"
+subsystem: "[[architecture/STDLIB]]"
+tags: [module, stdlib, database]
+aliases: [Std Db]
+---
+# Std Db
+## Purpose
+Ask a PostgreSQL database questions over a session, and hold connections between them.
+## Interface
+Simple and bound execution, row and column access, transactions and savepoints, scoped transaction
+and savepoint helpers that undo what failed, and bounded connection pools. Opening and closing a
+connection belong to [[Std Db Session]], which callers import alongside this.
+## Governance and algorithm
+Values reach a statement as parameters rather than as text placed into it, so nothing a caller holds
+can become part of the statement. A scoped transaction rolls back when what it wrapped failed,
+because a connection returned with a transaction still open would hand the next caller a
+half-finished one. Server errors keep the severity, code, and message the server gave. Pools bound
+their connection count through [[Std Channel]].
+## Grill Log
+- **Q:** Call the API database-agnostic? **A:** No. _Rationale:_ its protocol, authentication, type
+  OIDs, and transaction status are PostgreSQL contracts. _Rejected:_ SQL string interpolation;
+  forgetting a failed transaction's rollback requirement.
+- **Q:** Use the clock-seeded deterministic generator for SCRAM? **A:** No. _Rationale:_ security
+  protocol nonces require an unpredictable source. _Rejected:_ clock entropy; silent fallback.
+## Pool resource lifecycle
+
+A pool requires a positive size and owns a shared closing cell beside its channel. Construction
+failure closes every successfully opened connection. A connection that cannot be queued during
+construction is also closed. Cleanup failures are retained with the primary construction error.
+
+Borrowers check closing state after acquisition, so queued connections cannot start new work after
+closure is observed. A connection returned after closure is closed by its borrower. Only successful
+callbacks and synchronized server errors are candidates for reuse. All typed return, settlement, and
+close failures are propagated instead of being discarded.
+
+**A lost connection keeps its place.** Each place in the pool holds a connection or nothing. A
+connection that cannot be lent again — a transport or protocol failure, a failed rollback, a lending
+that could not be renewed — is closed and its place returned empty, before its close is reported.
+The next borrower to take an empty place opens a fresh connection with the settings the pool was
+built from; if that fails, the place goes back empty and the borrower gets the connection error. So
+capacity never shrinks and waiters are never stranded, and a dropped socket or a restarted server
+costs the requests that were using those connections rather than every request until the program
+restarts. The settings are kept inside a function, so showing a pool cannot show its password.
+Checked against a live PostgreSQL 14 server: after both backends of a two-connection pool were
+terminated, each failed one request and the next requests were answered by fresh connections.
+
+**Taking a connection waits without a limit.** A borrower that finds every connection lent waits on
+the pool's channel until one comes back, however long that is. Under a burst larger than the pool,
+requests queue rather than fail, which is the ordinary behaviour of a pool, but nothing yet turns a
+wait that has gone on too long into a refusal. Bounding it needs a timed receive on [[Std Channel]],
+and the runtime's channel primitives (`channelPull` and its siblings) take no time limit today. Until
+then, the server's `statement_timeout` is what bounds how long any one lent connection is held.
+
+`closePool` closes admission and the queue, drains queued connections, and attempts all closes.
+It does not wait for active callbacks; their returns perform final cleanup. Host panic and forced
+worker cancellation are not handled by this pure-Pudu scoped helper and remain runtime work.
+
+### Resolved Grill Log
+
+- **Q:** Return an empty pool after requesting zero connections? **A:** No; refuse before allocating
+  a channel. No caller can make progress through such a pool.
+- **Q:** Put a failed rollback's connection back? **A:** No; it has unknown transaction state.
+  Discard it and keep its place empty rather than reusing it or stranding capacity waiters.
+- **Q:** Close the whole pool when one connection's transport fails? **A:** No. _Rationale:_ closing
+  the pool was how capacity waiters were kept from waiting forever, but it turned one dropped socket
+  into every later request failing until restart. An empty place that the next borrower refills keeps
+  capacity and wakes waiters without that cost. _Rejected:_ closing the pool; shrinking it; retrying
+  the failed request, which may not be safe to repeat.
+- **Q:** Lose earlier opens if a later connection fails? **A:** No; constructor failure owns all
+  partial resources and drains them before returning its error.
+
+## A transaction holds one connection
+
+`transaction` and `transactionWith` take a connection from the pool and keep it for the whole
+operation, rather than composing a pool borrow per statement.
+
+The failure they exist to prevent is not a race a reader would see. A caller that reaches for the
+pool once per statement gets a different connection each time, so `BEGIN` lands on one and the work
+meant to be inside it lands on another. Nothing raises: the transaction holds nothing and therefore
+commits nothing and rolls back nothing, and the symptom is rows that should have been undone and were
+not, far from the code that caused it.
+
+Holding one connection is also what keeps another caller out from between the `BEGIN` and the
+`COMMIT`, because a connection lent to this operation is not in the pool for anyone else to take.
+The commit and rollback rules are `withTransaction`'s, unchanged: a failed action is rolled back, and
+a commit that itself fails is reported rather than swallowed.
+
+### Resolved Grill Log
+
+- **Q:** Leave callers to nest `withConnection` and `withTransaction` themselves? **A:** No. The
+  nesting is the whole correctness property, and one written the other way round — a transaction
+  around a pool borrow — reads almost the same and holds nothing.
+
+## A handle stops working when its scope ends
+
+A connection is a value, so a callback can keep a copy of one after the scope that lent it returned.
+By then the connection is back in the pool and may be inside somebody else's transaction: a statement
+written through the copy is interleaved with theirs, and the answers come back to the wrong caller.
+Nothing about that is visible at the call site, and it appears only under load.
+
+Every connection carries a shared count of how many times it has been lent, and each value carries
+the lending it belongs to. `withConnection` and `withTransaction` end the lending on the way in and
+again on the way out, so the value the callback holds names a lending that is over the moment the
+scope returns, while the value handed back to the caller names the current one. `write` compares the
+two and answers `Expired` rather than sending. The check sits at the write because that is where a
+stale copy would put bytes into a conversation that is no longer its own.
+
+The connection itself is untouched by this: what moved is the right to use it. The same statement
+through the value the scope handed back still works, which is what distinguishes refusing a stale
+copy from refusing the connection.
+
+### Resolved Grill Log
+
+- **Q:** Mark a connection dead at the end of a scope with a flag? **A:** No. The pool lends the
+  same connection again, so a flag set back to live would revive every stale copy with it. A count
+  that only goes up cannot be mistaken for an earlier lending.
+- **Q:** Check when the connection is passed rather than when it writes? **A:** No. Passing a stale
+  copy harms nothing; writing through it is what interleaves two conversations.
+
+## Query failure synchronization
+
+A server ErrorResponse is retained separately from a fatal transport or parsing error. Collection
+continues through ReadyForQuery before returning that server failure, so the next command cannot
+mistake the previous command's ending for its own. A malformed row or transport failure closes the
+connection. Data-row column counts must match their description. A single-result API refuses
+multiple command results instead of mixing rows from different schemas.
+
+### Resolved Grill Log
+
+- **Q:** Stop at ErrorResponse although ReadyForQuery is still pending? **A:** No; retain the
+  recoverable server error and drain the response boundary before returning it.
+- **Q:** Combine several command results into one `Rows` value? **A:** No; a single schema cannot
+  describe arbitrary multiple results. Multi-result execution needs a separate explicit API.
+
+## Referenced by
+[[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
+
+Connection URI opening is available through [[Std Db ConnectionString]]; [[Std App Database]] connects pool lifetime to application stages and provides parameterized queries for handlers.

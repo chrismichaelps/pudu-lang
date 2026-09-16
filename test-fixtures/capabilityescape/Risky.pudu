@@ -1,0 +1,9 @@
+module Risky
+
+/// A function whose caller takes on an unchecked assumption.
+export unsafe(raw) fn stepped(value: Int) -> Int { value + 1 }
+
+/// The blanket form, which names nothing and asks only that some region be
+/// open. It has to travel too, or the plainest way to write an unsafe function
+/// is the one way to lose the requirement.
+export unsafe fn blanket(value: Int) -> Int { value + 2 }

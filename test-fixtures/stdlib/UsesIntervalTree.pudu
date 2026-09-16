@@ -1,0 +1,120 @@
+module UsesIntervalTree
+
+import Std.IntervalTree as IntervalTree
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Interval validation
+  let validIv = IntervalTree.interval(10, 20)
+  let invalidIv = IntervalTree.interval(20, 10)
+  let exactPoint = IntervalTree.interval(15, 15)
+  if validIv == Some(IntervalTree.Interval{low: 10, high: 20})
+    && invalidIv == None
+    && exactPoint == Some(IntervalTree.Interval{low: 15, high: 15}) {
+    held = held + 1
+  }
+
+  // 2. Empty interval tree
+  let emptyTree = IntervalTree.empty()
+  if IntervalTree.isEmpty(&emptyTree)
+    && IntervalTree.size(&emptyTree) == 0
+    && IntervalTree.toIntervals(&emptyTree).length() == 0 {
+    held = held + 1
+  }
+
+  // 3. Single interval insertion and point query
+  let iv1 = IntervalTree.Interval{low: 10, high: 20}
+  let tree1 = IntervalTree.insert(&emptyTree, iv1)
+  if !IntervalTree.isEmpty(&tree1)
+    && IntervalTree.size(&tree1) == 1
+    && IntervalTree.pointQuery(&tree1, 15) == [iv1]
+    && IntervalTree.pointQuery(&tree1, 5).length() == 0 {
+    held = held + 1
+  }
+
+  // 4. Multiple insertions and toIntervals sorted low-first
+  let iv2 = IntervalTree.Interval{low: 5, high: 12}
+  let iv3 = IntervalTree.Interval{low: 18, high: 30}
+  let iv4 = IntervalTree.Interval{low: 1, high: 4}
+  var treeMulti = IntervalTree.insert(&tree1, iv2)
+  treeMulti = IntervalTree.insert(&treeMulti, iv3)
+  treeMulti = IntervalTree.insert(&treeMulti, iv4)
+  let sortedIvs = IntervalTree.toIntervals(&treeMulti)
+  if sortedIvs.length() == 4
+    && sortedIvs[0] == iv4
+    && sortedIvs[1] == iv2
+    && sortedIvs[2] == iv1
+    && sortedIvs[3] == iv3 {
+    held = held + 1
+  }
+
+  // 5. Stabbing query with multiple hits
+  // Point 11 lies in iv2 [5, 12] and iv1 [10, 20]
+  let hits11 = IntervalTree.pointQuery(&treeMulti, 11)
+  if hits11.length() == 2
+    && hits11.contains(iv1)
+    && hits11.contains(iv2) {
+    held = held + 1
+  }
+
+  // 6. Balanced construction from array via fromIntervals
+  let rawList = [
+    IntervalTree.Interval{low: 15, high: 25},
+    IntervalTree.Interval{low: 10, high: 20},
+    IntervalTree.Interval{low: 0, high: 5},
+    IntervalTree.Interval{low: 30, high: 40},
+    IntervalTree.Interval{low: 22, high: 28},
+    IntervalTree.Interval{low: 5, high: 12}
+  ]
+  let balancedTree = IntervalTree.fromIntervals(&rawList)
+  if IntervalTree.size(&balancedTree) == 6
+    && IntervalTree.toIntervals(&balancedTree).length() == 6 {
+    held = held + 1
+  }
+
+  // 7. Overlap query with range [11, 14]
+  // Overlaps [10, 20] and [5, 12]
+  let q1 = IntervalTree.Interval{low: 11, high: 14}
+  let overlapsQ1 = IntervalTree.findOverlaps(&balancedTree, q1)
+  if overlapsQ1.length() == 2
+    && overlapsQ1.contains(IntervalTree.Interval{low: 10, high: 20})
+    && overlapsQ1.contains(IntervalTree.Interval{low: 5, high: 12}) {
+    held = held + 1
+  }
+
+  // 8. Wide range overlapping all intervals in balanced tree
+  let qWide = IntervalTree.Interval{low: 0, high: 50}
+  let overlapsAll = IntervalTree.findOverlaps(&balancedTree, qWide)
+  if overlapsAll.length() == 6 {
+    held = held + 1
+  }
+
+  // 9. hasOverlap boolean early-exit testing
+  let qDisjoint = IntervalTree.Interval{low: 45, high: 50}
+  let qTouch = IntervalTree.Interval{low: 5, high: 6}
+  if IntervalTree.hasOverlap(&balancedTree, qTouch)
+    && !IntervalTree.hasOverlap(&balancedTree, qDisjoint)
+    && !IntervalTree.hasOverlap(&emptyTree, qTouch) {
+    held = held + 1
+  }
+
+  // 10. Negative coordinate intervals
+  let neg1 = IntervalTree.Interval{low: -100, high: -50}
+  let neg2 = IntervalTree.Interval{low: -60, high: -20}
+  let neg3 = IntervalTree.Interval{low: -10, high: 10}
+  let negTree = IntervalTree.fromIntervals(&[neg1, neg2, neg3])
+  let negStab = IntervalTree.pointQuery(&negTree, -55)
+  if IntervalTree.size(&negTree) == 3
+    && negStab.length() == 2
+    && negStab.contains(neg1)
+    && negStab.contains(neg2)
+    && IntervalTree.hasOverlap(
+      &negTree,
+    IntervalTree.Interval{low: 0, high: 5}
+  ) {
+    held = held + 1
+  }
+
+  held
+}

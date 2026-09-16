@@ -1,0 +1,138 @@
+module Seo
+
+import Std.Html.Build as H
+import Std.Json as Json
+import Std.Map as Map
+import Std.Option as Option
+import Std.Url as Url
+import Constants as Constants
+import Domain.Entry as Domain
+import Service.Catalog as Catalog
+import Service.Docs as Docs
+
+export fn head(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json]
+) -> Array[H.Node] {
+  let canonical = siteUrl + path
+  var nodes = [
+    H.tag("title").says(title + " | " + Constants.SITE_NAME),
+    H.meta().name("description").at("content", description),
+    H.meta().name("robots").at("content", if indexable { "index,follow,max-image-preview:large" } else { "noindex,follow" }),
+    H.link().rel("canonical").href(canonical),
+    property("og:type", "website"),
+    property("og:site_name", Constants.SITE_NAME),
+    property("og:title", title + " | " + Constants.SITE_NAME),
+    property("og:description", description),
+    property("og:url", canonical),
+    property("og:image", siteUrl + Constants.FULL_LOGO_PATH),
+    H.meta().name("twitter:card").at("content", "summary"),
+    H.meta().name("twitter:title").at("content", title + " | " + Constants.SITE_NAME),
+    H.meta().name("twitter:description").at("content", description),
+    H.meta().name("twitter:image").at("content", siteUrl + Constants.FULL_LOGO_PATH)
+  ]
+  if let Some(value) = structured {
+    let safe = Json.encode(&value).replace("</", "<\\/")
+    nodes = nodes.push(H.script().kind("application/ld+json").raw(safe))
+  }
+  nodes
+}
+
+export fn websiteSchema(siteUrl: Str) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("WebSite")),
+      ("name", Json.Text(Constants.SITE_NAME)),
+      ("url", Json.Text(siteUrl)),
+      ("description", Json.Text(Constants.SITE_DESCRIPTION))
+    ])
+}
+
+export fn symbolSchema(siteUrl: Str, entry: &Domain.Entry) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("TechArticle")),
+      ("headline", Json.Text(Domain.qualifiedName(entry))),
+      ("description", Json.Text(Domain.summary(entry))),
+      ("url", Json.Text(siteUrl + symbolPath(entry))),
+      ("isPartOf", Json.object(&[
+            ("@type", Json.Text("WebSite")),
+            ("name", Json.Text(Constants.SITE_NAME)),
+            ("url", Json.Text(siteUrl))
+          ]))
+    ])
+}
+
+export fn aboutSchema(siteUrl: Str) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("AboutPage")),
+      ("name", Json.Text("About Pudu")),
+      ("url", Json.Text(siteUrl + "/about")),
+      ("about", Json.object(&[
+            ("@type", Json.Text("SoftwareSourceCode")),
+            ("name", Json.Text(Constants.SITE_NAME)),
+            ("programmingLanguage", Json.Text(Constants.SITE_NAME)),
+            ("codeRepository", Json.Text(Constants.REPOSITORY_URL))
+          ])),
+      ("author", Json.object(&[
+            ("@type", Json.Text("Person")),
+            ("name", Json.Text(Constants.AUTHOR_NAME)),
+            ("sameAs", Json.List([
+                  Json.Text(Constants.AUTHOR_LINKEDIN_URL),
+                  Json.Text(Constants.AUTHOR_GITHUB_URL)
+                ]))
+          ]))
+    ])
+}
+
+export fn robots(siteUrl: Str) -> Str {
+  "User-agent: *\nAllow: /\nSitemap: " + siteUrl + "/sitemap.xml\n"
+}
+
+/// Every page the site has, as the paths a request arrives on.
+///
+/// One list rather than one per reader. The sitemap is built from it and so is
+/// the prerender, and those two disagreeing is not a small thing: a page in the
+/// sitemap that was not rendered is a crawler following a link to nothing, and a
+/// page rendered but absent from the sitemap is one nobody is told about.
+///
+/// A symbol can be reached by more than one declaration sharing a name, so the
+/// paths are deduplicated here: rendering one twice is work done twice, and
+/// listing it twice is a sitemap a crawler reports as containing duplicates.
+export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Array[Str] {
+  var found = ["/", "/docs", "/about", "/donate", "/modules"]
+  for page in docs.pages {
+    found = found.push("/docs/" + Url.encodeComponent(page.slug))
+  }
+  for moduleName in catalog.modules {
+    found = found.push("/module/" + Url.encodeComponent(moduleName))
+  }
+  var seen: Map[Str, Bool] = mapOf([])
+  for entry in catalog.entries {
+    let path = symbolPath(&entry)
+    if !Map.containsKey(&seen, path) {
+      seen = seen.insert(path, true)
+      found = found.push(path)
+    }
+  }
+  found
+}
+
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Str {
+  var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+  for path in paths(catalog, docs) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
+  body + "</urlset>\n"
+}
+
+export fn symbolPath(entry: &Domain.Entry) -> Str {
+  "/docs/" + Url.encodeComponent(entry.moduleName) + "/" + Url.encodeComponent(Domain.category(entry)) + "/" + Url.encodeComponent(entry.name)
+}
+
+fn property(name: Str, content: Str) -> H.Node {
+  H.meta().at("property", name).at("content", content)
+}

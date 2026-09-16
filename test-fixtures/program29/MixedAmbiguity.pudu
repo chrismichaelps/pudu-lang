@@ -1,0 +1,13 @@
+module MixedAmbiguity
+
+import Ambiguous {User, First}
+
+trait LocalLabel {
+  fn label(self: &Self) -> Int
+}
+
+impl LocalLabel for User {
+  fn label(self: &Self) -> Int { self.value }
+}
+
+fn label(user: User) -> Int { user.label() }

@@ -1,0 +1,412 @@
+module Std.App
+
+import Std.App.Config as Config
+import Std.App.Health as Health
+import Std.App.Metrics as Metrics
+import Std.App.Stage as Lifecycle
+import Std.Http as Http
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// One thing that starts and later stops.
+///
+/// A stage holds both halves because they belong together: the thing that
+/// knows how to open a pool is the thing that knows how to close it, and
+/// separating them into two lists is how the halves come to disagree about
+/// what exists.
+export type Stage = Lifecycle.Stage
+
+/// The program: what it is called, what it was told, what it serves, what has
+/// to be running before it serves it, and what is wrapped around every handler.
+///
+/// The steps are part of the application rather than left to each program,
+/// because the protections they carry are the ones a service should have
+/// before anybody has thought about them. A program that needs them different
+/// says so, and that is a line in its source rather than the absence of one.
+export type App = {
+  name: Str,
+  config: Config.Config,
+  router: Route.Router,
+  stages: Array[Stage],
+  steps: Array[Route.Middleware]
+}
+
+/// What a start or a stop did.
+///
+/// The stages that came up are named, not just counted, because the caller of
+/// a failed start needs to know how far it got, and because a stop reports the
+/// same shape so the two can be compared.
+export type Report = { started: Array[Str], failure: Option[(Str, Str)] }
+
+/// Successful callbacks and every typed failure, in occurrence order.
+export type LifecycleReport = { completed: Array[Str], failures: Array[(Str, Str)] }
+
+/// Why a program could not run.
+export type AppError
+  = Configuration(Str)
+  | StageFailed(Str, Str)
+  | Listen(Str)
+  | StopFailed(Str, Str)
+
+/// The port a service listens on when nothing said otherwise.
+const DEFAULT_PORT: Int = 8080
+
+/// The address a service binds when nothing said otherwise. Every interface
+/// rather than one, because a service in a container that bound only its own
+/// loopback is unreachable from outside it, which is the common deployment.
+const DEFAULT_HOST: Str = "0.0.0.0"
+
+/// Where a program's own settings are, when it does not say.
+const DEFAULT_CONFIG_PATH: Str = "app.toml"
+
+/// The settings a service has whether or not anyone wrote them down.
+const DEFAULT_SETTINGS: Array[(Str, Str)] = [
+  ("server.host", DEFAULT_HOST),
+  ("server.port", "8080"),
+  ("server.connections", "0"),
+  ("server.headBytes", "65536"),
+  ("server.bodyBytes", "8388608"),
+  ("server.readMillis", "30000"),
+  ("server.writeMillis", "30000"),
+  ("server.workers", "16"),
+  ("server.queueCapacity", "64"),
+  ("server.drainMillis", "10000")
+]
+
+/// A name and a router, and a service is running.
+///
+/// Configuration is found, the routes are served, and stopping is graceful.
+/// This is the whole of what a first program needs, and it is built from the
+/// public functions below it, so a program that outgrows it adds a stage
+/// rather than starting again.
+export fn serve(name: Str, routes: &Route.Router) -> Result[Int, AppError] {
+  let built = web(name, routes) ?
+  run(&built)
+}
+
+/// The same application, built and not run.
+///
+/// Worth having separately because an application is a value: a test builds
+/// one, reads its routes and its settings, and never binds a port.
+export fn web(name: Str, routes: &Route.Router) -> Result[App, AppError] {
+  let found = Config.discover(&DEFAULT_SETTINGS, DEFAULT_CONFIG_PATH)
+  if let Err(problem) = found {
+    Err(Configuration(Config.explain(&problem)))
+  } else {
+    Ok(
+      App {
+        name: name,
+        config: Result.unwrapOr(found, Config.empty()),
+        router: *routes,
+        stages: [],
+        steps: Guard.strict()
+      }
+    )
+  }
+}
+
+/// An application over settings the caller already has, for a program whose
+/// configuration comes from somewhere this module does not know about.
+export fn over(name: Str, settings: &Config.Config, routes: &Route.Router) -> App {
+  App{name: name, config: *settings, router: *routes, stages: [], steps: Guard.strict()}
+}
+
+/// An application with one more thing to start.
+///
+/// Order is the order written. Nothing infers it from what a stage needs,
+/// because an inferred order cannot be read off the page and needs a second
+/// mechanism to correct it in the cases that matter.
+export fn using(base: &App, step: Stage) -> App {
+  App{..*base, stages: base.stages.push(step)}
+}
+
+/// An application with different routes.
+export fn serving(base: &App, routes: &Route.Router) -> App { App{..*base, router: *routes} }
+
+/// The application, permitting the named origins to read its answers.
+export fn sharing(base: &App, origins: &Array[Str]) -> App {
+  App{..*base, steps: Guard.standard(&Guard.shareWith(origins))}
+}
+
+/// The application with one more step around every handler, outside the ones
+/// already there.
+export fn wrapping(base: &App, step: Route.Middleware) -> App {
+  App{..*base, steps: base.steps.push(step)}
+}
+
+/// The application with steps a program chose instead of the usual ones.
+///
+/// Named so that a service without the ordinary protections is a line
+/// somebody wrote rather than a line nobody wrote — which is the same reason
+/// a route states what it requires.
+export fn steppedBy(base: &App, steps: &Array[Route.Middleware]) -> App {
+  App{..*base, steps: *steps}
+}
+
+/// The steps wrapped around this application's handlers.
+export fn stepsOf(base: &App) -> Array[Route.Middleware] { base.steps }
+
+/// The application answering what it is asked about itself.
+///
+/// Mounted where the program says rather than at a path this module chose: an
+/// endpoint that appears without being written is one nobody decided to
+/// expose, and the same mechanism that publishes a health report publishes an
+/// environment dump beside it.
+export fn reporting(
+  base: &App,
+  livePath: Str,
+  readyPath: Str,
+  checks: &Array[Health.Liveness],
+  ready: &Array[Health.Readiness],
+  reading: Health.Reading
+) -> App {
+  let living = *checks
+  let answering = *ready
+  let seen = reading
+  let mounted = Route.adding(
+      &Route.adding(
+        &base.router,
+      Route.get(livePath, fn(_request: Route.Request) -> Http.Response {
+          answered(&Health.alive(&living, &seen))
+        })
+    ),
+    Route.get(readyPath, fn(_request: Route.Request) -> Http.Response {
+        answered(&Health.ready(&answering))
+      })
+  )
+  App{..*base, router: mounted}
+}
+
+/// A health report as the answer something outside the process receives.
+fn answered(report: &Health.Report) -> Http.Response {
+  Reply.text(Health.statusOf(report), Health.render(report))
+}
+
+/// A stage from its two halves.
+export fn stage(
+  name: Str,
+  opening: fn() -> Result[(), Str],
+  closing: fn() -> Result[(), Str]
+) -> Stage {
+  Lifecycle.create(name, opening, closing)
+}
+
+/// A stage that has something to start and nothing to undo.
+export fn once(name: Str, opening: fn() -> Result[(), Str]) -> Stage {
+  Lifecycle.create(name, opening, fn() -> Result[(), Str] { Ok(()) })
+}
+
+/// What the application is called.
+export fn nameOf(target: &App) -> Str { target.name }
+
+/// What the application was told.
+export fn configOf(target: &App) -> Config.Config { target.config }
+
+/// What the application serves.
+export fn routerOf(target: &App) -> Route.Router { target.router }
+
+/// What has to be running before it serves, in the order it starts.
+export fn stagesOf(target: &App) -> Array[Stage] { target.stages }
+
+/// The names of the stages, in start order, for a program reporting itself.
+export fn stageNames(target: &App) -> Array[Str] {
+  var found: Array[Str] = []
+  for held in target.stages { found = found.push(held.name) }
+  found
+}
+
+/// Start every stage in order.
+///
+/// A stage that fails stops every stage already started, in reverse, before
+/// answering. A caller told that a start failed will not then be told to clean
+/// up after it, so the cleanup happens here or it does not happen.
+export fn start(target: &App) -> Report { summarize(&startDetailed(target)) }
+
+/// Start in declaration order and retain failures from unwinding the started prefix.
+export fn startDetailed(target: &App) -> LifecycleReport {
+  var started: Array[Str] = []
+  var failures: Array[(Str, Str)] = []
+  var index = 0
+  while index < target.stages.length() && failures.isEmpty() {
+    let held = target.stages[index]
+    match (held.start)() {
+      case Err(reason) => { failures = failures.push((held.name, reason)) }
+      case Ok(_) => { started = started.push(held.name) }
+    }
+    index = index + 1
+  }
+  if !failures.isEmpty() {
+    let unwound = stopThroughDetailed(target, started.length())
+    failures = failures.concat(unwound.failures)
+  }
+  LifecycleReport{completed: started, failures: failures}
+}
+
+/// Stop every stage in reverse and summarize all failures.
+export fn stop(target: &App) -> Report { summarize(&stopDetailed(target)) }
+
+/// Stop every stage in reverse, retaining each failure separately.
+export fn stopDetailed(target: &App) -> LifecycleReport {
+  stopThroughDetailed(target, target.stages.length())
+}
+
+fn stopThroughDetailed(target: &App, count: Int) -> LifecycleReport {
+  var stopped: Array[Str] = []
+  var failures: Array[(Str, Str)] = []
+  var index = count - 1
+  while index >= 0 {
+    let held = target.stages[index]
+    match (held.stop)() {
+      case Err(reason) => { failures = failures.push((held.name, reason)) }
+      case Ok(_) => { stopped = stopped.push(held.name) }
+    }
+    index = index - 1
+  }
+  LifecycleReport{completed: stopped, failures: failures}
+}
+
+fn summarize(held: &LifecycleReport) -> Report {
+  var failure: Option[(Str, Str)] = None
+  if !held.failures.isEmpty() {
+    let first = held.failures[0]
+    var reasons: Array[Str] = [first[1]]
+    var index = 1
+    while index < held.failures.length() {
+      let next = held.failures[index]
+      reasons = reasons.push("also failed: " + next[0] + ": " + next[1])
+      index = index + 1
+    }
+    failure = Some((first[0], reasons.join("; ")))
+  }
+  Report{started: held.completed, failure: failure}
+}
+
+/// Whether a report says everything worked.
+export fn succeeded(held: &Report) -> Bool { Option.isNone(&held.failure) }
+
+/// What went wrong, as text.
+export fn explainReport(held: &Report) -> Str {
+  if let Some(problem) = held.failure { problem[0] + ": " + problem[1] } else { "" }
+}
+
+/// Start everything, serve until the work is finished, then stop everything.
+///
+/// Stopping happens whether the serving succeeded or not, because the reason a
+/// program stopped serving is never a reason to leave its pool open.
+export fn run(target: &App) -> Result[Int, AppError] {
+  let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
+  let port = serverNumber(&target.config, "server.port", DEFAULT_PORT) ?
+  let limit = serverNumber(&target.config, "server.connections", 0) ?
+  let workers = serverNumber(&target.config, "server.workers", 16) ?
+  let queueCapacity = serverNumber(&target.config, "server.queueCapacity", 64) ?
+  if workers < 1 || workers > 1024 { return Err(Configuration("server.workers must be in 1..1024")) }
+  if queueCapacity < 1 || queueCapacity > 65536 { return Err(Configuration("server.queueCapacity must be in 1..65536")) }
+  let writeMillis = serverNumber(&target.config, "server.writeMillis", 30000) ?
+  if writeMillis < 1 || writeMillis > 86400000 { return Err(Configuration("server.writeMillis must be in 1..86400000")) }
+  let readMillis = serverNumber(&target.config, "server.readMillis", 30000) ?
+  if readMillis < 1 || readMillis > 86400000 { return Err(Configuration("server.readMillis must be in 1..86400000")) }
+  let drainMillis = serverNumber(&target.config, "server.drainMillis", 10000) ?
+  if drainMillis < 1 || drainMillis > 86400000 { return Err(Configuration("server.drainMillis must be in 1..86400000")) }
+  let headBytes = serverNumber(&target.config, "server.headBytes", 65536) ?
+  let bodyBytes = serverNumber(&target.config, "server.bodyBytes", 8388608) ?
+  if host.trim().isEmpty() { return Err(Configuration("server.host must not be empty")) }
+  if port < 0 || port > 65535 { return Err(Configuration("server.port must be in 0..65535")) }
+  if limit < 0 { return Err(Configuration("server.connections must be nonnegative")) }
+  if headBytes < 1 { return Err(Configuration("server.headBytes must be positive")) }
+  if bodyBytes < 0 { return Err(Configuration("server.bodyBytes must be nonnegative")) }
+  let coming = start(target)
+  if let Some(problem) = coming.failure { return Err(StageFailed(problem[0], problem[1])) }
+  var listening = Server.server(&target.router).withLimits(headBytes, bodyBytes)
+  listening = listening.withReadDeadline(readMillis)
+  listening = listening.withWriteDeadline(writeMillis)
+  listening = listening.withDrainDeadline(drainMillis)
+  listening = listening.withWorkers(workers, queueCapacity)
+  for step in target.steps { listening = listening.using(step) }
+  let served = Server.listenAndServe(&listening, host, port, limit)
+  let stopped = stop(target)
+  if let Err(problem) = served {
+    let extra = if succeeded(&stopped) { "" } else { "; shutdown also failed: " + explainReport(&stopped) }
+    Err(Listen(show(problem) + extra))
+  } else if let Some(problem) = stopped.failure {
+    Err(StopFailed(problem[0], problem[1]))
+  } else { Ok(Result.unwrapOr(served, 0)) }
+}
+
+/// What a refusal says.
+export fn explain(problem: &AppError) -> Str {
+  match problem {
+    case Configuration(reason) => "configuration: " + reason
+    case StageFailed(named, reason) => named + " did not start: " + reason
+    case Listen(reason) => "could not serve: " + reason
+    case StopFailed(named, reason) => named + " did not stop: " + reason
+  }
+}
+
+/// The names the ordinary request measurements are kept under.
+const REQUESTS_MEASURED: Str = "http.requests"
+
+const REQUEST_MILLISECONDS: Str = "http.request.milliseconds"
+
+/// Measurements a service takes of itself, declared and ready to be added to.
+///
+/// Declared here rather than left to each program because a service that
+/// reports nothing about its own traffic is the ordinary failure, and the two
+/// measurements every service wants are the same two.
+export fn requestMeasurements() -> Metrics.Metrics {
+  Metrics.empty()
+    .counter(REQUESTS_MEASURED, Metrics.Count, "requests answered")
+    .distribution(REQUEST_MILLISECONDS, Metrics.Milliseconds, "how long answering took", &[])
+}
+
+/// The application measuring its own traffic into a cell the program holds,
+/// and answering with what it has measured where the program says.
+///
+/// The cell is the program's because the measurements are: nothing here is
+/// global, so two evaluations do not share counts and a test does not inherit
+/// another's. The route is written rather than mounted automatically, for the
+/// same reason a health report is.
+export fn measuring(base: &App, into: Sync.Cell[Metrics.Metrics], at: Str) -> App {
+  let store = into
+  let exposed = Route.adding(
+      &base.router,
+    Route.get(at, fn(_request: Route.Request) -> Http.Response {
+        Reply.text(200, Metrics.render(&Result.unwrapOr(Sync.get(&store), Metrics.empty())))
+      })
+  )
+  App{..*base, router: exposed, steps: base.steps.push(counting(into))}
+}
+
+/// A step that counts every request and how long it took.
+///
+/// The route is a label rather than the path, because a path carrying an
+/// identifier turns one measurement into millions — which is the bound
+/// [[Std App Metrics]] exists to hold, and holding it starts here.
+fn counting(into: Sync.Cell[Metrics.Metrics]) -> Route.Middleware {
+  let store = into
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let began = clock()
+    let answer = next(request)
+    let labels = [
+      ("method", Http.methodName(&request.message.method)),
+      ("status", show(answer.status.code))
+    ]
+    let held = Result.unwrapOr(Sync.get(&store), Metrics.empty())
+    let timed = held.increment(REQUESTS_MEASURED, &labels)
+      .observe(REQUEST_MILLISECONDS, &labels, clock() - began)
+    let _kept = Sync.set(&store, timed)
+    answer
+  }
+}
+
+fn serverNumber(settings: &Config.Config, key: Str, fallback: Int) -> Result[Int, AppError] {
+  match Config.whole(settings, key) {
+    case Ok(value) => Ok(value)
+    case Err(Config.Missing(_)) => Ok(fallback)
+    case Err(_) => Err(Configuration(key + " must be a whole number"))
+  }
+}

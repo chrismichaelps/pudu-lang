@@ -1,0 +1,96 @@
+module UsesUuid
+
+import Std.Bytes as ByteSeq
+import Std.Random as Random
+import Std.Result as Result
+import Std.Uuid {BadDigit, WrongLength}
+import Std.Uuid as Uuid
+
+/// What an identifier promises. The generator is seeded rather than taken from
+/// the clock, so every check here answers the same way on every run.
+export fn main() -> Int {
+  var held = 0
+
+  // Security material comes from the operating system, while seeded UUID
+  // construction below remains reproducible. Invalid allocation requests fail
+  // before reaching the host provider.
+  if Result.unwrapOr(Result.map(Random.secureBytes(32), fn(bytes: Bytes) -> Int { bytes.length() }), -1) == 32 {
+    held = held + 1
+  }
+  if let Err(_) = Random.secureBytes(-1) { held = held + 1 }
+  if let Err(_) = Random.secureBytes(1048577) { held = held + 1 }
+
+  // The identifier that names nothing is sixteen zero bytes, and says so.
+  let empty = Uuid.nil()
+  if Uuid.toBytes(&empty).length() == 16 { held = held + 1 }
+  if Uuid.isNil(&empty) { held = held + 1 }
+  if Uuid.toText(&empty) == "00000000-0000-0000-0000-000000000000" { held = held + 1 }
+
+  // Rendering puts the hyphens where a person reads them.
+  if Uuid.toText(&empty).length() == 36 { held = held + 1 }
+
+  // A random identifier records the scheme that made it, and the same seed
+  // makes the same identifier: that is what lets a failure repeat exactly.
+  let drawn = Uuid.version4(&Random.fromSeed(42u64))
+  let again = Uuid.version4(&Random.fromSeed(42u64))
+  if Uuid.versionOf(&drawn[1]) == 4 { held = held + 1 }
+  if Uuid.equal(&drawn[1], &again[1]) { held = held + 1 }
+  if !Uuid.isNil(&drawn[1]) { held = held + 1 }
+
+  // A different seed makes a different identifier, so the generator is doing
+  // something rather than answering constantly.
+  let other = Uuid.version4(&Random.fromSeed(43u64))
+  if !Uuid.equal(&drawn[1], &other[1]) { held = held + 1 }
+
+  // The generator is answered rather than kept, so drawing twice from the one
+  // that came back gives two identifiers rather than the same one.
+  let second = Uuid.version4(&drawn[0])
+  if !Uuid.equal(&drawn[1], &second[1]) { held = held + 1 }
+
+  // The variant bits are written, so the byte after the version's group sits
+  // in the range the format reserves.
+  if variantOk(&drawn[1]) { held = held + 1 }
+
+  // A time-ordered identifier records its own scheme and sorts by when it was
+  // made, which is what a database index wants from one.
+  let early = Uuid.version7(&Random.fromSeed(7u64), 1000)
+  let later = Uuid.version7(&Random.fromSeed(7u64), 2000)
+  if Uuid.versionOf(&early[1]) == 7 { held = held + 1 }
+  if Uuid.toText(&early[1]) < Uuid.toText(&later[1]) { held = held + 1 }
+  if variantOk(&early[1]) { held = held + 1 }
+
+  // Two made in the same millisecond are still distinct, because what follows
+  // the time is random.
+  let twin = Uuid.version7(&early[0], 1000)
+  if !Uuid.equal(&early[1], &twin[1]) { held = held + 1 }
+
+  // Text round trips, hyphenated or not, and case does not matter.
+  let written = Uuid.toText(&drawn[1])
+  held = held + parsesTo(written, &drawn[1])
+  held = held + parsesTo(written.toUpper(), &drawn[1])
+  held = held + parsesTo(written.replace("-", ""), &drawn[1])
+
+  // Text that names no identifier is refused, and says which way it failed.
+  if let Err(WrongLength(_)) = Uuid.fromText("abc") { held = held + 1 }
+  if let Err(BadDigit(_)) = Uuid.fromText("zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz") { held = held + 1 }
+
+  // Bytes that are not sixteen are refused rather than padded.
+  if let Err(WrongLength(_)) = Uuid.fromBytes(&ByteSeq.fromText("short")) { held = held + 1 }
+  if Result.isOk(&Uuid.fromBytes(&Uuid.toBytes(&drawn[1]))) { held = held + 1 }
+
+  held
+}
+
+/// Whether the byte the format reserves carries the variant it should.
+fn variantOk(value: &Uuid) -> Bool {
+  let digits = ByteSeq.encodeHex(&Uuid.toBytes(value))
+  "89ab".contains(digits.slice(16, 17))
+}
+
+fn parsesTo(text: Str, expected: &Uuid) -> Int {
+  if let Ok(parsed) = Uuid.fromText(text) {
+    if Uuid.equal(&parsed, expected) { 1 } else { 0 }
+  } else {
+    0
+  }
+}

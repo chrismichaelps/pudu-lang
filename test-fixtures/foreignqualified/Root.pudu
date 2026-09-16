@@ -1,0 +1,10 @@
+module Root
+
+import Other
+
+foreign "c" {
+  type Box
+  fn wrong(box: Other.Box) -> Int32
+}
+
+export fn main() -> Int { 0 }

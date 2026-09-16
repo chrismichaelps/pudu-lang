@@ -1,0 +1,91 @@
+module UsesNumericWidths
+
+import Std.Random as R
+import Std.Text.Parse as P
+
+/// A drawn number keeps the type its bound was written in. A caller working in
+/// `UInt8` never leaves `UInt8` to ask for one.
+fn randomKeepsTheCallersWidth() -> Bool {
+  let source = R.fromSeed(42u64)
+  let narrow = R.below(&source, 10u8)
+  let broad = R.below(&source, 1000i64)
+  let ordinary = R.below(&source, 10)
+  narrow[1] < 10u8 && broad[1] < 1000i64 && ordinary[1] < 10
+}
+
+/// Both bounds and the answer share one type, so a range in one width cannot
+/// silently produce another.
+fn betweenKeepsItToo() -> Bool {
+  let source = R.fromSeed(7u64)
+  let drawn = R.between(&source, 100u16, 110u16)
+  drawn[1] >= 100u16 && drawn[1] < 110u16
+}
+
+fn numbersFillAnArrayOfThatWidth() -> Bool {
+  let source = R.fromSeed(9u64)
+  let drawn = R.numbers(&source, 4, 5u32)
+  drawn[1].length() == 4
+}
+
+/// A parsed magnitude is the caller's data, so its type is the caller's choice.
+fn parsingKeepsTheCallersWidth() -> Bool {
+  match P.run(P.integerIn(0u8), "200") {
+    case Ok(value) => value == 200u8
+    case Err(_) => false
+  }
+}
+
+/// A number the text names but the type cannot hold is a parse problem at the
+/// position it was read, not a wrapped value.
+fn tooLargeForTheTypeIsAProblem() -> Bool {
+  match P.run(P.integerIn(0u8), "300") {
+    case Ok(_) => false
+    case Err(problem) => problem.position >= 0
+  }
+}
+
+/// The magnitude accumulates in `BigInt`, so a number longer than any fixed
+/// width still reads.
+fn arbitraryPrecisionReads() -> Bool {
+  match P.run(P.bigInteger(), "123456789012345678901234567890") {
+    case Ok(value) => value > 999999999999999999
+    case Err(_) => false
+  }
+}
+
+/// Arbitrary precision absorbs in mixed arithmetic. With the narrow kind
+/// winning instead, accumulating a long number overflowed part way through.
+fn bigIntegerAbsorbs() -> Bool {
+  match convertInteger[BigInt](1) {
+    case Some(one) => {
+      var total = one
+      var count = 0
+      while count < 40 {
+        total = total * 10
+        count = count + 1
+      }
+      total > 0
+    }
+    case None => false
+  }
+}
+
+fn negativeStillReads() -> Bool {
+  match P.run(P.integer(), "-42") {
+    case Ok(value) => value == (0 - 42)
+    case Err(_) => false
+  }
+}
+
+export fn main() -> Int {
+  var passed = 0
+  if randomKeepsTheCallersWidth() { passed = passed + 1 }
+  if betweenKeepsItToo() { passed = passed + 1 }
+  if numbersFillAnArrayOfThatWidth() { passed = passed + 1 }
+  if parsingKeepsTheCallersWidth() { passed = passed + 1 }
+  if tooLargeForTheTypeIsAProblem() { passed = passed + 1 }
+  if arbitraryPrecisionReads() { passed = passed + 1 }
+  if bigIntegerAbsorbs() { passed = passed + 1 }
+  if negativeStillReads() { passed = passed + 1 }
+  passed
+}

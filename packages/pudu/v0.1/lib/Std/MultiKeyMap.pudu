@@ -1,0 +1,265 @@
+module Std.MultiKeyMap
+
+/// A map keyed by two things, which can also be asked about either one alone.
+///
+/// The composite key by itself is not why this exists: `Map[(A, B), V]` already
+/// works, because the runtime's order handles tuples, and a caller wanting only
+/// "the value under this pair" should write that and stop here.
+///
+/// What a pair-keyed `Map` cannot do is answer about *part* of the key. Every
+/// permission for one user, whatever the resource; every reading from one
+/// sensor, whatever the hour; every override for one environment, whatever the
+/// setting. Against `Map[(A, B), V]` each of those reads every entry and throws
+/// most of them away, and the map gets slower at exactly the rate the data
+/// grows.
+///
+/// So this keeps two indexes beside the entries — one grouping the pairs by
+/// their first part, one by their second — and a partial lookup reads the group
+/// it wants instead of the whole map. That is the cost too: three structures
+/// updated on every write, in exchange for the two questions. A caller who never
+/// asks a partial question is paying for indexes they do not read, and should
+/// use a pair-keyed `Map` instead. This is written on the module because it is
+/// the whole decision of whether to reach for it.
+export type MultiKeyMap[A, B, V] = {
+  entries: Map[(A, B), V],
+  byFirst: Map[A, Array[B]],
+  bySecond: Map[B, Array[A]]
+}
+
+/// A map with no entries.
+export fn empty[A, B, V]() -> MultiKeyMap[A, B, V] {
+  MultiKeyMap{entries: mapOf([]), byFirst: mapOf([]), bySecond: mapOf([])}
+}
+
+/// How many entries the map holds.
+export fn size[A, B, V](map: &MultiKeyMap[A, B, V]) -> Int { map.entries.size() }
+
+/// Whether the map holds nothing.
+export fn isEmpty[A, B, V](map: &MultiKeyMap[A, B, V]) -> Bool {
+  map.entries.isEmpty()
+}
+
+/// The value under both parts of a key, or `None`.
+export fn get[A, B, V](map: &MultiKeyMap[A, B, V], first: A, second: B) -> Option[V] {
+  map.entries.get((first, second))
+}
+
+/// The value under both parts of a key, or a fallback.
+export fn getOr[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A,
+  second: B,
+  fallback: V
+) -> V {
+  match map.entries.get((first, second)) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// Whether both parts of a key name an entry.
+export fn containsKey[A, B, V](map: &MultiKeyMap[A, B, V], first: A, second: B) -> Bool {
+  map.entries.containsKey((first, second))
+}
+
+fn secondsUnder[A, B, V](map: &MultiKeyMap[A, B, V], first: A) -> Array[B] {
+  match map.byFirst.get(first) {
+    case Some(found) => found
+    case None => []
+  }
+}
+
+fn firstsUnder[A, B, V](map: &MultiKeyMap[A, B, V], second: B) -> Array[A] {
+  match map.bySecond.get(second) {
+    case Some(found) => found
+    case None => []
+  }
+}
+
+/// The map with an entry added or replaced.
+///
+/// The indexes only gain an entry when the key is new. Replacing a value leaves
+/// them alone, because the pair they record is unchanged — recording it twice
+/// would make a later removal drop only one of the copies and leave the index
+/// claiming a key the entries no longer hold.
+export fn insert[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A,
+  second: B,
+  held: V
+) -> MultiKeyMap[A, B, V] {
+  if map.entries.containsKey((first, second)) {
+    MultiKeyMap {
+      entries: map.entries.insert((first, second), held),
+      byFirst: map.byFirst,
+      bySecond: map.bySecond
+    }
+  } else {
+    MultiKeyMap {
+      entries: map.entries.insert((first, second), held),
+      byFirst: map.byFirst.insert(first, secondsUnder(map, first).push(second)),
+      bySecond: map.bySecond.insert(second, firstsUnder(map, second).push(first))
+    }
+  }
+}
+
+fn withoutFromFirst[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A,
+  second: B
+) -> Map[A, Array[B]] {
+  let held = secondsUnder(map, first)
+  let at = held.indexOf(second)
+  if at < 0 { map.byFirst } else {
+    let kept = held.remove(at)
+    if kept.length() == 0 { map.byFirst.remove(first) } else {
+      map.byFirst.insert(first, kept)
+    }
+  }
+}
+
+fn withoutFromSecond[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A,
+  second: B
+) -> Map[B, Array[A]] {
+  let held = firstsUnder(map, second)
+  let at = held.indexOf(first)
+  if at < 0 { map.bySecond } else {
+    let kept = held.remove(at)
+    if kept.length() == 0 { map.bySecond.remove(second) } else {
+      map.bySecond.insert(second, kept)
+    }
+  }
+}
+
+/// The map with an entry removed, or unchanged when there is none.
+///
+/// A part of the key left naming nothing is dropped from its index, so a
+/// partial lookup never reports a key with no entries behind it.
+export fn remove[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A,
+  second: B
+) -> MultiKeyMap[A, B, V] {
+  if !map.entries.containsKey((first, second)) { *map } else {
+    MultiKeyMap {
+      entries: map.entries.remove((first, second)),
+      byFirst: withoutFromFirst(map, first, second),
+      bySecond: withoutFromSecond(map, first, second)
+    }
+  }
+}
+
+/// Every entry whose key begins with this first part.
+///
+/// The question this module exists for. Reads the group for that part rather
+/// than every entry in the map.
+export fn withFirst[A, B, V](map: &MultiKeyMap[A, B, V], first: A) -> Array[(B, V)] {
+  var out = []
+  for second in secondsUnder(map, first) {
+    match map.entries.get((first, second)) {
+      case Some(found) => { out = out.push((second, found)) }
+      case None => {}
+    }
+  }
+  out
+}
+
+/// Every entry whose key ends with this second part.
+export fn withSecond[A, B, V](map: &MultiKeyMap[A, B, V], second: B) -> Array[(A, V)] {
+  var out = []
+  for first in firstsUnder(map, second) {
+    match map.entries.get((first, second)) {
+      case Some(found) => { out = out.push((first, found)) }
+      case None => {}
+    }
+  }
+  out
+}
+
+/// Every second part paired with a given first part.
+export fn secondsFor[A, B, V](map: &MultiKeyMap[A, B, V], first: A) -> Array[B] {
+  secondsUnder(map, first)
+}
+
+/// Every first part paired with a given second part.
+export fn firstsFor[A, B, V](map: &MultiKeyMap[A, B, V], second: B) -> Array[A] {
+  firstsUnder(map, second)
+}
+
+/// Whether any entry's key begins with this first part.
+export fn containsFirst[A, B, V](map: &MultiKeyMap[A, B, V], first: A) -> Bool {
+  map.byFirst.containsKey(first)
+}
+
+/// Whether any entry's key ends with this second part.
+export fn containsSecond[A, B, V](map: &MultiKeyMap[A, B, V], second: B) -> Bool {
+  map.bySecond.containsKey(second)
+}
+
+/// The map with every entry whose key begins with this first part removed.
+export fn removeFirst[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  first: A
+) -> MultiKeyMap[A, B, V] {
+  var out = *map
+  for second in secondsUnder(map, first) { out = remove(&out, first, second) }
+  out
+}
+
+/// The map with every entry whose key ends with this second part removed.
+export fn removeSecond[A, B, V](
+  map: &MultiKeyMap[A, B, V],
+  second: B
+) -> MultiKeyMap[A, B, V] {
+  var out = *map
+  for first in firstsUnder(map, second) { out = remove(&out, first, second) }
+  out
+}
+
+/// Every distinct first part, in order.
+export fn firsts[A, B, V](map: &MultiKeyMap[A, B, V]) -> Array[A] { map.byFirst.keys() }
+
+/// Every distinct second part, in order.
+export fn seconds[A, B, V](map: &MultiKeyMap[A, B, V]) -> Array[B] { map.bySecond.keys() }
+
+/// Every entry as its two key parts and its value, in key order.
+export fn entries[A, B, V](map: &MultiKeyMap[A, B, V]) -> Array[(A, B, V)] {
+  var out = []
+  for pair in map.entries.entries() {
+    out = out.push((pair[0][0], pair[0][1], pair[1]))
+  }
+  out
+}
+
+/// Every value, in key order.
+export fn values[A, B, V](map: &MultiKeyMap[A, B, V]) -> Array[V] {
+  map.entries.values()
+}
+
+/// A map built from triples of first part, second part, and value.
+export fn fromEntries[A, B, V](given: &Array[(A, B, V)]) -> MultiKeyMap[A, B, V] {
+  var out = empty()
+  for entry in given { out = insert(&out, entry[0], entry[1], entry[2]) }
+  out
+}
+
+/// The entries as an ordinary map keyed by the pair, losing the indexes.
+///
+/// For handing on to something that only asks whole-key questions, where the
+/// indexes would be carried and never read.
+export fn toMap[A, B, V](map: &MultiKeyMap[A, B, V]) -> Map[(A, B), V] { map.entries }
+
+/// Every entry combined into one value, in key order.
+export fn fold[A, B, V, R](
+  map: &MultiKeyMap[A, B, V],
+  combine: fn(R, A, B, V) -> R,
+  start: R
+) -> R {
+  var accumulated = start
+  for entry in entries(map) {
+    accumulated = combine(accumulated, entry[0], entry[1], entry[2])
+  }
+  accumulated
+}

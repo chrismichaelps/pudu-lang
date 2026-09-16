@@ -1,0 +1,203 @@
+---
+type: module
+path: "@root/src/Pudu/Semantic/Prelude.hs"
+fidelity: Active
+domain: "[[Pudu Program]]"
+subsystem: "[[Semantics]]"
+grammar: "[[grammar/haskell]]"
+depth_score: 0.3
+depth_status: SHALLOW
+coupling: 1.0
+interface_stability: 1.0
+tags: [module, shallow]
+aliases: [Semantic Prelude]
+---
+
+# Semantic Prelude
+
+## Purpose
+
+Separate the types the compiler wires in from the names an implicitly imported prelude module supplies, so the prelude stays replaceable while the primitives stay inviolable.
+
+## Interface
+
+### Signatures
+
+```haskell
+wiredInTypeNames :: [Text]
+preludeTypeNames :: [Text]
+preludeValueNames :: [Text]
+isPreludeModule :: ModuleName -> Bool
+```
+
+### Governance
+
+- `Map` and `Set` are wired-in types and `mapOf`, `setOf`, and `charFromCode` are prelude values,
+  because each is a construction or conversion nothing written in the language can express.
+
+- Wired-in names are the grammar's builtin set plus the compiler-controlled `Copy` marker: sized signed and unsigned integers through 128 bits, target-width `Int`/`UInt`, `Float32`, `Float64`, the `Float` alias, `Bool`, `Char`, `Str`, `Never`, `BigInt`, `Decimal`, and the constructors `Option`, `Result`, `Array`, and `Task`. No module can remove them.
+- The wired-in `Option` and `Result` carry their constructors — `Some`, `None`, `Ok`, `Err` — because a type the compiler provides is useless without the variants that build it. A module may declare its own `Ok`, which shadows the wired-in one.
+- Prelude names are ordinary library declarations that happen to be imported implicitly: the traits and failure types [[architecture/SEMANTICS]] already names — `Drop`, `Send`, `Sync`, `Iterator`, `IntoIterator`, `From`, `Overflow`, `DivisionByZero` — and the value `panic`.
+- The implicit import is suppressed by an explicit `import Core.Prelude`. A module that names the prelude therefore controls precisely what it takes.
+- A module may declare its own `Drop` or `panic`; shadowing a prelude name is silent, because it displaces a library binding rather than a wired-in type or a user import.
+- Library types such as `List` belong to neither list; a program that uses one imports it, which keeps the prelude from silently becoming a standard library.
+- Names only. No arities, kinds, signatures, or definitions — those enter with typing, and a placeholder here would be a second source of truth.
+- Both compatibility network effect names and their `Within` variants are present; this module owns
+  discoverability only, while [[Type Check Prelude]] owns their different signatures.
+- The four desktop effect names are compiler-owned capability operations consumed by
+  [[Std Ui Desktop]]. They expose no platform-framework identifiers.
+
+### Linkage
+
+- **Requires:** [[Syntax Name]], [[grammar/pudu]], [[architecture/SEMANTICS]].
+- **Consumed by:** [[Name Resolution]].
+
+## Algorithm
+
+None; constant lists plus one module-name comparison.
+
+## Negative Logic (Prohibited Paths)
+
+- No implicit import of a user module, no operator definitions, no signatures, and no name that the normative vault does not already define.
+
+## Edge Cases
+
+- `Float` and `Float64` are separate names because the alias is transparent at the type level, not the name level.
+- A module that imports the prelude and selects nothing takes nothing from it, which is the documented way to opt out.
+
+## Depth
+
+DEPTH 0.30 (SHALLOW by intent). It is a single normative list; deepening it before typing exists would invent structure the compiler cannot yet use.
+
+## Grill Log
+
+- **Q:** Should the prelude include `List`, `Map`, or `print`? **A:** No. _Rationale:_ [[grammar/pudu]] enumerates the builtins and [[architecture/SEMANTICS]] names the rest; inventing convenience bindings here would create a standard library nobody specified. _Rejected:_ a convenience prelude; ambient value bindings.
+- **Q:** Are wired-in and prelude names one list or two? **A:** Two, in separate scope layers. _Rationale:_ splitting wired-in types from the prelude module is what makes the prelude replaceable while keeping primitives inviolable, and Pudu wants both properties. _Rejected:_ one flat builtin list, which would make `Int` shadowable and `Drop` unremovable — precisely backwards.
+- **Q:** How is the implicit import disabled? **A:** By importing the prelude explicitly. _Rationale:_ it reuses syntax the language already has instead of adding a pragma or compiler flag. _Rejected:_ a `NoImplicitPrelude`-style flag before the language has any flags.
+
+## Referenced by
+
+[[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
+
+## Cryptographic primitive names
+
+The pure value vocabulary includes `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`,
+`hmacSha512Of`, and `constantTimeEqual`, allowing `Std.Crypto` to resolve them without a foreign or
+effect capability.
+
+Resolved Grill Log: expose only exact algorithm names; the standard library owns the documented
+public wrappers while these remain language-runtime primitives.
+
+## Desktop capability names
+
+`desktopOpen`, `desktopPresent`, `desktopPump`, and `desktopClose` are discoverable effect values.
+Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
+standard-library wrapper is the public contract.
+
+## Device-audio capability name
+
+`audioDevicePlay`, `audioStreamOpen`, `audioStreamWrite`, `audioStreamPause`, `audioStreamResume`,
+`audioStreamVolume`, `audioStreamSnapshot`, and `audioStreamClose` are discoverable effect values
+consumed by [[Std Audio Device]]. Resolved Grill Log: expose target-neutral primitive names; queue
+ownership and target framework names remain behind the runtime boundary.
+
+`audioToneBytes` and `audioRampBytes` are discoverable pure values used by [[Std Audio Graph]].
+Resolved Grill Log: their low-level spelling makes them representation primitives, while graph nodes
+and errors remain the documented public API.
+
+## Word-map cardinality kernel
+
+`wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by
+[[Std BitSet]]. It counts payload bits independently of keys, including zero payloads, and avoids
+entry-array materialization. The runtime checks UInt64 kind/range before conversion and reports
+E7001 for invalid payloads or receiver, E7003 for wrong arity. Registration covers semantic names,
+type signatures, installation, builtin naming and pure dispatch. No IO or FFI capability is required.
+
+Resolved Grill Log: Use an explicit primitive rather than recognize a library function by name,
+so shadowing and ordinary calls retain their meaning. Result width is UInt128; an Int-sized host
+map cannot contain enough 64-bit words to overflow it. This remains unvalidated.
+
+## Native word-map algebra
+
+Four pure primitives `wordMapUnion`, `wordMapIntersection`, `wordMapDifference`, and
+`wordMapSymmetricDifference` each take two Map[K, UInt64] values and return Map[K, UInt64].
+Absent keys denote zero words; zero results are omitted. Shared keys retain the left key
+representative. UInt64 payloads are validated in ascending key order, left input before right,
+including entries the operation will discard. Invalid runtime values report E7001; wrong arity
+reports E7003. Existing argument evaluation remains left to right. These names are installed,
+typed and dispatched as pure primitives; Std.BitSet uses them directly.
+
+The internal `WordOperation` enum selects `combineMaps`: tree-native mergeWithKey applies OR,
+AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator validates both input maps first, then projects payloads during merging and
+encodes directly into the final map. The input and result trees still hold boxed values; no
+projected input tree or separately encoded output tree is constructed.
+
+Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
+discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
+No tests, builds, reviews or measurements run.
+
+## Short-circuit word predicates
+
+`wordMapIsSubsetOf` and `wordMapIsDisjointFrom` take two Map[K, UInt64] values and return Bool.
+They consume `compareMaps` in [[Runtime Word Kernels]] with a fallible UInt64 projection. A lazy
+ascending map fold visits left payloads and looks up corresponding right payloads; absent right
+keys mean zero. Subset requires `left & complement right == 0`; disjointness requires
+`left & right == 0`. Both return true for empty left input and stop at the first false block.
+No entry array, projected map or result map is constructed. Worst-case work is O(n log(m+1)),
+where n and m count left and right blocks. Tree nodes and payloads remain boxed.
+
+Only visited payloads are validated, left word before matching right word. Unmatched right
+payloads and blocks after the first counterexample are not inspected. This preserves STD's
+short-circuit traversal; unlike algebra it is not a full-map validation operation. A visited
+invalid UInt64 kind/range or non-map argument reports E7001; wrong arity reports E7003.
+Registration includes names, types, installation and pure dispatch. STD delegates directly.
+
+Resolved Grill Log: Do not swap inputs for disjointness even if the right map is smaller: the
+left-first visitation and failure order are explicit. Keep the right fold lazy in its remainder
+so a counterexample does not force later lookups. No tests, builds, reviews or measurements run.
+
+## Native sparse word enumeration
+
+`wordMapMembers` is added to `preludeValueNames`. It is available implicitly in the value
+namespace as a pure built-in function.
+
+Resolved Grill Log: Include in prelude value names without requiring an explicit import.
+No tests or measurements run.
+
+## Buffer and SwissTable prelude bindings
+
+Adds the 12 primitive names to `preludeSymbols`:
+`bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
+`swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
+and `swissTableSize`. They are resolved in user code and STD modules without qualified import prefixes.
+`csvRecords`, the native record scan behind [[Std Csv]], and `jsonDecode` and `jsonEncode`, the native
+decoder and encoder behind [[Std Json]], and `xmlDecode`, the native reader behind [[Std Xml]], are
+prelude names on the same terms.
+
+Resolved Grill Log: Register symbols directly in prelude symbol tables alongside existing hashing and memory primitives.
+
+## Low-level buffer extensions and vectorized column prelude bindings
+
+Adds the 24 extended primitive names to `preludeValueNames`:
+`bufferReadI64`, `bufferWriteI64`, `bufferReadF64`, `bufferWriteF64`, `bufferReadU32`, `bufferWriteU32`,
+`bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, `columnProjectU64`,
+`columnSumF64`, `columnMinF64`, `columnMaxF64`, `columnFilterGtF64`, `columnFilterLtF64`, `columnProjectF64`,
+`columnAddF64`, `columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, `columnBitmapCount`,
+`columnSortIndicesU64`, `columnSortIndicesF64`, `columnBinarySearchU64`, `columnBinarySearchF64`,
+`columnGatherU64`, and `columnGatherF64`.
+They are available implicitly in the value namespace for standard library modules.
+
+### Resolved Grill Log
+- **Q:** Introduce a separate namespace for columnar primitives? **A:** No; bind primitive names in prelude values and expose idiomatic record abstractions in `Std.Column`.
+- **Q:** Are sorting and binary search primitives registered in prelude values? **A:** Yes; registered in `preludeValueNames` so `Std.Column` and user modules resolve them unconditionally.
+
+
+
+
+
+
+## TLS and binary compression implementation contract
+
+Adds tlsUpgradeWithin, gzipCompress and gzipDecompress to the prelude value vocabulary.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

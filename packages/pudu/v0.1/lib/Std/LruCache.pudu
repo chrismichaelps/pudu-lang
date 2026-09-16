@@ -1,0 +1,203 @@
+module Std.LruCache
+
+import Std.LinkedMap as LinkedMap
+
+/// A map that holds only so much, and gives up what has gone longest unused.
+///
+/// A cache without a bound is a map that only grows, which is a leak with a
+/// helpful name. The bound is the whole point: memoised results, parsed files,
+/// recently opened documents all want to keep what is being used and let go of
+/// what is not, and none of them can afford to keep everything.
+///
+/// Least recently *used*, not least recently written — so reading an entry
+/// keeps it alive. That is what separates a cache from a queue, and it is why
+/// `get` answers both the value and a cache: the read changed which entry is
+/// next to go, and hiding that would make the order depend on reads a caller
+/// could not see.
+///
+/// The recency order comes from `LinkedMap.touch`, which already exists to move
+/// a key to the end of an order. Nothing here re-implements it.
+export type LruCache[K, V] = { entries: LinkedMap.LinkedMap[K, V], capacity: Int }
+
+/// A cache holding at most `capacity` entries.
+///
+/// A capacity below one is kept as zero, and such a cache stores nothing: every
+/// write is immediately evicted. That is a legal and occasionally useful thing
+/// to configure — a cache turned off without the calling code changing shape —
+/// so it is allowed rather than refused.
+export fn withCapacity[K, V](limit: Int) -> LruCache[K, V] {
+  LruCache {
+    entries: LinkedMap.empty(),
+    capacity: if limit < 0 { 0 } else { limit }
+  }
+}
+
+/// How many entries the cache is holding.
+export fn size[K, V](cache: &LruCache[K, V]) -> Int { LinkedMap.size(&cache.entries) }
+
+/// How many entries the cache will hold before it starts discarding.
+export fn capacity[K, V](cache: &LruCache[K, V]) -> Int { cache.capacity }
+
+/// Whether the cache is holding nothing.
+export fn isEmpty[K, V](cache: &LruCache[K, V]) -> Bool {
+  LinkedMap.isEmpty(&cache.entries)
+}
+
+/// Whether the cache is holding as much as it can.
+export fn isFull[K, V](cache: &LruCache[K, V]) -> Bool {
+  LinkedMap.size(&cache.entries) >= cache.capacity
+}
+
+/// The cache with the oldest entries discarded until it fits.
+///
+/// A loop rather than a single removal, because lowering a capacity can leave a
+/// cache holding many entries too many at once.
+fn trimmed[K, V](cache: &LruCache[K, V]) -> LruCache[K, V] {
+  var out = *cache
+  while LinkedMap.size(&out.entries) > out.capacity {
+    out = LruCache {
+      entries: LinkedMap.removeOldest(&out.entries),
+      capacity: out.capacity
+    }
+  }
+  out
+}
+
+/// The value stored under a key, and the cache with that key marked as used.
+///
+/// Both, because a read is what a recency order is about: taking the value
+/// without recording that it was taken would let an entry the program relies on
+/// be discarded as unused. A caller that genuinely only wants to look — a
+/// diagnostic, a report — should use `peek`.
+export fn get[K, V](cache: &LruCache[K, V], key: K) -> (Option[V], LruCache[K, V]) {
+  match LinkedMap.get(&cache.entries, key) {
+    case Some(found) => (
+      Some(found),
+      LruCache {
+        entries: LinkedMap.touch(&cache.entries, key, found),
+        capacity: cache.capacity
+      }
+    )
+    case None => (None, *cache)
+  }
+}
+
+/// The value stored under a key, without marking it as used.
+///
+/// For looking at a cache rather than using it. A program that reads through
+/// `peek` alone has a cache that evicts by write order, which is not what it
+/// asked for — so this exists for reports and assertions, not for the hot path.
+export fn peek[K, V](cache: &LruCache[K, V], key: K) -> Option[V] {
+  LinkedMap.get(&cache.entries, key)
+}
+
+/// Whether a key is held, without marking it as used.
+export fn containsKey[K, V](cache: &LruCache[K, V], key: K) -> Bool {
+  LinkedMap.containsKey(&cache.entries, key)
+}
+
+/// The cache with an entry added or replaced, and marked as the most recently
+/// used.
+///
+/// Writing is using, so an existing key moves to the end of the order rather
+/// than staying where it was — which is the opposite of `LinkedMap.insert` and
+/// the reason this is a different type rather than a wrapper.
+export fn put[K, V](cache: &LruCache[K, V], key: K, held: V) -> LruCache[K, V] {
+  trimmed(&LruCache {
+      entries: LinkedMap.touch(&cache.entries, key, held),
+      capacity: cache.capacity
+    })
+}
+
+/// The cache with a key's entry removed, or unchanged when there is none.
+export fn remove[K, V](cache: &LruCache[K, V], key: K) -> LruCache[K, V] {
+  LruCache {
+    entries: LinkedMap.remove(&cache.entries, key),
+    capacity: cache.capacity
+  }
+}
+
+/// The entry that will be discarded next, or `None` when the cache is empty.
+export fn oldest[K, V](cache: &LruCache[K, V]) -> Option[(K, V)] {
+  LinkedMap.oldest(&cache.entries)
+}
+
+/// The most recently used entry, or `None` when the cache is empty.
+export fn newest[K, V](cache: &LruCache[K, V]) -> Option[(K, V)] {
+  LinkedMap.newest(&cache.entries)
+}
+
+/// The cache with its next entry discarded, unchanged when it is empty.
+export fn evict[K, V](cache: &LruCache[K, V]) -> LruCache[K, V] {
+  LruCache {
+    entries: LinkedMap.removeOldest(&cache.entries),
+    capacity: cache.capacity
+  }
+}
+
+/// The cache holding nothing, keeping its capacity.
+export fn cleared[K, V](cache: &LruCache[K, V]) -> LruCache[K, V] {
+  LruCache{entries: LinkedMap.empty(), capacity: cache.capacity}
+}
+
+/// The cache with a new capacity, discarding the oldest entries if it shrank.
+export fn resized[K, V](cache: &LruCache[K, V], limit: Int) -> LruCache[K, V] {
+  trimmed(&LruCache {
+      entries: cache.entries,
+      capacity: if limit < 0 { 0 } else { limit }
+    })
+}
+
+/// Every key, least recently used first.
+///
+/// The order entries would be discarded in, which is the useful direction to
+/// read a cache in when deciding whether its capacity is right.
+export fn keys[K, V](cache: &LruCache[K, V]) -> Array[K] {
+  LinkedMap.keys(&cache.entries)
+}
+
+/// Every value, least recently used first.
+export fn values[K, V](cache: &LruCache[K, V]) -> Array[V] {
+  LinkedMap.values(&cache.entries)
+}
+
+/// Every entry as a pair, least recently used first.
+export fn pairs[K, V](cache: &LruCache[K, V]) -> Array[(K, V)] {
+  LinkedMap.pairs(&cache.entries)
+}
+
+/// The value under a key, computing and storing it when it is absent.
+///
+/// The reason a cache exists, in one call: the caller says what the value would
+/// be if it had to be made, and gets back the value and the cache that now
+/// holds it. The function is not called when the key is already present, which
+/// is the saving being asked for.
+export fn getOrCompute[K, V](
+  cache: &LruCache[K, V],
+  key: K,
+  compute: fn(K) -> V
+) -> (V, LruCache[K, V]) {
+  let looked = get(cache, key)
+  match looked[0] {
+    case Some(found) => (found, looked[1])
+    case None => {
+      let made = compute(key)
+      (made, put(cache, key, made))
+    }
+  }
+}
+
+/// A cache of the given capacity holding these pairs, in the order given.
+///
+/// A later pair counts as more recent, so giving more pairs than the capacity
+/// keeps the last ones.
+export fn fromPairs[K, V](entries: &Array[(K, V)], limit: Int) -> LruCache[K, V] {
+  var out = withCapacity(limit)
+  for pair in entries { out = put(&out, pair[0], pair[1]) }
+  out
+}
+
+/// The entries as an ordinary map, losing the recency order and the bound.
+export fn toMap[K, V](cache: &LruCache[K, V]) -> Map[K, V] {
+  LinkedMap.toMap(&cache.entries)
+}

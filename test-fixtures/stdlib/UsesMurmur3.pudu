@@ -1,0 +1,90 @@
+module UsesMurmur3
+
+import Std.Murmur3 as Murmur3
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Empty buffer hashing
+  let hEmpty = Murmur3.hash32(&[], 0u32)
+  if hEmpty == 0u32 {
+    held = held + 1
+  }
+
+  // 2. rotL32 bit rotation across word boundaries
+  let r1 = Murmur3.rotL32(1u32, 1)
+  let r2 = Murmur3.rotL32(0x80000000u32, 1)
+  let r3 = Murmur3.rotL32(0x12345678u32, 0)
+  let r4 = Murmur3.rotL32(0x12345678u32, 32)
+  if r1 == 2u32 && r2 == 1u32 && r3 == 0x12345678u32 && r4 == 0x12345678u32 {
+    held = held + 1
+  }
+
+  // 3. fmix32 and fmix64 avalanche properties
+  let fm32_0 = Murmur3.fmix32(0u32)
+  let fm32_1 = Murmur3.fmix32(1u32)
+  let fm64_0 = Murmur3.fmix64(0u64)
+  let fm64_1 = Murmur3.fmix64(1u64)
+  if fm32_0 == 0u32 && fm32_1 != 1u32 && fm64_0 == 0u64 && fm64_1 != 1u64 {
+    held = held + 1
+  }
+
+  // 4. Deterministic text hashing
+  let hHello1 = Murmur3.hash32Text("hello", 0u32)
+  let hHello2 = Murmur3.hash32Text("hello", 0u32)
+  if hHello1 == hHello2 && hHello1 != 0u32 {
+    held = held + 1
+  }
+
+  // 5. Seed sensitivity: different seeds produce different digests
+  let hSeed0 = Murmur3.hash32Text("hello", 0u32)
+  let hSeed42 = Murmur3.hash32Text("hello", 42u32)
+  let hSeed99 = Murmur3.hash32Text("hello", 99u32)
+  if hSeed0 != hSeed42 && hSeed0 != hSeed99 && hSeed42 != hSeed99 {
+    held = held + 1
+  }
+
+  // 6. Equivalence between hash32 on byte array and hash32Text
+  let b = "pudu-lang".toBytes().toArray()
+  let hBytes = Murmur3.hash32(&b, 1234u32)
+  let hText = Murmur3.hash32Text("pudu-lang", 1234u32)
+  if hBytes == hText {
+    held = held + 1
+  }
+
+  // 7. Tail length variants (lengths 1, 2, 3, 4, 5, 7)
+  let h1 = Murmur3.hash32Text("a", 0u32)
+  let h2 = Murmur3.hash32Text("ab", 0u32)
+  let h3 = Murmur3.hash32Text("abc", 0u32)
+  let h4 = Murmur3.hash32Text("abcd", 0u32)
+  let h5 = Murmur3.hash32Text("abcde", 0u32)
+  let h7 = Murmur3.hash32Text("abcdefg", 0u32)
+  if h1 != h2 && h2 != h3 && h3 != h4 && h4 != h5 && h5 != h7 {
+    held = held + 1
+  }
+
+  // 8. Avalanche effect: single bit flips produce drastically different hashes
+  let hCat = Murmur3.hash32Text("cat", 0u32)
+  let hBat = Murmur3.hash32Text("bat", 0u32)
+  if hCat != hBat {
+    held = held + 1
+  }
+
+  // 9. hash32Int direct 64-bit integer hashing without allocations
+  let hi0 = Murmur3.hash32Int(0, 0u32)
+  let hi1 = Murmur3.hash32Int(1, 0u32)
+  let hiNeg1 = Murmur3.hash32Int(-1, 0u32)
+  let hiBig = Murmur3.hash32Int(9223372036854775807, 0u32)
+  if hi0 != hi1 && hi1 != hiNeg1 && hi0 != hiBig {
+    held = held + 1
+  }
+
+  // 10. Long payload consistency and collision resistance
+  let hLongA = Murmur3.hash32Text("The quick brown fox jumps over the lazy dog", 0u32)
+  let hLongB = Murmur3.hash32Text("The quick brown fox jumps over the lazy dog.", 0u32)
+  if hLongA != 0u32 && hLongB != 0u32 && hLongA != hLongB {
+    held = held + 1
+  }
+
+  held
+}

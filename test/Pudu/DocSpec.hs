@@ -1,0 +1,296 @@
+module Pudu.DocSpec (docProperties) where
+
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Doc
+  ( DocEntry (..)
+  , DocIndex (..)
+  , DocKind (..)
+  , entriesFor
+  )
+import Pudu.Doc.Json (encodeIndex, escapeJson)
+import Pudu.Doc.Query (Query (..), parseQuery)
+import Pudu.Doc.Search (Match (..), searchText)
+import Pudu.Doc.Site (renderSite)
+import Pudu.Doc.Signature (renderSignature)
+import Pudu.Source (SourceName (SourceName), newSource)
+import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
+
+docProperties :: [(String, IO Property)]
+docProperties =
+  [ ("the index reports the type the checker inferred", testInferredSignatures)
+  , ("doc comments attach to the declaration they precede", testDocComments)
+  , ("a type query finds a function by its shape", testTypeSearch)
+  , ("a dynamic type is searchable and a name matches unqualified", testDynamicSearch)
+  , ("a name query ranks exact matches first", testNameSearch)
+  , ("queries are read as names or as shapes", testQueryParsing)
+  , ("the encoded index is well formed", testEncoding)
+  , ("the documentation site embeds and presents the index", testSite)
+  , ("the documentation site contains source text safely", testSiteSafety)
+  ]
+
+{-| The whole point of building the index from the checker: a declaration with
+    no written types is still described, and one with written types is described
+    as the compiler understood it. -}
+testInferredSignatures :: IO Property
+testInferredSignatures = do
+  index <- indexOf
+    [ "module Doc"
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    , "fn inferred(n) { n + 1 }"
+    , "fn pick[T](left: T, right: T) -> T { left }"
+    , "const LIMIT: Int = 5"
+    ]
+  pure $ conjoin
+    [ counterexample "an annotated function reports its type"
+        (signatureOf "twice" index === "Int -> Int")
+    , counterexample "an unannotated function reports its inferred type"
+        (signatureOf "inferred" index === "Int -> Int")
+    , counterexample "a generic function keeps its parameter and bound"
+        (signatureOf "pick" index === "T -> T -> T")
+    , counterexample "a constant reports its type with no arguments"
+        (signatureOf "LIMIT" index === "Int")
+    ]
+
+{-| Documentation is the run of `///` lines directly above a declaration, and
+    an ordinary comment is not documentation. -}
+testDocComments :: IO Property
+testDocComments = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// Double a number."
+    , "/// The second line is kept."
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    , "// an ordinary note"
+    , "fn plain(n: Int) -> Int { n }"
+    , "/// Documented and exported."
+    , "export fn shown(n: Int) -> Int { n }"
+    , "/** A block form. */"
+    , "fn blocked(n: Int) -> Int { n }"
+    , "trait Named {"
+    , "  /// Return the public name."
+    , "  fn name(self: &Self) -> Str"
+    , "}"
+    , "trait Labeled {"
+    , "  /// Return an unrelated label."
+    , "  fn name(self: &Self) -> Str"
+    , "}"
+    , "type Child = { value: Str }"
+    , "impl Named for Child {"
+    , "  fn name(self: &Self) -> Str { self.value }"
+    , "}"
+    , "type Adult = { value: Str }"
+    , "impl Named for Adult {"
+    , "  /// Return the verified adult name."
+    , "  fn name(self: &Self) -> Str { self.value }"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "every doc line is kept in order"
+        (commentOf "twice" index === ["Double a number.", "The second line is kept."])
+    , counterexample "an ordinary comment is not documentation"
+        (commentOf "plain" index === [])
+    , counterexample "a block doc comment is documentation"
+        (commentOf "blocked" index === ["A block form."])
+    , counterexample "an export modifier does not detach the documentation"
+        (commentOf "shown" index === ["Documented and exported."])
+    , counterexample "an implementation inherits its own trait member documentation"
+        (commentOfMethod "Child" "name" index === ["Return the public name."])
+    , counterexample "a direct implementation comment overrides inherited documentation"
+        (commentOfMethod "Adult" "name" index === ["Return the verified adult name."])
+    ]
+
+{-| Search by shape, which is the question a reader with a type but no name
+    is asking. -}
+{-| A dynamic type is one atom in the index, and a reader searching for a type
+    should not have to know which module declared it. -}
+testDynamicSearch :: IO Property
+testDynamicSearch = do
+  index <- indexOf
+    [ "module Doc"
+    , "trait Shape { fn area(self: &Self) -> Int }"
+    , "type Circle = { r: Int }"
+    , "impl Shape for Circle { fn area(self: &Self) -> Int { self.r } }"
+    , "fn make(kind: Str) -> dynamic Shape { Circle{r: 1} }"
+    , "fn sized(c: Circle) -> Int { c.r }"
+    ]
+  pure $ conjoin
+    [ counterexample "a dynamic result is found by its trait"
+        (property ("make" `elem` namesOf (searchText "Str -> dynamic Shape" index)))
+    , counterexample "and by the qualified form"
+        (property ("make" `elem` namesOf (searchText "Str -> dynamic Doc.Shape" index)))
+    , counterexample "an unqualified nominal query finds a qualified signature"
+        (property ("sized" `elem` namesOf (searchText "Circle -> Int" index)))
+    , counterexample "a qualified query that names the wrong module finds nothing"
+        (notElem "sized" (namesOf (searchText "Other.Circle -> Int" index)) === True)
+    ]
+
+testTypeSearch :: IO Property
+testTypeSearch = do
+  index <- indexOf
+    [ "module Doc"
+    , "fn first[T](items: Array[T]) -> T { items[0] }"
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    , "fn label(n: Int) -> Str { \"n\" }"
+    ]
+  pure $ conjoin
+    [ counterexample "a polymorphic shape finds the polymorphic function"
+        (namesOf (searchText "Array[a] -> a" index) === ["first"])
+    , counterexample "a concrete shape finds the concrete function"
+        (namesOf (searchText "Int -> Int" index) === ["twice"])
+    , counterexample "a shape nothing has finds nothing"
+        (namesOf (searchText "Str -> Str" index) === [])
+    , counterexample "a leading arrow searches only by result"
+        (property ("label" `elem` namesOf (searchText "-> Str" index)))
+    , counterexample "a result-only match stays on the documented weakest rung"
+        (scoresOf "label" (searchText "-> Str" index) === [60])
+    , counterexample "a variable query does not match a concrete signature exactly"
+        (notElem "twice" (namesOf (searchText "a -> a" index)) === True)
+    ]
+
+{-| A name query ranks the closest spelling first, so a reader who typed most
+    of a name gets it before everything that merely contains it. -}
+testNameSearch :: IO Property
+testNameSearch = do
+  index <- indexOf
+    [ "module Doc"
+    , "fn sort(n: Int) -> Int { n }"
+    , "fn sortBy(n: Int) -> Int { n }"
+    , "fn resort(n: Int) -> Int { n }"
+    ]
+  pure $ conjoin
+    [ counterexample "an exact name comes first"
+        (take 1 (namesOf (searchText "sort" index)) === ["sort"])
+    , counterexample "a prefix outranks an infix"
+        (namesOf (searchText "sort" index) === ["sort", "sortBy", "resort"])
+    ]
+
+{-| The one disambiguation rule the query language has. -}
+testQueryParsing :: IO Property
+testQueryParsing =
+  pure $ conjoin
+    [ counterexample "a bare word is a name" (isName (parseQuery "sort") === True)
+    , counterexample "an applied type with no arrow is still a name"
+        (isName (parseQuery "Array[Int]") === True)
+    , counterexample "an arrow makes it a shape" (isShape (parseQuery "Int -> Int") === True)
+    , counterexample "a leading arrow asks for a result shape"
+        (renderedQuery (parseQuery "-> Array[Int]") === Just "Array[Int]")
+    , counterexample "blank input is no query" (parseQuery "   " === Nothing)
+    , counterexample "a trailing arrow remains incomplete" (parseQuery "Int ->" === Nothing)
+    , counterexample "an omitted middle type remains malformed"
+        (parseQuery "Int -> -> Str" === Nothing)
+    , counterexample "uncased Unicode letters remain query variables"
+        (isShape (parseQuery "你 -> 你") === True)
+    , counterexample "hostile query nesting is refused before recursive parsing"
+        (parseQuery (Text.replicate 65 "Array[" <> "Int" <> Text.replicate 65 "]" <> " -> Int") === Nothing)
+    , counterexample "a nested arrow stays inside its argument"
+        (renderedQuery (parseQuery "(fn(Int) -> Str) -> Bool") === Just "fn(Int) -> Str -> Bool")
+    ]
+ where
+  isName query = case query of
+    Just (NameQuery _) -> True
+    _ -> False
+  isShape query = case query of
+    Just (TypeQuery _) -> True
+    _ -> False
+  renderedQuery query = case query of
+    Just (TypeQuery signature) -> Just (renderSignature signature)
+    _ -> Nothing
+
+{-| The encoding is a contract with editors, so its escaping has to hold for
+    text a reader can actually write. -}
+testEncoding :: IO Property
+testEncoding = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// A \"quoted\" note."
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    ]
+  let encoded = encodeIndex index
+  pure $ conjoin
+    [ counterexample "quotes are escaped" (escapeJson "a\"b" === "a\\\"b")
+    , counterexample "backslashes are escaped" (escapeJson "a\\b" === "a\\\\b")
+    , counterexample "newlines are escaped" (escapeJson "a\nb" === "a\\nb")
+    , counterexample "the entry survives encoding"
+        (property (Text.isInfixOf "\\\"quoted\\\"" encoded))
+    , counterexample "the signature is carried alongside the structure"
+        (property (Text.isInfixOf "\"form\":\"con\"" encoded))
+    ]
+
+{-| The site is one complete artifact and projects the same index fields the
+    terminal and JSON forms expose. -}
+testSite :: IO Property
+testSite = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// Double a number."
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    ]
+  let site = renderSite index
+      emptySite = renderSite (DocIndex [])
+  pure $ conjoin
+    [ counterexample "the artifact declares HTML" (property ("<!doctype html>" `Text.isPrefixOf` site))
+    , counterexample "the index entry is embedded" (property (Text.isInfixOf "\"name\":\"twice\"" site))
+    , counterexample "name and type search are available" (property (Text.isInfixOf "function shapeScore" site))
+    , counterexample "browser identifiers use Unicode letter categories"
+        (property (Text.isInfixOf "\\p{L}" site && Text.isInfixOf "\\p{N}" site))
+    , counterexample "the search control is labelled" (property (Text.isInfixOf "label for='query'" site))
+    , counterexample "the artifact has no remote dependency" (property (not (Text.isInfixOf "https://" site)))
+    , counterexample "an empty index keeps an explicit state"
+        (property (Text.isInfixOf "\"entries\":[]" emptySite && Text.isInfixOf "No declarations indexed" emptySite))
+    ]
+
+{-| JSON is not an HTML raw-text escape boundary. A documentation comment that
+    looks like a closing script tag must remain data when embedded. -}
+testSiteSafety :: IO Property
+testSiteSafety = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// </script><script>globalThis.compromised = true</script>"
+    , "fn safe(n: Int) -> Int { n }"
+    ]
+  let site = renderSite index
+      dataStart = snd (Text.breakOn "<script id='pudu-index'" site)
+      beforeProgram = fst (Text.breakOn "</script>\n<script>" dataStart)
+  pure $ conjoin
+    [ counterexample "source markup is neutralised inside the embedded index"
+        (property (not (Text.isInfixOf "<script>globalThis.compromised" beforeProgram)))
+    , counterexample "markup-opening scalars use JSON escapes"
+        (property (Text.isInfixOf "\\u003c/script\\u003e" beforeProgram))
+    , counterexample "the page owns only its fixed executable script"
+        (Text.count "</script>" site === 2)
+    ]
+
+indexOf :: [Text] -> IO DocIndex
+indexOf lines' = do
+  source <- newSource (SourceName "Doc.pudu") (Text.unlines lines')
+  maybe (DocIndex []) id . compileDocs <$> runCompile source
+
+signatureOf :: Text -> DocIndex -> Text
+signatureOf name index = case entriesFor name index of
+  entry : _ -> maybe "none" renderSignature (docSignature entry)
+  [] -> "missing"
+
+commentOf :: Text -> DocIndex -> [Text]
+commentOf name index = case entriesFor name index of
+  entry : _ -> docComment entry
+  [] -> ["missing"]
+
+commentOfMethod :: Text -> Text -> DocIndex -> [Text]
+commentOfMethod holder name index = case matching of
+  entry : _ -> docComment entry
+  [] -> ["missing"]
+ where
+  matching =
+    [ entry
+    | entry <- entriesFor name index
+    , DocMethod owner <- [docKind entry]
+    , owner == holder
+    ]
+
+namesOf :: [Match] -> [Text]
+namesOf = map (docName . matchEntry)
+
+scoresOf :: Text -> [Match] -> [Int]
+scoresOf name = map matchScore . filter ((== name) . docName . matchEntry)

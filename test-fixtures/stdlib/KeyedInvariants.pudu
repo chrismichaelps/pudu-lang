@@ -1,0 +1,73 @@
+module KeyedInvariants
+
+import Std.List as List
+import Std.Map as Map
+import Std.Set as Set
+
+/// The behaviour the keyed runtime promises, independent of how it stores
+/// entries. Each check answers 1 when it holds, so the total names how many
+/// held and a failure says which one did not by how far short it falls.
+export fn main() -> Int {
+  var held = 0
+
+  // Insertion order does not survive into the map: keys come back sorted.
+  let scattered = Map.fromPairs(&[(3, "c"), (1, "a"), (2, "b")])
+  if Map.keys(&scattered) == [1, 2, 3] { held = held + 1 }
+
+  // Two maps with the same entries are the same map however they were built.
+  let ascending = Map.fromPairs(&[(1, "a"), (2, "b"), (3, "c")])
+  if scattered == ascending { held = held + 1 }
+
+  // A repeated key takes the later value rather than making a second entry.
+  let repeated = Map.fromPairs(&[(1, "first"), (1, "second")])
+  if Map.size(&repeated) == 1 { held = held + 1 }
+  if Map.getOr(&repeated, 1, "none") == "second" { held = held + 1 }
+
+  // Removing a key the map does not have leaves it alone.
+  if Map.remove(&scattered, 99) == scattered { held = held + 1 }
+
+  // Merging lets the right map win, because that is the order an override is
+  // written in.
+  let defaults = Map.fromPairs(&[(1, "old"), (2, "keep")])
+  let override = Map.fromPairs(&[(1, "new")])
+  let merged = Map.merge(&defaults, &override)
+  if Map.getOr(&merged, 1, "none") == "new" { held = held + 1 }
+  if Map.getOr(&merged, 2, "none") == "keep" { held = held + 1 }
+
+  // Values come back in the order of their keys, not of their insertion.
+  if Map.values(&scattered) == ["a", "b", "c"] { held = held + 1 }
+
+  // An empty map answers nothing rather than failing.
+  let nothing = Map.empty()
+  if Map.size(&nothing) == 0 { held = held + 1 }
+  match Map.get(&nothing, 1) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // A set holds its members once, in order, whatever order they arrived in.
+  let members = Set.fromArray(&[3, 1, 2, 1, 3])
+  if Set.size(&members) == 3 { held = held + 1 }
+  if Set.toArray(&members) == [1, 2, 3] { held = held + 1 }
+
+  // The three set operations against an empty set answer the other side.
+  let empty = Set.empty()
+  if Set.union(&members, &empty) == members { held = held + 1 }
+  if Set.size(&Set.intersection(&members, &empty)) == 0 { held = held + 1 }
+  if Set.difference(&members, &empty) == members { held = held + 1 }
+
+  // A map keyed by an aggregate orders by that aggregate, which is what lets a
+  // tuple or a record be a key at all.
+  let tupled = Map.fromPairs(&[((2, 1), "b"), ((1, 9), "a")])
+  if Map.values(&tupled) == ["a", "b"] { held = held + 1 }
+
+  // Iterating a map walks its pairs in key order.
+  var walked = []
+  for pair in scattered { walked = walked.push(pair[0]) }
+  if walked == [1, 2, 3] { held = held + 1 }
+
+  // Folding sees every entry exactly once.
+  if List.length(&Map.pairs(&scattered)) == 3 { held = held + 1 }
+
+  held
+}

@@ -1,0 +1,151 @@
+module Std.Html.Buffer
+
+import Std.Buffer as Buffer
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+
+/// A chunk of an HTML template: either pre-baked static bytes or a named dynamic slot.
+export type RawChunk
+  = Static(Bytes)
+  | Dynamic(Str)
+
+/// A pre-compiled immutable byte plan with static size metadata.
+export type BytePlan = {
+  parts: Array[RawChunk],
+  totalStaticBytes: Int
+}
+
+/// Pre-compiles a list of chunks, aggregating static byte metrics.
+export fn compile(chunks: &Array[RawChunk]) -> BytePlan {
+  var staticBytes = 0
+  for chunk in chunks {
+    match chunk {
+      case Static(bytes) => { staticBytes = staticBytes + bytes.length() }
+      case Dynamic(_) => {}
+    }
+  }
+  BytePlan{parts: *chunks, totalStaticBytes: staticBytes}
+}
+
+/// Assembles the byte plan and runtime slot values directly into a contiguous unboxed buffer.
+///
+/// Pre-computes exact capacity to perform a single contiguous allocation followed by
+/// vectorized memory block copies (`Buffer.copy`), avoiding string reallocations.
+export fn renderToBytes(plan: &BytePlan, values: &Map[Str, Bytes]) -> Bytes {
+  var totalLength = plan.totalStaticBytes
+  for part in plan.parts {
+    match part {
+      case Static(_) => {}
+      case Dynamic(name) => {
+        if let Some(held) = values.get(name) {
+          totalLength = totalLength + held.length()
+        }
+      }
+    }
+  }
+
+  if totalLength <= 0 { return ByteSeq.empty() }
+
+  var dst = Buffer.alloc(totalLength)
+  var cursor = 0
+
+  for part in plan.parts {
+    match part {
+      case Static(bytes) => {
+        let len = bytes.length()
+        if len > 0 {
+          let src = Buffer.fromBytes(bytes)
+          dst = Option.unwrapOr(Buffer.copy(&src, 0, &dst, cursor, len), dst)
+          cursor = cursor + len
+        }
+      }
+      case Dynamic(name) => {
+        if let Some(held) = values.get(name) {
+          let len = held.length()
+          if len > 0 {
+            let src = Buffer.fromBytes(held)
+            dst = Option.unwrapOr(Buffer.copy(&src, 0, &dst, cursor, len), dst)
+            cursor = cursor + len
+          }
+        }
+      }
+    }
+  }
+
+  Buffer.toBytes(&dst)
+}
+
+/// Converts an integer nibble (0-15) into its ASCII lowercase hex byte.
+fn hexDigit(nibble: Int) -> UInt8 {
+  if nibble < 10 {
+    Option.unwrapOr(convertInteger[UInt8](48 + nibble), 48u8)
+  } else {
+    Option.unwrapOr(convertInteger[UInt8](97 + (nibble - 10)), 97u8)
+  }
+}
+
+/// Formats an HTTP/1.1 chunk length into a hex frame header `<hex>\r\n` without string heap allocation.
+export fn formatHexChunkHeader(len: Int) -> Bytes {
+  if len <= 0 { return bytesOf([48u8, 13u8, 10u8]) }
+
+  var octets: Array[UInt8] = []
+  var remaining = len
+  while remaining > 0 {
+    let nibble = remaining % 16
+    octets = octets.push(hexDigit(nibble))
+    remaining = remaining / 16
+  }
+
+  // Reverse nibbles to big-endian order
+  var reversed: Array[UInt8] = []
+  var idx = octets.length() - 1
+  while idx >= 0 {
+    reversed = reversed.push(octets[idx])
+    idx = idx - 1
+  }
+
+  // Append CRLF
+  reversed = reversed.push(13u8)
+  reversed = reversed.push(10u8)
+  bytesOf(reversed)
+}
+
+/// Frames a byte payload as an HTTP/1.1 chunk: `<hex-length>\r\n<payload>\r\n`.
+export fn frameChunk(chunk: &Bytes) -> Bytes {
+  let len = chunk.length()
+  if len == 0 { return ByteSeq.empty() }
+  let header = formatHexChunkHeader(len)
+  let crlf = bytesOf([13u8, 10u8])
+  ByteSeq.join(&[header, *chunk, crlf])
+}
+
+/// Batches streaming chunks up to the TCP Maximum Segment Size (MSS) boundary.
+///
+/// Prevents small-packet amplification on mobile cellular networks and minimizes
+/// OS socket transmission syscalls.
+export fn coalesceToMss(chunks: &Array[Bytes], maxMss: Int) -> Array[Bytes] {
+  if maxMss <= 0 { return *chunks }
+  var coalesced: Array[Bytes] = []
+  var currentBatch: Array[Bytes] = []
+  var currentBytes = 0
+
+  for chunk in chunks {
+    let len = chunk.length()
+    if len > 0 {
+      if currentBytes + len > maxMss && currentBytes > 0 {
+        coalesced = coalesced.push(ByteSeq.join(&currentBatch))
+        currentBatch = [chunk]
+        currentBytes = len
+      } else {
+        currentBatch = currentBatch.push(chunk)
+        currentBytes = currentBytes + len
+      }
+    }
+  }
+
+  if currentBytes > 0 {
+    coalesced = coalesced.push(ByteSeq.join(&currentBatch))
+  }
+
+  coalesced
+}

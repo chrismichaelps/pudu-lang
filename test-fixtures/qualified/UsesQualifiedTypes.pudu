@@ -1,0 +1,26 @@
+module UsesQualifiedTypes
+
+import Std.Text.Parse as P
+import Std.Time as T
+
+/// A type its module really declares, reached through the alias.
+fn yearOf(value: &T.Date) -> Int { value.year }
+
+/// A generic one, and one that is an alias rather than a declaration.
+fn keep(value: P.Parser[Int]) -> P.Parser[Int] { value }
+
+export fn main() -> Int {
+  var total = 0
+  if yearOf(&T.Date{year: 2026, month: 8, day: 27}) == 2026 {
+    total = total + 1
+  }
+  match P.run(keep(P.integer()), "7") {
+    case Ok(found) => {
+      if found == 7 {
+        total = total + 2
+      }
+    }
+    case Err(_e) => {}
+  }
+  total
+}

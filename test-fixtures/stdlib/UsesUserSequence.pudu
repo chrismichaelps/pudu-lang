@@ -1,0 +1,115 @@
+module UsesUserSequence
+
+import Std.Iter as I
+
+/// A singly linked list that says how it is iterated.
+///
+/// A sum falls back to walking the payload its matched variant carries — the
+/// rule that makes an `Option` a sequence of nought or one. A type that writes
+/// its own `Sequence` means something else by iteration, and what it wrote is
+/// what runs.
+type List
+  = Empty
+  | Cons{head: Int, tail: List}
+
+impl I.Sequence[List, Int] for List {
+  fn begin(self: &List) -> List { *self }
+  fn advance(self: &List, state: List) -> Option[(List, Int)] {
+    match state {
+      case Empty => None
+      case Cons{head, tail} => Some((tail, head))
+    }
+  }
+}
+
+/// The same list written with a positional payload, so both spellings are
+/// shown to reach the same implementation.
+type Stack
+  = Bottom
+  | Push(Int, Stack)
+
+impl I.Sequence[Stack, Int] for Stack {
+  fn begin(self: &Stack) -> Stack { *self }
+  fn advance(self: &Stack, state: Stack) -> Option[(Stack, Int)] {
+    match state {
+      case Bottom => None
+      case Push(top, rest) => Some((rest, top))
+    }
+  }
+}
+
+/// A sum with no implementation still walks its payload.
+type Boxed = One(Int) | Two(Int)
+
+fn listFrom(items: &Array[Int]) -> List {
+  var built = Empty
+  var index = items.length()
+  while index > 0 {
+    index = index - 1
+    built = Cons{head: items[index], tail: built}
+  }
+  built
+}
+
+fn stackFrom(items: &Array[Int]) -> Stack {
+  var built = Bottom
+  var index = items.length()
+  while index > 0 {
+    index = index - 1
+    built = Push(items[index], built)
+  }
+  built
+}
+
+fn totalOf(list: &List) -> Int {
+  var sum = 0
+  for value in list {
+    sum = sum + value
+  }
+  sum
+}
+
+fn countOf(list: &List) -> Int {
+  var seen = 0
+  for _value in list {
+    seen = seen + 1
+  }
+  seen
+}
+
+fn stackTotal(stack: &Stack) -> Int {
+  var sum = 0
+  for value in stack {
+    sum = sum + value
+  }
+  sum
+}
+
+fn payloadTotal(boxed: Boxed) -> Int {
+  var sum = 0
+  for value in boxed {
+    sum = sum + value
+  }
+  sum
+}
+
+fn optionTotal(value: Option[Int]) -> Int {
+  var sum = 0
+  for item in value {
+    sum = sum + item
+  }
+  sum
+}
+
+export fn main() -> Int {
+  var built = listFrom(&[3, 4, 5])
+  var stacked = stackFrom(&[6, 7])
+  var total = 0
+  total = total + totalOf(&built)
+  total = total + countOf(&built)
+  total = total + stackTotal(&stacked)
+  total = total + payloadTotal(Two(8))
+  total = total + optionTotal(Some(9))
+  total = total + optionTotal(None)
+  total
+}

@@ -1,0 +1,99 @@
+module View.MarkdownInline
+
+import Std.Html.Build as H
+
+/// The characters that may open inline markup.
+const MARKERS: Array[Str] = ["`", "*", "["]
+
+/// One line of Markdown prose as nodes: code spans, strong and emphasised text,
+/// and links, with everything between them as text.
+///
+/// A plain run is taken up to the next marker in one step rather than a
+/// character at a time. A marker with nothing to close it is kept as the
+/// character it is, so a stray asterisk reads as written rather than swallowing
+/// the rest of the line. Every piece of text becomes a text node, so nothing a
+/// page says can become markup.
+export fn render(text: Str) -> Array[H.Node] {
+  var out: Array[H.Node] = []
+  var pending = ""
+  var rest = text
+  while !rest.isEmpty() {
+    let next = nextMarker(rest)
+    if next < 0 {
+      pending = pending + rest
+      rest = ""
+    } else if next > 0 {
+      pending = pending + rest.take(next)
+      rest = rest.drop(next)
+    } else {
+      match marked(rest) {
+        case Some(found) => {
+          out = withText(out, pending)
+          pending = ""
+          out = out.push(found[0])
+          rest = rest.drop(found[1])
+        }
+        case None => {
+          pending = pending + rest.take(1)
+          rest = rest.drop(1)
+        }
+      }
+    }
+  }
+  withText(out, pending)
+}
+
+/// Markup that begins the text, and how many characters it used.
+fn marked(rest: Str) -> Option[(H.Node, Int)] {
+  if rest.startsWith("`") {
+    let close = rest.drop(1).indexOf("`")
+    if close < 0 { return None }
+    return Some((H.code().says(rest.slice(1, close + 1)), close + 2))
+  }
+  if rest.startsWith("**") {
+    let close = rest.drop(2).indexOf("**")
+    if close <= 0 { return None }
+    return Some((H.strong().holding(render(rest.slice(2, close + 2))), close + 4))
+  }
+  if rest.startsWith("*") {
+    let close = rest.drop(1).indexOf("*")
+    if close <= 0 { return None }
+    return Some((H.em().holding(render(rest.slice(1, close + 1))), close + 2))
+  }
+  link(rest)
+}
+
+/// A link written `[label](target)`, when the target is one a page may link to.
+fn link(rest: Str) -> Option[(H.Node, Int)] {
+  if !rest.startsWith("[") { return None }
+  let middle = rest.indexOf("](")
+  if middle < 0 { return None }
+  let end = rest.drop(middle + 2).indexOf(")")
+  if end < 0 { return None }
+  let target = rest.slice(middle + 2, middle + 2 + end)
+  if !linkable(target) { return None }
+  Some((H.a().href(target).holding(render(rest.slice(1, middle))), middle + 3 + end))
+}
+
+/// Whether a target is a page, a place on one, or a web address.
+///
+/// Anything else — a script written where an address belongs — is refused, and
+/// the text is shown as it was written.
+fn linkable(target: Str) -> Bool {
+  target.startsWith("/") || target.startsWith("#") || target.startsWith("https://")
+    || target.startsWith("http://")
+}
+
+/// Where the nearest marker begins, or -1 when the text holds none.
+fn nextMarker(rest: Str) -> Int {
+  var nearest = -1
+  for marker in MARKERS {
+    let found = rest.indexOf(marker)
+    if found >= 0 && (nearest < 0 || found < nearest) { nearest = found }
+  }
+  nearest
+}
+
+fn withText(out: Array[H.Node], text: Str) -> Array[H.Node] {
+  if text.isEmpty() { out } else { out.push(H.words(text)) }
+}

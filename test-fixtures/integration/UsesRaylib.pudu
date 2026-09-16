@@ -1,0 +1,21 @@
+module UsesRaylib
+
+foreign "raylib" version "6" {
+  type Allocation
+  fn getRandomValue symbol "GetRandomValue" (min: Int32, max: Int32) -> Int32
+  fn memAlloc symbol "MemAlloc" (size: UInt32) -> owned Allocation by memFree
+  fn memFree symbol "MemFree" (memory: Allocation) -> ()
+}
+
+/// Prove Pudu can load and call a real Raylib shared library without a display.
+///
+/// Equal random bounds make the scalar result deterministic. Allocation and
+/// release exercise the owned opaque-handle path against Raylib's allocator.
+export fn main() -> Int {
+  unsafe(foreign) {
+    let allocation = memAlloc(64u32)
+    let value = getRandomValue(7i32, 7i32)
+    memFree(allocation)
+    if value == 7i32 { 0 } else { 1 }
+  }
+}

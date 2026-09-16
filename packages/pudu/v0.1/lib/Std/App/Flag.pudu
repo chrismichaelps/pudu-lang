@@ -1,0 +1,86 @@
+module Std.App.Flag
+
+/// Activation strategies for feature flags.
+export type Strategy
+  = Disabled
+  | Enabled
+  | Percentage(Int)
+  | Allowlist(Array[Str])
+
+/// Context carrying subject and tenant identifiers for evaluation.
+export type Context = {
+  subjectId: Str,
+  tenantId: Str
+}
+
+/// A named feature flag with its targeting strategy.
+export type Flag = {
+  name: Str,
+  strategy: Strategy
+}
+
+/// Constructs an evaluation context.
+export fn context(subjectId: Str, tenantId: Str) -> Context {
+  Context {
+    subjectId: subjectId,
+    tenantId: tenantId
+  }
+}
+
+/// Constructs a feature flag.
+export fn flag(name: Str, strategy: Strategy) -> Flag {
+  Flag {
+    name: name,
+    strategy: strategy
+  }
+}
+
+/// Checks whether an array contains the target string.
+fn listContains(items: &Array[Str], target: Str) -> Bool {
+  if target.length() == 0 { return false }
+  for item in items {
+    if item == target { return true }
+  }
+  false
+}
+
+/// Computes a deterministic integer bucket (0..99) from a string key.
+fn bucketHash(key: Str) -> Int {
+  var hash = 5381
+  var i = 0
+  let len = key.length()
+  while i < len {
+    let code = key.charAt(i).code()
+    hash = ((hash * 33) + code) % 1000000007
+    i = i + 1
+  }
+  let bucket = hash % 100
+  if bucket < 0 { 0 - bucket } else { bucket }
+}
+
+/// Evaluates whether a flag is enabled for the provided context.
+export fn isEnabled(f: &Flag, ctx: &Context) -> Bool {
+  match f.strategy {
+    case Disabled => false
+    case Enabled => true
+    case Percentage(pct) => {
+      if pct <= 0 {
+        false
+      } else {
+        if pct >= 100 {
+          true
+        } else {
+          if ctx.subjectId.length() == 0 {
+            false
+          } else {
+            let key = f.name + ":" + ctx.subjectId
+            bucketHash(key) < pct
+          }
+        }
+      }
+    }
+    case Allowlist(ids) => {
+      listContains(&ids, ctx.subjectId) || listContains(&ids, ctx.tenantId)
+    }
+  }
+}

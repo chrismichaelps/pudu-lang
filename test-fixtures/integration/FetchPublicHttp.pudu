@@ -1,0 +1,112 @@
+module FetchPublicHttp
+
+import Std.Http.Client as Client
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+import Std.Tls {Closed, TlsOperationTimedOut}
+import Std.Tls as Tls
+
+/// Exercise the complete client path against a server outside this repository.
+///
+/// The example domain is reserved for documentation by IANA, so this check does
+/// not depend on an application API or on data that changes as part of normal
+/// operation. Distinct exit codes keep a failed scheduled run diagnosable.
+export fn main() -> Int {
+  let secured = verify("https://example.com/", 10)
+  if secured != 0 { return secured }
+
+  let plain = verify("http://example.com/", 20)
+  if plain != 0 { return plain }
+
+  let json = verifyJsonApi()
+  if json != 0 { return json }
+
+  verifyTlsTimeoutInvalidation()
+}
+
+fn verify(target: Str, failure: Int) -> Int {
+  let fetched = Client.fetch(target, &Client.limits())
+  if let Err(problem) = fetched {
+    let _reported = print(target + ": " + Client.explain(&problem))
+    return failure
+  }
+
+  if let Ok(response) = fetched {
+    if response.status.code != 200 {
+      let _reported = print(target + ": status " + show(response.status.code))
+      return failure + 1
+    }
+    if !response.body.contains("Example Domain") {
+      let _reported = print(target + ": expected page marker was absent")
+      return failure + 2
+    }
+    0
+  } else {
+    failure + 3
+  }
+}
+
+fn verifyJsonApi() -> Int {
+  let target = "https://jsonplaceholder.typicode.com/todos/1"
+  let fetched = Client.fetch(target, &Client.limits())
+  if let Err(problem) = fetched {
+    let _reported = print(target + ": " + Client.explain(&problem))
+    return 30
+  }
+
+  if let Ok(response) = fetched {
+    if response.status.code != 200 {
+      let _reported = print(target + ": status " + show(response.status.code))
+      return 31
+    }
+    let decoded = Json.decode(response.body)
+    if let Err(_) = decoded { return 32 }
+    let value = Result.unwrapOr(decoded, Json.Null)
+    let userId = Option.andThen(Json.field(&value, "userId"), fn(field: Json.Json) -> Option[Int] {
+        Json.asInt(&field)
+      })
+    let id = Option.andThen(Json.field(&value, "id"), fn(field: Json.Json) -> Option[Int] {
+        Json.asInt(&field)
+      })
+    let completed = Option.andThen(Json.field(&value, "completed"), fn(field: Json.Json) -> Option[Bool] {
+        Json.asBool(&field)
+      })
+    if Option.unwrapOr(userId, 0) != 1
+      || Option.unwrapOr(id, 0) != 1
+      || Option.unwrapOr(completed, true) {
+      let _reported = print(target + ": expected JSON fields were absent")
+      return 32
+    }
+    0
+  } else {
+    33
+  }
+}
+
+fn verifyTlsTimeoutInvalidation() -> Int {
+  let host = "jsonplaceholder.typicode.com"
+  let sendConnection = Tls.connectWithin(host, 443, 30000)
+  if let Err(problem) = sendConnection {
+    let _reported = print(host + ": TLS send setup failed: " + show(problem))
+    return 40
+  }
+  if let Ok(connection) = sendConnection {
+    let payload = "GET / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n"
+    if let Err(TlsOperationTimedOut) = Tls.sendTextWithin(&connection, payload, 0) {
+      if let Err(Closed) = Tls.receive(&connection, 1) {
+        let receiveConnection = Tls.connectWithin(host, 443, 30000)
+        if let Ok(receiving) = receiveConnection {
+          if let Err(TlsOperationTimedOut) = Tls.receiveWithin(&receiving, 1, 0) {
+            if let Err(Closed) = Tls.peerOf(&receiving) { return 0 }
+          }
+          let _closed = Tls.closeWithin(&receiving, 1000)
+        }
+        return 43
+      }
+      return 42
+    }
+    let _closed = Tls.closeWithin(&connection, 1000)
+  }
+  41
+}

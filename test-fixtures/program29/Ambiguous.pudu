@@ -1,0 +1,19 @@
+module Ambiguous
+
+export type User = { value: Int }
+
+export trait First {
+  fn label(self: &Self) -> Int
+}
+
+export trait Second {
+  fn label(self: &Self) -> Int
+}
+
+impl First for User {
+  fn label(self: &Self) -> Int { self.value }
+}
+
+impl Second for User {
+  fn label(self: &Self) -> Int { self.value }
+}

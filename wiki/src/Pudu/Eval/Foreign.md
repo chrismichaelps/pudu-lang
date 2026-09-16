@@ -1,0 +1,179 @@
+---
+type: module
+path: "@root/src/Pudu/Eval/Foreign.hs"
+fidelity: Active
+domain: "[[Execution Result]]"
+subsystem: "[[Runtime]]"
+grammar: "[[grammar/haskell]]"
+depth_score: 0.55
+depth_status: MEDIUM
+coupling: 3.0
+interface_stability: 0.7
+tags: [module, medium, runtime, foreign, ffi]
+aliases: [Eval Foreign]
+---
+
+# Eval Foreign
+
+## Purpose
+
+Make the call a foreign declaration describes, enforcing everything it promised on the way through.
+
+## Interface
+
+```haskell
+callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
+```
+
+### Governance
+
+- **Every check that can happen before the call happens before the call.** Past this point the value
+  is in somebody else's hands and a mistake stops being a diagnostic and becomes a corrupted stack.
+- **An integer that does not fit its declared width is refused rather than wrapped.** A value that
+  does not fit would arrive as a different value and the program would continue with it.
+- **A returned integer is interpreted with the declared signedness.** The native carrier is a
+  64-bit bit pattern, so `UInt64` values above `Int64` maximum are widened as unsigned before a Pudu
+  integer is built. The same rule applies to fields in a returned record.
+- **Text carrying a nought is refused.** The other side reads to the first nought, so it would see
+  less than the text says — and text shortened without anybody being told is how a check on the
+  whole of it is passed by only part of it.
+- **Everything one call produced is claimed together.** A call may hand back a result and the
+  resources it wrote into slots; claiming some and failing on the rest would leave the program owning
+  things it cannot name, so one store transaction decides for all of them and the tuple is exposed
+  only after it succeeds.
+- **A slot leases nothing on the way in.** A handle a caller passes is leased for the call; a handle
+  a slot receives did not exist before the call and is claimed after it.
+- **A foreign call is an effect**, so a compile-time constant cannot make one. What a program
+  compiles to must not depend on what happened to be installed on the machine that compiled it.
+- **A failure names the library and the symbol**, because the usual cause is that the library is not
+  installed and the usual remedy is to install it.
+- **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
+  pass, and its address is never exposed as an integer.
+- **Ownership covers the complete native call.** Null owned results are refused; ordinary handle
+  uses acquire atomic leases held until native code returns; release waits for leases and removes
+  the claim before calling the destructor. A call-setup failure restores a release claim because the
+  destructor did not run. A producer records the declared native release action for runtime cleanup.
+
+### Linkage
+
+- **Requires:** [[Eval Env]], [[Eval Value]], [[Foreign Call]], [[Foreign Crossing]], [[src/Pudu/Eval/Foreign/Argument]], [[src/Pudu/Eval/Foreign/Result]], [[src/Pudu/Eval/Foreign/Resource]].
+- **Used by:** [[Eval Call]].
+
+## Grill Log
+
+- **Q:** Wrap an out-of-range integer to the declared width, as C does? **A:** No.
+  _Rationale:_ the caller computed a number and would get a different one, with
+  nothing said. That is the oldest way for a program calling a library to keep
+  running on a value it never produced. _Rejected:_ wrapping; clamping.
+- **Q:** Strip the nought from text rather than refusing it? **A:** No.
+  _Rationale:_ stripping hands the other side a shorter string while the caller
+  believes the whole of it crossed — and whatever was checked about the whole was
+  not checked about the part. _Rejected:_ truncating at the nought.
+- **Q:** Let a release function decide whether a handle is valid? **A:** No. _Rationale:_ calling a
+  destructor twice is already undefined behaviour; validation after the call is too late.
+  _Rejected:_ foreign-side double-release detection as the safety boundary.
+- **Q:** Check liveness and then call after dropping the ownership lock? **A:** No. _Rationale:_ a
+  concurrent release could free the address in that gap. _Rejected:_ membership checks without a
+  lease spanning the call.
+- **Q:** Turn invalid returned UTF-8 into replacement characters? **A:** No. _Rationale:_ replacement
+  silently changes data at the least trustworthy boundary. _Rejected:_ lossy decoding; host
+  exceptions escaping the evaluator.
+- **Q:** Why decompose Eval.Foreign into coordinator and Argument submodule? **A:** Separating argument crossing and arity/shape validation into `Pudu.Eval.Foreign.Argument` leaves the coordinator focused on symbol invocation, handle leasing, and result settlement, adhering to <500 lines per module.
+
+
+## Rejected output batches
+
+A failed claim never destroys an address already held by the store. Fresh outputs are grouped by
+address and cleaned once only when all occurrences agree on canonical handle type, release library,
+and release symbol. Conflicting obligations are left unfreed rather than invoking an arbitrary
+destructor. Duplicate products are rejected even when their obligations agree.
+
+### Resolved Grill
+
+- **Q:** Release every output after a batch refusal? **A:** No. Preserve protected addresses and
+  group fresh candidates by their complete release obligation before cleanup. A failed claim does
+  not transfer ownership of an already-held address to its caller.
+
+## Conversion-failure cleanup
+
+Post-call failures retain produced handle addresses. The evaluator resolves their release obligations
+from the binding and settles the batch before reporting the original conversion diagnostic. Existing
+claims are protected and ambiguous obligations remain unfreed. Fresh, unambiguous resources are
+released once, including resources produced beside invalid UTF-8.
+
+### Resolved Grill
+
+- **Q:** Wait for a successful text conversion to discover ownership? **A:** No; the native bridge
+  retains raw handle outputs even when conversion fails.
+
+## Boundary cancellation interval
+
+The evaluator masks asynchronous exceptions over foreign dispatch through ownership settlement.
+Waiting for a lease before removing a claim remains interruptible; the non-interruptible native
+call and subsequent nonblocking settlement run under the mask. This closes the gap between native
+return and recording produced resources. It does not make arbitrary native code cancellable, contain
+native memory faults, or prove synchronous allocation-failure cleanup.
+
+### Resolved Grill
+
+- **Q:** Restore asynchronous delivery immediately when a producer returns? **A:** No; settle its
+  ownership first, or cancellation can erase the only reference to a fresh native allocation.
+
+## Resource helper boundary
+
+[[Eval Foreign Resource]] now owns destructor preflight, failed-batch cleanup, and warning recording.
+Every producer's release symbols are resolved before dispatch. A boundary abort retains its original
+code and span and includes accumulated cleanup warnings as related messages.
+
+### Resolved Grill
+
+- **Q:** Keep cleanup policy mixed with result conversion? **A:** No; the resource helper owns
+  release obligations while this module converts admitted values and chooses the primary diagnostic.
+
+## Generation-aware crossing
+
+Ordinary handle arguments retain their ownership generations until lease admission; only native
+addresses cross the ABI. Explicit release validates the same generation atomically. Output claims
+return generations in their insertion transaction, and direct and optional slot values are built
+from those exact generations. No result can recover a generation by querying a later address occupant.
+
+### Resolved Grill
+
+- **Q:** Read the generation after claiming in a separate lookup? **A:** No; the claim transaction
+  returns it, avoiding a race with release and address reuse.
+
+## Exact result conversion
+
+[[Eval Foreign Result]] validates non-owning result shapes. Slot count must match the declaration;
+only text and handle slots may be absent. Record shape and scalar category mismatches abort rather
+than yielding a truncated or differently typed value. If conversion aborts after claiming resources,
+its exact generations are discarded immediately. Host exceptions also trigger that discard before
+propagating. The primary diagnostic remains primary.
+
+### Resolved Grill
+
+- **Q:** Trust `zip` to enforce output arity? **A:** No; compare lengths before conversion.
+- **Q:** Skip cleanup when a claimed result later fails conversion? **A:** No; the result settlement
+  wrapper owns every claimed generation until it exposes a successful value.
+
+## A result the library keeps
+
+`borrowed T` on a handle result builds a `BorrowedClaim` and claims nothing. Only owned handles among
+a call's arguments become leases, so passing a borrowed one neither leases nor refuses; passing one to
+the release its handle type declared finds no claim and is refused with `E7022` before native code.
+
+A null result is refused whether it is owned or borrowed: a handle names a live object, and there is
+no representation here for one that may be absent.
+
+### Resolved Grill
+
+- **Q:** Was refusing a borrowed result the safe position? **A:** No. The only spelling left was
+  `owned T by release`, which made teardown call a destructor on the library's own object. The
+  refusal required the hazard rather than withholding it.
+- **Q:** Does `borrowed` bound the borrow? **A:** No, and it does not claim to. What it enforces is
+  that nothing here releases the value; how long the library keeps it is the declaration's assertion,
+  like the pointer validity and ABI layout beside it.
+
+## Referenced by
+
+[[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]

@@ -1,0 +1,153 @@
+---
+type: module
+path: "@root/src/Pudu/IntegerLiteral.hs"
+fidelity: Active
+domain: "[[Pudu Type]]"
+subsystem: "[[Frontend]]"
+grammar: "[[grammar/haskell]]"
+depth_score: 0.66
+depth_status: MEDIUM
+tags: [module, medium, numeric]
+aliases: [Integer Literal]
+---
+
+# Integer Literal
+
+## Purpose
+
+Decode one already lexically admitted integer spelling into an arbitrary-precision mathematical value plus an optional fixed-width suffix, and answer whether that value fits a concrete Pudu integer type.
+
+## Interface
+
+```haskell
+data IntegerSuffix = SignedSuffix !Int | UnsignedSuffix !Int
+data ParsedInteger = ParsedInteger
+  { parsedIntegerValue :: !Integer
+  , parsedIntegerSuffix :: !(Maybe IntegerSuffix)
+  }
+integerSuffix :: Text -> Maybe IntegerSuffix
+integerSuffixType :: IntegerSuffix -> Text
+splitIntegerSuffix :: Text -> (Text, Maybe IntegerSuffix)
+parseIntegerLiteral :: Text -> Maybe ParsedInteger
+fitsIntegerType :: Int -> Text -> Integer -> Maybe Bool
+```
+
+## Governance
+
+- **Arbitrary precision absorbs.** A `BigInt` met with anything narrower stays a `BigInt`. The rule
+  was originally the reverse, and that overflowed `total * 10 + digit` part way through a number
+  `BigInt` was chosen to hold — carrying a mixed result in the narrower type is the quiet truncation
+  checked arithmetic exists to prevent.
+
+- `IntegerKind` is the width and signedness a value carries at run time. `Int` and `UInt` keep their
+  own constructors rather than being written as the target's width, because they are distinct types:
+  an implementation for `Int` is not an implementation for `Int64`, however wide the target is.
+- `targetPointerWidth` is the one place the target's width is written down, so the day a target
+  becomes selectable there is one place to change.
+- `integerKindWrap` is used only where wrapping is the *defined* answer — the bitwise operations,
+  where a mask is what the operation means — never to rescue an arithmetic result that overflowed.
+
+- Exact token text stays owned by the frontend. This module decodes only after scanning, using host `Integer` so source magnitude is never truncated.
+- Suffixes are the closed lowercase set `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, and `u128`. Unsuffixed literals remain context-selectable and default to `Int` only after inference.
+- Decimal, binary, octal, and hexadecimal bodies share one strict digit fold. `_` is ignored only after the lexer has proved separator placement.
+- `fitsIntegerType` recognizes compiler-wired `Int*`, `UInt*`, and `BigInt`. It receives the target `Int` width explicitly; a non-integer type returns `Nothing` rather than being treated as an out-of-range integer.
+
+## Algorithm
+
+Strip a leading sign, split a known suffix, select the radix from a lowercase prefix, and fold each remaining scalar into an arbitrary-precision `Integer`. Fit checking compares that value with the exact signed or unsigned mathematical interval; `BigInt` is unbounded.
+
+## Negative Logic
+
+- No token emission, type-variable state, implicit widening/narrowing, runtime representation, floating parsing, partial `read`, or host fixed-width conversion.
+
+## Edge Cases
+
+- `127i8` and `-128i8` fit; `128i8` and `-129i8` do not.
+- `0u8` and `255u8` fit; `-1u8` and `256u8` do not.
+- Base-prefixed forms such as `0xffu8` retain their suffix while decoding the body in its declared radix.
+- `BigInt` accepts every decoded magnitude; `Int`/`UInt` use the target width supplied by the checker.
+
+## Depth
+
+DEPTH 0.66 (MEDIUM). One total boundary centralizes suffix vocabulary, arbitrary-precision decoding, and mathematical fit laws for lexer, checker, and evaluator consumers.
+
+## Grill Log
+
+- **Q:** Parse through host `Int` or partial `read`? **A:** No; fold into arbitrary-precision `Integer`. _Rationale:_ source magnitude and target width must not depend on the compiler host's fixed-width conversion. _Rejected:_ `read Int`; truncating conversion; exception recovery.
+- **Q:** Encode suffixes as separate identifier tokens? **A:** No; the number scanner owns a contiguous known suffix. _Rationale:_ `1i8` is one literal and an unknown suffix should receive one numeric diagnostic rather than a parser cascade. _Rejected:_ integer-plus-identifier token pairs; parser adjacency rules.
+- **Q:** Default every unsuffixed literal immediately? **A:** No; register a deferred constraint and default only if context leaves it unresolved. _Rationale:_ `let x: Int8 = 1` must select `Int8` while bare `1` remains ergonomic. _Rejected:_ hard-coded `Int`; global overloaded-number traits in this slice.
+
+## Referenced by
+
+[[src/Pudu/_MOC]] · [[Number Scanner]] · [[Type Env]] · [[Eval Match]]
+
+## Fixed-width wrapping kernel
+
+Wrapping into a nonnegative width uses the low-bit mask `value .&. (2^width - 1)` rather than
+general integer remainder. The mask is exact for both positive and negative arbitrary-precision
+inputs under two's-complement bit semantics. Signed kinds reinterpret the upper half by subtracting
+the modulus; BigInt remains unchanged. Common admitted widths use shared mask constants, avoiding
+rebuilding bounds for each operation. This is not used to rescue checked arithmetic overflow.
+
+### Resolved Grill Log
+- **Q:** Apply the mask to ordinary checked addition? **A:** No; only the existing wrapping boundary changes.
+- **Q:** Narrow the mathematical input before masking? **A:** No; Integer retains all bits until the explicit reduction.
+
+## Shared scalar bounds
+
+`integerKindBounds` supplies the inclusive mathematical interval of a bounded kind, or Nothing
+for BigInt. Checked arithmetic, literal fit checks and saturation share these intervals. Admitted
+signed widths use constant interval pairs; unsigned widths reuse the existing masks. Platform kinds
+resolve through targetPointerWidth. No host-width narrowing or change to overflow behavior occurs.
+
+### Resolved Grill Log
+- **Q:** Recompute powers independently in checked and saturating operations? **A:** No; share the width descriptor.
+- **Q:** Give BigInt artificial machine bounds? **A:** No; Nothing denotes its unbounded interval.
+
+## Native-width wrapping dispatch
+
+Signed and unsigned 8-, 16-, 32- and 64-bit wrapping dispatches through the corresponding Haskell
+fixed-width scalar conversion and widens the wrapped value back to Integer. These conversions
+implement the requested modular reduction; they are never used by checked arithmetic. Platform
+kinds select the target width. The 128-bit and general-width paths retain exact Integer masks,
+using the shared signed upper bound to identify the negative half. BigInt remains unbounded.
+
+### Resolved Grill Log
+- **Q:** Let the host Int determine a Pudu width? **A:** No; dispatch names explicit Int8/16/32/64 and Word8/16/32/64 carriers.
+- **Q:** Apply native narrowing before deciding the overflow mode? **A:** No; native carriers exist only inside integerKindWrap.
+
+## Native modular arithmetic
+
+Wrapping add/subtract/multiply for widths 1..64 operate on Word64 carriers before reinterpretation
+at the declared width. Reduction modulo 2^64 followed by reduction modulo 2^w equals direct
+reduction modulo 2^w for these three operations when w <= 64. This also preserves signed results
+through the existing wrapping conversion. Wider kinds and BigInt retain mathematical Integer
+operations; checked and saturating operations remain on their exact-result paths.
+
+### Resolved Grill Log
+- **Q:** Build an arbitrary-precision product only to discard its high bits? **A:** No; bounded modular multiplication computes only the carrier bits needed.
+- **Q:** Extend modular reduction to division? **A:** No; the reduction law does not justify that transformation.
+
+## Native bitwise kernels
+
+Fixed-width AND, OR, XOR and complement use Word64 carriers for widths through 64 bits and then
+reinterpret the result at its declared width. Wider types and BigInt retain Integer operations.
+Only the existing bitwise operators consume these internal kernels. Platform kinds retain their
+target width; this introduces no implicit surface conversion or raw-pointer access.
+
+### Resolved Grill Log
+- **Q:** Lose signed interpretation in an unsigned carrier? **A:** No; the existing declared-kind wrapping conversion restores it after the operation.
+- **Q:** Give BigInt a finite complement? **A:** No; its Integer fallback retains unbounded two's-complement behavior.
+
+## Native bounded shifts
+
+After existing shift-count validation, widths through 64 use Word64 left shifts and unsigned
+right shifts. Signed right shifts use Int64 only when the original mathematical value fits that
+carrier; otherwise they retain exact Integer shifting. Unsigned right shifts first reduce to the
+declared width so bits above it cannot enter the result. Wider widths retain Integer operations.
+The helper defensively falls back outside native shift-count bounds. Public count diagnostics and
+BigInt dispatch are unchanged.
+
+### Resolved Grill Log
+- **Q:** Right-shift an unmasked wide unsigned operand? **A:** No; normalize to its declared bit pattern first.
+- **Q:** Use logical shifting for signed values? **A:** No; use an arithmetic signed carrier or the exact fallback.

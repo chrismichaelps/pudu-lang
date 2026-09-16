@@ -1,0 +1,224 @@
+module Std.App.Database
+
+import Std.App.Config as Config
+import Std.App.Health as Health
+import Std.App.Stage as Lifecycle
+import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
+import Std.Db.Postgres as Postgres
+import Std.Db.Row as Row
+import Std.Db.Sqlite as Sqlite
+import Std.Db.Store as Store
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// A backend-neutral resource shared by lifecycle callbacks and handlers.
+export type Database = {
+  driver: Driver.Driver,
+  uri: Str,
+  size: Int,
+  lifecycle: Sync.Mutex,
+  current: Sync.Cell[Option[Driver.Client]]
+}
+
+/// Built-in connectors remain ordinary values that applications can extend.
+export fn bundledDrivers() -> Array[Driver.Driver] { [Postgres.driver(), Sqlite.driver()] }
+
+/// Select a bundled connector from the connection-string scheme.
+export fn create(uri: Str, size: Int) -> Result[Database, Driver.Error] {
+  withDrivers(&bundledDrivers(), uri, size)
+}
+
+/// Prepare any developer-supplied connector; sockets open during stage startup.
+export fn withDriver(driver: Driver.Driver, uri: Str, size: Int) -> Result[Database, Driver.Error] {
+  let selected = Driver.select(&[driver], uri) ?
+  if size < 1 { return Err(Driver.error(selected.name, "configuration", "connection capacity must be positive")) }
+  Ok(Database{driver: selected, uri: uri, size: size, lifecycle: Sync.mutex(), current: Sync.cell(None)})
+}
+
+/// Select a connector from an explicit set, without a process-global registry.
+export fn withDrivers(drivers: &Array[Driver.Driver], uri: Str, size: Int) -> Result[Database, Driver.Error] {
+  withDriver(Driver.select(drivers, uri) ?, uri, size)
+}
+
+/// Prepare a database from the connection string a setting names.
+export fn fromConfig(settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
+  let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
+      Driver.error("", "configuration", "required database connection setting is missing or empty")
+    }) ?
+  create(uri, size)
+}
+
+/// Prepare a database from a setting, using the given driver.
+export fn fromConfigWith(driver: Driver.Driver, settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
+  let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
+      Driver.error(driver.name, "configuration", "required database connection setting is missing or empty")
+    }) ?
+  withDriver(driver, uri, size)
+}
+
+/// Add before stages that need the database; stage order determines dependency order.
+export fn stage(database: &Database, name: Str) -> Lifecycle.Stage {
+  let resource = *database
+  Lifecycle.create(name,
+    fn() -> Result[(), Str] { Result.mapErr(start(&resource), describe) },
+    fn() -> Result[(), Str] { Result.mapErr(stop(&resource), describe) })
+}
+
+/// Open the connections. Called by the stage rather than by a caller.
+export fn start(database: &Database) -> Result[(), Driver.Error] {
+  let resource = *database
+  Result.mapErr(Sync.withLock(&database.lifecycle, fn() -> Result[(), Driver.Error] {
+        let current = Result.mapErr(Sync.get(&resource.current), syncError) ?
+        if let Some(_) = current { return Err(Driver.error(resource.driver.name, "lifecycle", "database resource is already started")) }
+        let opened = (resource.driver.open)(resource.uri, resource.size) ?
+        match Sync.set(&resource.current, Some(opened)) {
+          case Ok(_) => Ok(())
+          case Err(problem) => {
+            match Driver.close(&opened) {
+              case Ok(_) => Err(syncError(problem))
+              case Err(cleanup) => Err(Driver.error(resource.driver.name, "cleanup", show(problem) + "; closing client also failed: " + cleanup.message))
+            }
+          }
+        }
+      }), syncError) ?
+}
+
+/// Clear admission before closing; repeated stops are harmless.
+export fn stop(database: &Database) -> Result[(), Driver.Error] {
+  let resource = *database
+  Result.mapErr(Sync.withLock(&database.lifecycle, fn() -> Result[(), Driver.Error] {
+        let current = Result.mapErr(Sync.swap(&resource.current, None), syncError) ?
+        match current {
+          case None => Ok(())
+          case Some(client) => Driver.close(&client)
+        }
+      }), syncError) ?
+}
+
+/// SQL and placeholders follow the selected driver; values are always separate.
+export fn query(database: &Database, sql: Str, values: &Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+  let client = available(database) ?
+  Driver.query(&client, sql, values)
+}
+
+/// Run a statement that carries no values.
+export fn execute(database: &Database, sql: Str) -> Result[Driver.Rows, Driver.Error] {
+  let client = available(database) ?
+  Driver.execute(&client, sql)
+}
+
+fn available(database: &Database) -> Result[Driver.Client, Driver.Error] {
+  let current = Result.mapErr(Sync.get(&database.current), syncError) ?
+  match current {
+    case None => Err(Driver.error(database.driver.name, "closed", "database resource is not started"))
+    case Some(client) => Ok(client)
+  }
+}
+
+fn syncError(problem: Sync.SyncError) -> Driver.Error { Driver.error("", "synchronization", show(problem)) }
+fn describe(problem: Driver.Error) -> Str { problem.driver + ": " + problem.category + ": " + problem.message }
+
+/// Preserve the distinction between database execution and application row decoding.
+export type QueryError = DatabaseFailure(Driver.Error) | MappingFailure(Row.RowError)
+
+/// Every row a query answered, each read by the mapper.
+export fn queryAll[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[Array[T], QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.map(&rows, mapper), mappingFailure)
+}
+
+/// The single row a query answered, or an error when it answered none or several.
+export fn queryOne[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[T, QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.one(&rows, mapper), mappingFailure)
+}
+
+/// The one row a query answered, or nothing.
+export fn queryOptional[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[Option[T], QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.optional(&rows, mapper), mappingFailure)
+}
+
+/// The selected driver owns the connection for the complete action.
+export fn transaction(
+  database: &Database,
+  action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]
+) -> Result[Driver.Rows, Driver.Error] {
+  let client = available(database) ?
+  Driver.transaction(&client, action)
+}
+
+/// Bring the schema to what the program holds, through this database's driver.
+///
+/// Answers how many migrations ran. A database that is not started is refused
+/// rather than opened, like every other call here.
+export fn migrate(
+  database: &Database,
+  migrations: &Array[Migrate.Migration]
+) -> Result[Int, Migrate.MigrationError] {
+  let client = Result.mapErr(available(database), fn(problem: Driver.Error) -> Migrate.MigrationError {
+      Migrate.Refused("the database", problem.message)
+    }) ?
+  Migrate.apply(&client, &database.driver, migrations)
+}
+
+/// This database as a store reads and writes it. A database that is not
+/// started is refused rather than opened.
+export fn storeTarget(database: &Database) -> Result[Store.Target, Driver.Error] {
+  let client = available(database) ?
+  Ok(Store.through(&client, &database.driver))
+}
+
+/// A stage that migrates when the application starts and has nothing to undo
+/// when it stops. Placed after the database's own stage, so the connection is
+/// open before it runs and still open when it finishes.
+export fn migrationStage(
+  database: &Database,
+  name: Str,
+  migrations: &Array[Migrate.Migration]
+) -> Lifecycle.Stage {
+  let resource = *database
+  let held = *migrations
+  Lifecycle.create(name,
+    fn() -> Result[(), Str] {
+      match migrate(&resource, &held) {
+        case Ok(_) => Ok(())
+        case Err(problem) => Err(Migrate.explain(&problem))
+      }
+    },
+    fn() -> Result[(), Str] { Ok(()) })
+}
+
+/// A readiness check that asks the database a question.
+///
+/// It runs `select 1` through the started client, so an instance whose
+/// database is not started or not answering is taken out of rotation rather
+/// than sent requests it will fail. It belongs among readiness checks and
+/// never among liveness checks: a database outage is not a reason to restart
+/// a program that is otherwise well, and a liveness check that asked would
+/// restart every instance at once.
+export fn readiness(database: &Database, name: Str) -> Health.Readiness {
+  let resource = *database
+  Health.readiness(name, fn() -> Health.Verdict {
+      Health.fromTruth(Result.isOk(&execute(&resource, "select 1")))
+    })
+}
+
+fn databaseFailure(problem: Driver.Error) -> QueryError { DatabaseFailure(problem) }
+fn mappingFailure(problem: Row.RowError) -> QueryError { MappingFailure(problem) }

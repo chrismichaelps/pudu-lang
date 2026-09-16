@@ -1,0 +1,7 @@
+module Collision
+
+import A as First
+import X as Second
+
+fn left(user: First.User) -> Str { user.show() }
+fn right(user: Second.User) -> Int { user.show() }

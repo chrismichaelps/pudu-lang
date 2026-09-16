@@ -1,0 +1,6 @@
+[package]
+name = "tableform"
+source = "src"
+
+[dependencies]
+shared = { path = "../shared" }

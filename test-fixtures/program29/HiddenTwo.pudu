@@ -1,0 +1,7 @@
+module HiddenTwo
+
+type Hidden = { value: Int }
+export type Public = Hidden
+
+export fn keep(value: Public) -> Public { value }
+export fn take(value: Hidden) -> Int { value.value }

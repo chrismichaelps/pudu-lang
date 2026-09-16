@@ -1,0 +1,21 @@
+module A
+
+export type User = { name: Str }
+
+export trait Show {
+  fn show(self: &Self) -> Str
+}
+
+export trait Label {
+  fn label(self: &Self) -> Str = "user"
+}
+
+impl Show for User {
+  fn show(self: &Self) -> Str { self.name }
+}
+
+impl Label for User {}
+
+export fn displayName(user: User) -> Str { user.name }
+
+export const ANSWER: Int = 42

@@ -1,0 +1,84 @@
+module Std.Adler32
+
+const MOD_ADLER: UInt32 = 65521u32
+
+fn toU32(b: UInt8) -> UInt32 {
+  match convertInteger[UInt32](b) {
+    case Some(u) => u
+    case None => 0u32
+  }
+}
+
+/// Computes the RFC 1950 Adler-32 checksum of `bytes`.
+export fn checksum(bytes: &Array[UInt8]) -> UInt32 {
+  update(1u32, bytes)
+}
+
+/// Computes the Adler-32 checksum directly over a UTF-8 text string.
+export fn checksumText(text: Str) -> UInt32 {
+  let b = text.toBytes().toArray()
+  checksum(&b)
+}
+
+/// Updates an existing Adler-32 checksum with additional bytes.
+export fn update(adler: UInt32, bytes: &Array[UInt8]) -> UInt32 {
+  var s1 = adler & 0xffffu32
+  var s2 = (adler >> 16) & 0xffffu32
+  let len = bytes.length()
+  var i = 0
+  while i < len {
+    let blockEnd = if (i + 5552) < len {
+      i + 5552
+    } else {
+      len
+    }
+    while i < blockEnd {
+      let b = toU32(bytes[i])
+      s1 = s1 &+ b
+      s2 = s2 &+ s1
+      i = i + 1
+    }
+    s1 = s1 % MOD_ADLER
+    s2 = s2 % MOD_ADLER
+  }
+  (s2 << 16) | s1
+}
+
+/// Performs an O(1) rolling update over a sliding window of size `length`.
+export fn roll(adler: UInt32, oldByte: UInt8, newByte: UInt8, length: Int) -> UInt32 {
+  let s1 = adler & 0xffffu32
+  let s2 = (adler >> 16) & 0xffffu32
+  let oldU = toU32(oldByte)
+  let newU = toU32(newByte)
+  let lenU = match convertInteger[UInt32](length) {
+    case Some(u) => u % MOD_ADLER
+    case None => 0u32
+  }
+
+  var nextS1 = (s1 &+ MOD_ADLER) &- (oldU % MOD_ADLER)
+  nextS1 = (nextS1 &+ (newU % MOD_ADLER)) % MOD_ADLER
+
+  let oldTimesLen = (lenU &* (oldU % MOD_ADLER)) % MOD_ADLER
+  var nextS2 = (s2 &+ MOD_ADLER) &- oldTimesLen
+  nextS2 = (nextS2 &+ nextS1 &+ MOD_ADLER &- 1u32) % MOD_ADLER
+
+  (nextS2 << 16) | nextS1
+}
+
+/// Combines two adjacent Adler-32 checksums into the checksum of their concatenation.
+export fn combine(adler1: UInt32, adler2: UInt32, len2: Int) -> UInt32 {
+  let s1a = adler1 & 0xffffu32
+  let s2a = (adler1 >> 16) & 0xffffu32
+  let s1b = adler2 & 0xffffu32
+  let s2b = (adler2 >> 16) & 0xffffu32
+  let len2Mod = match convertInteger[UInt32](len2) {
+    case Some(u) => u % MOD_ADLER
+    case None => 0u32
+  }
+
+  let s1 = ((s1a &+ s1b &+ MOD_ADLER) &- 1u32) % MOD_ADLER
+  let crossTerm = (len2Mod &* (((s1a &+ MOD_ADLER) &- 1u32) % MOD_ADLER)) % MOD_ADLER
+  let s2 = (s2a &+ s2b &+ crossTerm) % MOD_ADLER
+
+  (s2 << 16) | s1
+}

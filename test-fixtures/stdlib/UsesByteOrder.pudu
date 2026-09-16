@@ -1,0 +1,86 @@
+module UsesByteOrder
+
+import Std.ByteOrder as ByteOrder
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. bswap16 swaps upper and lower 8-bit bytes
+  if ByteOrder.bswap16(0x1234u16) == 0x3412u16
+    && ByteOrder.bswap16(0xABCDu16) == 0xCDABu16 {
+    held = held + 1
+  }
+
+  // 2. bswap32 reverses 4 bytes
+  if ByteOrder.bswap32(0x12345678u32) == 0x78563412u32
+    && ByteOrder.bswap32(0x01000000u32) == 0x00000001u32 {
+    held = held + 1
+  }
+
+  // 3. bswap64 reverses 8 bytes
+  let val64 = 0x0102030405060708u64
+  if ByteOrder.bswap64(val64) == 0x0807060504030201u64
+    && ByteOrder.bswap64(ByteOrder.bswap64(val64)) == val64 {
+    held = held + 1
+  }
+
+  // 4. htons / ntohs and htonl / ntohl roundtrips
+  if ByteOrder.ntohs(ByteOrder.htons(0x5678u16)) == 0x5678u16
+    && ByteOrder.ntohl(ByteOrder.htonl(0x12345678u32)) == 0x12345678u32 {
+    held = held + 1
+  }
+
+  // 5. readU16BE and readU32BE big-endian decoding
+  let bytes4: Array[UInt8] = [0x12u8, 0x34u8, 0x56u8, 0x78u8]
+  if ByteOrder.readU16BE(&bytes4, 0) == Some(0x1234u16)
+    && ByteOrder.readU16BE(&bytes4, 2) == Some(0x5678u16)
+    && ByteOrder.readU32BE(&bytes4, 0) == Some(0x12345678u32) {
+    held = held + 1
+  }
+
+  // 6. readU16LE and readU32LE little-endian decoding
+  if ByteOrder.readU16LE(&bytes4, 0) == Some(0x3412u16)
+    && ByteOrder.readU16LE(&bytes4, 2) == Some(0x7856u16)
+    && ByteOrder.readU32LE(&bytes4, 0) == Some(0x78563412u32) {
+    held = held + 1
+  }
+
+  // 7. readU64BE and readU64LE 64-bit integer decoding
+  let bytes8: Array[UInt8] = [
+    0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8, 0x08u8
+  ]
+  if ByteOrder.readU64BE(&bytes8, 0) == Some(0x0102030405060708u64)
+    && ByteOrder.readU64LE(&bytes8, 0) == Some(0x0807060504030201u64) {
+    held = held + 1
+  }
+
+  // 8. writeU16BE and writeU32BE
+  let w16BE = ByteOrder.writeU16BE(0xABCDu16)
+  let w32BE = ByteOrder.writeU32BE(0x12345678u32)
+  let exp16BE: Array[UInt8] = [0xABu8, 0xCDu8]
+  let exp32BE: Array[UInt8] = [0x12u8, 0x34u8, 0x56u8, 0x78u8]
+  if w16BE == exp16BE && w32BE == exp32BE {
+    held = held + 1
+  }
+
+  // 9. writeU16LE, writeU32LE, and writeU64LE
+  let w16LE = ByteOrder.writeU16LE(0xABCDu16)
+  let w32LE = ByteOrder.writeU32LE(0x12345678u32)
+  let exp16LE: Array[UInt8] = [0xCDu8, 0xABu8]
+  let exp32LE: Array[UInt8] = [0x78u8, 0x56u8, 0x34u8, 0x12u8]
+  if w16LE == exp16LE && w32LE == exp32LE {
+    held = held + 1
+  }
+
+  // 10. Bounds check failure handling and writeU64BE
+  let shortBuf: Array[UInt8] = [0x01u8, 0x02u8]
+  let w64BE = ByteOrder.writeU64BE(0x0102030405060708u64)
+  if ByteOrder.readU32BE(&shortBuf, 0) == None
+    && ByteOrder.readU16BE(&shortBuf, -1) == None
+    && ByteOrder.readU16BE(&shortBuf, 2) == None
+    && w64BE == bytes8 {
+    held = held + 1
+  }
+
+  held
+}

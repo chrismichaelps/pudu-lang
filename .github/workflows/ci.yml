@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  compiler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      # `apt-get update` fails as a whole when any configured repository fails,
+      # and the runner image carries third-party repositories this project does
+      # not use — a bad mirror for one of those has failed this build for a
+      # reason unrelated to the change under test. The install is the gate: if
+      # the index is too stale to resolve the package, this still fails, and it
+      # fails saying the package could not be installed rather than that some
+      # other repository could not be read.
+      - name: Install the dynamic call headers
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev
+      - run: cabal update
+      # A fresh checkout has nothing built, so this cannot answer "up to date"
+      # without compiling — which is how a local `-Werror` run passed for a week
+      # while checking nothing, and let an incomplete pattern and three dead
+      # bindings through.
+      - name: Verify the tree compiles with no warnings
+        run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
+      - run: cabal build all --enable-optimization=2
+      # Every gate below runs the executable, and `cabal list-bin` answers for
+      # the configuration it is asked about rather than the one that was built.
+      # Asked without the optimization flag it names the unoptimized path: on a
+      # fresh runner that file does not exist and the gate fails for a reason
+      # that has nothing to do with the change, and on a machine that has built
+      # both it names a binary from some earlier day — which is worse, because
+      # the gates pass and the benchmark reports a figure for the wrong build.
+      # Resolved once here so no gate can disagree with what was compiled.
+      - name: Locate the executable that was built
+        run: echo "PUDU=$(cabal list-bin pudu --enable-optimization=2)" >> "$GITHUB_ENV"
+      - name: Enforce scheduled API removals
+        run: python3 scripts/api-lifecycle.py check --binary "$PUDU"
+      # A suite that stops responding should say so and end, rather than hold
+      # the runner until the job's own limit. The bound is generous against the
+      # observed run so an ordinary slow day is not a failure.
+      - name: Run the full suite
+        timeout-minutes: 12
+        run: cabal test all --enable-optimization=2 --test-show-details=direct
+      - name: Verify every committed Pudu file is formatted
+        run: cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name '*.pudu')
+      # Formatting only parses. Nothing else compiled the standard library
+      # itself: a module broke only where a test happened to import it, and the
+      # ones no test reaches were never checked at all. The fixtures are
+      # excluded because many of them are programs that must fail to check.
+      - name: Verify the standard library and examples compile
+        run: cabal run -v0 pudu -- check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
+      - name: Verify every diagnostic code means one thing
+        run: node test/diagnostic-codes.mjs
+      # A merge that changes only documentation, the website, or the examples
+      # must never publish a release; the decision the release workflow asks is
+      # held to that here, where every change is checked.
+      - name: Verify only a compiler change at a new version releases
+        run: python3 test/release-plan.test.py
+      - name: Verify the language server answers a real session
+        run: node test/lsp-session.mjs "$PUDU"
+      - name: Verify the language server survives what an editor sends it
+        run: node test/lsp-robustness.mjs "$PUDU"
+      # A running process is the only place this can be checked: the request
+      # arrives from outside, and what is under test is what a program already
+      # running does with it.
+      - name: Verify a program asked to stop drains rather than being killed
+        run: node test/signal-drain.mjs "$PUDU"
+      # Run with an empty environment and from another directory, because what
+      # is under test is that the built file needs nothing from around it.
+      - name: Verify a built program runs with nothing installed
+        run: node test/build-bundle.mjs "$PUDU"
+      # Against libraries nobody here wrote, in the shapes their own headers
+      # declare. Every other foreign fixture calls a shim from `cbits`, which
+      # can be given whatever signature the boundary happens to admit.
+      - name: Verify the foreign boundary reaches third-party libraries
+        run: node test/foreign-third-party.mjs "$PUDU"
+      # A service that answers, measured end to end. The figures are not
+      # asserted — a shared runner's are not comparable between runs — but a
+      # service that stopped answering at all is a failure worth catching here.
+      - name: Verify a service answers over a socket
+        run: node bench/request.mjs "$PUDU" --requests 40
+      # Everything a new project's own README tells somebody to run, run in a
+      # project made outside this checkout — where the standard library is not
+      # sitting beside the compiler's sources.
+      - name: Verify a new project works from the moment it is made
+        run: node test/scaffold.mjs "$PUDU"
+      # A module gaining an export gains no test with it, so the untested part
+      # of the library grows quietly. The floor only rises, so that growth has
+      # to be deliberate.
+      - name: Verify the fixtures still reach as much of the library
+        run: node test/api-coverage.mjs "$PUDU"
+      # Peak memory is a property of the whole process, which a program cannot
+      # observe, so it is measured from outside: a streaming reader must hold
+      # as much at ten times the input, and a buffered control must not.
+      - name: Verify a streaming reader holds as much at ten times the input
+        run: python3 test/residency.py "$PUDU"
+      - name: Verify documentation site browser and CLI contracts
+        run: |
+          cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
+          ! cabal run -v0 pudu -- doc --html > /dev/null
+          ! cabal run -v0 pudu -- doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null

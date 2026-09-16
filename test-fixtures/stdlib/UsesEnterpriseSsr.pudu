@@ -1,0 +1,613 @@
+module UsesEnterpriseSsr
+
+import Std.App.Audit as Audit
+import Std.App.Audit {Success, Failure, Denied}
+import Std.App.Flag {Disabled, Enabled, Percentage, Allowlist}
+import Std.App.Flag as Flag
+import Std.App.IsrCache {Fresh, Stale, Miss}
+import Std.App.IsrCache as IsrCache
+import Std.App.Secret as Secret
+import Std.App.Tenant as Tenant
+import Std.App.Totp as Totp
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Html.Buffer as HtmlBuffer
+import Std.Html as Html
+import Std.Html.Media {Critical, Standard, Low}
+import Std.Html.Media as Media
+import Std.Html.Stream as HtmlStream
+import Std.Http {Get}
+import Std.Http as Http
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Resilience as Resilience
+import Std.Http.Server.Resilience {SaveDataActive, ConstrainedCellular, FastBroadband}
+import Std.Http.Server.Route as Route
+import Std.Http.Server.Security as Security
+import Std.Http.Server as Server
+import Std.Option as Option
+import Std.Result as Result
+import Std.Ui.Island as Island
+
+fn textOf(b: &Bytes) -> Str {
+  match ByteSeq.toText(b) {
+    case Ok(str) => str
+    case Err(_) => ""
+  }
+}
+
+/// A longer code in a longer window that no clock drift is allowed in, set
+/// through a bound naming the configuring trait and nothing else.
+fn tightened[C: Totp.Configuring](base: &C) -> C {
+  base.digits(8).step(60).skew(0)
+}
+
+fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Get, target: "/", headers: headers, body: "", binaryBody: None},
+    path: "/",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: peer
+  }
+}
+
+export fn main() -> Int {
+  var passed = 0
+
+  // 1. HtmlBuffer: compile and zero-copy assemble into unboxed memory
+  let chunks = [HtmlBuffer.Static("<h1>Title: ".toBytes()), HtmlBuffer.Dynamic("name"), HtmlBuffer.Static("</h1>".toBytes())]
+  let plan = HtmlBuffer.compile(&chunks)
+  if plan.totalStaticBytes == 16 { passed = passed + 1 }
+
+  let values = mapOf([("name", "Enterprise SSR".toBytes())])
+  let assembled = HtmlBuffer.renderToBytes(&plan, &values)
+  if textOf(&assembled) == "<h1>Title: Enterprise SSR</h1>" { passed = passed + 1 }
+
+  // 2. HtmlBuffer: bitwise chunk hex header formatting
+  let zeroHeader = HtmlBuffer.formatHexChunkHeader(0)
+  if textOf(&zeroHeader) == "0\r\n" { passed = passed + 1 }
+
+  let mssHeader = HtmlBuffer.formatHexChunkHeader(1460)
+  if textOf(&mssHeader) == "5b4\r\n" { passed = passed + 1 }
+
+  // 3. HtmlBuffer: TCP MSS coalescing
+  let batched = HtmlBuffer.coalesceToMss(&["aaaa".toBytes(), "bbbb".toBytes(), "cccc".toBytes()], 8)
+  if batched.length() == 2 { passed = passed + 1 }
+  if textOf(&batched[0]) == "aaaabbbb" { passed = passed + 1 }
+
+  // 4. HtmlStream: documentHead and 14KB initcwnd budget
+  let headBytes = HtmlStream.documentHead("My Portal", &[], "body\{margin:0;\}", &[])
+  let headStr = textOf(&headBytes)
+  if headStr.contains("<title>My Portal</title>") && headStr.contains("<style>body\{margin:0;\}</style>") {
+    passed = passed + 1
+  }
+
+  let budgetOk = Resilience.enforceInitcwndBudget(&headBytes, 14000)
+  if Result.isOk(&budgetOk) { passed = passed + 1 }
+
+  let hugeBytes = ByteSeq.repeat(&"x".toBytes(), 15000)
+  let budgetErr = Resilience.enforceInitcwndBudget(&hugeBytes, 14000)
+  if Result.isErr(&budgetErr) { passed = passed + 1 }
+
+  // 5. HtmlStream: Suspense placeholder and replacement
+  let suspensePair = HtmlStream.renderSuspended("orders", &"loading".toBytes(), &"orders-data".toBytes())
+  let fallback = suspensePair[0]
+  let replacement = suspensePair[1]
+  if textOf(&fallback) == "<div id=\"pudu-s-orders\">loading</div>" { passed = passed + 1 }
+
+  let repStr = textOf(&replacement)
+  if repStr.contains("<template id=\"pudu-t-orders\">orders-data</template>") && repStr.contains("replaceChildren") {
+    passed = passed + 1
+  }
+
+  // 6. Resilience: Network profile inspection
+  let saveProf = Resilience.inspectClientNetwork(&[("Save-Data", "on"), ("Host", "example.com")])
+  match saveProf { case SaveDataActive => { passed = passed + 1 } case _ => {} }
+
+  let cellProf = Resilience.inspectClientNetwork(&[("ECT", "2g")])
+  match cellProf {
+    case ConstrainedCellular(kind) => { if kind == "2g" { passed = passed + 1 } }
+    case _ => {}
+  }
+
+  let broadProf = Resilience.inspectClientNetwork(&[("ECT", "4g"), ("RTT", "40")])
+  match broadProf { case FastBroadband => { passed = passed + 1 } case _ => {} }
+
+  // 7. Resilience: SWR headers and adaptive payload
+  let swr = Resilience.swrHeaders(60, 300, &["catalog", "v1"])
+  var hasSwr = false
+  var hasTags = false
+  for pair in swr {
+    if pair[0] == "Cache-Control" && pair[1].contains("stale-while-revalidate=300") {
+      hasSwr = true
+    }
+    if pair[0] == "Cache-Tags" && pair[1] == "catalog,v1" {
+      hasTags = true
+    }
+  }
+  if hasSwr && hasTags { passed = passed + 1 }
+
+  let full = "full-markup".toBytes()
+  let minimal = "minimal-markup".toBytes()
+  let chosen = Resilience.selectAdaptivePayload(&saveProf, &full, &minimal)
+  match ByteSeq.toText(&chosen) {
+    case Ok(str) => {
+      if str == "minimal-markup" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // 8. Security: Nonce generation and strict security headers
+  let nonce = Security.generateNonce(42)
+  if nonce.length() == 32 { passed = passed + 1 }
+
+  let secHeaders = Security.strictSecurityHeaders(nonce)
+  var hasCsp = false
+  var hasHsts = false
+  var hasFrame = false
+  for pair in secHeaders {
+    if pair[0] == "Content-Security-Policy" && pair[1].contains("nonce-" + nonce) {
+      hasCsp = true
+    }
+    if pair[0] == "Strict-Transport-Security" { hasHsts = true }
+    if pair[0] == "X-Frame-Options" && pair[1] == "DENY" { hasFrame = true }
+  }
+  if hasCsp && hasHsts && hasFrame { passed = passed + 1 }
+
+  // 9. Security: Origin and constant-time token comparison
+  let validOrigin = Security.verifyOrigin(Some("https://app.example.com"), None, "app.example.com")
+  let invalidOrigin = Security.verifyOrigin(Some("https://malicious.com"), None, "app.example.com")
+  if validOrigin && !invalidOrigin { passed = passed + 1 }
+
+  let matchTok = Security.constantTimeCompare(&"secret-token-abc", &"secret-token-abc")
+  let mismatchTok = Security.constantTimeCompare(&"secret-token-abc", &"secret-token-xyz")
+  if matchTok && !mismatchTok { passed = passed + 1 }
+
+  // 10. Ui.Island: Island element, form action, and micro-runtime
+  let renderedIsland = Html.render(&Island.island("cart", "\{\"items\":2\}", Html.text("Fallback Cart")))
+  if renderedIsland.contains("<pudu-island") && renderedIsland.contains("data-name=\"cart\"") { passed = passed + 1 }
+
+  let renderedForm = Html.render(&Island.serverActionForm("/api/cart", "token123", &[Html.text("Input")]))
+  if renderedForm.contains("<form method=\"POST\" action=\"/api/cart\"") && renderedForm.contains("value=\"token123\"") { passed = passed + 1 }
+
+  // The runtime carries the nonce it was given and defines the element the
+  // island markup names. Checked for the definition rather than for any one
+  // line of its body, so a rewrite of how hydration works does not quietly
+  // stop testing that a runtime is emitted at all.
+  let renderedRuntime = Html.render(&Island.microRuntime(nonce))
+  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"")
+    && renderedRuntime.contains("customElements.define('pudu-island'") { passed = passed + 1 }
+
+  // Braces survive the trip out of the source. Every brace in the runtime is
+  // written escaped, and one that is not stops the module compiling — but a
+  // wrongly escaped one would render a backslash into the page and leave a
+  // script that no browser can parse, which nothing else here would notice.
+  var opens = 0
+  var closes = 0
+  for character in renderedRuntime.chars() {
+    if character == '\{' { opens = opens + 1 }
+    if character == '\}' { closes = closes + 1 }
+  }
+  if opens > 0 && opens == closes { passed = passed + 1 }
+  var slashes = 0
+  for character in renderedRuntime.chars() {
+    if character == '\\' { slashes = slashes + 1 }
+  }
+  if slashes == 0 { passed = passed + 1 }
+
+  // Each way of hydrating says so in the markup, since that attribute is the
+  // whole instruction the runtime reads.
+  let eagerIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Eager)
+  )
+  let visibleIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Visible)
+  )
+  let idleIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Idle)
+  )
+  if eagerIsland.contains("data-hydrate=\"eager\"") { passed = passed + 1 }
+  if visibleIsland.contains("data-hydrate=\"visible\"") { passed = passed + 1 }
+  if idleIsland.contains("data-hydrate=\"idle\"") { passed = passed + 1 }
+
+  // 11. Reply: withEtag and notModified
+  let baseResp = Reply.text(200, "resource-body")
+  let taggedResp = Reply.withEtag(&baseResp, "v123")
+  var hasEtag = false
+  for pair in taggedResp.headers {
+    if pair[0] == "ETag" && pair[1] == "\"v123\"" { hasEtag = true }
+  }
+  if hasEtag { passed = passed + 1 }
+
+  let notModResp = Reply.notModified("v123")
+  if notModResp.status.code == 304 && notModResp.body == "" { passed = passed + 1 }
+
+  // 12. Reply: conditional evaluation (304 on match, 200 on miss)
+  let matchReq = testRequest([("if-none-match", "\"v123\"")], "127.0.0.1")
+  let condMatch = Reply.conditional(&matchReq.message.headers, &baseResp, "v123")
+  if condMatch.status.code == 304 { passed = passed + 1 }
+
+  let missReq = testRequest([("if-none-match", "\"v999\"")], "127.0.0.1")
+  let condMiss = Reply.conditional(&missReq.message.headers, &baseResp, "v123")
+  if condMiss.status.code == 200 { passed = passed + 1 }
+
+  // 13. Reply: tooManyRequests
+  let tmr = Reply.tooManyRequests(45)
+  var hasRetryAfter = false
+  for pair in tmr.headers {
+    if pair[0] == "Retry-After" && pair[1] == "45" { hasRetryAfter = true }
+  }
+  if tmr.status.code == 429 && hasRetryAfter { passed = passed + 1 }
+
+  // 14. Guard: rateLimited middleware
+  let limiter = Guard.rateLimited(2, 60)
+  let okHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "ok") }
+
+  let r1 = limiter(matchReq, okHandler)
+  let r2 = limiter(matchReq, okHandler)
+  let r3 = limiter(matchReq, okHandler)
+
+  if r1.status.code == 200 { passed = passed + 1 }
+  if r2.status.code == 200 { passed = passed + 1 }
+  if r3.status.code == 429 { passed = passed + 1 }
+
+  // 15. HtmlStream: suspenseError boundary
+  let errFallback = "<div>Async Error Boundary</div>".toBytes()
+  let errChunk = HtmlStream.suspenseError("user-feed", &errFallback)
+  let errStr = textOf(&errChunk)
+  if errStr.contains("<template id=\"pudu-e-user-feed\">") && errStr.contains("data-pudu-error") {
+    passed = passed + 1
+  }
+
+  // 16. Media: adaptiveImage on constrained vs broadband networks
+  let constrainedProfile = Resilience.inspectClientNetwork(&[("save-data", "on")])
+  let fastProfile = Resilience.inspectClientNetwork(&[("ect", "4g")])
+
+  let lqipUri = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
+  let imgConstrained = Media.adaptiveImage(&constrainedProfile, "/hero.jpg", "Hero", 800, 400, Critical, lqipUri)
+  let imgConstrainedStr = textOf(&imgConstrained)
+  if imgConstrainedStr.contains("src=\"data:image/svg+xml") && imgConstrainedStr.contains("fetchpriority=\"low\"") && imgConstrainedStr.contains("data-pudu-network=\"constrained\"") {
+    passed = passed + 1
+  }
+
+  let imgFast = Media.adaptiveImage(&fastProfile, "/hero.jpg", "Hero", 800, 400, Critical, lqipUri)
+  let imgFastStr = textOf(&imgFast)
+  if imgFastStr.contains("src=\"/hero.jpg\"") && imgFastStr.contains("fetchpriority=\"high\"") && imgFastStr.contains("loading=\"eager\"") {
+    passed = passed + 1
+  }
+
+  // 17. Media: adaptivePicture
+  let sourceRules = [
+    Media.SourceRule{srcset: "/hero-desktop.webp", mediaQuery: "(min-width: 1024px)", typeMime: "image/webp", minWidth: 1024}
+  ]
+  let picFast = Media.adaptivePicture(&fastProfile, "/hero.jpg", "Hero", 800, 400, &sourceRules, Standard)
+  if textOf(&picFast).contains("<source srcset=\"/hero-desktop.webp\"") {
+    passed = passed + 1
+  }
+
+  let picConstrained = Media.adaptivePicture(&constrainedProfile, "/hero.jpg", "Hero", 800, 400, &sourceRules, Standard)
+  if !textOf(&picConstrained).contains("<source srcset=\"/hero-desktop.webp\"") {
+    passed = passed + 1
+  }
+
+  // 18. IsrCache: create, put, get Fresh, Stale, and Miss
+  let isr = IsrCache.create(5)
+  let pageBytes1 = "<h1>Cached Article 1</h1>".toBytes()
+  IsrCache.put(&isr, "/article/1", &pageBytes1, "v1", &["article", "author:alice"], 10, 60, 1000)
+
+  // Fresh lookup at now = 1005 (expiresAt = 1010)
+  match IsrCache.get(&isr, "/article/1", 1005) {
+    case Fresh(b, tag) => {
+      if tag == "v1" && textOf(&b).contains("Cached Article 1") { passed = passed + 1 }
+    }
+    case Stale(_, _) => {}
+    case Miss => {}
+  }
+
+  // Stale lookup at now = 1030 (after expiresAt 1010, before staleUntil 1070)
+  match IsrCache.get(&isr, "/article/1", 1030) {
+    case Fresh(_, _) => {}
+    case Stale(b, tag) => {
+      if tag == "v1" && textOf(&b).contains("Cached Article 1") { passed = passed + 1 }
+    }
+    case Miss => {}
+  }
+
+  // Miss lookup at now = 1080 (after staleUntil 1070)
+  match IsrCache.get(&isr, "/article/1", 1080) {
+    case Fresh(_, _) => {}
+    case Stale(_, _) => {}
+    case Miss => { passed = passed + 1 }
+  }
+
+  // 19. IsrCache: revalidateTag
+  let pageBytes2 = "<h1>Cached Article 2</h1>".toBytes()
+  IsrCache.put(&isr, "/article/2", &pageBytes2, "v2", &["article", "author:bob"], 50, 60, 1000)
+  let revalCount = IsrCache.revalidateTag(&isr, "author:bob", 1002)
+  if revalCount == 1 { passed = passed + 1 }
+
+  // Lookup /article/2 at 1003 should now be Stale because expiresAt was set to 1001
+  match IsrCache.get(&isr, "/article/2", 1003) {
+    case Fresh(_, _) => {}
+    case Stale(b, tag) => {
+      if tag == "v2" { passed = passed + 1 }
+    }
+    case Miss => {}
+  }
+
+  // 20. IsrCache: purgeTag and stats
+  let purgedCount = IsrCache.purgeTag(&isr, "article")
+  if purgedCount == 2 { passed = passed + 1 }
+
+  let isrStats = IsrCache.stats(&isr)
+  if isrStats[0] == 0 { passed = passed + 1 }
+
+  // 21. Reply: serviceUnavailable and gatewayTimeout
+  let su = Reply.serviceUnavailable(30)
+  var hasSuRetry = false
+  for pair in su.headers {
+    if pair[0] == "Retry-After" && pair[1] == "30" { hasSuRetry = true }
+  }
+  if su.status.code == 503 && hasSuRetry { passed = passed + 1 }
+
+  let gt = Reply.gatewayTimeout("custom upstream timeout")
+  if gt.status.code == 504 && gt.body == "custom upstream timeout" { passed = passed + 1 }
+
+  // 22. Guard: boundedConcurrency backpressure
+  let backpressureLimiter = Guard.boundedConcurrency(1)
+  let slowHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response {
+    Reply.text(200, "admitted")
+  }
+  let bp1 = backpressureLimiter(matchReq, slowHandler)
+  if bp1.status.code == 200 { passed = passed + 1 }
+
+  // 23. Guard: circuitBreaker trips open after consecutive failures
+  let cb = Guard.circuitBreaker(2, 60)
+  let failHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(500, "internal error") }
+  let successHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "healthy") }
+
+  let cb1 = cb(matchReq, failHandler)
+  let cb2 = cb(matchReq, failHandler)
+  let cb3 = cb(matchReq, successHandler)
+
+  if cb1.status.code == 500 { passed = passed + 1 }
+  if cb2.status.code == 500 { passed = passed + 1 }
+  if cb3.status.code == 503 { passed = passed + 1 }
+
+  // 24. Secret: encapsulation, redaction, and constant-time equality
+  let sec = Secret.secret("live_secret_key_9876")
+  if Secret.reveal(&sec) == "live_secret_key_9876" { passed = passed + 1 }
+  if Secret.redact(&sec) == "[REDACTED]" { passed = passed + 1 }
+  if Secret.redactKey(&sec, 4) == "••••••••9876" { passed = passed + 1 }
+  if Secret.constantTimeEquals(&sec, &Secret.secret("live_secret_key_9876")) { passed = passed + 1 }
+  if !Secret.constantTimeEquals(&sec, &Secret.secret("wrong_token_1234")) { passed = passed + 1 }
+
+  // 25. Flag: targeted, allowlist, and percentage rollouts
+  let ctxA = Flag.context("user-42", "tenant-alpha")
+  let ctxB = Flag.context("user-99", "tenant-beta")
+
+  let fDis = Flag.flag("beta-nav", Disabled)
+  let fEna = Flag.flag("beta-nav", Enabled)
+  if !Flag.isEnabled(&fDis, &ctxA) && Flag.isEnabled(&fEna, &ctxA) { passed = passed + 1 }
+
+  let fTarget = Flag.flag("tenant-rollout", Allowlist(["tenant-alpha", "vip-user"]))
+  if Flag.isEnabled(&fTarget, &ctxA) && !Flag.isEnabled(&fTarget, &ctxB) { passed = passed + 1 }
+
+  let fCanary = Flag.flag("canary-v2", Percentage(50))
+  let sticky1 = Flag.isEnabled(&fCanary, &ctxA)
+  let sticky2 = Flag.isEnabled(&fCanary, &ctxA)
+  if sticky1 == sticky2 { passed = passed + 1 }
+
+  // 26. Audit: ledger, cryptographic chaining, and secrets redaction
+  let auditTrail = Audit.auditLog()
+  if Audit.count(&auditTrail) == 0 && Audit.headHash(&auditTrail) == Audit.GENESIS_HASH {
+    passed = passed + 1
+  }
+
+  var auditMeta = mapOf([])
+  auditMeta = auditMeta.insert("password", "super-secret-pwd")
+  auditMeta = auditMeta.insert("tenant", "acme-corp")
+  let ev1 = Audit.record(&auditTrail, "user.login", "usr-42", "/login", Success, "10.0.0.1", &auditMeta)
+  if ev1.prevHash == Audit.GENESIS_HASH && ev1.hash != Audit.GENESIS_HASH { passed = passed + 1 }
+  if Option.unwrapOr(ev1.details.get("password"), "") == "[REDACTED]"
+    && Option.unwrapOr(ev1.details.get("tenant"), "") == "acme-corp" {
+    passed = passed + 1
+  }
+
+  let ev2 = Audit.record(&auditTrail, "admin.elevate", "usr-42", "/admin", Denied("insufficient_role"), "10.0.0.1", &mapOf([]))
+  if ev2.prevHash == ev1.hash { passed = passed + 1 }
+  if Audit.verifyIntegrity(&auditTrail) { passed = passed + 1 }
+
+  let ev1Json = Audit.renderJson(&ev1)
+  if ev1Json.contains("\"action\":\"user.login\"") && ev1Json.contains("\"[REDACTED]\"") && ev1Json.contains("\"outcome\":\"SUCCESS\"") {
+    passed = passed + 1
+  }
+
+  let ndjson = Audit.renderNdjson(&auditTrail)
+  if ndjson.contains(ev1.hash) && ndjson.contains(ev2.hash) { passed = passed + 1 }
+
+  // 27. Guard: timeout middleware
+  let fastHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "fast-ok") }
+  let slowDeadlineHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response {
+    let _slept = Concurrent.sleep(200)
+    Reply.text(200, "slow-ok")
+  }
+  let timeoutLimiter = Guard.timeout(50)
+  let fastResp = timeoutLimiter(matchReq, fastHandler)
+  if fastResp.status.code == 200 && fastResp.body == "fast-ok" { passed = passed + 1 }
+
+  let slowResp = timeoutLimiter(matchReq, slowDeadlineHandler)
+  if slowResp.status.code == 504 && slowResp.body.contains("deadline exceeded") { passed = passed + 1 }
+
+  // 28. Guard: audited middleware
+  let auditMiddleware = Guard.audited(&auditTrail, "api.call")
+  let auditedResp = auditMiddleware(matchReq, fastHandler)
+  if auditedResp.status.code == 200 && Audit.count(&auditTrail) == 3 { passed = passed + 1 }
+
+  // 29. Server: withDrainDeadline configuration
+  let testRouter = Route.router()
+  let srv = Server.server(&testRouter).withDrainDeadline(7500)
+  if srv.drainMillis == 7500 { passed = passed + 1 }
+
+  // 30. Tenant: registry, quotas, noisy-neighbor concurrency bounding, and suspension
+  let tenantReg: Tenant.TenantRegistry = Tenant.registry()
+  let tAlpha: Tenant.Tenant = Tenant.tenant("tenant-alpha", "Alpha Corp", Tenant.Free, Tenant.freeQuota())
+  let tBeta = Tenant.tenant("tenant-beta", "Beta LLC", Tenant.Enterprise, Tenant.enterpriseQuota())
+  Tenant.register(&tenantReg, tAlpha)
+  Tenant.register(&tenantReg, tBeta)
+
+  if Option.isSome(&Tenant.get(&tenantReg, "tenant-alpha")) { passed = passed + 1 }
+  if Tenant.scopedKey("tenant-alpha", "cache:home") == "tenant:tenant-alpha:cache:home" { passed = passed + 1 }
+
+  let adm1 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
+  match adm1 { case Tenant.Admitted(_) => { passed = passed + 1 } case _ => {} }
+
+  // Tenant-alpha free quota maxInflight is 2: 2nd request admitted, 3rd request fast-sheds noisy neighbor!
+  let adm2 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
+  let adm3 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
+  match (adm2, adm3) {
+    case (Tenant.Admitted(_), Tenant.ConcurrencyExceeded(_)) => { passed = passed + 1 }
+    case _ => {}
+  }
+
+  // Releasing one inflight request allows admission again
+  Tenant.release(&tenantReg, "tenant-alpha")
+  let adm4 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
+  match adm4 { case Tenant.Admitted(_) => { passed = passed + 1 } case _ => {} }
+
+  // Account suspension immediately refuses admission with Suspended
+  let _deact = Tenant.setActive(&tenantReg, "tenant-alpha", false)
+  let admSusp = Tenant.admit(&tenantReg, "tenant-alpha", 500)
+  match admSusp { case Tenant.Suspended(_) => { passed = passed + 1 } case _ => {} }
+
+  // Tenant middleware integration
+  let tenantGuard = Tenant.guard(&tenantReg, Tenant.resolveFromHeader("x-tenant-id"))
+  let betaReq = testRequest([("x-tenant-id", "tenant-beta")], "127.0.0.1")
+  let betaResp = tenantGuard(betaReq, fastHandler)
+  if betaResp.status.code == 200 { passed = passed + 1 }
+
+  let unkReq = testRequest([], "127.0.0.1")
+  let unkResp = tenantGuard(unkReq, fastHandler)
+  if unkResp.status.code == 401 { passed = passed + 1 }
+
+  let suspReq = testRequest([("x-tenant-id", "tenant-alpha")], "127.0.0.1")
+  let suspResp = tenantGuard(suspReq, fastHandler)
+  if suspResp.status.code == 403 { passed = passed + 1 }
+
+  // A tier carries the bounds a tenant starts with, and each tier's are wider
+  // than the one below it. Written out rather than compared with themselves,
+  // since a tier whose quota was copied from the tier below would agree with
+  // any check that only asked whether it had one.
+  let middle: Tenant.Quota = Tenant.standardQuota()
+  if middle.maxInflight == 10 && middle.maxRequestsPerMinute == 600
+    && middle.maxPayloadBytes == 10485760 {
+    passed = passed + 1
+  }
+  if Tenant.freeQuota().maxInflight < middle.maxInflight
+    && middle.maxInflight < Tenant.enterpriseQuota().maxInflight {
+    passed = passed + 1
+  }
+  let tier: Tenant.Tier = tBeta.tier
+  match tier { case Tenant.Enterprise => { passed = passed + 1 } case _ => {} }
+
+  // A tenant's bounds can be changed while the service runs, which is what a
+  // support desk raising a limit during an incident actually does.
+  let widened = Tenant.tenant("tenant-gamma", "Gamma Ltd", Tenant.Standard, Tenant.standardQuota())
+  Tenant.register(&tenantReg, widened)
+  if Tenant.setQuota(&tenantReg, "tenant-gamma", Tenant.enterpriseQuota()) { passed = passed + 1 }
+  if Option.unwrapOr(Tenant.get(&tenantReg, "tenant-gamma"), widened).quota.maxInflight == 50 {
+    passed = passed + 1
+  }
+  // A tenant nobody registered is not quietly given bounds: the change says it
+  // did not happen, rather than creating the tenant the caller mistyped.
+  if !Tenant.setQuota(&tenantReg, "tenant-absent", Tenant.freeQuota()) { passed = passed + 1 }
+  if Option.isNone(&Tenant.get(&tenantReg, "tenant-absent")) { passed = passed + 1 }
+  if !Tenant.setActive(&tenantReg, "tenant-absent", true) { passed = passed + 1 }
+
+  // And an unregistered tenant is refused rather than admitted on default
+  // bounds, which is the answer that keeps an unknown caller from being served.
+  let strange: Tenant.Admission = Tenant.admit(&tenantReg, "tenant-absent", 1)
+  match strange { case Tenant.UnknownTenant => { passed = passed + 1 } case _ => {} }
+
+  // A payload above the bound is refused before any slot is taken, so a body
+  // too large cannot exhaust the concurrency it was never admitted to.
+  let chunky = Tenant.admit(&tenantReg, "tenant-gamma", 52428801)
+  match chunky {
+    case Tenant.PayloadTooLarge(who) => {
+      if who.id == "tenant-gamma" { passed = passed + 1 }
+    }
+    case _ => {}
+  }
+
+  // The rate bound is the other refusal, and it says how long to wait. A
+  // refusal without that leaves a caller to guess, and they retry at once.
+  let narrow = Tenant.Quota{maxInflight: 100, maxRequestsPerMinute: 1, maxPayloadBytes: 1024}
+  let _narrowed = Tenant.setQuota(&tenantReg, "tenant-gamma", narrow)
+  let first = Tenant.admit(&tenantReg, "tenant-gamma", 1)
+  let second = Tenant.admit(&tenantReg, "tenant-gamma", 1)
+  match (first, second) {
+    case (Tenant.Admitted(_), Tenant.RateExceeded(who, retry)) => {
+      if who.id == "tenant-gamma" && retry > 0 && retry <= 60 { passed = passed + 1 }
+    }
+    case _ => {}
+  }
+
+  // What is counted per tenant is a value, so a state can be written out and
+  // compared rather than only reached through the registry.
+  let fresh: Tenant.TenantState = Tenant.TenantState{inflight: 0, windowStart: 0, requestCount: 0}
+  if fresh.inflight == 0 && fresh.requestCount == 0 { passed = passed + 1 }
+
+  // 31. Totp: Base32, RFC 6238 generation, constant-time verify, replay prevention, and clock skew
+  let foobarBs = "foobar".toBytes()
+  if Totp.encodeBase32(&foobarBs) == "MZXW6YTBOI" { passed = passed + 1 }
+  match Totp.decodeBase32("mzx-w6-ytboi===") {
+    case Ok(bs) => { if bs == foobarBs { passed = passed + 1 } }
+    case Err(_) => {}
+  }
+
+  let totpSec = "12345678901234567890".toBytes()
+  let totpCfg: Totp.TotpConfig = Totp.config(totpSec, "Acme Corp", "alice@example.com")
+  let totpUri = Totp.provisioningUri(&totpCfg)
+  if totpUri.contains("otpauth://totp/Acme%20Corp:alice%40example.com")
+    && totpUri.contains("algorithm=SHA256")
+    && totpUri.contains("digits=6") {
+    passed = passed + 1
+  }
+
+  let totpSt: Totp.TotpState = Totp.state()
+  let codeT0 = Totp.generate(&totpCfg, 0)
+  if codeT0.length() == 6 { passed = passed + 1 }
+  if Totp.verify(&totpCfg, &totpSt, codeT0, 0) { passed = passed + 1 }
+
+  // Replay of same code within same window is rejected
+  if !Totp.verify(&totpCfg, &totpSt, codeT0, 5) { passed = passed + 1 }
+
+  // Next window at t=30 generates fresh code and succeeds
+  let codeT30 = Totp.generate(&totpCfg, 30)
+  if Totp.verify(&totpCfg, &totpSt, codeT30, 30) { passed = passed + 1 }
+
+  // Forward clock skew (+1 step) within skew allowance succeeds
+  let codeT90 = Totp.generate(&totpCfg, 90)
+  if Totp.verify(&totpCfg, &totpSt, codeT90, 60) { passed = passed + 1 }
+
+  // The three numbers set through a bound naming the trait alone, which is what
+  // checks they are usable as methods rather than only as functions.
+  let longer = tightened(&totpCfg)
+  if longer.digits == 8 && longer.stepSeconds == 60 && longer.skewSteps == 0 {
+    passed = passed + 1
+  }
+  // A longer code is longer, and the window it was made in is the only one it
+  // works in: no skew means the step before it is refused.
+  if Totp.generate(&longer, 0).length() == 8 { passed = passed + 1 }
+  let strictSt = Totp.state()
+  if !Totp.verify(&longer, &strictSt, Totp.generate(&longer, 0), 60) { passed = passed + 1 }
+  // Nothing asked for is the default rather than a code with no digits, which
+  // would be the same code for everybody.
+  if totpCfg.digits(0).digits == 6 && totpCfg.step(0).stepSeconds == 30 {
+    passed = passed + 1
+  }
+  if totpCfg.skew(0 - 1).skewSteps == 0 { passed = passed + 1 }
+
+  passed
+}

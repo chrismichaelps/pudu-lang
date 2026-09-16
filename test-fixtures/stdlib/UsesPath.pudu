@@ -1,0 +1,87 @@
+module UsesPath
+
+import Std.Option as Option
+import Std.Path as Path
+
+/// What a path promises when it is read rather than looked up. Every check
+/// here is written with the separator this machine writes, so the fixture says
+/// the same thing on either family of operating system.
+export fn main() -> Int {
+  let sep = Path.separator()
+  var held = 0
+
+  // Joining does not double a separator, and does not add one to nothing.
+  if Path.join("a", "b") == "a" + sep + "b" { held = held + 1 }
+  if Path.join("a" + sep, "b") == "a" + sep + "b" { held = held + 1 }
+  if Path.join("", "b") == "b" { held = held + 1 }
+  if Path.join("a", "") == "a" { held = held + 1 }
+  if Path.joinAll(&["a", "b", "c"]) == "a" + sep + "b" + sep + "c" { held = held + 1 }
+
+  // A piece that is itself absolute begins the path again rather than being
+  // buried under what came before it.
+  if Path.join("a", sep + "b") == sep + "b" { held = held + 1 }
+
+  // Decomposition, and the leading dot that names a hidden file rather than
+  // an extension.
+  let file = Path.joinAll(&["one", "two", "note.txt"])
+  if Path.nameOf(file) == "note.txt" { held = held + 1 }
+  if Path.directoryOf(file) == "one" + sep + "two" { held = held + 1 }
+  if Option.unwrapOr(Path.extensionOf(file), "") == "txt" { held = held + 1 }
+  if Path.stemOf(file) == "note" { held = held + 1 }
+  if Path.withExtension(file, "md") == Path.joinAll(&["one", "two", "note.md"]) { held = held + 1 }
+  let hidden = Path.extensionOf(".gitignore")
+  if Option.isNone(&hidden) { held = held + 1 }
+  if Path.isHidden(".gitignore") { held = held + 1 }
+  if Path.hasExtension(file, "TXT") { held = held + 1 }
+
+  // A path says where it starts, and its components agree with it.
+  if Path.isAbsolute(sep + "one") { held = held + 1 }
+  if Path.isRelative("one") { held = held + 1 }
+  if Path.components("one" + sep + "two") == ["one", "two"] { held = held + 1 }
+  if Path.components(sep + "one") == [sep, "one"] { held = held + 1 }
+
+  // Normalizing reads the path rather than asking the file system, so it needs
+  // nothing to exist and does not follow a link.
+  if Path.normalize("a" + sep + "." + sep + "b") == "a" + sep + "b" { held = held + 1 }
+  if Path.normalize("a" + sep + "b" + sep + "..") == "a" { held = held + 1 }
+  if Path.normalize("a" + sep + ".." + sep + "b") == "b" { held = held + 1 }
+  if Path.normalize("") == "." { held = held + 1 }
+
+  // A climb above a relative path is kept, because what it reaches is not
+  // known until the path is resolved against somewhere.
+  if Path.normalize(".." + sep + "a") == ".." + sep + "a" { held = held + 1 }
+
+  // A climb above a root stays at the root, because there is nothing above it.
+  if Path.normalize(sep + ".." + sep + "a") == sep + "a" { held = held + 1 }
+
+  // Walking upwards is told when to stop rather than looping on a root.
+  if Option.unwrapOr(Path.parentOf("a" + sep + "b"), "") == "a" { held = held + 1 }
+  let top = Path.parentOf(sep)
+  if Option.isNone(&top) { held = held + 1 }
+  // A relative path's last ancestor is the directory the program is in, which
+  // is where the walk stops: that directory has nothing above it that reading
+  // the text alone can name.
+  if Path.ancestors(Path.joinAll(&["a", "b", "c"])) == ["a" + sep + "b", "a", "."] {
+    held = held + 1
+  }
+
+  // Reaching one path from another, and the pair that has no answer.
+  if Option.unwrapOr(Path.relativeTo("a", Path.joinAll(&["a", "b", "c"])), "") == "b" + sep + "c" {
+    held = held + 1
+  }
+  if Option.unwrapOr(Path.relativeTo(Path.joinAll(&["a", "b"]), "a"), "") == ".." { held = held + 1 }
+  if Option.unwrapOr(Path.relativeTo("a", "a"), "") == "." { held = held + 1 }
+  let mixed = Path.relativeTo(sep + "a", "a")
+  if Option.isNone(&mixed) { held = held + 1 }
+
+  // Resolving against a directory, and an absolute path answering for itself.
+  if Path.resolve("a", "b") == "a" + sep + "b" { held = held + 1 }
+  if Path.resolve("a", sep + "b") == sep + "b" { held = held + 1 }
+
+  // What a program asks before writing where a caller named: a path holding a
+  // climb can leave the directory it looked like it was under.
+  if Path.isInside("a", Path.joinAll(&["a", "b"])) { held = held + 1 }
+  if !Path.isInside("a", Path.joinAll(&["a", "..", "b"])) { held = held + 1 }
+
+  held
+}

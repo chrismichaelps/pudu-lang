@@ -1,0 +1,282 @@
+module Std.Db.Repository
+
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text as Text
+
+/// Why a row would not become a value.
+///
+/// The column is named and the value is not. The value came from the database
+/// and may be anything, and a message is a place values end up rendered; the
+/// column is what a caller acts on.
+export type RowError
+  = NoColumn(Str)
+  | Absent(Str)
+  | NotWhole(Str)
+  | NotCount(Str)
+  | NotTruth(Str)
+  | NotText(Str)
+  | NoRow
+  | ManyRows(Int)
+
+/// How a row becomes a value.
+///
+/// A pure function of a result and a row number, so a program's mapping is
+/// checked by building a result and comparing values. Mapping is where the
+/// errors are, and a database is the slowest way to find them.
+export type Mapper[T] = fn(Driver.Rows, Int) -> Result[T, RowError]
+
+/// What a program can do with one kind of thing.
+///
+/// A record of functions. Nothing here proxies an interface into an
+/// implementation or derives a statement from a name — what a repository does
+/// is what somebody wrote in it, which also means a repository over a
+/// different backing is the same record with different functions.
+export type Repository[T, K] = {
+  named: Str,
+  byKey: fn(K) -> Result[Option[T], RowError],
+  every: fn() -> Result[Array[T], RowError],
+  add: fn(T) -> Result[Int, RowError],
+  removeKey: fn(K) -> Result[Int, RowError]
+}
+
+/// The spellings a truth arrives in.
+const TRUE_WORDS: Set[Str] = setOf(["t", "true", "yes", "on", "1"])
+
+const FALSE_WORDS: Set[Str] = setOf(["f", "false", "no", "off", "0"])
+
+/// Whether a result has a column of that name.
+///
+/// Asked before reading, because the layer beneath cannot tell a column that
+/// is not there from one that held nothing, and inheriting that turns a typo
+/// into a data condition found later and somewhere else.
+export fn hasColumn(result: &Driver.Rows, named: Str) -> Bool { indexOf(result, named) >= 0 }
+
+fn indexOf(result: &Driver.Rows, named: Str) -> Int {
+  var index = 0
+  var found = -1
+  for held in result.columns {
+    if held.name == named && found < 0 { found = index }
+    index = index + 1
+  }
+  found
+}
+
+fn cellAt(result: &Driver.Rows, row: Int, named: Str) -> Option[Driver.Value] {
+  let index = indexOf(result, named)
+  if index < 0 || row < 0 || row >= result.rows.length() || index >= result.rows[row].length() {
+    None
+  } else {
+    Some(result.rows[row][index])
+  }
+}
+
+/// A value as the text a caller asked for.
+///
+/// PostgreSQL answers every column as text and SQLite answers it as whatever
+/// it stored, so a number is text on one and a number on the other. Rendering
+/// it here is what keeps one query working on both: refusing an integer would
+/// mean the same program read a column on one backend and failed on the other,
+/// which is the portability trap this layer exists to close. Bytes are refused,
+/// because text is not what they are.
+fn asText(named: Str, value: Driver.Value) -> Result[Str, RowError] {
+  match value {
+    case TextValue(held) => Ok(held)
+    case IntegerValue(held) => Ok(show(held))
+    case RealValue(held) => Ok(show(held))
+    case DecimalValue(held) => Ok(show(held))
+    case BooleanValue(held) => Ok(if held { "true" } else { "false" })
+    case NullValue => Err(Absent(named))
+    case BytesValue(_) => Err(NotText(named))
+  }
+}
+
+/// One column of one row as text, which must be there and must hold something.
+export fn text(result: &Driver.Rows, row: Int, named: Str) -> Result[Str, RowError] {
+  match cellAt(result, row, named) {
+    case None => Err(NoColumn(named))
+    case Some(held) => asText(named, held)
+  }
+}
+
+/// One column of one row as text, which must be there and may hold nothing.
+export fn optionalText(
+  result: &Driver.Rows,
+  row: Int,
+  named: Str
+) -> Result[Option[Str], RowError] {
+  match cellAt(result, row, named) {
+    case None => Err(NoColumn(named))
+    case Some(NullValue) => Ok(None)
+    case Some(held) => {
+      let written = asText(named, held) ?
+      Ok(Some(written))
+    }
+  }
+}
+
+/// One column as a whole number, which may be below nothing.
+///
+/// Taken from the value the backend already decoded where it decoded one,
+/// rather than read back out of its digits.
+export fn whole(result: &Driver.Rows, row: Int, named: Str) -> Result[Int, RowError] {
+  match cellAt(result, row, named) {
+    case None => Err(NoColumn(named))
+    case Some(IntegerValue(held)) =>
+    match convertInteger[Int](held) {
+      case Some(number) => Ok(number)
+      case None => Err(NotWhole(named))
+    }
+    case Some(other) => {
+      let held = asText(named, other) ?
+      if let Some(number) = Text.wholeOf(held) { Ok(number) } else { Err(NotWhole(named)) }
+    }
+  }
+}
+
+/// One column as a count, which may not.
+export fn count(result: &Driver.Rows, row: Int, named: Str) -> Result[Int, RowError] {
+  let held = whole(result, row, named) ?
+  if held < 0 { Err(NotCount(named)) } else { Ok(held) }
+}
+
+/// One column as a truth.
+///
+/// The spellings accepted are the ones a database sends. Anything else is
+/// refused rather than read as false, because a column that silently means the
+/// opposite of what it holds is worse than one that stops the program.
+export fn truth(result: &Driver.Rows, row: Int, named: Str) -> Result[Bool, RowError] {
+  if let Some(BooleanValue(held)) = cellAt(result, row, named) { return Ok(held) }
+  let held = text(result, row, named) ?
+  let word = held.trim().toLower()
+  if TRUE_WORDS.contains(word) {
+    Ok(true)
+  } else {
+    if FALSE_WORDS.contains(word) { Ok(false) } else { Err(NotTruth(named)) }
+  }
+}
+
+/// One column as a whole number, or a fallback when it holds nothing.
+export fn wholeOr(result: &Driver.Rows, row: Int, named: Str, fallback: Int) -> Result[Int, RowError] {
+  let held = optionalText(result, row, named) ?
+  if let Some(written) = held {
+    if let Some(number) = Text.wholeOf(written) { Ok(number) } else { Err(NotWhole(named)) }
+  } else {
+    Ok(fallback)
+  }
+}
+
+/// Every row as a value.
+///
+/// The first failure stops it, because a partial list of what a query returned
+/// is a value a caller cannot act on and cannot tell from a complete one.
+export fn all[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Array[T], RowError] {
+  var found: Array[T] = []
+  var index = 0
+  while index < result.rows.length() {
+    let mapped = mapper(*result, index) ?
+    found = found.push(mapped)
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// Exactly one row as a value.
+///
+/// A lookup that found none and one that found several are different, and both
+/// are refused. Answering the first of several is how a program acts on the
+/// wrong record without anything appearing to go wrong.
+export fn one[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[T, RowError] {
+  let rows = result.rows.length()
+  if rows == 0 {
+    Err(NoRow)
+  } else {
+    if rows > 1 { Err(ManyRows(rows)) } else { mapper(*result, 0) }
+  }
+}
+
+/// At most one row as a value.
+///
+/// For a lookup by something unique, where finding nothing is an ordinary
+/// answer and finding several is still a fault.
+export fn optional[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
+  let rows = result.rows.length()
+  if rows == 0 {
+    Ok(None)
+  } else {
+    if rows > 1 {
+      Err(ManyRows(rows))
+    } else {
+      let mapped = mapper(*result, 0) ?
+      Ok(Some(mapped))
+    }
+  }
+}
+
+/// The first row as a value, for a caller that asked for several and means it.
+export fn first[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
+  if result.rows.length() == 0 {
+    Ok(None)
+  } else {
+    let mapped = mapper(*result, 0) ?
+    Ok(Some(mapped))
+  }
+}
+
+/// One column of every row, mapped.
+export fn column[T](
+  result: &Driver.Rows,
+  named: Str,
+  read: fn(Str) -> Option[T]
+) -> Result[Array[T], RowError] {
+  if !hasColumn(result, named) { return Err(NoColumn(named)) }
+  var found: Array[T] = []
+  var index = 0
+  while index < result.rows.length() {
+    let held = text(result, index, named) ?
+    if let Some(mapped) = read(held) {
+      found = found.push(mapped)
+    } else {
+      return Err(NotWhole(named))
+    }
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// How many rows a statement that produced none reported changing.
+export fn changed(result: &Driver.Rows) -> Int {
+  let pieces = result.command.split(" ")
+  if pieces.length() == 0 { 0 } else { Option.unwrapOr(Text.countOf(pieces[pieces.length() - 1]), 0) }
+}
+
+/// A repository from its operations.
+export fn repository[T, K](
+  named: Str,
+  byKey: fn(K) -> Result[Option[T], RowError],
+  every: fn() -> Result[Array[T], RowError],
+  add: fn(T) -> Result[Int, RowError],
+  removeKey: fn(K) -> Result[Int, RowError]
+) -> Repository[T, K] {
+  Repository{named: named, byKey: byKey, every: every, add: add, removeKey: removeKey}
+}
+
+/// What the repository is over.
+export fn nameOf[T, K](held: &Repository[T, K]) -> Str { held.named }
+
+/// What a refusal says.
+export fn explain(problem: &RowError) -> Str {
+  match problem {
+    case NoColumn(named) => "the result has no column called " + named
+    case Absent(named) => named + " held nothing"
+    case NotWhole(named) => named + " is not a whole number"
+    case NotCount(named) => named + " is not a count"
+    case NotTruth(named) => named + " is not true or false"
+    case NotText(named) => named + " holds bytes rather than text"
+    case NoRow => "no row was found where one was expected"
+    case ManyRows(found) =>
+    show(found) + " rows were found where one was expected"
+  }
+}

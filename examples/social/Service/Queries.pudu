@@ -1,0 +1,64 @@
+module Service.Queries
+
+import Std.App.Database as Database
+import Db.Approvals as Approvals
+import Db.Comments as Comments
+import Db.Posts as Posts
+
+/// The read side: everything that answers without changing anything.
+///
+/// The views here are shaped for what a page shows, not for how rows are
+/// stored. A feed carries its own totals because the page states them, and
+/// counting them in a template would put a question about the data inside
+/// something whose job is arrangement.
+export type Feed = { posts: Array[Posts.Post], total: Int, approvals: Int, replies: Int }
+
+/// A post with everything under it, which is what a page about one post shows.
+export type Thread = { post: Posts.Post, replies: Array[Comments.Comment], approvedBy: Array[Str] }
+
+export type QueryError = { message: Str }
+
+/// How many posts a feed shows at once.
+///
+/// A limit rather than everything, because a feed with no limit is a page that
+/// works for a month and then takes a second to draw. The number is stated so
+/// that when it needs changing there is one place to change it.
+const PAGE: Int = 50
+
+export fn feed(db: &Database.Database, reader: Str) -> Result[Feed, QueryError] {
+  match Posts.feed(db, reader, PAGE) {
+    case Err(problem) => Err(QueryError{message: problem.message})
+    case Ok(posts) => {
+      var approvals = 0
+      var replies = 0
+      for entry in posts {
+        approvals = approvals + entry.approvals
+        replies = replies + entry.replies
+      }
+      Ok(Feed{posts: posts, total: posts.length(), approvals: approvals, replies: replies})
+    }
+  }
+}
+
+/// One post, its replies, and who approved it.
+export fn thread(db: &Database.Database, reader: Str, id: Int) -> Result[Option[Thread], QueryError] {
+  match Posts.find(db, reader, id) {
+    case Err(problem) => Err(QueryError{message: problem.message})
+    case Ok(None) => Ok(None)
+    case Ok(Some(found)) => {
+      let under = match Comments.under(db, id) {
+        case Err(problem) => {
+          return Err(QueryError{message: problem.message})
+        }
+        case Ok(replies) => replies
+      }
+      let names = match Approvals.readers(db, id) {
+        case Err(problem) => {
+          return Err(QueryError{message: problem.message})
+        }
+        case Ok(readers) => readers
+      }
+      Ok(Some(Thread{post: found, replies: under, approvedBy: names}))
+    }
+  }
+}

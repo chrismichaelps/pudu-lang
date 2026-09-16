@@ -1,0 +1,5 @@
+module AmbiguousRoot
+
+import Ambiguous {User, First, Second}
+
+fn label(user: User) -> Int { user.label() }

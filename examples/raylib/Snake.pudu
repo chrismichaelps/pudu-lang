@@ -1,0 +1,286 @@
+module Snake
+
+import Std.Option as Option
+
+/// Snake, drawn by a library written elsewhere.
+///
+/// A whole program rather than a demonstration of one feature. It holds state
+/// across frames, grows an array, reads input, and asks the platform for a
+/// random number — and every frame it makes a few dozen calls across the
+/// foreign boundary. Three seconds of play is tens of thousands of them, which
+/// is the load a binding actually sees and the reason a call resolves its
+/// symbol once rather than every time.
+///
+/// Run it with raylib on the loader's path:
+///
+///     DYLD_LIBRARY_PATH="$(brew --prefix raylib)/lib" pudu run examples/raylib/Snake.pudu
+type Color = { r: UInt8, g: UInt8, b: UInt8, a: UInt8 }
+
+/// Where something is, in cells rather than pixels.
+///
+/// The grid is the game's own idea and the pixels are the drawing's, so the
+/// conversion happens once, at the edge, in `fill`.
+type Cell = { x: Int, y: Int }
+
+/// Which way the snake is going, as a step of one cell.
+type Step = { dx: Int, dy: Int }
+
+/// Everything one frame needs to know, carried from the last.
+///
+/// A record rather than a scattering of variables: a frame takes the world and
+/// answers with the next one, so there is nothing a step can forget to update.
+type World = {
+  body: Array[Cell],
+  heading: Step,
+  food: Cell,
+  score: Int,
+  alive: Bool
+}
+
+foreign "raylib" version "6" {
+  fn initWindow symbol "InitWindow" (width: Int32, height: Int32, title: Str) -> ()
+  fn closeWindow symbol "CloseWindow" () -> ()
+  fn shouldClose symbol "WindowShouldClose" () -> Bool
+  fn beginDrawing symbol "BeginDrawing" () -> ()
+  fn endDrawing symbol "EndDrawing" () -> ()
+  fn clearBackground symbol "ClearBackground" (color: Color) -> ()
+  fn drawText symbol "DrawText" (text: Str, x: Int32, y: Int32, size: Int32, color: Color) -> ()
+  fn drawRectangle symbol "DrawRectangle" (x: Int32, y: Int32, w: Int32, h: Int32, color: Color) -> ()
+  fn setTargetFps symbol "SetTargetFPS" (fps: Int32) -> ()
+  fn setLogLevel symbol "SetTraceLogLevel" (level: Int32) -> ()
+  fn keyPressed symbol "IsKeyPressed" (key: Int32) -> Bool
+  fn randomBetween symbol "GetRandomValue" (low: Int32, high: Int32) -> Int32
+}
+
+const COLUMNS: Int = 24
+
+const ROWS: Int = 18
+
+const CELL: Int = 24
+
+const KEY_RIGHT: Int32 = 262i32
+
+const KEY_LEFT: Int32 = 263i32
+
+const KEY_DOWN: Int32 = 264i32
+
+const KEY_UP: Int32 = 265i32
+
+const KEY_SPACE: Int32 = 32i32
+
+const INK: Color = Color{r: 24u8, g: 26u8, b: 32u8, a: 255u8}
+
+const GRID: Color = Color{r: 34u8, g: 37u8, b: 46u8, a: 255u8}
+
+const BODY: Color = Color{r: 120u8, g: 200u8, b: 140u8, a: 255u8}
+
+const HEAD: Color = Color{r: 180u8, g: 240u8, b: 190u8, a: 255u8}
+
+const FOOD: Color = Color{r: 220u8, g: 90u8, b: 60u8, a: 255u8}
+
+const PAPER: Color = Color{r: 235u8, g: 235u8, b: 240u8, a: 255u8}
+
+/// A count of cells as the width raylib takes.
+///
+/// Narrowing can fail, so the conversion answers with an `Option` and this
+/// names what to do when it does. Nothing here is ever near the edge of a
+/// thirty-two bit integer — the board is two dozen cells across — so a failure
+/// would mean the caller computed something impossible, and zero is the
+/// harmless thing to draw.
+fn pixels(value: Int) -> Int32 {
+  Option.unwrapOr(convertInteger[Int32](value), 0i32)
+}
+
+fn cells(value: Int32) -> Int {
+  Option.unwrapOr(convertInteger[Int](value), 0)
+}
+
+/// A cell, filled.
+///
+/// The one place the grid becomes pixels. Everything above this counts in
+/// cells, so nothing else has to know how big one is.
+fn fill(at: &Cell, shade: Color) -> () {
+  unsafe(foreign) {
+    drawRectangle(
+      pixels(at.x * CELL + 1),
+      pixels(at.y * CELL + 1),
+      pixels(CELL - 2),
+      pixels(CELL - 2),
+      shade
+    )
+  }
+}
+
+/// Somewhere to put food that the snake is not already on.
+///
+/// It asks again rather than searching, which is right while the board is
+/// mostly empty and is the whole of what this game needs.
+fn placeFood(body: &Array[Cell]) -> Cell {
+  var tries = 0
+  var spot = Cell{x: 0, y: 0}
+  var settled = false
+  while !settled && tries < 200 {
+    unsafe(foreign) {
+      spot = Cell {
+        x: cells(randomBetween(0i32, pixels(COLUMNS - 1))),
+        y: cells(randomBetween(0i32, pixels(ROWS - 1)))
+      }
+    }
+    settled = !occupies(body, &spot)
+    tries = tries + 1
+  }
+  spot
+}
+
+fn occupies(body: &Array[Cell], spot: &Cell) -> Bool {
+  var found = false
+  for part in body {
+    if part.x == spot.x && part.y == spot.y { found = true }
+  }
+  found
+}
+
+/// The heading the player asked for, if they asked for one it may take.
+///
+/// A snake cannot turn back along itself, so a reversal is read as no
+/// instruction at all rather than as a death.
+fn steer(current: Step) -> Step {
+  var next = current
+  unsafe(foreign) {
+    if keyPressed(KEY_UP) && current.dy == 0 { next = Step{dx: 0, dy: -1} }
+    if keyPressed(KEY_DOWN) && current.dy == 0 { next = Step{dx: 0, dy: 1} }
+    if keyPressed(KEY_LEFT) && current.dx == 0 { next = Step{dx: -1, dy: 0} }
+    if keyPressed(KEY_RIGHT) && current.dx == 0 { next = Step{dx: 1, dy: 0} }
+  }
+  next
+}
+
+/// One step of the world.
+///
+/// The head moves, the tail follows unless the snake just ate, and the walls
+/// wrap rather than kill — which keeps a run going long enough to be worth
+/// watching.
+fn advance(world: World) -> World {
+  let head = world.body[0]
+  let ahead = Cell {
+    x: wrapped(head.x + world.heading.dx, COLUMNS),
+    y: wrapped(head.y + world.heading.dy, ROWS)
+  }
+
+  if occupies(&world.body, &ahead) {
+    World{..world, alive: false}
+  } else {
+    let eating = ahead.x == world.food.x && ahead.y == world.food.y
+    var grown: Array[Cell] = [ahead]
+    var index = 0
+    let keep = if eating { world.body.length() } else { world.body.length() - 1 }
+    while index < keep {
+      grown = grown.push(world.body[index])
+      index = index + 1
+    }
+    if eating {
+      World {
+        ..world,
+        body: grown,
+        food: placeFood(&grown),
+        score: world.score + 1
+      }
+    } else {
+      World{..world, body: grown}
+    }
+  }
+}
+
+fn wrapped(value: Int, limit: Int) -> Int {
+  if value < 0 { limit - 1 } else { if value >= limit { 0 } else { value } }
+}
+
+fn draw(world: &World) -> () {
+  unsafe(foreign) {
+    beginDrawing()
+    clearBackground(INK)
+
+    var column = 0
+    while column < COLUMNS {
+      drawRectangle(
+        pixels(column * CELL),
+        0i32,
+        1i32,
+        pixels(ROWS * CELL),
+        GRID
+      )
+      column = column + 1
+    }
+  }
+
+  var index = 0
+  for part in world.body {
+    fill(&part, if index == 0 { HEAD } else { BODY })
+    index = index + 1
+  }
+  fill(&world.food, FOOD)
+
+  unsafe(foreign) {
+    drawText("score " + show(world.score), 12i32, pixels(ROWS * CELL + 10), 20i32, PAPER)
+    if !world.alive {
+      drawText("caught yourself - space to begin again", 12i32, pixels(ROWS * CELL + 36), 18i32, FOOD)
+    }
+    endDrawing()
+  }
+}
+
+fn opening() -> World {
+  let start = Cell{x: 6, y: 9}
+  let body = [start, Cell{x: 5, y: 9}, Cell{x: 4, y: 9}]
+  World {
+    body: body,
+    heading: Step{dx: 1, dy: 0},
+    food: placeFood(&body),
+    score: 0,
+    alive: true
+  }
+}
+
+/// The loop.
+///
+/// Bounded by a frame count so the example ends on its own; a game would run
+/// until the window closed. The snake steps every sixth frame, which is the
+/// pace that makes it playable at sixty.
+export fn play(frames: Int) -> Int {
+  var world = opening()
+  var frame = 0
+  var best = 0
+
+  unsafe(foreign) {
+    setLogLevel(4i32)
+    initWindow(pixels(COLUMNS * CELL), pixels(ROWS * CELL + 70), "Snake, in Pudu")
+    setTargetFps(60i32)
+  }
+
+  var closing = false
+  while frame < frames && !closing {
+    unsafe(foreign) { closing = shouldClose() }
+
+    if world.alive {
+      world = World{..world, heading: steer(world.heading)}
+      if frame % 6 == 0 { world = advance(world) }
+    } else {
+      var restart = false
+      unsafe(foreign) { restart = keyPressed(KEY_SPACE) }
+      if restart { world = opening() }
+    }
+
+    if world.score > best { best = world.score }
+    draw(&world)
+    frame = frame + 1
+  }
+
+  unsafe(foreign) { closeWindow() }
+  best
+}
+
+export fn main() -> Int {
+  let best = play(900)
+  print("best score: " + show(best))
+  0
+}

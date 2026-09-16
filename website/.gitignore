@@ -1,0 +1,6 @@
+.vercel/
+bin/*
+!bin/.gitkeep
+data/*.tmp
+
+.vercel

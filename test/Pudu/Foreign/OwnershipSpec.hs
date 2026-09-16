@@ -1,0 +1,358 @@
+{-| What the store admits, refuses, and releases.
+
+    A batch is all of it or none of it, an address is not an identity, and a
+    claim nothing above the boundary can name is discarded rather than left
+    behind. These reach the store directly: the paths they cover are the ones a
+    passing foreign call never takes. -}
+module Pudu.Foreign.OwnershipSpec (ownershipProperties) where
+
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, throwTo)
+import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
+import Data.Int (Int64)
+import Data.List (sort)
+import Pudu.Foreign.Call (candidates)
+import Pudu.Foreign.Ownership
+  ( claimAllOwnedGenerations
+  , claimCountedGeneration
+  , claimOwnedGeneration
+  , closeForeignStore
+  , discardOwnedGenerations
+  , newForeignStore
+  , takeOwnedGeneration
+  , takeCountedGeneration
+  , withOwnedGenerations
+  )
+import System.Timeout (timeout)
+import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
+
+ownershipProperties :: [(String, IO Property)]
+ownershipProperties =
+  [ ("a batch naming one address twice is refused whole", testDuplicateBatch)
+  , ("a batch touching a held address leaves that claim alone", testProtectedBatch)
+  , ("a batch that is refused releases nothing", testRefusedBatchKeepsCleanup)
+  , ("an address reused after release does not revive the old claim", testStaleGeneration)
+  , ("a discarded claim is released once and only its own", testDiscardOwnClaims)
+  , ("a closing store admits nothing and releases what it turns away", testClosedAdmission)
+  , ("a lease cancelled mid-call is still given back", testInterruptedLease)
+  , ("a declared version is asked for the way each platform spells it", testVersionedNames)
+  , ("two references to one address are two claims", testCountedClaims)
+  , ("every outstanding reference is released at teardown", testCountedTeardown)
+  , ("an interrupt during teardown still releases the rest, then stops", testInterruptedTeardown)
+  ]
+
+{-| A cleanup that records that it ran, so a leak and a double release are both
+    visible as a count rather than inferred. -}
+newtype Releases = Releases (IORef [Int64])
+
+newReleases :: IO Releases
+newReleases = Releases <$> newIORef []
+
+releasing :: Releases -> Int64 -> IO ()
+releasing (Releases held) address = atomicModifyIORef' held (\seen -> (address : seen, ()))
+
+released :: Releases -> IO [Int64]
+released (Releases held) = sort <$> readIORef held
+
+{-| Two products at one address cannot both be claimed, and coalescing them
+    would leave one destructor obligation for two resources. -}
+testDuplicateBatch :: IO Property
+testDuplicateBatch = do
+  store <- newForeignStore
+  releases <- newReleases
+  outcome <- claimAllOwnedGenerations store [(4096, releasing releases 4096), (4096, releasing releases 4096)]
+  after <- released releases
+  reclaimed <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  pure
+    ( conjoin
+        [ counterexample "the batch is refused" (property (isRefusal outcome))
+        , counterexample "no address is named protected" (refusedAddresses outcome === [])
+        , counterexample "nothing was released by the refusal" (after === [])
+        , counterexample "the address was never inserted" (property (isJustGeneration reclaimed))
+        ]
+    )
+
+{-| A refused batch names only what the store already held. The caller's own
+    fresh products stay its problem, and the existing claim is untouched. -}
+testProtectedBatch :: IO Property
+testProtectedBatch = do
+  store <- newForeignStore
+  releases <- newReleases
+  held <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  outcome <-
+    claimAllOwnedGenerations
+      store
+      [(4096, releasing releases 4096), (8192, releasing releases 8192)]
+  afterRefusal <- released releases
+  survivor <- case held of
+    Nothing -> pure Nothing
+    Just generation -> takeOwnedGeneration store 4096 generation
+  fresh <- claimOwnedGeneration store 8192 (releasing releases 8192)
+  pure
+    ( conjoin
+        [ counterexample "the batch is refused" (property (isRefusal outcome))
+        , counterexample "only the held address is named" (refusedAddresses outcome === [4096])
+        , counterexample "the refusal released nothing" (afterRefusal === [])
+        , counterexample "the existing claim survived" (property (isJustResource survivor))
+        , counterexample "the fresh address was never inserted" (property (isJustGeneration fresh))
+        ]
+    )
+
+{-| A refusal must not free what it turned away: the caller still holds those
+    products and is the only side that knows their release obligation. -}
+testRefusedBatchKeepsCleanup :: IO Property
+testRefusedBatchKeepsCleanup = do
+  store <- newForeignStore
+  releases <- newReleases
+  _ <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  _ <- claimAllOwnedGenerations store [(4096, releasing releases 4096)]
+  _ <- claimAllOwnedGenerations store [(16384, releasing releases 16384), (16384, releasing releases 16384)]
+  after <- released releases
+  pure (counterexample "a refusal is not a release" (after === []))
+
+{-| An allocator hands the same address back after a free. The generation is
+    what says the old handle names a resource that is gone, so a use and a
+    release of it are both refused while the new occupant stands. -}
+testStaleGeneration :: IO Property
+testStaleGeneration = do
+  store <- newForeignStore
+  releases <- newReleases
+  first <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  stale <- case first of
+    Nothing -> pure 0
+    Just generation -> do
+      _ <- takeOwnedGeneration store 4096 generation
+      pure generation
+  second <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  let current = maybe 0 id second
+  leased <- withOwnedGenerations store [(4096, stale)] (pure ())
+  takenStale <- takeOwnedGeneration store 4096 stale
+  leasedCurrent <- withOwnedGenerations store [(4096, current)] (pure ())
+  takenCurrent <- takeOwnedGeneration store 4096 current
+  pure
+    ( conjoin
+        [ counterexample "the reused address gets a new generation" (property (stale /= current))
+        , counterexample "the stale generation cannot be leased" (leased === Nothing)
+        , counterexample "the stale generation cannot be released" (property (isNothingResource takenStale))
+        , counterexample "the occupant is still usable" (leasedCurrent === Just ())
+        , counterexample "the occupant is still releasable" (property (isJustResource takenCurrent))
+        ]
+    )
+
+{-| A conversion that fails after its batch was claimed discards exactly what it
+    claimed. It cannot reach a newer resource that happens to sit at the same
+    address, because that one belongs to a claim it never made. -}
+testDiscardOwnClaims :: IO Property
+testDiscardOwnClaims = do
+  store <- newForeignStore
+  releases <- newReleases
+  claimed <- claimAllOwnedGenerations store [(4096, releasing releases 4096), (8192, releasing releases 8192)]
+  let generations = either (const []) id claimed
+  discardOwnedGenerations store generations
+  afterDiscard <- released releases
+  discardOwnedGenerations store generations
+  afterRepeat <- released releases
+  reused <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  discardOwnedGenerations store generations
+  afterStale <- released releases
+  occupant <- case reused of
+    Nothing -> pure Nothing
+    Just generation -> takeOwnedGeneration store 4096 generation
+  pure
+    ( conjoin
+        [ counterexample "each claim is released once" (afterDiscard === [4096, 8192])
+        , counterexample "discarding again releases nothing" (afterRepeat === [4096, 8192])
+        , counterexample "a newer occupant is not reachable by the old claim" (afterStale === [4096, 8192])
+        , counterexample "and it is still there" (property (isJustResource occupant))
+        ]
+    )
+
+{-| Teardown closes admission first. A product that arrives after that has no
+    owner to release it later, so it is released now rather than inserted
+    behind a store nothing will drain again. -}
+testClosedAdmission :: IO Property
+testClosedAdmission = do
+  store <- newForeignStore
+  releases <- newReleases
+  closeForeignStore store
+  refusedOne <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  afterOne <- released releases
+  refusedBatch <- claimAllOwnedGenerations store [(8192, releasing releases 8192)]
+  leased <- withOwnedGenerations store [(4096, 1)] (pure ())
+  pure
+    ( conjoin
+        [ counterexample "a late claim is refused" (refusedOne === Nothing)
+        , counterexample "and its resource is released, not leaked" (afterOne === [4096])
+        , counterexample "a late batch is refused" (property (isRefusal refusedBatch))
+        , counterexample "a closed store leases nothing" (leased === Nothing)
+        ]
+    )
+
+{-| A native call is interruptible while it runs, so an evaluation cancelled
+    inside one lands there. The lease has to end anyway: an address still marked
+    in use is one nothing can release, and teardown waits on it for as long as
+    its patience lasts and then leaves it.
+
+    Deterministic on purpose. The leaseholder blocks on an empty variable rather
+    than on a sleep, so the exception arrives while the lease is certainly held,
+    and the wait for the claim afterwards is bounded — release removes a claim
+    only once no one is inside it, so a lease that was never given back would
+    wait for ever rather than fail. -}
+testInterruptedLease :: IO Property
+testInterruptedLease = do
+  store <- newForeignStore
+  releases <- newReleases
+  claimed <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  let generation = maybe 0 id claimed
+  leased <- newEmptyMVar
+  blocked <- newEmptyMVar
+  leaseholder <- forkIO $ do
+    _ <- withOwnedGenerations store [(4096, generation)] (putMVar leased () >> takeMVar blocked)
+    pure ()
+  takeMVar leased
+  throwTo leaseholder ThreadKilled
+  recovered <- timeout oneSecond (takeOwnedGeneration store 4096 generation)
+  afterwards <- released releases
+  pure
+    ( conjoin
+        [ counterexample "the claim comes back rather than staying in use"
+            (property (maybe False isJustResource recovered))
+        , counterexample "and cancelling a lease is not itself a release" (afterwards === [])
+        ]
+    )
+
+{-| The version a declaration names has to reach the loader, because the
+    platform puts it inside the file name. On most systems the unversioned name
+    is a symlink shipped for building against: a machine with the library and
+    not its headers has `libcairo.so.2` and no `libcairo.so`, so a binding that
+    asked only for the latter would fail where the library is plainly present. -}
+testVersionedNames :: IO Property
+testVersionedNames =
+  pure
+    ( conjoin
+        [ counterexample "what the declaration wrote is asked for first"
+            (take 1 (candidates "cairo" (Just "2")) === ["cairo"])
+        , counterexample "each platform's spelling of the version is asked for"
+            ( property
+                ( all
+                    (`elem` candidates "cairo" (Just "2"))
+                    ["libcairo.so.2", "libcairo.2.dylib", "libcairo-2.dll"]
+                )
+            )
+        , counterexample "versioned names come before the unversioned ones"
+            ( property
+                ( maybe False id $ do
+                    versioned <- lookup "libcairo.so.2" numbered
+                    plain <- lookup "libcairo.so" numbered
+                    pure (versioned < plain)
+                )
+            )
+        , counterexample "the unversioned names are still reached"
+            ( property
+                (all (`elem` candidates "cairo" (Just "2")) ["libcairo.so", "libcairo.dylib"])
+            )
+        , counterexample "no version means the names that were tried before"
+            (candidates "cairo" Nothing
+              === ["cairo", "libcairo.dylib", "libcairo.so", "cairo.dylib", "cairo.so", "cairo.dll"])
+        ]
+    )
+ where
+  numbered = zip (candidates "cairo" (Just "2")) [0 :: Int ..]
+
+{-| A reference-counted library hands back the pointer it was given and expects
+    an unref for each reference. Keying a claim by address cannot express that,
+    so these are keyed by the claim instead: two references to one address are
+    two claims, each releasing once, and releasing one leaves the other usable. -}
+testCountedClaims :: IO Property
+testCountedClaims = do
+  store <- newForeignStore
+  releases <- newReleases
+  first <- claimCountedGeneration store 4096 (releasing releases 4096)
+  second <- claimCountedGeneration store 4096 (releasing releases 4096)
+  let one = maybe 0 id first
+      two = maybe 0 id second
+  usable <- withOwnedGenerations store [(4096, one)] (pure ())
+  takenFirst <- takeCountedGeneration store 4096 one
+  afterFirst <- released releases
+  stillUsable <- withOwnedGenerations store [(4096, two)] (pure ())
+  repeated <- takeCountedGeneration store 4096 one
+  takenSecond <- takeCountedGeneration store 4096 two
+  wrongAddress <- claimCountedGeneration store 8192 (releasing releases 8192)
+  mismatched <- takeCountedGeneration store 4096 (maybe 0 id wrongAddress)
+  pure
+    ( conjoin
+        [ counterexample "a second reference to one address is admitted" (property (one /= two))
+        , counterexample "a reference can be leased" (usable === Just ())
+        , counterexample "releasing one gives that reference back"
+            (property (isJustResource takenFirst))
+        , counterexample "the other reference is still usable" (stillUsable === Just ())
+        , counterexample "releasing the same reference twice is refused"
+            (property (isNothingResource repeated))
+        , counterexample "and the second reference releases on its own"
+            (property (isJustResource takenSecond))
+        , counterexample "a reference is not released through another address"
+            (property (isNothingResource mismatched))
+        , counterexample "nothing was cleaned up by removing a claim" (afterFirst === [])
+        ]
+    )
+
+{-| Two references left behind owe two releases, not one. An address released
+    once would leave the library's count above zero for ever. -}
+testCountedTeardown :: IO Property
+testCountedTeardown = do
+  store <- newForeignStore
+  releases <- newReleases
+  _ <- claimCountedGeneration store 4096 (releasing releases 4096)
+  _ <- claimCountedGeneration store 4096 (releasing releases 4096)
+  _ <- claimOwnedGeneration store 8192 (releasing releases 8192)
+  closeForeignStore store
+  afterwards <- released releases
+  refused <- claimCountedGeneration store 16384 (releasing releases 16384)
+  afterClosed <- released releases
+  pure
+    ( conjoin
+        [ counterexample "each reference is released once, and the owned claim too"
+            (afterwards === [4096, 4096, 8192])
+        , counterexample "a reference arriving after closing is refused" (refused === Nothing)
+        , counterexample "and is released rather than left behind"
+            (afterClosed === [4096, 4096, 8192, 16384])
+        ]
+    )
+
+{-| A kill that lands inside one cleanup is not that cleanup failing. The other
+    resources are still released, and the kill reaches the caller afterwards
+    instead of being answered as a quiet cleanup failure. -}
+testInterruptedTeardown :: IO Property
+testInterruptedTeardown = do
+  store <- newForeignStore
+  releases <- newReleases
+  _ <- claimOwnedGeneration store 4096 (throwIO ThreadKilled)
+  _ <- claimOwnedGeneration store 8192 (releasing releases 8192)
+  _ <- claimCountedGeneration store 16384 (releasing releases 16384)
+  _ <- claimOwnedGeneration store 32768 (ioError (userError "the library refused"))
+  outcome <- try (closeForeignStore store)
+  afterwards <- released releases
+  pure
+    ( conjoin
+        [ counterexample "every other resource is released" (afterwards === [8192, 16384])
+        , counterexample "the kill reaches the caller" (outcome === Left ThreadKilled)
+        ]
+    )
+
+oneSecond :: Int
+oneSecond = 1000000
+
+isRefusal :: Either [Int64] a -> Bool
+isRefusal = either (const True) (const False)
+
+refusedAddresses :: Either [Int64] a -> [Int64]
+refusedAddresses = either sort (const [])
+
+isJustGeneration :: Maybe Integer -> Bool
+isJustGeneration = maybe False (const True)
+
+isJustResource :: Maybe a -> Bool
+isJustResource = maybe False (const True)
+
+isNothingResource :: Maybe a -> Bool
+isNothingResource = maybe True (const False)

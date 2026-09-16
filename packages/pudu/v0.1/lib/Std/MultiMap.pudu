@@ -1,0 +1,243 @@
+module Std.MultiMap
+
+import Std.List as List
+
+/// A map holding several values under one key.
+///
+/// Grouping is the commonest thing anyone does with a map, and `Map.groupBy`
+/// already builds one. What it does not do is *keep* one: adding a value to a
+/// key that may or may not already be there, taking one occurrence back out,
+/// and having the key stop existing when its last value goes.
+///
+/// Written by hand that is the same three lines every time — match the key, push
+/// onto what is there or start an array — plus a fourth that is the one people
+/// forget: removing the key once its values run out. A key left mapped to an
+/// empty array is a key `containsKey` then answers `true` for and `get` answers
+/// nothing for, which is a map disagreeing with itself.
+///
+/// So the rule here is that **a key with no values does not exist**. Every
+/// operation maintains it, and it is what makes `size`, `containsKey` and
+/// `keys` mean what a reader expects.
+///
+/// Values under a key keep the order they were added in. Duplicates are kept:
+/// this is a bag under each key, not a set, because the commonest use is
+/// collecting records that genuinely repeat — two log lines at the same level,
+/// two headers with the same name.
+export type MultiMap[K, V] = { groups: Map[K, Array[V]] }
+
+/// A map with no entries.
+export fn empty[K, V]() -> MultiMap[K, V] { MultiMap{groups: mapOf([])} }
+
+/// How many keys have values.
+///
+/// Keys, not values, matching `Map`. `total` counts the values.
+export fn size[K, V](map: &MultiMap[K, V]) -> Int { map.groups.size() }
+
+/// How many values the map holds across every key.
+export fn total[K, V](map: &MultiMap[K, V]) -> Int {
+  var seen = 0
+  for pair in map.groups.entries() { seen = seen + pair[1].length() }
+  seen
+}
+
+/// Whether the map holds nothing.
+export fn isEmpty[K, V](map: &MultiMap[K, V]) -> Bool { map.groups.isEmpty() }
+
+/// Every value under a key, in the order they were added, or an empty array.
+///
+/// An empty array rather than `Option[Array[V]]`, because a key with no values
+/// and a key that was never added are the same thing here, and offering two
+/// spellings of one state would invite the caller to distinguish them.
+export fn get[K, V](map: &MultiMap[K, V], key: K) -> Array[V] {
+  match map.groups.get(key) {
+    case Some(found) => found
+    case None => []
+  }
+}
+
+/// Whether a key has any value.
+export fn containsKey[K, V](map: &MultiMap[K, V], key: K) -> Bool {
+  map.groups.containsKey(key)
+}
+
+/// Whether a key has this particular value.
+export fn contains[K, V](map: &MultiMap[K, V], key: K, value: V) -> Bool {
+  get(map, key).contains(value)
+}
+
+/// How many values a key has.
+export fn count[K, V](map: &MultiMap[K, V], key: K) -> Int { get(map, key).length() }
+
+/// The map with a value added under a key, after any already there.
+export fn add[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
+  MultiMap{groups: map.groups.insert(key, get(map, key).push(value))}
+}
+
+/// The map with several values added under a key, in the order given.
+export fn addAll[K, V](map: &MultiMap[K, V], key: K, adding: &Array[V]) -> MultiMap[K, V] {
+  if adding.length() == 0 { *map } else {
+    MultiMap{groups: map.groups.insert(key, get(map, key).concat(*adding))}
+  }
+}
+
+/// The map with a key's values replaced entirely.
+///
+/// Replacing with nothing removes the key, rather than leaving one with an
+/// empty array behind it.
+export fn setAll[K, V](map: &MultiMap[K, V], key: K, replacement: &Array[V]) -> MultiMap[K, V] {
+  if replacement.length() == 0 { removeKey(map, key) } else {
+    MultiMap{groups: map.groups.insert(key, *replacement)}
+  }
+}
+
+/// The map with one occurrence of a value removed from a key.
+///
+/// One occurrence, not all of them, because the values under a key are a bag:
+/// removing every copy when the caller took one back would lose the others.
+/// The key goes when its last value does.
+export fn remove[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
+  let held = get(map, key)
+  match List.indexOf(&held, value) {
+    case Some(at) => setAll(map, key, &held.remove(at))
+    case None => *map
+  }
+}
+
+/// The map with every occurrence of a value removed from a key.
+export fn removeAll[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
+  let kept = List.filter(&get(map, key), fn(held: V) -> Bool => held != value)
+  setAll(map, key, &kept)
+}
+
+/// The map with a key and all its values removed.
+export fn removeKey[K, V](map: &MultiMap[K, V], key: K) -> MultiMap[K, V] {
+  MultiMap{groups: map.groups.remove(key)}
+}
+
+/// Every key that has values, in order.
+export fn keys[K, V](map: &MultiMap[K, V]) -> Array[K] { map.groups.keys() }
+
+/// Every value under every key, in key order.
+export fn values[K, V](map: &MultiMap[K, V]) -> Array[V] {
+  var out = []
+  for pair in map.groups.entries() { out = out.concat(pair[1]) }
+  out
+}
+
+/// Every key paired with each of its values, in key order.
+///
+/// One pair per value, so a key with three values appears three times. This is
+/// the flat reading, for handing to something that takes pairs.
+export fn pairs[K, V](map: &MultiMap[K, V]) -> Array[(K, V)] {
+  var out = []
+  for pair in map.groups.entries() {
+    for value in pair[1] { out = out.push((pair[0], value)) }
+  }
+  out
+}
+
+/// Every key paired with all of its values, in key order.
+export fn groups[K, V](map: &MultiMap[K, V]) -> Array[(K, Array[V])] {
+  map.groups.entries()
+}
+
+/// A map built from pairs, collecting values under their shared keys.
+export fn fromPairs[K, V](entries: &Array[(K, V)]) -> MultiMap[K, V] {
+  var out = empty()
+  for pair in entries { out = add(&out, pair[0], pair[1]) }
+  out
+}
+
+/// Items collected under the key each one produces.
+///
+/// What `Map.groupBy` answers, in the shape that can then be added to.
+export fn groupBy[T, K](items: &Array[T], key: fn(T) -> K) -> MultiMap[K, T] {
+  var out = empty()
+  for item in items { out = add(&out, key(item), item) }
+  out
+}
+
+/// Every value transformed, keeping its key and position.
+export fn mapValues[K, A, B](
+  map: &MultiMap[K, A],
+  transform: fn(A) -> B
+) -> MultiMap[K, B] {
+  var out = empty()
+  for pair in map.groups.entries() {
+    out = MultiMap{groups: out.groups.insert(pair[0], List.map(&pair[1], transform))}
+  }
+  out
+}
+
+/// Only the values the predicate accepts, dropping keys left with none.
+export fn filterValues[K, V](
+  map: &MultiMap[K, V],
+  keep: fn(V) -> Bool
+) -> MultiMap[K, V] {
+  var out = empty()
+  for pair in map.groups.entries() {
+    out = setAll(&out, pair[0], &List.filter(&pair[1], keep))
+  }
+  out
+}
+
+/// Only the keys the predicate accepts.
+export fn filterKeys[K, V](
+  map: &MultiMap[K, V],
+  keep: fn(K) -> Bool
+) -> MultiMap[K, V] {
+  var out = empty()
+  for pair in map.groups.entries() {
+    if keep(pair[0]) { out = setAll(&out, pair[0], &pair[1]) }
+  }
+  out
+}
+
+/// Every key and all its values combined into one value, in key order.
+export fn fold[K, V, A](
+  map: &MultiMap[K, V],
+  combine: fn(A, K, Array[V]) -> A,
+  start: A
+) -> A {
+  var accumulated = start
+  for pair in map.groups.entries() {
+    accumulated = combine(accumulated, pair[0], pair[1])
+  }
+  accumulated
+}
+
+/// Two maps combined, with the second map's values added after the first's.
+export fn merge[K, V](left: &MultiMap[K, V], right: &MultiMap[K, V]) -> MultiMap[K, V] {
+  var out = *left
+  for pair in right.groups.entries() { out = addAll(&out, pair[0], &pair[1]) }
+  out
+}
+
+/// The map with its keys and values exchanged.
+///
+/// Each value becomes a key holding every key it appeared under, which is the
+/// reverse index a caller otherwise builds by hand.
+export fn inverted[K, V](map: &MultiMap[K, V]) -> MultiMap[V, K] {
+  var out = empty()
+  for pair in pairs(map) { out = add(&out, pair[1], pair[0]) }
+  out
+}
+
+/// The map as an ordinary map from key to its values.
+export fn toMap[K, V](map: &MultiMap[K, V]) -> Map[K, Array[V]] { map.groups }
+
+/// Whether every value satisfies the predicate. True for an empty map.
+export fn all[K, V](map: &MultiMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if !holds(pair[0], pair[1]) { return false }
+  }
+  true
+}
+
+/// Whether any value satisfies the predicate. False for an empty map.
+export fn any[K, V](map: &MultiMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if holds(pair[0], pair[1]) { return true }
+  }
+  false
+}

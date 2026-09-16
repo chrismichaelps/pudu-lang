@@ -1,0 +1,33 @@
+module UsesCountedForeignHandle
+
+/// A library that counts references. Taking one returns the pointer the last
+/// one returned, so two references are one address — and each still owes its
+/// own drop. A boundary that treated them as one claim would leave the
+/// library's count above zero for ever.
+foreign "c" {
+  type Box
+
+  fn reference symbol "pudu_ffi_cpp_reference" () -> counted Box by drop
+  fn drop symbol "pudu_ffi_cpp_drop_reference" (box: Box) -> ()
+  fn readBox symbol "pudu_ffi_cpp_box_read" (box: Box) -> Int32
+  fn references symbol "pudu_ffi_cpp_reference_count" () -> Int32
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    let one = reference()
+    let two = reference()
+    if references() == 2i32 { held = held + 1 }
+    if readBox(one) == 53i32 { held = held + 1 }
+    if readBox(two) == 53i32 { held = held + 1 }
+
+    drop(one)
+    if references() == 1i32 { held = held + 1 }
+    // The other reference is untouched by the first being dropped.
+    if readBox(two) == 53i32 { held = held + 1 }
+    drop(two)
+    if references() == 0i32 { held = held + 1 }
+  }
+  held
+}

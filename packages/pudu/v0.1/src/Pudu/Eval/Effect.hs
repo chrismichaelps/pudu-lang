@@ -1,0 +1,684 @@
+{-| @Program.Eval.Effect — performs the operations that reach outside -}
+module Pudu.Eval.Effect
+  ( callEffect
+  , effectBuiltins
+  ) where
+
+import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
+import qualified Data.Sequence as Seq
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
+import Pudu.Eval.Compress (compressGzip, compressRaw, decompressGzip, decompressRaw)
+import Pudu.Eval.Child
+  ( closeChildInput
+  , writeChildChunk
+  , readChildChunk
+  , readChildErrorChunk
+  , startChild
+  , startChildWith
+  , stopChild
+  , waitChild
+  , waitChildWithin
+  )
+import Pudu.Eval.AudioDevice (playAudioDevice)
+import Pudu.Eval.AudioStream
+  ( AudioStreamSnapshot (..)
+  , closeAudioStream
+  , openAudioStream
+  , pauseAudioStream
+  , readAudioStreamSnapshot
+  , resumeAudioStream
+  , setAudioStreamVolume
+  , writeAudioStream
+  )
+import Pudu.Eval.Clock
+import Pudu.Eval.Desktop (closeDesktop, openDesktop, presentDesktop, pumpDesktop)
+import Pudu.Eval.Signal (stopRequested, watchForStop)
+import Pudu.Eval.Handle
+  ( closeHandleAt
+  , flushHandleAt
+  , openAppendHandle
+  , openReadHandle
+  , openWriteHandle
+  , readHandleChunk
+  , writeHandleChunk
+  )
+import Pudu.Eval.Concurrent
+  ( cellNew
+  , cellRead
+  , cellSwap
+  , channelClose
+  , channelNew
+  , channelPending
+  , channelReceive
+  , channelSend
+  , mutexLock
+  , mutexNew
+  , mutexUnlock
+  , sleepFor
+  , threadJoin
+  )
+import Pudu.Eval.Tls
+  ( closeTlsAt
+  , closeTlsAtWithin
+  , receiveTls
+  , receiveTlsWithin
+  , secureConnect
+  , secureConnectWithin
+  , sendTls
+  , sendTlsWithin
+  , tlsPeerName
+  , upgradeTlsWithin
+  )
+import Pudu.Eval.Socket
+  ( acceptOn
+  , closeSocketAt
+  , connectTo
+  , connectToWithin
+  , listenOn
+  , localPortOf
+  , peerOf
+  , receiveFrom
+  , receiveFromWithin
+  , sendOn
+  , sendOnWithin
+  , shutdownWriteAt
+  )
+import Pudu.Eval.Io
+import Pudu.Eval.Entropy (secureBytes)
+import Pudu.Eval.Env
+  ( effectsAdmitted
+  , currentConcurrentStore
+  , currentDesktopStore
+  , currentAudioStreamStore
+  , currentHandleStore
+  , currentChildStore
+  , currentSocketStore
+  , currentTlsStore
+  , performEffect
+  , Evaluator (..)
+  , abortAt
+  )
+import Pudu.Source (Span)
+import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Value
+  ( Builtin (..)
+  , builtinName
+  , intOf
+  , Value (..)
+  )
+
+{-| The built-ins that reach the world.
+
+    They are listed once so the evaluator and the checker cannot disagree about
+    which names exist, and so adding one is a single edit rather than three. -}
+effectBuiltins :: [Builtin]
+effectBuiltins =
+  [ PrintBuiltin
+  , PrintErrorBuiltin
+  , PrintPartBuiltin
+  , PrintErrorPartBuiltin
+  , ReadLineBuiltin
+  , ReadFileBuiltin
+  , WriteFileBuiltin
+  , AppendFileBuiltin
+  , FileExistsBuiltin
+  , SignalWatchStopBuiltin
+  , DeflateBuiltin
+  , InflateBuiltin
+  , SignalStopRequestedBuiltin
+  , RemoveFileBuiltin
+  , ListDirectoryBuiltin
+  , CreateDirectoryBuiltin
+  , ArgumentsBuiltin
+  , EnvironmentBuiltin
+  , TemporaryDirectoryBuiltin
+  , RenamePathBuiltin
+  , CreateTemporaryFileBuiltin
+  , CreateDirectoryExclusiveBuiltin
+  , RemoveEmptyDirectoryBuiltin
+  , PermissionsOfBuiltin
+  , SetPermissionsOfBuiltin
+  , PathIsSymbolicLinkBuiltin
+  , CreateSymbolicLinkBuiltin
+  , CanonicalPathBuiltin
+  , FileSizeBuiltin
+  , DirectoryExistsBuiltin
+  , HomeDirectoryBuiltin
+  , PathSeparatorsBuiltin
+  , SearchSeparatorBuiltin
+  , ExitBuiltin
+  , ClockBuiltin
+  , NowBuiltin
+  , FormatTimeBuiltin
+  , ParseTimeBuiltin
+  , ZoneOffsetBuiltin
+  , RunBuiltin
+  , SpawnBuiltin
+  , SpawnWithBuiltin
+  , ChildReadBuiltin
+  , ChildReadErrorBuiltin
+  , ChildWriteBuiltin
+  , ChildCloseInputBuiltin
+  , ChildWaitBuiltin
+  , ChildWaitWithinBuiltin
+  , ChildStopBuiltin
+  , OpenReaderBuiltin
+  , OpenWriterBuiltin
+  , OpenAppenderBuiltin
+  , ReadChunkBuiltin
+  , WriteChunkBuiltin
+  , FlushWriterBuiltin
+  , CloseHandleBuiltin
+  , TcpListenBuiltin
+  , TcpAcceptBuiltin
+  , TcpConnectBuiltin
+  , TcpConnectWithinBuiltin
+  , SocketSendBuiltin
+  , SocketSendWithinBuiltin
+  , SocketReceiveBuiltin
+  , SocketReceiveWithinBuiltin
+  , SocketCloseBuiltin
+  , SocketPeerBuiltin
+  , SocketPortBuiltin
+  , SocketFinishBuiltin
+  , TlsConnectBuiltin
+  , GzipCompressBuiltin
+  , GzipDecompressBuiltin
+  , TlsUpgradeWithinBuiltin
+  , TlsConnectWithinBuiltin
+  , TlsSendBuiltin
+  , TlsSendWithinBuiltin
+  , TlsReceiveBuiltin
+  , TlsReceiveWithinBuiltin
+  , TlsCloseBuiltin
+  , TlsCloseWithinBuiltin
+  , TlsPeerBuiltin
+  , SpawnThreadBuiltin
+  , JoinThreadBuiltin
+  , SleepBuiltin
+  , ChannelOpenBuiltin
+  , ChannelPushBuiltin
+  , ChannelPullBuiltin
+  , ChannelWaitingBuiltin
+  , ChannelFinishBuiltin
+  , MutexOpenBuiltin
+  , MutexAcquireBuiltin
+  , MutexReleaseBuiltin
+  , CellOpenBuiltin
+  , CellGetBuiltin
+  , CellSwapBuiltin
+  , SecureBytesBuiltin
+  , DesktopOpenBuiltin
+  , DesktopPresentBuiltin
+  , DesktopPumpBuiltin
+  , DesktopCloseBuiltin
+  , AudioDevicePlayBuiltin
+  , AudioStreamOpenBuiltin
+  , AudioStreamWriteBuiltin
+  , AudioStreamPauseBuiltin
+  , AudioStreamResumeBuiltin
+  , AudioStreamVolumeBuiltin
+  , AudioStreamSnapshotBuiltin
+  , AudioStreamCloseBuiltin
+  ]
+
+{-| Perform one effect.
+
+    Every one answers with a `Result` rather than failing the program: the
+    language has no exceptions, and a runtime that unwound past a boundary the
+    program cannot see would take away the only decision worth having. A missing
+    file is an outcome a caller handles, not a crash.
+
+    `exit` is the exception to that, and is the only one: a program that asked
+    to stop has nothing left to decide. -}
+callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
+callEffect spanValue builtin arguments = do
+  admitted <- effectsAdmitted
+  handles <- currentHandleStore
+  sockets <- currentSocketStore
+  concurrent <- currentConcurrentStore
+  if not admitted
+    then
+      abortAt (Just spanValue) "E7009"
+        (builtinName builtin <> " reaches outside the program")
+        ( Just
+            ( "a compile-time constant is folded while the compiler runs, so it "
+                <> "cannot read, write, or ask the environment anything"
+            )
+        )
+    else case (builtin, arguments) of
+      (PrintBuiltin, [value]) -> effectUnit (writeStandardOutput (textOf value))
+      (PrintErrorBuiltin, [value]) -> effectUnit (writeStandardError (textOf value))
+      (PrintPartBuiltin, [value]) -> effectUnit (writeStandardOutputPart (textOf value))
+      (PrintErrorPartBuiltin, [value]) -> effectUnit (writeStandardErrorPart (textOf value))
+      (ReadLineBuiltin, []) -> do
+        outcome <- lift refusal readStandardLine
+        pure (resultOf (fmap optionalText outcome))
+      (ReadFileBuiltin, [StrValue path]) ->
+        resultOf . fmap StrValue <$> lift refusal (readTextFile (Text.unpack path))
+      (WriteFileBuiltin, [StrValue path, value]) ->
+        effectUnit (writeTextFile (Text.unpack path) (textOf value))
+      (AppendFileBuiltin, [StrValue path, value]) ->
+        effectUnit (appendTextFile (Text.unpack path) (textOf value))
+      (FileExistsBuiltin, [StrValue path]) ->
+        BoolValue <$> lift refusal (testFileExists (Text.unpack path))
+      (DeflateBuiltin, [BytesValue payload, IntValue _ level, IntValue _ chunkSize]) ->
+        resultOf . fmap BytesValue <$> lift refusal (compressRaw payload level chunkSize)
+      (InflateBuiltin, [BytesValue payload, IntValue _ limit]) ->
+        resultOf . fmap BytesValue <$> lift refusal (decompressRaw payload limit)
+      (SignalWatchStopBuiltin, []) -> BoolValue <$> lift refusal watchForStop
+      (SignalStopRequestedBuiltin, []) -> BoolValue <$> lift refusal stopRequested
+      (RemoveFileBuiltin, [StrValue path]) -> effectUnit (removeFileAt (Text.unpack path))
+      (ListDirectoryBuiltin, [StrValue path]) ->
+        resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
+      (CreateDirectoryBuiltin, [StrValue path]) ->
+        effectUnit (createDirectoryAt (Text.unpack path))
+      {-| A handle is named by a token rather than held as a value, because a
+          value is copied through evaluation and an open file is not: two
+          copies of one file, each thinking it owns the position, would read
+          the same bytes twice. The token means nothing outside the runtime,
+          so a program cannot make one up. -}
+      (OpenReaderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openReadHandle handles (Text.unpack path))
+      (OpenWriterBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openWriteHandle handles (Text.unpack path))
+      (OpenAppenderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openAppendHandle handles (Text.unpack path))
+      {-| Nothing read means the input has ended, which is a different answer
+          from an empty chunk: a reader that could not tell them apart would
+          either stop early or never stop. -}
+      (ReadChunkBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (readHandleChunk handles (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (WriteChunkBuiltin, [IntValue _ token, BytesValue chunk]) ->
+        effectUnit (writeHandleChunk handles (fromInteger token) chunk)
+      (FlushWriterBuiltin, [IntValue _ token]) ->
+        effectUnit (flushHandleAt handles (fromInteger token))
+      (CloseHandleBuiltin, [IntValue _ token]) ->
+        effectUnit (closeHandleAt handles (fromInteger token))
+      {-| An endpoint is named by a token for the reason an open file is: it is
+          one object with one position in its stream, while a value is copied
+          through evaluation. -}
+      (TcpListenBuiltin, [StrValue host, IntValue _ port, IntValue _ backlog]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (listenOn sockets host (fromInteger port) (fromInteger backlog))
+      (TcpAcceptBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (acceptOn sockets (fromInteger token))
+      (TcpConnectBuiltin, [StrValue host, IntValue _ port]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (connectTo sockets host (fromInteger port))
+      (TcpConnectWithinBuiltin, [StrValue host, IntValue _ port, IntValue _ timeout]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (connectToWithin sockets host (fromInteger port) timeout)
+      (SocketSendBuiltin, [IntValue _ token, BytesValue payload]) ->
+        effectUnit (sendOn sockets (fromInteger token) payload)
+      (SocketSendWithinBuiltin, [IntValue _ token, BytesValue payload, IntValue _ timeout]) ->
+        effectUnit (sendOnWithin sockets (fromInteger token) payload timeout)
+      (SocketReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (receiveFrom sockets (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (SocketReceiveWithinBuiltin, [IntValue _ token, IntValue _ count, IntValue _ timeout]) -> do
+        outcome <- lift refusal (receiveFromWithin sockets (fromInteger token) (fromInteger count) timeout)
+        pure (resultOf (fmap optionalBytes outcome))
+      (SocketCloseBuiltin, [IntValue _ token]) ->
+        effectUnit (closeSocketAt sockets (fromInteger token))
+      (SocketFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (shutdownWriteAt sockets (fromInteger token))
+      (SocketPeerBuiltin, [IntValue _ token]) ->
+        resultOf . fmap StrValue <$> lift refusal (peerOf sockets (fromInteger token))
+      {-| A secured connection is named by a token like a plain one, and the
+          verification that makes it secure happens once, when it opens. There
+          is no operation here that can turn it off. -}
+      (TlsConnectBuiltin, [StrValue host, IntValue _ port]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (secureConnect store host (fromInteger port))
+      (GzipCompressBuiltin, [BytesValue payload, IntValue _ level, IntValue _ chunkSize]) ->
+        resultOf . fmap BytesValue <$> lift refusal (compressGzip payload level chunkSize)
+      (GzipDecompressBuiltin, [BytesValue payload, IntValue _ limit]) ->
+        resultOf . fmap BytesValue <$> lift refusal (decompressGzip payload limit)
+      (TlsUpgradeWithinBuiltin, [IntValue _ token, StrValue host, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (upgradeTlsWithin sockets store (fromInteger token) host timeout)
+      (TlsConnectWithinBuiltin, [StrValue host, IntValue _ port, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (secureConnectWithin store host (fromInteger port) timeout)
+      (TlsSendBuiltin, [IntValue _ token, BytesValue payload]) -> do
+        store <- currentTlsStore
+        effectUnit (sendTls store (fromInteger token) payload)
+      (TlsSendWithinBuiltin, [IntValue _ token, BytesValue payload, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        effectUnit (sendTlsWithin store (fromInteger token) payload timeout)
+      (TlsReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        store <- currentTlsStore
+        outcome <- lift refusal (receiveTls store (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (TlsReceiveWithinBuiltin, [IntValue _ token, IntValue _ count, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        outcome <- lift refusal (receiveTlsWithin store (fromInteger token) (fromInteger count) timeout)
+        pure (resultOf (fmap optionalBytes outcome))
+      (TlsCloseBuiltin, [IntValue _ token]) -> do
+        store <- currentTlsStore
+        effectUnit (closeTlsAt store (fromInteger token))
+      (TlsCloseWithinBuiltin, [IntValue _ token, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        effectUnit (closeTlsAtWithin store (fromInteger token) timeout)
+      (TlsPeerBuiltin, [IntValue _ token]) -> do
+        store <- currentTlsStore
+        resultOf . fmap StrValue <$> lift refusal (tlsPeerName store (fromInteger token))
+      (SocketPortBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf sockets (fromInteger token))
+      {-| A thread, a channel, a lock, and a cell are each named by a token for
+          the reason a file and a socket are: they are shared objects, while a
+          value is copied through evaluation, and two copies of a lock would
+          not exclude each other. -}
+      (JoinThreadBuiltin, [IntValue _ token]) ->
+        effectUnit (threadJoin concurrent (fromInteger token))
+      (SleepBuiltin, [IntValue _ millis]) -> effectUnit (sleepFor (fromInteger millis))
+      (ChannelOpenBuiltin, [IntValue _ limit]) ->
+        intOf . fromIntegral <$> lift refusal (channelNew concurrent (fromInteger limit))
+      (ChannelPushBuiltin, [IntValue _ token, value]) ->
+        effectUnit (channelSend concurrent (fromInteger token) value)
+      (ChannelPullBuiltin, [IntValue _ token]) -> do
+        outcome <- lift refusal (channelReceive concurrent (fromInteger token))
+        pure (resultOf (fmap optionalValue outcome))
+      (ChannelWaitingBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending concurrent (fromInteger token))
+      (ChannelFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (channelClose concurrent (fromInteger token))
+      (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal (mutexNew concurrent)
+      (MutexAcquireBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexLock concurrent (fromInteger token))
+      (MutexReleaseBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexUnlock concurrent (fromInteger token))
+      (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew concurrent value)
+      (CellGetBuiltin, [IntValue _ token]) ->
+        resultOf <$> lift refusal (cellRead concurrent (fromInteger token))
+      (CellSwapBuiltin, [IntValue _ token, value]) ->
+        resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
+      (SecureBytesBuiltin, [IntValue _ count]) ->
+        resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
+      (DesktopOpenBuiltin, [StrValue title, IntValue _ width, IntValue _ height, BoolValue resizable]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap intValue
+          <$> lift refusal (openDesktop desktop title (fromInteger width) (fromInteger height) resizable)
+      (DesktopPresentBuiltin, [IntValue _ token, IntValue _ width, IntValue _ height, BytesValue rgba]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (presentDesktop desktop (fromInteger token) (fromInteger width) (fromInteger height) rgba)
+      (DesktopPumpBuiltin, [IntValue _ token, IntValue _ milliseconds]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap BoolValue
+          <$> lift refusal (pumpDesktop desktop (fromInteger token) (fromInteger milliseconds))
+      (DesktopCloseBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (closeDesktop desktop (fromInteger token))
+      ( AudioDevicePlayBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          , IntValue _ timeout
+          ]
+        ) ->
+        resultOf . fmap intValue
+          <$> lift refusal
+            ( playAudioDevice
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+                (fromInteger timeout)
+            )
+      ( AudioStreamOpenBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap openStreamValue
+          <$> lift refusal
+            ( openAudioStream
+                streams
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+            )
+      ( AudioStreamWriteBuiltin
+        , [ IntValue _ token
+          , IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ timeout
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap writeStreamValue
+          <$> lift refusal
+            ( writeAudioStream
+                streams
+                token
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger timeout)
+            )
+      (AudioStreamPauseBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (pauseAudioStream streams token)
+      (AudioStreamResumeBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (resumeAudioStream streams token)
+      (AudioStreamVolumeBuiltin, [IntValue _ token, FloatValue _ volume]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (setAudioStreamVolume streams token volume)
+      (AudioStreamSnapshotBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap streamSnapshotValue
+          <$> lift refusal (readAudioStreamSnapshot streams token)
+      (AudioStreamCloseBuiltin, [IntValue _ token, BoolValue drain, IntValue _ timeout]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (closeAudioStream streams token drain (fromInteger timeout))
+      (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
+      (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
+      (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
+      (RenamePathBuiltin, [StrValue from, StrValue to]) ->
+        effectUnit (renamePathAt (Text.unpack from) (Text.unpack to))
+      (CreateTemporaryFileBuiltin, [StrValue directory, StrValue prefix]) ->
+        resultOf . fmap StrValue
+          <$> lift refusal (createTemporaryFileIn (Text.unpack directory) (Text.unpack prefix))
+      (CreateDirectoryExclusiveBuiltin, [StrValue path]) ->
+        effectUnit (createDirectoryExclusiveAt (Text.unpack path))
+      (RemoveEmptyDirectoryBuiltin, [StrValue path]) ->
+        effectUnit (removeEmptyDirectoryAt (Text.unpack path))
+      (PermissionsOfBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (permissionsMaskAt (Text.unpack path))
+      (SetPermissionsOfBuiltin, [StrValue path, IntValue _ mask]) ->
+        effectUnit (setPermissionsMaskAt (Text.unpack path) mask)
+      (PathIsSymbolicLinkBuiltin, [StrValue path]) ->
+        resultOf . fmap BoolValue <$> lift refusal (isSymbolicLinkAt (Text.unpack path))
+      (CreateSymbolicLinkBuiltin, [StrValue target, StrValue link]) ->
+        effectUnit (createSymbolicLinkAt (Text.unpack target) (Text.unpack link))
+      (CanonicalPathBuiltin, [StrValue path]) ->
+        resultOf . fmap StrValue <$> lift refusal (canonicalPathAt (Text.unpack path))
+      (FileSizeBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (fileSizeAt (Text.unpack path))
+      (DirectoryExistsBuiltin, [StrValue path]) ->
+        BoolValue <$> lift refusal (testDirectoryExists (Text.unpack path))
+      (HomeDirectoryBuiltin, []) -> optionalText <$> lift refusal homeDirectoryPath
+      (PathSeparatorsBuiltin, []) ->
+        ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
+      (SearchSeparatorBuiltin, []) -> StrValue <$> lift refusal (pure searchPathSeparatorText)
+      (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
+      (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
+      (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset
+      (FormatTimeBuiltin, [StrValue pattern, IntValue _ milliseconds, StrValue zone]) -> do
+        rendered <- lift refusal (formatInstant pattern milliseconds zone)
+        pure (eitherOf (StrValue <$> rendered))
+      (ParseTimeBuiltin, [StrValue pattern, StrValue text]) ->
+        pure (eitherOf (intOf <$> parseInstant pattern text))
+      (RunBuiltin, [StrValue program, ArrayValue given, StrValue standardInput]) -> do
+        outcome <- lift refusal (runProcess (Text.unpack program) (textsOf given) standardInput)
+        pure (eitherOf (processValue <$> outcome))
+      (SpawnBuiltin, [StrValue program, ArrayValue given]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (startChild children (Text.unpack program) (textsOf given))
+      (SpawnWithBuiltin, [StrValue program, ArrayValue given, ArrayValue pairs, BoolValue inherits, StrValue directory]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue
+          <$> lift
+            refusal
+            ( startChildWith
+                children
+                (Text.unpack program)
+                (textsOf given)
+                (pairsOf pairs)
+                inherits
+                (Text.unpack directory)
+            )
+      (ChildReadBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalBytesValue
+          <$> lift refusal (readChildChunk children (fromInteger token) (fromInteger wanted))
+      (ChildReadErrorBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalBytesValue
+          <$> lift refusal (readChildErrorChunk children (fromInteger token) (fromInteger wanted))
+      (ChildWriteBuiltin, [IntValue _ token, BytesValue payload]) -> do
+        children <- currentChildStore
+        effectUnit (writeChildChunk children (fromInteger token) payload)
+      (ChildCloseInputBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        effectUnit (closeChildInput children (fromInteger token))
+      (ChildWaitBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (waitChild children (fromInteger token))
+      (ChildWaitWithinBuiltin, [IntValue _ token, IntValue _ millis]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalIntValue
+          <$> lift refusal (waitChildWithin children (fromInteger token) (fromInteger millis))
+      (ChildStopBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (stopChild children (fromInteger token))
+      (ExitBuiltin, [IntValue _ code]) -> do
+        _ <- lift refusal (exitWith code)
+        pure UnitValue
+      _ ->
+        abortAt (Just spanValue) "E7012"
+          ("wrong arguments for " <> builtinName builtin) Nothing
+ where
+  refusal = effectRefusal spanValue builtin
+
+  effectUnit action = resultOf . fmap (const UnitValue) <$> lift refusal action
+
+  textOf value = case value of
+    StrValue text -> text
+    other -> renderValue other
+
+  textArray = ArrayValue . Seq.fromList . map StrValue
+  pairArray pairs =
+    ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
+
+  openStreamValue (token, sampleRate, channels) =
+    ArrayValue (Seq.fromList (map intOf [token, toInteger sampleRate, toInteger channels]))
+
+  writeStreamValue (accepted, status) =
+    ArrayValue (Seq.fromList (map intOf [accepted, toInteger status]))
+
+  streamSnapshotValue snapshot =
+    ArrayValue . Seq.fromList . map intOf $
+      [ snapshotSubmittedFrames snapshot
+      , snapshotAcquiredFrames snapshot
+      , snapshotClockFrames snapshot
+      , snapshotClockNanoseconds snapshot
+      , snapshotUnderruns snapshot
+      , snapshotInterruptions snapshot
+      , snapshotDeviceChanges snapshot
+      , snapshotTimelineFailures snapshot
+      , toInteger (snapshotState snapshot)
+      ]
+  intValue = intOf . toInteger
+  optionalBytesValue found = case found of
+    Just bytes -> VariantValue "Some" [BytesValue bytes]
+    Nothing -> VariantValue "None" []
+  optionalIntValue found = case found of
+    Just value -> VariantValue "Some" [intValue value]
+    Nothing -> VariantValue "None" []
+  optionalText found = case found of
+    Just text -> VariantValue "Some" [StrValue text]
+    Nothing -> VariantValue "None" []
+  optionalValue found = case found of
+    Just value -> VariantValue "Some" [value]
+    Nothing -> VariantValue "None" []
+  optionalBytes found = case found of
+    Just chunk -> VariantValue "Some" [BytesValue chunk]
+    Nothing -> VariantValue "None" []
+
+{-| Run one effect behind the refusal that applies to it.
+
+    A top-level binding rather than a local one so it stays polymorphic in what
+    the effect produces; every effect here produces something different. -}
+lift :: Diagnostic -> IO a -> Evaluator a
+lift refusal action = performEffect refusal action
+
+{-| An either as the language's own failure carrier. -}
+eitherOf :: Either Text Value -> Value
+eitherOf outcome = case outcome of
+  Right value -> VariantValue "Ok" [value]
+  Left message -> VariantValue "Err" [StrValue message]
+
+{-| A finished program's status and its two streams.
+
+    A tuple rather than a record, because a record would have to be a wired-in
+    nominal type with wired-in fields — a second way for the compiler to know
+    about a shape, for one built-in. `Std.Process` gives it names, in the
+    language, where a reader can see them. -}
+processValue :: ProcessOutcome -> Value
+processValue outcome =
+  TupleValue
+    [ intOf (processStatus outcome)
+    , StrValue (processOutput outcome)
+    , StrValue (processErrors outcome)
+    ]
+
+textsOf :: Seq.Seq Value -> [Text]
+textsOf values = [text | StrValue text <- toList values]
+
+pairsOf :: Seq.Seq Value -> [(Text, Text)]
+pairsOf values = [(name, value) | TupleValue [StrValue name, StrValue value] <- toList values]
+
+{-| An outcome as the language's own failure carrier. -}
+resultOf :: IoOutcome Value -> Value
+resultOf outcome = case outcome of
+  IoDone value -> VariantValue "Ok" [value]
+  IoFailed message -> VariantValue "Err" [StrValue message]
+
+{-| The diagnostic a refused effect reports, built once so the message a reader
+    sees does not depend on which effect they reached for. -}
+effectRefusal :: Span -> Builtin -> Diagnostic
+effectRefusal spanValue builtin =
+  fromMaybe (fallbackRefusal spanValue) $ do
+    code <- mkDiagnosticCode "E7009"
+    value <-
+      diagnostic code Error spanValue
+        (builtinName builtin <> " reaches outside the program")
+    pure
+      ( withHelp
+          "a compile-time constant is folded while the compiler runs, so it cannot reach the world"
+          value
+      )
+
+fallbackRefusal :: Span -> Diagnostic
+fallbackRefusal spanValue =
+  fromMaybe
+    (error "the refusal diagnostic must exist")
+    (mkDiagnosticCode "E7009" >>= \code -> diagnostic code Error spanValue "effect refused")

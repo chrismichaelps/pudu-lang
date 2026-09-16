@@ -1,0 +1,23 @@
+module Main
+
+/// A type is written before a dot for one thing: a variant it declares.
+///
+/// Anything else after the dot is a mistake, and it used to be a silent one —
+/// nothing binds beneath a type that declares no variants, so the check that
+/// catches a module's missing member had nothing to go on. The program compiled
+/// and died where it ran.
+type Colour = Red | Green
+
+type Thing = { a: Int }
+
+fn good() -> Colour { Colour.Red }
+
+fn missingVariant() -> Colour { Colour.Purple }
+
+fn recordHasNoMembers() -> Int { Thing.missing(1) }
+
+fn builtinHasNoMembers(value: Int) -> Int { Int.toInt32(value) }
+
+fn unimportedModule(value: Option[Int]) -> Int { Option.unwrapOr(value, 0) }
+
+export fn main() -> Int { 0 }

@@ -1,0 +1,396 @@
+module Std.Db.Store
+
+import Std.Db as Db
+import Std.Db.Driver as Driver
+import Std.Db.Query as Query
+import Std.Db.Repository as Repository
+import Std.Db.Schema as Schema
+import Std.Db.Session as Session
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text as Text
+
+/// How a kind of value is kept.
+///
+/// Both directions are stated and neither is derived: a row becomes a value by
+/// a function somebody wrote, and a value becomes a row the same way. Nothing
+/// reads a shape to guess a column, so renaming a field is not a silent change
+/// to a schema, and the mapping is checked by comparing values with no
+/// database present.
+export type Stored[T] = {
+  table: Str,
+  key: Str,
+  columns: Array[Str],
+  toRow: fn(T) -> Array[Option[Str]],
+  fromRow: Repository.Mapper[T]
+}
+
+/// Why a value would not be kept or read back.
+export type StoreError
+  = Mapping(Repository.RowError)
+  | Statement(Query.QueryError)
+  | Refused(Str)
+
+/// A kind of value that is kept, from its parts.
+/// A row a caller wrote as text, as the values a statement carries.
+///
+/// These arrive already spelled, so nothing here can recover what they were.
+/// The typed path is `Std.Db.Schema`'s `Bindable`, where a column's own type
+/// says what its value is.
+fn asValues(row: &Array[Option[Str]]) -> Array[Driver.Value] {
+  var found: Array[Driver.Value] = []
+  for value in *row { found = found.push(Query.maybeText(value)) }
+  found
+}
+
+/// Describe how a value is written to a table and read back.
+export fn stored[T](
+  table: Str,
+  key: Str,
+  columns: &Array[Str],
+  toRow: fn(T) -> Array[Option[Str]],
+  fromRow: Repository.Mapper[T]
+) -> Stored[T] {
+  Stored{table: table, key: key, columns: *columns, toRow: toRow, fromRow: fromRow}
+}
+
+/// Which table a kind of value lives in.
+export fn tableOf[T](held: &Stored[T]) -> Str { held.table }
+
+/// Which column identifies one.
+export fn keyOf[T](held: &Stored[T]) -> Str { held.key }
+
+/// The statement that adds one.
+export fn insertOf[T](held: &Stored[T], value: T) -> Result[Query.Statement, StoreError] {
+  written(Query.insert(held.table, &held.columns, &asValues(&(held.toRow)(value))))
+}
+
+/// The statement that changes the one a key names.
+export fn updateOf[T](
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.update(held.table, &held.columns, &asValues(&(held.toRow)(value)))) ?
+  written(Query.matching(&base, held.key, "=", Query.maybeText(key)))
+}
+
+/// The statement that removes the one a key names.
+export fn deleteOf[T](held: &Stored[T], key: Option[Str]) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.deleteFrom(held.table)) ?
+  written(Query.matching(&base, held.key, "=", Query.maybeText(key)))
+}
+
+/// The statement that reads the one a key names.
+export fn selectOf[T](held: &Stored[T], key: Option[Str]) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.selecting(&held.columns, held.table)) ?
+  written(Query.matching(&base, held.key, "=", Query.maybeText(key)))
+}
+
+/// The statement that reads every one.
+export fn selectAllOf[T](held: &Stored[T]) -> Result[Query.Statement, StoreError] {
+  written(Query.selecting(&held.columns, held.table))
+}
+
+/// Every row of a result as a value.
+export fn readAll[T](held: &Stored[T], result: &Driver.Rows) -> Result[Array[T], StoreError] {
+  mapped(Repository.all(result, held.fromRow))
+}
+
+/// At most one row of a result as a value.
+export fn readOne[T](held: &Stored[T], result: &Driver.Rows) -> Result[Option[T], StoreError] {
+  mapped(Repository.optional(result, held.fromRow))
+}
+
+/// What belongs to several parents, as a map from each parent's key to what
+/// belongs to it.
+///
+/// This is the shape that matters. Loading what belongs to one parent is
+/// loading for a list of one, so the batched form is the ordinary form and the
+/// form that issues a query per parent is the one somebody has to write a loop
+/// to produce. Offering both as peers is how the slow one becomes the default.
+export fn groupedBy[T](
+  held: &Stored[T],
+  result: &Driver.Rows,
+  parentColumn: Str
+) -> Result[Map[Str, Array[T]], StoreError] {
+  var found: Map[Str, Array[T]] = Map.empty()
+  var index = 0
+  while index < result.rows.length() {
+    let value = mapped((held.fromRow)(*result, index)) ?
+    let owner = Result.unwrapOr(Repository.text(result, index, parentColumn), "")
+    found = Map.insert(&found, owner, Map.getOr(&found, owner, []).push(value))
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// The statement that reads everything belonging to any of these parents.
+///
+/// One statement for every parent rather than one for each, with each key its
+/// own parameter so a list of parents cannot become part of the text however
+/// long it is.
+export fn forParents[T](
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[Query.Statement, StoreError] {
+  var columns = held.columns
+  if !columns.contains(parentColumn) { columns = columns.push(parentColumn) }
+  let base = written(Query.selecting(&columns, held.table)) ?
+  written(Query.matchingOneOf(&base, parentColumn, &asValues(keys)))
+}
+
+/// What belongs to one parent, which is what belongs to a list of one.
+export fn forParent[T](
+  held: &Stored[T],
+  parentColumn: Str,
+  key: Option[Str]
+) -> Result[Query.Statement, StoreError] {
+  forParents(held, parentColumn, &[key])
+}
+
+/// The keys of several parents, for the statement that loads their children.
+export fn keysOf[P](parents: &Array[P], identity: fn(P) -> Option[Str]) -> Array[Option[Str]] {
+  var found: Array[Option[Str]] = []
+  for parent in parents {
+    let key = identity(parent)
+    if !found.contains(key) { found = found.push(key) }
+  }
+  found
+}
+
+/// What belongs to one parent, out of what was loaded for many.
+export fn belongingTo[T](
+  grouped: &Map[Str, Array[T]],
+  key: Option[Str]
+) -> Array[T] {
+  Map.getOr(grouped, Option.unwrapOr(key, ""), [])
+}
+
+/// Add one, and say how many rows it changed.
+export fn save[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  value: T
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = insertOf(held, value) ?
+  run(stream, &statement)
+}
+
+/// Change the one a key names.
+export fn change[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = updateOf(held, key, value) ?
+  run(stream, &statement)
+}
+
+/// Remove the one a key names.
+export fn remove[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str]
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = deleteOf(held, key) ?
+  run(stream, &statement)
+}
+
+/// Read the one a key names.
+export fn load[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str]
+) -> Result[(Option[T], Session.Connection), StoreError] {
+  let statement = selectOf(held, key) ?
+  let answered = ask(stream, &statement) ?
+  let value = readOne(held, &Db.asDriverRows(&answered[0])) ?
+  Ok((value, answered[1]))
+}
+
+/// Read every one.
+export fn loadAll[T](
+  stream: Session.Connection,
+  held: &Stored[T]
+) -> Result[(Array[T], Session.Connection), StoreError] {
+  let statement = selectAllOf(held) ?
+  let answered = ask(stream, &statement) ?
+  let values = readAll(held, &Db.asDriverRows(&answered[0])) ?
+  Ok((values, answered[1]))
+}
+
+/// Read everything a statement chooses.
+export fn loadWhere[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  statement: &Query.Statement
+) -> Result[(Array[T], Session.Connection), StoreError] {
+  let answered = ask(stream, statement) ?
+  let values = readAll(held, &Db.asDriverRows(&answered[0])) ?
+  Ok((values, answered[1]))
+}
+
+/// Read everything belonging to any of these parents, in one statement.
+export fn loadForParents[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[(Map[Str, Array[T]], Session.Connection), StoreError] {
+  let statement = forParents(held, parentColumn, keys) ?
+  let answered = ask(stream, &statement) ?
+  let grouped = groupedBy(held, &Db.asDriverRows(&answered[0]), parentColumn) ?
+  Ok((grouped, answered[1]))
+}
+
+/// A database a store reads and writes through: a client, and the driver that
+/// opened it, which says how that backend spells a placeholder.
+export type Target = { client: Driver.Client, driver: Driver.Driver }
+
+/// A target from a client and the driver that opened it.
+export fn through(client: &Driver.Client, driver: &Driver.Driver) -> Target {
+  Target{client: *client, driver: *driver}
+}
+
+/// Add one through any driver, and say how many rows it changed.
+///
+/// Each call takes a connection of its own, so it is not for use inside a
+/// transaction on the same client: on SQLite that client has one connection,
+/// and the transaction already holds it.
+export fn saveIn[T](target: &Target, held: &Stored[T], value: T) -> Result[Int, StoreError] {
+  let statement = insertOf(held, value) ?
+  writeIn(target, &statement)
+}
+
+/// Change the one a key names through any driver, and say how many rows it
+/// changed, which is none when no row carries that key.
+export fn changeIn[T](
+  target: &Target,
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[Int, StoreError] {
+  let statement = updateOf(held, key, value) ?
+  writeIn(target, &statement)
+}
+
+/// Remove the one a key names through any driver, and say how many rows went.
+export fn removeIn[T](target: &Target, held: &Stored[T], key: Option[Str]) -> Result[Int, StoreError] {
+  let statement = deleteOf(held, key) ?
+  writeIn(target, &statement)
+}
+
+/// Read the one a key names through any driver.
+export fn loadIn[T](target: &Target, held: &Stored[T], key: Option[Str]) -> Result[Option[T], StoreError] {
+  let statement = selectOf(held, key) ?
+  readOne(held, &askIn(target, &statement) ?)
+}
+
+/// Read every one through any driver.
+export fn loadAllIn[T](target: &Target, held: &Stored[T]) -> Result[Array[T], StoreError] {
+  let statement = selectAllOf(held) ?
+  readAll(held, &askIn(target, &statement) ?)
+}
+
+/// Read everything a statement chooses through any driver.
+export fn loadWhereIn[T](
+  target: &Target,
+  held: &Stored[T],
+  statement: &Query.Statement
+) -> Result[Array[T], StoreError] {
+  readAll(held, &askIn(target, statement) ?)
+}
+
+/// Read everything belonging to any of these parents through any driver, in
+/// one statement.
+export fn loadForParentsIn[T](
+  target: &Target,
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[Map[Str, Array[T]], StoreError] {
+  let statement = forParents(held, parentColumn, keys) ?
+  groupedBy(held, &askIn(target, &statement) ?, parentColumn)
+}
+
+fn askIn(target: &Target, statement: &Query.Statement) -> Result[Driver.Rows, StoreError] {
+  refusedBy(Driver.query(&target.client, Query.textIn(statement, &target.driver.placeholders), &Query.valuesOf(statement)))
+}
+
+/// A write, and the number of rows it changed.
+///
+/// PostgreSQL states the count in the command tag it answers with. SQLite
+/// states none, so the count is asked for with `changes()`, in the same
+/// transaction so no other statement can land on the connection between the
+/// write and the question.
+fn writeIn(target: &Target, statement: &Query.Statement) -> Result[Int, StoreError] {
+  let text = Query.textIn(statement, &target.driver.placeholders)
+  let values = Query.valuesOf(statement)
+  if target.driver.name == "sqlite" {
+    let counted = Driver.transaction(&target.client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        let _written = Driver.ask(&open, text, &values) ?
+        Driver.ask(&open, "select changes()", &[])
+      })
+    let rows = refusedBy(counted) ?
+    Ok(countIn(&rows))
+  } else {
+    let rows = refusedBy(Driver.query(&target.client, text, &values)) ?
+    Ok(Option.unwrapOr(Text.countOf(lastWord(rows.command)), 0))
+  }
+}
+
+fn countIn(rows: &Driver.Rows) -> Int {
+  if rows.rows.length() == 0 || rows.rows[0].length() == 0 { return 0 }
+  match rows.rows[0][0] {
+    case Driver.IntegerValue(number) => Option.unwrapOr(convertInteger[Int](number), 0)
+    case _ => 0
+  }
+}
+
+fn lastWord(tag: Str) -> Str {
+  let pieces = tag.split(" ")
+  if pieces.length() == 0 { "" } else { pieces[pieces.length() - 1] }
+}
+
+fn refusedBy[T](outcome: Result[T, Driver.Error]) -> Result[T, StoreError] {
+  Result.mapErr(outcome, fn(problem: Driver.Error) -> StoreError { Refused(problem.driver + ": " + problem.message) })
+}
+
+fn run(
+  stream: Session.Connection,
+  statement: &Query.Statement
+) -> Result[(Int, Session.Connection), StoreError] {
+  let answered = ask(stream, statement) ?
+  Ok((Db.affected(&answered[0]), answered[1]))
+}
+
+fn ask(
+  stream: Session.Connection,
+  statement: &Query.Statement
+) -> Result[(Db.Rows, Session.Connection), StoreError] {
+  let outcome = Db.run(stream, Query.textOf(statement), &Query.textValuesOf(statement))
+  if let Err(problem) = outcome { Err(Refused(show(problem))) } else { Ok(Result.unwrapOr(outcome, (emptyRows(), stream))) }
+}
+
+fn written(outcome: Result[Query.Statement, Query.QueryError]) -> Result[Query.Statement, StoreError] {
+  Result.mapErr(outcome, fn(problem: Query.QueryError) -> StoreError { Statement(problem) })
+}
+
+fn mapped[T](outcome: Result[T, Repository.RowError]) -> Result[T, StoreError] {
+  Result.mapErr(outcome, fn(problem: Repository.RowError) -> StoreError { Mapping(problem) })
+}
+
+fn emptyRows() -> Db.Rows { Db.Rows{columns: [], rows: [], tag: ""} }
+
+/// What a refusal says.
+export fn explain(problem: &StoreError) -> Str {
+  match problem {
+    case Mapping(held) => Repository.explain(&held)
+    case Statement(held) => Query.explain(&held)
+    case Refused(reason) => reason
+  }
+}

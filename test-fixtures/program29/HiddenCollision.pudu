@@ -1,0 +1,6 @@
+module HiddenCollision
+
+import HiddenOne as One
+import HiddenTwo as Two
+
+fn reject() -> Int { Two.take(One.make()) }

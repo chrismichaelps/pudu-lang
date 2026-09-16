@@ -1,0 +1,4 @@
+module Helper
+
+/// Documentation belonging to Helper, not Root.
+export fn helperOnly() -> Int { 0 }

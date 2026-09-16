@@ -1,0 +1,70 @@
+module UsesDeepRenderers
+
+import Std.Html as Html
+import Std.Json as Json
+import Std.Ui {Replaced, Retexted}
+import Std.Ui as Ui
+
+/// Rendering, comparison, and patching beyond the former evaluator-frame
+/// failure boundary. These are semantic checks, not merely survival checks:
+/// every output boundary and path still has to be exact.
+export fn main() -> Int {
+  let depth = 1600
+  var held = 0
+
+  var page = Html.text("x")
+  var level = 0
+  while level < depth {
+    page = Html.div(&[], &[page])
+    level = level + 1
+  }
+  let markup = Html.render(&page)
+  if markup.length() == depth * 11 + 1 { held = held + 1 }
+  if markup.startsWith("<div><div>") { held = held + 1 }
+  if markup.endsWith("</div></div>") { held = held + 1 }
+
+  var value = Json.Null
+  level = 0
+  while level < depth {
+    value = Json.List([value])
+    level = level + 1
+  }
+  let compact = Json.encode(&value)
+  if compact.length() == depth * 2 + 4 { held = held + 1 }
+  if compact.startsWith("[[[[") { held = held + 1 }
+  if compact.endsWith("]]]]") { held = held + 1 }
+
+  let pretty = Json.encodePretty(&value)
+  if pretty.length() == 2 * depth * depth + 4 * depth + 4 { held = held + 1 }
+  if pretty.startsWith("[\n  [") { held = held + 1 }
+  if pretty.endsWith("\n]") { held = held + 1 }
+
+  var before = Html.text("a")
+  var after = Html.text("b")
+  level = 0
+  while level < depth {
+    before = Html.div(&[], &[before])
+    after = Html.div(&[], &[after])
+    level = level + 1
+  }
+  if Ui.unchanged(&before, &before) { held = held + 1 }
+  let edits = Ui.changes(&before, &after)
+  if edits.length() == 1 { held = held + 1 }
+  if let Retexted(path, content) = edits[0] {
+    if Ui.depthOf(&path) == depth { held = held + 1 }
+    if content == "b" { held = held + 1 }
+  }
+  if Html.render(&Ui.applied(&before, &edits)) == Html.render(&after) { held = held + 1 }
+
+  var missing = Ui.root()
+  level = 0
+  while level < depth {
+    missing = Ui.childOf(&missing, 0)
+    level = level + 1
+  }
+  missing = Ui.childOf(&missing, 1)
+  let invalid = [Replaced(missing, Html.text("unreachable"))]
+  if Html.render(&Ui.applied(&before, &invalid)) == Html.render(&before) { held = held + 1 }
+
+  held
+}

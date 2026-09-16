@@ -1,0 +1,554 @@
+module UsesDbQueryShapeAll
+
+import Std.Db.Driver {DollarNumber, Named, QuestionMark}
+import Std.Db.Driver as Driver
+import Std.Db.Query as Query
+import Std.Db.Query.Shape {Cross, Inner, LeftOuter, SkipLocked}
+import Std.Db.Query.Shape as Shape
+import Std.Db.Schema as Schema
+import Std.Option as Option
+import Std.Result as Result
+
+/// The text a whole query is written as, or a marker no query produces.
+fn writtenAs(query: &Shape.Select) -> Str {
+  match Shape.select(query) {
+    case Ok(statement) => Query.textOf(&statement)
+    case Err(_) => "\u{0}"
+  }
+}
+
+/// How many values a whole query carries beside its text.
+fn carriedBy(query: &Shape.Select) -> Int {
+  match Shape.select(query) {
+    case Ok(statement) => Query.valueCount(&statement)
+    case Err(_) => 0 - 1
+  }
+}
+
+/// Two clauses added through the trait rather than through the type, so a
+/// helper that refines a query need not name which kind of query it is.
+///
+/// The bound is what is being checked: the refining calls are methods, and a
+/// caller writing one of these over their own query type gets it.
+fn narrowedAndDeduplicated[Q: Shape.Refining](base: &Q, bound: Shape.Bound) -> Q {
+  base.bounded(bound).distinctly()
+}
+
+/// Whether a query was refused.
+fn refused(query: &Shape.Select) -> Bool {
+  match Shape.select(query) {
+    case Ok(_) => false
+    case Err(_) => true
+  }
+}
+
+/// Every export of `Std.Db.Query` and `Std.Db.Query.Shape`.
+///
+/// The property both modules exist for is that nothing from outside can reach
+/// the text: values travel beside a statement and names are refused rather than
+/// quoted. So every check that could show a value leaking into the text reads
+/// the text back and counts the values beside it — a builder that wrote a value
+/// into the text answers a statement carrying one value fewer, and the text
+/// alone would look right.
+///
+/// A name is checked at each of the shapes an injection arrives as: a quote, a
+/// space, a semicolon, a comment marker, a leading digit, a second dot. Each is
+/// refused rather than escaped, because a name that was quoted wrongly is an
+/// injection that looks handled.
+///
+/// A statement put after another is the case placeholders make interesting.
+/// Both halves carry their own values, so the second half's placeholders must
+/// come out numbered after the first's — a builder that wrote the numbers when
+/// each half was built answers a statement whose second half starts again at
+/// one, which the database reads as the first half's value.
+export fn main() -> Int {
+  var held = 0
+
+  // A statement with nothing in it, and one made of text the program wrote.
+  let nothing: Query.Statement = Query.empty()
+  if Query.textOf(&nothing) == "" && Query.valueCount(&nothing) == 0 {
+    held = held + 1
+  }
+  if Query.textOf(&Query.text("select 1")) == "select 1" { held = held + 1 }
+  if Query.valueCount(&Query.text("select 1")) == 0 { held = held + 1 }
+  // Text with nothing in it adds no piece at all.
+  if Query.textOf(&Query.text("")) == "" { held = held + 1 }
+
+  // The only door a value goes through. The placeholder is written here rather
+  // than by the caller, so a caller cannot write one with no value behind it.
+  let one = Query.withValue(&Query.text("select * from people where name ="),
+    "", Query.textValue("ada"))
+  if Query.textOf(&one) == "select * from people where name = $1" { held = held + 1 }
+  if Query.valueCount(&one) == 1 { held = held + 1 }
+  if Query.valuesOf(&one) == [Query.textValue("ada")] { held = held + 1 }
+  // The value never appears in the text, whatever it holds.
+  let dangerous = Query.withValue(&Query.text("where name ="), "",
+    Query.textValue("'; drop table people; --"))
+  if !Query.textOf(&dangerous).contains("drop table") { held = held + 1 }
+  if Query.textOf(&dangerous) == "where name = $1" { held = held + 1 }
+
+  // Two statements one after the other, where the second's placeholders are
+  // numbered after the first's rather than starting again.
+  let left = Query.withValue(&Query.text("where a ="), "", Query.whole(1))
+  let right = Query.withValue(&Query.text("and b ="), "", Query.whole(2))
+  let joined = Query.then(&left, &right)
+  if Query.textOf(&joined) == "where a = $1 and b = $2" { held = held + 1 }
+  if Query.valueCount(&joined) == 2 { held = held + 1 }
+  // The other way round, which must renumber the other half.
+  if Query.textOf(&Query.then(&right, &left)) == "and b = $1 where a = $2" {
+    held = held + 1
+  }
+  // Joining with nothing changes neither side.
+  if Query.textOf(&Query.then(&left, &nothing)) == Query.textOf(&left) {
+    held = held + 1
+  }
+  if Query.textOf(&Query.then(&nothing, &left)) == Query.textOf(&left) {
+    held = held + 1
+  }
+
+  // A statement written out in full, whose placeholders are read back as parts
+  // so it can still be put after another and come out numbered right.
+  let handWritten = Query.raw("select * from people where id = $1", &[Query.whole(7)])
+  if Query.textOf(&handWritten) == "select * from people where id = $1" {
+    held = held + 1
+  }
+  if Query.valueCount(&handWritten) == 1 { held = held + 1 }
+  // Put after a statement that already used a placeholder, it renumbers.
+  if Query.textOf(&Query.then(&left, &handWritten))
+    == "where a = $1 select * from people where id = $2" {
+    held = held + 1
+  }
+  // A written statement carrying more than one placeholder keeps their order.
+  let two = Query.raw("where a = $1 and b = $2", &[Query.whole(1), Query.whole(2)])
+  if Query.textOf(&Query.then(&left, &two)) == "where a = $1 where a = $2 and b = $3" {
+    held = held + 1
+  }
+  // A dollar that is not a placeholder stays in the text.
+  if Query.textOf(&Query.raw("select '$' as sign", &[])) == "select '$' as sign" {
+    held = held + 1
+  }
+
+  // The same statement spelled the way each backend writes a placeholder, so a
+  // caller with a driver in hand asks rather than guesses.
+  if Query.textIn(&joined, &DollarNumber) == "where a = $1 and b = $2" {
+    held = held + 1
+  }
+  if Query.textIn(&joined, &QuestionMark) == "where a = ? and b = ?" {
+    held = held + 1
+  }
+  if Query.textIn(&joined, &Named) == "where a = :p1 and b = :p2" { held = held + 1 }
+
+  // Each kind of value, and what it becomes on a wire that carries every
+  // parameter as text.
+  if Query.textValue("ada") == Driver.TextValue("ada") { held = held + 1 }
+  if Query.flag(true) == Driver.BooleanValue(true) { held = held + 1 }
+  if Query.absent() == Driver.NullValue { held = held + 1 }
+  if Query.maybeText(Some("here")) == Driver.TextValue("here") { held = held + 1 }
+  if Query.maybeText(None) == Driver.NullValue { held = held + 1 }
+  // A number crosses as a number, which is the whole reason values are typed:
+  // compared as text, every number sorts before every text on one backend and
+  // is coerced on another, so the same query would mean two things.
+  if Query.whole(6) == Driver.IntegerValue(6i64) { held = held + 1 }
+  let mixed = Query.raw(
+    "x",
+      &[Query.textValue("a"), Query.whole(2), Query.flag(false), Query.absent()]
+  )
+  if Query.textValuesOf(&mixed) == [Some("a"), Some("2"), Some("false"), None] {
+    held = held + 1
+  }
+  let noValues: Array[Driver.Value] = []
+  if Query.textValuesOf(&Query.raw("x", &noValues)) == [] { held = held + 1 }
+  // Bytes have no text spelling, so they answer absent rather than something
+  // that would be read back as text.
+  let binary = Query.raw("x", &[Driver.BytesValue("ab".toBytes())])
+  if Query.textValuesOf(&binary) == [None] { held = held + 1 }
+
+  // A name, admitted only when it is one. Each shape an injection arrives as
+  // is refused rather than escaped, since a name quoted wrongly is an
+  // injection that looks handled.
+  if Result.unwrapOr(Query.name("people"), "") == "people" { held = held + 1 }
+  if Result.unwrapOr(Query.name("_private9"), "") == "_private9" { held = held + 1 }
+  if Result.isErr(&Query.name("")) { held = held + 1 }
+  if Result.isErr(&Query.name("9lives")) { held = held + 1 }
+  if Result.isErr(&Query.name("people; drop table x")) { held = held + 1 }
+  if Result.isErr(&Query.name("people'")) { held = held + 1 }
+  if Result.isErr(&Query.name("people x")) { held = held + 1 }
+  if Result.isErr(&Query.name("people--")) { held = held + 1 }
+  // A bare name has no dot in it; a qualified one may have exactly one, and
+  // each side of it is checked as a name in its own right.
+  if Result.isErr(&Query.name("public.people")) { held = held + 1 }
+  if Result.unwrapOr(Query.qualifiedName("public.people"), "") == "public.people" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Query.qualifiedName("people"), "") == "people" { held = held + 1 }
+  if Result.isErr(&Query.qualifiedName("a.b.c")) { held = held + 1 }
+  // A rule loose enough to admit a dot is loose enough to admit what follows
+  // one, so each half is checked rather than the whole against a looser rule.
+  if Result.isErr(&Query.qualifiedName("public.people; drop table x")) {
+    held = held + 1
+  }
+  if Result.isErr(&Query.qualifiedName("public.")) { held = held + 1 }
+
+  // A name that really does come from outside, chosen from a list the program
+  // wrote, so nothing outside decides anything.
+  if Result.unwrapOr(Query.oneOf("name", &["name", "age"]), "") == "name" {
+    held = held + 1
+  }
+  if Result.isErr(&Query.oneOf("password", &["name", "age"])) { held = held + 1 }
+
+  // An operator, from a stated set for the same reason: one taken from outside
+  // is as dangerous as a name taken from outside.
+  if Result.unwrapOr(Query.operator(">="), "") == ">=" { held = held + 1 }
+  if Result.unwrapOr(Query.operator("  LIKE "), "") == "like" { held = held + 1 }
+  if Result.isErr(&Query.operator("; drop table x")) { held = held + 1 }
+  if Result.isErr(&Query.operator("")) { held = held + 1 }
+
+  // The statements built from a table and its columns, each checking its names
+  // on the way.
+  if Result.unwrapOr(Result.map(Query.from("people"), fn(s: Query.Statement) -> Str => Query.textOf(&s)), "")
+    == "select * from people" {
+    held = held + 1
+  }
+  if Result.isErr(&Query.from("people; drop table x")) { held = held + 1 }
+  match Query.selecting(&["name", "age"], "people") {
+    case Ok(statement) => {
+      if Query.textOf(&statement) == "select name, age from people" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  let noColumns: Array[Str] = []
+  if Result.isErr(&Query.selecting(&noColumns, "people")) { held = held + 1 }
+  if Result.isErr(&Query.selecting(&["name; drop table x"], "people")) {
+    held = held + 1
+  }
+
+  // A whole query as one value, which is the smallest one there is.
+  let everyone: Shape.Select = Shape.everythingFrom("people")
+  if writtenAs(&everyone) == "select * from people" { held = held + 1 }
+  if carriedBy(&everyone) == 0 { held = held + 1 }
+  if refused(&Shape.everythingFrom("people; drop table x")) { held = held + 1 }
+
+  // What a query answers with, each shape of it checked on the way to the
+  // text.
+  let picked: Shape.Selected = Shape.pick("name")
+  if Shape.selectedText(&picked) == "name" { held = held + 1 }
+  if Shape.selectedText(&Shape.everything()) == "*" { held = held + 1 }
+  if Shape.selectedText(&Shape.howMany()) == "count(*)" { held = held + 1 }
+  if Shape.selectedText(&Shape.over("sum", "total")) == "sum(total)" { held = held + 1 }
+  if Shape.selectedText(&Shape.under(&Shape.howMany(), "rows")) == "count(*) as rows" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.answering(&[picked, Shape.pick("age")]))
+    == "select name, age from people" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.answering(&[Shape.under(&Shape.over("sum", "total"), "all")]))
+    == "select sum(total) as all from people" {
+    held = held + 1
+  }
+  // An aggregate is checked in both parts, and one that is not in the stated
+  // set is refused however ordinary it looks.
+  if refused(&everyone.answering(&[Shape.over("evil", "total")])) {
+    held = held + 1
+  }
+  if refused(&everyone.answering(&[Shape.over("sum", "total); drop table x --")])) {
+    held = held + 1
+  }
+  if refused(&everyone.answering(&[Shape.pick("name; drop table x")])) {
+    held = held + 1
+  }
+  // A query answering nothing is refused rather than written as one that
+  // answers everything.
+  let noneSelected: Array[Shape.Selected] = []
+  if refused(&everyone.answering(&noneSelected)) { held = held + 1 }
+  // Duplicate rows removed.
+  if writtenAs(&everyone.distinctly()) == "select distinct * from people" {
+    held = held + 1
+  }
+
+  // Tables put beside one another, each way written the way the language
+  // writes it.
+  let withOrders: Shape.Join = Shape.inner("orders", "people.id", "orders.person")
+  if writtenAs(&everyone.alongside(&[withOrders]))
+    == "select * from people join orders on people.id = orders.person" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.alongside(&[Shape.leftJoin("orders", "people.id", "orders.person")]))
+    == "select * from people left join orders on people.id = orders.person" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.alongside(&[Shape.rightJoin("orders", "people.id", "orders.person")]))
+    .contains("right join") {
+    held = held + 1
+  }
+  if writtenAs(&everyone.alongside(&[Shape.fullJoin("orders", "people.id", "orders.person")]))
+    .contains("full join") {
+    held = held + 1
+  }
+  // Every row beside every row, which names no columns to agree on.
+  if writtenAs(&everyone.alongside(&[Shape.crossJoin("orders")]))
+    == "select * from people cross join orders" {
+    held = held + 1
+  }
+  // The columns a join agrees on are names, and refused when they are not.
+  if refused(&everyone.alongside(&[Shape.inner("orders", "x; drop table y", "orders.person")])) {
+    held = held + 1
+  }
+  if refused(&everyone.alongside(&[Shape.inner("orders; drop table y", "a", "b")])) {
+    held = held + 1
+  }
+
+  // A join written from two columns whose types must agree, so joining a
+  // column of text to one of numbers does not compile at all.
+  let personId: Schema.Column[Int] = Schema.column("people", "id")
+  let orderPerson: Schema.Column[Int] = Schema.column("orders", "person")
+  let typed: Shape.Join = Shape.joinOn(Inner, &personId, &orderPerson)
+  if writtenAs(&everyone.alongside(&[typed]))
+    == "select * from people join orders on people.id = orders.person" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.alongside(&[Shape.joinOn(LeftOuter, &personId, &orderPerson)]))
+    .contains("left join") {
+    held = held + 1
+  }
+  // The table joined is the one the right column belongs to, read off the
+  // column rather than named again.
+  if Shape.joinOn(Cross, &personId, &orderPerson).table == "orders" { held = held + 1 }
+
+  // Conditions. Each value travels beside the text, so the count of values is
+  // read back beside it every time.
+  let named = everyone.keeping(&[Shape.is("name", "=", "ada")])
+  if writtenAs(&named) == "select * from people where name = $1" { held = held + 1 }
+  if carriedBy(&named) == 1 { held = held + 1 }
+  // A value that would end the statement if it were written into the text.
+  let attacked = everyone.keeping(&[Shape.is("name", "=", "'; drop table people; --")])
+  if writtenAs(&attacked) == "select * from people where name = $1" { held = held + 1 }
+  if carriedBy(&attacked) == 1 { held = held + 1 }
+  // A comparison against a number crosses as a number rather than as text.
+  let numbered = everyone.keeping(&[Shape.isNumber("age", ">", 21)])
+  if writtenAs(&numbered) == "select * from people where age > $1" { held = held + 1 }
+  match Shape.select(&numbered) {
+    case Ok(statement) => {
+      if Query.valuesOf(&statement) == [Driver.IntegerValue(21i64)] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A value carrying its own type, and one that may be absent.
+  let bound = everyone.keeping(&[Shape.isBound("active", "=", Query.flag(true))])
+  if carriedBy(&bound) == 1 && writtenAs(&bound).endsWith("active = $1") {
+    held = held + 1
+  }
+  let perhaps = everyone.keeping(&[Shape.isValue("note", "=", None)])
+  match Shape.select(&perhaps) {
+    case Ok(statement) => {
+      if Query.valuesOf(&statement) == [Driver.NullValue] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if carriedBy(&everyone.keeping(&[Shape.isValue("note", "=", Some("x"))])) == 1 {
+    held = held + 1
+  }
+
+  // Holding nothing and holding something are asked of the column rather than
+  // compared against a value, so neither carries one.
+  let absent = everyone.keeping(&[Shape.isMissing("note")])
+  if writtenAs(&absent) == "select * from people where note is null" { held = held + 1 }
+  if carriedBy(&absent) == 0 { held = held + 1 }
+  let present = everyone.keeping(&[Shape.isPresent("note")])
+  if writtenAs(&present) == "select * from people where note is not null" {
+    held = held + 1
+  }
+  if carriedBy(&present) == 0 { held = held + 1 }
+
+  // A column that is one of several values, each its own parameter, so a list
+  // from outside cannot become part of the text however long it is.
+  let among = everyone.keeping(&[Shape.isOneOf("name", &[Some("ada"), Some("bob")])])
+  if writtenAs(&among) == "select * from people where name in ($1, $2)" {
+    held = held + 1
+  }
+  if carriedBy(&among) == 2 { held = held + 1 }
+  let inAges = [Query.whole(1), Query.whole(2), Query.whole(3)]
+  let typedAmong = everyone.keeping(&[Shape.isAmong("age", &inAges)])
+  if writtenAs(&typedAmong) == "select * from people where age in ($1, $2, $3)" {
+    held = held + 1
+  }
+  if carriedBy(&typedAmong) == 3 { held = held + 1 }
+  // A list holding nothing matches nothing, which is what it means, rather
+  // than an empty bracket the database refuses.
+  let noneAmong: Array[Driver.Value] = []
+  let emptyAmong = everyone.keeping(&[Shape.isAmong("age", &noneAmong)])
+  if writtenAs(&emptyAmong) == "select * from people where false" { held = held + 1 }
+  if carriedBy(&emptyAmong) == 0 { held = held + 1 }
+
+  // More than one condition, joined by the word that follows the first.
+  let both =
+  everyone.keeping(&[Shape.is("name", "=", "ada"), Shape.isNumber("age", ">", 21)])
+  if writtenAs(&both) == "select * from people where name = $1 and age > $2" {
+    held = held + 1
+  }
+  if carriedBy(&both) == 2 { held = held + 1 }
+  // One more condition than a query had, which is what a search screen adds
+  // for each thing the reader typed.
+  let narrowed = named.andKeeping(Shape.isPresent("note"))
+  if writtenAs(&narrowed) == "select * from people where name = $1 and note is not null" {
+    held = held + 1
+  }
+  if carriedBy(&narrowed) == 1 { held = held + 1 }
+  // The query it was added to is unchanged, which is what makes adding one
+  // safe in a loop.
+  if writtenAs(&named) == "select * from people where name = $1" { held = held + 1 }
+  // A condition's column and its operator are both checked.
+  if refused(&everyone.keeping(&[Shape.is("name; drop table x", "=", "a")])) {
+    held = held + 1
+  }
+  if refused(&everyone.keeping(&[Shape.is("name", "; drop table x", "a")])) {
+    held = held + 1
+  }
+  // A qualified column is admitted, since once a join is in play every
+  // condition names its column with the table.
+  if writtenAs(&everyone.keeping(&[Shape.is("people.name", "=", "ada")]))
+    == "select * from people where people.name = $1" {
+    held = held + 1
+  }
+
+  // Gathering rows, and keeping only some of the groups — where a condition
+  // names an aggregate rather than a column.
+  let counted = everyone
+    .answering(&[Shape.pick("city"), Shape.howMany()])
+    .gatheredBy(&["city"])
+  if writtenAs(&counted) == "select city, count(*) from people group by city" {
+    held = held + 1
+  }
+  let popular = counted.keepingGroups(&[Shape.isNumber("count(*)", ">", 5)])
+  if writtenAs(&popular)
+    == "select city, count(*) from people group by city having count(*) > $1" {
+    held = held + 1
+  }
+  if carriedBy(&popular) == 1 { held = held + 1 }
+  // A group condition naming an aggregate that is not one is refused.
+  if refused(&counted.keepingGroups(&[Shape.isNumber("evil(*)", ">", 5)])) {
+    held = held + 1
+  }
+  if refused(&everyone.gatheredBy(&["city; drop table x"])) { held = held + 1 }
+
+  // Order, where the rows holding nothing go is stated rather than left to the
+  // server's default — which differs by direction, so a page that reorders
+  // itself when a column becomes nullable is a bug nobody looks for.
+  if writtenAs(&everyone.inOrder(&[Shape.ascending("name")]))
+    == "select * from people order by name asc nulls last" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.inOrder(&[Shape.descending("age")]))
+    == "select * from people order by age desc nulls last" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.inOrder(&[Shape.ordered("age", true, true)]))
+    == "select * from people order by age desc nulls first" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.inOrder(&[Shape.ascending("name"), Shape.descending("age")]))
+    == "select * from people order by name asc nulls last, age desc nulls last" {
+    held = held + 1
+  }
+  if refused(&everyone.inOrder(&[Shape.ascending("name; drop table x")])) {
+    held = held + 1
+  }
+
+  // How much of a result is wanted. Nothing for either means all of it, so an
+  // unbounded query writes neither clause.
+  if writtenAs(&everyone.bounded(Shape.unbounded())) == "select * from people" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.bounded(Shape.first(10)))
+    == "select * from people limit 10" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.bounded(Shape.page(10, 20)))
+    == "select * from people limit 10 offset 20" {
+    held = held + 1
+  }
+  // A page that skips nothing writes no skipping clause.
+  if writtenAs(&everyone.bounded(Shape.page(10, 0)))
+    == "select * from people limit 10" {
+    held = held + 1
+  }
+
+  // Rows held for the length of a transaction, and the form that steps over
+  // the rows somebody else already holds.
+  if writtenAs(&everyone.locked(Shape.ForUpdate))
+    == "select * from people for update" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.locked(SkipLocked))
+    == "select * from people for update skip locked" {
+    held = held + 1
+  }
+  if writtenAs(&everyone.locked(Shape.NoLocking)) == "select * from people" {
+    held = held + 1
+  }
+
+  // The clauses reached through the trait rather than through the type.
+  if writtenAs(&narrowedAndDeduplicated(&everyone, Shape.first(3)))
+    == "select distinct * from people limit 3" {
+    held = held + 1
+  }
+  // How two tables are put beside one another, and what a condition asks, are
+  // each a type a caller may name.
+  let howJoined: Shape.Joining = Inner
+  if Shape.joinOn(howJoined, &personId, &orderPerson).kind == Inner { held = held + 1 }
+  let asks: Shape.Test = Shape.is("name", "=", "ada").test
+  if asks == Shape.isNumber("age", ">", 1).test { held = held + 1 }
+  if asks != Shape.isMissing("note").test { held = held + 1 }
+
+  // The name check the shape layer offers, which is the one underneath it.
+  if Result.unwrapOr(Shape.qualifiedName("people.name"), "") == "people.name" {
+    held = held + 1
+  }
+  if Result.isErr(&Shape.qualifiedName("people.name; drop table x")) { held = held + 1 }
+
+  // Every clause at once, written as the one value it is. Each part is named
+  // where a reader looks for it and nothing is nested inside anything, which
+  // is the whole reason the query is a record rather than a chain of calls:
+  // written as calls that each take the last one, what a reader wants first —
+  // the table and the columns — ends up furthest in, and the shape on the page
+  // is the shape of the nesting rather than the shape of the query.
+  let report = Shape.Select {
+    from: "people",
+    columns: [Shape.pick("people.city"), Shape.under(&Shape.howMany(), "many")],
+    joins: [withOrders],
+    conditions: [Shape.isNumber("people.age", ">", 21)],
+    groupBy: ["people.city"],
+    having: [Shape.isNumber("count(*)", ">", 2)],
+    orderBy: [Shape.descending("people.city")],
+    bound: Shape.page(5, 10),
+    distinct: true,
+    locking: Shape.ForUpdate
+  }
+  let written = "select distinct people.city, count(*) as many from people"
+    + " join orders on people.id = orders.person"
+    + " where people.age > $1 group by people.city having count(*) > $2"
+    + " order by people.city desc nulls last limit 5 offset 10 for update"
+  if writtenAs(&report) == written { held = held + 1 }
+  // Both conditions carried their values beside the text rather than in it.
+  if carriedBy(&report) == 2 { held = held + 1 }
+
+  // The same query built one clause at a time, which is what a program does
+  // when the query is not known in advance — a search screen adding a filter
+  // for each thing the reader typed. Each step names the query it changes, so
+  // the steps read down the page in the order they happen rather than inside
+  // out, and the two ways of writing it must agree.
+  let building = Shape.everythingFrom("people")
+    .distinctly()
+    .answering(&[Shape.pick("people.city"), Shape.under(&Shape.howMany(), "many")])
+    .alongside(&[withOrders])
+    .andKeeping(Shape.isNumber("people.age", ">", 21))
+    .gatheredBy(&["people.city"])
+    .keepingGroups(&[Shape.isNumber("count(*)", ">", 2)])
+    .inOrder(&[Shape.descending("people.city")])
+    .bounded(Shape.page(5, 10))
+    .locked(Shape.ForUpdate)
+  if writtenAs(&building) == written { held = held + 1 }
+  if carriedBy(&building) == 2 { held = held + 1 }
+
+  held
+}

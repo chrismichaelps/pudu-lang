@@ -1,0 +1,158 @@
+module UsesMail
+
+import Std.Mail {HeaderBreak, NoRecipient, NotAnAddress}
+import Std.Mail as Mail
+import Std.Result as Result
+
+/// What a message promises.
+///
+/// Two claims matter. A value that could end a header is refused, because a
+/// break there lets whoever supplied it write headers of their own — which is
+/// how bulk mail is sent through somebody else's contact form. And whoever is
+/// copied without the others knowing stays out of the headers, because that is
+/// a disclosure nobody notices until after it has happened.
+export fn main() -> Int {
+  var held = 0
+
+  let sender = at("shop@example.com")
+  let reader = at("ada@example.com")
+  let other = at("grace@example.com")
+
+  // An address is checked, and one that is not an address is refused.
+  if Mail.addressText(&sender) == "shop@example.com" { held = held + 1 }
+  if let Err(NotAnAddress(_)) = Mail.address("not an address") { held = held + 1 }
+  if let Err(NotAnAddress(_)) = Mail.address("@example.com") { held = held + 1 }
+  if let Err(NotAnAddress(_)) = Mail.address("ada@") { held = held + 1 }
+  if let Err(NotAnAddress(_)) = Mail.address("a@b@c") { held = held + 1 }
+  if let Err(NotAnAddress(_)) = Mail.address("ada example@x.com") { held = held + 1 }
+  if Result.isOk(&Mail.address("  ada@example.com  ")) { held = held + 1 }
+
+  // A break in an address lets whoever supplied it write headers of their own.
+  // Refused rather than stripped: stripping guesses at what was meant and
+  // hands back something the caller believes carries what they gave it.
+  if let Err(HeaderBreak(_)) = Mail.address("ada@example.com\r\nBcc: everyone@example.com") {
+    held = held + 1
+  }
+  if let Err(HeaderBreak(_)) = Mail.address("ada@example.com\nSubject: something else") {
+    held = held + 1
+  }
+
+  // And the same in a subject, which is the field a contact form usually hands
+  // straight through.
+  if let Err(HeaderBreak(_)) = Mail.message(&sender, &reader, "Hello\r\nBcc: everyone@x.com", "hi") {
+    held = held + 1
+  }
+  if let Err(HeaderBreak(_)) = Mail.message(&sender, &reader, "Hello\nTo: someone@x.com", "hi") {
+    held = held + 1
+  }
+
+  // An ordinary message is built and reads back as what it was.
+  let note = orNothing(Mail.message(&sender, &reader, "Your order", "It has shipped."))
+  if Mail.recipientCount(&note) == 1 { held = held + 1 }
+  if note.subject == "Your order" { held = held + 1 }
+  if Result.isOk(&Mail.sendable(&note)) { held = held + 1 }
+
+  // More recipients, and copies the others can see.
+  let widened = Mail.copying(&Mail.andTo(&note, &other), &at("audit@example.com"))
+  if Mail.recipientCount(&widened) == 3 { held = held + 1 }
+  if Mail.envelope(&widened).length() == 3 { held = held + 1 }
+
+  // The headers name the visible recipients.
+  if headerOf(&widened, "To").contains("ada@example.com") { held = held + 1 }
+  if headerOf(&widened, "To").contains("grace@example.com") { held = held + 1 }
+  if headerOf(&widened, "Cc") == "audit@example.com" { held = held + 1 }
+  if headerOf(&widened, "From") == "shop@example.com" { held = held + 1 }
+  if headerOf(&widened, "Subject") == "Your order" { held = held + 1 }
+
+  // Somebody copied without the others knowing reaches the envelope, because
+  // the server must be told, and never the headers, because the others must
+  // not.
+  let quiet = Mail.copyingBlind(&widened, &at("watcher@example.com"))
+  if Mail.hasBlindCopies(&quiet) { held = held + 1 }
+  if Mail.recipientCount(&quiet) == 4 { held = held + 1 }
+  if envelopeHas(&quiet, "watcher@example.com") { held = held + 1 }
+
+  // Which is the check this design exists for: nothing a program can call
+  // writes that list into the headers.
+  if !headerOf(&quiet, "To").contains("watcher") { held = held + 1 }
+  if !headerOf(&quiet, "Cc").contains("watcher") { held = held + 1 }
+  if !Mail.render(&quiet).contains("watcher@example.com") { held = held + 1 }
+  if !Mail.render(&quiet).contains("Bcc") { held = held + 1 }
+
+  // And the visible ones are still there, so the check has not simply hidden
+  // everybody.
+  if Mail.render(&quiet).contains("ada@example.com") { held = held + 1 }
+  if Mail.render(&quiet).contains("audit@example.com") { held = held + 1 }
+
+  // A line of the body that would end the message is escaped, since the wire
+  // format ends one with a lone full stop and the rest would be read as
+  // commands.
+  let dotted = orNothing(Mail.message(&sender, &reader, "x", "before\n.\nafter"))
+  if Mail.render(&dotted).contains("\r\n..\r\n") { held = held + 1 }
+  if Mail.stuffed(".") == ".." { held = held + 1 }
+  if Mail.stuffed(".hidden") == "..hidden" { held = held + 1 }
+  if Mail.stuffed("ordinary") == "ordinary" { held = held + 1 }
+  if Mail.stuffed("a\n.\nb") == "a\r\n..\r\nb" { held = held + 1 }
+
+  // Line endings are the ones the format uses, whichever the body was written
+  // with.
+  if Mail.stuffed("a\r\nb") == "a\r\nb" { held = held + 1 }
+  if Mail.stuffed("a\nb") == "a\r\nb" { held = held + 1 }
+
+  // What goes on the wire has its headers, then a blank line, then the body.
+  let written = Mail.render(&note)
+  if written.contains("Subject: Your order\r\n") { held = held + 1 }
+  if written.contains("\r\n\r\nIt has shipped.") { held = held + 1 }
+  if written.contains("MIME-Version: 1.0") { held = held + 1 }
+  if written.contains("charset=utf-8") { held = held + 1 }
+
+  // A message naming nobody says so rather than being sent nowhere.
+  let nobody = Mail.Message {
+    from: sender,
+    to: [],
+    copies: [],
+    blindCopies: [],
+    subject: "x",
+    body: "y"
+  }
+  if let Err(NoRecipient) = Mail.sendable(&nobody) { held = held + 1 }
+  if Mail.recipientCount(&nobody) == 0 { held = held + 1 }
+
+  // A refusal never repeats what it refused, since the sender knows what they
+  // gave and repeating it carries whatever was in it somewhere else.
+  if !Mail.explain(&HeaderBreak("a\r\nBcc: x@y.z")).contains("Bcc") { held = held + 1 }
+  if !Mail.explain(&NotAnAddress("secret@internal")).contains("internal") { held = held + 1 }
+  if Mail.explain(&NoRecipient).contains("nobody") { held = held + 1 }
+
+  held
+}
+
+fn at(written: Str) -> Mail.Address {
+  Result.unwrapOr(Mail.address(written), Mail.Address{written: ""})
+}
+
+fn orNothing(outcome: Result[Mail.Message, Mail.MailError]) -> Mail.Message {
+  Result.unwrapOr(
+    outcome,
+    Mail.Message {
+      from: Mail.Address{written: ""},
+      to: [],
+      copies: [],
+      blindCopies: [],
+      subject: "",
+      body: ""
+    }
+  )
+}
+
+fn headerOf(held: &Mail.Message, name: Str) -> Str {
+  var found = ""
+  for entry in Mail.headers(held) { if entry[0] == name { found = entry[1] } }
+  found
+}
+
+fn envelopeHas(held: &Mail.Message, written: Str) -> Bool {
+  var found = false
+  for one in Mail.envelope(held) { if Mail.addressText(&one) == written { found = true } }
+  found
+}

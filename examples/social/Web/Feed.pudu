@@ -1,0 +1,164 @@
+module Web.Feed
+
+import Std.App.Database as Database
+import Std.Http as Http
+import Std.Http.Message as Message
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Url as Url
+import Service.Commands as Commands
+import Service.Queries as Queries
+import View.Pages as Pages
+import View.Style as Style
+
+/// The edge a person uses: forms in, pages out.
+///
+/// Every write answers with a redirect rather than a page, so that reloading
+/// repeats the reading and never the writing. Without it, refreshing after
+/// approving something would approve it again — or, worse, the browser would
+/// ask whether to resend the form and the reader would have to decide.
+///
+/// Nothing here decides what may be written. It reads what arrived, names a
+/// command, and turns the answer into a page; the rules live in
+/// `Service.Commands`, which the JSON edge reaches too.
+export fn feed(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let reader = readerOf(request)
+  match Queries.feed(db, reader) {
+    case Err(problem) => Reply.text(500, "the feed could not be read: " + problem.message)
+    case Ok(view) => Reply.html(200, Pages.feed(&view, reader, complaintOf(request)))
+  }
+}
+
+export fn thread(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let reader = readerOf(request)
+  match identifier(request) {
+    case None => Reply.html(404, Pages.missing())
+    case Some(id) =>
+    match Queries.thread(db, reader, id) {
+      case Err(problem) => Reply.text(500, "the post could not be read: " + problem.message)
+      case Ok(None) => Reply.html(404, Pages.missing())
+      case Ok(Some(view)) => Reply.html(200, Pages.thread(&view, reader, complaintOf(request)))
+    }
+  }
+}
+
+export fn stylesheet() -> Http.Response {
+  Message.respond(200, "text/css; charset=utf-8", Style.sheet())
+}
+
+export fn publish(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let fields = Route.fieldsOf(request)
+  let author = Option.unwrapOr(fields.get("author"), "")
+  let body = Option.unwrapOr(fields.get("body"), "")
+  answered(Commands.apply(db, Commands.Publish(author, body), clock), "/", author)
+}
+
+export fn reply(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let fields = Route.fieldsOf(request)
+  let author = Option.unwrapOr(fields.get("author"), "")
+  let body = Option.unwrapOr(fields.get("body"), "")
+  match identifier(request) {
+    case None => Reply.html(404, Pages.missing())
+    case Some(id) =>
+    answered(
+      Commands.apply(db, Commands.Reply(id, author, body), clock),
+      "/posts/" + display(id),
+      author
+    )
+  }
+}
+
+export fn approve(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  commanded(db, request, clock, fn(id: Int, who: Str) -> Commands.Command { Commands.Approve(id, who) })
+}
+
+export fn withdraw(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  commanded(db, request, clock, fn(id: Int, who: Str) -> Commands.Command { Commands.Withdraw(id, who) })
+}
+
+export fn retract(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let author = Option.unwrapOr(Route.fieldsOf(request).get("author"), "")
+  match identifier(request) {
+    case None => Reply.html(404, Pages.missing())
+    case Some(id) => answered(Commands.apply(db, Commands.Retract(id), clock), "/", author)
+  }
+}
+
+export fn retractReply(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let author = Option.unwrapOr(Route.fieldsOf(request).get("author"), "")
+  match identifier(request) {
+    case None => Reply.html(404, Pages.missing())
+    case Some(id) => answered(Commands.apply(db, Commands.RetractReply(id), clock), "/", author)
+  }
+}
+
+export fn missing() -> Http.Response { Reply.html(404, Pages.missing()) }
+
+/// An approval or a withdrawal, which differ only in which command they name.
+fn commanded(
+  db: &Database.Database,
+  request: &Route.Request,
+  clock: Int,
+  named: fn(Int, Str) -> Commands.Command
+) -> Http.Response {
+  let author = Option.unwrapOr(Route.fieldsOf(request).get("author"), "")
+  match identifier(request) {
+    case None => Reply.html(404, Pages.missing())
+    case Some(id) => {
+      let back = Option.unwrapOr(Route.queryParam(request, "from"), "/")
+      answered(Commands.apply(db, named(id, author), clock), back, author)
+    }
+  }
+}
+
+/// Send the reader back to where they were, carrying who they are and, when
+/// something was refused, what was refused.
+///
+/// The complaint travels in the address because the next request is a fresh
+/// one: there is nowhere else to put it without a session, and a page that
+/// silently discarded a refusal would leave somebody staring at a post that
+/// did not appear with nothing saying why.
+fn answered(outcome: Commands.Outcome, back: Str, author: Str) -> Http.Response {
+  let who = "reader=" + Url.encodeComponent(author)
+  match outcome {
+    case Commands.Done(_) => Message.redirect(303, back + "?" + who)
+    case Commands.Refused(why) =>
+    Message.redirect(303, back + "?" + who + "&refused=" + Url.encodeComponent(why))
+    case Commands.Absent(_) => Message.redirect(303, "/?" + who + "&refused=" + Url.encodeComponent("that is not here any more"))
+    case Commands.Broke(why) =>
+    Message.redirect(303, back + "?" + who + "&refused=" + Url.encodeComponent(why))
+  }
+}
+
+/// Who is reading, as the last form or link said.
+fn readerOf(request: &Route.Request) -> Str {
+  Option.unwrapOr(Route.queryParam(request, "reader"), "")
+}
+
+fn complaintOf(request: &Route.Request) -> Str {
+  Option.unwrapOr(Route.queryParam(request, "refused"), "")
+}
+
+fn identifier(request: &Route.Request) -> Option[Int] {
+  numberOf(Route.param(request, "id"))
+}
+
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}

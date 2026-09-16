@@ -1,0 +1,55 @@
+---
+type: module
+path: "@root/lib/Std/Tls.pudu"
+fidelity: Active
+domain: "[[Standard Library]]"
+subsystem: "[[architecture/STDLIB]]"
+tags: [module, stdlib, network, security]
+aliases: [Std Tls]
+---
+# Std Tls
+## Purpose
+Carry bytes over a connection whose contents only the two ends can read, to a host that has proved
+it is the host that was named.
+## Interface
+`connect`, `connectWithin`, and `withConnection` open one; `send`, `sendWithin`, `sendText`,
+`sendTextWithin`, `receive`, `receiveWithin`, `receiveAll`, `receiveUntil`, and `foldChunks` move
+bytes; `peerOf` answers the proven name; `close` and `closeWithin` end it.
+## Governance and algorithm
+The protocol is not implemented here and not implemented in Pudu. Transport security is the one
+place in this library where being wrong is silent: a handshake that skips a check still completes
+and still carries traffic. [[Eval Tls]] therefore reaches an implementation that has been reviewed
+and attacked for years, exactly as sockets reach the system's own.
+
+Verification is not a parameter. A caller given one would eventually use it to make something work,
+and the result is a connection encrypted against a stranger rather than private with the intended
+server — worse than an unsecured one, because it looks safe. Trust is the machine's own store, so an
+internal authority a machine already knows about is believed without this library keeping a list
+that would go stale. The name checked is the one the caller named, never one the certificate offers.
+
+The `Within` operations bound one blocking resolver, handshake, send, or receive operation in
+milliseconds and report `TlsOperationTimedOut` distinctly. Interrupting a handshake closes the
+socket it opened; a timeout must not trade an infinite wait for a leaked descriptor.
+Timed send/receive invalidates the connection because an interrupted record cannot be resumed.
+## Negative Logic (Prohibited Paths)
+- No option to skip verification, accept any certificate, or ignore a name mismatch.
+- No trust list of this library's own, which would go stale against the machine's.
+- No protocol implementation written here or in Pudu.
+## Grill Log
+- **Q:** Offer an insecure mode for self-signed certificates in development? **A:** No. _Rationale:_
+  the flag outlives the situation that justified it and disables the only property that matters.
+  _Rejected:_ a verification argument; a global switch.
+- **Q:** Treat a read count as a promise? **A:** No. _Rationale:_ the protocol delivers whole
+  records. _Rejected:_ padding short reads.
+- **Q:** Let handshake timeout cleanup skip the protocol goodbye? **A:** Yes. _Rationale:_ no secured
+  session exists yet, while the underlying socket must close immediately. _Rejected:_ leaking the
+  socket while attempting a goodbye on a handshake that never completed.
+## Referenced by
+[[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Tls]] · [[Std Net]]
+
+
+## TLS and binary compression implementation contract
+
+upgradeWithin(connection: &Net.Connection, host: Str, millis: Int) -> Result[Secured,TlsError] consumes the plain token even on failure. Call only at a protocol-agreed upgrade boundary with no concurrent readers/writers.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

@@ -1,0 +1,144 @@
+module Api.Tasks
+
+import Std.App.Database as Database
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Option as Option
+import Service.Commands as Commands
+import Service.Queries as Queries
+
+/// The edge a program uses: JSON in, JSON out.
+///
+/// It reaches the same commands and queries the page does. That is what the
+/// split is for — the rule that a task needs a title is written once, in
+/// `Service.Commands`, so a title of spaces is refused identically whether it
+/// arrived from a browser form or from a client posting JSON. Two edges each
+/// checking their own way would be two definitions of a valid task, and they
+/// would disagree within a month.
+///
+/// What happened is said in the status rather than in the body, so a client
+/// need not read prose to find out: a refusal the caller could have avoided is
+/// a bad request, a task that is not there is a missing thing, and a database
+/// that failed is the server's fault.
+export fn list(db: &Database.Database) -> Http.Response {
+  match Queries.board(db) {
+    case Err(problem) => failed(500, problem.message)
+    case Ok(view) => {
+      var items: Array[Json.Json] = []
+      for entry in view.tasks {
+        items = items.push(encoded(entry.id, entry.title, entry.done))
+      }
+      Reply.json(
+        200,
+        Json.encode(
+            &Json.object(
+              &[
+              ("tasks", Json.list(&items)),
+              ("total", Json.Number(view.total)),
+              ("done", Json.Number(view.done)),
+              ("remaining", Json.Number(view.remaining))
+            ]
+          )
+        )
+      )
+    }
+  }
+}
+
+/// One task, or a plain statement that there is no such task.
+export fn one(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  match numberOf(Route.param(request, "id")) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) =>
+    match Queries.one(db, id) {
+      case Err(problem) => failed(500, problem.message)
+      case Ok(None) => failed(404, "no task " + display(id))
+      case Ok(Some(found)) => Reply.json(200, Json.encode(&encoded(found.id, found.title, found.done)))
+    }
+  }
+}
+
+export fn create(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  answer(Commands.apply(db, Commands.Add(titleOf(Route.body(request)))), 201)
+}
+
+export fn complete(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  commanded(db, request, fn(id: Int) -> Commands.Command { Commands.Complete(id) })
+}
+
+export fn reopen(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  commanded(db, request, fn(id: Int) -> Commands.Command { Commands.Reopen(id) })
+}
+
+export fn remove(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  commanded(db, request, fn(id: Int) -> Commands.Command { Commands.Remove(id) })
+}
+
+/// A command named by the identifier in the path.
+fn commanded(
+  db: &Database.Database,
+  request: &Route.Request,
+  named: fn(Int) -> Commands.Command
+) -> Http.Response {
+  match numberOf(Route.param(request, "id")) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) => answer(Commands.apply(db, named(id)), 200)
+  }
+}
+
+/// One place turns an outcome into a status, so every endpoint answers the
+/// same kind of failure the same way.
+fn answer(outcome: Commands.Outcome, done: Int) -> Http.Response {
+  match outcome {
+    case Commands.Applied(said) => Reply.json(done, Json.encode(&Json.object(&[("applied", Json.Text(said))])))
+    case Commands.Rejected(why) => failed(400, why)
+    case Commands.Missing(id) => failed(404, "no task " + display(id))
+    case Commands.Broke(why) => failed(500, why)
+  }
+}
+
+fn encoded(id: Int, title: Str, done: Bool) -> Json.Json {
+  Json.object(&[("id", Json.Number(id)), ("title", Json.Text(title)), ("done", Json.Boolean(done))])
+}
+
+fn failed(code: Int, message: Str) -> Http.Response {
+  Reply.json(code, Json.encode(&Json.object(&[("error", Json.Text(message))])))
+}
+
+/// The title a request carried, or nothing at all.
+///
+/// A body that is not JSON, or JSON without a title, yields the empty string —
+/// which `Service.Commands` refuses with the same words it refuses an empty
+/// form field. Deciding here that a malformed body is a different failure
+/// would put a second opinion about validity at the edge.
+fn titleOf(body: Str) -> Str {
+  match Json.decode(body) {
+    case Err(_) => ""
+    case Ok(document) =>
+    match Json.field(&document, "title") {
+      case Some(Json.Text(found)) => found
+      case _ => ""
+    }
+  }
+}
+
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}

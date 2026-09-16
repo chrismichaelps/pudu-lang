@@ -1,0 +1,18 @@
+module UsesUnaliasedImport
+
+/// An import written without `as`. The module is reached through its own last
+/// segment, which is the qualifier the checker resolves names against, so a
+/// program that checks is one that runs. The aliased form is here beside it
+/// because the two must not answer differently.
+import Std.Map
+import Std.Set as Renamed
+
+export fn main() -> Int {
+  let counts = Map.insert(&Map.empty(), "a", 4)
+  let held = Renamed.insert(&Renamed.empty(), 3)
+  let found = match Map.get(&counts, "a") {
+    case Some(value) => value
+    case None => 0
+  }
+  found + Renamed.size(&held)
+}

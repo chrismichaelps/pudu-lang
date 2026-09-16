@@ -1,0 +1,70 @@
+module UsesCharAll
+
+import Std.Char as Char
+import Std.Option as Option
+
+/// Every export of `Std.Char`, checked on a character that holds and one that
+/// does not.
+///
+/// A predicate is only worth its name if it also refuses, so each is asked
+/// twice. The classes that overlap are separated deliberately: a letter is not
+/// a number, an ASCII letter is not every letter, and a space is a separator
+/// as well as whitespace.
+export fn main() -> Int {
+  var held = 0
+
+  // Digits, and the value behind one.
+  if Char.isDigit('7') && !Char.isDigit('x') { held = held + 1 }
+  if Option.unwrapOr(Char.toDigit('7'), 0) == 7 { held = held + 1 }
+  if Option.isNone(&Char.toDigit('x')) { held = held + 1 }
+  if Option.unwrapOr(Char.fromDigit(7), 'x') == '7' { held = held + 1 }
+  if Option.isNone(&Char.fromDigit(42)) { held = held + 1 }
+
+  // The other bases.
+  if Char.isHexDigit('f') && !Char.isHexDigit('g') { held = held + 1 }
+  if Option.unwrapOr(Char.toHexDigit('f'), 0) == 15 { held = held + 1 }
+  if Option.isNone(&Char.toHexDigit('g')) { held = held + 1 }
+  if Char.isOctDigit('7') && !Char.isOctDigit('8') { held = held + 1 }
+
+  // Letters and the classes around them.
+  if Char.isLetter('a') && !Char.isLetter('1') { held = held + 1 }
+  if Char.isAlphanumeric('a') && Char.isAlphanumeric('1') { held = held + 1 }
+  if !Char.isAlphanumeric('-') { held = held + 1 }
+  if Char.isNumber('1') && !Char.isNumber('a') { held = held + 1 }
+
+  // Case, asked and changed.
+  if Char.isLower('a') && !Char.isLower('A') { held = held + 1 }
+  if Char.isUpper('A') && !Char.isUpper('a') { held = held + 1 }
+  if Char.toUpper('a') == 'A' && Char.toUpper('1') == '1' { held = held + 1 }
+  if Char.toLower('A') == 'a' && Char.toLower('1') == '1' { held = held + 1 }
+  if Char.toTitle('a') == 'A' { held = held + 1 }
+  if Char.equalsIgnoreCase('a', 'A') && !Char.equalsIgnoreCase('a', 'b') { held = held + 1 }
+
+  // The ASCII range, separately from the wider classes.
+  if Char.isAscii('a') && !Char.isAscii('é') { held = held + 1 }
+  if Char.isAsciiLower('a') && !Char.isAsciiLower('A') { held = held + 1 }
+  if Char.isAsciiUpper('A') && !Char.isAsciiUpper('a') { held = held + 1 }
+  if Char.isLatin1('é') { held = held + 1 }
+
+  // Space, and what counts as a boundary.
+  if Char.isWhitespace(' ') && !Char.isWhitespace('a') { held = held + 1 }
+  if Char.isSeparator(' ') && !Char.isSeparator('a') { held = held + 1 }
+
+  // Marks and control.
+  if Char.isPunctuation('.') && !Char.isPunctuation('a') { held = held + 1 }
+  if Char.isSymbol('+') && !Char.isSymbol('a') { held = held + 1 }
+  if Char.isPrintable('a') && !Char.isPrintable('\n') { held = held + 1 }
+  if Char.isControl('\n') && !Char.isControl('a') { held = held + 1 }
+
+  // What a name may be written with.
+  if Char.isIdentifier('a') && Char.isIdentifier('_') { held = held + 1 }
+  if !Char.isIdentifier('-') { held = held + 1 }
+
+  // Codes, both directions, and moving along them.
+  if Char.ord('A') == 65 { held = held + 1 }
+  if Option.unwrapOr(Char.fromCode(65), 'x') == 'A' { held = held + 1 }
+  if Option.isNone(&Char.fromCode(0 - 1)) { held = held + 1 }
+  if Char.toText('a') == "a" { held = held + 1 }
+
+  held
+}

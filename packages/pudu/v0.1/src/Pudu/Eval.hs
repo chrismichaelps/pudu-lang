@@ -1,0 +1,391 @@
+{-| @Eval.Module — evaluates a resolved module -}
+{-| The evaluator's core. What a caller reaches to run a program is
+    [[Eval Program]], which depends on this rather than the other way round. -}
+module Pudu.Eval
+  ( EvalOutcome (..)
+  , awaitTask
+  , callClosure
+  , evaluate
+  , evaluateBlockInFrame
+  , outcomeOf
+  , runCounted
+  , runWithEffects
+  , scopeTo
+  ) where
+
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import Data.Text (Text)
+import Pudu.Diagnostic (Diagnostic)
+import Pudu.Eval.Env
+  ( Env (..)
+  , integerKindAt
+  , tally
+  , captureEnvironment
+  , Eval (..)
+  , Evaluator (..)
+  , abortAt
+  , bind
+  , expectBool
+  , lookupName
+  , unwind
+  , Unwind (..)
+  , withFrame
+  , withNewFrame
+  )
+import Pudu.Eval.Runtime (withRuntimeEnv)
+import Pudu.Eval.Loop
+  ( LoopNeeds (..)
+  , evaluateFor
+  , evaluateLoop
+  , evaluateWhile
+  , evaluateWhileLet
+  )
+import Pudu.Eval.Call
+  ( CallNeeds (..)
+  , evaluateCall
+  , evaluateScope
+  , lastPathSegment
+  , pathValue
+  , readPath
+  )
+import qualified Pudu.Eval.Call as Call
+import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
+import Pudu.Eval.Keyed (setContains, setFromMembers)
+import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Order (comparableValue)
+import Pudu.Eval.Place (placeOf, storePlace)
+import Pudu.Eval.Render (renderValue, valueKind)
+import Pudu.Eval.Value
+  ( Closure (..)
+  , Value (..)
+  )
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Literal (IntegerValue)
+  , Block (..)
+  , lambdaName
+  , FieldInit (..)
+  , Declaration (..)
+  , Expression (..)
+  , MatchArm (..)
+  , Statement (..)
+  )
+import Data.IORef (IORef)
+import Pudu.Source (Span)
+
+{-| @Eval.Outcome — a value or the diagnostic that stopped evaluation -}
+data EvalOutcome = EvalOutcome
+  { outcomeValue :: !(Maybe Value)
+  , outcomeDiagnostics :: ![Diagnostic]
+  }
+  deriving stock (Eq, Show)
+
+runCounted :: Maybe (IORef (Map.Map Text Int)) -> Evaluator Value -> IO EvalOutcome
+runCounted counters (Evaluator action) =
+  withRuntime $ \env -> outcomeOf <$> action env{envEffects = True, envTally = counters}
+
+{-| Run an evaluation, choosing whether the program may reach the world.
+
+    Compile-time folding passes `False`: a constant is evaluated while the
+    compiler runs, and letting it read a file or print would make compilation
+    depend on the world the compiler happened to be in, and would produce output
+    nobody asked for. -}
+runWithEffects :: Bool -> Evaluator Value -> IO EvalOutcome
+runWithEffects effects (Evaluator action) =
+  withRuntime $ \env -> outcomeOf <$> action env{envEffects = effects}
+
+{-| Allocate one resource set for a run and close it on every exit path.
+
+    Workers stop before secured connections, sockets, and handles close, so a
+    child cannot race teardown while finishing an effect. Independent evaluations own disjoint
+    stores and therefore cannot invalidate one another's tokens. -}
+withRuntime :: (Env -> IO EvalOutcome) -> IO EvalOutcome
+withRuntime action = do
+  (outcome, problems) <- withRuntimeEnv action
+  pure outcome{outcomeDiagnostics = outcomeDiagnostics outcome <> problems}
+
+{-| What a finished evaluation answers with. A control transfer that reached the
+    top is the value it carried; only an abort has nothing to answer. -}
+outcomeOf :: Eval Value -> EvalOutcome
+outcomeOf outcome = case outcome of
+  Done value _ -> EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+  Unwound (ReturnUnwind value) _ ->
+    EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+  Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
+  Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
+
+evaluateBlock :: Located Block -> Evaluator Value
+evaluateBlock located@(Located _ block)
+  | blockIntroducesBindings block = withNewFrame (evaluateBlockInFrame located)
+  | otherwise = evaluateBlockInFrame located
+
+blockIntroducesBindings :: Block -> Bool
+blockIntroducesBindings block = any statementIntroduces (blockStatements block)
+ where
+  statementIntroduces (Located _ statement) = case statement of
+    DeclarationStatement (Located _ BindingDeclaration{}) -> True
+    LetElseStatement{} -> True
+    _ -> False
+
+{-| Interactive top-level bindings use the frame their context retains. Nested
+    lexical blocks still enter through evaluateBlock and keep normal scoping. -}
+evaluateBlockInFrame :: Located Block -> Evaluator Value
+evaluateBlockInFrame (Located _ block) = do
+  mapM_ evaluateStatement (blockStatements block)
+  case blockResult block of
+    Nothing -> pure UnitValue
+    Just expression -> evaluate expression
+
+evaluateStatement :: Located Statement -> Evaluator ()
+evaluateStatement (Located _ statement) = case statement of
+  DeclarationStatement (Located _ (BindingDeclaration _ _ name _ value)) -> do
+    evaluated <- evaluate value
+    bind (locatedValue name) evaluated
+  DeclarationStatement _ -> pure ()
+  ExpressionStatement expression -> evaluate expression >> pure ()
+  ReturnStatement Nothing -> unwind (ReturnUnwind UnitValue)
+  ReturnStatement (Just expression) -> do
+    value <- evaluate expression
+    unwind (ReturnUnwind value)
+  BreakStatement label value -> do
+    carried <- maybe (pure UnitValue) evaluate value
+    unwind (BreakUnwind (fmap locatedValue label) carried)
+  ContinueStatement label -> unwind (ContinueUnwind (fmap locatedValue label))
+  {-| The bindings enter the frame already open rather than a new one, which is
+      what makes them visible to every statement after this. The fallback needs
+      no forcing: typing has already established that it cannot reach them. -}
+  LetElseStatement pattern' subject fallback -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> mapM_ (uncurry bind) bindings
+      Nothing -> evaluateBlock fallback >> pure ()
+  InvalidStatement -> pure ()
+
+{-| Evaluation is not counted per expression.
+
+    A tally on every node of every program costs more than it reports: measured
+    on a quarter-megabyte parse, a bind there took the run from 0.93s to 1.50s,
+    and writing it against the environment directly still left it at 1.30s.
+    `evaluate` is the hottest function in the evaluator and nothing belongs in
+    it that the program did not ask for.
+
+    What is counted is counted where the evaluator already stops: a name lookup,
+    which every way of reaching a name goes through, and the constructs that
+    already open a block to do their work. Those are the costs worth knowing and
+    they are free to take. -}
+{-| What a loop needs of the evaluator, tied once here. -}
+{-| What a call needs of the evaluator, tied once here. -}
+{-| Calling, awaiting, and scoping with the record already supplied, so a
+    caller that only wants to run something does not have to know there is one.
+    [[Eval Program]] and the loop forms reach these. -}
+callClosure :: Closure -> [Value] -> Maybe Span -> Evaluator Value
+callClosure = Call.callClosure callNeeds
+
+awaitTask :: Span -> Value -> Evaluator Value
+awaitTask = Call.awaitTask callNeeds
+
+scopeTo :: [Map Text Value] -> Value -> Value
+scopeTo = Call.scopeTo
+
+callNeeds :: CallNeeds
+callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock}
+
+loopNeeds :: LoopNeeds
+loopNeeds =
+  LoopNeeds
+    { loopEvaluate = evaluate
+    , loopBlock = evaluateBlock
+    , loopClosure = callClosure
+    }
+
+evaluate :: Located Expression -> Evaluator Value
+evaluate = evaluateHere
+
+evaluateHere :: Located Expression -> Evaluator Value
+evaluateHere (Located spanValue expression) = case expression of
+  {-| A literal is built as the type inference gave it, not as it was spelled.
+      A suffix says the kind outright; without one the checker's answer for this
+      span is the kind, and only where it has none is the platform integer the
+      right default. -}
+  LiteralExpression literal -> case literal of
+    IntegerValue _ -> do
+      selected <- integerKindAt spanValue
+      pure (integerLiteralValue selected literal)
+    _ -> pure (literalValue literal)
+  NameExpression names -> readPath spanValue names
+  UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
+  BinaryExpression left operator right -> applyBinary spanValue left operator right
+  CallExpression callee arguments -> evaluateCall callNeeds spanValue callee arguments
+  MemberExpression target member -> do
+    tally "member"
+    {-| A member access on a linked module is a name, not a read: `Std.Char.toUpper`
+        is one binding, while `record.field.inner` is two reads. Trying the whole
+        chain as a path first is what lets a module's function be passed as a
+        value, which is how `mapChars(text, Char.toUpper)` works at all. -}
+    linked <- pathValue expression
+    case linked of
+      Just value -> pure value
+      Nothing -> do
+        value <- evaluate target
+        readMember spanValue value (locatedValue member)
+  IndexExpression target index -> do
+    tally "index"
+    container <- evaluate target
+    key <- evaluate index
+    readIndex spanValue container key
+  TryExpression target -> do
+    value <- evaluate target
+    unwrapTry spanValue value
+  AwaitExpression target -> evaluate target >>= awaitTask spanValue
+  TupleExpression members -> case members of
+    [] -> pure UnitValue
+    _ -> TupleValue <$> mapM evaluate members
+  ArrayExpression members -> ArrayValue . Seq.fromList <$> mapM evaluate members
+  SetExpression members -> do
+    values <- mapM evaluate members
+    case filter (not . comparableValue) values of
+      offender : _ ->
+        abortAt (Just spanValue) "E7008"
+          ("a " <> valueKind offender <> " cannot be a set member")
+          (Just "use a value the language can order, such as text, a number, or a tuple of those")
+      [] -> pure (setFromMembers values)
+  UnsafeExpression _ body -> evaluateBlock body
+  MacroCall _ _ ->
+    abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
+  {-| Types are erased at run time, so a type application evaluates to what it
+      was applied to. It exists to tell the checker which instantiation was
+      meant, and the checker has already been told by the time this runs. -}
+  TypeApplication target _ -> evaluate target
+  LambdaExpression value -> do
+    {-| A literal captures the environment it was written in, so calling it
+        later means what it meant then. A declaration does not, and the two
+        cases are distinguished by this field rather than by asking what kind
+        of function it is. -}
+    captured <- captureEnvironment
+    pure (FunctionValue (Closure lambdaName value Nothing (Just captured)))
+  ScopeExpression body -> evaluateScope callNeeds spanValue body
+  RecordExpression path fields -> do
+    values <- mapM (evaluateFieldInit spanValue) fields
+    pure (RecordValue (lastPathSegment path) values)
+  {-| A record that is another record with some fields different.
+
+      The base is evaluated first and its fields kept in the order it declared
+      them, so an update does not reorder what it did not mention — two records
+      of one type compare and render the same whether either was written
+      whole or as a change to the other.
+
+      Every field of the result is decided before the record is returned. A
+      field left as a pending choice would hold both the record it came from
+      and this update's written fields, so a record updated in a loop would
+      keep every earlier version, and everything those versions held, alive. -}
+  RecordUpdateExpression path source fields -> do
+    base <- evaluate source
+    written <- mapM (evaluateFieldInit spanValue) fields
+    case base of
+      RecordValue heldName held -> do
+        let updated = [(name, maybe value id (lookup name written)) | (name, value) <- held]
+        foldr (\(_, value) rest -> value `seq` rest) () updated
+          `seq` pure (RecordValue heldName updated)
+      _ ->
+        abortAt (Just spanValue) "E7001"
+          (lastPathSegment path <> " can only be updated from a record of the same type")
+          Nothing
+  BlockExpression block -> evaluateBlock block
+  IfExpression condition thenBlock elseBranch -> do
+    test <- evaluate condition
+    truth <- expectBool spanValue test
+    if truth
+      then evaluateBlock thenBlock
+      else case elseBranch of
+        Nothing -> pure UnitValue
+        Just branch -> evaluate branch
+  IfLetExpression pattern' subject thenBlock elseBranch -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> withFrame bindings $ case elseBranch of
+        Nothing -> evaluateBlock thenBlock >> pure UnitValue
+        Just _ -> evaluateBlock thenBlock
+      Nothing -> case elseBranch of
+        Nothing -> pure UnitValue
+        Just branch -> evaluate branch
+  MatchExpression scrutinee arms -> do
+    subject <- evaluate scrutinee
+    evaluateArms spanValue subject arms
+  WhileExpression label condition body ->
+    evaluateWhile loopNeeds spanValue (fmap locatedValue label) condition body
+  WhileLetExpression label pattern' subject body ->
+    evaluateWhileLet loopNeeds spanValue (fmap locatedValue label) pattern' subject body
+  LoopExpression label body -> evaluateLoop loopNeeds spanValue (fmap locatedValue label) body
+  ForExpression label binder iterated body -> do
+    sequence' <- evaluate iterated
+    evaluateFor loopNeeds spanValue (fmap locatedValue label) binder sequence' body
+  InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
+
+evaluateFieldInit :: Span -> Located FieldInit -> Evaluator (Text, Value)
+evaluateFieldInit recordSpan (Located _ field) = do
+  let name = locatedValue (fieldInitName field)
+  value <- case fieldInitValue field of
+    Just expression -> evaluate expression
+    Nothing -> do
+      found <- lookupName name
+      case found of
+        Just existing -> pure existing
+        Nothing -> abortAt (Just recordSpan) "E7001" ("undefined name " <> name) Nothing
+  pure (name, value)
+
+evaluateArms :: Span -> Value -> [Located MatchArm] -> Evaluator Value
+evaluateArms spanValue subject arms = case arms of
+  [] ->
+    abortAt (Just spanValue) "E7011" ("no match arm accepted " <> renderValue subject)
+      (Just "add a case that covers this value")
+  Located _ arm : rest -> case matchPattern (armPattern arm) subject of
+    Nothing -> evaluateArms spanValue subject rest
+    Just bindings -> do
+      guarded <- withFrame bindings (evaluateGuard (armGuard arm))
+      if guarded
+        then withFrame bindings (evaluate (armBody arm))
+        else evaluateArms spanValue subject rest
+
+evaluateGuard :: Maybe (Located Expression) -> Evaluator Bool
+evaluateGuard guard = case guard of
+  Nothing -> pure True
+  Just expression -> do
+    value <- evaluate expression
+    case value of
+      BoolValue flag -> pure flag
+      _ -> pure False
+
+applyBinary :: Span -> Located Expression -> Text -> Located Expression -> Evaluator Value
+applyBinary spanValue left operator right = case operator of
+  "=" -> do
+    target <- placeOf evaluate left
+    case target of
+      Just place -> do
+        value <- evaluate right
+        storePlace place value
+        pure UnitValue
+      Nothing -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing
+  "&&" -> do
+    leftValue <- evaluate left
+    truth <- expectBool spanValue leftValue
+    if not truth then pure (BoolValue False) else evaluate right >>= expectBoolValue spanValue
+  "||" -> do
+    leftValue <- evaluate left
+    truth <- expectBool spanValue leftValue
+    if truth then pure (BoolValue True) else evaluate right >>= expectBoolValue spanValue
+  "in" -> do
+    candidate <- evaluate left
+    container <- evaluate right
+    case container of
+      SetValue _ -> pure (BoolValue (setContains container candidate))
+      _ -> abortAt (Just spanValue) "E7001"
+        ("membership needs a Set, found a " <> valueKind container) Nothing
+  _ -> do
+    leftValue <- evaluate left
+    rightValue <- evaluate right
+    combine spanValue operator leftValue rightValue
+
+expectBoolValue :: Span -> Value -> Evaluator Value
+expectBoolValue spanValue value = BoolValue <$> expectBool spanValue value

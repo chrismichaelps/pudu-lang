@@ -1,0 +1,187 @@
+module View.Documentation
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Url as Url
+import Constants as Constants
+import Domain.Entry as Domain
+import Domain.Library as Library
+import Seo as Seo
+import Service.Catalog as Catalog
+import View.Dynamic as Dynamic
+import View.Layout as Layout
+
+/// The standard library as a map: its sections, each module in a section with
+/// the sentence that says what it is for, and the modules beneath it.
+export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
+  var jumps: Array[H.Node] = []
+  var sections: Array[H.Node] = []
+  for section in Library.SECTIONS {
+    jumps = jumps.push(H.li().holding([H.a().href("#" + section.id).says(section.title)]))
+    var rows: Array[H.Node] = []
+    for name in section.modules {
+      if catalog.modules.contains(name) { rows = rows.push(moduleRow(catalog, name, Library.childrenOf(name, &catalog.modules))) }
+    }
+    sections = sections.push(librarySection(section.id, section.title, section.lead, rows))
+  }
+  let remaining = Library.unplaced(&catalog.modules)
+  if remaining.length() > 0 {
+    var rows: Array[H.Node] = []
+    for name in remaining { rows = rows.push(moduleRow(catalog, name, [])) }
+    jumps = jumps.push(H.li().holding([H.a().href("#other").says("Other")]))
+    sections = sections.push(librarySection("other", "Other", "Modules not yet placed in a section.", rows))
+  }
+  Layout.page(siteUrl, "Pudu standard library", "Every module in the Pudu standard library, grouped by what it is for.", "/modules", true, None, H.article().class("doc library").holding([
+        H.span().class("kind").says("Reference"),
+        H.h1().says("Pudu standard library"),
+        H.dl().class("docs-meta").holding([
+            H.dt().says("Author"),
+            H.dd().says(Constants.AUTHOR_NAME),
+            H.dt().says("Version"),
+            H.dd().says(catalog.languageVersion),
+            H.dt().says("Contents"),
+            H.dd().says(show(catalog.modules.length()) + " modules, " + show(catalog.entries.length()) + " public declarations")
+          ]),
+        H.p().says("The standard library ships with the compiler. Every module lives under Std, nothing is imported implicitly, and a program imports exactly the modules it uses. Pick a section, or search by name or type from the top of any page."),
+        H.nav().label("Library sections").holding([H.ul().class("library-jump").holding(jumps)])
+      ].concat(sections)).html())
+}
+
+fn librarySection(id: Str, title: Str, lead: Str, rows: Array[H.Node]) -> H.Node {
+  H.section().class("library-section").holding([
+      H.h2().id(id).says(title),
+      H.p().says(lead),
+      H.div().class("table-wrap").holding([H.table().class("library-table").holding([H.tbody().holding(rows)])])
+    ])
+}
+
+fn moduleRow(catalog: &Catalog.Catalog, name: Str, children: Array[Str]) -> H.Node {
+  let count = Catalog.moduleEntries(catalog, name).length()
+  let summary = match Library.SUMMARIES.get(name) {
+    case Some(text) => text
+    case None => ""
+  }
+  var described: Array[H.Node] = [H.span().says(summary)]
+  if children.length() > 0 {
+    var links: Array[H.Node] = []
+    for child in children {
+      links = links.push(H.li().holding([H.a().href("/module/" + Url.encodeComponent(child)).says(child.drop(name.length() + 1))]))
+    }
+    described = described.push(H.ul().class("child-modules").label("Modules inside " + name).holding(links))
+  }
+  H.tr().holding([
+      H.td().holding([
+          H.a().href("/module/" + Url.encodeComponent(name)).says(name),
+          H.p().class("meta").says(show(count) + " declarations")
+        ]),
+      H.td().holding(described)
+    ])
+}
+
+export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -> Option[Html.Html] {
+  let entries = Catalog.moduleEntries(catalog, moduleName)
+  if entries.length() == 0 { None } else {
+    var rows: Array[H.Node] = []
+    for entry in entries {
+      rows = rows.push(H.li().class("result").holding([
+            H.a().class("result-name").href(symbolPath(&entry)).says(entry.name),
+            H.code().class("signature").says(entry.signature),
+            H.p().class("summary").says(Domain.summary(&entry)),
+            H.div().class("meta").says(entry.kind)
+          ]))
+    }
+    Some(Layout.page(siteUrl, moduleName, "Public declarations in the " + moduleName + " Pudu module.", "/module/" + Url.encodeComponent(moduleName), true, None, H.article().class("doc").holding([
+            H.span().class("kind").says("module"),
+            H.h1().says(moduleName),
+            H.p().says(show(entries.length()) + " public declarations"),
+            H.ul().class("results").holding(rows)
+          ]).html()))
+  }
+}
+
+export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
+  let primary = entries[0]
+  var declarations: Array[H.Node] = []
+  for entry in entries {
+    let shownSignature = if entry.signature.isEmpty() { entry.name }
+      else { entry.name + ": " + entry.signature }
+    var content: Array[H.Node] = [
+      H.h2().class("declaration-title").says(entry.kind),
+      H.code().class("signature").says(shownSignature),
+      H.p().class("kind-explanation").says(kindExplanation(entry.kind)),
+      H.h3().says("What it does")
+    ]
+    for line in entry.documentation {
+      if !line.isEmpty() { content = content.push(H.p().says(line)) }
+    }
+    content = content.push(H.h3().says("Read the signature"))
+    content = content.push(H.ul().class("signature-guide").holding(signatureGuide(entry.signature)))
+    declarations = declarations.push(H.section().class("declaration").holding(content))
+  }
+  Layout.page(siteUrl, Domain.qualifiedName(&primary), Domain.summary(&primary), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
+        H.h1().says(Domain.qualifiedName(&primary)),
+        H.p().class("meta").says(if entries.length() == 1 { "1 declaration" } else { show(entries.length()) + " declarations with this name" }),
+        H.div().holding(declarations),
+        H.p().class("symbol-actions").holding([
+            H.a().href("/module/" + Url.encodeComponent(primary.moduleName)).says("Back to " + primary.moduleName),
+            H.a().href("/search?q=" + Url.encodeComponent(Domain.qualifiedName(&primary))).says("Search related declarations")
+          ])
+      ]).html())
+}
+
+/// The explanation each plainly written declaration kind carries. A method's
+/// kind names the type or trait it belongs to, so those two read as prefixes
+/// rather than entries here.
+const KIND_EXPLANATIONS: Map[Str, Str] = mapOf([
+    ("fn", "This is a callable function."),
+    ("type", "This declaration introduces a public type."),
+    ("trait", "This declaration names behavior that types can implement."),
+    ("const", "This is a named value that cannot be reassigned."),
+    ("macro", "This declaration transforms syntax during compilation."),
+    ("foreign", "This function is provided by an external library.")
+  ])
+
+/// The note each signature marker earns, in the order a reader meets them.
+const SIGNATURE_NOTES: Array[(Str, Str)] = [
+  ("->", "Read arrows from left to right: inputs come first, and the final type is returned."),
+  ("&", "& borrows a value for this call instead of moving or copying it."),
+  ("&mut", "&mut grants temporary exclusive permission to change the borrowed value."),
+  ("[", "Names inside [ ] are type arguments, such as the item type held by a collection."),
+  ("Option[", "Option holds Some(value) or None when no value is available."),
+  ("Result[", "Result makes success and recoverable failure part of the function's type."),
+  ("Self", "Self means the concrete type that implements this trait.")
+]
+
+/// What a declaration of this kind is, in one sentence for a first reader.
+fn kindExplanation(kind: Str) -> Str {
+  if kind.startsWith("fn (trait ") { "This declaration defines a function required by a trait." }
+    else if kind.startsWith("fn (") { "This declaration implements the function for one concrete type." }
+    else {
+    match KIND_EXPLANATIONS.get(kind) {
+      case Some(text) => text
+      case None => "This is a public Pudu declaration."
+    }
+  }
+}
+
+/// The reading notes a signature earns, one for each marker it writes.
+fn signatureGuide(signature: Str) -> Array[H.Node] {
+  if signature.isEmpty() {
+    return [H.li().says("This declaration has no value signature because it introduces a type or trait.")]
+  }
+  var notes: Array[H.Node] = [
+    H.li().says("The text after the name is the type checked by Pudu.")
+  ]
+  for note in SIGNATURE_NOTES {
+    if signature.contains(note[0]) { notes = notes.push(H.li().says(note[1])) }
+  }
+  notes
+}
+
+export fn missing(siteUrl: Str, path: Str) -> Html.Html {
+  Dynamic.missing(siteUrl, path)
+}
+
+fn symbolPath(entry: &Domain.Entry) -> Str {
+  Seo.symbolPath(entry)
+}

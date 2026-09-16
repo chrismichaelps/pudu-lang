@@ -1,0 +1,234 @@
+module Std.EnumMap
+
+import Std.List as List
+
+/// A map over a fixed set of keys, where every key has a value.
+///
+/// The days of a week, the variants of a status, the levels of a log: the keys
+/// are known when the program is written, and every one of them has an entry.
+/// Asking an ordinary `Map` for one still answers `Option[V]`, so the caller
+/// unwraps a value they already knew was there, and picks a fallback that can
+/// never be used — a decision they had to make and a reader has to read past.
+///
+/// This removes that, in the way `NonEmpty` removes the `Option` from `first`:
+/// by making the map total when it is built. `get` answers `V`. The cost is
+/// paid once, at the boundary, where the caller says which keys exist and what
+/// each one starts as.
+///
+/// Keys are held in the order the domain names them, not sorted, because a
+/// domain is usually written in an order that means something — Monday first,
+/// Debug below Error — and sorting it would replace the author's order with the
+/// spelling of the names.
+export type EnumMap[K, V] = { domain: Array[K], slots: Array[V] }
+
+/// A map giving every key in the domain the same starting value.
+///
+/// A key repeated in the domain is kept once, at its first position, so a
+/// caller who lists one twice gets a map rather than a structure with two slots
+/// for the same key and no way to say which is meant.
+export fn filled[K, V](domain: &Array[K], start: V) -> EnumMap[K, V] {
+  var named = []
+  var slots = []
+  for key in domain {
+    if !named.contains(key) {
+      named = named.push(key)
+      slots = slots.push(start)
+    }
+  }
+  EnumMap{domain: named, slots: slots}
+}
+
+/// A map giving every key in the domain the value a function computes for it.
+export fn from[K, V](domain: &Array[K], compute: fn(K) -> V) -> EnumMap[K, V] {
+  var named = []
+  var slots = []
+  for key in domain {
+    if !named.contains(key) {
+      named = named.push(key)
+      slots = slots.push(compute(key))
+    }
+  }
+  EnumMap{domain: named, slots: slots}
+}
+
+/// How many keys the domain holds.
+export fn size[K, V](map: &EnumMap[K, V]) -> Int { map.domain.length() }
+
+/// Whether the domain names any key at all.
+///
+/// A map over an empty domain is legal and holds nothing. It is the one case
+/// where there is no key to ask about, which is why `get` still needs a domain
+/// that contains its key.
+export fn isEmpty[K, V](map: &EnumMap[K, V]) -> Bool { map.domain.length() == 0 }
+
+/// Whether a key is in the domain.
+export fn containsKey[K, V](map: &EnumMap[K, V], key: K) -> Bool {
+  map.domain.contains(key)
+}
+
+/// Every key, in the order the domain named them.
+export fn keys[K, V](map: &EnumMap[K, V]) -> Array[K] { map.domain }
+
+/// Every value, in the order of its key.
+export fn values[K, V](map: &EnumMap[K, V]) -> Array[V] { map.slots }
+
+/// The value stored under a key, or the given fallback when the key is not in
+/// the domain.
+///
+/// The fallback is not the "missing value" case an ordinary map has — every key
+/// in the domain has a value. It is for a key from outside the domain
+/// altogether, which is a different mistake and one the caller can usually rule
+/// out. `get` is the total form for when they can.
+export fn getOr[K, V](map: &EnumMap[K, V], key: K, fallback: V) -> V {
+  match List.indexOf(&map.domain, key) {
+    case Some(at) => map.slots[at]
+    case None => fallback
+  }
+}
+
+/// The value stored under a key.
+///
+/// Total for any key the domain holds, which is what this module exists to
+/// give. A key from outside the domain has no value to answer with and no
+/// honest one to invent, so it panics: that is a defect in the caller's own
+/// code — they named the domain — rather than an input a program could receive.
+/// `find` is the form to reach for when the key came from outside the program.
+export fn get[K, V](map: &EnumMap[K, V], key: K) -> V {
+  match List.indexOf(&map.domain, key) {
+    case Some(at) => map.slots[at]
+    case None => panic("EnumMap.get was asked for a key outside its domain")
+  }
+}
+
+/// The value stored under a key, or `None` when the key is outside the domain.
+///
+/// For a key that arrived from outside the program — parsed from a file, read
+/// off a request — where being outside the domain is an input to handle rather
+/// than a defect to stop for.
+export fn find[K, V](map: &EnumMap[K, V], key: K) -> Option[V] {
+  Some(map.slots[List.indexOf(&map.domain, key) ?])
+}
+
+/// The map with a key's value replaced, unchanged when the key is outside the
+/// domain.
+///
+/// The domain does not grow. A map whose keys could be added to is an ordinary
+/// map, and the totality of `get` rests on the domain being settled when the
+/// map was built.
+export fn set[K, V](map: &EnumMap[K, V], key: K, held: V) -> EnumMap[K, V] {
+  match List.indexOf(&map.domain, key) {
+    case Some(at) => EnumMap{domain: map.domain, slots: List.set(&map.slots, at, held)}
+    case None => *map
+  }
+}
+
+/// A key's value transformed, unchanged when the key is outside the domain.
+export fn adjust[K, V](
+  map: &EnumMap[K, V],
+  key: K,
+  transform: fn(V) -> V
+) -> EnumMap[K, V] {
+  match List.indexOf(&map.domain, key) {
+    case Some(at) => EnumMap {
+      domain: map.domain,
+      slots: List.set(&map.slots, at, transform(map.slots[at]))
+    }
+    case None => *map
+  }
+}
+
+/// Every entry as a pair, in domain order.
+export fn pairs[K, V](map: &EnumMap[K, V]) -> Array[(K, V)] {
+  var out = []
+  var at = 0
+  while at < map.domain.length() {
+    out = out.push((map.domain[at], map.slots[at]))
+    at = at + 1
+  }
+  out
+}
+
+/// Every value transformed, keeping the domain and its order.
+export fn mapValues[K, A, B](
+  map: &EnumMap[K, A],
+  transform: fn(A) -> B
+) -> EnumMap[K, B] {
+  EnumMap{domain: map.domain, slots: List.map(&map.slots, transform)}
+}
+
+/// Every entry combined into one value, in domain order.
+export fn fold[K, V, A](
+  map: &EnumMap[K, V],
+  combine: fn(A, K, V) -> A,
+  start: A
+) -> A {
+  var accumulated = start
+  for pair in pairs(map) { accumulated = combine(accumulated, pair[0], pair[1]) }
+  accumulated
+}
+
+/// The keys whose values the predicate accepts.
+///
+/// Answers keys rather than a smaller map, because a map with keys removed is
+/// no longer total over the domain it claims, and quietly returning one would
+/// give back the `Option` this module exists to remove.
+export fn keysWhere[K, V](map: &EnumMap[K, V], holds: fn(V) -> Bool) -> Array[K] {
+  var out = []
+  for pair in pairs(map) {
+    if holds(pair[1]) { out = out.push(pair[0]) }
+  }
+  out
+}
+
+/// How many values the predicate accepts.
+export fn countValues[K, V](map: &EnumMap[K, V], holds: fn(V) -> Bool) -> Int {
+  var total = 0
+  for value in map.slots {
+    if holds(value) { total = total + 1 }
+  }
+  total
+}
+
+/// Whether every entry satisfies the predicate. True over an empty domain.
+export fn all[K, V](map: &EnumMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if !holds(pair[0], pair[1]) { return false }
+  }
+  true
+}
+
+/// Whether any entry satisfies the predicate. False over an empty domain.
+export fn any[K, V](map: &EnumMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if holds(pair[0], pair[1]) { return true }
+  }
+  false
+}
+
+/// Two maps over the same domain combined value by value.
+///
+/// The domain is the first map's. A key the second map lacks keeps the first
+/// map's value untouched, so combining a full week with a partial one leaves
+/// the untouched days alone rather than reporting a domain mismatch the caller
+/// would have to handle on every call.
+export fn mergeWith[K, V](
+  left: &EnumMap[K, V],
+  right: &EnumMap[K, V],
+  combine: fn(V, V) -> V
+) -> EnumMap[K, V] {
+  var out = *left
+  for pair in pairs(left) {
+    match find(right, pair[0]) {
+      case Some(other) => { out = set(&out, pair[0], combine(pair[1], other)) }
+      case None => {}
+    }
+  }
+  out
+}
+
+/// The map as an ordinary map, losing the promise that every key has a value.
+export fn toMap[K, V](map: &EnumMap[K, V]) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in pairs(map) { out = out.insert(pair[0], pair[1]) }
+  out
+}

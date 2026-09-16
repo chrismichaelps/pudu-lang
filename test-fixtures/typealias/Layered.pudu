@@ -1,0 +1,13 @@
+module Layered
+
+import Layered.Lifecycle as Lifecycle
+
+/// A re-export under the name the type already has.
+///
+/// This is what broke: the alias is recorded under its bare name as well as
+/// its qualified one, and that record used to carry into the module that
+/// declares the real `Stage` — which then read its own name through this
+/// alias and disagreed with its own constructor.
+export type Stage = Lifecycle.Stage
+
+export fn staged(name: Str) -> Stage { Lifecycle.create(name) }

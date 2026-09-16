@@ -1,0 +1,139 @@
+module UsesTrace
+
+import Std.App.Trace as Trace
+import Std.Option as Option
+
+/// What following one piece of work promises.
+///
+/// The decision worth checking is the one that differs from every other module
+/// here: a header that cannot be read starts a new trace rather than refusing
+/// the request, because a service that fails over a malformed diagnostic has
+/// made the diagnosis into the outage.
+export fn main() -> Int {
+  var held = 0
+
+  // A header the format itself gives as an example.
+  let carried = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  if let Some(found) = Trace.parse(carried) {
+    if Trace.workOf(&found) == "4bf92f3577b34da6a3ce929d0e0e4736" { held = held + 1 }
+    if Trace.stepOf(&found) == "00f067aa0ba902b7" { held = held + 1 }
+    if Trace.isRecorded(&found) { held = held + 1 }
+    if Trace.traced(&found) { held = held + 1 }
+  }
+
+  // And one that says it is not being recorded.
+  if let Some(found) = Trace.parse("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00") {
+    if !Trace.isRecorded(&found) { held = held + 1 }
+  }
+
+  // What is written reads back as what it was.
+  if let Some(found) = Trace.parse(carried) {
+    if Trace.render(&found) == carried { held = held + 1 }
+    if Trace.asHeader(&found)[0] == Trace.headerName() { held = held + 1 }
+    if Trace.asHeader(&found)[1] == carried { held = held + 1 }
+  }
+
+  // Anything unreadable is nothing rather than a guess.
+  if Option.isNone(&Trace.parse("nonsense")) { held = held + 1 }
+  if Option.isNone(&Trace.parse("00-4bf92f3577b34da6-00f067aa0ba902b7-01")) { held = held + 1 }
+  if Option.isNone(&Trace.parse("99-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")) {
+    held = held + 1
+  }
+  if Option.isNone(&Trace.parse("00-4bf92f3577b34da6a3ce929d0e0e473z-00f067aa0ba902b7-01")) {
+    held = held + 1
+  }
+  if Option.isNone(&Trace.parse("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7")) {
+    held = held + 1
+  }
+
+  // The identifiers the format uses to mean nothing are not traces.
+  if Option.isNone(&Trace.parse("00-00000000000000000000000000000000-00f067aa0ba902b7-01")) {
+    held = held + 1
+  }
+  if Option.isNone(&Trace.parse("00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01")) {
+    held = held + 1
+  }
+
+  // A header that cannot be read starts a new trace rather than refusing the
+  // request. This is the one place here where malformed input is not refused.
+  let recovered = Trace.continuing(Some("nonsense"), true)
+  if Trace.traced(&recovered) { held = held + 1 }
+  if Trace.workOf(&recovered) != "nonsense" { held = held + 1 }
+  if Trace.isRecorded(&recovered) { held = held + 1 }
+
+  // A request that carried nothing starts one too.
+  let fresh = Trace.continuing(None, true)
+  if Trace.traced(&fresh) { held = held + 1 }
+  if Trace.isRecorded(&fresh) { held = held + 1 }
+  if !Trace.isRecorded(&Trace.continuing(None, false)) { held = held + 1 }
+
+  // A request that carried one continues it: the same piece of work, a new
+  // step within it.
+  let continued = Trace.continuing(Some(carried), false)
+  if Trace.workOf(&continued) == "4bf92f3577b34da6a3ce929d0e0e4736" { held = held + 1 }
+  if Trace.stepOf(&continued) != "00f067aa0ba902b7" { held = held + 1 }
+
+  // And the recording decision travels rather than being retaken — the caller
+  // asked for a trace that is not recorded, and got the one that is, because
+  // that is what the work entered as.
+  if Trace.isRecorded(&continued) { held = held + 1 }
+
+  // A step within a trace keeps the work and changes the step.
+  let step = Trace.childOf(&fresh)
+  if Trace.workOf(&step) == Trace.workOf(&fresh) { held = held + 1 }
+  if Trace.stepOf(&step) != Trace.stepOf(&fresh) { held = held + 1 }
+  if Trace.isRecorded(&step) == Trace.isRecorded(&fresh) { held = held + 1 }
+
+  // Two pieces of work are never the same piece of work.
+  if Trace.workOf(&Trace.starting(true)) != Trace.workOf(&Trace.starting(true)) { held = held + 1 }
+  if Trace.workOf(&fresh).length() == 32 { held = held + 1 }
+  if Trace.stepOf(&fresh).length() == 16 { held = held + 1 }
+
+  // The one service that decides is the one the work entered at.
+  if Trace.isRecorded(&Trace.recording(&fresh, true)) { held = held + 1 }
+  if !Trace.isRecorded(&Trace.recording(&fresh, false)) { held = held + 1 }
+
+  // A trace nothing can follow is a trace, and says so.
+  if !Trace.traced(&Trace.untraced()) { held = held + 1 }
+  if !Trace.isRecorded(&Trace.untraced()) { held = held + 1 }
+
+  // A stretch of work, timed by a clock that is given rather than read — so
+  // this is a comparison of values and no time has to pass.
+  let stretch = Trace.span(&fresh, "read the order", 1000)
+  if !Trace.complete(&stretch) { held = held + 1 }
+  if Option.isNone(&Trace.took(&stretch)) { held = held + 1 }
+
+  let done = Trace.finished(&stretch, 1150)
+  if Trace.complete(&done) { held = held + 1 }
+  if Option.unwrapOr(Trace.took(&done), 0) == 150 { held = held + 1 }
+
+  // What a program noted, and only that.
+  let noted = Trace.noting(&Trace.noting(&done, "rows", "12"), "cached", "false")
+  if Option.unwrapOr(Trace.noteOf(&noted, "rows"), "") == "12" { held = held + 1 }
+  if Option.unwrapOr(Trace.noteOf(&noted, "cached"), "") == "false" { held = held + 1 }
+  if Option.isNone(&Trace.noteOf(&noted, "authorization")) { held = held + 1 }
+
+  // A span carries nothing nobody put there, which is why a trace does not
+  // come to hold a password.
+  if Trace.span(&fresh, "x", 1).notes.length() == 0 { held = held + 1 }
+
+  // And it reads out as the fields a log line carries, so one line ties to one
+  // piece of work.
+  let fields = Trace.fieldsOf(&noted)
+  if pairIn(&fields, "trace") == Trace.workOf(&fresh) { held = held + 1 }
+  if pairIn(&fields, "span") == Trace.stepOf(&fresh) { held = held + 1 }
+  if pairIn(&fields, "name") == "read the order" { held = held + 1 }
+  if pairIn(&fields, "ms") == "150" { held = held + 1 }
+  if pairIn(&fields, "rows") == "12" { held = held + 1 }
+
+  // A stretch still running carries no duration rather than a wrong one.
+  if pairIn(&Trace.fieldsOf(&stretch), "ms").isEmpty() { held = held + 1 }
+
+  held
+}
+
+fn pairIn(fields: &Array[(Str, Str)], name: Str) -> Str {
+  var found = ""
+  for entry in fields { if entry[0] == name { found = entry[1] } }
+  found
+}

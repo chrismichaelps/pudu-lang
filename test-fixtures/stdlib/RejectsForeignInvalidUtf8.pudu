@@ -1,0 +1,9 @@
+module RejectsForeignInvalidUtf8
+
+foreign "c" {
+  fn invalid symbol "pudu_ffi_cpp_invalid_utf8" () -> Str
+}
+
+export fn main() -> Int {
+  unsafe(foreign) { invalid().length() }
+}

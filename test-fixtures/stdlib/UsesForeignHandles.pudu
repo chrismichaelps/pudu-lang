@@ -1,0 +1,21 @@
+module UsesForeignHandles
+
+foreign "c" {
+  type Box
+  fn pudu_ffi_cpp_box_new(value: Int32) -> owned Box by pudu_ffi_cpp_box_delete
+  fn pudu_ffi_cpp_box_read(box: Box) -> Int32
+  fn pudu_ffi_cpp_box_delete(box: Box) -> ()
+  fn pudu_ffi_cpp_delete_count() -> Int32
+}
+
+export fn main() -> Int {
+  unsafe(foreign) {
+    let before = pudu_ffi_cpp_delete_count()
+    let box = pudu_ffi_cpp_box_new(42i32)
+    let read = pudu_ffi_cpp_box_read(box)
+    pudu_ffi_cpp_box_delete(box)
+    let after = pudu_ffi_cpp_delete_count()
+
+    if read == 42i32 && after == before + 1i32 { 2 } else { 0 }
+  }
+}

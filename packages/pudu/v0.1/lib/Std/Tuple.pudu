@@ -1,0 +1,42 @@
+module Std.Tuple
+
+/// The first member of a pair.
+export fn first[A, B](value: (A, B)) -> A { value[0] }
+
+/// The second member of a pair.
+export fn second[A, B](value: (A, B)) -> B { value[1] }
+
+/// A pair with its members exchanged.
+export fn swap[A, B](value: (A, B)) -> (B, A) { (value[1], value[0]) }
+
+/// A pair with its first member transformed.
+export fn mapFirst[A, B, C](value: (A, B), transform: fn(A) -> C) -> (C, B) {
+  (transform(value[0]), value[1])
+}
+
+/// A pair with its second member transformed.
+export fn mapSecond[A, B, C](value: (A, B), transform: fn(B) -> C) -> (A, C) {
+  (value[0], transform(value[1]))
+}
+
+/// Both members transformed by the same function.
+export fn mapBoth[A, B](value: (A, A), transform: fn(A) -> B) -> (B, B) {
+  (transform(value[0]), transform(value[1]))
+}
+
+/// A two-argument function applied to a pair, so a function written for two
+/// arguments can be used where a pair is what there is.
+export fn uncurry[A, B, C](f: fn(A, B) -> C, value: (A, B)) -> C {
+  f(value[0], value[1])
+}
+
+/// A pair-taking function applied to two arguments, the inverse of `uncurry`.
+export fn curry[A, B, C](f: fn((A, B)) -> C, left: A, right: B) -> C {
+  f((left, right))
+}
+
+/// A value paired with itself.
+export fn duplicate[T](value: T) -> (T, T) { (value, value) }
+
+/// A pair built from two values.
+export fn of[A, B](left: A, right: B) -> (A, B) { (left, right) }

@@ -1,0 +1,208 @@
+module Std.Result
+
+/// Whether the operation succeeded.
+export fn isOk[T, E](value: &Result[T, E]) -> Bool {
+  match value {
+    case Ok(_) => true
+    case Err(_) => false
+  }
+}
+
+/// Whether the operation failed.
+export fn isErr[T, E](value: &Result[T, E]) -> Bool {
+  match value {
+    case Ok(_) => false
+    case Err(_) => true
+  }
+}
+
+/// The value, or a fallback when the operation failed.
+/// The failure is discarded, which is why this is the only form that takes one:
+/// a caller who needs to know why should match, or propagate with `?`.
+export fn unwrapOr[T, E](value: Result[T, E], fallback: T) -> T {
+  match value {
+    case Ok(found) => found
+    case Err(_) => fallback
+  }
+}
+
+/// The value if there is one, forgetting why there was not.
+export fn ok[T, E](value: Result[T, E]) -> Option[T] {
+  match value {
+    case Ok(found) => Some(found)
+    case Err(_) => None
+  }
+}
+
+/// The failure if there was one.
+export fn err[T, E](value: Result[T, E]) -> Option[E] {
+  match value {
+    case Ok(_) => None
+    case Err(problem) => Some(problem)
+  }
+}
+
+/// The first result if it succeeded, otherwise the second.
+export fn orElse[T, E](first: Result[T, E], second: Result[T, E]) -> Result[T, E] {
+  match first {
+    case Ok(found) => Ok(found)
+    case Err(_) => second
+  }
+}
+
+/// The value as an array of nought or one element.
+export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
+  match value {
+    case Ok(found) => [found]
+    case Err(_) => []
+  }
+}
+
+/// The success transformed, if there was one.
+export fn map[T, E, U](value: Result[T, E], transform: fn(T) -> U) -> Result[U, E] {
+  Ok(transform(value ?))
+}
+
+/// The failure transformed, if there was one.
+/// This is how a caller adapts one module's failure vocabulary into its own
+/// without discarding what went wrong.
+export fn mapErr[T, E, F](value: Result[T, E], transform: fn(E) -> F) -> Result[T, F] {
+  match value {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(transform(problem))
+  }
+}
+
+/// The success transformed into another result, flattened.
+export fn andThen[T, E, U](value: Result[T, E], transform: fn(T) -> Result[U, E]) -> Result[U, E] {
+  transform(value ?)
+}
+
+/// The success, or a fallback computed from the failure.
+export fn unwrapOrElse[T, E](value: Result[T, E], recover: fn(E) -> T) -> T {
+  match value {
+    case Ok(found) => found
+    case Err(problem) => recover(problem)
+  }
+}
+
+/// One of two transformations, whichever side the result holds.
+/// Success comes first, matching the order the cases are written everywhere
+/// else a result is inspected.
+export fn fold[T, E, A](value: Result[T, E], onOk: fn(T) -> A, onErr: fn(E) -> A) -> A {
+  match value {
+    case Ok(found) => onOk(found)
+    case Err(problem) => onErr(problem)
+  }
+}
+
+/// A nested result flattened by one level.
+export fn flatten[T, E](value: Result[Result[T, E], E]) -> Result[T, E] {
+  value ?
+}
+
+/// Every success, with the failures dropped.
+export fn successes[T, E](values: &Array[Result[T, E]]) -> Array[T] {
+  var out = []
+  for value in values {
+    match value {
+      case Ok(found) => { out = out.push(found) }
+      case Err(_) => {}
+    }
+  }
+  out
+}
+
+/// Every failure, with the successes dropped.
+export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
+  var out = []
+  for value in values {
+    match value {
+      case Ok(_) => {}
+      case Err(problem) => { out = out.push(problem) }
+    }
+  }
+  out
+}
+
+/// Every success, or the first failure.
+/// This is how a caller turns many fallible steps into one answer without
+/// deciding, at each step, whether to keep going.
+export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
+  var out = []
+  for value in values {
+    out = out.push(value ?)
+  }
+  Ok(out)
+}
+
+/// The success, or `None` when there was a failure, keeping neither.
+export fn toOption[T, E](value: Result[T, E]) -> Option[T] {
+  match value {
+    case Ok(found) => Some(found)
+    case Err(_) => None
+  }
+}
+
+/// The failure, or a fallback when the operation succeeded.
+export fn errOr[T, E](value: Result[T, E], fallback: E) -> E {
+  match value {
+    case Ok(_) => fallback
+    case Err(problem) => problem
+  }
+}
+
+/// The two sides separated: every success, and every failure.
+export fn partition[T, E](values: &Array[Result[T, E]]) -> (Array[T], Array[E]) {
+  var good = []
+  var bad = []
+  for value in values {
+    match value {
+      case Ok(found) => { good = good.push(found) }
+      case Err(problem) => { bad = bad.push(problem) }
+    }
+  }
+  (good, bad)
+}
+
+/// The sides exchanged, so a failure becomes a success and back.
+export fn swap[T, E](value: Result[T, E]) -> Result[E, T] {
+  match value {
+    case Ok(found) => Err(found)
+    case Err(problem) => Ok(problem)
+  }
+}
+
+/// Both successes combined, or the first failure.
+export fn map2[T, U, E, V](
+  left: Result[T, E],
+  right: Result[U, E],
+  combine: fn(T, U) -> V
+) -> Result[V, E] {
+  Ok(combine(left ?, right ?))
+}
+
+/// Whether the operation succeeded and the predicate accepts the value.
+export fn holds[T, E](value: &Result[T, E], predicate: fn(T) -> Bool) -> Bool {
+  match value {
+    case Ok(found) => predicate(found)
+    case Err(_) => false
+  }
+}
+
+/// A success when a condition holds, and a named failure otherwise.
+export fn require[E](condition: Bool, failure: E) -> Result[(), E] {
+  if condition { Ok(()) } else { Err(failure) }
+}
+
+/// Every result transformed and collected, stopping at the first failure.
+export fn traverse[A, B, E](
+  items: &Array[A],
+  transform: fn(A) -> Result[B, E]
+) -> Result[Array[B], E] {
+  var out = []
+  for item in items {
+    out = out.push(transform(item) ?)
+  }
+  Ok(out)
+}

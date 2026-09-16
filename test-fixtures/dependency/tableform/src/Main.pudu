@@ -1,0 +1,7 @@
+module Main
+
+import Money as Money
+
+fn main() -> Int {
+  Money.addPence(1250, 375)
+}

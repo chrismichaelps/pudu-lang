@@ -1,0 +1,323 @@
+module Std.Audio.Device
+
+import Std.Audio as Audio
+import Std.Bytes as Bytes
+import Std.Result as Result
+
+/// Queue bounds and the total monotonic deadline for one clip.
+export type Plan = {
+  framesPerBuffer: Int,
+  buffers: Int,
+  timeoutMilliseconds: Int
+}
+
+/// Completion reported by the native device queue.
+export type Playback = { frames: Int }
+
+/// Bounds and requested PCM shape for a persistent output stream.
+export type StreamPlan = {
+  format: Audio.Format,
+  framesPerBuffer: Int,
+  buffers: Int,
+  writeTimeoutMilliseconds: Int
+}
+
+/// One evaluation-owned output capability and its negotiated format.
+export type Stream = {
+  token: Int,
+  format: Audio.Format,
+  writeTimeoutMilliseconds: Int
+}
+
+/// Observable output state without exposing a target framework.
+export type StreamState = Ready | Running | Paused | Starved | Interrupted
+
+/// Monotonic counters and the audio-master media clock.
+export type StreamSnapshot = {
+  submittedFrames: Int,
+  acquiredFrames: Int,
+  clockFrames: Int,
+  clockNanoseconds: Int,
+  underruns: Int,
+  interruptions: Int,
+  deviceChanges: Int,
+  timelineFailures: Int,
+  state: StreamState
+}
+
+/// Why a bounded clip could not be presented to the default output device.
+export type DeviceError
+  = InvalidFramesPerBuffer(Int)
+  | InvalidBufferCount(Int)
+  | InvalidTimeout(Int)
+  | InvalidFormat(Audio.AudioError)
+  | EmptyAudio
+  | MalformedAudio(Int, Int)
+  | UnsupportedPlatform
+  | DeadlineExceeded
+  | Cancelled
+  | InvalidWriteTimeout(Int)
+  | InvalidVolume(Float64)
+  | FormatMismatch(Audio.Format, Audio.Format)
+  | WriteDeadlineExceeded(Int, Int)
+  | WritePlatformFailure(Int, Int, Str)
+  | ClosedStream
+  | PlatformFailure(Str)
+
+/// Admit two to eight preallocated buffers of 16 through 4,096 frames each.
+export fn plan(
+  framesPerBuffer: Int,
+  buffers: Int,
+  timeoutMilliseconds: Int
+) -> Result[Plan, DeviceError] {
+  if framesPerBuffer < 16 || framesPerBuffer > 4096 {
+    Err(InvalidFramesPerBuffer(framesPerBuffer))
+  } else if buffers < 2 || buffers > 8 {
+    Err(InvalidBufferCount(buffers))
+  } else if timeoutMilliseconds < 1 || timeoutMilliseconds > 60000 {
+    Err(InvalidTimeout(timeoutMilliseconds))
+  } else {
+    Ok(Plan {
+        framesPerBuffer: framesPerBuffer,
+        buffers: buffers,
+        timeoutMilliseconds: timeoutMilliseconds
+      })
+  }
+}
+
+/// Play one admitted interleaved signed-16 clip and await exact completion.
+///
+/// A program that watches for a stop request and receives one gets `Cancelled`
+/// within a few milliseconds rather than after the clip or its deadline; the
+/// queue is stopped at once and released before this answers.
+export fn play(target: &Plan, source: &Audio.Pcm) -> Result[Playback, DeviceError] {
+  validatePlan(target) ?
+  match Audio.format(source.format.sampleRate, source.format.channels) {
+    case Err(problem) => { return Err(InvalidFormat(problem)) }
+    case Ok(_) => {}
+  }
+  let byteCount = Bytes.length(&source.data)
+  let frameBytes = source.format.channels * 2
+  if byteCount == 0 {
+    return Err(EmptyAudio)
+  }
+  if byteCount % frameBytes != 0 {
+    return Err(MalformedAudio(byteCount, frameBytes))
+  }
+  match audioDevicePlay(
+    source.format.sampleRate,
+    source.format.channels,
+    source.data,
+    target.framesPerBuffer,
+    target.buffers,
+    target.timeoutMilliseconds
+  ) {
+    case Ok(frames) => {
+      let expected = byteCount / frameBytes
+      if frames == expected {
+        Ok(Playback{frames: frames})
+      } else {
+        Err(PlatformFailure("audio device acknowledged an incomplete clip"))
+      }
+    }
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Admit a persistent stream request before touching a device.
+export fn streamPlan(
+  format: Audio.Format,
+  framesPerBuffer: Int,
+  buffers: Int,
+  writeTimeoutMilliseconds: Int
+) -> Result[StreamPlan, DeviceError] {
+  match Audio.format(format.sampleRate, format.channels) {
+    case Err(problem) => { return Err(InvalidFormat(problem)) }
+    case Ok(_) => {}
+  }
+  if framesPerBuffer < 16 || framesPerBuffer > 4096 {
+    Err(InvalidFramesPerBuffer(framesPerBuffer))
+  } else if buffers < 2 || buffers > 8 {
+    Err(InvalidBufferCount(buffers))
+  } else if writeTimeoutMilliseconds < 1 || writeTimeoutMilliseconds > 60000 {
+    Err(InvalidWriteTimeout(writeTimeoutMilliseconds))
+  } else {
+    Ok(StreamPlan {
+        format: format,
+        framesPerBuffer: framesPerBuffer,
+        buffers: buffers,
+        writeTimeoutMilliseconds: writeTimeoutMilliseconds
+      })
+  }
+}
+
+/// Open the default output and return the format accepted by its queue.
+export fn openStream(target: &StreamPlan) -> Result[Stream, DeviceError] {
+  streamPlan(target.format, target.framesPerBuffer, target.buffers, target.writeTimeoutMilliseconds) ?
+  match audioStreamOpen(
+    target.format.sampleRate,
+    target.format.channels,
+    target.framesPerBuffer,
+    target.buffers
+  ) {
+    case Err(message) => Err(classified(message))
+    case Ok(answer) => {
+      if answer.length() != 3 || answer[0] < 1 {
+        return Err(PlatformFailure("audio stream returned a malformed open reply"))
+      }
+      match Audio.format(answer[1], answer[2]) {
+        case Err(_) => Err(PlatformFailure("audio stream returned an invalid negotiated format"))
+        case Ok(negotiated) => Ok(Stream {
+            token: answer[0],
+            format: negotiated,
+            writeTimeoutMilliseconds: target.writeTimeoutMilliseconds
+          })
+      }
+    }
+  }
+}
+
+/// Enqueue one exact PCM chunk with bounded backpressure.
+export fn write(stream: &Stream, source: &Audio.Pcm) -> Result[Int, DeviceError] {
+  if source.format.sampleRate != stream.format.sampleRate ||
+  source.format.channels != stream.format.channels
+  {
+    return Err(FormatMismatch(stream.format, source.format))
+  }
+  let byteCount = Bytes.length(&source.data)
+  let frameBytes = source.format.channels * 2
+  if byteCount == 0 { return Ok(0) }
+  if byteCount % frameBytes != 0 { return Err(MalformedAudio(byteCount, frameBytes)) }
+  let expected = byteCount / frameBytes
+  match audioStreamWrite(
+    stream.token,
+    stream.format.sampleRate,
+    stream.format.channels,
+    source.data,
+    stream.writeTimeoutMilliseconds
+  ) {
+    case Err(message) => Err(classified(message))
+    case Ok(answer) => {
+      if answer.length() != 2 || answer[0] < 0 || answer[0] > expected {
+        Err(PlatformFailure("audio stream returned a malformed write reply"))
+      } else if answer[1] == 0 && answer[0] == expected {
+        Ok(answer[0])
+      } else if answer[1] == -2 {
+        Err(WriteDeadlineExceeded(answer[0], expected))
+      } else {
+        Err(WritePlatformFailure(answer[0], expected, streamStatus(answer[1])))
+      }
+    }
+  }
+}
+
+/// Stop consuming queued frames while keeping them and the stream's position.
+export fn pause(stream: &Stream) -> Result[(), DeviceError] {
+  Result.mapErr(audioStreamPause(stream.token), fn(message: Str) -> DeviceError { classified(message) })
+}
+
+/// Continue consuming queued frames from where a pause left them.
+export fn resume(stream: &Stream) -> Result[(), DeviceError] {
+  Result.mapErr(audioStreamResume(stream.token), fn(message: Str) -> DeviceError { classified(message) })
+}
+
+/// Set linear output volume from silence through unity.
+export fn setVolume(stream: &Stream, volume: Float64) -> Result[(), DeviceError] {
+  if volume < 0.0 || volume > 1.0 {
+    Err(InvalidVolume(volume))
+  } else {
+    Result.mapErr(audioStreamVolume(stream.token, volume), fn(message: Str) -> DeviceError { classified(message) })
+  }
+}
+
+/// Read one coherent telemetry sample and audio-master clock.
+export fn snapshot(stream: &Stream) -> Result[StreamSnapshot, DeviceError] {
+  match audioStreamSnapshot(stream.token) {
+    case Err(message) => Err(classified(message))
+    case Ok(answer) => {
+      if answer.length() != 9 || answer[0] < 0 || answer[1] < 0 || answer[2] < 0 ||
+      answer[3] < 0 || answer[4] < 0 || answer[5] < 0 || answer[6] < 0 || answer[7] < 0
+      {
+        return Err(PlatformFailure("audio stream returned malformed telemetry"))
+      }
+      let state = stateOf(answer[8]) ?
+      Ok(StreamSnapshot {
+          submittedFrames: answer[0],
+          acquiredFrames: answer[1],
+          clockFrames: answer[2],
+          clockNanoseconds: answer[3],
+          underruns: answer[4],
+          interruptions: answer[5],
+          deviceChanges: answer[6],
+          timelineFailures: answer[7],
+          state: state
+        })
+    }
+  }
+}
+
+/// Release the stream exactly once, optionally sounding every queued frame.
+export fn closeStream(
+  stream: &Stream,
+  drain: Bool,
+  timeoutMilliseconds: Int
+) -> Result[(), DeviceError] {
+  if timeoutMilliseconds < 1 || timeoutMilliseconds > 60000 {
+    Err(InvalidTimeout(timeoutMilliseconds))
+  } else {
+    Result.mapErr(
+      audioStreamClose(stream.token, drain, timeoutMilliseconds),
+      fn(message: Str) -> DeviceError { classified(message) }
+    )
+  }
+}
+
+fn validatePlan(target: &Plan) -> Result[(), DeviceError] {
+  if target.framesPerBuffer < 16 || target.framesPerBuffer > 4096 {
+    Err(InvalidFramesPerBuffer(target.framesPerBuffer))
+  } else if target.buffers < 2 || target.buffers > 8 {
+    Err(InvalidBufferCount(target.buffers))
+  } else if target.timeoutMilliseconds < 1 || target.timeoutMilliseconds > 60000 {
+    Err(InvalidTimeout(target.timeoutMilliseconds))
+  } else {
+    Ok(())
+  }
+}
+
+/// The error each fixed runtime message names. Any other message is a platform
+/// failure carrying the text the adapter reported.
+const RUNTIME_ERRORS: Map[Str, DeviceError] = mapOf([
+    ("audio device playback is unsupported on this platform", UnsupportedPlatform),
+    ("audio device playback deadline exceeded", DeadlineExceeded),
+    ("audio device playback was cancelled", Cancelled),
+    ("audio device streaming is unsupported on this platform", UnsupportedPlatform),
+    ("audio stream is closed or unknown", ClosedStream),
+    ("audio stream operation deadline exceeded", DeadlineExceeded)
+  ])
+
+fn classified(message: Str) -> DeviceError {
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
+  }
+}
+
+fn stateOf(state: Int) -> Result[StreamState, DeviceError] {
+  if state == 0 { Ok(Ready) }
+    else if state == 1 { Ok(Running) }
+    else if state == 2 { Ok(Paused) }
+    else if state == 3 { Ok(Starved) }
+    else if state == 4 { Ok(Interrupted) }
+    else { Err(PlatformFailure("audio stream returned an unknown state")) }
+}
+
+fn streamStatus(status: Int) -> Str {
+  if status == -1 { "audio stream received an invalid argument" }
+    else if status == -3 { "audio output stream could not be created" }
+    else if status == -4 { "audio output stream buffers could not be allocated" }
+    else if status == -5 { "audio output stream buffer could not be enqueued" }
+    else if status == -6 { "audio output stream control failed" }
+    else if status == -7 { "audio output stream could not be released cleanly" }
+    else if status == -8 { "audio output stream timeline is unavailable" }
+    else { "audio stream failed in the platform adapter" }
+}

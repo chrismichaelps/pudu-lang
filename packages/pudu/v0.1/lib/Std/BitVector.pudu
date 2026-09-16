@@ -1,0 +1,239 @@
+module Std.BitVector
+
+import Std.List as List
+
+/// A dense contiguous sequence of bits backed by unboxed 64-bit words.
+export type BitVector = {
+  words: Array[UInt64],
+  length: Int
+}
+
+fn popCount64(x: UInt64) -> Int {
+  var v = x
+  v = v - ((v >> 1) & 0x5555555555555555u64)
+  v = (v & 0x3333333333333333u64) + ((v >> 2) & 0x3333333333333333u64)
+  v = (v + (v >> 4)) & 0x0f0f0f0f0f0f0f0fu64
+  v = v + (v >> 8)
+  v = v + (v >> 16)
+  v = v + (v >> 32)
+  match convertInteger[Int](v & 0x7fu64) {
+    case Some(c) => c
+    case None => 0
+  }
+}
+
+fn ctz64(w: UInt64) -> Int {
+  if w == 0u64 { return 64 }
+  let lowest = w & (0u64 &- w)
+  var count = 0
+  if (lowest & 0xffffffff00000000u64) != 0u64 { count = count + 32 }
+  if (lowest & 0xffff0000ffff0000u64) != 0u64 { count = count + 16 }
+  if (lowest & 0xff00ff00ff00ff00u64) != 0u64 { count = count + 8 }
+  if (lowest & 0xf0f0f0f0f0f0f0f0u64) != 0u64 { count = count + 4 }
+  if (lowest & 0xccccccccccccccccu64) != 0u64 { count = count + 2 }
+  if (lowest & 0xaaaaaaaaaaaaaaaau64) != 0u64 { count = count + 1 }
+  count
+}
+
+fn lastWordMask(bitLen: Int) -> UInt64 {
+  let rem = bitLen % 64
+  if rem == 0 { ~0u64 } else { (1u64 << rem) - 1u64 }
+}
+
+/// Allocates a bit-vector of exact bit length initialized to false (0) or true (1).
+export fn create(bitLength: Int, initVal: Bool) -> BitVector {
+  if bitLength <= 0 {
+    return BitVector{words: [], length: 0}
+  }
+  let numWords = (bitLength + 63) / 64
+  let initWord = if initVal { ~0u64 } else { 0u64 }
+  var w: Array[UInt64] = []
+  var i = 0
+  while i < numWords {
+    w = w.push(initWord)
+    i = i + 1
+  }
+  if initVal && (bitLength % 64 != 0) {
+    let lastIdx = numWords - 1
+    let masked = w[lastIdx] & lastWordMask(bitLength)
+    w = List.set(&w, lastIdx, masked)
+  }
+  BitVector{words: w, length: bitLength}
+}
+
+/// Constructs a bit-vector from an array of boolean flags.
+export fn fromBits(bits: &Array[Bool]) -> BitVector {
+  let len = bits.length()
+  var vec = create(len, false)
+  var i = 0
+  while i < len {
+    if bits[i] {
+      let wordIdx = i >> 6
+      let bitPos = i & 63
+      let mask = 1u64 << bitPos
+      let cur = vec.words[wordIdx]
+      let updatedWords = List.set(&vec.words, wordIdx, cur | mask)
+      vec = BitVector{words: updatedWords, length: len}
+    }
+    i = i + 1
+  }
+  vec
+}
+
+/// Converts the bit-vector to an array of booleans.
+export fn toBits(vector: &BitVector) -> Array[Bool] {
+  var out: Array[Bool] = []
+  var i = 0
+  let len = vector.length
+  while i < len {
+    let wordIdx = i >> 6
+    let bitPos = i & 63
+    let mask = 1u64 << bitPos
+    out = out.push((vector.words[wordIdx] & mask) != 0u64)
+    i = i + 1
+  }
+  out
+}
+
+/// Total number of addressable bits in the vector.
+export fn length(vector: &BitVector) -> Int {
+  vector.length
+}
+
+/// Reads the bit at the given index.
+export fn get(vector: &BitVector, index: Int) -> Option[Bool] {
+  if index < 0 || index >= vector.length { return None }
+  let wordIdx = index >> 6
+  let bitPos = index & 63
+  let mask = 1u64 << bitPos
+  Some((vector.words[wordIdx] & mask) != 0u64)
+}
+
+/// Sets the bit at the given index to value.
+export fn set(vector: &BitVector, index: Int, value: Bool) -> Option[BitVector] {
+  if index < 0 || index >= vector.length { return None }
+  let wordIdx = index >> 6
+  let bitPos = index & 63
+  let mask = 1u64 << bitPos
+  let cur = vector.words[wordIdx]
+  let newWord = if value { cur | mask } else { cur & (~mask) }
+  let updated = List.set(&vector.words, wordIdx, newWord)
+  Some(BitVector{words: updated, length: vector.length})
+}
+
+/// Inverts the bit at the given index.
+export fn flip(vector: &BitVector, index: Int) -> Option[BitVector] {
+  if index < 0 || index >= vector.length { return None }
+  let wordIdx = index >> 6
+  let bitPos = index & 63
+  let mask = 1u64 << bitPos
+  let cur = vector.words[wordIdx]
+  let updated = List.set(&vector.words, wordIdx, cur ^ mask)
+  Some(BitVector{words: updated, length: vector.length})
+}
+
+/// Parallel 64-bit hardware bitwise AND.
+export fn bitAnd(left: &BitVector, right: &BitVector) -> Option[BitVector] {
+  if left.length != right.length { return None }
+  var w: Array[UInt64] = []
+  let len = left.words.length()
+  var i = 0
+  while i < len {
+    w = w.push(left.words[i] & right.words[i])
+    i = i + 1
+  }
+  Some(BitVector{words: w, length: left.length})
+}
+
+/// Parallel 64-bit hardware bitwise OR.
+export fn bitOr(left: &BitVector, right: &BitVector) -> Option[BitVector] {
+  if left.length != right.length { return None }
+  var w: Array[UInt64] = []
+  let len = left.words.length()
+  var i = 0
+  while i < len {
+    w = w.push(left.words[i] | right.words[i])
+    i = i + 1
+  }
+  Some(BitVector{words: w, length: left.length})
+}
+
+/// Parallel 64-bit hardware bitwise XOR.
+export fn bitXor(left: &BitVector, right: &BitVector) -> Option[BitVector] {
+  if left.length != right.length { return None }
+  var w: Array[UInt64] = []
+  let len = left.words.length()
+  var i = 0
+  while i < len {
+    w = w.push(left.words[i] ^ right.words[i])
+    i = i + 1
+  }
+  Some(BitVector{words: w, length: left.length})
+}
+
+/// Parallel 64-bit hardware bitwise NOT with trailing bit masking.
+export fn bitNot(vector: &BitVector) -> BitVector {
+  var w: Array[UInt64] = []
+  let len = vector.words.length()
+  var i = 0
+  while i < len {
+    var inverted = ~vector.words[i]
+    if i == len - 1 && (vector.length % 64 != 0) {
+      inverted = inverted & lastWordMask(vector.length)
+    }
+    w = w.push(inverted)
+    i = i + 1
+  }
+  BitVector{words: w, length: vector.length}
+}
+
+/// Total count of set bits (1s) across the entire vector.
+export fn popCount(vector: &BitVector) -> Int {
+  var total = 0
+  for w in vector.words {
+    total = total + popCount64(w)
+  }
+  total
+}
+
+/// Total count of clear bits (0s).
+export fn countZeros(vector: &BitVector) -> Int {
+  vector.length - popCount(vector)
+}
+
+/// Finds the index of the lowest set bit using hardware trailing-zero scan.
+export fn findFirstSet(vector: &BitVector) -> Option[Int] {
+  let numWords = vector.words.length()
+  var wIdx = 0
+  while wIdx < numWords {
+    let w = vector.words[wIdx]
+    if w != 0u64 {
+      let bitOffset = ctz64(w)
+      let idx = (wIdx << 6) + bitOffset
+      if idx < vector.length {
+        return Some(idx)
+      }
+    }
+    wIdx = wIdx + 1
+  }
+  None
+}
+
+/// Finds the index of the lowest clear bit.
+export fn findFirstZero(vector: &BitVector) -> Option[Int] {
+  let inverted = bitNot(vector)
+  findFirstSet(&inverted)
+}
+
+/// Whether all bits in the vector are zero.
+export fn isZero(vector: &BitVector) -> Bool {
+  for w in vector.words {
+    if w != 0u64 { return false }
+  }
+  true
+}
+
+/// Whether all bits in the vector are one.
+export fn isOnes(vector: &BitVector) -> Bool {
+  popCount(vector) == vector.length
+}

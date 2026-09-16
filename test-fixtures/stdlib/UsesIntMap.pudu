@@ -1,0 +1,190 @@
+module UsesIntMap
+
+import Std.IntMap as IntMap
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Empty and singleton
+  let emp = IntMap.empty()
+  let s1 = IntMap.singleton(42, "answer")
+  if IntMap.isEmpty(&emp) && IntMap.size(&emp) == 0 && !IntMap.isEmpty(&s1) && IntMap.size(&s1) == 1 {
+    held = held + 1
+  }
+
+  // 2. Query singleton
+  let get42 = IntMap.get(&s1, 42)
+  let get99 = IntMap.get(&s1, 99)
+  let mem42 = IntMap.member(&s1, 42)
+  let mem99 = IntMap.member(&s1, 99)
+  if get42 == Some("answer") && get99 == None && mem42 && !mem99 {
+    held = held + 1
+  }
+
+  // 3. Multi-element insertion across bit boundaries
+  var m = IntMap.empty()
+  m = IntMap.insert(&m, 1, "one")
+  m = IntMap.insert(&m, 2, "two")
+  m = IntMap.insert(&m, 8, "eight")
+  m = IntMap.insert(&m, 15, "fifteen")
+  m = IntMap.insert(&m, 1024, "kilo")
+  if IntMap.size(&m) == 5 && IntMap.get(&m, 8) == Some("eight") && IntMap.get(&m, 1024) == Some("kilo") {
+    held = held + 1
+  }
+
+  // 4. Overwrite existing key
+  let mUpdated = IntMap.insert(&m, 2, "TWO_UPDATED")
+  if IntMap.size(&mUpdated) == 5 && IntMap.get(&mUpdated, 2) == Some("TWO_UPDATED") {
+    held = held + 1
+  }
+
+  // 5. Deletion
+  let mDeleted = IntMap.delete(&m, 8)
+  if IntMap.size(&mDeleted) == 4 && IntMap.get(&mDeleted, 8) == None && IntMap.member(&mDeleted, 15) {
+    held = held + 1
+  }
+
+  // 6. getOr fallback
+  let valPresent = IntMap.getOr(&m, 1, "fallback")
+  let valAbsent = IntMap.getOr(&m, 9999, "fallback")
+  if valPresent == "one" && valAbsent == "fallback" {
+    held = held + 1
+  }
+
+  // 7. Adjust existing value
+  var numMap = IntMap.empty()
+  numMap = IntMap.insert(&numMap, 10, 100)
+  numMap = IntMap.adjust(&numMap, 10, fn(v: Int) -> Int { v + 50 })
+  if IntMap.get(&numMap, 10) == Some(150) {
+    held = held + 1
+  }
+
+  // 8. Union of two maps
+  var mapA = IntMap.empty()
+  mapA = IntMap.insert(&mapA, 1, "A1")
+  mapA = IntMap.insert(&mapA, 2, "A2")
+
+  var mapB = IntMap.empty()
+  mapB = IntMap.insert(&mapB, 2, "B2")
+  mapB = IntMap.insert(&mapB, 3, "B3")
+
+  let unionMap = IntMap.union(&mapA, &mapB)
+  if IntMap.size(&unionMap) == 3 && IntMap.get(&unionMap, 1) == Some("A1") && IntMap.get(&unionMap, 2) == Some("A2") && IntMap.get(&unionMap, 3) == Some("B3") {
+    held = held + 1
+  }
+
+  // 9. Intersection of two maps
+  let interMap = IntMap.intersection(&mapA, &mapB)
+  if IntMap.size(&interMap) == 1 && IntMap.get(&interMap, 2) == Some("A2") && IntMap.get(&interMap, 1) == None {
+    held = held + 1
+  }
+
+  // 10. Difference of two maps
+  let diffMap = IntMap.difference(&mapA, &mapB)
+  if IntMap.size(&diffMap) == 1 && IntMap.get(&diffMap, 1) == Some("A1") && IntMap.get(&diffMap, 2) == None {
+    held = held + 1
+  }
+
+  // 11. mapValues transformation
+  let transformed = IntMap.mapValues(&numMap, fn(v: Int) -> Int { v * 2 })
+  if IntMap.get(&transformed, 10) == Some(300) {
+    held = held + 1
+  }
+
+  // 12. Keys and values collection in sorted order
+  var sortTest = IntMap.empty()
+  sortTest = IntMap.insert(&sortTest, 50, "fifty")
+  sortTest = IntMap.insert(&sortTest, 10, "ten")
+  sortTest = IntMap.insert(&sortTest, 30, "thirty")
+  let sortedKeys = IntMap.keys(&sortTest)
+  if sortedKeys.length() == 3 && sortedKeys[0] == 10 && sortedKeys[1] == 30 && sortedKeys[2] == 50 {
+    held = held + 1
+  }
+
+  // 13. Empty map edge cases (minKey, maxKey, delete, adjust, keys, values, entries)
+  let empMap: IntMap.IntMap[Int] = IntMap.empty()
+  let empMin = IntMap.minKey(&empMap)
+  let empMax = IntMap.maxKey(&empMap)
+  let empDel = IntMap.delete(&empMap, 100)
+  let empAdj = IntMap.adjust(&empMap, 100, fn(x: Int) -> Int { x + 1 })
+  let empKs = IntMap.keys(&empMap)
+  let empVs = IntMap.values(&empMap)
+  let empEnt = IntMap.entries(&empMap)
+  let empGetOr = IntMap.getOr(&empMap, 42, -999)
+  if empMin == None && empMax == None
+    && IntMap.isEmpty(&empDel) && IntMap.isEmpty(&empAdj)
+    && empKs.length() == 0 && empVs.length() == 0 && empEnt.length() == 0
+    && empGetOr == -999 {
+    held = held + 1
+  }
+
+  // 14. Set operations with empty maps (left-empty, right-empty, both-empty)
+  let empStr: IntMap.IntMap[Str] = IntMap.empty()
+  let uEmpEmp = IntMap.union(&empMap, &empMap)
+  let uEmpS1 = IntMap.union(&empStr, &s1)
+  let uS1Emp = IntMap.union(&s1, &empStr)
+  let iEmpS1 = IntMap.intersection(&empStr, &s1)
+  let iS1Emp = IntMap.intersection(&s1, &empStr)
+  let dEmpS1 = IntMap.difference(&empStr, &s1)
+  let dS1Emp = IntMap.difference(&s1, &empStr)
+  if IntMap.isEmpty(&uEmpEmp)
+    && IntMap.size(&uEmpS1) == 1 && IntMap.size(&uS1Emp) == 1
+    && IntMap.isEmpty(&iEmpS1) && IntMap.isEmpty(&iS1Emp)
+    && IntMap.isEmpty(&dEmpS1) && IntMap.size(&dS1Emp) == 1 {
+    held = held + 1
+  }
+
+  // 15. Negative keys mixed with zero and positive keys
+  var negMap = IntMap.empty()
+  negMap = IntMap.insert(&negMap, -100, "minus hundred")
+  negMap = IntMap.insert(&negMap, 100, "plus hundred")
+  negMap = IntMap.insert(&negMap, 0, "zero")
+  negMap = IntMap.insert(&negMap, -1, "minus one")
+  negMap = IntMap.insert(&negMap, 1, "plus one")
+  let negMin = IntMap.minKey(&negMap)
+  let negMax = IntMap.maxKey(&negMap)
+  let negKs = IntMap.keys(&negMap)
+  let gNeg100 = IntMap.get(&negMap, -100)
+  let gNeg1 = IntMap.get(&negMap, -1)
+  let gZero = IntMap.get(&negMap, 0)
+  let gPos1 = IntMap.get(&negMap, 1)
+  let gPos100 = IntMap.get(&negMap, 100)
+  if IntMap.size(&negMap) == 5
+    && negMin == Some(-100) && negMax == Some(100)
+    && negKs.length() == 5
+    && negKs[0] == -100 && negKs[1] == -1 && negKs[2] == 0 && negKs[3] == 1 && negKs[4] == 100
+    && gNeg100 == Some("minus hundred") && gNeg1 == Some("minus one")
+    && gZero == Some("zero") && gPos1 == Some("plus one") && gPos100 == Some("plus hundred") {
+    held = held + 1
+  }
+
+  // 16. Deleting negative keys and deleting absent keys
+  let negDeleted = IntMap.delete(&negMap, -1)
+  let absentDel = IntMap.delete(&negMap, 99999)
+  let diffSelf = IntMap.difference(&negMap, &negMap)
+  if IntMap.size(&negDeleted) == 4
+    && IntMap.get(&negDeleted, -1) == None
+    && IntMap.member(&negDeleted, -100)
+    && IntMap.size(&absentDel) == 5
+    && IntMap.isEmpty(&diffSelf) {
+    held = held + 1
+  }
+
+  // 17. Extreme 64-bit integer key boundaries (min signed int and max signed int)
+  var extMap = IntMap.empty()
+  let minInt = -9223372036854775808
+  let maxInt = 9223372036854775807
+  extMap = IntMap.insert(&extMap, minInt, "MIN_INT")
+  extMap = IntMap.insert(&extMap, maxInt, "MAX_INT")
+  let extMin = IntMap.minKey(&extMap)
+  let extMax = IntMap.maxKey(&extMap)
+  let gMin = IntMap.get(&extMap, minInt)
+  let gMax = IntMap.get(&extMap, maxInt)
+  if IntMap.size(&extMap) == 2
+    && extMin == Some(minInt) && extMax == Some(maxInt)
+    && gMin == Some("MIN_INT") && gMax == Some("MAX_INT") {
+    held = held + 1
+  }
+
+  held
+}

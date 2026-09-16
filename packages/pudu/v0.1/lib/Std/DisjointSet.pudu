@@ -1,0 +1,128 @@
+module Std.DisjointSet
+
+import Std.List as List
+
+/// A low-level, flat-array Disjoint-Set (Union-Find) with path halving and union-by-rank.
+export type DisjointSet = {
+  parent: Array[Int],
+  rank: Array[Int],
+  size: Array[Int],
+  count: Int,
+}
+
+/// Allocates a disjoint-set forest of `totalElements` singleton components.
+export fn create(totalElements: Int) -> DisjointSet {
+  let total = if totalElements > 0 { totalElements } else { 0 }
+  var p: Array[Int] = []
+  var r: Array[Int] = []
+  var s: Array[Int] = []
+  var i = 0
+  while i < total {
+    p = p.push(i)
+    r = r.push(0)
+    s = s.push(1)
+    i = i + 1
+  }
+  DisjointSet {
+    parent: p,
+    rank: r,
+    size: s,
+    count: total,
+  }
+}
+
+/// Returns the total number of elements tracked.
+export fn elementCount(ds: &DisjointSet) -> Int {
+  ds.parent.length()
+}
+
+/// Returns the number of disconnected components remaining.
+export fn componentCount(ds: &DisjointSet) -> Int {
+  ds.count
+}
+
+/// Finds the root representative of element `x` using iterative path halving.
+export fn find(ds: &DisjointSet, x: Int) -> (DisjointSet, Option[Int]) {
+  let total = ds.parent.length()
+  if x < 0 || x >= total {
+    return (*ds, None)
+  }
+  var p = ds.parent
+  var curr = x
+  while curr != p[curr] {
+    let parentNode = p[curr]
+    let grandParent = p[parentNode]
+    p = List.set(&p, curr, grandParent)
+    curr = grandParent
+  }
+  let updated = DisjointSet {
+    parent: p,
+    rank: ds.rank,
+    size: ds.size,
+    count: ds.count,
+  }
+  (updated, Some(curr))
+}
+
+/// Merges the sets containing elements `x` and `y` using union-by-rank.
+export fn union(ds: &DisjointSet, x: Int, y: Int) -> Option[DisjointSet] {
+  let f1 = find(ds, x)
+  let ds1 = f1[0]
+  let root1 = f1[1] ?
+
+  let f2 = find(&ds1, y)
+  let ds2 = f2[0]
+  let root2 = f2[1] ?
+
+  if root1 == root2 {
+    return Some(ds2)
+  }
+
+  let rank1 = ds2.rank[root1]
+  let rank2 = ds2.rank[root2]
+  let size1 = ds2.size[root1]
+  let size2 = ds2.size[root2]
+  let combinedSize = size1 + size2
+
+  var p = ds2.parent
+  var r = ds2.rank
+  var s = ds2.size
+
+  if rank1 < rank2 {
+    p = List.set(&p, root1, root2)
+    s = List.set(&s, root2, combinedSize)
+  } else if rank1 > rank2 {
+    p = List.set(&p, root2, root1)
+    s = List.set(&s, root1, combinedSize)
+  } else {
+    p = List.set(&p, root2, root1)
+    r = List.set(&r, root1, rank1 + 1)
+    s = List.set(&s, root1, combinedSize)
+  }
+
+  Some(DisjointSet {
+      parent: p,
+      rank: r,
+      size: s,
+      count: ds2.count - 1,
+    })
+}
+
+/// Tests whether elements `x` and `y` belong to the same component.
+export fn connected(ds: &DisjointSet, x: Int, y: Int) -> Option[Bool] {
+  let f1 = find(ds, x)
+  let ds1 = f1[0]
+  let root1 = f1[1] ?
+
+  let f2 = find(&ds1, y)
+  let root2 = f2[1] ?
+
+  Some(root1 == root2)
+}
+
+/// Returns the number of elements in the component containing `x`.
+export fn componentSize(ds: &DisjointSet, x: Int) -> Option[Int] {
+  let f = find(ds, x)
+  let root = f[1] ?
+  Some(f[0].size[root])
+}

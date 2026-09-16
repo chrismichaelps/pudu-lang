@@ -1,0 +1,267 @@
+module UsesLruCachePrefixTrieAll
+
+import Std.LruCache as Lru
+import Std.Option as Option
+import Std.PrefixTrie as Trie
+
+fn routes() -> Trie.PrefixTrie[Int] {
+  Trie.fromPairs(&[("car", 1), ("cart", 2), ("care", 3), ("dog", 4)])
+}
+
+/// Every export of `Std.LruCache` and `Std.PrefixTrie`.
+///
+/// A cache bounded by use is only worth having if reading counts as using, so
+/// every check that could tell reads the key order back afterwards: a cache
+/// that recorded writes and not reads answers every value correctly and
+/// discards the entry the program was relying on. Reading through the looking
+/// call and reading through the using call are done at the same key on the
+/// same cache, and the orders compared — that pair is what separates them, and
+/// nothing about either answer does.
+///
+/// The value made on a miss cannot be watched from outside, so what is checked
+/// instead is that a hit answers what was stored rather than what the maker
+/// would have made: the maker is given a different answer to the stored one,
+/// so a cache that ran it anyway answers the maker's value and is caught.
+///
+/// The trie is asked the questions a routing table asks. A key that is only a
+/// prefix of other keys holds no value, and that is checked directly, since a
+/// trie confusing a node with an entry answers a value for every partial path.
+/// Removal is checked for pruning what it leaves behind: a trie that kept the
+/// emptied nodes still answers that something begins with that prefix.
+export fn main() -> Int {
+  var held = 0
+
+  // A cache that will hold two entries.
+  let start: Lru.LruCache[Str, Int] = Lru.withCapacity(2)
+  if Lru.isEmpty(&start) && Lru.size(&start) == 0 { held = held + 1 }
+  if Lru.capacity(&start) == 2 && !Lru.isFull(&start) { held = held + 1 }
+  if Option.isNone(&Lru.oldest(&start)) && Option.isNone(&Lru.newest(&start)) {
+    held = held + 1
+  }
+  if Option.isNone(&Lru.peek(&start, "a")) && !Lru.containsKey(&start, "a") {
+    held = held + 1
+  }
+
+  // Filled to its bound. The keys read back oldest first, which is the order
+  // they would be discarded in.
+  let filled = Lru.put(&Lru.put(&start, "a", 1), "b", 2)
+  if Lru.size(&filled) == 2 && Lru.isFull(&filled) { held = held + 1 }
+  if Lru.keys(&filled) == ["a", "b"] { held = held + 1 }
+  if Lru.values(&filled) == [1, 2] { held = held + 1 }
+  if Lru.pairs(&filled) == [("a", 1), ("b", 2)] { held = held + 1 }
+  if Option.unwrapOr(Lru.oldest(&filled), ("", 0)) == ("a", 1) { held = held + 1 }
+  if Option.unwrapOr(Lru.newest(&filled), ("", 0)) == ("b", 2) { held = held + 1 }
+
+  // Looking does not count as using: the value comes back and the order does
+  // not move.
+  if Option.unwrapOr(Lru.peek(&filled, "a"), 0) == 1 { held = held + 1 }
+  if Lru.keys(&filled) == ["a", "b"] { held = held + 1 }
+  if Lru.containsKey(&filled, "a") && !Lru.containsKey(&filled, "z") {
+    held = held + 1
+  }
+
+  // Using does: the same key, on the same cache, moves to the far end.
+  let read = Lru.get(&filled, "a")
+  if Option.unwrapOr(read[0], 0) == 1 { held = held + 1 }
+  if Lru.keys(&read[1]) == ["b", "a"] { held = held + 1 }
+  // A key that is not there answers nothing and moves nothing.
+  let missed = Lru.get(&filled, "z")
+  if Option.isNone(&missed[0]) && Lru.keys(&missed[1]) == ["a", "b"] {
+    held = held + 1
+  }
+
+  // A write past the bound discards the least recently used, which after that
+  // read is the one that was written first.
+  let pushed = Lru.put(&read[1], "c", 3)
+  if Lru.size(&pushed) == 2 && Lru.keys(&pushed) == ["a", "c"] { held = held + 1 }
+  if !Lru.containsKey(&pushed, "b") { held = held + 1 }
+  // Writing a key already held replaces its value and marks it as used.
+  let rewritten = Lru.put(&pushed, "a", 9)
+  if Lru.pairs(&rewritten) == [("c", 3), ("a", 9)] { held = held + 1 }
+  if Lru.size(&rewritten) == 2 { held = held + 1 }
+
+  // Discarding the next entry by hand, and doing it to a cache holding
+  // nothing, which changes nothing rather than refusing.
+  if Lru.keys(&Lru.evict(&rewritten)) == ["a"] { held = held + 1 }
+  if Lru.isEmpty(&Lru.evict(&start)) { held = held + 1 }
+
+  // Taking a key out, and taking out one that was never there.
+  if Lru.keys(&Lru.remove(&rewritten, "c")) == ["a"] { held = held + 1 }
+  if Lru.size(&Lru.remove(&rewritten, "z")) == 2 { held = held + 1 }
+
+  // Emptied, keeping the bound it was given.
+  let emptied = Lru.cleared(&rewritten)
+  if Lru.isEmpty(&emptied) && Lru.capacity(&emptied) == 2 { held = held + 1 }
+
+  // A smaller bound discards from the old end until it fits, and a larger one
+  // discards nothing.
+  let shrunk = Lru.resized(&rewritten, 1)
+  if Lru.capacity(&shrunk) == 1 && Lru.keys(&shrunk) == ["a"] { held = held + 1 }
+  let grown = Lru.resized(&rewritten, 5)
+  if Lru.capacity(&grown) == 5 && Lru.size(&grown) == 2 { held = held + 1 }
+  if !Lru.isFull(&grown) { held = held + 1 }
+  // A bound below nothing is kept as nothing rather than refused, and such a
+  // cache stores nothing at all.
+  let off: Lru.LruCache[Str, Int] = Lru.withCapacity(0 - 3)
+  if Lru.capacity(&off) == 0 && Lru.isFull(&off) { held = held + 1 }
+  if Lru.isEmpty(&Lru.put(&off, "a", 1)) { held = held + 1 }
+
+  // Made on a miss and kept. On a hit the maker is not run, which shows in the
+  // answer: it would have made something else.
+  let makeTen = fn(key: Str) -> Int => 10
+  let missMade = Lru.getOrCompute(&start, "a", makeTen)
+  if missMade[0] == 10 && Lru.size(&missMade[1]) == 1 { held = held + 1 }
+  if Option.unwrapOr(Lru.peek(&missMade[1], "a"), 0) == 10 { held = held + 1 }
+  let hitMade = Lru.getOrCompute(&filled, "a", makeTen)
+  if hitMade[0] == 1 { held = held + 1 }
+  // The hit still counts as a use.
+  if Lru.keys(&hitMade[1]) == ["b", "a"] { held = held + 1 }
+
+  // Built from pairs, where more pairs than the bound keeps the last ones
+  // rather than the first.
+  let fromPairs: Lru.LruCache[Str, Int] =
+  Lru.fromPairs(&[("a", 1), ("b", 2), ("c", 3)], 2)
+  if Lru.keys(&fromPairs) == ["b", "c"] { held = held + 1 }
+  if Lru.capacity(&fromPairs) == 2 { held = held + 1 }
+  // As a plain map, which keeps the entries and loses the order and the bound.
+  let asMap = Lru.toMap(&fromPairs)
+  if asMap.size() == 2 && asMap.get("c") == Some(3) { held = held + 1 }
+
+  // A trie holding nothing.
+  let bare: Trie.PrefixTrie[Int] = Trie.empty()
+  if Trie.isEmpty(&bare) && Trie.size(&bare) == 0 { held = held + 1 }
+  if Trie.pairs(&bare) == [] && Trie.keys(&bare) == [] { held = held + 1 }
+  if Option.isNone(&Trie.get(&bare, "a")) && !Trie.containsKey(&bare, "a") {
+    held = held + 1
+  }
+  if Trie.getOr(&bare, "a", 0 - 1) == 0 - 1 { held = held + 1 }
+  if !Trie.hasPrefix(&bare, "a") { held = held + 1 }
+  if Option.isNone(&Trie.longestPrefixOf(&bare, "anything")) { held = held + 1 }
+
+  // Four keys, three of which share a path.
+  let paths = routes()
+  if Trie.size(&paths) == 4 && !Trie.isEmpty(&paths) { held = held + 1 }
+  if Trie.keys(&paths) == ["car", "care", "cart", "dog"] { held = held + 1 }
+  if Trie.values(&paths) == [1, 3, 2, 4] { held = held + 1 }
+  if Trie.pairs(&paths) == [("car", 1), ("care", 3), ("cart", 2), ("dog", 4)] {
+    held = held + 1
+  }
+  if Trie.getOr(&paths, "cart", 0) == 2 { held = held + 1 }
+  if Trie.containsKey(&paths, "dog") { held = held + 1 }
+
+  // A node on the way to a key is not itself a key: something begins with it,
+  // and nothing is stored under it.
+  if Option.isNone(&Trie.get(&paths, "ca")) { held = held + 1 }
+  if !Trie.containsKey(&paths, "ca") && Trie.hasPrefix(&paths, "ca") {
+    held = held + 1
+  }
+  if !Trie.hasPrefix(&paths, "z") { held = held + 1 }
+  // A key that is itself a prefix of others still holds its own value.
+  if Option.unwrapOr(Trie.get(&paths, "car"), 0) == 1 { held = held + 1 }
+
+  // Everything under a prefix, in key order, including the prefix itself.
+  if Trie.keysWithPrefix(&paths, "car") == ["car", "care", "cart"] {
+    held = held + 1
+  }
+  if Trie.withPrefix(&paths, "car") == [("car", 1), ("care", 3), ("cart", 2)] {
+    held = held + 1
+  }
+  if Trie.countWithPrefix(&paths, "car") == 3 { held = held + 1 }
+  if Trie.countWithPrefix(&paths, "z") == 0 { held = held + 1 }
+  if Trie.withPrefix(&paths, "z") == [] { held = held + 1 }
+  // The empty prefix covers everything.
+  if Trie.countWithPrefix(&paths, "") == 4 { held = held + 1 }
+
+  // The section under a prefix as a trie of its own, with the prefix gone from
+  // its keys.
+  let below = Trie.under(&paths, "car")
+  if Trie.keys(&below) == ["", "e", "t"] { held = held + 1 }
+  if Option.unwrapOr(Trie.get(&below, "e"), 0) == 3 { held = held + 1 }
+  if Trie.isEmpty(&Trie.under(&paths, "z")) { held = held + 1 }
+
+  // The most specific key covering a path, which is what a routing table
+  // wants. The text is longer than the key, and a shorter key also matches.
+  if Option.unwrapOr(Trie.longestPrefixOf(&paths, "cartload"), ("", 0)) == ("cart", 2) {
+    held = held + 1
+  }
+  if Option.unwrapOr(Trie.longestPrefixOf(&paths, "care"), ("", 0)) == ("care", 3) {
+    held = held + 1
+  }
+  // A path that runs out inside the trie without ever passing a key.
+  if Option.isNone(&Trie.longestPrefixOf(&paths, "ca")) { held = held + 1 }
+  if Option.isNone(&Trie.longestPrefixOf(&paths, "zebra")) { held = held + 1 }
+  // A value stored under the empty key covers everything, including paths that
+  // leave the trie at the first step.
+  let rooted = Trie.insert(&paths, "", 0)
+  if Option.unwrapOr(Trie.longestPrefixOf(&rooted, "zebra"), ("", 0 - 1)) == ("", 0) {
+    held = held + 1
+  }
+  if Trie.size(&rooted) == 5 { held = held + 1 }
+
+  // Replacing a value in place rather than adding a key.
+  let replaced = Trie.insert(&paths, "car", 99)
+  if Trie.size(&replaced) == 4 && Trie.getOr(&replaced, "car", 0) == 99 {
+    held = held + 1
+  }
+
+  // Taking a key out. The keys that shared its path stay, and so does the
+  // answer that something begins with it.
+  let lessCart = Trie.remove(&paths, "cart")
+  if Trie.size(&lessCart) == 3 && Option.isNone(&Trie.get(&lessCart, "cart")) {
+    held = held + 1
+  }
+  if Trie.getOr(&lessCart, "car", 0) == 1 { held = held + 1 }
+  if Trie.hasPrefix(&lessCart, "car") { held = held + 1 }
+  // Taking out a key that is a prefix of another leaves the other alone.
+  let lessCar = Trie.remove(&lessCart, "car")
+  if Option.isNone(&Trie.get(&lessCar, "car")) { held = held + 1 }
+  if Trie.getOr(&lessCar, "care", 0) == 3 { held = held + 1 }
+  if Trie.hasPrefix(&lessCar, "car") { held = held + 1 }
+  // Taking out the last key down a path prunes what it leaves behind, so
+  // nothing begins with it any more.
+  let lessDog = Trie.remove(&paths, "dog")
+  if Trie.size(&lessDog) == 3 && !Trie.hasPrefix(&lessDog, "d") { held = held + 1 }
+  // Taking out a key that was never there changes nothing.
+  if Trie.size(&Trie.remove(&paths, "zebra")) == 4 { held = held + 1 }
+
+  // Built from keys alone, each holding the same value.
+  let flags: Trie.PrefixTrie[Bool] = Trie.fromKeys(&["on", "off"], true)
+  if Trie.keys(&flags) == ["off", "on"] { held = held + 1 }
+  if Trie.values(&flags) == [true, true] { held = held + 1 }
+
+  // Every value transformed, keeping the keys where they were.
+  let doubled = Trie.mapValues(&paths, fn(n: Int) -> Int => n * 2)
+  if Trie.keys(&doubled) == Trie.keys(&paths) { held = held + 1 }
+  if Trie.values(&doubled) == [2, 6, 4, 8] { held = held + 1 }
+
+  // Only what a test accepts, asked about both the key and the value.
+  let kept = Trie.filter(&paths, fn(key: Str, held2: Int) -> Bool => held2 > 2)
+  if Trie.keys(&kept) == ["care", "dog"] { held = held + 1 }
+  let cars = Trie.filter(&paths, fn(key: Str, held2: Int) -> Bool => key.startsWith("car"))
+  if Trie.size(&cars) == 3 { held = held + 1 }
+
+  // Two tries combined, where the second's value for a shared key wins.
+  let other = Trie.fromPairs(&[("car", 7), ("bus", 8)])
+  let merged = Trie.merge(&paths, &other)
+  if Trie.size(&merged) == 5 { held = held + 1 }
+  if Trie.getOr(&merged, "car", 0) == 7 { held = held + 1 }
+  if Trie.getOr(&merged, "bus", 0) == 8 { held = held + 1 }
+  // The other way round, the other value wins.
+  if Trie.getOr(&Trie.merge(&other, &paths), "car", 0) == 1 { held = held + 1 }
+
+  // Everything combined in key order. The keys go into the answer, so an
+  // implementation folding in another order is visible.
+  if Trie.fold(&paths, fn(sum: Int, key: Str, value: Int) -> Int => sum + value, 0) == 10 {
+    held = held + 1
+  }
+  if Trie.fold(&paths, fn(text: Str, key: Str, value: Int) -> Str => text + key, "")
+    == "carcarecartdog" {
+    held = held + 1
+  }
+
+  // As a plain map, which keeps the entries and loses the prefix questions.
+  let plain = Trie.toMap(&paths)
+  if plain.size() == 4 && plain.get("care") == Some(3) { held = held + 1 }
+
+  held
+}

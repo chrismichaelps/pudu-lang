@@ -1,0 +1,6 @@
+module ForeignDefault
+
+import ForeignTarget {User}
+import TraitSource {Label}
+
+fn label(user: User) -> Str { user.label() }

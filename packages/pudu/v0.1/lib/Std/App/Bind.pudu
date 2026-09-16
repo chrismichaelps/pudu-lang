@@ -1,0 +1,214 @@
+module Std.App.Bind
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Map as Map
+import Std.Option as Option
+import Std.Text as Text
+import Std.Validate as Validate
+
+/// Where a field is read from.
+///
+/// Stated rather than searched for. A binding that looks in the path, then the
+/// query, then the body and takes the first hit lets a caller move a value
+/// between places to reach a different code path, and makes a handler's
+/// behaviour depend on an order nobody wrote down.
+export type Source
+  = FromPath
+  | FromQuery
+  | FromForm
+  | FromDocument
+
+/// One field: what it is called, where it comes from, and what it must be.
+export type Wanted = { name: Str, source: Source, rules: Array[Validate.Rule] }
+
+/// What a request carried, once it has been read and checked.
+export type Bound = { values: Map[Str, Str], report: Validate.Report }
+
+/// The media type a form body carries.
+const FORM_TYPE: Str = "application/x-www-form-urlencoded"
+
+/// The media type a document body carries.
+const DOCUMENT_TYPE: Str = "application/json"
+
+/// The status a request whose shape was wrong receives.
+///
+/// Distinguished from the one below because they are different problems for
+/// whoever sent it: this one says the request was not the shape this resource
+/// reads at all.
+const MALFORMED_STATUS: Int = 400
+
+/// The status a request whose shape was right and whose contents were not
+/// receives.
+const UNPROCESSABLE_STATUS: Int = 422
+
+/// A field read from the path.
+export fn fromPath(name: Str, rules: &Array[Validate.Rule]) -> Wanted {
+  Wanted{name: name, source: FromPath, rules: *rules}
+}
+
+/// A field read from the query.
+export fn fromQuery(name: Str, rules: &Array[Validate.Rule]) -> Wanted {
+  Wanted{name: name, source: FromQuery, rules: *rules}
+}
+
+/// A field read from a form body.
+export fn fromForm(name: Str, rules: &Array[Validate.Rule]) -> Wanted {
+  Wanted{name: name, source: FromForm, rules: *rules}
+}
+
+/// A field read from a document body.
+export fn fromDocument(name: Str, rules: &Array[Validate.Rule]) -> Wanted {
+  Wanted{name: name, source: FromDocument, rules: *rules}
+}
+
+/// What a request carried, checked against what was wanted.
+///
+/// Reading and checking are one step, and every field that was wrong is in the
+/// report rather than only the first: a caller correcting a request wants the
+/// whole list.
+export fn bind(request: &Route.Request, wanted: &Array[Wanted]) -> Bound {
+  let form = formFields(request)
+  let document = documentFields(request)
+  var values: Map[Str, Str] = Map.empty()
+  var checking: Array[(Validate.Field, Array[Validate.Rule])] = []
+  for field in wanted {
+    let held = readOne(request, &form, &document, &field)
+    values = Map.insert(&values, field.name, held)
+    checking = checking.push((Validate.field(field.name, held), field.rules))
+  }
+  Bound{values: values, report: Validate.check(&checking)}
+}
+
+/// One field, from the place it says it comes from.
+fn readOne(
+  request: &Route.Request,
+  form: &Map[Str, Str],
+  document: &Map[Str, Str],
+  field: &Wanted
+) -> Str {
+  match field.source {
+    case FromPath => Option.unwrapOr(Route.param(request, field.name), "")
+    case FromQuery => Option.unwrapOr(Route.queryParam(request, field.name), "")
+    case FromForm => Map.getOr(form, field.name, "")
+    case FromDocument => Map.getOr(document, field.name, "")
+  }
+}
+
+/// The media type a request states, without whatever follows it.
+export fn mediaType(request: &Route.Request) -> Str {
+  if let Some(stated) = Route.header(request, "content-type") {
+    let mark = stated.indexOf(";")
+    (if mark < 0 { stated } else { stated.take(mark) }).trim().toLower()
+  } else {
+    ""
+  }
+}
+
+/// Whether a request carries a form.
+export fn carriesForm(request: &Route.Request) -> Bool { mediaType(request) == FORM_TYPE }
+
+/// Whether a request carries a document.
+export fn carriesDocument(request: &Route.Request) -> Bool {
+  mediaType(request) == DOCUMENT_TYPE
+}
+
+/// A form body's fields, when the request says that is what it carries.
+///
+/// A request stating no type has its body read as nothing rather than as a
+/// guess: guessing between a form and a document by looking at the body is how
+/// one is read as the other.
+fn formFields(request: &Route.Request) -> Map[Str, Str] {
+  if !carriesForm(request) {
+    Map.empty()
+  } else {
+    var found: Map[Str, Str] = Map.empty()
+    for entry in Http.parseForm(Route.body(request)) {
+      found = Map.insert(&found, entry[0], entry[1])
+    }
+    found
+  }
+}
+
+/// A document body's fields, flattened to text so one set of rules covers
+/// every source.
+fn documentFields(request: &Route.Request) -> Map[Str, Str] {
+  if !carriesDocument(request) {
+    Map.empty()
+  } else {
+    if let Ok(parsed) = Json.decode(Route.body(request)) {
+      if let Some(entries) = Json.asObject(&parsed) {
+        var found: Map[Str, Str] = Map.empty()
+        for entry in entries { found = Map.insert(&found, entry[0], asText(&entry[1])) }
+        found
+      } else {
+        Map.empty()
+      }
+    } else {
+      Map.empty()
+    }
+  }
+}
+
+/// One document value as the text a rule reads.
+fn asText(value: &Json.Json) -> Str {
+  if let Some(held) = Json.asText(value) {
+    held
+  } else {
+    if Json.isNull(value) { "" } else { Json.encode(value) }
+  }
+}
+
+/// Whether everything wanted was there and was what it had to be.
+export fn bound(held: &Bound) -> Bool { Validate.passed(&held.report) }
+
+/// What was wrong, if anything.
+export fn reportOf(held: &Bound) -> Validate.Report { held.report }
+
+/// One bound field as text.
+export fn text(held: &Bound, name: Str) -> Str { Map.getOr(&held.values, name, "") }
+
+/// One bound field as a whole number, which may be below nothing.
+export fn whole(held: &Bound, name: Str) -> Option[Int] { Text.wholeOf(text(held, name)) }
+
+/// One bound field as a count, which may not.
+export fn count(held: &Bound, name: Str) -> Option[Int] { Text.countOf(text(held, name)) }
+
+/// One bound field as a truth.
+export fn truth(held: &Bound, name: Str) -> Bool {
+  let word = text(held, name).trim().toLower()
+  word == "true" || word == "yes" || word == "on" || word == "1"
+}
+
+/// One bound field, absent when it carried nothing.
+export fn optional(held: &Bound, name: Str) -> Option[Str] {
+  let found = text(held, name)
+  if found.isEmpty() { None } else { Some(found) }
+}
+
+/// The refusal a failed binding becomes.
+///
+/// The status says which kind of problem it was, and the body names the fields
+/// and what each had to be. It names no values: the sender knows what they
+/// sent, and a response is a place something they sent would be rendered.
+export fn refusal(held: &Bound) -> Http.Response {
+  Reply.text(UNPROCESSABLE_STATUS, Validate.render(&held.report))
+}
+
+/// The refusal a request of the wrong shape entirely receives.
+///
+/// Separate from the one above because they are different problems: this one
+/// says the request was not the shape this resource reads, and no correction
+/// to the fields would help.
+export fn malformed(reason: Str) -> Http.Response { Reply.text(MALFORMED_STATUS, reason) }
+
+/// The bound values, or the refusal, in one step for the common handler.
+export fn binding(
+  request: &Route.Request,
+  wanted: &Array[Wanted]
+) -> Result[Bound, Http.Response] {
+  let held = bind(request, wanted)
+  if bound(&held) { Ok(held) } else { Err(refusal(&held)) }
+}

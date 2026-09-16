@@ -1,0 +1,160 @@
+module UsesCacheAndTrie
+
+import Std.LruCache as LruCache
+import Std.PrefixTrie as PrefixTrie
+
+/// What the bounded cache and the prefix trie promise, weighted toward the
+/// parts that are easy to get wrong: that a read counts as use, that the
+/// capacity holds on every write, and that removing a key gives back the path
+/// it did not share.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  // A cache keeps what fits and discards the least recently used.
+  var cache = LruCache.withCapacity(2)
+  cache = LruCache.put(&cache, "a", 1)
+  cache = LruCache.put(&cache, "b", 2)
+  if LruCache.size(&cache) == 2 { held = held + 1 }
+  if LruCache.isFull(&cache) { held = held + 1 }
+  if LruCache.capacity(&cache) == 2 { held = held + 1 }
+
+  // A third entry evicts the oldest rather than growing past the capacity.
+  let full = LruCache.put(&cache, "c", 3)
+  if LruCache.size(&full) == 2 { held = held + 1 }
+  if !LruCache.containsKey(&full, "a") { held = held + 1 }
+  if LruCache.containsKey(&full, "c") { held = held + 1 }
+
+  // Reading counts as use: after reading "a" it is no longer the next to go,
+  // so adding a third entry discards "b" instead.
+  let read = LruCache.get(&cache, "a")
+  match read[0] {
+    case Some(found) => { if found == 1 { held = held + 1 } }
+    case None => {}
+  }
+  let afterRead = LruCache.put(&read[1], "c", 3)
+  if LruCache.containsKey(&afterRead, "a") { held = held + 1 }
+  if !LruCache.containsKey(&afterRead, "b") { held = held + 1 }
+
+  // peek does not count as use, so the eviction order is unchanged by it.
+  match LruCache.peek(&cache, "a") {
+    case Some(found) => { if found == 1 { held = held + 1 } }
+    case None => {}
+  }
+  let afterPeek = LruCache.put(&cache, "c", 3)
+  if !LruCache.containsKey(&afterPeek, "a") { held = held + 1 }
+
+  // Rewriting an existing key is use too, and does not grow the cache.
+  let rewritten = LruCache.put(&cache, "a", 10)
+  if LruCache.size(&rewritten) == 2 { held = held + 1 }
+  match LruCache.peek(&rewritten, "a") {
+    case Some(found) => { if found == 10 { held = held + 1 } }
+    case None => {}
+  }
+
+  // The next entry to go is the oldest.
+  match LruCache.oldest(&cache) {
+    case Some(pair) => { if pair[0] == "a" { held = held + 1 } }
+    case None => {}
+  }
+  match LruCache.newest(&cache) {
+    case Some(pair) => { if pair[0] == "b" { held = held + 1 } }
+    case None => {}
+  }
+
+  // A cache of capacity zero stores nothing rather than refusing to be built.
+  let none = LruCache.put(&LruCache.withCapacity(0), "a", 1)
+  if LruCache.size(&none) == 0 { held = held + 1 }
+  // A negative capacity is kept as zero rather than making the cache unbounded.
+  if LruCache.capacity(&LruCache.withCapacity(-5)) == 0 { held = held + 1 }
+
+  // Shrinking discards enough to fit, not just one entry.
+  let big = LruCache.fromPairs(&[("a", 1), ("b", 2), ("c", 3), ("d", 4)], 4)
+  if LruCache.size(&LruCache.resized(&big, 1)) == 1 { held = held + 1 }
+  // Giving more pairs than the capacity keeps the last ones.
+  if LruCache.size(&LruCache.fromPairs(&[("a", 1), ("b", 2), ("c", 3)], 2)) == 2 {
+    held = held + 1
+  }
+
+  // Computing on a miss stores the value; a hit does not recompute.
+  let computed = LruCache.getOrCompute(&cache, "z", fn(k: Str) -> Int => 99)
+  if computed[0] == 99 { held = held + 1 }
+  if LruCache.containsKey(&computed[1], "z") { held = held + 1 }
+
+  // A trie answers exact keys and prefixes.
+  let settings = PrefixTrie.fromPairs(&[
+      ("server.tls.cert", "a.pem"),
+      ("server.tls.key", "b.pem"),
+      ("server.port", "8080"),
+      ("client.retry", "3")
+    ])
+
+  match PrefixTrie.get(&settings, "server.port") {
+    case Some(found) => { if found == "8080" { held = held + 1 } }
+    case None => {}
+  }
+  if PrefixTrie.size(&settings) == 4 { held = held + 1 }
+
+  // The question the trie exists for.
+  if PrefixTrie.countWithPrefix(&settings, "server.") == 3 { held = held + 1 }
+  if PrefixTrie.countWithPrefix(&settings, "server.tls.") == 2 { held = held + 1 }
+  if PrefixTrie.countWithPrefix(&settings, "client.") == 1 { held = held + 1 }
+
+  // A prefix nothing starts with answers empty rather than failing.
+  if PrefixTrie.countWithPrefix(&settings, "nothing") == 0 { held = held + 1 }
+  if !PrefixTrie.hasPrefix(&settings, "nothing") { held = held + 1 }
+  if PrefixTrie.hasPrefix(&settings, "server") { held = held + 1 }
+
+  // A prefix that is not itself a key has no value of its own.
+  match PrefixTrie.get(&settings, "server") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // Keys come back in order without anything being sorted.
+  if PrefixTrie.keysWithPrefix(&settings, "server.tls.")
+    == ["server.tls.cert", "server.tls.key"] { held = held + 1 }
+
+  // A key that is also a prefix of another key keeps its own value.
+  let both = PrefixTrie.insert(&PrefixTrie.fromKeys(&["car"], "x"), "carpet", "y")
+  if PrefixTrie.size(&both) == 2 { held = held + 1 }
+  match PrefixTrie.get(&both, "car") {
+    case Some(found) => { if found == "x" { held = held + 1 } }
+    case None => {}
+  }
+  // Removing the shorter one leaves the longer intact.
+  let shorterGone = PrefixTrie.remove(&both, "car")
+  if PrefixTrie.size(&shorterGone) == 1 { held = held + 1 }
+  if PrefixTrie.containsKey(&shorterGone, "carpet") { held = held + 1 }
+
+  // Removing everything gives the path back, leaving an empty trie rather than
+  // a skeleton of nodes holding nothing.
+  let emptied = PrefixTrie.remove(&PrefixTrie.remove(&both, "car"), "carpet")
+  if PrefixTrie.isEmpty(&emptied) { held = held + 1 }
+  // Removing an absent key changes nothing.
+  if PrefixTrie.size(&PrefixTrie.remove(&settings, "absent")) == 4 { held = held + 1 }
+
+  // The subtree under a prefix, with the prefix stripped.
+  let tls = PrefixTrie.under(&settings, "server.tls.")
+  if PrefixTrie.size(&tls) == 2 { held = held + 1 }
+  if PrefixTrie.containsKey(&tls, "cert") { held = held + 1 }
+
+  // The most specific rule covering a path, which is what a router asks.
+  let routes = PrefixTrie.fromPairs(&[("/", "root"), ("/api", "api"), ("/api/v2", "v2")])
+  match PrefixTrie.longestPrefixOf(&routes, "/api/v2/users") {
+    case Some(found) => { if found[1] == "v2" { held = held + 1 } }
+    case None => {}
+  }
+  match PrefixTrie.longestPrefixOf(&routes, "/api/other") {
+    case Some(found) => { if found[1] == "api" { held = held + 1 } }
+    case None => {}
+  }
+  // Nothing matching answers None rather than an empty match.
+  match PrefixTrie.longestPrefixOf(&PrefixTrie.empty(), "/anything") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  held
+}

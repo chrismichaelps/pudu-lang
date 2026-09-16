@@ -1,0 +1,235 @@
+module View.Markdown
+
+import Std.Html.Build as H
+import Std.Map as Map
+import Std.Text as Text
+import View.MarkdownInline as Inline
+
+/// A heading a page holds, for the list of contents beside it.
+export type Heading = { level: Int, text: Str, anchor: Str }
+
+/// A page read from Markdown: its title, the sentence that describes it, the
+/// blocks to show, and the headings a reader can jump to.
+export type Document = {
+  title: Str,
+  summary: Str,
+  blocks: Array[H.Node],
+  headings: Array[Heading]
+}
+
+/// What the lines read so far are building, so a blank line or a line of
+/// another kind can close it.
+type Pending = { paragraph: Array[Str], items: Array[H.Node], ordered: Bool, quote: Array[Str] }
+
+/// A page of Markdown as a document.
+///
+/// The subset is the one documentation is written in: headings, paragraphs,
+/// fenced code, lists, quotations, tables, and rules, with code spans, strong
+/// and emphasised text, and links inside a line. The first `# ` heading is the
+/// page's title rather than a block, because the page shows it above
+/// everything else. Every other heading gets an anchor made from its words, so
+/// a link to a section keeps working when the page around it changes.
+export fn parse(source: &Array[Str]) -> Document {
+  var blocks: Array[H.Node] = []
+  var headings: Array[Heading] = []
+  var anchors: Map[Str, Int] = Map.empty()
+  var held = nothingPending()
+  var title = ""
+  var summary = ""
+  var index = 0
+  let count = source.length()
+  while index < count {
+    let bare = Text.trimEnd(source[index]).trim()
+    if bare.startsWith("```") {
+      blocks = flush(blocks, &held)
+      held = nothingPending()
+      let language = bare.drop(3).trim()
+      var code: Array[Str] = []
+      index = index + 1
+      while index < count && !Text.trimEnd(source[index]).trim().startsWith("```") {
+        code = code.push(Text.trimEnd(source[index]))
+        index = index + 1
+      }
+      blocks = blocks.push(codeBlock(language, &code))
+    } else if bare.isEmpty() {
+      blocks = flush(blocks, &held)
+      held = nothingPending()
+    } else if let Some(heading) = headingOf(bare) {
+      blocks = flush(blocks, &held)
+      held = nothingPending()
+      if heading[0] == 1 && title.isEmpty() {
+        title = plainText(heading[1])
+      } else {
+        let anchor = uniqueAnchor(&anchors, heading[1])
+        anchors = anchors.insert(anchor, 1)
+        headings = headings.push(Heading{level: heading[0], text: plainText(heading[1]), anchor: anchor})
+        blocks = blocks.push(headingNode(heading[0], anchor, heading[1]))
+      }
+    } else if bare == "---" {
+      blocks = flush(blocks, &held)
+      held = nothingPending()
+      blocks = blocks.push(H.hr())
+    } else if bare.startsWith("|") && index + 1 < count && separatorRow(source[index + 1]) {
+      blocks = flush(blocks, &held)
+      held = nothingPending()
+      let header = cellsOf(bare)
+      index = index + 2
+      var rows: Array[Array[Str]] = []
+      while index < count && source[index].trim().startsWith("|") {
+        rows = rows.push(cellsOf(source[index].trim()))
+        index = index + 1
+      }
+      blocks = blocks.push(table(&header, &rows))
+      continue
+    } else if bare.startsWith(">") {
+      if held.paragraph.length() > 0 || held.items.length() > 0 {
+        blocks = flush(blocks, &held)
+        held = nothingPending()
+      }
+      held = Pending{..held, quote: held.quote.push(bare.drop(1).trim())}
+    } else if let Some(item) = listItem(bare) {
+      let switching = held.items.length() > 0 && held.ordered != item[0]
+      if held.paragraph.length() > 0 || held.quote.length() > 0 || switching {
+        blocks = flush(blocks, &held)
+        held = nothingPending()
+      }
+      held = Pending{..held, items: held.items.push(H.li().holding(Inline.render(item[1]))), ordered: item[0]}
+    } else {
+      if held.items.length() > 0 || held.quote.length() > 0 {
+        blocks = flush(blocks, &held)
+        held = nothingPending()
+      }
+      if summary.isEmpty() { summary = plainText(bare) }
+      held = Pending{..held, paragraph: held.paragraph.push(bare)}
+    }
+    index = index + 1
+  }
+  blocks = flush(blocks, &held)
+  Document{title: title, summary: summary, blocks: blocks, headings: headings}
+}
+
+/// Text with its inline markup taken out, for a title, a description, or an
+/// anchor, where markup would be read as the characters it is made of.
+export fn plainText(text: Str) -> Str {
+  text.replace("`", "").replace("**", "").replace("*", "")
+}
+
+fn nothingPending() -> Pending { Pending{paragraph: [], items: [], ordered: false, quote: []} }
+
+/// The blocks with whatever was still being built closed onto them.
+fn flush(out: Array[H.Node], held: &Pending) -> Array[H.Node] {
+  var blocks = out
+  if held.paragraph.length() > 0 {
+    blocks = blocks.push(H.p().holding(Inline.render(held.paragraph.join(" "))))
+  }
+  if held.items.length() > 0 {
+    blocks = blocks.push(if held.ordered { H.ol().holding(held.items) } else { H.ul().holding(held.items) })
+  }
+  if held.quote.length() > 0 {
+    blocks = blocks.push(H.blockquote().holding([H.p().holding(Inline.render(held.quote.join(" ")))]))
+  }
+  blocks
+}
+
+/// A heading's level and words, when the line is a heading.
+fn headingOf(bare: Str) -> Option[(Int, Str)] {
+  var level = 0
+  var rest = bare
+  while rest.startsWith("#") && level < 5 {
+    level = level + 1
+    rest = rest.drop(1)
+  }
+  if level == 0 || level > 4 || !rest.startsWith(" ") { return None }
+  Some((level, rest.trim()))
+}
+
+fn headingNode(level: Int, anchor: Str, text: Str) -> H.Node {
+  let content = Inline.render(text)
+  if level == 2 {
+    H.h2().id(anchor).holding(content)
+  } else if level == 3 {
+    H.h3().id(anchor).holding(content)
+  } else {
+    H.h4().id(anchor).holding(content)
+  }
+}
+
+/// An anchor for a heading, made distinct from the anchors already on the page.
+fn uniqueAnchor(anchors: &Map[Str, Int], text: Str) -> Str {
+  let base = slugOf(text)
+  if !Map.containsKey(anchors, base) { return base }
+  var suffix = 2
+  while Map.containsKey(anchors, base + "-" + show(suffix)) { suffix = suffix + 1 }
+  base + "-" + show(suffix)
+}
+
+/// Lower-case letters and digits, with a single dash where anything else was.
+fn slugOf(text: Str) -> Str {
+  var pieces: Array[Str] = []
+  var dashed = false
+  for character in plainText(text).toLower().chars() {
+    let kept = (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9')
+    if kept {
+      pieces = pieces.push(character.toText())
+      dashed = false
+    } else if !dashed && pieces.length() > 0 {
+      pieces = pieces.push("-")
+      dashed = true
+    }
+  }
+  var slug = pieces.join("")
+  if slug.endsWith("-") { slug = slug.take(slug.length() - 1) }
+  if slug.isEmpty() { "section" } else { slug }
+}
+
+fn codeBlock(language: Str, code: &Array[Str]) -> H.Node {
+  let body = H.code().says(code.join("\n"))
+  if language.isEmpty() { return H.pre().class("code-block").holding([body]) }
+  H.figure().class("code-figure").holding([
+      H.span().class("code-label").at("aria-hidden", "true").says(language),
+      H.pre().class("code-block").holding([body.class("language-" + language)])
+    ])
+}
+
+/// An item's words and whether its list is numbered, when the line is an item.
+fn listItem(bare: Str) -> Option[(Bool, Str)] {
+  if bare.startsWith("- ") || bare.startsWith("* ") { return Some((false, bare.drop(2).trim())) }
+  let dot = bare.indexOf(". ")
+  if dot > 0 && dot < 4 {
+    if let Some(_) = Text.wholeOf(bare.take(dot)) { return Some((true, bare.drop(dot + 2).trim())) }
+  }
+  None
+}
+
+/// Whether a line is the row of dashes that ends a table's header.
+fn separatorRow(line: Str) -> Bool {
+  let bare = line.trim()
+  if !bare.startsWith("|") || !bare.contains("-") { return false }
+  for character in bare.chars() {
+    if character != '|' && character != '-' && character != ':' && character != ' ' { return false }
+  }
+  true
+}
+
+fn cellsOf(bare: Str) -> Array[Str] {
+  var inner = bare
+  if inner.startsWith("|") { inner = inner.drop(1) }
+  if inner.endsWith("|") { inner = inner.take(inner.length() - 1) }
+  var cells: Array[Str] = []
+  for cell in inner.split("|") { cells = cells.push(cell.trim()) }
+  cells
+}
+
+fn table(header: &Array[Str], rows: &Array[Array[Str]]) -> H.Node {
+  var headCells: Array[H.Node] = []
+  for cell in *header { headCells = headCells.push(H.th().holding(Inline.render(cell))) }
+  var body: Array[H.Node] = []
+  for row in *rows {
+    var cells: Array[H.Node] = []
+    for cell in row { cells = cells.push(H.td().holding(Inline.render(cell))) }
+    body = body.push(H.tr().holding(cells))
+  }
+  H.div().class("table-wrap").holding([
+      H.table().holding([H.thead().holding([H.tr().holding(headCells)]), H.tbody().holding(body)])
+    ])
+}

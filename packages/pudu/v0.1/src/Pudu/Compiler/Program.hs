@@ -1,0 +1,345 @@
+{-| @Program.Compiler.Program.Module — compiles a filesystem module graph -}
+module Pudu.Compiler.Program
+  ( ProgramResult (..)
+  , compileProgram
+  , compileProgramSource
+  , programDependencies
+  , programIntegerKinds
+  , programDocs
+  , rootCompileResult
+  ) where
+
+import Control.Exception (IOException, try)
+import Data.Graph (SCC, flattenSCC, stronglyConnComp)
+import Data.List (isSuffixOf, sort)
+import Data.List.NonEmpty (toList)
+import Data.Maybe (fromMaybe)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import Pudu.Compiler
+  ( CompileContext (..)
+  , CompileResult (..)
+  , FrontendResult (..)
+  , compileFrontendWith
+  , runFrontend
+  )
+import Pudu.Compiler.Manifest (manifestVersionDiagnostics)
+import Pudu.Compiler.Library (isStandardModule, searchRoots, triedRoots)
+import Pudu.Doc (DocIndex)
+import Pudu.Diagnostic
+  ( Diagnostic
+  , Severity (Error)
+  , diagnostic
+  , mkDiagnosticCode
+  , sortDiagnostics
+  , withHelp
+  )
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Frontend.Syntax.Tree (Import (..), Module (..))
+import Pudu.Semantic.Interface (exportIndex)
+import Pudu.Source (Source, SourceName (..), Span, emptySpan, newSource)
+import Pudu.Type.Interface (interfaceSkeleton)
+import System.FilePath
+  ( (</>)
+  , dropExtension
+  , joinPath
+  , normalise
+  , splitDirectories
+  , takeDirectory
+  )
+
+data ProgramResult = ProgramResult
+  { programRoot :: !(Maybe ModuleName)
+  , programModules :: !(Map ModuleName CompileResult)
+  , programSources :: ![Source]
+  {-| Every module the walk reached, by the name it was reached under.
+
+      `programSources` answers what was read; this answers what each one is
+      called, which is what anything reassembling the program somewhere else
+      needs — a module's canonical path is derived from its name, so the name
+      is the only part of a file's location that has to travel with it. -}
+  , programNamedSources :: !(Map ModuleName Source)
+  , programOrder :: ![ModuleName]
+  , programDiagnostics :: ![Diagnostic]
+  , programContext :: !CompileContext
+  }
+
+{-| Every documented name in the program, in dependency order.
+
+    Ordering by `programOrder` rather than by module name means a search over a
+    whole program lists a dependency's answer before the module that uses it,
+    which is the order a reader follows a definition in. -}
+programDocs :: ProgramResult -> DocIndex
+programDocs result =
+  foldMap forModule (programOrder result)
+ where
+  forModule name = case Map.lookup name (programModules result) of
+    Nothing -> mempty
+    Just compiled -> fromMaybe mempty (compileDocs compiled)
+
+{-| The program's dependencies, in the order they must be linked.
+
+    The root is excluded: it is the module being evaluated, not one of its
+    dependencies, and linking it twice would run its constants twice. A module
+    that failed to compile is excluded too — there is nothing to link — and the
+    diagnostics already say why. -}
+programDependencies :: ProgramResult -> [(Text.Text, Module)]
+programDependencies result =
+  [ (moduleNameText name, parsed)
+  | name <- programOrder result
+  , Just name /= programRoot result
+  , Just compiled <- [Map.lookup name (programModules result)]
+  , Just parsed <- [compileModule compiled]
+  ]
+
+{-| What inference settled on for every integer literal in the program, its
+    dependencies included.
+
+    Spans carry the source they came from, so one table serves every module and
+    two files holding a literal at the same offsets cannot be confused. -}
+programIntegerKinds :: ProgramResult -> Map.Map Span Text.Text
+programIntegerKinds result =
+  Map.unions [compileIntegerKinds compiled | compiled <- Map.elems (programModules result)]
+
+rootCompileResult :: ProgramResult -> Maybe CompileResult
+rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
+
+compileProgram :: FilePath -> IO ProgramResult
+compileProgram rootPath = do
+  rootRead <- readSource rootPath
+  case rootRead of
+    Left _ -> do
+      source <- newSource (SourceName (Text.pack rootPath)) Text.empty
+      pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
+        (CompileContext (exportIndex Map.empty) Map.empty True))
+    Right rootSource -> do
+      let rootFrontend = runFrontend rootSource
+      case frontendModule rootFrontend of
+        Nothing ->
+          pure
+            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) Map.empty True))
+        Just rootModule -> do
+          let rootName = locatedValue (moduleName rootModule)
+              (sourceRoot, rootMismatch) = deriveSourceRoot rootPath rootModule
+          if rootMismatch
+            then do
+              let mismatch = rootPathMismatch rootPath (moduleName rootModule)
+                  emptyContext = CompileContext (exportIndex Map.empty) Map.empty True
+              compiled <- compileFrontendWith emptyContext rootFrontend
+              pure
+                (ProgramResult (Just rootName) (Map.singleton rootName compiled)
+                  [rootSource] (Map.singleton rootName rootSource) [rootName]
+                  (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
+            else discoverFrom sourceRoot rootSource rootFrontend rootModule
+
+{-| Compile a program whose root is already in memory.
+
+    The interactive session's buffer is not a file, but its imports are still
+    ordinary imports and must reach the same modules on disk that a compiled
+    program's would. Without this the session resolved an import loosely enough
+    to type-check and then had nothing to link, so `Std.Math.factorial` was a
+    name the checker knew and the evaluator did not.
+
+    The source root is given rather than derived, because there is no path to
+    derive it from. -}
+compileProgramSource :: FilePath -> Source -> IO ProgramResult
+compileProgramSource sourceRoot rootSource = do
+  let rootFrontend = runFrontend rootSource
+  case frontendModule rootFrontend of
+    Nothing ->
+      pure
+        ( ProgramResult Nothing Map.empty [rootSource] Map.empty []
+            (frontendDiagnostics rootFrontend)
+            (CompileContext (exportIndex Map.empty) Map.empty True)
+        )
+    Just rootModule -> discoverFrom sourceRoot rootSource rootFrontend rootModule
+
+{-| Walk a root module's imports and compile everything the walk reaches. -}
+discoverFrom :: FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom sourceRoot rootSource rootFrontend rootModule = do
+  let rootName = locatedValue (moduleName rootModule)
+  manifestProblems <- manifestVersionDiagnostics sourceRoot
+  discovered <- discover sourceRoot
+    (Map.singleton rootName rootFrontend)
+    (Map.singleton rootName rootSource)
+    manifestProblems
+    (importsOf rootModule)
+  finish rootName discovered
+
+data Discovery = Discovery
+  { discoveredFrontends :: !(Map ModuleName FrontendResult)
+  , discoveredSources :: !(Map ModuleName Source)
+  , discoveredDiagnostics :: ![Diagnostic]
+  }
+
+discover
+  :: FilePath
+  -> Map ModuleName FrontendResult
+  -> Map ModuleName Source
+  -> [Diagnostic]
+  -> [(Located Import, ModuleName)]
+  -> IO Discovery
+discover sourceRoot frontends sources diagnostics pending = case pending of
+  [] -> pure (Discovery frontends sources diagnostics)
+  (locatedImport, requested) : rest
+    | Map.member requested frontends -> discover sourceRoot frontends sources diagnostics rest
+    | otherwise -> do
+        roots <- searchRoots sourceRoot requested
+        loaded <- readFirst [modulePath root requested | root <- roots]
+        case loaded of
+          Left _ -> do
+            tried <- triedRoots sourceRoot requested
+            discover sourceRoot frontends sources
+              (diagnostics <> missingModule requested tried locatedImport) rest
+          Right source -> do
+            let frontend = runFrontend source
+            case frontendModule frontend of
+              Nothing ->
+                discover sourceRoot
+                  (Map.insert requested frontend frontends)
+                  (Map.insert requested source sources)
+                  diagnostics rest
+              Just parsed ->
+                let actual = locatedValue (moduleName parsed)
+                 in if actual /= requested
+                      then discover sourceRoot
+                        (Map.insert requested frontend{frontendModule = Nothing} frontends)
+                        (Map.insert requested source sources)
+                        (diagnostics <> pathMismatch requested (moduleName parsed)) rest
+                      else discover sourceRoot
+                        (Map.insert requested frontend frontends)
+                        (Map.insert requested source sources)
+                        diagnostics (importsOf parsed <> rest)
+
+finish :: ModuleName -> Discovery -> IO ProgramResult
+finish rootName discovered = do
+  let validModules = Map.mapMaybe frontendModule (discoveredFrontends discovered)
+      interfaces = Map.map interfaceSkeleton validModules
+      context = CompileContext (exportIndex validModules) interfaces True
+      order = dependencyOrder validModules
+      pending =
+        [ (name, frontend)
+        | name <- order
+        , Just frontend <- [Map.lookup name (discoveredFrontends discovered)]
+        ]
+  {-| Modules compile in dependency order, one at a time, because compiling a
+      module folds its constants and folding runs the evaluator. -}
+  results <- mapM (\(name, frontend) -> (,) name <$> compileFrontendWith context frontend) pending
+  let compiled = Map.fromList results
+      uncompiled = Map.difference (discoveredFrontends discovered) compiled
+      diagnostics = sortDiagnostics
+        ( discoveredDiagnostics discovered
+            <> concatMap frontendDiagnostics (Map.elems uncompiled)
+            <> concatMap compileDiagnostics (Map.elems compiled)
+        )
+  pure
+    ( ProgramResult (Just rootName) compiled
+        (Map.elems (discoveredSources discovered))
+        (discoveredSources discovered)
+        order diagnostics context
+    )
+
+dependencyOrder :: Map ModuleName Module -> [ModuleName]
+dependencyOrder modules =
+  concatMap ordered (stronglyConnComp nodes)
+ where
+  nodes =
+    [ (name, name, [dependency | (_, dependency) <- importsOf value, Map.member dependency modules])
+    | (name, value) <- Map.toList modules
+    ]
+  ordered :: SCC ModuleName -> [ModuleName]
+  ordered = sort . flattenSCC
+
+importsOf :: Module -> [(Located Import, ModuleName)]
+importsOf value =
+  [ (located, locatedValue (importModule imported))
+  | located@(Located _ imported) <- moduleImports value
+  ]
+
+deriveSourceRoot :: FilePath -> Module -> (FilePath, Bool)
+deriveSourceRoot rootPath value =
+  let pathParts = splitDirectories (dropExtension (normalise rootPath))
+      nameParts = map Text.unpack (toList (moduleNameSegments (locatedValue (moduleName value))))
+      agrees = nameParts `isSuffixOf` pathParts
+      kept = take (length pathParts - length nameParts) pathParts
+   in (if agrees then joinPath kept else takeDirectory rootPath, not agrees)
+
+modulePath :: FilePath -> ModuleName -> FilePath
+modulePath sourceRoot name =
+  normalise (sourceRoot </> joinPath (map Text.unpack (toList (moduleNameSegments name))) <> ".pudu")
+
+{-| Read the first path that exists, keeping the last failure so a module that
+    is nowhere is reported against the search rather than against one guess. -}
+readFirst :: [FilePath] -> IO (Either IOException Source)
+readFirst [] = readSource ""
+readFirst [path] = readSource path
+readFirst (path : rest) = do
+  loaded <- readSource path
+  case loaded of
+    Right source -> pure (Right source)
+    Left _ -> readFirst rest
+
+readSource :: FilePath -> IO (Either IOException Source)
+readSource path = do
+  loaded <- try (TextIO.readFile path)
+  case loaded of
+    Left problem -> pure (Left problem)
+    Right contents -> Right <$> newSource (SourceName (Text.pack path)) contents
+
+missingModule :: ModuleName -> [Text.Text] -> Located Import -> [Diagnostic]
+missingModule requested roots locatedImport = do
+  code <- maybe [] pure (mkDiagnosticCode "E2014")
+  value <- maybe [] pure
+    (diagnostic code Error (locatedSpan locatedImport)
+      ("cannot read module " <> moduleNameText requested))
+  pure (withHelp helpText value)
+ where
+  {-| A missing `Std` module is almost always a misspelling of a module that
+      exists, not a file the author forgot to write, so the help points at the
+      library rather than at their own source root.
+
+      The directories that were searched are named, because when it is not a
+      misspelling the only useful question is where the library was looked for
+      — and a reader cannot answer that by reading their own program. A
+      standard module missing on one machine and present on another is a
+      question about paths, and this is the only place that knows them. -}
+  helpText
+    | isStandardModule requested =
+        "check the spelling against the standard library, or set PUDU_LIB if it is"
+          <> " installed elsewhere"
+          <> searched
+    | otherwise = "create the module at its canonical source-root path, or fix the import"
+          <> searched
+
+  searched
+    | null roots = "; nothing was searched"
+    | otherwise = "; looked in " <> Text.intercalate ", " roots
+
+pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
+pathMismatch requested actual = do
+  code <- maybe [] pure (mkDiagnosticCode "E2015")
+  value <- maybe [] pure
+    (diagnostic code Error (locatedSpan actual)
+      ("module path expects " <> moduleNameText requested
+        <> ", but the file declares " <> moduleNameText (locatedValue actual)))
+  pure (withHelp "make the module header agree with its canonical path" value)
+
+rootPathMismatch :: FilePath -> Located ModuleName -> [Diagnostic]
+rootPathMismatch rootPath actual = do
+  code <- maybe [] pure (mkDiagnosticCode "E2015")
+  value <- maybe [] pure
+    (diagnostic code Error (locatedSpan actual)
+      ("module " <> moduleNameText (locatedValue actual)
+        <> " does not match source path " <> Text.pack (normalise rootPath)))
+  pure (withHelp "rename the file hierarchy or change the module header so their segments agree" value)
+
+rootReadFailure :: FilePath -> Source -> [Diagnostic]
+rootReadFailure rootPath source = do
+  code <- maybe [] pure (mkDiagnosticCode "E2014")
+  value <- maybe [] pure
+    (diagnostic code Error (emptySpan source)
+      ("cannot read root source " <> Text.pack (normalise rootPath)))
+  pure (withHelp "check that the path names a readable Pudu source file" value)

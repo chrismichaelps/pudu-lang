@@ -1,0 +1,35 @@
+module UsesForeignBytes
+
+/// A run of bytes the library reads. It is the program's own storage, lent for
+/// the length of the call and not copied to get there, and its length travels
+/// beside it the way C says it does.
+foreign "c" {
+  fn byteSum symbol "pudu_ffi_cpp_byte_sum" (data: Bytes, length: Int32) -> Int32
+  fn byteAddress symbol "pudu_ffi_cpp_byte_address" (data: Bytes, length: Int32) -> Bool
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    let three = bytesOf([1u8, 2u8, 3u8])
+    if byteSum(three, 3i32) == 6i32 { held = held + 1 }
+
+    // Every byte is read, so a run that crossed short would answer differently.
+    let wide = bytesOf([200u8, 100u8, 55u8, 1u8])
+    if byteSum(wide, 4i32) == 356i32 { held = held + 1 }
+
+    // A nought is a byte here. This is what separates Bytes from Str, which
+    // would have stopped at the first one.
+    let withNought = bytesOf([5u8, 0u8, 7u8])
+    if byteSum(withNought, 3i32) == 12i32 { held = held + 1 }
+
+    // A run of no bytes is still a place the library may read from.
+    let empty = bytesOf([])
+    if byteAddress(empty, 0i32) { held = held + 1 }
+    if byteSum(empty, 0i32) == 0i32 { held = held + 1 }
+
+    // The value is unchanged by having been lent.
+    if three == bytesOf([1u8, 2u8, 3u8]) { held = held + 1 }
+  }
+  held
+}

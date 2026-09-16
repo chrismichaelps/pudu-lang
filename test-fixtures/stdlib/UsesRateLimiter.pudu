@@ -1,0 +1,81 @@
+module UsesRateLimiter
+
+import Std.RateLimiter as RateLimiter
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Creation initializes full burst capacity
+  var rl = RateLimiter.create(10, 20)
+  if RateLimiter.availableTokens(&rl, 0u64) == 20 {
+    held = held + 1
+  }
+
+  // 2. Acquisition of partial tokens
+  let acq1 = RateLimiter.tryAcquire(&rl, 5, 0u64)
+  rl = acq1.limiter
+  if acq1.acquired && RateLimiter.availableTokens(&rl, 0u64) == 15 {
+    held = held + 1
+  }
+
+  // 3. Exhausting remainder of burst capacity
+  let acq2 = RateLimiter.tryAcquire(&rl, 15, 0u64)
+  rl = acq2.limiter
+  if acq2.acquired && RateLimiter.availableTokens(&rl, 0u64) == 0 {
+    held = held + 1
+  }
+
+  // 4. Rejection when bucket is exhausted at same timestamp
+  let acqEmpty = RateLimiter.tryAcquire(&rl, 1, 0u64)
+  rl = acqEmpty.limiter
+  if !acqEmpty.acquired && RateLimiter.availableTokens(&rl, 0u64) == 0 {
+    held = held + 1
+  }
+
+  // 5. Half-second replenishment: 10 tokens/sec * 0.5s = 5 tokens
+  let availHalf = RateLimiter.availableTokens(&rl, 500000u64)
+  if availHalf == 5 {
+    held = held + 1
+  }
+
+  // 6. Acquire from replenished tokens
+  let acqReplenished = RateLimiter.tryAcquire(&rl, 3, 500000u64)
+  rl = acqReplenished.limiter
+  if acqReplenished.acquired && RateLimiter.availableTokens(&rl, 500000u64) == 2 {
+    held = held + 1
+  }
+
+  // 7. Full replenishment with saturation at burst capacity (20)
+  // At 3,000,000 micros (3.0s total elapsed), 25+ tokens accumulated, capped at 20
+  let availFull = RateLimiter.availableTokens(&rl, 3000000u64)
+  if availFull == 20 {
+    held = held + 1
+  }
+
+  // 8. Zero-token acquisition always succeeds without consuming
+  let acqZero = RateLimiter.tryAcquire(&rl, 0, 3000000u64)
+  rl = acqZero.limiter
+  if acqZero.acquired && RateLimiter.availableTokens(&rl, 3000000u64) == 20 {
+    held = held + 1
+  }
+
+  // 9. Oversized request exceeding burst capacity is rejected
+  let acqOver = RateLimiter.tryAcquire(&rl, 25, 3000000u64)
+  rl = acqOver.limiter
+  if !acqOver.acquired && RateLimiter.availableTokens(&rl, 3000000u64) == 20 {
+    held = held + 1
+  }
+
+  // 10. Manual reset immediately restores maximum capacity
+  let drainAll = RateLimiter.tryAcquire(&rl, 20, 3000000u64)
+  rl = drainAll.limiter
+  let wasDrained = drainAll.acquired && RateLimiter.availableTokens(&rl, 3000000u64) == 0
+  rl = RateLimiter.reset(&rl, 3000000u64)
+  let isReset = RateLimiter.availableTokens(&rl, 3000000u64) == 20
+
+  if wasDrained && isReset {
+    held = held + 1
+  }
+
+  held
+}

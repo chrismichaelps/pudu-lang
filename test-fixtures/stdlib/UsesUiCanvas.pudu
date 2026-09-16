@@ -1,0 +1,303 @@
+module UsesUiCanvas
+
+import Std.Buffer as Buffer
+import Std.Bytes as Bytes
+import Std.Option as Option
+import Std.Ui.Canvas as Canvas
+
+/// Exact native-canvas behavior without opening a host window.
+export fn main() -> Int {
+  var held = 0
+  let white = Canvas.rgb(255u8, 255u8, 255u8)
+  let black = Canvas.rgb(0u8, 0u8, 0u8)
+  let red = Canvas.rgb(255u8, 0u8, 0u8)
+
+  if let Err(Canvas.InvalidSize(0, 2)) = Canvas.canvas(0, 2, white) { held = held + 1 }
+  if let Err(Canvas.InvalidSize(2, -1)) = Canvas.canvas(2, -1, white) { held = held + 1 }
+  if let Err(Canvas.InvalidPixelBudget(-1)) = Canvas.canvasWithin(1, 1, white, -1) {
+    held = held + 1
+  }
+  if let Err(Canvas.PixelBudgetExceeded(3, 2, 5)) = Canvas.canvasWithin(3, 2, white, 5) {
+    held = held + 1
+  }
+  if let Err(Canvas.PixelStorageOverflow(9223372036854775807, 1)) =
+  Canvas.canvasWithin(9223372036854775807, 1, white, 9223372036854775807)
+  {
+    held = held + 1
+  }
+  if let Err(Canvas.InvalidCommandBudget(-1)) =
+  Canvas.canvasWithinLimits(1, 1, white, 1, -1)
+  {
+    held = held + 1
+  }
+  if let Err(Canvas.OpaqueBackgroundRequired(1u8)) =
+  Canvas.canvas(1, 1, Canvas.rgba(0u8, 0u8, 0u8, 1u8))
+  {
+    held = held + 1
+  }
+
+  if let Ok(base) = Canvas.canvas(2, 2, white) {
+    if Canvas.dimensions(&base) == Canvas.size(2, 2) { held = held + 1 }
+    if Canvas.commandCount(&base) == 0 { held = held + 1 }
+
+    if let Ok(same) = Canvas.fill(&base, Canvas.rect(0, 0, 0, 2), red) {
+      if Canvas.commandCount(&same) == 0 { held = held + 1 }
+    }
+    if let Err(Canvas.NegativeExtent(-1, 2)) =
+    Canvas.fill(&base, Canvas.rect(0, 0, -1, 2), red)
+    {
+      held = held + 1
+    }
+
+    let invalidCanvas = Canvas.Canvas {
+      size: Canvas.size(0, 2),
+      background: white,
+      maxPixels: 4,
+      maxCommands: 4,
+      commands: []
+    }
+    if let Err(Canvas.InvalidSize(0, 2)) = Canvas.render(&invalidCanvas) { held = held + 1 }
+
+    let invalidCommand = Canvas.Canvas {
+      size: Canvas.size(2, 2),
+      background: white,
+      maxPixels: 4,
+      maxCommands: 4,
+      commands: [Canvas.Command{area: Canvas.rect(0, 0, -1, 1), color: red}]
+    }
+    if let Err(Canvas.NegativeExtent(-1, 1)) = Canvas.render(&invalidCommand) { held = held + 1 }
+
+    if let Ok(limited) = Canvas.canvasWithinLimits(2, 2, white, 4, 1) {
+      if let Ok(one) = Canvas.fill(&limited, Canvas.rect(0, 0, 1, 1), red) {
+        if let Err(Canvas.CommandBudgetExceeded(1)) =
+        Canvas.fill(&one, Canvas.rect(1, 1, 1, 1), black)
+        {
+          held = held + 1
+        }
+      }
+    }
+
+    if let Ok(surface) = Canvas.render(&base) {
+      if Canvas.surfaceSize(&surface) == Ok(Canvas.size(2, 2)) { held = held + 1 }
+      if let Ok(bytes) = Canvas.rgbaBytes(&surface) {
+        if Bytes.length(&bytes) == 16 { held = held + 1 }
+      }
+      if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(white)) { held = held + 1 }
+      if Canvas.pixelAt(&surface, Canvas.point(2, 1)) == Ok(None) { held = held + 1 }
+    }
+
+    let malformed = Canvas.Surface{size: Canvas.size(2, 2), pixels: Buffer.alloc(4)}
+    if let Err(Canvas.MalformedSurface(16, 4)) = Canvas.surfaceSize(&malformed) {
+      held = held + 1
+    }
+    if let Err(Canvas.MalformedSurface(16, 4)) = Canvas.rgbaBytes(&malformed) { held = held + 1 }
+    if let Err(Canvas.MalformedSurface(16, 4)) = Canvas.pixelAt(&malformed, Canvas.point(0, 0)) {
+      held = held + 1
+    }
+
+    if let Ok(painted) = Canvas.fill(&base, Canvas.rect(0, 0, 1, 1), red) {
+      if let Ok(surface) = Canvas.render(&painted) {
+        if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(red)) { held = held + 1 }
+        if Canvas.pixelAt(&surface, Canvas.point(1, 0)) == Ok(Some(white)) { held = held + 1 }
+        if let Ok(bytes) = Canvas.rgbaBytes(&surface) {
+          if Bytes.toArray(&bytes).slice(0, 4) == [255u8, 0u8, 0u8, 255u8] {
+            held = held + 1
+          }
+        }
+      }
+    }
+
+    if let Ok(clipped) = Canvas.fill(&base, Canvas.rect(-2, -2, 3, 3), black) {
+      if let Ok(surface) = Canvas.render(&clipped) {
+        if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(black)) { held = held + 1 }
+      }
+    }
+
+    if let Ok(outside) = Canvas.fill(&base, Canvas.rect(9, 9, 2, 2), black) {
+      if let Ok(surface) = Canvas.render(&outside) {
+        if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(white)) { held = held + 1 }
+      }
+    }
+
+    let halfBlack = Canvas.rgba(0u8, 0u8, 0u8, 128u8)
+    if let Ok(blended) = Canvas.fill(&base, Canvas.rect(0, 0, 1, 1), halfBlack) {
+      if let Ok(surface) = Canvas.render(&blended) {
+        if Canvas.pixelAt(&surface, Canvas.point(0, 0)) ==
+        Ok(Some(Canvas.rgb(127u8, 127u8, 127u8)))
+        {
+          held = held + 1
+        }
+      }
+    }
+
+    if let Ok(transparent) =
+    Canvas.fill(&base, Canvas.rect(0, 0, 2, 2), Canvas.rgba(0u8, 0u8, 0u8, 0u8))
+    {
+      if Canvas.commandCount(&transparent) == 0 { held = held + 1 }
+    }
+
+    if let Ok(first) = Canvas.fill(&base, Canvas.rect(0, 0, 2, 2), black) {
+      if let Ok(second) = Canvas.fill(&first, Canvas.rect(1, 1, 1, 1), red) {
+        if let Ok(surface) = Canvas.render(&second) {
+          if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(red)) { held = held + 1 }
+        }
+      }
+    }
+
+    if let Ok(extreme) = Canvas.fill(&base, Canvas.rect(9223372036854775807, 0, 2, 1), black) {
+      if let Ok(surface) = Canvas.render(&extreme) {
+        if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(white)) { held = held + 1 }
+      }
+    }
+
+    if let Ok(firstHalf) = Canvas.fill(&base, Canvas.rect(0, 0, 1, 1), halfBlack) {
+      if let Ok(secondHalf) = Canvas.fill(&firstHalf, Canvas.rect(0, 0, 1, 1), halfBlack) {
+        if let Ok(surface) = Canvas.render(&secondHalf) {
+          if Canvas.pixelAt(&surface, Canvas.point(0, 0)) ==
+          Ok(Some(Canvas.rgb(63u8, 63u8, 63u8)))
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+
+    if let Ok(bottom) = Canvas.fill(&base, Canvas.rect(0, 1, 2, 1), black) {
+      if let Ok(surface) = Canvas.render(&bottom) {
+        if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(white)) &&
+        Canvas.pixelAt(&surface, Canvas.point(0, 1)) == Ok(Some(black))
+        {
+          held = held + 1
+        }
+      }
+    }
+
+    if let Ok(lowerRight) = Canvas.fill(&base, Canvas.rect(1, 1, 3, 3), black) {
+      if let Ok(surface) = Canvas.render(&lowerRight) {
+        if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(black)) &&
+        Canvas.pixelAt(&surface, Canvas.point(0, 1)) == Ok(Some(white))
+        {
+          held = held + 1
+        }
+      }
+    }
+  }
+
+  if let Ok(strip) = Canvas.canvas(4, 1, white) {
+    let halfBlack = Canvas.rgba(0u8, 0u8, 0u8, 128u8)
+    if let Ok(dark) = Canvas.fill(&strip, Canvas.rect(0, 0, 3, 1), black) {
+      if let Ok(split) = Canvas.fill(&dark, Canvas.rect(2, 0, 2, 1), halfBlack) {
+        if let Ok(surface) = Canvas.render(&split) {
+          if Canvas.pixelAt(&surface, Canvas.point(2, 0)) == Ok(Some(black)) &&
+          Canvas.pixelAt(&surface, Canvas.point(3, 0)) == Ok(Some(Canvas.rgb(127u8, 127u8, 127u8)))
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+  }
+
+  if let Ok(grid) = Canvas.canvas(3, 3, white) {
+    if let Ok(upper) = Canvas.fill(&grid, Canvas.rect(0, 0, 2, 2), red) {
+      if let Ok(lower) = Canvas.fill(&upper, Canvas.rect(1, 1, 2, 2), black) {
+        if let Ok(surface) = Canvas.render(&lower) {
+          if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(black)) &&
+          Canvas.pixelAt(&surface, Canvas.point(0, 1)) == Ok(Some(red)) &&
+          Canvas.pixelAt(&surface, Canvas.point(2, 0)) == Ok(Some(white)) &&
+          Canvas.pixelAt(&surface, Canvas.point(2, 2)) == Ok(Some(black)) &&
+          Canvas.pixelAt(&surface, Canvas.point(0, 2)) == Ok(Some(white))
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+
+    if let Ok(low) = Canvas.fill(&grid, Canvas.rect(0, 1, 1, 1), red) {
+      if let Ok(tall) = Canvas.fill(&low, Canvas.rect(0, 0, 1, 2), black) {
+        if let Ok(surface) = Canvas.render(&tall) {
+          if Canvas.pixelAt(&surface, Canvas.point(0, 1)) == Ok(Some(black)) { held = held + 1 }
+        }
+      }
+    }
+  }
+
+  if let Ok(screen) = Canvas.canvas(6, 4, white) {
+    let halfBlack = Canvas.rgba(0u8, 0u8, 0u8, 128u8)
+    if let Ok(before) = Canvas.fill(&screen, Canvas.rect(0, 0, 2, 2), red) {
+      if let Ok(moved) = Canvas.fill(&screen, Canvas.rect(3, 1, 2, 2), red) {
+        if let Ok(after) = Canvas.fill(&moved, Canvas.rect(2, 2, 3, 2), halfBlack) {
+          if let Ok(old) = Canvas.render(&before) {
+            if let Ok(full) = Canvas.render(&after) {
+              let regions = [
+                Canvas.rect(0, 0, 2, 2),
+                Canvas.rect(3, 1, 2, 2),
+                Canvas.rect(2, 2, 3, 2)
+              ]
+              if let Ok(patched) = Canvas.repaint(&after, &old, &regions) {
+                if Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&full) { held = held + 1 }
+              }
+              if let Ok(same) = Canvas.repaint(&after, &old, &[]) {
+                if Canvas.rgbaBytes(&same) == Canvas.rgbaBytes(&old) { held = held + 1 }
+              }
+              if let Ok(outside) = Canvas.repaint(&after, &old, &[Canvas.rect(-9, 0, 3, 3)]) {
+                if Canvas.rgbaBytes(&outside) == Canvas.rgbaBytes(&old) { held = held + 1 }
+              }
+              if let Err(Canvas.NegativeExtent(1, -1)) =
+              Canvas.repaint(&after, &old, &[Canvas.rect(0, 0, 1, -1)])
+              {
+                held = held + 1
+              }
+            }
+          }
+        }
+      }
+    }
+    if let Ok(small) = Canvas.canvas(2, 2, white) {
+      if let Ok(smallSurface) = Canvas.render(&small) {
+        if let Err(Canvas.SurfaceMismatch(2, 2)) =
+        Canvas.repaint(&screen, &smallSurface, &[Canvas.rect(0, 0, 1, 1)])
+        {
+          held = held + 1
+        }
+      }
+    }
+  }
+
+  if let Ok(stack) = Canvas.canvas(3, 2, white) {
+    let halfRed = Canvas.rgba(255u8, 0u8, 0u8, 128u8)
+    if let Ok(a) = Canvas.fill(&stack, Canvas.rect(0, 0, 3, 2), halfRed) {
+      if let Ok(b) = Canvas.fill(&a, Canvas.rect(1, 0, 1, 1), red) {
+        if let Ok(covered) = Canvas.fill(&b, Canvas.rect(-5, -5, 20, 20), black) {
+          if let Ok(surface) = Canvas.render(&covered) {
+            if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(black)) &&
+            Canvas.pixelAt(&surface, Canvas.point(1, 0)) == Ok(Some(black)) &&
+            Canvas.pixelAt(&surface, Canvas.point(2, 1)) == Ok(Some(black))
+            {
+              held = held + 1
+            }
+          }
+          let halfWhite = Canvas.rgba(255u8, 255u8, 255u8, 128u8)
+          if let Ok(over) = Canvas.fill(&covered, Canvas.rect(0, 0, 1, 1), halfWhite) {
+            if let Ok(surface) = Canvas.render(&over) {
+              if let Ok(old) = Canvas.render(&b) {
+                if let Ok(patched) = Canvas.repaint(&over, &old, &[Canvas.rect(0, 0, 3, 2)]) {
+                  if Canvas.pixelAt(&surface, Canvas.point(0, 0)) ==
+                  Ok(Some(Canvas.rgb(128u8, 128u8, 128u8))) &&
+                  Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(black)) &&
+                  Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&surface)
+                  {
+                    held = held + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  held
+}

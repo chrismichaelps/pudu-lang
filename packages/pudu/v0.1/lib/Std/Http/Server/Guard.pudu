@@ -1,0 +1,493 @@
+module Std.Http.Server.Guard
+
+import Std.App.Audit as Audit
+import Std.App.Trace as Trace
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Http as Http
+import Std.Http.Safe as Safe
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// Which origins a service permits to read its answers.
+///
+/// An allowlist and nothing else. Reflecting back whichever origin asked is
+/// indistinguishable from permitting everything, and is what a
+/// misconfiguration produces; a wildcard alongside credentials is refused by
+/// browsers anyway and states an intention nobody has.
+export type Sharing = { origins: Array[Str], methods: Array[Str], headers: Array[Str], credentials: Bool }
+
+/// The headers a page cannot defend itself without.
+///
+/// In order: do not frame this, do not guess its type, do not send a referrer,
+/// permit only this page's own origin and no objects or frames, isolate it,
+/// and do not store it.
+const PROTECTIVE_HEADERS: Array[(Str, Str)] = [
+  ("X-Frame-Options", "deny"),
+  ("X-Content-Type-Options", "nosniff"),
+  ("Referrer-Policy", "no-referrer"),
+  ("X-Permitted-Cross-Domain-Policies", "none"),
+  (
+    "Content-Security-Policy",
+    "default-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+  ),
+  ("Cross-Origin-Opener-Policy", "same-origin"),
+  ("Cross-Origin-Resource-Policy", "same-origin"),
+  ("Cache-Control", "no-store, max-age=0")
+]
+
+/// The header carried when a connection is known to be secure, which says the
+/// site is only ever reached that way. Sent separately because sending it over
+/// a connection that is not secure states something untrue.
+const TRANSPORT_HEADER: (Str, Str) = ("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+
+/// The header a request carries its identity in, and the one an answer
+/// carries it back in.
+const IDENTITY_HEADER: Str = "X-Request-Id"
+
+/// What a caller is told when something unexpected failed.
+///
+/// A status and a sentence. An error page that explains itself is a
+/// reconnaissance tool, and the detail is more useful in a log than in a
+/// stranger's browser.
+const FAILURE_TEXT: Str = "the request could not be completed"
+
+/// Every protection, in the order they belong.
+///
+/// The outermost is applied first, so the identity is attached before anything
+/// can fail and the headers are added to whatever answer comes back, including
+/// a refusal. A program that needs one of these to differ writes that one step
+/// itself rather than turning this off.
+export fn standard(sharing: &Sharing) -> Array[Route.Middleware] {
+  [identified(), protectedHeaders(), shared(sharing), sameSiteOnly()]
+}
+
+/// Every protection for a service nothing shares with, which is most of them.
+export fn strict() -> Array[Route.Middleware] { standard(&shareNothing()) }
+
+/// A service that permits no other origin to read its answers.
+export fn shareNothing() -> Sharing {
+  Sharing{origins: [], methods: [], headers: [], credentials: false}
+}
+
+/// A service that permits the named origins, and nothing else.
+export fn shareWith(origins: &Array[Str]) -> Sharing {
+  Sharing{origins: *origins, methods: ["GET", "HEAD", "POST"], headers: ["content-type"], credentials: false}
+}
+
+/// The same, for a caller that also sends credentials. A wildcard is not
+/// reachable from here, which is why credentials can be permitted at all.
+export fn withCredentials(base: &Sharing) -> Sharing {
+  Sharing{origins: base.origins, methods: base.methods, headers: base.headers, credentials: true}
+}
+
+/// The same, permitting different methods.
+export fn allowing(base: &Sharing, methods: &Array[Str]) -> Sharing {
+  Sharing{origins: base.origins, methods: *methods, headers: base.headers, credentials: base.credentials}
+}
+
+/// The protective headers, added to whatever the answer was.
+///
+/// Added rather than replaced where a handler already set one, because a
+/// handler that set a policy meant it and this step is a floor rather than a
+/// ceiling.
+export fn protectedHeaders() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    var headers = answer.headers
+    for entry in PROTECTIVE_HEADERS {
+      if !hasHeader(&headers, entry[0]) { headers = headers.push(entry) }
+    }
+    if secureConnection(&request) {
+      if !hasHeader(&headers, TRANSPORT_HEADER[0]) { headers = headers.push(TRANSPORT_HEADER) }
+    }
+    Http.Response{binaryBody: answer.binaryBody, status: answer.status, headers: headers, body: answer.body}
+  }
+}
+
+/// The cross-origin permission, from the allowlist and only from it.
+export fn shared(sharing: &Sharing) -> Route.Middleware {
+  let permitted = *sharing
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    if let Some(origin) = Route.header(&request, "origin") {
+      if listed(&permitted.origins, origin) {
+        Http.Response {
+          binaryBody: answer.binaryBody, status: answer.status,
+          headers: sharingHeaders(&answer.headers, &permitted, origin),
+          body: answer.body
+        }
+      } else {
+        // No permission header at all rather than one permitting nothing: the
+        // absence is what a browser is specified to act on.
+        answer
+      }
+    } else {
+      answer
+    }
+  }
+}
+
+fn sharingHeaders(
+  base: &Array[(Str, Str)],
+  permitted: &Sharing,
+  origin: Str
+) -> Array[(Str, Str)] {
+  var headers = base.push(("Access-Control-Allow-Origin", origin))
+  // The answer differs by who asked, so anything holding it must be told that.
+  headers = headers.push(("Vary", "Origin"))
+  if permitted.methods.length() > 0 {
+    headers = headers.push(("Access-Control-Allow-Methods", permitted.methods.join(", ")))
+  }
+  if permitted.headers.length() > 0 {
+    headers = headers.push(("Access-Control-Allow-Headers", permitted.headers.join(", ")))
+  }
+  if permitted.credentials {
+    headers = headers.push(("Access-Control-Allow-Credentials", "true"))
+  }
+  headers
+}
+
+/// A refusal of state-changing requests that came from another site.
+///
+/// The browser states where a request came from in a header a page cannot
+/// forge, which makes this stronger than a token a page has to carry: it
+/// cannot be forgotten by the author of a form. A token remains available for
+/// what the header does not cover.
+export fn sameSiteOnly() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    if let Err(problem) = Safe.changeAllowed(&request.message.method, &request.message.headers) {
+      Reply.text(403, Safe.explain(&problem))
+    } else {
+      next(request)
+    }
+  }
+}
+
+/// A request identity, carried into the answer.
+///
+/// Taken from the request when it brought one, so a value that entered at a
+/// proxy stays the same value across every service it reaches. Made from what
+/// this program can see when it did not.
+export fn identified() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let identity = identityOf(&request)
+    let answer = next(request)
+    if hasHeader(&answer.headers, IDENTITY_HEADER) {
+      answer
+    } else {
+      Http.Response {
+        binaryBody: answer.binaryBody, status: answer.status,
+        headers: answer.headers.push((IDENTITY_HEADER, identity)),
+        body: answer.body
+      }
+    }
+  }
+}
+
+/// The identity a request carries, or one made for it.
+export fn identityOf(request: &Route.Request) -> Str {
+  if let Some(carried) = Route.header(request, "x-request-id") {
+    // A value from outside is written into a header, so it is held to what a
+    // header may hold rather than trusted for having arrived.
+    if let Ok(_) = Safe.headerWritable(IDENTITY_HEADER, carried) { carried } else { madeIdentity() }
+  } else {
+    madeIdentity()
+  }
+}
+
+/// An identity for a request that arrived without one.
+fn madeIdentity() -> Str { show(clock()) }
+
+/// A step that answers a refusal the same way whatever caused it.
+///
+/// What crosses the network is a status and a sentence; the identity in the
+/// answer is what ties it to the detail recorded elsewhere. An error that
+/// explains itself tells a stranger about the program.
+export fn quiet(report: fn(Str) -> ()) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let identity = identityOf(&request)
+    let answer = next(request)
+    if answer.status.code >= 500 {
+      report(
+        identity + " " + Http.methodName(&request.message.method) + " " + request.path + " -> "
+          + show(answer.status.code) + ": " + answer.body
+      )
+      Http.Response {
+        binaryBody: None, status: answer.status,
+        headers: [(IDENTITY_HEADER, identity)],
+        body: FAILURE_TEXT
+      }
+    } else {
+      answer
+    }
+  }
+}
+
+/// A redirect to somewhere the program named, or a refusal.
+///
+/// A target taken from a request and used unchecked is how a trusted name is
+/// borrowed to make a link look real, so the check is here rather than left to
+/// each handler.
+export fn redirect(code: Int, target: Str, permitted: &Array[Str]) -> Http.Response {
+  if let Ok(allowed) = Safe.redirectTarget(target, permitted) {
+    Http.Response {
+      binaryBody: None, status: Http.Status{code: code, reason: Http.reasonFor(code)},
+      headers: [("Location", allowed)],
+      body: ""
+    }
+  } else {
+    Reply.text(400, "that is not a destination this program redirects to")
+  }
+}
+
+/// Whether the connection this request arrived on is secure.
+///
+/// Read from what a proxy stated, since a service behind one does not see the
+/// connection the client made. A value that is not the affirmative one is
+/// read as not secure, so a missing or unexpected value never states more than
+/// is known.
+fn secureConnection(request: &Route.Request) -> Bool {
+  if let Some(stated) = Route.header(request, "x-forwarded-proto") {
+    stated.trim().toLower() == "https"
+  } else {
+    false
+  }
+}
+
+fn hasHeader(headers: &Array[(Str, Str)], name: Str) -> Bool {
+  var found = false
+  for entry in headers { if entry[0].toLower() == name.toLower() { found = true } }
+  found
+}
+
+fn listed(origins: &Array[Str], origin: Str) -> Bool {
+  var found = false
+  for held in origins { if held.trim().toLower() == origin.trim().toLower() { found = true } }
+  found
+}
+
+/// The trace a request belongs to, continued from what it carried.
+///
+/// Read here rather than in each handler, so every service in a chain agrees
+/// about what piece of work a request is part of. A request that carried
+/// nothing readable begins a new one rather than being refused: the header is
+/// a diagnostic, and refusing over a malformed diagnostic makes the diagnosis
+/// into the outage.
+export fn traceOf(request: &Route.Request, recordedWhenNew: Bool) -> Trace.Trace {
+  Trace.continuing(Route.header(request, Trace.headerName()), recordedWhenNew)
+}
+
+/// A step that answers with the trace the request belongs to.
+///
+/// So a caller holding an answer can find the record of what produced it, and
+/// a service handing work on has the header to hand on.
+export fn traced(recordedWhenNew: Bool) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let following = traceOf(&request, recordedWhenNew)
+    let answer = next(request)
+    if !Trace.traced(&following) || hasHeader(&answer.headers, Trace.headerName()) {
+      answer
+    } else {
+      Http.Response {
+        binaryBody: answer.binaryBody, status: answer.status,
+        headers: answer.headers.push(Trace.asHeader(&following)),
+        body: answer.body
+      }
+    }
+  }
+}
+
+/// A rate limiting middleware that restricts requests per peer within a moving window.
+///
+/// Refuses requests exceeding `maxRequests` per `windowSeconds` with RFC 6585 status 429
+/// and sets the `Retry-After` header.
+export fn rateLimited(maxRequests: Int, windowSeconds: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let state: Sync.Cell[Map[Str, (Int, Int)]] = Sync.cell(mapOf([]))
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let peerKey = if request.peer.length() > 0 { request.peer } else { "client" }
+    let now = clock() / 1000
+
+    let decision = Sync.withLock(&lock, fn() -> (Bool, Int) {
+        let currentMap = Result.unwrapOr(Sync.get(&state), mapOf([]))
+        match currentMap.get(peerKey) {
+          case Some(entry) => {
+            let windowStart = entry[0]
+            let count = entry[1]
+            if now - windowStart < windowSeconds {
+              if count >= maxRequests {
+                var retry = windowSeconds - (now - windowStart)
+                if retry <= 0 { retry = 1 }
+                (false, retry)
+              } else {
+                let updated = currentMap.insert(peerKey, (windowStart, count + 1))
+                let _s = Sync.set(&state, updated)
+                (true, 0)
+              }
+            } else {
+              let updated = currentMap.insert(peerKey, (now, 1))
+              let _s = Sync.set(&state, updated)
+              (true, 0)
+            }
+          }
+          case None => {
+            let updated = currentMap.insert(peerKey, (now, 1))
+            let _s = Sync.set(&state, updated)
+            (true, 0)
+          }
+        }
+      })
+
+    let outcome = Result.unwrapOr(decision, (true, 0))
+    let allowed = outcome[0]
+    let retryAfter = outcome[1]
+    if !allowed {
+      Reply.tooManyRequests(retryAfter)
+    } else {
+      next(request)
+    }
+  }
+}
+
+/// Bounded concurrent request admission middleware enforcing backpressure.
+///
+/// When active inflight requests reach `maxInflight`, excess requests are shed immediately
+/// with status 503 Service Unavailable and `Retry-After: 1`, preventing memory starvation.
+export fn boundedConcurrency(maxInflight: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let inflightCell = Sync.cell(0)
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let admitted = Sync.withLock(&lock, fn() -> Bool {
+        let current = Result.unwrapOr(Sync.get(&inflightCell), 0)
+        if current >= maxInflight {
+          false
+        } else {
+          let _s = Sync.set(&inflightCell, current + 1)
+          true
+        }
+      })
+
+    if !Result.unwrapOr(admitted, false) {
+      Reply.serviceUnavailable(1)
+    } else {
+      let answer = next(request)
+      let _cleanup = Sync.withLock(&lock, fn() -> () {
+          let current = Result.unwrapOr(Sync.get(&inflightCell), 1)
+          let updated = if current > 0 { current - 1 } else { 0 }
+          let _s = Sync.set(&inflightCell, updated)
+        })
+      answer
+    }
+  }
+}
+
+/// Circuit breaker middleware protecting downstream dependencies from cascading failure.
+///
+/// Trips open when consecutive 5xx errors reach `failureThreshold`, fast-failing with 503
+/// for `resetTimeoutSeconds` before permitting a half-open probe request.
+export fn circuitBreaker(failureThreshold: Int, resetTimeoutSeconds: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let stateCell = Sync.cell((0, 0))
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let now = clock() / 1000
+
+    let check = Sync.withLock(&lock, fn() -> (Bool, Int) {
+        let st = Result.unwrapOr(Sync.get(&stateCell), (0, 0))
+        let failures = st[0]
+        let openedAt = st[1]
+
+        if failures >= failureThreshold {
+          let elapsed = now - openedAt
+          if elapsed < resetTimeoutSeconds {
+            var retry = resetTimeoutSeconds - elapsed
+            if retry <= 0 { retry = 1 }
+            (false, retry)
+          } else {
+            (true, 0)
+          }
+        } else {
+          (true, 0)
+        }
+      })
+
+    let outcome = Result.unwrapOr(check, (true, 0))
+    if !outcome[0] {
+      Reply.serviceUnavailable(outcome[1])
+    } else {
+      let answer = next(request)
+      let isFailure = answer.status.code >= 500
+
+      let _update = Sync.withLock(&lock, fn() -> () {
+          let st = Result.unwrapOr(Sync.get(&stateCell), (0, 0))
+          if isFailure {
+            let updatedFailures = st[0] + 1
+            let opened = if updatedFailures >= failureThreshold { now } else { st[1] }
+            let _s = Sync.set(&stateCell, (updatedFailures, opened))
+          } else {
+            let _s = Sync.set(&stateCell, (0, 0))
+          }
+        })
+
+      answer
+    }
+  }
+}
+
+/// Request deadline middleware enforcing an execution time budget.
+///
+/// If the wrapped handler does not produce a response within `timeoutMs`,
+/// RFC 7231 status 504 Gateway Timeout is returned immediately to the client.
+export fn timeout(timeoutMs: Int) -> Route.Middleware {
+  let limit = if timeoutMs < 1 { 1 } else { timeoutMs }
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let ch: Channel.Channel[Option[Http.Response]] = Channel.channel(2)
+    let handlerTask = Concurrent.start(fn() -> () {
+        let ans = next(request)
+        let _s = Channel.send(&ch, Some(ans))
+      })
+    if let Err(_) = handlerTask {
+      return Reply.gatewayTimeout("failed to start execution task")
+    }
+    let timerTask = Concurrent.start(fn() -> () {
+        let _slept = Concurrent.sleep(limit)
+        let _s = Channel.send(&ch, None)
+      })
+    if let Err(_) = timerTask {
+      return Reply.gatewayTimeout("failed to start deadline timer")
+    }
+    match Channel.receive(&ch) {
+      case Ok(Some(Some(ans))) => ans
+      case Ok(Some(None)) => Reply.gatewayTimeout("request execution deadline exceeded")
+      case _ => Reply.gatewayTimeout("deadline execution failure")
+    }
+  }
+}
+
+/// Audit logging middleware recording security outcomes in the tamper-evident audit ledger.
+export fn audited(log: &Audit.AuditLog, action: Str) -> Route.Middleware {
+  let auditTrail = *log
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    let outcome = if answer.status.code < 400 {
+      Audit.Success
+    } else if answer.status.code == 401 || answer.status.code == 403 {
+      Audit.Denied("HTTP " + show(answer.status.code))
+    } else {
+      Audit.Failure("HTTP " + show(answer.status.code))
+    }
+    var details = mapOf([])
+    if let Some(reqId) = Route.header(&request, "x-request-id") {
+      details = details.insert("requestId", reqId)
+    }
+    let principal = Option.unwrapOr(Route.header(&request, "x-user-id"), "anonymous")
+    let _ev = Audit.record(&auditTrail, action, principal, request.path, outcome, request.peer, &details)
+    answer
+  }
+}

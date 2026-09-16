@@ -1,0 +1,46 @@
+module Std.Bool
+
+/// The opposite of a truth value.
+export fn not(value: Bool) -> Bool { if value { false } else { true } }
+
+/// Whether both are true. Both are evaluated, unlike `&&`, which is why this
+/// exists: it can be passed as a function where the operator cannot.
+export fn and(left: Bool, right: Bool) -> Bool { left && right }
+
+/// Whether either is true.
+export fn or(left: Bool, right: Bool) -> Bool { left || right }
+
+/// Whether exactly one is true.
+export fn xor(left: Bool, right: Bool) -> Bool { left != right }
+
+/// Whether the first being true forces the second to be.
+export fn implies(left: Bool, right: Bool) -> Bool { !left || right }
+
+/// One of two values, chosen by a condition.
+/// The false case comes first so the arguments read in the order `if` writes
+/// its branches once the condition has been read.
+export fn select[T](condition: Bool, whenFalse: T, whenTrue: T) -> T {
+  if condition { whenTrue } else { whenFalse }
+}
+
+/// A truth value as a whole number: one for true, nought for false.
+export fn toInt(value: Bool) -> Int { if value { 1 } else { 0 } }
+
+/// A truth value written out.
+export fn toText(value: Bool) -> Str { if value { "true" } else { "false" } }
+
+/// Whether every value is true. True for an empty array.
+export fn all(values: &Array[Bool]) -> Bool {
+  for value in values {
+    if !value { return false }
+  }
+  true
+}
+
+/// Whether any value is true. False for an empty array.
+export fn any(values: &Array[Bool]) -> Bool {
+  for value in values {
+    if value { return true }
+  }
+  false
+}

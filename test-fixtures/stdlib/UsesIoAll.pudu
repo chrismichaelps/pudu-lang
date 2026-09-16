@@ -1,0 +1,130 @@
+module UsesIoAll
+
+import Std.Env as Env
+import Std.Io as Io
+import Std.Option as Option
+import Std.Result as Result
+
+/// Every export of `Std.Io` that touches a file, checked by writing and
+/// reading it back.
+///
+/// Everything is done under a directory of the machine's own temporary one,
+/// named for this fixture alone, and every file made is removed at the end.
+/// A fixture that wrote beside the source would leave the tree dirty, and one
+/// sharing a name with another fixture would meet its files.
+///
+/// The path functions are checked against the separator the module reports
+/// rather than against a written slash, so the checks say the same thing on a
+/// machine that separates paths differently.
+fn root() -> Str { Io.join(Env.temporaryDirectory(), "pudu-fixture-io-all") }
+
+fn under(name: Str) -> Str { Io.join(root(), name) }
+
+export fn main() -> Int {
+  var held = 0
+
+  // Path handling, in terms of the separator the module reports.
+  let sep = Io.separator()
+  if sep.length() == 1 { held = held + 1 }
+  if Io.isSeparator(sep) && !Io.isSeparator("x") { held = held + 1 }
+  if Io.join("a", "b") == "a" + sep + "b" { held = held + 1 }
+  if Io.directoryOf(Io.join("a", "b.txt")) == "a" { held = held + 1 }
+  if Io.nameOf(Io.join("a", "b.txt")) == "b.txt" { held = held + 1 }
+  if Option.unwrapOr(Io.extensionOf("b.txt"), "") == "txt" { held = held + 1 }
+  if Option.isNone(&Io.extensionOf("b")) { held = held + 1 }
+  if Io.withoutExtension("b.txt") == "b" { held = held + 1 }
+  if Io.withExtension("b", "md") == "b.md" { held = held + 1 }
+
+  // A directory to work in.
+  let _cleared = Io.removeIfPresent(under("one.txt"))
+  if Result.isOk(&Io.makeDirectory(root())) || Io.exists(root()) { held = held + 1 }
+
+  // Writing and reading text.
+  let first = under("one.txt")
+  if Result.isOk(&Io.write(first, "hello")) { held = held + 1 }
+  if Io.exists(first) && !Io.exists(under("absent.txt")) { held = held + 1 }
+  if Result.unwrapOr(Io.read(first), "") == "hello" { held = held + 1 }
+  if Result.isErr(&Io.read(under("absent.txt"))) { held = held + 1 }
+
+  // Adding to what is there.
+  if Result.isOk(&Io.append(first, " there")) { held = held + 1 }
+  if Result.unwrapOr(Io.read(first), "") == "hello there" { held = held + 1 }
+  if Result.isOk(&Io.appendLine(first, "!")) { held = held + 1 }
+  if Result.unwrapOr(Io.read(first), "").endsWith("\n") { held = held + 1 }
+
+  // Lines, written and read as a list.
+  let lined = under("lines.txt")
+  if Result.isOk(&Io.writeFileLines(lined, &["a", "b"])) { held = held + 1 }
+  if Result.unwrapOr(Io.readLines(lined), []) == ["a", "b"] { held = held + 1 }
+  if Result.unwrapOr(Io.readAllLinesOf(lined), []) == ["a", "b"] { held = held + 1 }
+
+  // Folding and walking the lines without holding them all.
+  if Result.unwrapOr(Io.foldLines(lined, 0, fn(total: Int, _line: Str) -> Int => total + 1), 0) == 2 {
+    held = held + 1
+  }
+  if Result.isOk(&Io.forEachLine(lined, fn(_line: Str) -> () => {})) { held = held + 1 }
+
+  // Bytes.
+  let bytes = under("bytes.bin")
+  if Result.isOk(&Io.writeAllBytes(bytes, &"abc".toBytes())) { held = held + 1 }
+  if Result.unwrapOr(Io.countBytes(bytes), 0) == 3 { held = held + 1 }
+  if Result.unwrapOr(Io.readAllBytes(bytes), "".toBytes()).length() == 3 { held = held + 1 }
+  if Result.isOk(&Io.appendAllBytes(bytes, &"de".toBytes())) { held = held + 1 }
+  if Result.unwrapOr(Io.countBytes(bytes), 0) == 5 { held = held + 1 }
+
+  // A reader and a writer, each closed when the action is done.
+  let streamed = under("streamed.txt")
+  let written = Io.withWriter(streamed, fn(w: Io.Writer) -> Result[(), Io.IoError] {
+      Io.writeTextTo(&w, "streamed")
+    })
+  if Result.isOk(&written) { held = held + 1 }
+  let readBack = Io.withReader(streamed, fn(r: Io.Reader) -> Result[Int, Io.IoError] {
+      Io.foldChunks(&r, 0, fn(total: Int, chunk: Bytes) -> Int => total + chunk.length())
+    })
+  if Result.unwrapOr(readBack, 0) == 8 { held = held + 1 }
+  let appended = Io.withAppender(streamed, fn(w: Io.Writer) -> Result[(), Io.IoError] {
+      Io.writeTo(&w, &"!".toBytes())
+    })
+  if Result.isOk(&appended) { held = held + 1 }
+  if Result.unwrapOr(Io.countBytes(streamed), 0) == 9 { held = held + 1 }
+  let firstChunk = Io.withReader(streamed, fn(r: Io.Reader) -> Result[Option[Bytes], Io.IoError] {
+      Io.readFrom(&r, 4)
+    })
+  if Result.isOk(&firstChunk) { held = held + 1 }
+  let walked = Io.withReader(streamed, fn(r: Io.Reader) -> Result[(), Io.IoError] {
+      Io.forEachChunk(&r, fn(_chunk: Bytes) -> () => {})
+    })
+  if Result.isOk(&walked) { held = held + 1 }
+
+  // Copying and moving.
+  let copied = under("copied.txt")
+  if Result.isOk(&Io.copy(first, copied)) { held = held + 1 }
+  let moved = under("moved.txt")
+  if Result.isOk(&Io.move(copied, moved)) { held = held + 1 }
+  if Io.exists(moved) && !Io.exists(copied) { held = held + 1 }
+
+  // What the directory holds, by name and by path.
+  if Result.unwrapOr(Io.list(root()), []).contains("one.txt") { held = held + 1 }
+  if Result.unwrapOr(Io.listPaths(root()), []).contains(first) { held = held + 1 }
+
+  // Removing, and removing what is not there.
+  if Result.isOk(&Io.remove(moved)) && !Io.exists(moved) { held = held + 1 }
+  if Result.isErr(&Io.remove(under("absent.txt"))) { held = held + 1 }
+  if Result.isOk(&Io.removeIfPresent(under("absent.txt"))) { held = held + 1 }
+
+  // Writing to the two streams a program answers on.
+  //
+  // `readLineOrEnd` and `readAllLines` are left alone: they read the input a
+  // program was given, and a fixture that asked for input the harness may not
+  // have closed would wait rather than fail.
+  if Result.isOk(&Io.writeLines(&[])) { held = held + 1 }
+  if Result.isOk(&Io.writeErrorLine("")) { held = held + 1 }
+  if Result.isOk(&Io.writeValue("")) { held = held + 1 }
+
+  // Everything made here is taken away again.
+  for name in Result.unwrapOr(Io.listPaths(root()), []) {
+    let _removed = Io.removeIfPresent(name)
+  }
+
+  held
+}

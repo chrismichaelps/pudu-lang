@@ -1,0 +1,644 @@
+module Std.Db
+
+import Std.Bytes as ByteSeq
+import Std.Channel as Channel
+import Std.Db.Driver as Driver
+import Std.Db.Protocol as Wire
+import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+import Std.Text as Text
+
+/// A column of a result.
+export type Column = { name: Str, oid: Int }
+
+/// What a query produced.
+///
+/// A value that was absent is `None` rather than empty text, because the two
+/// are different and a caller that could not tell them apart would read a
+/// column nobody filled in as one somebody filled in with nothing.
+export type Rows = {
+  columns: Array[Column],
+  rows: Array[Array[Option[Str]]],
+  tag: Str
+}
+
+/// A set of connections shared between threads.
+///
+/// Each place in `ready` holds a connection, or nothing where one was lost. A
+/// lost connection keeps its place, and the next borrower opens a fresh one
+/// with `reopen`, so a dropped socket costs one request rather than the pool.
+/// `reopen` is a function rather than the settings themselves so that showing a
+/// pool cannot show its password.
+export type Pool = {
+  ready: Channel.Channel[Option[Session.Connection]],
+  size: Int,
+  closing: Sync.Cell[Bool],
+  reopen: fn() -> Result[Session.Connection, Session.DbError]
+}
+
+/// Run text the server plans and executes in one step.
+///
+/// This cannot carry values, and nothing here will paste one into it. A query
+/// built by joining text to a value is a query whose shape the value decides,
+/// which is how a value becomes an instruction; `run` is the way to supply
+/// one.
+export fn simple(stream: Session.Connection, sql: Str) -> Result[(Rows, Session.Connection), Session.DbError] {
+  Session.write(&stream, &Wire.query(sql)) ?
+  collect(stream)
+}
+
+/// Run a statement with values supplied apart from it.
+///
+/// The values never enter the text. The server plans the statement first and
+/// is handed the values after, so a value holding a quotation mark, a
+/// semicolon, or the whole of another statement is a value in a column and
+/// cannot become part of what runs.
+export fn run(
+  stream: Session.Connection,
+  sql: Str,
+  values: &Array[Option[Str]]
+) -> Result[(Rows, Session.Connection), Session.DbError] {
+  let request = ByteSeq.join(&[
+      Wire.parse("", sql),
+      Wire.bind("", "", values),
+      Wire.describeStatement(""),
+      Wire.execute("", 0),
+      Wire.sync()
+    ])
+  Session.write(&stream, &request) ?
+  collect(stream)
+}
+
+/// Read until the server says it is ready again, gathering what it sent.
+fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Session.DbError] {
+  var stream = start
+  var columns: Array[Column] = []
+  var rows: Array[Array[Option[Str]]] = []
+  var tag = ""
+  var failure: Option[Session.DbError] = None
+  var reported: Option[Session.DbError] = None
+  var ready = false
+  while !ready && Option.isNone(&failure) {
+    let read = Session.nextMessage(stream)
+    if let Err(reason) = read {
+      failure = Some(reason)
+    } else {
+      let pair = Result.unwrapOr(read, (Session.emptyMessage(), stream))
+      let message = pair[0]
+      stream = pair[1]
+      if message.kind == "T" {
+        let described = Wire.readRowDescription(&message.payload)
+        if !columns.isEmpty() || !rows.isEmpty() || !tag.isEmpty() {
+          failure = Some(Unsupported("multiple command results require a separate result stream"))
+        } else if let Ok(found) = described { columns = namedColumns(&found) } else {
+          failure = Some(Malformed("a row description that did not read"))
+        }
+      } else {
+        if message.kind == "D" {
+          let valued = Wire.readDataRow(&message.payload)
+          if let Ok(found) = valued {
+            if found.length() != columns.length() {
+              failure = Some(Malformed("a data row does not match its column description"))
+            } else { rows = rows.push(found) }
+          } else {
+            failure = Some(Malformed("a data row that did not read"))
+          }
+        } else {
+          if message.kind == "C" {
+            let named = Wire.readCString(&message.payload)
+            if !tag.isEmpty() {
+              failure = Some(Unsupported("multiple command results require a separate result stream"))
+            } else if let Ok(found) = named {
+              if found[1].isEmpty() { tag = found[0] } else {
+                failure = Some(Malformed("unread bytes after a command tag"))
+              }
+            } else { failure = Some(Malformed("a command tag that did not read")) }
+          } else {
+            if message.kind == "E" {
+              // The failure is kept and the loop keeps reading rather than
+              // answering here, because the server still sends the message
+              // saying it is ready. Stopping at the failure would leave that
+              // unread, and the next query would read this one's ending as its
+              // own — which is how one failed query makes every query after it
+              // wrong. The loop below ends on that message, not this one.
+              if Option.isNone(&reported) { reported = Some(Session.serverFailure(&message.payload)) }
+            } else {
+              if message.kind == "Z" {
+                stream = Session.withStatus(stream, &message.payload)
+                ready = true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    let failed: Result[(Rows, Session.Connection), Session.DbError] = Err(reason)
+    afterCleanup(failed, Result.mapErr(Net.close(&stream.socket), fn(problem: Net.NetError) -> Session.DbError { Other(show(problem)) }))
+  } else if let Some(reason) = reported {
+    Err(reason)
+  } else {
+    Ok((Rows{columns: columns, rows: rows, tag: tag}, stream))
+  }
+}
+
+fn namedColumns(found: &Array[Wire.Column]) -> Array[Column] {
+  var columns: Array[Column] = []
+  for entry in found { columns = columns.push(Column{name: entry.name, oid: entry.oid}) }
+  columns
+}
+
+/// Where a column sits, or `-1` when the result has no column of that name.
+export fn indexOfColumn(result: &Rows, name: Str) -> Int {
+  var found = -1
+  var index = 0
+  while index < result.columns.length() {
+    if result.columns[index].name == name && found < 0 { found = index }
+    index = index + 1
+  }
+  found
+}
+
+/// One value by row and column name, absent when either is missing or when the
+/// column had no value.
+export fn value(result: &Rows, row: Int, named: Str) -> Option[Str] {
+  let position = indexOfColumn(result, named)
+  if position < 0 || row < 0 || row >= result.rows.length() {
+    None
+  } else {
+    let values = result.rows[row]
+    if position >= values.length() { None } else { values[position] }
+  }
+}
+
+/// Every value in one column.
+export fn column(result: &Rows, name: Str) -> Array[Option[Str]] {
+  let position = indexOfColumn(result, name)
+  var found: Array[Option[Str]] = []
+  if position >= 0 {
+    for values in result.rows {
+      found = found.push(if position < values.length() { values[position] } else { None })
+    }
+  }
+  found
+}
+
+/// How many rows a result holds.
+export fn rowCount(result: &Rows) -> Int { result.rows.length() }
+
+/// How many rows a statement that produced none reported changing.
+///
+/// Read from the tag the server sends, which is the only place an update says
+/// what it did. A caller checking that an update changed something is checking
+/// this rather than a row count, which for an update is zero either way.
+export fn affected(result: &Rows) -> Int {
+  let pieces = result.tag.split(" ")
+  if pieces.length() == 0 { 0 } else {
+    Option.unwrapOr(Text.countOf(pieces[pieces.length() - 1]), 0)
+  }
+}
+
+/// This result as the driver layer carries one.
+///
+/// The session answers every column as text, because that is what the wire
+/// carries; the driver layer carries what a value is. Converting here rather
+/// than in each driver keeps one description of how a session's result becomes
+/// a driver's, which two copies would eventually disagree about.
+export fn asDriverRows(result: &Rows) -> Driver.Rows {
+  var columns: Array[Driver.Column] = []
+  for named in result.columns {
+    columns = columns.push(Driver.Column{name: named.name, nativeType: Some(show(named.oid))})
+  }
+  var values: Array[Array[Driver.Value]] = []
+  for row in result.rows {
+    var converted: Array[Driver.Value] = []
+    var index = 0
+    for cell in row {
+      let binary = index < result.columns.length() && result.columns[index].oid == BYTEA_OID
+      converted = converted.push(match cell {
+          case None => Driver.NullValue
+          case Some(held) => { if binary { bytesOrText(held) } else { Driver.TextValue(held) } }
+        })
+      index = index + 1
+    }
+    values = values.push(converted)
+  }
+  Driver.Rows{columns: columns, rows: values, command: result.tag}
+}
+
+/// The type the server gives a column of bytes.
+const BYTEA_OID: Int = 17
+
+/// A bytea cell as the bytes it spells.
+///
+/// The server writes bytes as `\x` and two hexadecimal digits a byte. A cell
+/// in any other form — the older escaped output a server can be configured to
+/// send — is kept as the text it arrived as rather than guessed at.
+fn bytesOrText(held: Str) -> Driver.Value {
+  if !held.startsWith("\\x") { return Driver.TextValue(held) }
+  match ByteSeq.decodeHex(held.drop(2)) {
+    case Ok(bytes) => Driver.BytesValue(bytes)
+    case Err(_) => Driver.TextValue(held)
+  }
+}
+
+/// How much a transaction is protected from what other transactions are doing.
+///
+/// Named rather than left to text, because these are the four the standard
+/// defines and a caller writing one as a string can misspell it into whatever
+/// the server's default happens to be — silently, since a server given an
+/// unknown level reports nothing until it matters.
+export type Isolation
+  = ReadCommitted
+  | RepeatableRead
+  | Serializable
+  | ReadUncommitted
+
+fn isolationText(level: &Isolation) -> Str {
+  match level {
+    case ReadCommitted => "READ COMMITTED"
+    case RepeatableRead => "REPEATABLE READ"
+    case Serializable => "SERIALIZABLE"
+    case ReadUncommitted => "READ UNCOMMITTED"
+  }
+}
+
+/// Where a connection stands, so a caller can ask before acting.
+export fn statusOf(stream: &Session.Connection) -> Session.TransactionStatus { stream.status }
+
+/// Whether a connection is inside a transaction, failed or not.
+export fn inTransaction(stream: &Session.Connection) -> Bool { stream.status != Idle }
+
+/// Begin a transaction.
+export fn begin(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "BEGIN")
+}
+
+/// Begin a transaction at a stated level of protection.
+export fn beginWith(stream: Session.Connection, level: &Isolation) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "BEGIN ISOLATION LEVEL " + isolationText(level))
+}
+
+/// Keep everything the transaction did.
+export fn commit(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "COMMIT")
+}
+
+/// Undo everything the transaction did.
+///
+/// This is also how a connection whose transaction failed is made usable
+/// again: the server refuses every other statement until it arrives.
+export fn rollback(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "ROLLBACK")
+}
+
+/// Mark a point a transaction can be returned to without undoing all of it.
+export fn savepoint(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "SAVEPOINT " + quoteName(name))
+}
+
+/// Undo back to a marked point, keeping what came before it.
+export fn rollbackTo(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "ROLLBACK TO SAVEPOINT " + quoteName(name))
+}
+
+/// Forget a marked point, keeping everything done since.
+export fn release(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
+  statementOnly(stream, "RELEASE SAVEPOINT " + quoteName(name))
+}
+
+/// A name written so it cannot be read as anything but a name.
+///
+/// A savepoint's name is part of the statement rather than a value, so it
+/// cannot be supplied apart from it the way `run` supplies one. Quoting it and
+/// doubling any quotation mark inside is what keeps a name from ending the
+/// statement and beginning another.
+fn quoteName(name: Str) -> Str { "\"" + name.replace("\"", "\"\"") + "\"" }
+
+/// Run a statement for its effect, keeping the connection rather than a
+/// result.
+fn statementOnly(stream: Session.Connection, sql: Str) -> Result[Session.Connection, Session.DbError] {
+  let outcome = simple(stream, sql) ?
+  Ok(outcome[1])
+}
+
+/// Run an action inside a transaction, and undo it if the action failed.
+///
+/// There is no rollback a caller can forget. A transaction left open holds
+/// every row it touched against every other connection until something closes
+/// it, and a caller that returned early on a failure — which is exactly when a
+/// rollback matters most — is the commonest way one is left open.
+///
+/// A commit that itself fails is answered as a failure rather than swallowed:
+/// a caller told its work was kept, when the server refused to keep it, would
+/// carry on from a state that does not exist.
+export fn withTransaction[T](
+  start: Session.Connection,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> (Result[T, Session.DbError], Session.Connection) {
+  let opened = begin(start)
+  if let Err(reason) = opened { return (Err(reason), start) }
+  let begun = Result.unwrapOr(opened, start)
+  // The action is lent the connection under a lending of its own, so a copy it
+  // keeps stops working the moment this returns. Without that, a callback can
+  // hold one past the commit and write through it while the pool has handed
+  // the connection to somebody else.
+  let lent = Session.renew(begun)
+  if let Err(reason) = lent { return (Err(reason), begun) }
+  let stream = Result.unwrapOr(lent, begun)
+  let acted = action(stream)
+  let taken = Session.renew(acted[1])
+  if let Err(reason) = taken { return (Err(reason), acted[1]) }
+  let outcome = (acted[0], Result.unwrapOr(taken, acted[1]))
+  if Result.isErr(&outcome[0]) {
+    let undone = rollback(outcome[1])
+    (outcome[0], Result.unwrapOr(undone, outcome[1]))
+  } else {
+    let kept = commit(outcome[1])
+    if let Err(reason) = kept {
+      let undone = rollback(outcome[1])
+      (Err(reason), Result.unwrapOr(undone, outcome[1]))
+    } else {
+      (outcome[0], Result.unwrapOr(kept, outcome[1]))
+    }
+  }
+}
+
+/// Run an action between two marked points, undoing back to the first if it
+/// failed.
+///
+/// The difference from a transaction is what a failure costs: this undoes only
+/// what the action did, leaving the transaction around it intact, so one
+/// optional step failing does not throw away the work before it.
+export fn withSavepoint[T](
+  start: Session.Connection,
+  name: Str,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> (Result[T, Session.DbError], Session.Connection) {
+  let marked = savepoint(start, name)
+  if let Err(reason) = marked { return (Err(reason), start) }
+  let stream = Result.unwrapOr(marked, start)
+  let outcome = action(stream)
+  if Result.isErr(&outcome[0]) {
+    let undone = rollbackTo(outcome[1], name)
+    (outcome[0], Result.unwrapOr(undone, outcome[1]))
+  } else {
+    let freed = release(outcome[1], name)
+    (outcome[0], Result.unwrapOr(freed, outcome[1]))
+  }
+}
+
+/// A pool of open connections, shared between threads.
+///
+/// The connections are held in a channel, which is what makes taking one wait
+/// rather than fail when they are all in use: a channel's receive already
+/// blocks until something is there, so the pool needs no waiting of its own.
+/// It also means a pool cannot hand out more connections than it opened, which
+/// is the whole reason a database wants one.
+export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
+  if size < 1 { return Err(Other("a database pool must contain at least one connection")) }
+  let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(size)
+  let held = *settings
+  let building = Pool {
+    ready: ready,
+    size: size,
+    closing: Sync.cell(false),
+    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) }
+  }
+  var opened = 0
+  var failure: Option[Session.DbError] = None
+  while opened < size && Option.isNone(&failure) {
+    match Session.connect(settings) {
+      case Err(reason) => { failure = Some(reason) }
+      case Ok(stream) => {
+        match Channel.send(&ready, Some(stream)) {
+          case Ok(_) => { opened = opened + 1 }
+          case Err(reason) => {
+            let failed: Result[(), Session.DbError] = Err(asChannel(reason))
+            match afterCleanup(failed, Session.close(&stream)) {
+              case Err(problem) => { failure = Some(problem) }
+              case Ok(_) => { failure = Some(asChannel(reason)) }
+            }
+          }
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    let failed: Result[Pool, Session.DbError] = Err(reason)
+    afterCleanup(failed, closePool(&building))
+  } else {
+    Ok(building)
+  }
+}
+
+/// Take a connection, hand it to an action, and put it back however the action
+/// ended.
+///
+/// There is no return a caller can forget. A connection not put back is one
+/// the pool has lost, and a pool that has lost all of them stops every thread
+/// waiting on it — a failure that appears only under load and looks like the
+/// database being slow.
+///
+/// A connection that cannot be lent again — its socket dropped, the server
+/// restarted, the protocol went wrong — is closed and its place kept empty, so
+/// the next borrower opens a fresh one. Closing the whole pool instead would
+/// turn one lost socket into every later request failing until the program
+/// restarts.
+export fn withConnection[T](
+  target: &Pool,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  let taken = Result.mapErr(Channel.receive(&target.ready), asChannel) ?
+  let slot = match taken {
+    case Some(found) => found
+    case None => { return Err(Closed) }
+  }
+  match Sync.get(&target.closing) {
+    case Err(problem) => {
+      let failed: Result[T, Session.DbError] = Err(Other(show(problem)))
+      return afterCleanup(afterCleanup(failed, closeSlot(&slot)), closePool(target))
+    }
+    case Ok(true) => {
+      let failed: Result[T, Session.DbError] = Err(Closed)
+      return afterCleanup(failed, closeSlot(&slot))
+    }
+    case Ok(false) => {}
+  }
+  let stream = match slot {
+    case Some(found) => found
+    case None => {
+      match (target.reopen)() {
+        case Ok(opened) => opened
+        case Err(reason) => {
+          let failed: Result[T, Session.DbError] = Err(reason)
+          return afterCleanup(failed, vacate(target))
+        }
+      }
+    }
+  }
+  let lent = Session.renew(stream)
+  if let Err(reason) = lent {
+    let failed: Result[T, Session.DbError] = Err(reason)
+    return afterCleanup(failed, discard(target, &stream))
+  }
+  let acted = action(Result.unwrapOr(lent, stream))
+  let ended = Session.renew(acted[1])
+  if let Err(reason) = ended {
+    let cleanup: Result[(), Session.DbError] = Err(reason)
+    return afterCleanup(afterCleanup(acted[0], cleanup), discard(target, &acted[1]))
+  }
+  let outcome = (acted[0], Result.unwrapOr(ended, acted[1]))
+  match Sync.get(&target.closing) {
+    case Err(problem) => {
+      let cleanup: Result[(), Session.DbError] = Err(Other(show(problem)))
+      return afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&outcome[1])), closePool(target))
+    }
+    case Ok(true) => { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
+    case Ok(false) => {}
+  }
+  let reusable = match outcome[0] {
+    case Ok(_) => true
+    case Err(Server(_, _, _)) => true
+    case Err(_) => false
+  }
+  if !reusable {
+    return afterCleanup(outcome[0], discard(target, &outcome[1]))
+  }
+  match settled(outcome[1]) {
+    case Err(problem) => {
+      let cleanup: Result[(), Session.DbError] = Err(problem)
+      let failed = afterCleanup(outcome[0], cleanup)
+      return afterCleanup(failed, discard(target, &outcome[1]))
+    }
+    case Ok(returning) => {
+      match Channel.send(&target.ready, Some(returning)) {
+        case Ok(_) => outcome[0]
+        case Err(problem) => {
+          let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
+          afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&returning)), closePool(target))
+        }
+      }
+    }
+  }
+}
+
+/// Take a connection, run an action inside a transaction on it, and put it
+/// back.
+///
+/// The connection is held for the whole operation, which is the point. A
+/// caller that reaches for the pool once per statement gets a different
+/// connection each time, so `BEGIN` lands on one and the work that was meant
+/// to be inside it lands on another — and the transaction, holding nothing,
+/// commits nothing and rolls back nothing. Nothing about that reads as wrong
+/// at the call site; it appears as rows that should have been undone and were
+/// not.
+///
+/// Holding one connection is also what stops another caller interleaving work
+/// between the `BEGIN` and the `COMMIT`: a connection lent to this operation
+/// is not in the pool for anyone else to take.
+export fn transaction[T](
+  target: &Pool,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  withConnection(target, fn(stream: Session.Connection) -> (Result[T, Session.DbError], Session.Connection) {
+      withTransaction(stream, action)
+    })
+}
+
+/// The same, at a stated level of protection.
+export fn transactionWith[T](
+  target: &Pool,
+  level: &Isolation,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  withConnection(target, fn(stream: Session.Connection) -> (Result[T, Session.DbError], Session.Connection) {
+      let opened = beginWith(stream, level)
+      if let Err(reason) = opened { return (Err(reason), stream) }
+      let inside = Result.unwrapOr(opened, stream)
+      let outcome = action(inside)
+      if Result.isErr(&outcome[0]) {
+        let undone = rollback(outcome[1])
+        (outcome[0], Result.unwrapOr(undone, outcome[1]))
+      } else {
+        let kept = commit(outcome[1])
+        if let Err(reason) = kept {
+          let undone = rollback(outcome[1])
+          (Err(reason), Result.unwrapOr(undone, outcome[1]))
+        } else {
+          (outcome[0], Result.unwrapOr(kept, outcome[1]))
+        }
+      }
+    })
+}
+
+/// Only a confirmed idle connection may return to the available queue.
+fn settled(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  if stream.status == Idle { Ok(stream) } else {
+    let restored = rollback(stream) ?
+    if restored.status == Idle { Ok(restored) } else { Err(Malformed("rollback did not leave the connection idle")) }
+  }
+}
+
+/// Close admission and every queued connection; borrowers close their own returns.
+export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
+  var outcome: Result[(), Session.DbError] = Result.mapErr(Sync.set(&target.closing, true), fn(problem: Sync.SyncError) -> Session.DbError { Other(show(problem)) })
+  let finished = Result.mapErr(Channel.close(&target.ready), asChannel)
+  outcome = afterCleanup(outcome, finished)
+  if Result.isErr(&finished) { return outcome }
+  var going = true
+  while going {
+    match Channel.receive(&target.ready) {
+      case Err(problem) => {
+        let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
+        outcome = afterCleanup(outcome, cleanup)
+        going = false
+      }
+      case Ok(None) => { going = false }
+      case Ok(Some(slot)) => { outcome = afterCleanup(outcome, closeSlot(&slot)) }
+    }
+  }
+  outcome
+}
+
+/// Close a connection that cannot be lent again and keep its place, so the
+/// pool stays the size it was opened at.
+///
+/// The place is returned before the close is reported, because a close that
+/// fails on a socket already gone must not also cost the pool a connection.
+fn discard(target: &Pool, stream: &Session.Connection) -> Result[(), Session.DbError] {
+  let kept = vacate(target)
+  afterCleanup(kept, Session.close(stream))
+}
+
+/// Return an empty place to the pool, for the next borrower to fill.
+fn vacate(target: &Pool) -> Result[(), Session.DbError] {
+  Result.mapErr(Channel.send(&target.ready, None), asChannel)
+}
+
+fn closeSlot(slot: &Option[Session.Connection]) -> Result[(), Session.DbError] {
+  match slot {
+    case Some(stream) => Session.close(&stream)
+    case None => Ok(())
+  }
+}
+
+/// Keep the operation's failure first while retaining cleanup failures beside it.
+fn afterCleanup[T](primary: Result[T, Session.DbError], cleanup: Result[(), Session.DbError]) -> Result[T, Session.DbError] {
+  match cleanup {
+    case Ok(_) => primary
+    case Err(problem) => {
+      match primary {
+        case Ok(_) => Err(problem)
+        case Err(original) => Err(Other(show(original) + "; cleanup also failed: " + show(problem)))
+      }
+    }
+  }
+}
+
+fn asChannel(problem: Channel.ChannelError) -> Session.DbError { Other(show(problem)) }

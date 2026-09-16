@@ -1,0 +1,129 @@
+module UsesArchiveTar
+
+import Std.Archive.Tar as Tar
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. An archive is a whole number of 512-byte blocks
+  let one = Tar.entry("readme.txt", "hello".toBytes())
+  let archive = Tar.writeArchive([one])
+  if archive.length() % 512 == 0 {
+    held = held + 1
+  }
+
+  // 2. Two empty blocks end the stream, as USTAR requires
+  if archive.length() >= 1024 {
+    held = held + 1
+  }
+
+  // 3. A written entry reads back
+  let readBack = match Tar.readArchive(&archive) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  if readBack.length() == 1 {
+    held = held + 1
+  }
+
+  // 4. Its path survives the 100-byte name field
+  let firstPath = match readBack.get(0) {
+    case found => found.path
+  }
+  if firstPath == "readme.txt" {
+    held = held + 1
+  }
+
+  // 5. Its content survives, byte for byte
+  let extracted = Tar.extractFile(&readBack, "readme.txt")
+  let content = Option.unwrapOr(extracted, ByteSeq.empty())
+  if ByteSeq.toText(&content) == Ok("hello") {
+    held = held + 1
+  }
+
+  // 6. The recorded size is the data's own length
+  let firstSize = match readBack.get(0) {
+    case found => found.size
+  }
+  if firstSize == 5 {
+    held = held + 1
+  }
+
+  // 7. Several entries keep their order
+  let first = Tar.entry("a.txt", "one".toBytes())
+  let second = Tar.entry("b.txt", "two".toBytes())
+  let third = Tar.entry("c.txt", "three".toBytes())
+  let many = Tar.writeArchive([first, second, third])
+  let manyBack = match Tar.readArchive(&many) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  if manyBack.length() == 3 {
+    held = held + 1
+  }
+
+  // 8. Each of them extracts its own content
+  let secondBack = Option.unwrapOr(Tar.extractFile(&manyBack, "b.txt"), ByteSeq.empty())
+  let thirdBack = Option.unwrapOr(Tar.extractFile(&manyBack, "c.txt"), ByteSeq.empty())
+  if ByteSeq.toText(&secondBack) == Ok("two") && ByteSeq.toText(&thirdBack) == Ok("three") {
+    held = held + 1
+  }
+
+  // 9. A name no entry carries extracts nothing
+  match Tar.extractFile(&manyBack, "absent.txt") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // 10. A directory entry carries no data and keeps its trailing separator
+  let tree = Tar.writeArchive([Tar.directory("logs")])
+  let treeBack = match Tar.readArchive(&tree) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  let treePath = match treeBack.get(0) {
+    case found => found.path
+  }
+  if treePath == "logs/" {
+    held = held + 1
+  }
+
+  // 11. Data shorter than a block is padded, not truncated
+  let padded = Tar.writeArchive([Tar.entry("tiny", "x".toBytes())])
+  let paddedBack = match Tar.readArchive(&padded) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  let tiny = Option.unwrapOr(Tar.extractFile(&paddedBack, "tiny"), ByteSeq.empty())
+  if tiny.length() == 1 {
+    held = held + 1
+  }
+
+  // 12. Data crossing a block boundary survives whole
+  var wide = ""
+  var w = 0
+  while w < 130 {
+    wide = wide + "abcd"
+    w = w + 1
+  }
+  let large = Tar.writeArchive([Tar.entry("wide.txt", wide.toBytes())])
+  let largeBack = match Tar.readArchive(&large) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  let recovered = Option.unwrapOr(Tar.extractFile(&largeBack, "wide.txt"), ByteSeq.empty())
+  if recovered.length() == 520 {
+    held = held + 1
+  }
+
+  // 13. A corrupt header is refused rather than misread
+  let truncated = ByteSeq.slice(&archive, 0, 100)
+  match Tar.readArchive(&truncated) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  held
+}

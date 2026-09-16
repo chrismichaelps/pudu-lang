@@ -1,0 +1,182 @@
+name: musl-runtime
+
+# A runtime that runs anywhere Linux runs, and the proof that it does.
+#
+# The proof is the point. A musl link either happened or did not, and a runtime
+# that quietly fell back to the host C library builds cleanly, passes a smoke
+# test on the machine that built it, and fails on the platform — from the loader,
+# before any Pudu code runs, so nothing in the program can report it.
+#
+# So the artefact is carried into two images it has no business running in
+# unless the package worked: Alpine, which has no glibc at all, and Amazon
+# Linux 2023, which is the custom-runtime target Vercel currently provides.
+#
+# The job runs *in* Alpine rather than building a container from a runner,
+# because Alpine is musl: nothing has to arrange for a different C library than
+# the one the system uses, which is the arrangement that goes wrong. The runner
+# is x86_64, which is what Lambda runs, so nothing is emulated.
+
+on:
+  push:
+    branches:
+      - "feature/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: alpine:3.20
+    steps:
+      # `gmp-dev` carries libgmp.a, so there is no separate static package for it
+      # the way there is for ncurses and zlib.
+      - name: Install the toolchain musl needs
+        run: |
+          apk add --no-cache \
+            bash binutils build-base coreutils curl git gmp-dev gnupg \
+            libffi-dev ncurses-dev patchelf perl tar xz zlib-dev \
+            nodejs
+
+      - uses: actions/checkout@v7
+
+      - name: Install GHC and cabal
+        env:
+          BOOTSTRAP_HASKELL_NONINTERACTIVE: 1
+          BOOTSTRAP_HASKELL_MINIMAL: 1
+          GHCUP_INSTALL_BASE_PREFIX: /opt
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+          echo "/opt/.ghcup/bin" >> "$GITHUB_PATH"
+
+      - name: Select the versions the package is built with
+        run: |
+          ghcup install ghc 9.10.1 --set
+          ghcup install cabal 3.12.1.0 --set
+          GHC_BIN="$(ghcup whereis ghc 9.10.1)"
+          CABAL_BIN="$(ghcup whereis cabal 3.12.1.0)"
+          dirname "$GHC_BIN" >> "$GITHUB_PATH"
+          dirname "$CABAL_BIN" >> "$GITHUB_PATH"
+          "$GHC_BIN" --version
+          "$CABAL_BIN" --version
+
+      # The Haskell libraries are linked into the runtime. Its C dependencies
+      # remain musl-built shared objects so dynamic loading stays available;
+      # the Lambda package carries the exact files that `ldd` names.
+      - name: Build the runtime
+        working-directory: packages/pudu/v0.1
+        run: |
+          cabal update
+          cabal build exe:pudu \
+            --disable-tests \
+            --enable-optimization=2
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64"
+          cp "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64" \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          cp /lib/ld-musl-x86_64.so.1 "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1"
+          patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+            resolved="$(ldd "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64" | \
+              awk -v wanted="$dependency" '$1 == wanted { print $3 }')"
+            if [ -z "$resolved" ]; then
+              echo "could not resolve $dependency from the built runtime" >&2
+              exit 1
+            fi
+            cp -L "$resolved" "$GITHUB_WORKSPACE/dist/$dependency"
+            patchelf --replace-needed "$dependency" "/var/task/$dependency" \
+              "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          done
+
+      - name: Say what was produced
+        run: |
+          cd dist
+          file pudu-musl-x86_64 || true
+          file pudu-musl-lambda-x86_64 || true
+          readelf -l pudu-musl-lambda-x86_64 | grep -F '/var/task/ld-musl-x86_64.so.1'
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+            patchelf --print-needed pudu-musl-lambda-x86_64 | \
+              grep -Fx "/var/task/$dependency"
+          done
+          ldd pudu-musl-x86_64 || true
+          if ldd pudu-musl-x86_64 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
+            echo "the runtime still needs glibc, which is the thing this avoids" >&2
+            exit 1
+          fi
+
+      # Same version of Pudu on both sides: the compiler that attaches the
+      # program and the runtime it is attached to come from this one checkout.
+      - name: Attach a program to it
+        run: |
+          PUDU="$(cd packages/pudu/v0.1 && cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          mkdir -p dist/probe
+          cat > dist/probe/Deployed.pudu <<'PROGRAM'
+          module Deployed
+
+          import Std.Io as Io
+          import Std.Text as Text
+
+          fn main() -> Int {
+            match Io.writeLine(Text.toTitle("deployed") + " on musl") {
+              case Ok(_) => 0
+              case Err(_) => 1
+            }
+          }
+          PROGRAM
+          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed \
+            --runtime dist/pudu-musl-lambda-x86_64
+          ls -l dist/deployed
+
+      - name: Run it here, where there is no glibc at all
+        run: |
+          cd /tmp
+          mkdir -p /var/task
+          cp "$GITHUB_WORKSPACE/dist/deployed" /var/task/deployed
+          cp "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1" /var/task/ld-musl-x86_64.so.1
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+            cp "$GITHUB_WORKSPACE/dist/$dependency" "/var/task/$dependency"
+          done
+          env -i /var/task/deployed | tee said.txt
+          grep -qx "Deployed on musl" said.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-musl-x86_64
+          path: |
+            dist/pudu-musl-x86_64
+            dist/pudu-musl-lambda-x86_64
+            dist/ld-musl-x86_64.so.1
+            dist/libffi.so.8
+            dist/libz.so.1
+            dist/libncursesw.so.6
+            dist/libgmp.so.10
+            dist/deployed
+          if-no-files-found: error
+          retention-days: 7
+
+  # The artefact carried into the glibc AWS Lambda actually provides. Separate
+  # from the build because it needs a runner that can run containers rather than
+  # one that is a container.
+  lambda:
+    needs: runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pudu-musl-x86_64
+          path: dist
+      - name: Run it on the glibc AWS Lambda provides
+        run: |
+          chmod +x dist/deployed dist/ld-musl-x86_64.so.1
+          docker run --rm \
+            --volume "$PWD/dist:/var/task:ro" \
+            amazonlinux:2023 \
+            /usr/bin/env -i LD_LIBRARY_PATH=/lib64:/usr/lib64 \
+              /var/task/deployed | tee said.txt
+          grep -qx "Deployed on musl" said.txt

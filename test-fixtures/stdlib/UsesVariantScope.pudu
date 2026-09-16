@@ -1,0 +1,80 @@
+module UsesVariantScope
+
+import Std.Html {Element, Fragment, Text, Trusted}
+import Std.Html as Html
+import Std.Json as Json
+import Std.Option as Option
+
+/// That a pattern matches the variant the module named, not one another
+/// module happens to have.
+///
+/// Two modules here each declare a variant called `Text`. Only one of them is
+/// in scope unqualified, and a pattern must find that one — reading the name
+/// against a table holding every loaded module's variants made the answer
+/// depend on which module was loaded last, which is not a property of this
+/// module at all.
+export fn main() -> Int {
+  var held = 0
+
+  // Built and matched unqualified: this is Html's Text, because that is the
+  // one this module selected.
+  let node = Text("hello")
+  match node {
+    case Text(content) => if content == "hello" { held = held + 1 }
+    case _other => held = held + 0
+  }
+
+  // The other module is imported only qualified, so its variant of the same
+  // name is reachable by its qualifier and nowhere else.
+  let value = Json.Text("hello")
+  if Option.unwrapOr(Json.asText(&value), "") == "hello" { held = held + 1 }
+
+  // And rendering proves which type each actually is: markup from one, an
+  // encoded document from the other.
+  if Html.render(&node) == "hello" { held = held + 1 }
+  if Json.encode(&value) == "\"hello\"" { held = held + 1 }
+
+  // Every other selected variant of the same type still matches, so the fix
+  // did not narrow what a pattern can reach.
+  match Fragment([Text("a"), Text("b")]) {
+    case Fragment(children) => if children.length() == 2 { held = held + 1 }
+    case _other => held = held + 0
+  }
+  match Trusted("<em>x</em>") {
+    case Trusted(markup) => if markup == "<em>x</em>" { held = held + 1 }
+    case _other => held = held + 0
+  }
+  match Element("p", [], []) {
+    case Element(name, _attributes, _children) => if name == "p" { held = held + 1 }
+    case _other => held = held + 0
+  }
+
+  // A wired-in variant reached without importing anything still matches, since
+  // resolving through scope must not lose the ones that were never imported.
+  match Some(1) {
+    case Some(found) => if found == 1 { held = held + 1 }
+    case None => held = held + 0
+  }
+  match ok() {
+    case Ok(found) => if found == 2 { held = held + 1 }
+    case Err(_reason) => held = held + 0
+  }
+
+  // A qualified pattern names the variant its qualifier names, whatever else
+  // is in scope under the bare name.
+  match value {
+    case Json.Text(content) => if content == "hello" { held = held + 1 }
+    case _other => held = held + 0
+  }
+
+  // A generic sum still carries its type arguments through a pattern, which is
+  // what the owner-keyed shape has to preserve.
+  match Some("text") {
+    case Some(found) => if found.length() == 4 { held = held + 1 }
+    case None => held = held + 0
+  }
+
+  held
+}
+
+fn ok() -> Result[Int, Str] { Ok(2) }

@@ -1,0 +1,326 @@
+module UsesCryptoAll
+
+import Std.Bytes as Bytes
+import Std.Crypto as Crypto
+import Std.Option as Option
+
+/// A run of bytes of exactly the stated length, for the key and nonce lengths
+/// the sealing calls insist on.
+fn patternOf(seed: Str, length: Int) -> Bytes {
+  Bytes.take(&Bytes.repeat(&Bytes.fromText(seed), length), length)
+}
+
+/// The same bytes with every low bit flipped, which changes each one of them
+/// whatever they were. Adding or dropping a byte would change the length as
+/// well, and length is not what a tag is meant to catch.
+fn flipped(source: &Bytes) -> Bytes {
+  Bytes.xorWith(source, &Bytes.repeat(&Bytes.putU8(1u8), source.length()))
+}
+
+/// Every export of `Std.Crypto`.
+///
+/// A digest is worth nothing unless it agrees with every other implementation
+/// of the same algorithm, so every one here is checked against a value computed
+/// elsewhere rather than against itself: a digest checked only for being stable
+/// or for differing between two inputs would pass with any function at all in
+/// its place. The published answers used are the ones these algorithms are
+/// specified by.
+///
+/// The two constant-time comparisons are asked for both answers, and for the
+/// case that separates them from a length check — two values of the same length
+/// differing in one place.
+///
+/// Sealing is checked for the property it exists for, which encryption alone
+/// does not give: a sealed message that has been changed does not open. Each
+/// way it can be wrong is asked separately — a changed byte, the wrong key, the
+/// wrong nonce, associated data that does not match — and each answers nothing
+/// rather than saying which was wrong, since saying would tell whoever changed
+/// it which change got closer.
+export fn main() -> Int {
+  var held = 0
+
+  // The digest of text against the published answers for this algorithm.
+  if Crypto.sha256Hex("abc")
+    == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+    held = held + 1
+  }
+  if Crypto.sha256Hex("")
+    == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+    held = held + 1
+  }
+  // Text that is not one byte per character, so the encoding step is covered
+  // rather than assumed.
+  if Crypto.sha256Hex("h\u{00e9}llo")
+    == "3c48591d8d098a4538f5e013dfcf406e948eac4d3277b10bf614e295d6068179" {
+    held = held + 1
+  }
+
+  // The same digest reached through the value rather than the text, which is
+  // what a caller comparing two digests holds.
+  let abc: Crypto.Digest = Crypto.sha256("abc")
+  if Crypto.toHex(&abc) == Crypto.sha256Hex("abc") { held = held + 1 }
+  if abc.words.length() == 8 { held = held + 1 }
+  // And over bytes given directly, which must agree with the text call.
+  if Crypto.toHex(&Crypto.sha256Bytes(&Crypto.utf8("abc"))) == Crypto.sha256Hex("abc") {
+    held = held + 1
+  }
+
+  // The encoding those calls go through, checked at the boundaries where its
+  // output grows by a byte.
+  if Crypto.utf8("A") == [65u32] { held = held + 1 }
+  if Crypto.utf8("\u{00e9}") == [195u32, 169u32] { held = held + 1 }
+  if Crypto.utf8("\u{20ac}") == [226u32, 130u32, 172u32] { held = held + 1 }
+  let noText: Array[UInt32] = []
+  if Crypto.utf8("") == noText { held = held + 1 }
+
+  // Comparing digests, both ways, and comparing ones of different lengths.
+  if Crypto.digestsMatch(&abc, &Crypto.sha256("abc")) { held = held + 1 }
+  if !Crypto.digestsMatch(&abc, &Crypto.sha256("abd")) { held = held + 1 }
+  let short: Crypto.Digest = Crypto.Digest{words: [1u32]}
+  if !Crypto.digestsMatch(&abc, &short) { held = held + 1 }
+
+  // Comparing secrets. The case that matters is two of the same length
+  // differing in one place: a comparison that only checked lengths would pass
+  // every other check here.
+  if Crypto.secretsMatch("token", "token") { held = held + 1 }
+  if !Crypto.secretsMatch("token", "tokes") { held = held + 1 }
+  if !Crypto.secretsMatch("token", "token ") { held = held + 1 }
+  if Crypto.secretsMatch("", "") { held = held + 1 }
+
+  // The older digest, against its own published answers. It is a different
+  // algorithm rather than a shorter rendering of the same one, so its answer
+  // for the same text differs.
+  let legacy: Crypto.LegacyDigest = Crypto.sha1("abc")
+  if Crypto.legacyHex(&legacy) == "a9993e364706816aba3e25717850c26c9cd0d89d" {
+    held = held + 1
+  }
+  if Crypto.legacyHex(&Crypto.sha1(""))
+    == "da39a3ee5e6b4b0d3255bfef95601890afd80709" {
+    held = held + 1
+  }
+  if legacy.words.length() == 5 { held = held + 1 }
+  if Crypto.legacyHex(&Crypto.sha1Bytes(&Crypto.utf8("abc"))) == Crypto.legacyHex(&legacy) {
+    held = held + 1
+  }
+  // The same digest as the bytes a protocol would carry: four bytes to a word,
+  // most significant first, which is what makes the rendering agree.
+  let legacyOctets = Crypto.legacyBytes(&legacy)
+  if legacyOctets.length() == 20 { held = held + 1 }
+  if legacyOctets[0] == 169u32 && legacyOctets[19] == 157u32 { held = held + 1 }
+
+  // A keyed digest against the published answer for this key and message.
+  let keyed = Crypto.hmacSha256Text("key", "The quick brown fox jumps over the lazy dog")
+  if Bytes.encodeHex(&keyed)
+    == "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8" {
+    held = held + 1
+  }
+  if keyed.length() == 32 { held = held + 1 }
+  // The same over bytes given directly, which must agree with the text call.
+  let keyBytes = Bytes.fromText("key")
+  let messageBytes = Bytes.fromText("The quick brown fox jumps over the lazy dog")
+  if Bytes.encodeHex(&Crypto.hmacSha256(&keyBytes, &messageBytes)) == Bytes.encodeHex(&keyed) {
+    held = held + 1
+  }
+  // A different key over the same message answers something else, which is the
+  // whole of what a keyed digest is for.
+  let otherKey = Bytes.fromText("kex")
+  if Bytes.encodeHex(&Crypto.hmacSha256(&otherKey, &messageBytes)) != Bytes.encodeHex(&keyed) {
+    held = held + 1
+  }
+
+  // The longer digest, which stands beside the shorter one rather than
+  // replacing it: a protocol naming one is not satisfied by the other.
+  let long = Crypto.sha512(&Bytes.fromText("abc"))
+  if long.length() == 64 { held = held + 1 }
+  if Bytes.encodeHex(&long)
+    == "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+    + "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f" {
+    held = held + 1
+  }
+
+  // A key made from a password. The same inputs give the same key, a different
+  // salt gives a different one, and the length asked for is the length given.
+  let password = Bytes.fromText("correct horse")
+  let salt = Bytes.fromText("some salt")
+  let derived = Crypto.derive(&password, &salt, 100, 32)
+  if derived.length() == 32 { held = held + 1 }
+  if Bytes.encodeHex(&Crypto.derive(&password, &salt, 100, 32)) == Bytes.encodeHex(&derived) {
+    held = held + 1
+  }
+  let otherSalt = Bytes.fromText("other salt")
+  if Bytes.encodeHex(&Crypto.derive(&password, &otherSalt, 100, 32))
+    != Bytes.encodeHex(&derived) {
+    held = held + 1
+  }
+  // More rounds is a different key, not a longer one: the count is part of
+  // what a stored key must be checked against.
+  if Bytes.encodeHex(&Crypto.derive(&password, &salt, 200, 32)) != Bytes.encodeHex(&derived) {
+    held = held + 1
+  }
+  if Crypto.derive(&password, &salt, 100, 16).length() == 16 { held = held + 1 }
+
+  // Sealing. The lengths are asked for by name rather than written down, so a
+  // program that changed them stays correct.
+  if Crypto.keyLength() == 32 && Crypto.nonceLength() == 12 { held = held + 1 }
+  let key = patternOf("0123456789abcdef", Crypto.keyLength())
+  let nonce = patternOf("nonce", Crypto.nonceLength())
+  let message = Bytes.fromText("the message")
+  let context = Bytes.fromText("record 7")
+
+  let sealed = Option.unwrapOr(
+    Crypto.seal(&key, &nonce, &message, &context),
+    Bytes.fromText("")
+  )
+  // A sealed message is longer than what went in, because it carries the tag
+  // that makes changing it detectable.
+  if sealed.length() > message.length() { held = held + 1 }
+  if Bytes.encodeHex(&sealed) != Bytes.encodeHex(&message) { held = held + 1 }
+  // Opened with everything as it was, the message comes back exactly.
+  if Bytes.encodeHex(&Option.unwrapOr(
+      Crypto.open(&key, &nonce, &sealed, &context),
+      Bytes.fromText("")
+    )) == Bytes.encodeHex(&message) {
+    held = held + 1
+  }
+
+  // Each way it can be wrong, answering nothing rather than saying which.
+  let otherContext = Bytes.fromText("record 8")
+  if Option.isNone(&Crypto.open(&key, &nonce, &sealed, &otherContext)) {
+    held = held + 1
+  }
+  let wrongKey = flipped(&key)
+  if Option.isNone(&Crypto.open(&wrongKey, &nonce, &sealed, &context)) {
+    held = held + 1
+  }
+  let wrongNonce = flipped(&nonce)
+  if Option.isNone(&Crypto.open(&key, &wrongNonce, &sealed, &context)) {
+    held = held + 1
+  }
+  // The sealed message changed, at the same length it had.
+  if Option.isNone(&Crypto.open(&key, &nonce, &flipped(&sealed), &context)) {
+    held = held + 1
+  }
+  // A message cut short, which is neither a changed byte nor a wrong key.
+  let cut = Bytes.take(&sealed, sealed.length() - 1)
+  if Option.isNone(&Crypto.open(&key, &nonce, &cut, &context)) { held = held + 1 }
+
+  // A key or nonce of the wrong length is a mistake in the program rather than
+  // a fact about the message, and is refused on the way in.
+  if Option.isNone(&Crypto.seal(&Bytes.fromText("short"), &nonce, &message, &context)) {
+    held = held + 1
+  }
+  if Option.isNone(&Crypto.seal(&key, &Bytes.fromText("short"), &message, &context)) {
+    held = held + 1
+  }
+  if Option.isNone(&Crypto.open(&Bytes.fromText("short"), &nonce, &sealed, &context)) {
+    held = held + 1
+  }
+
+  // A message with nothing in it still seals and opens, and still carries a
+  // tag, which is what lets a protocol send an empty payload safely.
+  let nothing = Bytes.fromText("")
+  let sealedNothing = Option.unwrapOr(
+    Crypto.seal(&key, &nonce, &nothing, &nothing),
+    Bytes.fromText("x")
+  )
+  if sealedNothing.length() > 0 { held = held + 1 }
+  if Bytes.encodeHex(&Option.unwrapOr(
+      Crypto.open(&key, &nonce, &sealedNothing, &nothing),
+      Bytes.fromText("x")
+    )) == "" {
+    held = held + 1
+  }
+
+  // SHA-3 and BLAKE2b against their published values, including a million bytes.
+  let emptyInput = Bytes.fromText("")
+  let abcInput = Bytes.fromText("abc")
+  let millionInput = Bytes.repeat(&Bytes.fromText("a"), 1000000)
+  if Bytes.encodeHex(&Crypto.sha3_256(&emptyInput)) ==
+  "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a" &&
+  Bytes.encodeHex(&Crypto.sha3_256(&abcInput)) ==
+  "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+  {
+    held = held + 1
+  }
+  if Bytes.encodeHex(&Crypto.sha3_512(&abcInput)) ==
+  "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0" &&
+  Bytes.encodeHex(&Crypto.sha3_512(&emptyInput)) ==
+  "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26"
+  {
+    held = held + 1
+  }
+  if Bytes.encodeHex(&Crypto.sha3_256(&millionInput)) ==
+  "5c8875ae474a3634ba4fd55ec85bffd661f32aca75c6d699d0cdcb6c115891c1" &&
+  Bytes.encodeHex(&Crypto.sha3_512(&millionInput)) ==
+  "3c3a876da14034ab60627c077bb98f7e120a2a5370212dffb3385a18d4f38859ed311d0a9d5141ce9cc5c66ee689b266a8aa18ace8282a0e0db596c90b0a7b87"
+  {
+    held = held + 1
+  }
+  if Bytes.encodeHex(&Crypto.blake2b512(&abcInput)) ==
+  "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923" &&
+  Bytes.encodeHex(&Crypto.blake2b512(&emptyInput)) ==
+  "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce"
+  {
+    held = held + 1
+  }
+  if Bytes.encodeHex(&Crypto.blake2b256(&abcInput)) ==
+  "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319" &&
+  Bytes.encodeHex(&Crypto.blake2b256(&emptyInput)) ==
+  "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8" &&
+  Bytes.encodeHex(&Crypto.blake2b256(&millionInput)) ==
+  "0741850f36cba4259628355d1073e24ddb9ca0e1bfac36fd39ae5dc2101e23a4"
+  {
+    held = held + 1
+  }
+
+  // HMAC-SHA512 against RFC 4231: a short key, a text key, and a key longer
+  // than a block, which must be replaced by its own digest.
+  let rfcKeyOne = Bytes.repeat(&Bytes.putU8(11u8), 20)
+  if Bytes.encodeHex(&Crypto.hmacSha512(&rfcKeyOne, &Bytes.fromText("Hi There"))) ==
+  "87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cdedaa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854"
+  {
+    held = held + 1
+  }
+  if Bytes.encodeHex(&Crypto.hmacSha512(&Bytes.fromText("Jefe"), &Bytes.fromText("what do ya want for nothing?"))) ==
+  "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+  {
+    held = held + 1
+  }
+  let rfcKeySix = Bytes.repeat(&Bytes.putU8(170u8), 131)
+  if Bytes.encodeHex(&Crypto.hmacSha512(&rfcKeySix, &Bytes.fromText("Test Using Larger Than Block-Size Key - Hash Key First"))) ==
+  "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f3526b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598"
+  {
+    held = held + 1
+  }
+
+  // Constant-time equality answers like ordinary equality.
+  let tag = Bytes.fromText("0123456789abcdef")
+  let sameTag = Bytes.fromText("0123456789abcdef")
+  let lastDiffers = Bytes.fromText("0123456789abcdeX")
+  if Crypto.bytesMatch(&tag, &sameTag) && !Crypto.bytesMatch(&tag, &lastDiffers) &&
+  !Crypto.bytesMatch(&tag, &Bytes.fromText("0123")) && Crypto.bytesMatch(&emptyInput, &emptyInput)
+  {
+    held = held + 1
+  }
+
+  // Fresh keys and nonces have the lengths sealing needs, differ from each other,
+  // and seal and open a message.
+  match (Crypto.newKey(), Crypto.newKey(), Crypto.newNonce()) {
+    case (Ok(firstKey), Ok(secondKey), Ok(freshNonce)) => {
+      if firstKey.length() == Crypto.keyLength() && freshNonce.length() == Crypto.nonceLength() &&
+      !Crypto.bytesMatch(&firstKey, &secondKey)
+      {
+        held = held + 1
+      }
+      let payload = Bytes.fromText("fresh")
+      if let Some(sealedFresh) = Crypto.seal(&firstKey, &freshNonce, &payload, &emptyInput) {
+        if Crypto.open(&firstKey, &freshNonce, &sealedFresh, &emptyInput) == Some(payload) {
+          held = held + 1
+        }
+      }
+    }
+    case _ => {}
+  }
+
+  held
+}

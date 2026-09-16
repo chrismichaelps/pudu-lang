@@ -1,0 +1,155 @@
+module UsesMapAll
+
+import Std.Map as Map
+import Std.Option as Option
+import Std.Set as Set
+
+/// Every export of `Std.Map`, checked against a stated answer.
+///
+/// Keys come back in order, so a whole map is compared as its pairs rather
+/// than key by key. The empty map is asked the same questions as a full one:
+/// that is where a fold has nothing to fold and an extreme has no answer, and
+/// it is the case a caller reaches first and tries last.
+fn sample() -> Map[Str, Int] { Map.fromPairs(&[("a", 1), ("b", 2), ("c", 3)]) }
+
+fn none() -> Map[Str, Int] { Map.empty() }
+
+export fn main() -> Int {
+  var held = 0
+  let items = sample()
+
+  // Building, and the size of what was built.
+  if Map.pairs(&items) == [("a", 1), ("b", 2), ("c", 3)] { held = held + 1 }
+  if Map.size(&items) == 3 && Map.size(&none()) == 0 { held = held + 1 }
+  if Map.isEmpty(&none()) && !Map.isEmpty(&items) { held = held + 1 }
+  if Map.pairs(&Map.singleton("k", 9)) == [("k", 9)] { held = held + 1 }
+  // A later pair wins, since that is what writing the same key twice means.
+  if Map.getOr(&Map.fromPairs(&[("a", 1), ("a", 2)]), "a", 0) == 2 { held = held + 1 }
+  if Map.pairs(&Map.fromPairsWith(&[("a", 1), ("a", 2)], fn(l: Int, r: Int) -> Int => l + r))
+    == [("a", 3)] {
+    held = held + 1
+  }
+
+  // Reading, present and absent.
+  if Option.unwrapOr(Map.get(&items, "b"), 0) == 2 { held = held + 1 }
+  if Option.isNone(&Map.get(&items, "z")) { held = held + 1 }
+  if Map.getOr(&items, "z", 99) == 99 { held = held + 1 }
+  if Map.containsKey(&items, "a") && !Map.containsKey(&items, "z") { held = held + 1 }
+  if Map.notContainsKey(&items, "z") && !Map.notContainsKey(&items, "a") { held = held + 1 }
+
+  // The three views, each in key order.
+  if Map.keys(&items) == ["a", "b", "c"] { held = held + 1 }
+  if Map.values(&items) == [1, 2, 3] { held = held + 1 }
+  if Map.toArray(&items) == [("a", 1), ("b", 2), ("c", 3)] { held = held + 1 }
+  if Set.toArray(&Map.keySet(&items)) == ["a", "b", "c"] { held = held + 1 }
+
+  // Writing.
+  if Map.getOr(&Map.insert(&items, "d", 4), "d", 0) == 4 { held = held + 1 }
+  if Map.getOr(&Map.insert(&items, "a", 9), "a", 0) == 9 { held = held + 1 }
+  if Map.getOr(&Map.insertIfAbsent(&items, "a", 9), "a", 0) == 1 { held = held + 1 }
+  if Map.getOr(&Map.insertIfAbsent(&items, "d", 9), "d", 0) == 9 { held = held + 1 }
+  if Map.pairs(&Map.remove(&items, "b")) == [("a", 1), ("c", 3)] { held = held + 1 }
+  if Map.pairs(&Map.remove(&items, "z")) == Map.pairs(&items) { held = held + 1 }
+
+  // Changing a value in place, present and absent.
+  if Map.getOr(&Map.adjust(&items, "a", fn(v: Int) -> Int => v * 10), "a", 0) == 10 {
+    held = held + 1
+  }
+  if Map.pairs(&Map.adjust(&items, "z", fn(v: Int) -> Int => v * 10)) == Map.pairs(&items) {
+    held = held + 1
+  }
+  if Map.getOr(&Map.upsert(&items, "a", 100, fn(v: Int) -> Int => v + 1), "a", 0) == 2 {
+    held = held + 1
+  }
+  if Map.getOr(&Map.upsert(&items, "z", 100, fn(v: Int) -> Int => v + 1), "z", 0) == 100 {
+    held = held + 1
+  }
+  // `update` may remove by answering nothing.
+  if Map.notContainsKey(&Map.update(&items, "a", fn(_v: Int) -> Option[Int] => None), "a") {
+    held = held + 1
+  }
+  if Map.getOr(&Map.update(&items, "a", fn(v: Int) -> Option[Int] => Some(v + 1)), "a", 0) == 2 {
+    held = held + 1
+  }
+  // `alter` sees whether the key was there at all.
+  if Map.getOr(&Map.alter(&items, "z", fn(_v: Option[Int]) -> Option[Int] => Some(5)), "z", 0) == 5 {
+    held = held + 1
+  }
+  if Map.notContainsKey(&Map.alter(&items, "a", fn(_v: Option[Int]) -> Option[Int] => None), "a") {
+    held = held + 1
+  }
+
+  // Over every entry.
+  if Map.values(&Map.mapValues(&items, fn(v: Int) -> Int => v * 2)) == [2, 4, 6] { held = held + 1 }
+  if Map.keys(&Map.mapKeys(&items, fn(k: Str) -> Str => k + "!")) == ["a!", "b!", "c!"] {
+    held = held + 1
+  }
+  if Map.keys(&Map.filterValues(&items, fn(v: Int) -> Bool => v > 1)) == ["b", "c"] {
+    held = held + 1
+  }
+  if Map.keys(&Map.filterKeys(&items, fn(k: Str) -> Bool => k != "b")) == ["a", "c"] {
+    held = held + 1
+  }
+  if Map.fold(&items, fn(total: Int, _k: Str, v: Int) -> Int => total + v, 0) == 6 {
+    held = held + 1
+  }
+  if Map.fold(&none(), fn(total: Int, _k: Str, v: Int) -> Int => total + v, 0) == 0 {
+    held = held + 1
+  }
+  if Map.countValues(&items, fn(v: Int) -> Bool => v > 1) == 2 { held = held + 1 }
+  if Map.all(&items, fn(_k: Str, v: Int) -> Bool => v > 0) { held = held + 1 }
+  if !Map.all(&items, fn(_k: Str, v: Int) -> Bool => v > 1) { held = held + 1 }
+  if Map.any(&items, fn(_k: Str, v: Int) -> Bool => v == 3) { held = held + 1 }
+  if !Map.any(&items, fn(_k: Str, v: Int) -> Bool => v == 9) { held = held + 1 }
+  if Option.unwrapOr(Map.findKey(&items, fn(v: Int) -> Bool => v == 2), "") == "b" {
+    held = held + 1
+  }
+  if Option.isNone(&Map.findKey(&items, fn(v: Int) -> Bool => v == 9)) { held = held + 1 }
+  let split = Map.partition(&items, fn(_k: Str, v: Int) -> Bool => v > 1)
+  if Map.keys(&split[0]) == ["b", "c"] && Map.keys(&split[1]) == ["a"] { held = held + 1 }
+
+  // Two maps together.
+  let other = Map.fromPairs(&[("b", 20), ("d", 40)])
+  // The right side wins where both carry a key.
+  if Map.pairs(&Map.merge(&items, &other)) == [("a", 1), ("b", 20), ("c", 3), ("d", 40)] {
+    held = held + 1
+  }
+  if Map.getOr(&Map.mergeWith(&items, &other, fn(l: Int, r: Int) -> Int => l + r), "b", 0) == 22 {
+    held = held + 1
+  }
+  if Map.pairs(&Map.intersectWith(&items, &other, fn(l: Int, r: Int) -> Int => l + r))
+    == [("b", 22)] {
+    held = held + 1
+  }
+  if Map.keys(&Map.without(&items, &other)) == ["a", "c"] { held = held + 1 }
+  if Map.keysNotIn(&items, &other) == ["a", "c"] { held = held + 1 }
+  if Map.pairs(&Map.mergeAll(&[items, other])) == [("a", 1), ("b", 20), ("c", 3), ("d", 40)] {
+    held = held + 1
+  }
+
+  // Narrowing by a list of keys.
+  if Map.keys(&Map.restrictTo(&items, &["a", "c", "z"])) == ["a", "c"] { held = held + 1 }
+  if Map.keys(&Map.withoutKeys(&items, &["a", "z"])) == ["b", "c"] { held = held + 1 }
+
+  // The ends, and what an empty map answers for them.
+  if Option.unwrapOr(Map.least(&items), ("", 0)) == ("a", 1) { held = held + 1 }
+  if Option.unwrapOr(Map.greatest(&items), ("", 0)) == ("c", 3) { held = held + 1 }
+  if Option.isNone(&Map.least(&none())) && Option.isNone(&Map.greatest(&none())) {
+    held = held + 1
+  }
+  if Map.keys(&Map.removeLeast(&items)) == ["b", "c"] { held = held + 1 }
+  if Map.keys(&Map.removeGreatest(&items)) == ["a", "b"] { held = held + 1 }
+  if Map.isEmpty(&Map.removeLeast(&none())) && Map.isEmpty(&Map.removeGreatest(&none())) {
+    held = held + 1
+  }
+
+  // Turned around, and counted.
+  if Map.pairs(&Map.invert(&Map.fromPairs(&[("a", 1)]))) == [(1, "a")] { held = held + 1 }
+  if Map.pairs(&Map.tally(&["a", "b", "a"])) == [("a", 2), ("b", 1)] { held = held + 1 }
+  if Map.pairs(&Map.groupBy(&[1, 2, 3, 4], fn(n: Int) -> Bool => n % 2 == 0))
+    == [(false, [1, 3]), (true, [2, 4])] {
+    held = held + 1
+  }
+
+  held
+}

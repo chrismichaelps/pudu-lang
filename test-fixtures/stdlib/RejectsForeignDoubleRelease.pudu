@@ -1,0 +1,15 @@
+module RejectsForeignDoubleRelease
+
+foreign "c" {
+  type Box
+  fn pudu_ffi_cpp_box_new(value: Int32) -> owned Box by pudu_ffi_cpp_box_delete
+  fn pudu_ffi_cpp_box_delete(box: Box) -> ()
+}
+
+export fn main() -> () {
+  unsafe(foreign) {
+    let box = pudu_ffi_cpp_box_new(7i32)
+    pudu_ffi_cpp_box_delete(box)
+    pudu_ffi_cpp_box_delete(box)
+  }
+}

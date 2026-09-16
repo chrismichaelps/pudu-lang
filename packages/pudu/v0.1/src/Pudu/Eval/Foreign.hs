@@ -1,0 +1,389 @@
+{-| @Eval.Foreign — makes a call into a library written elsewhere
+
+    Everything the declaration promised is enforced here, on the way through.
+    That order matters: past this point the value is in somebody else's hands
+    and a mistake stops being a diagnostic and becomes a corrupted stack, so
+    every check that can happen before the call happens before the call. -}
+module Pudu.Eval.Foreign
+  ( callForeign
+  ) where
+
+import Control.Exception (mask_, onException)
+import Data.Maybe (fromMaybe)
+import Data.Int (Int64)
+import Data.Text (Text)
+import Foreign.Ptr (Ptr)
+import Pudu.Diagnostic
+  ( Diagnostic
+  , Related (..)
+  , diagnosticMessage
+  , diagnosticSpan
+  , withRelated
+  , Severity (Error)
+  , diagnostic
+  , mkDiagnosticCode
+  , withHelp
+  )
+import Pudu.Eval.Env (Evaluator (..), Eval (..), abortAt, currentForeignStore, performEffect)
+import Pudu.Eval.Value (ForeignBinding (..), ForeignClaim (..), ForeignSlot (..), Value (..))
+import Pudu.Foreign.Call
+  ( CrossedValue (..)
+  , ForeignCallFailure (..)
+  , callSymbol
+  , resolveSymbol
+  )
+import Pudu.Foreign.Crossing (Crossing (..))
+import Pudu.Eval.Foreign.Argument (crossArguments)
+import Pudu.Foreign.Ownership
+  ( ForeignResource
+  , ForeignStore
+  , discardOwnedGenerations
+  , claimAllOwnedGenerations
+  , claimCountedGeneration
+  , claimOwnedGeneration
+  , restoreOwned
+  , takeOwnedGeneration
+  , takeCountedGeneration
+  , takeForeignDiagnostics
+  , withOwnedGenerations
+  )
+import Pudu.Source (Span)
+import Pudu.Eval.Foreign.Result (ConversionFailure (..), convertForeignValue)
+import Pudu.Eval.Foreign.Resource (prepareReleases, releaseHandle, cleanupFailedOutputs, cleanupUnclaimed)
+
+{-| Make the call the binding describes.
+
+    A foreign call is an effect, and the same rule applies to it as to reading a
+    file: a compile-time constant is folded while the compiler runs, and letting
+    one reach a graphics library would make what the program compiles to depend
+    on what was installed on the machine that compiled it. -}
+callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
+callForeign spanValue binding values = maskedBoundary $ do
+  crossed <- crossArguments spanValue binding values
+  let claims =
+        [(address, generation) | ForeignHandleValue _ address (OwnedClaim generation) <- values]
+  store <- currentForeignStore
+  found <-
+    performEffect (refusal spanValue)
+      (resolveSymbol (foreignBindingLibrary binding) (foreignBindingVersion binding)
+        (foreignBindingSymbol binding))
+  case found of
+    Left problem -> abortForeign spanValue binding problem
+    Right symbol -> do
+      ready <- performEffect (refusal spanValue) (prepareReleases binding)
+      case ready of
+        Left problem -> abortForeign spanValue binding problem
+        Right () -> pure ()
+      released <- prepareHandles spanValue binding store claims crossed
+      attempted <- invoke spanValue binding store symbol claims crossed
+      case attempted of
+        Nothing -> deadHandle spanValue binding (firstHandleName crossed)
+        Just (Left problem) -> do
+          case problem of
+            PostCallFailure _ handles -> performEffect (refusal spanValue)
+              (cleanupFailedOutputs spanValue binding store handles)
+            _ -> restoreReleased spanValue store released
+          abortForeignCall spanValue binding problem
+        Just (Right (produced, written)) ->
+          answer spanValue binding store produced written
+
+{-| Settle native resources before asynchronous cancellation is delivered. -}
+maskedBoundary :: Evaluator a -> Evaluator a
+maskedBoundary (Evaluator action) = Evaluator $ \env -> mask_ $ do
+  outcome <- action env
+  case outcome of
+    Aborted primary -> do
+      let Evaluator current = currentForeignStore
+      storeResult <- current env
+      case storeResult of
+        Done store _ -> do
+          problems <- takeForeignDiagnostics store
+          pure (Aborted (foldl (\held problem ->
+            withRelated (Related (diagnosticSpan problem) (diagnosticMessage problem)) held)
+            primary problems))
+        _ -> pure outcome
+    _ -> pure outcome
+
+invoke
+  :: Span
+  -> ForeignBinding
+  -> ForeignStore
+  -> Ptr ()
+  -> [(Int64, Integer)]
+  -> [(Crossing, Bool, CrossedValue)]
+  -> Evaluator (Maybe (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue])))
+invoke spanValue binding store symbol claims arguments =
+  case foreignBindingReleases binding of
+    Just _ -> Just <$> perform
+    Nothing ->
+      performEffect (refusal spanValue)
+        (withOwnedGenerations store claims
+          (callSymbol symbol arguments (foreignBindingResult binding)))
+ where
+  perform =
+    performEffect (refusal spanValue)
+      (callSymbol symbol arguments (foreignBindingResult binding))
+
+{-| Validate handle liveness immediately before control crosses the boundary.
+
+    Releasing removes ownership before the call. That ordering closes the only
+    window in which an aliased value could start a second release, while a
+    failure to assemble the call restores the claim because foreign code never
+    ran. -}
+prepareHandles
+  :: Span
+  -> ForeignBinding
+  -> ForeignStore
+  -> [(Int64, Integer)]
+  -> [(Crossing, Bool, CrossedValue)]
+  -> Evaluator (Maybe (Int64, ForeignResource))
+prepareHandles spanValue binding store claims arguments =
+  case foreignBindingReleases binding of
+    Just expected -> case handleAddresses arguments of
+      [(actual, address)]
+        | actual == expected -> do
+            released <- case lookup address claims of
+              Nothing -> pure Nothing
+              Just generation -> performEffect (refusal spanValue) $ do
+                owned <- takeOwnedGeneration store address generation
+                case owned of
+                  Just resource -> pure (Just resource)
+                  Nothing -> takeCountedGeneration store address generation
+            case released of
+              Just resource -> pure (Just (address, resource))
+              Nothing -> deadHandle spanValue binding actual
+      _ ->
+        abortAt (Just spanValue) "E7022"
+          (foreignBindingSymbol binding <> " cannot release this handle")
+          (Just "pass one live handle of the type named by its foreign declaration")
+    Nothing -> pure Nothing
+
+{-| The live handles a caller passed in, which are the ones a call leases.
+
+    A slot carries no handle from this side: what it receives is claimed after
+    the call, not leased through it. -}
+handleAddresses :: [(Crossing, Bool, CrossedValue)] -> [(Text, Int64)]
+handleAddresses arguments =
+  [ (name, address)
+  | (_, False, CrossedHandle name address) <- arguments
+  ]
+
+restoreReleased :: Span -> ForeignStore -> Maybe (Int64, ForeignResource) -> Evaluator ()
+restoreReleased _ _ Nothing = pure ()
+restoreReleased spanValue store (Just (address, resource)) =
+  performEffect (refusal spanValue) (restoreOwned store address resource)
+
+firstHandleName :: [(Crossing, Bool, CrossedValue)] -> Text
+firstHandleName arguments = case handleAddresses arguments of
+  (name, _) : _ -> name
+  [] -> "foreign handle"
+
+deadHandle :: Span -> ForeignBinding -> Text -> Evaluator a
+deadHandle spanValue binding name =
+  abortAt (Just spanValue) "E7022"
+    ("the " <> name <> " passed to " <> foreignBindingSymbol binding <> " is no longer owned")
+    (Just "a foreign handle cannot be used or released after its release function has run")
+
+{-| Everything the call produced, as one Pudu value.
+
+    Without slots that is the result alone, exactly as before. With them it is a
+    tuple of the result and each slot in declaration order, and every resource
+    the call handed back — the result's and the slots' — is claimed together
+    before any of it is visible. A claim that cannot be made gives back what the
+    library just made rather than leaking it, because a resource nobody can name
+    is one nobody can release. -}
+answer
+  :: Span
+  -> ForeignBinding
+  -> ForeignStore
+  -> CrossedValue
+  -> [Maybe CrossedValue]
+  -> Evaluator Value
+answer spanValue binding store produced written
+  | null (slotDescriptions binding) = receive spanValue binding store produced
+  | otherwise = do
+      claimed <-
+        performEffect (refusal spanValue)
+          (claimAllOwnedGenerations store [(address, releaseHandle store spanValue release name address)
+            | (address, name, release) <- fresh <> resultFresh])
+      case claimed of
+        Left protected -> do
+          performEffect (refusal spanValue)
+            (cleanupUnclaimed store spanValue protected (fresh <> resultFresh))
+          abortAt (Just spanValue) "E7021"
+            (foreignBindingSymbol binding <> " handed back duplicate or already owned resources")
+            (Just "an owned foreign value must transfer one new ownership claim")
+        Right generations -> settleClaimed store generations $ do
+          if length written == length described
+            then pure ()
+            else foreignResultMismatch spanValue binding
+          native <- receiveClaimed spanValue binding store generations produced
+          slots <- mapM (uncurry (receiveSlot spanValue binding generations)) (zip described written)
+          pure (TupleValue (native : slots))
+ where
+  described = slotDescriptions binding
+  fresh =
+    [ (address, name, release)
+    | (Just slot, Just (CrossedHandle name address)) <- zip (map Just described) written
+    , address /= 0
+    , Just release <- [foreignSlotReleasedBy slot]
+    ]
+  resultFresh = case (foreignBindingResult binding, produced, foreignBindingReleasedBy binding) of
+    (HandleCrossing name, CrossedHandle _ address, Just release)
+      | address /= 0 -> [(address, name, release)]
+    _ -> []
+
+{-| The slots this binding declares, in order. -}
+slotDescriptions :: ForeignBinding -> [ForeignSlot]
+slotDescriptions binding = [slot | Just slot <- foreignBindingSlots binding]
+
+{-| One slot's value, once its ownership has already been settled.
+
+    A pointer slot answers `Option`, so a library that wrote nothing is a `None`
+    the program can read rather than an address it must not follow. -}
+receiveSlot
+  :: Span -> ForeignBinding -> [(Int64, Integer)] -> ForeignSlot -> Maybe CrossedValue -> Evaluator Value
+receiveSlot spanValue binding generations slot received = case received of
+  Nothing -> case foreignSlotCrossing slot of
+    TextCrossing -> pure (VariantValue "None" [])
+    HandleCrossing _ -> pure (VariantValue "None" [])
+    _ -> foreignResultMismatch spanValue binding
+  Just value -> do
+    held <- case (foreignSlotCrossing slot, value) of
+      (HandleCrossing name, CrossedHandle actual address)
+        | name == actual -> ownedValue spanValue binding generations name address
+      _ -> receivedField spanValue binding "slot" (foreignSlotCrossing slot) value
+    pure
+      ( case foreignSlotCrossing slot of
+          TextCrossing -> VariantValue "Some" [held]
+          HandleCrossing _ -> VariantValue "Some" [held]
+          _ -> held
+      )
+
+{-| The native result, when its ownership was settled with the slots'. -}
+receiveClaimed :: Span -> ForeignBinding -> ForeignStore -> [(Int64, Integer)] -> CrossedValue -> Evaluator Value
+receiveClaimed spanValue binding store generations produced =
+  case (foreignBindingResult binding, produced) of
+    (HandleCrossing name, CrossedHandle actual address)
+      | name /= actual -> foreignResultMismatch spanValue binding
+      | address == 0 ->
+          abortAt (Just spanValue) "E7020"
+            (foreignBindingSymbol binding <> " returned a null " <> name)
+            (Just "an owned foreign result must name a live object")
+      | otherwise -> ownedValue spanValue binding generations name address
+    _ -> receive spanValue binding store produced
+
+ownedValue :: Span -> ForeignBinding -> [(Int64, Integer)] -> Text -> Int64 -> Evaluator Value
+ownedValue spanValue binding generations name address = case lookup address generations of
+  Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
+  Nothing -> foreignResultMismatch spanValue binding
+
+receive :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
+receive spanValue binding store produced =
+  case (foreignBindingResult binding, produced) of
+    (HandleCrossing name, CrossedHandle actual address)
+      | name /= actual -> foreignResultMismatch spanValue binding
+      | address == 0 ->
+          abortAt (Just spanValue) "E7020"
+            (foreignBindingSymbol binding <> " returned a null " <> name)
+            (Just "a foreign handle result must name a live object")
+      {-| A borrowed result is the library's own, so nothing is claimed for it:
+          no lease, no release at teardown, and a release that is handed one
+          refuses. Whether it outlives what owns it is the declaration's
+          assertion, as every other thing crossing here is. -}
+      | foreignBindingBorrowedResult binding -> pure (ForeignHandleValue name address BorrowedClaim)
+      {-| Another reference to something the library counts. The address is
+          almost always one already claimed — that is what a reference is — so
+          this is admitted rather than refused, and owes a release of its own. -}
+      | foreignBindingCountedResult binding -> case foreignBindingReleasedBy binding of
+          Nothing -> foreignResultMismatch spanValue binding
+          Just release -> do
+            fresh <-
+              performEffect (refusal spanValue)
+                (claimCountedGeneration store address
+                  (releaseHandle store spanValue release name address))
+            case fresh of
+              Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
+              Nothing ->
+                abortAt (Just spanValue) "E7021"
+                  (foreignBindingSymbol binding <> " returned a " <> name <> " that cannot be claimed")
+                  (Just "a reference must be claimed before the evaluation it belongs to ends")
+      | otherwise -> case foreignBindingReleasedBy binding of
+          Nothing -> foreignResultMismatch spanValue binding
+          Just release -> do
+            fresh <-
+              performEffect (refusal spanValue)
+                (claimOwnedGeneration store address (releaseHandle store spanValue release name address))
+            case fresh of
+              Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
+              Nothing ->
+                abortAt (Just spanValue) "E7021"
+                  (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")
+                  (Just "an owned foreign result must transfer one new ownership claim")
+    (BytesCrossing, _) ->
+      abortAt (Just spanValue) "E7026"
+        (foreignBindingSymbol binding <> " cannot return Bytes")
+        (Just "an owned buffer requires an explicit length and release contract")
+    _ -> receivedField spanValue binding "result" (foreignBindingResult binding) produced
+
+foreignResultMismatch :: Span -> ForeignBinding -> Evaluator a
+foreignResultMismatch spanValue binding =
+  abortAt (Just spanValue) "E7015"
+    (foreignBindingSymbol binding <> " returned a value outside its declaration")
+    (Just "check the foreign result type against the library's exported signature")
+
+receivedField :: Span -> ForeignBinding -> Text -> Crossing -> CrossedValue -> Evaluator Value
+receivedField spanValue binding label crossing produced =
+  case convertForeignValue label crossing produced of
+    Right value -> pure value
+    Left InvalidShape -> foreignResultMismatch spanValue binding
+    Left (MissingText field) ->
+      abortAt (Just spanValue) "E7024"
+        (foreignBindingSymbol binding <> " returned no text for " <> field)
+        (Just "a declared Str must name valid UTF-8 text")
+
+{-| Failed conversion cannot leave unexposed claims in the store. -}
+settleClaimed :: ForeignStore -> [(Int64, Integer)] -> Evaluator a -> Evaluator a
+settleClaimed store claims (Evaluator action) = Evaluator $ \env -> do
+  outcome <- action env `onException` discardOwnedGenerations store claims
+  case outcome of
+    Done _ _ -> pure outcome
+    _ -> discardOwnedGenerations store claims >> pure outcome
+
+abortForeign :: Span -> ForeignBinding -> Text -> Evaluator a
+abortForeign spanValue binding problem =
+  abortAt (Just spanValue) "E7015"
+    ( "cannot call " <> foreignBindingSymbol binding <> " in "
+        <> foreignBindingLibrary binding <> ": " <> problem
+    )
+    ( Just
+        ( "a foreign declaration names a library the platform must already have; "
+            <> "install it, or check the name and the symbol against what it exports"
+        )
+    )
+
+abortForeignCall :: Span -> ForeignBinding -> ForeignCallFailure -> Evaluator a
+abortForeignCall spanValue binding failure = case failure of
+  CallAssemblyFailure problem -> abortForeign spanValue binding problem
+  PostCallFailure problem _ -> abortForeignCall spanValue binding problem
+  InvalidReturnedText ->
+    abortAt (Just spanValue) "E7025"
+      (foreignBindingSymbol binding <> " returned text that is not valid UTF-8")
+      (Just "fix the native binding or declare a byte-oriented result instead of Str")
+
+refusal :: Span -> Diagnostic
+refusal spanValue =
+  fromMaybe (fallback spanValue) $ do
+    code <- mkDiagnosticCode "E7009"
+    value <- diagnostic code Error spanValue "a foreign call reaches outside the program"
+    pure
+      ( withHelp
+          "a compile-time constant is folded while the compiler runs, so it cannot reach a library"
+          value
+      )
+
+fallback :: Span -> Diagnostic
+fallback spanValue =
+  fromMaybe
+    (error "the refusal diagnostic must exist")
+    (mkDiagnosticCode "E7009" >>= \code -> diagnostic code Error spanValue "foreign call refused")

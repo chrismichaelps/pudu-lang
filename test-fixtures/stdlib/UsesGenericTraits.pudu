@@ -1,0 +1,81 @@
+module UsesGenericTraits
+
+/// A trait may carry its own type parameters, and an implementation says what
+/// they are for the type it is written for.
+trait Holds[T] {
+  fn get(self: &Self) -> T
+  fn orElse(self: &Self, fallback: T) -> T
+}
+
+type Boxed = { value: Int }
+type Named = { label: Str }
+
+impl Holds[Int] for Boxed {
+  fn get(self: &Self) -> Int { self.value }
+  fn orElse(self: &Self, fallback: Int) -> Int {
+    if self.value == 0 { fallback } else { self.value }
+  }
+}
+
+impl Holds[Str] for Named {
+  fn get(self: &Self) -> Str { self.label }
+  fn orElse(self: &Self, fallback: Str) -> Str {
+    if self.label == "" { fallback } else { self.label }
+  }
+}
+
+/// A trait's parameters may be several, and may appear in an argument as well
+/// as in the result.
+trait Converts[A, B] {
+  fn convert(self: &Self, from: A) -> B
+}
+
+type Doubler = { factor: Int }
+
+impl Converts[Int, Str] for Doubler {
+  fn convert(self: &Self, from: Int) -> Str { display(from * self.factor) }
+}
+
+/// Both call forms select the same implementation: method syntax borrows the
+/// receiver, and the trait-qualified form takes the borrow explicitly.
+fn bothFormsAgree() -> Bool {
+  let boxed = Boxed{value: 5}
+  boxed.get() == 5 && Holds.get(&boxed) == 5
+}
+
+/// One trait, two implementations, two different parameter choices.
+fn parametersFollowTheImplementation() -> Bool {
+  let boxed = Boxed{value: 5}
+  let named = Named{label: "here"}
+  Holds.get(&boxed) == 5 && Holds.get(&named) == "here"
+}
+
+fn defaultsApply() -> Bool {
+  let empty = Boxed{value: 0}
+  let blank = Named{label: ""}
+  Holds.orElse(&empty, 9) == 9 && Holds.orElse(&blank, "fallback") == "fallback"
+}
+
+fn parametersReachArguments() -> Bool {
+  let doubler = Doubler{factor: 3}
+  Converts.convert(&doubler, 7) == "21" && doubler.convert(7) == "21"
+}
+
+/// A bounded generic still discharges its obligation against the
+/// implementation, which is what makes a generic trait usable from one.
+fn readThrough[T, H: Holds[T]](holder: &H) -> T { Holds.get(holder) }
+
+fn boundedGenericsWork() -> Bool {
+  let boxed = Boxed{value: 4}
+  readThrough(&boxed) == 4
+}
+
+export fn main() -> Int {
+  var passed = 0
+  if bothFormsAgree() { passed = passed + 1 }
+  if parametersFollowTheImplementation() { passed = passed + 1 }
+  if defaultsApply() { passed = passed + 1 }
+  if parametersReachArguments() { passed = passed + 1 }
+  if boundedGenericsWork() { passed = passed + 1 }
+  passed
+}

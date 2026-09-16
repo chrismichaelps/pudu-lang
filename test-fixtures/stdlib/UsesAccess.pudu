@@ -1,0 +1,215 @@
+module UsesAccess
+
+import Std.App.Access as Access
+import Std.App.Access {Anyone, Forbidden, HoldingAll, HoldingAny, HoldingRole, Judged, Matching, Permitted, Someone, Unidentified}
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+
+/// What authorisation promises.
+///
+/// The claim under test is that a route which decided nothing cannot be
+/// written: a requirement is given in the same call as the handler, so
+/// "anyone may do this" and "somebody forgot" stop being the same line.
+export fn main() -> Int {
+  var held = 0
+
+  let nobody = Access.anonymous()
+  let reader = Access.principal("ada", &["reader"])
+  let admin = Access.principal("grace", &["reader", "admin"])
+  let owner = Access.knowing(&Access.principal("ada", &["reader"]), "tenant", "acme")
+
+  // Anyone means anyone, including someone who has not said who they are.
+  if Access.decide(&Anyone, &nobody) == Permitted { held = held + 1 }
+  if Access.decide(&Anyone, &reader) == Permitted { held = held + 1 }
+
+  // Not knowing who is asking and not being allowed are different answers.
+  // One the caller can fix; the other they cannot, and answering the second as
+  // the first sends them round a login loop that cannot succeed.
+  if Access.decide(&Someone, &nobody) == Unidentified { held = held + 1 }
+  if Access.decide(&Someone, &reader) == Permitted { held = held + 1 }
+  if Access.decide(&HoldingRole("admin"), &nobody) == Unidentified { held = held + 1 }
+  if !Access.permits(&Access.decide(&HoldingRole("admin"), &reader)) { held = held + 1 }
+  if Access.decide(&HoldingRole("admin"), &admin) == Permitted { held = held + 1 }
+
+  // And they are different statuses, because they are different answers.
+  if Access.statusOf(&Access.decide(&HoldingRole("admin"), &nobody)) == 401 { held = held + 1 }
+  if Access.statusOf(&Access.decide(&HoldingRole("admin"), &reader)) == 403 { held = held + 1 }
+  if Access.statusOf(&Access.decide(&Anyone, &nobody)) == 200 { held = held + 1 }
+
+  // Every one of several, and any one of several.
+  if Access.decide(&HoldingAll(["reader", "admin"]), &admin) == Permitted { held = held + 1 }
+  if !Access.permits(&Access.decide(&HoldingAll(["reader", "admin"]), &reader)) { held = held + 1 }
+  if Access.decide(&HoldingAny(["admin", "reader"]), &reader) == Permitted { held = held + 1 }
+  if !Access.permits(&Access.decide(&HoldingAny(["admin", "owner"]), &reader)) { held = held + 1 }
+
+  // Something known about the principal rather than a role, which is how a
+  // decision about one tenant's data is written.
+  if Access.decide(&Matching("tenant", "acme"), &owner) == Permitted { held = held + 1 }
+  if !Access.permits(&Access.decide(&Matching("tenant", "other"), &owner)) { held = held + 1 }
+  if !Access.permits(&Access.decide(&Matching("tenant", "acme"), &reader)) { held = held + 1 }
+
+  // A judgement the program writes, for what the shapes above do not cover.
+  let named = Judged("being ada", fn(who: Access.Principal) -> Bool { who.identity == "ada" })
+  if Access.decide(&named, &reader) == Permitted { held = held + 1 }
+  if !Access.permits(&Access.decide(&named, &admin)) { held = held + 1 }
+  if Access.decide(&named, &nobody) == Unidentified { held = held + 1 }
+
+  // What is known about a principal beyond the roles they hold.
+  if Option.unwrapOr(Access.attributeOf(&owner, "tenant"), "") == "acme" { held = held + 1 }
+  if Option.isNone(&Access.attributeOf(&owner, "absent")) { held = held + 1 }
+
+  // What is known about a principal, and what they hold.
+  if Access.holds(&admin, "admin") { held = held + 1 }
+  if !Access.holds(&reader, "admin") { held = held + 1 }
+  if !Access.holds(&nobody, "admin") { held = held + 1 }
+
+  // A denial does not say why. A refusal naming the missing role tells a
+  // stranger the shape of the model, and one route at a time is how it is
+  // mapped.
+  let denied = Access.decide(&HoldingRole("admin"), &reader)
+  if !Access.refusal(&denied).body.contains("admin") { held = held + 1 }
+  if Access.refusal(&denied).status.code == 403 { held = held + 1 }
+  if Access.refusal(&Access.decide(&Someone, &nobody)).status.code == 401 { held = held + 1 }
+
+  // The reason exists for a log, where it is useful, and stays there.
+  if Access.reasonOf(&denied).contains("admin") { held = held + 1 }
+  if Access.reasonOf(&Permitted).isEmpty() { held = held + 1 }
+
+  // A route is built with its requirement in the same call as its handler.
+  // There is no call that builds one without, which is the whole point: a
+  // route that skipped the check and one that needed none stop being the same
+  // line of source.
+  let routes = [
+    Access.get("/health", Anyone, answer),
+    Access.get("/me", Someone, answer),
+    Access.remove("/users/:id", HoldingRole("admin"), answer)
+  ]
+
+  // A program can ask what it protects and read the answer, rather than
+  // reading every handler to find out.
+  let stated = Access.requirements(&routes)
+  if stated.length() == 3 { held = held + 1 }
+  if stated[0] == ("GET /health", "anyone") { held = held + 1 }
+  if stated[1] == ("GET /me", "anyone identified") { held = held + 1 }
+  if stated[2] == ("DELETE /users/:id", "the role admin") { held = held + 1 }
+
+  // And can ask directly for the list a review actually wants.
+  if Access.openRoutes(&routes) == ["GET /health"] { held = held + 1 }
+
+  // Routing decides before the handler runs, so a handler never sees a request
+  // it should not have.
+  let asAnonymous = Access.routing(&routes, fn(_request: Route.Request) -> Access.Principal {
+      Access.anonymous()
+    })
+  if Route.dispatch(&asAnonymous, requestFor(Http.Get, "/health")).status.code == 200 {
+    held = held + 1
+  }
+  if Route.dispatch(&asAnonymous, requestFor(Http.Get, "/me")).status.code == 401 {
+    held = held + 1
+  }
+  if Route.dispatch(&asAnonymous, requestFor(Http.Delete, "/users/7")).status.code == 401 {
+    held = held + 1
+  }
+
+  // The same routes, with somebody identified.
+  let asReader = Access.routing(&routes, fn(_request: Route.Request) -> Access.Principal {
+      Access.principal("ada", &["reader"])
+    })
+  if Route.dispatch(&asReader, requestFor(Http.Get, "/me")).status.code == 200 { held = held + 1 }
+  if Route.dispatch(&asReader, requestFor(Http.Delete, "/users/7")).status.code == 403 {
+    held = held + 1
+  }
+  if Route.dispatch(&asReader, requestFor(Http.Delete, "/users/7")).body == "reached" {
+    held = held + 0
+  } else {
+    held = held + 1
+  }
+
+  // And with somebody who is permitted.
+  let asAdmin = Access.routing(&routes, fn(_request: Route.Request) -> Access.Principal {
+      Access.principal("grace", &["reader", "admin"])
+    })
+  if Route.dispatch(&asAdmin, requestFor(Http.Delete, "/users/7")).status.code == 200 {
+    held = held + 1
+  }
+  if Route.dispatch(&asAdmin, requestFor(Http.Delete, "/users/7")).body == "reached" {
+    held = held + 1
+  }
+
+  // Who is asking is established in one place rather than repeated in every
+  // handler, so it cannot be done differently in two of them.
+  if Route.dispatch(&asAdmin, requestFor(Http.Get, "/me")).status.code == 200 { held = held + 1 }
+
+  // Every method a route can answer states its requirement the same way, and
+  // there is no call that makes one without — a route answering PUT with the
+  // check left out would be a line that looks exactly like a route that needs
+  // none. The method a route answers is part of what it is: the same pattern
+  // under two methods is two routes, each decided on its own.
+  let writes: Array[Access.Guarded] = [
+    Access.post("/users", HoldingRole("admin"), answer),
+    Access.put("/users/:id", HoldingRole("admin"), answer),
+    Access.patch("/users/:id", Someone, answer),
+    Access.query("/users", Anyone, answer),
+    Access.on(Http.Head, "/users", Anyone, answer)
+  ]
+  let writing = Access.requirements(&writes)
+  if writing[0] == ("POST /users", "the role admin") { held = held + 1 }
+  if writing[1] == ("PUT /users/:id", "the role admin") { held = held + 1 }
+  if writing[2] == ("PATCH /users/:id", "anyone identified") { held = held + 1 }
+  if writing[3] == ("QUERY /users", "anyone") { held = held + 1 }
+  // A method this module names no call for is still written with a
+  // requirement, so a protocol gaining a method does not gain a way to skip
+  // the check.
+  if writing[4] == ("HEAD /users", "anyone") { held = held + 1 }
+  if Access.openRoutes(&writes) == ["QUERY /users", "HEAD /users"] { held = held + 1 }
+
+  // A route's requirement and the route itself are both readable, so a
+  // reviewer reads what is protected rather than inferring it from a handler.
+  let guarded: Access.Guarded = writes[0]
+  let wanted: Access.Requirement = guarded.requirement
+  if Access.describe(&wanted) == "the role admin" && guarded.name == "POST /users" {
+    held = held + 1
+  }
+  // The same pattern decided under two methods answers each on its own: an
+  // admin-only PUT and an identified PATCH over one path.
+  let mixed = Access.routing(&writes, fn(_request: Route.Request) -> Access.Principal {
+      Access.principal("ada", &["reader"])
+    })
+  if Route.dispatch(&mixed, requestFor(Http.Patch, "/users/7")).status.code == 200 {
+    held = held + 1
+  }
+  if Route.dispatch(&mixed, requestFor(Http.Put, "/users/7")).status.code == 403 {
+    held = held + 1
+  }
+
+  // A decision is a value, so it can be held and asked more than one question
+  // without being decided twice.
+  let verdict: Access.Decision = Access.decide(&HoldingRole("admin"), &reader)
+  if !Access.permits(&verdict) && Access.statusOf(&verdict) == 403
+    && Access.reasonOf(&verdict).contains("admin") {
+    held = held + 1
+  }
+
+  // What a requirement is reads back as text, so a model can be reported.
+  if Access.describe(&HoldingAny(["a", "b"])) == "any one of a, b" { held = held + 1 }
+  if Access.describe(&HoldingAll(["a", "b"])) == "every one of a, b" { held = held + 1 }
+  if Access.describe(&Matching("tenant", "acme")) == "tenant being acme" { held = held + 1 }
+  if Access.describe(&named) == "being ada" { held = held + 1 }
+
+  held
+}
+
+fn answer(_request: Route.Request) -> Http.Response { Reply.text(200, "reached") }
+
+fn requestFor(method: Http.Method, path: Str) -> Route.Request {
+  let message = Http.Request{method: method, target: path, headers: [], body: "", binaryBody: None}
+  Route.Request {
+    message: message,
+    path: path,
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "test"
+  }
+}

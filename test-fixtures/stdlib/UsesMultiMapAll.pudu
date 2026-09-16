@@ -1,0 +1,95 @@
+module UsesMultiMapAll
+
+import Std.Map as Map
+import Std.MultiMap as MultiMap
+
+/// Every export of `Std.MultiMap`, checked against stated groups.
+///
+/// A key holding several values is the whole point, so the difference between
+/// counting keys and counting values is checked directly: a map of two keys
+/// holding three values between them answers two for one and three for the
+/// other, and a function that confused them would be right only when every key
+/// held exactly one.
+fn sample() -> MultiMap.MultiMap[Str, Int] {
+  MultiMap.fromPairs(&[("a", 1), ("a", 2), ("b", 3)])
+}
+
+export fn main() -> Int {
+  var held = 0
+  let items = sample()
+  let none: MultiMap.MultiMap[Str, Int] = MultiMap.empty()
+
+  // Keys counted apart from the values under them.
+  if MultiMap.size(&items) == 2 { held = held + 1 }
+  if MultiMap.total(&items) == 3 { held = held + 1 }
+  if MultiMap.isEmpty(&none) && !MultiMap.isEmpty(&items) { held = held + 1 }
+  if MultiMap.count(&items, "a") == 2 && MultiMap.count(&items, "z") == 0 { held = held + 1 }
+
+  // Reading.
+  if MultiMap.get(&items, "a") == [1, 2] { held = held + 1 }
+  if MultiMap.get(&items, "z") == [] { held = held + 1 }
+  if MultiMap.containsKey(&items, "a") && !MultiMap.containsKey(&items, "z") { held = held + 1 }
+  if MultiMap.contains(&items, "a", 2) && !MultiMap.contains(&items, "a", 9) { held = held + 1 }
+
+  // The three views.
+  if MultiMap.keys(&items) == ["a", "b"] { held = held + 1 }
+  if MultiMap.values(&items) == [1, 2, 3] { held = held + 1 }
+  if MultiMap.pairs(&items) == [("a", 1), ("a", 2), ("b", 3)] { held = held + 1 }
+  if MultiMap.groups(&items) == [("a", [1, 2]), ("b", [3])] { held = held + 1 }
+  if Map.pairs(&MultiMap.toMap(&items)) == [("a", [1, 2]), ("b", [3])] { held = held + 1 }
+
+  // Adding, one at a time and in bulk.
+  if MultiMap.get(&MultiMap.add(&items, "a", 9), "a") == [1, 2, 9] { held = held + 1 }
+  if MultiMap.get(&MultiMap.add(&items, "z", 9), "z") == [9] { held = held + 1 }
+  if MultiMap.get(&MultiMap.addAll(&items, "a", &[8, 9]), "a") == [1, 2, 8, 9] { held = held + 1 }
+  // Setting replaces what was there rather than adding to it.
+  if MultiMap.get(&MultiMap.setAll(&items, "a", &[9]), "a") == [9] { held = held + 1 }
+
+  // Removing one value, every copy of a value, and a whole key.
+  if MultiMap.get(&MultiMap.remove(&items, "a", 1), "a") == [2] { held = held + 1 }
+  if MultiMap.get(&MultiMap.removeAll(&MultiMap.add(&items, "a", 1), "a", 1), "a") == [2] {
+    held = held + 1
+  }
+  if !MultiMap.containsKey(&MultiMap.removeKey(&items, "a"), "a") { held = held + 1 }
+  if MultiMap.size(&MultiMap.removeKey(&items, "z")) == 2 { held = held + 1 }
+
+  // Over every value.
+  if MultiMap.values(&MultiMap.mapValues(&items, fn(v: Int) -> Int => v * 10))
+    == [10, 20, 30] {
+    held = held + 1
+  }
+  if MultiMap.pairs(&MultiMap.filterValues(&items, fn(v: Int) -> Bool => v > 1))
+    == [("a", 2), ("b", 3)] {
+    held = held + 1
+  }
+  if MultiMap.keys(&MultiMap.filterKeys(&items, fn(k: Str) -> Bool => k == "a")) == ["a"] {
+    held = held + 1
+  }
+  // The fold is given a whole group at a time rather than one value.
+  if MultiMap.fold(&items, fn(total: Int, _k: Str, group: Array[Int]) -> Int => total + group.length(), 0)
+    == 3 {
+    held = held + 1
+  }
+  if MultiMap.fold(&none, fn(total: Int, _k: Str, group: Array[Int]) -> Int => total + group.length(), 0)
+    == 0 {
+    held = held + 1
+  }
+  if MultiMap.all(&items, fn(_k: Str, v: Int) -> Bool => v > 0) { held = held + 1 }
+  if !MultiMap.all(&items, fn(_k: Str, v: Int) -> Bool => v > 1) { held = held + 1 }
+  if MultiMap.any(&items, fn(_k: Str, v: Int) -> Bool => v == 3) { held = held + 1 }
+  if !MultiMap.any(&items, fn(_k: Str, v: Int) -> Bool => v == 9) { held = held + 1 }
+
+  // Two together, and turned around.
+  let other: MultiMap.MultiMap[Str, Int] = MultiMap.fromPairs(&[("b", 4), ("c", 5)])
+  if MultiMap.get(&MultiMap.merge(&items, &other), "b") == [3, 4] { held = held + 1 }
+  if MultiMap.keys(&MultiMap.merge(&items, &other)) == ["a", "b", "c"] { held = held + 1 }
+  if MultiMap.get(&MultiMap.inverted(&items), 1) == ["a"] { held = held + 1 }
+
+  // Built by grouping a list.
+  let grouped: MultiMap.MultiMap[Bool, Int] = MultiMap.groupBy(&[1, 2, 3], fn(n: Int) -> Bool => n % 2 == 0)
+  if MultiMap.get(&grouped, true) == [2] && MultiMap.get(&grouped, false) == [1, 3] {
+    held = held + 1
+  }
+
+  held
+}

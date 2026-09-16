@@ -1,0 +1,1790 @@
+---
+type: changelog
+tags: [changelog]
+---
+
+# Changelog
+
+## 2026-09-15 — A release is published only from main, only for a compiler change
+
+- [[Release Workflow]] builds `linux-amd64` and `darwin-arm64` archives, verifies each checksum, runs a
+  program from each unpacked archive with an empty environment, and publishes an annotated tag and a
+  GitHub release — marked pre-release for `0.x` — from `main`. [[Release Plan]] decides: only a push
+  that changes `packages/pudu/` at a version with no tag releases, so merging README, website,
+  example, or wiki changes never does — those paths do not start the workflow, and the plan reads
+  every changed path, which a trigger filter cannot past 300 files, and a `release/` branch builds without publishing. Seven
+  tests hold the decision in CI and `test/gates.sh`.
+- [[First Release Readiness]] records the `0.1.0` pre-release scope against the open rows, and
+  `packages/pudu/v0.1/release-notes/0.1.0.md` states what it is and is not. The README describes
+  installing from a pre-release archive, and the semantics ledger records `0.7.0-draft` for places.
+
+## 2026-09-15 — The documentation reads as a book, from a first program to HTTP services
+
+- Ten new chapters join the ten there were, ordered so each builds on the last: getting started,
+  functions, text, collections, modules and packages, generics, testing, files and the system, data
+  formats, and HTTP servers and clients. The introduction ends with the outline in five parts. Files
+  were renumbered; every address stayed the same.
+- Every one of the 87 examples is a complete program that was run with the current compiler: `main`
+  answers 0, test modules pass under `pudu test`, the two-file modules example ran as a project, and
+  the server and client examples reach the network only behind a flag. Writing them corrected four
+  claims: the comparison traits are imported from `Std.Order`, `Env.temporaryDirectory()` and
+  `Client.limits()` are calls, and `task` is a reserved word.
+- On a phone, a table cell holding only code may wrap, so a three-column table no longer squeezes its
+  prose to one word per line. The stylesheet address moves to `v=10`.
+
+## 2026-09-15 — `&mut`, `mut` fields, and array elements change what they name
+
+- [[ADR-0022-lending-a-place]]. A place is a `var`, a `mut` field of a place, an element of an array
+  place, or `*r` for an exclusive reference, and assignment writes it: [[Eval Place]] resolves the
+  place and its index keys before the right-hand side. `&mut place` lends a place to one call, and
+  [[Eval Call]] stores each `&mut` parameter's final value back into it on every exit, including
+  `return` and `?`, for plain calls, `&mut self` methods, trait-qualified calls, and a reference lent
+  on by name.
+- [[Check Place]] states the rules: a root must be `var` or reached through `&mut` (`E3078`), a field
+  must be `mut` (`E3079`), nothing is written through `&T` (`E3080`), anything else is not a place
+  (`E3077`); `&mut` is only a call argument (`E3081`), loans to one call may not overlap (`E3082`),
+  `&mut T` is only a parameter's type (`E3083`), and no binding, result, closure, other value, or type
+  argument keeps one (`E3084`). The checker takes `var` from the resolver's symbol table.
+- Assigning to a `let`, a parameter, or a pattern binding was accepted and ran; it is now `E3078`. No
+  committed source relied on it: all 527 standard library, example, website, and fixture sources
+  check unchanged. `UsesPlaces` evaluates 18 writes; `PlaceSpec` covers 28 acceptances and refusals;
+  the three `PatternSpec` writes that expected `E3077` are now accepted.
+- The ownership documentation describes the implemented behaviour, with six programs that were run.
+- `pudu fmt` indented a statement opening with `*`, `-`, or `&` as a continuation of the line above,
+  which the new assignments through a reference made common; it now places such a line at its block's
+  level, and inside parentheses or brackets keeps the indentation it gave before.
+- Two checker cases that kept a local `&mut` borrow and returned `&mut` are restated as a `&mut`
+  parameter, since both forms are now refused by design.
+
+## 2026-09-15 — Documentation spacing and a fuller About page
+
+- A chapter card's number now sits on its own line above the chapter title, and the folded page
+  list on a narrow screen has room below it before the page's own label. The stylesheet address
+  moves to `v=9` so a browser holding the earlier one fetches the change.
+- The About page says what Pudu is built around, what ships with the compiler, and that 0.1.0 is
+  pre-release, replacing a sentence that called it the first stable version. The author's profile
+  links are labelled LinkedIn and GitHub rather than repeating the author's name.
+
+## 2026-09-15 — Documentation pages carry their author and version, and the library reads as a map
+
+- Reading the site as a newcomer on a phone found the page list opened above every article, a home
+  page that assumed the reader already knew a name to search for, and 163 modules in one unexplained
+  list. A documentation page now opens with the article and a closed page list, and names its author,
+  the language version, and a link to its Markdown source. Code blocks use the light `--code` surface
+  with a language label.
+- `/modules` is now the standard library as a map: twelve sections from [[website Domain Library]],
+  each module with its declaration count, one sentence on what it is for, and its child modules. The
+  home page says what Pudu is and links to the introduction and the library before the search.
+- The catalogue was regenerated from the current compiler: 173 modules and 3,456 declarations, now
+  including `Std.Audio`, `Std.Video`, `Std.Fs`, and the `Std.Ui` canvas, layout, screen, text, and
+  desktop modules. All 27 documentation programs were run again and pass; the website suite holds 100
+  assertions.
+
+## 2026-09-15 — An assignment the evaluator cannot store is refused where it is written
+
+- The checker accepted `*reference = value`, `record.field = value`, and `items[i] = value`, while the
+  evaluator treats `&`, `&mut`, and `*` as the value itself and stores only into a variable by name, so
+  each checked and then stopped the program with `E7001 assignment target is not a place`. Such an
+  assignment is now `E3077` at check time, naming the forms that work: assign the variable a new value,
+  such as `record = Record{..record, field: value}`, or return the changed value. No committed program
+  used these forms; `UsesVarint`'s never-called helper that assigned through `*held` is removed.
+  Implementing places for references and `mut` fields remains open in [[First Release Readiness]].
+
+## 2026-09-15 — Language documentation rendered from Markdown, and home page layout fixes
+
+- The website gains a documentation section: ten Markdown pages in `website/docs/` — introduction,
+  basics, types, control flow, errors, ownership, traits, concurrency, the standard library, and
+  tooling — rendered on the server by `Service.Docs`, `View.Markdown`, `View.MarkdownInline`, and
+  `View.Docs` with a page list, the article, and on-page contents. `/docs` and `/docs/:page` are
+  prerendered and in the sitemap; `/guide` answers with `/docs` as its canonical address, and the
+  navigation's Guide link is now Docs. All 27 complete programs in the pages were checked and run.
+- The home page's "Start with a shape" example sat beside a tall module panel, leaving a large empty
+  area under it, and long module names such as `Std.App.Database` overflowed the 280-pixel panel. The
+  example now sits beside its explanation and the modules have their own wrapping grid; at 1280 and
+  375 pixels no page overflows horizontally and no module link overflows its cell.
+- Writing the ownership page found that assigning through a reference checks and then stops the
+  program with `E7001`: the evaluator treats `&`, `&mut`, and `*` as the value itself. The page states
+  the limitation, the home page no longer claims `&mut` changes a value, and
+  [[First Release Readiness]] records it as a critical row. The website suite rises to 91 checks.
+
+## 2026-09-15 — Bytes cross the PostgreSQL driver both ways
+
+- The PostgreSQL driver refused every `BytesValue` parameter, and a `bytea` column came back as the
+  text `\x…`, which `Row.bytes` rightly will not call bytes. So binary data worked through the driver
+  layer on SQLite and not at all on PostgreSQL. A bytes parameter now crosses as its hexadecimal text
+  form, and `Db.asDriverRows` reads a `bytea` column's `\x` hex back into `BytesValue`, keeping any
+  other form as text. Against a live PostgreSQL 14 server, three bytes, an empty value and a null
+  each came back exactly, and the server measured the stored value at three bytes. `UsesStore` rises
+  to 35.
+
+## 2026-09-15 — A readiness check that asks the database
+
+- `Std.App.Health` had readiness checks but nothing that asked a database, so every service wrote its own
+  probe or reported ready while its database was down. `Database.readiness(database, name)` runs
+  `select 1` through the started client and answers `Well` or `Unwell`. `UsesAppDatabase` rises to 59:
+  an unstarted SQLite database is unwell, the same database started is well, and a started driver that
+  refuses the question is unwell.
+
+## 2026-09-15 — Opening a PostgreSQL connection has a time limit
+
+- `Std.Db.Session.connect` dialled with no limit and read the handshake with no deadline, so a host that
+  dropped packets held the caller for as long as the operating system waited, and a server that
+  accepted and stayed silent held it forever — since pools now reopen lost connections on a request,
+  that request with it. `Config.connectMillis` now bounds dialling and the whole handshake, ten seconds
+  by default; `connect_timeout` in a connection URI sets it in whole seconds. Query reads keep no
+  deadline. Against a silent local server a 400 ms limit refused the connection after 403 ms.
+  `UsesDb` rises to 86 and `UsesConnectionString` to 41.
+
+## 2026-09-15 — SQLite waits for a lock, and says what a failure was
+
+- `Std.Db.Sqlite` set no busy timeout, so while one process held a write transaction a second process
+  writing to the same file was refused within 0.09 seconds, reported only as
+  `SQLite operation failed with status 5`. Every connection now sets `PRAGMA busy_timeout` to five
+  seconds when it opens, so two worker processes can share one file.
+- A SQLite status now carries a category and message from one table — `busy`, `constraint`,
+  `readonly`, `io`, `corrupt`, `full`, `unavailable` — read from the primary code of an extended one,
+  with the number kept in `code`.
+
+## 2026-09-15 — A PostgreSQL pool survives a dropped connection
+
+- `Std.Db.withConnection` closed the whole pool when an action failed with anything other than a
+  server error, so a dropped socket, an idle timeout or a server restart made every later query on
+  every thread answer `Closed` until the program restarted. Reproduced against a live PostgreSQL 14
+  server by terminating a pool's backends. A connection that cannot be lent again is now closed and its
+  place kept empty, and the next borrower opens a fresh connection there, so the pool keeps its size.
+  Against the same server, each dead connection failed one request and the following requests were
+  answered by new backends. `UsesDb` rises to 84 with a stub that hangs up after each answer.
+- The `social` example removed a post with three separate statements, so a failure after the first
+  left a post whose approvals and replies were already gone. The three now run in one
+  `Database.transaction`. Checked on a running server: a post with a reply was removed, the feed no
+  longer listed it, and its page answered 404.
+- The `fullstack` and `social` examples answered a newly written row by reading the newest row
+  afterwards — `social` the newest post in the whole table, not even the author's — so two requests
+  writing at once could each be answered with the other's row. Both now take the row, or its
+  identifier, from `INSERT … RETURNING`, which PostgreSQL and SQLite 3.35 or later both support.
+
+## 2026-09-14 — Header lines another reader would take differently are refused
+
+- `Std.Http.Message` trimmed a header name before using it, so the server read `Content-Length : 5`
+  as a body length, accepted an empty name, a name with a space in it, and a folded continuation line,
+  and kept a bare line break inside a value. A proxy that follows the protocol rejects or reads each of
+  those differently, and a proxy and a server that disagree about where a body ends see different
+  requests in the same bytes. Each is now refused as `AmbiguousHeader`, in requests and responses
+  alike, and the server answers 400. A name is a token with nothing between it and its colon; a
+  value is still trimmed.
+- The request line was split at its first space and trimmed, so `GET /a b HTTP/1.1` became target
+  `/a` with version `b HTTP/1.1`, doubled spaces were absorbed, and a missing version defaulted to
+  HTTP/1.1. A request line is now exactly a token method, a target without whitespace, and HTTP/1.0 or
+  HTTP/1.1, one space apart, and anything else is `BadRequestLine`.
+- `decodeChunkedBytes` checked a chunked body's trailer with the head reader, which skips the line a
+  head begins with, so a trailer's first field was never read and a malformed one ended the body as
+  though it were well formed. Every trailer field is now read.
+- The status line a client reads was split and trimmed like the request line, and its code was any
+  whole number, so `HTTP/1.1 2000 OK`, `HTTP/1.1  200` and `HTTP/2 200` were all read. Whether a
+  response has a body depends on its code, so a code two readers take differently is a body they frame
+  differently. A status line is now HTTP/1.0 or HTTP/1.1, one space, exactly three digits from 100,
+  then nothing or a space and a reason; anything else is `BadStatusLine`.
+- `UsesHttpMessageReplyAll` rises to 104 (100 before the trailer fix, which is the malformed first
+  field being accepted). Against a running server, an ordinary request answered 200
+  while whitespace before a colon, a folded line, a target holding a space, and a request line with no
+  version each answered 400.
+
+## 2026-09-14 — Kept values through any driver
+
+- `Std.Db.Store` built backend-neutral statements but could only run them on a PostgreSQL session, so a
+  SQLite application could describe a kept value and not save it. `Store.Target` (a client and its
+  driver) and `saveIn`, `changeIn`, `removeIn`, `loadIn`, `loadAllIn`, `loadWhereIn` and
+  `loadForParentsIn` run the same statements through any driver, spelled for its placeholders;
+  `Database.storeTarget` answers one for a started database.
+- A write answers how many rows it changed. PostgreSQL states that in its command tag; SQLite's driver
+  states no count, so the store asks `changes()` in the same transaction as the write, and a change or
+  removal naming no row answers 0 rather than reporting a write that did not happen.
+- `UsesStoreDriver` (23) runs against in-memory SQLite and checks that a PostgreSQL driver is sent
+  numbered placeholders with no transaction. Against a live PostgreSQL 14 server, saves, a refused
+  duplicate key, changes and removals of present and absent keys, loads and grouped loads all answered
+  as on SQLite.
+
+## 2026-09-14 — Migrations through any driver, with no lock left behind
+
+- `Std.Db.Migrate` ran only on a PostgreSQL wire session, so an application on `Std.App.Database`
+  (every example, and every SQLite program) had no way to migrate. `Migrate.apply(client, driver,
+  migrations)` now runs over the driver contract, and `Database.migrate` and
+  `Database.migrationStage` expose it. Each migration commits with its record in one driver
+  transaction; on PostgreSQL that transaction first takes `pg_advisory_xact_lock` and reads the
+  record again, so a process that waited skips what another applied.
+- The session path took `pg_advisory_lock` and then returned early on a changed migration, a late
+  one, or an unreadable record without releasing it. On a pooled connection the lock stayed held and
+  every later migration anywhere waited forever. It is now released on every path, through the
+  connection the rollback left rather than a copy from before it.
+- A version of zero or below was reported as arriving late against an empty record; it is refused as
+  `Unnumbered`. The unused `Unordered` refusal is removed. The record's applied time defaults to
+  `current_timestamp`, which both bundled backends accept.
+- `UsesMigrateApply` (26) applies migrations to in-memory SQLite and checks what a PostgreSQL driver
+  is sent; `UsesMigrate` rises to 23. Against a live PostgreSQL 14 server both paths refused changed
+  and failing migrations with no advisory lock left, and four processes started together applied
+  three migrations exactly once between them. The `fullstack` and `social` examples now migrate at
+  start-up, and `examples/README.md` covers every example folder.
+
+## 2026-09-14 — One refusal for a bad audio stream token on every target
+
+- CI on Linux had failed since device audio streaming landed: on a target without a stream adapter,
+  pausing, resuming, writing, setting the volume of, snapshotting, or closing a stream answered
+  `UnsupportedPlatform`, where macOS answers `ClosedStream` for the same forged token, so
+  `UsesAudioDevice` counted 21 of 23. Opening still answers `UnsupportedPlatform`, because it is the
+  only call that could create a stream; every call on a token now answers `ClosedStream`, after close's
+  own deadline check. Checked by building with the macOS audio and desktop definitions removed and
+  warnings as errors, and running the full suite on that build.
+
+## 2026-09-14 — URL user information, IPv6 hosts, and faster query decoding
+
+- `Std.Url.parse` split the authority at its first colon, so `https://user:pw@host:8443/` was
+  `BadPort("pw@host:8443")`, `https://user@host/` gave the host `user@host`, and
+  `http://[::1]:8080/` was `BadPort`. User information before the last `@` is now not part of the host
+  and is not kept, and a bracketed IPv6 host keeps its brackets with the port read after them.
+- `decodeComponent` returns text holding neither `%` nor `+` unchanged without rebuilding it byte by
+  byte, and finding where the authority and path end is one native search per delimiter. A five-pair
+  query decodes in 179 µs instead of 452 µs.
+- Over 473 fuzz inputs, `decodeComponent` and `parseQuery` answer identically to before, and `parse`
+  differs only for the 24 inputs holding user information, each now reading the host and port.
+
+## 2026-09-14 — Oversized numbers from outside a program no longer stop it
+
+- Eight readers accumulated digits without a bound, so twenty digits raised `E7005` and ended the
+  program: `Std.Semver.parse` (now `NotANumber`), `Std.Args.numberOf` (now nothing),
+  `Std.Regex.compile` for a repeat count (now `BadRepeat`), `Std.Text.Parse.hexadecimal` (now a parse
+  failure), `Std.Http.Message` chunk sizes (now not a size), `Std.Http.Safe.framing` for a content
+  length (now refused), `Std.Http.Server.Resilience` for an `rtt` hint (now held at the largest
+  `Int`), and the internal readers of `Std.App.Trace` and `Std.Time`. Each checks before multiplying.
+  `UsesOverflowGuards` drives the seven reachable from outside; each stopped the program before.
+
+## 2026-09-14 — A TOML number that stopped the program
+
+- `Std.Toml.Scan.digitsIn` multiplied without a bound, so `size = 99999999999999999999` stopped the
+  program with `E7005`. It now answers nothing for digits past what an `Int` holds, in every base, and
+  such a word is kept as written, as every other word that is not a whole number is.
+
+## 2026-09-14 — JSON Lines residency evidence
+
+- `test/residency.py` runs `Std.Json.foldLines` over JSON Lines files of 2 MB and 20 MB and requires
+  the same peak, as it already does for `Std.Io.foldLines`, `countBytes`, and `Std.Csv.foldRows`.
+
+## 2026-09-14 — Faster YAML lines and a number that stopped the program
+
+- `Std.Yaml`'s private whole-number reader multiplied without a bound, so `replicas:
+  99999999999999999999` stopped the program with `E7005`. It now reads through `Std.Text.wholeOf`,
+  and such a value is text.
+- Measuring indentation, stripping comments, and finding a key use native searches wherever the answer
+  cannot differ, walking characters only for lines that hold a `#` or a quote, and
+  `Std.Text.trimStart` is one native span search instead of a predicate per character. A 1 MB document
+  reads in 5.4 s instead of 10.5 s, and 69 edge and generated documents read identically.
+
+## 2026-09-14 — Native XML reading
+
+- `Std.Xml.decode` first tries the runtime's `xmlDecode` (`Pudu.Eval.Xml`), which walks the document's
+  UTF-8 bytes, finds each run of text and attribute value by searching for its end, and builds
+  `Std.Xml.Tag` values directly. It answers only documents it reads exactly as the library's reader
+  does and leaves every other document, including every malformed one, to that reader. A 1 MB document
+  of records decodes in 0.10 s instead of 14.65 s. 84 documents — entities and numeric references at
+  their edges, attribute quoting, CDATA, comments and instructions before and inside the root,
+  document type declarations, mismatched closes, non-ASCII names, 511 to 513 levels of nesting, and
+  thirty generated documents — give identical trees and identical errors either way.
+
+## 2026-09-14 — Native JSON encoding
+
+- `Std.Json.encode` and `encodePretty` are written by the runtime's `jsonEncode` in one walk into UTF-8
+  bytes, each string as runs between the characters that need an escape. The 3.26 MB document is
+  written in 0.12 s instead of 12.2 s. Compact and pretty output for 91 documents, covering every
+  control character, empty and nested containers, and generated values, is byte-for-byte the former
+  encoder's. The Pudu `Writing` stack and its per-character string builder are removed.
+
+## 2026-09-14 — Native JSON decoding, JSON Lines, and number overflow
+
+- `Std.Text.wholeOf` and `countOf` stopped the program with `E7005` when digits spelled more than an
+  `Int` holds, and `Std.Json.decode` inherited it: one oversized number in untrusted JSON ended the
+  program. They now answer nothing, and `decode` reports `expected a number` where the number
+  begins.
+- `Std.Json.decode` first tries the runtime's `jsonDecode` (`Pudu.Eval.Json`), which reads the text's
+  bytes in one pass and builds `Std.Json` values directly. It answers only text it reads exactly as
+  the library's reader does and leaves every other text, including every invalid one, to that
+  reader, so errors keep their positions and wording. A 3.26 MB document decodes in 0.17 s instead of
+  17.5 s. 88 edge and generated documents decode to identical values and identical errors either
+  way.
+- `Std.Json.foldLines` folds a JSON Lines file one value to a line over `Std.Io.foldLines`, skipping
+  blank lines and answering `JsonLinesError` (`Unreadable(IoError)` or `Malformed(line, JsonError)`).
+  199,415 values in 20 MB fold in 1.7 s at a 100 MB peak.
+
+## 2026-09-14 — Missing-import advice for types named like modules
+
+- `Result.unwrapOr(...)` written without `import Std.Result as Result` drew `E3034` with help about
+  variants, which never names the actual mistake. For the eight types that share a name with a
+  standard-library module (`Bool`, `Bytes`, `Char`, `Decimal`, `Map`, `Option`, `Result`, `Set`), the
+  help now names the import. A fixture writes exactly those imports, and a spec checks that they are
+  the advised ones, resolve without a diagnostic, and run.
+
+## 2026-09-14 — Streaming CSV rows and bounded record updates
+
+- `Std.Csv.foldRows` and `foldRowsWith` fold a file's rows holding one chunk and one record at a
+  time, answering `CsvReadError` (`Unreadable(IoError)` or `Malformed(CsvError)`) so existing
+  matches on `CsvError` keep compiling. Rows equal those `parse` gives for the whole text, and an
+  unterminated field names the same position: checked against the character scanner on 69 MB of
+  generated files with quoted newlines, doubled quotes, CRLF, empty lines, multi-byte characters,
+  and 70 KB fields, plus tab delimiters, invalid text, and a missing file.
+- A new runtime scan, `csvRecords` in `Pudu.Eval.Csv`, reads one-byte delimiters by searching for
+  structural bytes and decoding each field once. On 20 MB of rows holding a quoted field, `parse`
+  takes 0.59 s instead of 272 s and `foldRows` 1.53 s; unquoted rows fold in 0.68 s. Other
+  delimiters keep the character scanner.
+- A record update now decides every field before it returns. A field left pending held the record
+  it came from, so a state record updated once per line kept every earlier version: the fold peaked
+  at 275 MB for 20 MB of input and now stays at 98 MB. `test/residency.py` gains a `foldRows` probe
+  that must hold the same peak at ten times the input.
+
+## 2026-09-14 — Line streaming splits natively
+
+- `Std.Io.foldLines`, and `forEachLine` and `readAllLinesOf` above it, look for the last newline in
+  each new 64 KiB chunk, join pending chunks once, decode each newline-terminated block once, and
+  divide it with one native split. On a 20 MB file of 83-byte lines the optimised build folds in
+  0.49 s instead of 2.39 s, and a line longer than a chunk is no longer rescanned per chunk. Lines
+  from one block share its decoded text, so holding every line of 20 MB peaks at 124 MiB instead
+  of 173 MiB.
+- Output is unchanged: a 6.7 MB mixed file of CRLF lines, empty lines, multi-byte characters across
+  read boundaries, a 150 KB line, and no final newline yields the same lines as before, and invalid
+  text still reports `NotText`. `UsesStreams` adds a character straddling the read boundary and
+  CRLF lines as regressions.
+- The residency gate's buffered control now requires the peak to rise by at least the extra input
+  rather than by half of a peak that is mostly the runtime itself.
+- The root README is now a short introduction that links to the reference, standard library,
+  examples, and contributing guide.
+
+## 2026-09-14 — Persistent native audio stream and qualified-pattern correctness
+
+- `Std.Audio.Device` now owns persistent output sessions in addition to bounded one-shot clips.
+  A stream opens with the target adapter's accepted format, accepts bounded PCM writes with explicit
+  partial progress, pauses, resumes, changes volume, snapshots state and telemetry, and closes by
+  draining or immediately. Tokens belong to one evaluation, operations on one session serialize
+  without blocking unrelated streams, and runtime teardown closes leaks. The private macOS Audio
+  Queue adapter preallocates two to eight buffers; callbacks do bounded atomic bookkeeping only.
+- Stream snapshots expose submitted frames, a hardware queue position clamped to submitted media,
+  clock nanoseconds, underruns, interruptions, device changes, timeline-query failures, and state.
+  A temporarily unavailable initial timeline is retained as telemetry rather than aborting playback,
+  while starvation cannot advance pictures beyond media actually submitted.
+- `examples/media/Studio.pudu` uses the audio stream as its master presentation clock and writes a
+  version-three report. The real configured 480×270 launch submitted all 16,016 stereo frames,
+  presented 27 of 30 pictures by dropping late frames, reported zero underruns, interruptions, and
+  device changes, wrote valid WAV and JSON artifacts, and closed the window and queue. Two real
+  `LaunchAudioStream.pudu` runs fed 4,096 frames apiece and exercised pause, resume, volume, timeline,
+  drain, and stale-token refusal.
+- Qualified constructor patterns no longer discard their qualifier and fall back to the global
+  bare-variant table. A missing exported module constructor now reports exactly one `E3033`; a known
+  type without the written variant reports exactly one `E3034`; named-field recovery binds nested
+  patterns at the error type without cascading field diagnostics. The exact `Std.Audio` typo that
+  exposed the defect and local type-owned positional/named cases are permanent regressions.
+- A record type destructured through its module, such as `Audio.Format { sampleRate, channels }`, is
+  again a record pattern: the qualified-constructor diagnostic first asks whether the full path names
+  a declared type, and `AcceptsQualifiedRecordPattern.pudu` holds it at zero diagnostics.
+- `Std.Diff.unifiedDiff` no longer reports texts that differ only in their final newline as equal.
+  The unterminated side's last line compares as distinct and is followed by
+  `\ No newline at end of file`; line splitting no longer re-walks the text per character.
+  `UsesDiff.pudu` holds 14 claims.
+- `Std.Url.encodeComponent` and `decodeComponent` escape UTF-8 bytes. A character above ASCII was
+  escaped from its scalar value, so `€` became `%20%AC` and read back as a space and `¬`, and a
+  standard `%C3%A9` decoded to two characters instead of `é`. Both directions now walk bytes through
+  module-constant tables and join once; escapes that do not spell UTF-8 leave the text unchanged.
+  `Std.Http` form fields reuse the component codec with a plus for a space. `UsesUrlAll.pudu` holds
+  53 claims and `UsesHttpAll.pudu` 93.
+- `charAt`, `length`, and `slice` on long text no longer walk from the start on every call. A
+  two-entry cursor keyed by the text's buffer remembers the last scalar position and the counted
+  length, so a positional scan walks only the distance it moves, in either direction. At -O2 a
+  `charAt` scan of 640,000 ASCII characters fell from 11.0 s to 0.94 s and 160,000 mixed-width
+  characters from 0.97 s to 0.27 s. Forward, backward, interleaved, shared-buffer, and past-the-end
+  evaluator cases guard the answers.
+- Foreign-resource teardown no longer swallows an interrupt. Every cleanup still runs and a
+  cleanup's own failure is still dropped, but an asynchronous exception raised during one is held
+  until the rest have released and is then re-raised, so Ctrl-C during teardown stops the program.
+- The README states the version development builds report, `0.1.0`.
+- CI's "standard library and examples compile" step searched a root `lib` directory that does not
+  exist, so it compiled only the examples. It now names `packages/pudu/v0.1/lib`, and all 201
+  library and example modules check clean.
+- `Std.Mime.negotiate` keeps offers of equal quality in the order the client wrote them: its
+  swapping selection sort turned `text/html;q=0.5, application/json;q=0.5` into a JSON answer, and a
+  stable `List.sortOn` replaces it. The extension registry is two module-constant maps instead of
+  comparison chains, and the per-character lower-casing, trimming, and splitting helpers give way to
+  the built-in methods. `UsesMime.pudu` holds 11 claims.
+- `Std.Log` reads `show`'s source escapes back in one pass and returns text holding no backslash
+  unchanged, instead of appending each character to the text built so far.
+- `Std.Toml.Read` builds documents through drafts addressed by position, so placing a key no longer
+  rebuilds and searches the table it lands in. At -O2 a 5,000-key table reads in 0.87 s instead of
+  43.2 s. A key written through a value and a repeated section over a value are refused as
+  `Duplicate` rather than silently replacing the value with a table. `Std.Toml.field` stops at the
+  first match. `UsesToml.pudu` holds 49 claims.
+- The compiler builds again on targets without the macOS media adapters, which is where CI runs.
+  `Pudu.Eval.Desktop`, `AudioStream`, and `AudioDevice` defined store fields, helpers, and imports
+  that only the adapter branch used, so a Linux build with warnings as errors failed. Without an
+  adapter each store is now an empty constructor and adapter-only code sits inside the platform
+  guard; all 181 library modules type-check with the macOS flags removed. The audio-device and
+  desktop error classifiers are module-constant tables rather than comparison chains.
+- `pudu init` no longer drops doubled letters from the package name it writes: `hello` became
+  `helo`, `book-keeper` became `bok-keper`, and `app2` became `ap2`, because every run of a repeated
+  character was collapsed rather than only runs of separators. Only separators collapse now, and the
+  names that failed are regression cases.
+- A missing standard module's help says where the library was looked for when none was found. It
+  was built from only the locations that exist, so with no library installed it read `looked in `
+  followed by nothing, or by an empty source root. With a library present it still names the
+  program's roots and the library found; with none it names `PUDU_LIB`, the installed layout, the
+  package data directory, and the walk up from the executable in one phrase, with `.` for a program
+  in the working directory.
+- `test/residency.py` is a gate and a CI step: `Std.Io.foldLines` and `countBytes` must reach the
+  same peak memory on a 20 MB file as on a 2 MB one, and buffered `readAllLinesOf` must grow, proving
+  the measurement sees memory at all. At 10 MB and 100 MB, `foldLines` peaked at 87 and 86 MB,
+  `countBytes` at 82 and 82 MB, and the buffered reader at 119 and 527 MB.
+- The `cabal sdist` archive is self-contained: unpacked outside the checkout it builds `pudu`, and
+  that binary, given its data directory, runs a standard-library program from an unrelated
+  directory with every claim holding.
+
+## 2026-09-13 — Configurable desktop media laboratory
+
+- `pudu lint` now analyzes files or directories through the ordinary typed compiler. Existing
+  compiler warnings become named lint rules; native `W7101` detects four equivalent redundant
+  Boolean-comparison shapes and carries an exact source-verified safe edit. Human and stable JSON
+  output, closed project and file/next-line suppression, unknown-code rejection, deterministic
+  discovery/deduplication, permission-preserving staged replacement, post-fix recompilation, and a
+  live CLI gate ship together. The analyzer exposes structural work counts; a 1,000-comparison
+  property proves one visit per expression without substituting a machine-dependent timing claim.
+  Eight CLI properties, four analyzer properties, the full compiler suite, both package checks, the
+  diagnostic-identity gate, and live four-finding/fix/clean execution pass.
+- `pudu init` now creates a Pudu-only inward dependency graph: `Main` composes effects,
+  `App.Greeting` owns the use case, and `Domain.Greeting` owns pure policy. The generator preserves
+  existing regular source and support files, refuses links and incompatible paths before writes,
+  normalizes directory names to the package identity grammar, rejects reserved/empty identities,
+  acquires its serialization lock atomically, maps competing creators to a typed refusal, stages
+  new files, and commits `pudu.toml` last. Seven
+  filesystem properties cover success and refusals. The previously unregistered scaffold script is
+  now a mandatory release gate and proves check, run, test, lint, formatter, build, bundled execution, and
+  an intentionally failing generated test from outside the repository.
+- The string construction/view audit found no missing public type: `Std.Text.Builder` already holds
+  persistent chunks and joins once; native `Str` remainders share storage for Unicode parsing, and
+  `Std.Text.Source` supplies explicit byte-coordinate views. A separate `StringView` would duplicate
+  those contracts without a measured caller while adding unresolved retention and coordinate rules.
+- HTML rendering, compact and pretty JSON encoding, UI tree comparison, and UI patch application
+  no longer consume one evaluator frame per value level. Explicit work stacks preserve document
+  and change order; patch application descends iteratively and rebuilds immutable ancestors from the
+  leaf. A Pudu fixture builds 1,600-level values and holds 15 exact claims across serialized lengths
+  and boundaries, edit path depth, the rendered post-patch tree, and a deep invalid patch path.
+  Native repeated indentation
+  reduced that 5.1 MB pretty-JSON regression from about 30 seconds to about 6 seconds. The full
+  70-module Cabal suite passes.
+- `Std.Json` decoding is linear and bounded. The reader walks a cursor over the unread remainder
+  instead of indexing UTF-8 text by position, so a 538-kilobyte document decodes in 2.4 s rather than
+  9.1 s and a 200,000-character string in 3 ms rather than 1,970 ms. Nesting deeper than 512 levels
+  answers the new `JsonError.TooDeep` instead of exhausting the evaluator's call limit and stopping
+  the program. The string fixture now holds 20 claims.
+- `Std.Bytes` hexadecimal and base64 codecs are linear. Encoders gather pieces and join once instead
+  of copying the growing text per byte, and decoders walk characters in order instead of reaching
+  each by position; at 120,000 bytes hex encoding fell from 2,299 ms to 423 ms and base64 decoding
+  from 2,019 ms to 979 ms. Error positions are unchanged, and the bytes fixture now holds 54 claims,
+  including exact digit positions and large round trips through every alphabet.
+- `Std.Diff.unifiedDiff` numbers a hunk side holding no lines by the line the change follows, so a
+  zero-context insertion renders `@@ -2,0 +3,2 @@` as `patch` expects instead of one line late. The
+  diff fixture now holds 12 claims.
+- `Std.Text` padding with an empty filler returns the text instead of looping forever: `padLeft`,
+  `padRight`, and `center` compute a whole-copy count. Scans and builders across the module walk
+  characters in order and join gathered pieces once instead of reading by position and appending per
+  character, so trimming, searching, grouping, comparison, and character maps are linear. The module
+  gains its missing vault mirror, and the text fixture now holds 91 claims.
+- `Std.Csv` reads in linear time: the scanner walks one character array and joins each field once
+  instead of reading by position and appending per character, so 200,000 characters of quoted rows
+  take 0.87 s rather than 2.55 s. Rendering joins fields and lines once.
+- `Std.Xml` and `Std.Toml` bound nesting at 512 levels and answer the new `TooDeep` error at the
+  opening position, where a deeply nested document previously exhausted the evaluator's call limit
+  and stopped the program. `Std.Xml` gains its missing vault mirror.
+- `Std.Http.Safe.framing` refuses a transfer encoding whose final coding is not exactly `chunked` as
+  the new `UnsupportedEncoding`. A `gzip` or `chunked, gzip` request was framed as an empty body,
+  leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
+  passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
+  handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
+- `Std.Glob.matches` decides a path in one walk that advances every reachable pattern position per
+  character, instead of trying each length a `*` could take and backtracking. `*a*a*a*a*a*a*a*b`
+  against forty `a`s, which ran for over a minute, answers in 11 ms, and a pattern of thousands of
+  stars no longer recurses once per star. The rewrite also corrects a dropped separator: `**/b`
+  matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
+  `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
+  exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- HTTP requests carry exact byte bodies. `Http.Request` gains `binaryBody: Option[Bytes]`, matching
+  `Response`, with `Http.withBytes` and `Http.requestBytes`. `Std.Http.Server` delivers a body that is
+  not UTF-8 as its bytes instead of refusing it, `Route.bodyBytes` reads them, and `Route.formOf`
+  hands the multipart reader those bytes, so a binary file upload arrives intact. `Std.Http.Client`
+  renders and sends requests as bytes, and a redirect that keeps its body keeps a byte body too. The
+  server fixture holds 37 claims and the client fixture 53.
+- Runtime effects no longer turn interrupts into failures. Sockets, TLS, entropy, compression, desktop
+  teardown, and thread teardown each caught every exception, including Ctrl-C: a server blocked in
+  `Net.accept` answered `Err(Other("user interrupt"))` and a serving loop would keep running. They now
+  share `Pudu.Eval.Io.trySynchronous`, which reports an action's own failures and re-raises
+  asynchronous exceptions, replacing two private copies of the same filter. Ten runs interrupted
+  while blocked in accept each exited 130 within 80 ms of the signal.
+- Desktop pumping answers interrupts. One native pump for the whole requested duration held Ctrl-C
+  until it ended, and the runtime then reported it as `PlatformFailure("user interrupt")` while the
+  program continued: a 10-second pump interrupted at 1.5 s ran to 10.28 s and exited 0. A pump now
+  runs in native slices of at most 16 ms against a monotonic deadline, a watched stop request ends it
+  early, and every asynchronous exception is re-raised rather than reported as a platform failure.
+- `Std.Ui.Layout.placeWithin` caps the nesting budget a caller may request at 512 and refuses a larger
+  one as `InvalidBudget`, the way the node budget was already capped. With no ceiling, a budget of
+  100,000 let 5,000 nested views exhaust the evaluator's call limit and stop the program; a view built
+  from data reaches that depth without anyone writing it. The layout fixture holds 49 claims.
+- `Std.Regex.compile` bounds group nesting at 256 levels and answers the new `RegexError.TooDeep` at
+  the opening bracket, where a pattern of 5,000 nested groups exhausted the evaluator's call limit and
+  stopped the program. Searches were already bounded by `stepLimit`. `Std.Regex` gains its missing
+  vault mirror.
+- `Std.Yaml` bounds block nesting at 512 levels and answers the new `YamlError.TooDeep` at the line
+  that opened the block too deep, where 3,000 nested mappings exhausted the evaluator's call limit and
+  stopped the program. The YAML fixture holds 20 claims.
+- Device playback is cancellable. The native play runs on a worker thread while the evaluating thread
+  waits, so Ctrl-C during an 8-second clip stops the program in 0.07 s with exit 130 instead of after
+  the clip with exit 0 and a `PlatformFailure("user interrupt")`. A program watching for a stop
+  request receives the new `DeviceError.Cancelled`; in both cases the adapter's cancel token stops and
+  releases the Audio Queue before the answer.
+- Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
+  trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
+  `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is
+  `InvalidRate` rather than a division trap. Audio, graph, and video fixtures now hold 43, 24, and 20.
+- Desktop event pumping now uses a safe foreign call, so a long pump no longer stalls garbage
+  collection for other evaluator threads.
+
+- Made the compiler source distribution installable: the production `pudu` package no longer points
+  outside its root for Haskell tests. A separate repository-root `pudu-tests` package preserves all
+  70 registered modules under `cabal test all`; both manifests pass `cabal check`, `cabal sdist pudu`
+  succeeds, and `cabal install exe:pudu` completes from the archive. The PATH-aware refresh proof now
+  accepts multiple byte-identical installs while still rejecting divergent stale binaries.
+- Added a desktop capability conformance ledger derived from user-visible AppKit responsibilities,
+  with `WORKING`, `PARTIAL`, `MISSING`, and `EXCLUDED` evidence states. It intentionally measures
+  complete application behavior rather than copying framework symbols or deprecated machinery.
+- Added `examples/media/Studio.pudu`, a configurable bounded Pudu-native media laboratory with nested
+  JSON configuration, checked resource limits, monotonic phase metrics, and a machine-readable
+  capability report. A real configured run rendered 16,016 stereo frames in bounded slices to a
+  valid 16-bit 16 kHz PCM WAV, aligned and presented 30 generated pictures at 30000/1001 timing
+  through a native 480×270 window, pumped events, and closed the session. Eight headless
+  configuration assertions cover malformed, unsafe, device-queue, and cross-media cases.
+- Added `Std.Audio.Device` bounded default-speaker playback and a private macOS Audio Queue adapter.
+  Queue buffers are all allocated before start, the callback performs atomic completion bookkeeping
+  only, refill and byte copies remain outside it, the queue is flushed and drained before success so
+  the final buffers are heard, the monotonic deadline bounds the whole play, and every return
+  disposes the queue. A real-device gate forces a one-millisecond timeout, then
+  reacquires the device and acknowledges exactly 4,000 frames; Studio acknowledged 16,016 frames.
+- Added pure compiled tone and Q15-ramp byte kernels beneath `Std.Audio.Graph`. Existing exact graph
+  tests remain the semantic oracle. The same 16,016-frame stereo Studio preparation fell from
+  13,401 ms to 54–55 ms while retaining exact PCM, removing the exposed real-time preparation blocker.
+  Persistent streaming, device discovery/switching, underrun reporting, codecs, shared device-clock
+  synchronization, capture, native input, and Windows/Linux adapters remain explicit gaps.
+
+## 2026-09-12 — Native application-media foundation
+
+- Added `Std.Ui.Desktop`, an independently designed Pudu API for bounded window plans and explicit
+  open/present/pump/close sessions. Tokens belong to one evaluation, concurrent use is serialized
+  against close, failed close remains retryable, malformed surfaces and unsafe dimensions are typed,
+  and runtime teardown closes leaks.
+- Added the first real macOS presenter as private language-runtime plumbing over public AppKit and
+  CoreGraphics entry points. No platform object or pointer crosses into Pudu, and no SwiftUI,
+  raylib, SDL, or foreign UI toolkit is linked. A Pudu launch fixture displayed its exact 480×280
+  Canvas surface in a titled desktop window, pumped the event loop for 1.8 seconds, and returned
+  `Ok(1)` after closing. Headless validation remains separate.
+- Made SwiftUI the primary behavioral benchmark while defining Pudu's distinct model: applications
+  will own typed models and named spaces rather than copy protocols, property wrappers, builders,
+  delegates, or one-for-one renamed framework declarations. Added official application, scene,
+  window, document, settings, focus, AppKit event, and Metal presentation references.
+- Included nested `Std.Audio` modules in package data so `Std.Audio.Graph` ships in source
+  distributions.
+
+- Corrected the serious-release table against the standard library that actually ships, separating
+  missing lifecycle, package, large-input, HTTP-client, filesystem, and concurrency evidence from
+  optional ecosystem breadth.
+- Established the Pudu-only UI, audio, and video boundary: raylib and Apple publications inform
+  explicit frame/resource lifetimes, accessibility, real-time audio, and timestamped media, but no
+  foreign toolkit or platform framework enters the portable packages.
+- Added a bounded RGBA conformance canvas with overflow-safe clipping, exact painter ordering,
+  source-over blending, pixel and command budgets, and 33 Pudu-level edge assertions.
+- Replaced per-pixel canvas writes with a band-and-span rasterizer and added `repaint` for damaged
+  regions. A 512×512 frame with an opaque and a translucent fill went from 4.35 s and 267 MB to
+  0.10 s and 96 MB at -O2, indistinguishable from startup; the fixture now holds 41 assertions,
+  including byte equality between repaint and full render.
+- `Std.Bytes.join` joins neighbours in pairs and `repeat` doubles, instead of carrying every octet
+  through an array: joining 262,144 four-byte parts fell from 1.71 s to 1.06 s at -O2.
+- Limited Apple references to the developer documentation archive and read OpenSwiftUI only for
+  declarative size negotiation; no API names or code are carried over.
+- Added `Std.Ui.Layout`: declarative `View` values whose modifiers are fields rather than wrapper
+  nodes, two-pass placement with exact cumulative grow distribution, a semantics tree that refuses
+  unnamed meaningful roles, focus order, hit testing, painting into the canvas, and damage regions
+  whose repaint equals a full render. 29 assertions; a 1,001-node screen places in about 0.18 s and
+  paints plus renders in about 0.56 s at -O2, still outside an interactive frame budget.
+- Added `Std.Ui.Screen`: a running screen as state, view function, update function, and frame.
+  Presses route through hit testing to controls, `Next`/`Previous`/`Activate`/`Dismiss` drive focus
+  and activation, events name controls by tag, and each update repaints only layout damage with bytes
+  equal to a fresh start. Layout gained tags with duplicate-tag refusal and single damage for a
+  recolored node. 16 screen assertions; layout now 33.
+- Added `Std.Ui.Text`: an original 5×7 bitmap face for printable ASCII packed into a constant table,
+  whole-number scaling, exact measuring, greedy wrapping that always progresses, a visible box for
+  missing glyphs, and drawing that merges lit pixels into runs extended across rows. 21 assertions.
+- The canvas now finds a command's first span by halving and rebuilds only overlapped spans, reusing
+  encoded pixels for the last two colors: a 400-character paragraph (1,072 rectangles) went from
+  3.22 s to 1.40 s at -O2.
+- Layout gained text views: `text` leaves measured in the single measuring pass, named by what they
+  say, drawn in `inked` color at `scaled` size, and damaged by their extent so text overflowing a fixed
+  frame still repaints exactly. Layout now 40 assertions.
+- Screens draw a one-pixel focus ring outside the focused control, recolorable with `focusRing`;
+  focus moves damage only the rings left and reached, and every frame in the fixture matches a
+  reference built without the screen. Screen now 20 assertions.
+- Added `Std.Audio`: interleaved 16-bit PCM held as little-endian bytes, frame-counted time converted
+  to exact fractions, Q15 gain rounding half away from zero, saturating mix, exact-length slices bounded
+  at 4,096 frames, and WAV encoding and bounded decoding with specific refusals. Encoding one second of
+  48 kHz stereo adds 0.02 s and decoding 0.03 s at -O2. 30 assertions.
+- Added `Std.Audio.Graph`: a pull-model render graph whose nodes—clips placed by frame, integer square,
+  saw, and triangle tones, Q15 gain, saturating mixes, and linear gain ramps—are functions of frame
+  position. The whole graph is admitted before rendering, slices are bounded at 4,096 frames and depth at
+  sixty-four, and a range rendered in slices equals the range rendered whole. 21 assertions.
+- Added `Std.Video`: frame rates and timestamps as exact fractions with cross-scale addition and
+  comparison, frame/time conversion exact over hours, tracks of same-size pictures that refuse overlap
+  and empty durations with lookup by halving, and audio frames aligned on the same clock. 19 assertions.
+- Screens keep the view they last placed; an update producing an equal view with unchanged focus keeps
+  the new state and skips placement, painting, and repaint. Screen now 21 assertions.
+- The canvas never composes commands hidden under an opaque command covering the rendered region: 300
+  stacked fills followed by a full-frame cover render at 512×512 in 0.14 s instead of 4.38 s at -O2.
+  Canvas now 43 assertions.
+- Screens accept text: `TypedText` and the `Erase` key reach the update as `Typed` and `Erased` events
+  only when focus is on a `Field`, so typing while a button holds focus changes nothing. Screen now 27
+  assertions.
+- Layout gained scrolling: `scrollColumn` and `scrollRow` place children at full length in a document
+  shifted by a clamped `scrolledTo` offset, and every node records its scrolling ancestors' window as a
+  clip that painting, hit testing, and damage respect. `Text.drawWithin` cuts glyphs to a window. Layout
+  now 46 assertions and text 22.
+- Screens deliver scrolling: `Scrolled(point, delta)` reaches the update as `ScrolledTo(tag, offset)`
+  for the frontmost tagged scrolling node under the point, clamped to its range, and a scroll that
+  cannot move changes nothing. Screen now 31 assertions.
+- `Std.Audio` resamples by linear interpolation in exact arithmetic with half-away-from-zero rounding,
+  downmixes to mono, upmixes mono, and remaps channels by name, refusing channels the source lacks.
+  Audio now 42 assertions.
+- Added `Std.Fs` on new runtime effects: files replaced by renaming a staged copy created under an
+  exclusively claimed name, temporary directories claimed by creation with scoped cleanup, portable
+  permission flags, metadata, symbolic links, canonical paths, containment decided on real locations,
+  and tree removal that never follows links. `Std.Io.copy` now copies bytes and `move` renames before
+  falling back to copy and remove. 19 assertions.
+- `Std.Process` gains launches: `launch` with `withVariable`, `isolated`, and `inDirectory` states the
+  environment and working directory a program starts with, `begin` refuses invalid variable names before
+  starting, `runLaunch` reads both streams at once, and `withStarted` stops a program when the scope that
+  started it returns. Process now 47 assertions.
+- `Std.Crypto` gains SHA3-256, SHA3-512, BLAKE2b-256, BLAKE2b-512, and HMAC-SHA512 through the runtime's
+  audited implementations, `bytesMatch` for constant-time equality, and `newKey` and `newNonce` from the
+  secure source. Every new digest is checked against values from an independent implementation and RFC
+  4231; BLAKE3 is deferred until it can be checked against its reference vectors. Crypto now 59
+  assertions.
+
+## 2026-09-12 — Adapter-free production website
+
+- Promoted the verified Pudu-native `provided.al2023` deployment to production without rebuilding
+  the Preview artifact; static pages, dynamic search, true 404s, SEO files, logos, and responsive
+  navigation were verified against the live domain.
+- Replaced the dynamic function's full JSON catalogue with the compact Pudu-generated search
+  database, bounded its route closure to search and no-index fallback, and unwrapped Vercel's
+  invocation body in Pudu.
+- Added a parsed Pudu search query with module and kind scope, exact-name intent, multi-term
+  matching, generic-normalized type shapes, module-first ranking, and discoverable query help.
+- Raised the bounded result page to 200 declarations so the largest current standard module remains
+  complete, and reduced the home search-to-content gap from 42 to 24 pixels.
+- Made undocumented implementation methods inherit their local trait member's explanation while
+  preserving direct implementation comments as overrides; the generated catalogue now has zero
+  undocumented public declarations across 3,243 entries.
+- Expanded symbol-family pages with declaration-provider explanations and conditional guides for
+  arrows, references, mutable references, type arguments, `Option`, `Result`, and `Self`.
+
+## 2026-09-11 — Adapter-free Vercel runtime build
+
+- Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their
+  directories to later steps, avoiding dependence on shell state that GitHub Actions discards.
+- Split the generated runtime into a normal Linux artifact and a Lambda-targeted copy, packaged the
+  matching musl loader beside the function, and added Alpine plus Amazon Linux 2023 execution proofs.
+- Restored the packaged loader's executable bit after cross-job artifact extraction.
+- Replaced ineffective static-link claims with dependency-driven packaging of the four musl shared
+  libraries and an `$ORIGIN` search path on the Lambda runtime.
+- Aligned the function metadata and execution proof with Vercel's current `provided.al2023` custom
+  runtime target.
+- Bound Lambda dependencies to their packaged `/var/task` paths and moved the function away from
+  `index.func` so static `/` is not shadowed.
+- Preserved the configured `website/data/api.json` catalogue path inside the Lambda package.
+- Made the HTTP client stop at complete `Content-Length`, chunked, `HEAD`, and bodyless responses
+  without waiting for socket closure; added a persistent-loopback regression so the Pudu Lambda
+  Runtime API cannot return to invocation timeouts unnoticed.
+- Regenerated the website catalogue from the current standard library: builder methods now appear
+  under their exported traits, the Lambda module is indexed, and `responseComplete` is documented.
+- Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
+  prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
+- Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.
+
+## 2026-09-10 — Pudu documentation website and private book validation
+
+- Built the documentation website in Pudu with one-way domain/service/view/route dependencies, typed server-rendered HTML, generated API data, ranked name and signature search, and thin build/runtime adapters for Vercel.
+- Added canonical metadata, robots policy, XML sitemap, Open Graph and Twitter metadata, structured data, static capture of crawlable routes, responsive Nunito typography, both supplied Pudu logos, the logo-blue visual system, favicon, copyright footer, GitHub navigation, About and author profiles, and an optional donation page.
+- Normalized 3,245 current public declarations from `pudu doc --json`; canonical HTML and search consume that machine-readable compiler output instead of scraping generated pages.
+- Grouped overloads and trait implementations at one kind-qualified canonical symbol URL, preventing both duplicate sitemap entries and case-insensitive build collisions such as `fn/stage` versus `type/Stage`; the final prerender produced 3,375 routes and 3,375 files.
+- Verified all 25 repository examples with the fresh repository compiler, all 36 website route assertions, desktop and 390px browser layouts, both logo assets, favicon metadata, type-signature search, canonical symbol and About pages, noindex error/search behavior, and the full `cabal test all` suite. One socket assertion failed during a concurrent first run and passed on the isolated rerun.
+- Optimized Vercel deployment: replaced native ELF binary spawning with a pure Node.js in-memory catalogue search handler over `api.json`, eliminating AWS Lambda GLIBC version incompatibilities, reducing search response times to ~330ms, and updating `.vc-config.json` to `"architecture": "x86_64"`.
+- Deployed live production documentation website to Vercel at `https://website-ivory-one-hyy8j9ljag.vercel.app/` using `--archive=tgz`, serving 3,375 pre-rendered static routes from Edge CDN and live XML sitemap / robots.txt.
+
+## 2026-09-09 — String optimizations, HTML chunk streaming, UI Island lifecycle, and CLI watch hardening
+
+- Zero-closure text dispatch expansion: expanded `callStringMethodFast` in `Pudu.Eval.Builtin.String` to directly dispatch all remaining built-in string methods (`spanOf`, `spanNotOf`, `slice`, `escapeHtml`, `trim`, `toUpper`, `toLower`, `replace`, `repeat`, `split`, `toBytes`, `chars`, `lines`, `reverse`), avoiding `StringMethodValue` closure allocation and environment traversal across all 22 primitive string methods.
+- Native HTML entity escaping: added `StringEscapeHtml` to `Pudu.Eval.Method` and `Pudu.Eval.Operator.Access`, typed `escapeHtml: fn() -> Str` in `Pudu.Type.Check.Rule`, and implemented `escapeHtmlText` in `Pudu.Eval.Builtin.String` using `Data.Text.Lazy.Builder` chunk scanning. Updated `Std.Html.escape` to delegate directly to `content.escapeHtml()`.
+- Single-pass string algorithms & bounds safety: implemented `countPrefix` in `Pudu.Eval.Builtin.String` using single-pass `Text.uncons` scanning, `characterMember` using `Set.member` lookup for multi-character alphabets, `charAtFast` to read characters by dropping prefixes without full-string scans, and `textCount` / replicate size bounding to prevent integer overflow and memory exhaustion.
+- Zero-action array join: converted `ArrayJoin` in `Pudu.Eval.Builtin.Array` to pure `foldr collectText`, eliminating monadic evaluator actions (`mapM asText`) per element when joining text arrays.
+- HTML chunk streaming: updated `Std.Html.document` to stream the doctype directly into `appendRendered` before joining, and introduced `appendAttributes` to stream formatted attribute chunks directly into the active chunk array without intermediate array allocations or joins.
+- Progressive UI Island lifecycle & deferred hydration: enhanced `Std.Ui.Island` with `Hydration` modes (`Eager`, `Visible`, `Idle`) and `islandWithHydration`. Upgraded client micro-runtime (`<pudu-island>` custom element) with scoped lifecycle cleanup, `AbortController` cancellation signals, `IntersectionObserver` visible hydration, `requestIdleCallback` idle hydration, dynamic on-demand module loading via `PuduIslands.registerLazy`, generational tokens, and `pudu:island-ready` / `pudu:island-error` event dispatching.
+- Shared module interface caching: cached `interfaceIdentities`, `interfaceExportedIdentities`, and `interfaceExportedValues` in `TypeInterface` (`Pudu.Type.Interface`) during skeleton generation, replaced linear list membership checks with `Set` lookups in `importOne`, and eliminated duplicate declaration traversal in `Pudu.Type.Check.Import`.
+- CLI watch process isolation & cycle safety: hardened `pudu watch` in `packages/pudu/v0.1/app/Main.hs` with `bracket` child process lifecycle scoping (guaranteeing termination and reaping), a 100ms settling debounce loop for file modification timestamps and file sizes, symlink cycle detection via canonical ancestor path tracking, monitoring for `pudu.toml` manifests, and $O(N \log N)$ `Map` difference indexing for changed paths.
+
+## 2026-09-08 — Low-level text scanning optimization and linear scaling
+
+- Low-level O(1) text drop: introduced `drop1Text` and `dropText` in `Pudu.Eval.Builtin.String` using `Data.Text.Array.unsafeIndex` and `Data.Text.Internal.Text` to inspect the underlying UTF-8 byte array and advance text scalars in O(1) time without stream decoding or copying.
+- Zero-closure text method dispatch: added `callStringMethodFast` in `Pudu.Eval.Builtin.String` and connected direct dispatch in `Pudu.Eval.Call` for `MemberExpression` on `StrValue`, eliminating `StringMethodValue` closure allocation, `receiverOwners` queries, and redundant trait searches.
+- Qualified callee syntax guard: updated `qualifiedParts` in `Pudu.Eval.Call.Path` to require uppercase initial characters for nominal types/traits, eliminating false trait resolution and environment searches on lowercase local variables.
+- Constant value reuse: added top-level cached `boolValue`, `trueValue`, `falseValue`, `zeroValue`, and `oneValue` in `Pudu.Eval.Value`, eliminating millions of heap allocations during tight conditional loops.
+- Single-pass assignment & lexical scoping optimization: introduced `updateExisting` in `Pudu.Eval.Env` for single-pass mutable frame assignment in `Pudu.Eval`, and bypassed empty lexical frame push/pop cycles in `evaluateBlock` when blocks introduce no binding declarations.
+- Benchmark validation: scaling benchmark `"scan text through a cursor"` at 640,000 characters dropped from 2,246ms (ratio x2.97 superlinear) to 932ms (ratio x1.84 linear), eliminating Gen-1 GC pauses (252ms -> 2.1ms) and reducing heap allocations by over 2.4 GB.
+
+## 2026-09-08 — Persistent REPL execution, version enforcement, and packaging pipeline
+
+- Persistent REPL execution: integrated `Pudu.Repl.Evaluation` and `Pudu.Eval.Context` into `puduci` loop. Previously executed statements and environment frames are retained; each submission compiles candidate source, validates type and dependency compatibility against prior retained types, and executes only the new entry statements or expressions via `evaluateInteractiveBlock` without replaying earlier code or duplicating side effects.
+- Masked publication: accepted runtime state and source snapshots commit together under mask in the context callback, ensuring atomic updates and safe interrupt recovery.
+- REPL comment blank entries: classified single-line closed block comments (`/* ... */`) as `BlankEntry` in `Pudu.Repl.Command`, immediately returning to prompt without parse errors or multiline continuation lockups.
+- Cabal-derived version enforcement: introduced `Pudu.Version` as the single source of truth for version numbers and minor-version bounds (`languageConstraint`), deriving from `Paths_pudu`.
+- Project language constraints: enforced `package.language` constraints declared in `pudu.toml` during program compilation (`Compiler.Program` and `Compiler.Manifest`), diagnosing incompatibilities with `E2090`.
+- Workspace isolation and packaging: restructured repository workspace to isolate `packages/pudu/v0.1/`, decoupled packaging scripts (`build-package.py`, `package-binary.py`, `api-lifecycle.py`, `select-version.py`), and added manual packaging CI workflow (`.github/workflows/package.yml`).
+- Bundle extraction isolation: isolated module extraction in `runBundled` to a per-process system temporary directory (`withSystemTempDirectory`), validated module names against path traversal, and safely restored environment variables using `bracket`.
+- CI compiler warning fix & script indentation: removed redundant `import Data.List (foldl')` in `Pudu.Repl.Input` for GHC 9.14 compatibility under `-Werror` in GitHub Actions, and reformatted all Python utility scripts in `scripts/` (`api-lifecycle.py`, `build-package.py`, `package-binary.py`, `package_info.py`, `select-version.py`) to strictly 2-space indentation with zero tabs.
+
+## 2026-09-08 — Scoped persistent evaluator context
+
+- Separate resource ownership into Eval.Runtime and reuse it in the existing one-shot runner.
+- Add a serialized evaluation context that retains accepted frames across actions and reports ContextClosed after scope exit.
+- Add current-frame block execution for persistent top-level bindings while preserving nested lexical scoping.
+- Stop child processes and workers before closing their transports. No tests, builds, reviews or measurements run. The REPL source/type commit path is not yet connected to this context.
+
+## 2026-09-08 — SMTP command budget
+
+SMTP writes and reply reads now share one command deadline. No tests or measurements run.
+
+## 2026-09-08 — REPL input and redefinition boundaries
+
+- Track delimiter kinds and submit irreparable input promptly for diagnostics. Continue open comments after code; accept bare return without waiting for an operand.
+- Preserve source between block comments and ignore ordinary comment-only submissions through lexical classification.
+- Use token identities for redefinition and preserve multiline binding groups. Correct source positions for repeated entries and empty/trailing-newline groups.
+- Preserve pending REPL enhancements. No builds, tests, reviews or measurements ran. Session evaluation still replays accumulated statements; incremental runtime state is not implemented.
+
+## 2026-09-07 — Pudu REPL Qualified Docs, Bindings Isolation, and Multiline Trivia Hardening
+
+- Resolved qualified name documentation lookup in `Pudu.Doc`: `entriesFor` now matches both unqualified names (`docName entry == name`) and fully-qualified module paths (`docModule entry <> "." <> docName entry == name`), enabling `:doc Std.Math.min` as well as `:doc min`.
+- Resolved `:show bindings` isolation in `Pudu.Repl.Answer`: `:show bindings` now displays only statement bindings (`sessionStatements session`) with `bind    ` prefix, isolating variable assignments from `:show declarations` (functions/types) and `:show imports`.
+- Resolved multiline trivia-only block execution in `Pudu.Repl` and `Pudu.Repl.Input`: added `isTriviaOnly` to check whether an entry contains solely whitespace and comments with no significant tokens and no errors. Multiline blocks (`:{ ... :}`) of comments now exit cleanly back to the prompt without evaluating a synthetic unit expression or printing `()`.
+- Expanded standard library module tab completion in `Pudu.Repl.Complete`: `stdModuleNames` now covers 30+ core standard library namespaces (`Std.Math`, `Std.Json`, `Std.Text`, `Std.Http`, `Std.Db`, `Std.Random`, `Std.Regex`, `Std.Io`, `Std.Time`, `Std.Test`, etc.) for `:browse Std.<Tab>`.
+- Updated mirrored documentation in `wiki/src/Pudu/Doc.md`, `wiki/src/Pudu/Repl/Answer.md`, `wiki/src/Pudu/Repl/Input.md`, `wiki/src/Pudu/Repl/Complete.md`, and `wiki/src/Pudu/Repl.md` with resolved Grill Logs.
+
+## 2026-09-07 — Pudu REPL (puduci) Prompt Operator Isolation and Validation Hardening
+
+- Resolved prompt entry accidental line gluing in `Pudu.Repl.Session`: added `invalidEntryStart` to validate leading tokens of prompt submissions before candidate buffer assembly. An orphaned binary operator (`<<`, `+`, `*`, `&&`, etc.) or non-prefix symbol/keyword submitted at the prompt is now diagnosed immediately with `E1040` (`binary operator '<op>' requires a left-hand expression`) at `<interactive>:1:1` without assembling or executing against prior statements, preventing the entry from erroneously fusing onto preceding statement lines in `sessionStatements`.
+- Exported `prefixDiagnostic` from `Pudu.Frontend.Parser.Expression.Recovery`, sharing canonical intent-aware operator diagnostics between parser recovery and prompt validation.
+
+## 2026-09-07 — Pudu REPL (puduci) Bug Fixes, Mutable Persistence, and Continuation Hardening
+
+- Resolved comment prompt continuation lockup in `Pudu.Repl.Command` and `Pudu.Repl.Input`: standalone line comments (`//`) and closed single-line block comments (`/* ... */`) now parse as `BlankEntry`, immediately redisplaying the prompt rather than locking into multiline continuation mode (`puduci| `). `isComplete` distinguishes non-doc trivia from doc comments (`///`) and unclosed block comments (`/* ...`), completing immediately on line comments.
+- Resolved mutable variable assignment persistence bug in `Pudu.Repl.Session`: top-level assignments (`=`) at bracket depth 0 are now classified as `StatementEntry` via `isTopLevelAssignment`. Assignments (`counter = counter + 1`, `arr[0] = 42`) are committed to `sessionStatements` and replay chronologically during subsequent evaluations, correctly preserving variable mutations at the interactive prompt.
+- Added missing binary continuation symbols to `Pudu.Repl.Input`: bitwise shift operators (`<<`, `>>`) and bitwise XOR (`^`) at the end of lines now trigger continuation mode, aligning REPL multiline continuation with Pudu grammar.
+- Polished contextual command diagnostics in `Pudu.Repl`: `:kind` and `:instances` with missing arguments now report command-specific usage messages (`usage: :kind <name>`, `usage: :instances <name>`) rather than hardcoded `:info`, and unknown setting errors list `+trunc (truncate collections)`.
+- Resolved import compilation in static inspection in `Pudu.Repl.Session`: `inspectDocs` and `inspectContext` now route through `compileBuffer`, resolving external and standard library module dependencies when session imports are active.
+- Exported `isComplete` from `Pudu.Repl.Input` and added comprehensive property test coverage for comment parsing, multiline continuation, mutable variable assignment persistence, and assignment rejection on type mismatch. All 70 test suites pass with 200 QuickCheck runs each.
+- Updated mirrored wiki documentation under `wiki/src/Pudu/Repl/Command.md`, `wiki/src/Pudu/Repl/Input.md`, `wiki/src/Pudu/Repl/Session.md`, and `wiki/src/Pudu/Repl.md` with resolved Grill Logs.
+
+- Replaced robotic `= help: start with a literal, name...` error messages in `Pudu.Frontend.Parser.Expression.Recovery` with intent-aware diagnostics distinguishing binary operators without left operands, unexpected colons in expression position (`type annotations belong on bindings ('let name: Type = value')`), and control keywords.
+- Added live hot redefinition with safe atomic rollback in `Pudu.Repl.Session`: functions and `let`/`var` statements can be redefined interactively in-place, eliminating duplicate declaration collisions (`E2001`). If a candidate entry fails syntax, type checking, or runtime validation, it is rejected and rolls back to the prior clean session state.
+- Added doc-rich, categorized module browsing via `:browse [module]` in `Pudu.Repl.Answer` and `Pudu.Repl`: inspecting a module (e.g. `:browse Std.Math`) categorizes exports into Constants, Types, Traits, Functions, and Foreign symbols with their full type signatures, trait constraints, and indented doc comments.
+- Added interactive micro-profiling dashboard via `:set +s` / `:unset +s` in `Pudu.Repl`: measures execution time with auto-scaled units (`µs`, `ms`, `s`) and memory delta via `GHC.Conc.getAllocationCounter` (`B`, `KB`, `MB`), reporting formatted metrics `[time: 142.3 µs | heap: 48 KB]`.
+- Added bounded value rendering via `renderReplValue` and `:set +trunc` / `:unset +trunc` (default enabled) in `Pudu.Repl.Answer`: truncates arrays, maps, and sets beyond 50 elements and strings beyond 500 characters, preventing terminal freezes from giant data structures.
+- Added external editor integration via `:edit [file]` (`:e`) in `Pudu.Repl`: launches `$VISUAL` / `$EDITOR` (default `nano`) and automatically reloads the file upon exit.
+- Enhanced contextual tab completion in `Pudu.Repl.Complete`: `:load` and `:edit` trigger filename completions; `:show` offers topic completions (`bindings`, `declarations`, `imports`, `settings`); `:set` and `:unset` offer flags (`+t`, `+s`, `+trunc`); `:browse` offers standard library and session module names.
+- Updated module wiki mirrors `wiki/src/Pudu/Frontend/Parser/Expression/Recovery.md`, `wiki/src/Pudu/Repl/Command.md`, `wiki/src/Pudu/Repl/Options.md`, `wiki/src/Pudu/Repl/Answer.md`, `wiki/src/Pudu/Repl/Session.md`, `wiki/src/Pudu/Repl/Complete.md`, `wiki/src/Pudu/Repl.md`, and created `wiki/src/Pudu/Eval/Verify.md`. All property test suites pass with 200 QuickCheck runs each.
+
+## 2026-09-07 — Low-Level HTTP Pipeline and Parser Optimization
+
+- Configure `TCP_NODELAY` (`Net.NoDelay = 1`) on accepted and connected sockets in `Pudu.Eval.Socket`, eliminating Nagle's algorithm delay and loopback delayed-ACK latency floors (saving 1–2 ms per request).
+- Optimize `Std.Http.Message`: remove the $O(N)$ intermediate line array push loop in `headLines`, prune line slicing allocations, extract header keys and values directly via `take` and `drop` without $O(L)$ Unicode length traversals, and export zero-reallocation `parseHead`.
+- Optimize `Std.Http.Safe`: introduce single-pass `framing` to inspect `Content-Length` and `Transfer-Encoding` simultaneously without repeated lowercasing scans.
+- Optimize `Std.Http.Server`: consume `Message.parseHead` directly without delimiter reconstruction, cache `Net.peerOf(connection)` per connection to eliminate repeated `getpeername()` system calls across keep-alive requests, and early-exit on `Connection: close`.
+- Updated module mirrors `wiki/src/Pudu/Eval/Socket.md`, `wiki/src/Std/Http/Message.md`, `wiki/src/Std/Http/Safe.md`, and `wiki/src/Std/Http/Server.md`.
+
+## 2026-09-07 — Standard Library Expansion: Core Math, IntMap, Tar, BloomFilter, Mime, and Diff
+
+- Add `Std.Math.Float`: IEEE-754 trigonometry (`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`), exponentials and logarithms (`exp`, `ln`, `log2`, `log10`, `powf`, `sqrt`, `cbrt`, `hypot`), hyperbolic functions (`sinh`, `cosh`, `tanh`), rounding/decomposition (`floor`, `ceil`, `round`, `trunc`, `fract`, `copysign`, `isNan`, `isInfinite`, `isFinite`, `lerp`), and constants (`pi`, `tau`, `e`, `ln2`, `ln10`, `sqrt2`, `epsilon`).
+- Add low-level integer math to `Std.Math`: Stein's binary GCD (`binaryGcd`), branchless power-of-two tests (`isPowerOfTwo`, `nextPowerOfTwo`), fast integer $\log_2$ (`ilog2`), and branchless extrema (`branchlessMin`, `branchlessMax`, `branchlessAbs`).
+- Add `Std.IntMap`: Fast bitwise Patricia Trie integer map inspired by Haskell's standard `Data.IntMap`, featuring $O(\min(N, W))$ lookups, insertions, deletions, set operations, and sorting.
+- Add `Std.IntSet`: High-performance bitwise Patricia Trie integer set inspired by Haskell's standard `Data.IntSet`, featuring fast bit-level set algebra (union, intersection, difference, subset, split).
+- Add `Std.Archive.Tar`: Standard POSIX USTAR archive streaming encoder, decoder, and file/directory entry extractor.
+- Add `Std.BloomFilter`: Probabilistic set membership with zero false negatives, mathematically optimal sizing ($m, k$), Kirsch-Mitzenmacher double-hashing, and union/intersection operations.
+- Add `Std.Mime`: RFC 2045 media type parser, parameter serializer, 60+ extension registry, and HTTP `Accept` content negotiation.
+- Add `Std.Diff`: Eugene Myers $O(ND)$ difference engine, Unified Diff (`@@ -l,s +l,s @@`) formatter with context lines, and Levenshtein edit distance metric.
+- Add `Std.BitVector`: Dense 64-bit word packed bit-vector with word-parallel bitwise operations (AND, OR, XOR, NOT), popcount, and trailing-zero scan acceleration.
+- Add `Std.FenwickTree`: Low-level Binary Indexed Tree for $O(\log n)$ prefix sums, point updates, range sum queries, and $O(\log n)$ binary lifting search.
+- Add `Std.RingBuffer`: Bounded power-of-two circular FIFO buffer with branchless bitmask wrapping (`& (capacity - 1)`) and flat senior API.
+- Add `Std.Varint`: Variable-length integer encoding (ULEB128 and signed ZigZag SLEB128) for compact binary protocols.
+- Add `Std.DisjointSet`: Low-level flat array Union-Find with iterative path halving and union-by-rank.
+- Add `Std.Murmur3`: Hardware-oriented non-cryptographic hash function implementing Austin Appleby's MurmurHash3 with 32-bit rotations and avalanche bit mixing.
+- Add `Std.RateLimiter`: 64-bit fixed-point integer token bucket rate limiter with smooth replenishment and burst capacity.
+- Add `Std.Hex`: Low-level Base16 hexadecimal encoder, decoder, validator, and prefix handler.
+- Add `Std.Adler32`: RFC 1950 Adler-32 unrolled checksum with 5552-byte blocks and $O(1)$ rolling hash.
+- Add `Std.RadixSort`: Linear-time $O(N)$ non-comparative hardware radix sort for 64-bit unsigned and signed integers.
+- Add `Std.ByteOrder`: Low-level register byte swapping (`bswap16`, `bswap32`, `bswap64`), endian binary codecs (`readU16BE`, `readU32LE`, `writeU64BE`), and network byte order converters (`htons`, `htonl`).
+- Add `Std.SipHash`: Cryptographically strong 64-bit SipHash-2-4 keyed PRF / hash function with ARX rounds for HashDoS protection.
+- Add `Std.IntervalTree`: Augmented 1D interval tree for fast $O(\log n + k)$ stabbing queries and overlap detection with subtree `maxEnd` bounds pruning.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], [[Std RateLimiter]], [[Std Hex]], [[Std Adler32]], [[Std RadixSort]], [[Std ByteOrder]], [[Std SipHash]], and [[Std IntervalTree]].
+
+## 2026-09-07 — Verified SMTP transports and binary gzip responses
+
+- Require application-supplied EHLO identity in `Smtp.client(host, port, domain)`; remove the localhost default.
+- Add implicit TLS and required STARTTLS SMTP submission with post-upgrade EHLO and advertised AUTH checks. Plaintext relays remain explicit and cannot send credentials.
+- Add socket-to-TLS ownership transfer and TLS 1.2/1.3 selection.
+- Add zlib compression levels and bounded single-member decompression.
+- Add Response.binaryBody, Reply.bytes, byte serialization and binary client response reading. Direct response literals require binaryBody: None for text.
+- Activate gzip middleware with exact negotiation, Vary, payload limits and conservative transformation exclusions.
+- No builds, tests, reviews, measurements or live mail delivery ran; readiness remains unproven.
+
+## 2026-09-06 — Tooling and pending STD boundaries
+
+LSP decodes percent-encoded UTF-8 URI paths, refuses negative/reversed protocol positions and
+clamps out-of-document/surrogate positions. REPL completion recognizes closing brackets and
+parentheses with trailing comments. Pending JWT rejects duplicate/wrong-kind registered claims
+and expires at its expiration instant. SMTP validates outbound input, closes ordinary failure
+paths, bounds replies and refuses plaintext credentials. Gzip middleware preserves responses
+until binary transport exists. Pending CLI/WebSocket/STD additions retained. No tests or reviews
+run in this continuation; production readiness remains unproven.
+
+## 2026-09-06 — Stored-block gzip codec and SMTP relay transport
+
+- [[Std Compress Gzip]] writes and reads gzip containers with stored DEFLATE blocks, CRC-32 and ISIZE checks. It does not reduce payload size or decode fixed/dynamic Huffman blocks. FHCRC is rejected. HTTP middleware is passthrough until binary response transport exists.
+- [[Std Mail Smtp]] adds plaintext relay delivery, bounded byte-buffered multiline replies and connection cleanup on ordinary result paths. Credentialed delivery is refused pending TLS. Authentication helpers format commands only.
+- Retained existing gzip and SMTP fixtures and registered them for future execution. No fixtures were run in this continuation; readiness remains unproven.
+- Updated [[Std/_MOC]], [[WEB]] and module mirrors to record these boundaries.
+
+## 2026-09-06 — 64-bit SWAR WebSocket payload unmasking optimization
+
+- [[Std Http Server Socket]]: Changed WebSocket frame payload unmasking by transitioning from $O(N)$ heap allocations and byte-by-byte software division loops to 64-bit SWAR (SIMD Within A Register) chunking over contiguous unboxed `Std.Buffer`.
+- Replicates 4-byte masking key into 32-bit and 64-bit registers: $M_{64} = M_{32} \mid (M_{32} \ll 32)$. Processes 8 bytes per iteration using native bitwise XOR (`^`), followed by 4-byte and scalar tail unmasking.
+- Replaced 12-line software division/modulo loop in `xorOf` with direct native bitwise `^`.
+- Expanded `test-fixtures/stdlib/UsesSocket.pudu` to 40 assertions covering 24-byte multi-word chunks and 14-byte mixed word/scalar tails; updated `ProtocolSpec.hs`.
+- Updated mirrored module documentation [[Std Http Server Socket]].
+
+## 2026-09-06 — RFC 7519 JSON Web Tokens (JWT) and domain-rich claims policies
+
+- [[Std App Jwt]]: RFC 7519 JSON Web Tokens implementing HS256 HMAC-SHA256 signatures, constant-time verification (`Crypto.secretsMatch`), strict algorithm enforcement, clock skew tolerance (`leewaySeconds`), and domain-rich claims policies (`expiresIn`, `hasExpired`, `isValidAt`).
+- Integrated `test-fixtures/stdlib/UsesJwt.pudu` (15 assertions) covering builders, encoding, decoding, leeway, invalid signatures, malformed tokens, expired tokens, and unverified decoding; registered in `RuntimeSpec.hs`.
+- Updated [[Std/_MOC]], [[WEB]] (Authentication row), and added mirrored module documentation [[Std App Jwt]].
+
+## 2026-09-06 — RFC 6238 TOTP multi-factor authentication and Base32 codecs
+
+- [[Std App Totp]]: Multi-factor authentication (MFA) implementing RFC 6238 Time-Based One-Time Passwords (TOTP) and RFC 4226 dynamic truncation over HMAC-SHA256 with constant-time equality validation, clock skew windows, replay prevention, and RFC 4648 Base32 codecs.
+- Provisioning URI generation (`otpauth://totp/...`) compatible with Google Authenticator, 1Password, and Authy.
+- Updated `UsesEnterpriseSsr.pudu` with TOTP validation and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] Authentication verdict from Partial/Absent to Ready.
+
+## 2026-09-06 — Multi-tenant isolation, noisy-neighbor bounding, and admission quotas
+
+- [[Std App Tenant]]: Synchronized multi-tenant registry, resource quota definitions (`Free`, `Standard`, `Enterprise`), data isolation keying (`scopedKey`), per-tenant admission backpressure (noisy-neighbor protection), moving-window rate limiting, and instant account suspension.
+- `Std.App.Tenant.guard`: HTTP middleware enforcing tenant resolution, concurrency bounds, and account status with RFC 7231 status 503 and RFC 6585 status 429 backpressure.
+- Updated `UsesEnterpriseSsr.pudu` to 77 assertions and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] Multi-tenancy verdict from Partial to Ready.
+
+## 2026-09-06 — Tamper-evident audit trails, request execution deadlines, and server draining
+
+- [[Std App Audit]]: Structured append-only audit trail logging with SHA-256 cryptographic hash chaining, outcome classification (`Success`, `Failure`, `Denied`), automatic credential redaction, and SIEM NDJSON export.
+- [[Std Http Server Guard]]: Added `timeout(timeoutMs)` middleware bounding handler execution duration via asynchronous racing, returning RFC 7231 status 504 Gateway Timeout if exceeded; added `audited(log, action)` middleware recording HTTP route requests into the tamper-evident audit ledger.
+- [[Std Http Server]]: Added `drainMillis` and `withDrainDeadline(base, millis)` bounding in-flight connection draining upon shutdown to prevent hanging processes.
+- [[Std App]]: Configurable and validated `server.drainMillis` setting applied to HTTP server instances.
+- Updated `UsesEnterpriseSsr.pudu` to 68 assertions and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] verdicts for Request Deadlines, Graceful Shutdown, and Audit Trail to Ready.
+
+## 2026-09-06 — Secure secrets management and value-based feature flags
+
+- [[Std App Secret]]: Opaque credential containers enforcing explicit unveiling, automatic redaction (`[REDACTED]`), masked suffix formatting, and constant-time equality comparisons.
+- [[Std App Flag]]: Pure value-based feature flags supporting targeted entity allowlists and deterministic sticky percentage canary rollouts.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 57 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] verdicts for Secrets Handling and Feature Flags from Partial/Absent to Ready.
+
+## 2026-09-06 — Bounded concurrency backpressure and circuit breaker middleware
+
+- [[Std Http Server Guard]]: Added `boundedConcurrency(maxInflight)` for admission backpressure and fast-shedding of excess load via status 503 Service Unavailable, and `circuitBreaker(failureThreshold, resetTimeoutSeconds)` for cascading failure isolation.
+- [[Std Http Server Reply]]: Added `serviceUnavailable(retryAfterSeconds)` and `gatewayTimeout(reason)`.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 49 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] backpressure verdict from Absent to Ready.
+
+## 2026-09-06 — Network-adaptive media, streaming error boundaries, and zero-copy ISR cache
+
+- [[Std Html Media]]: Adaptive `<img>` and `<picture>` elements tailored to client network profiles (`Save-Data`, 2G/3G), downscaling and omitting desktop descriptors to prevent packet drops and buffer bloat over mobile networks.
+- [[Std Html Stream]]: Added `suspenseError(boundaryId, fallback)` boundary resolution chunks that swap placeholders with error UI without aborting the chunked HTTP stream.
+- [[Std App IsrCache]]: Thread-safe zero-copy cache storing contiguous byte payloads (`Bytes`) with tag-based multi-route invalidation (`revalidateTag`, `purgeTag`) and SWR serving.
+- Updated `UsesEnterpriseSsr.pudu` integration test suite to 43 assertions and updated `RuntimeSpec.hs`.
+
+## 2026-09-06 — Server rate limiting and conditional ETag responses
+
+- [[Std Http Server Guard]]: Added `rateLimited(maxRequests, windowSeconds)` middleware to throttle peer requests per moving window and emit RFC 6585 `429 Too Many Requests` with `Retry-After`.
+- [[Std Http Server Reply]]: Added `withEtag`, `notModified`, `conditional`, `computeEtag`, and `tooManyRequests` for HTTP `304 Not Modified` conditional response evaluation.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 31 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] verdicts for Rate Limiting and Caching to Ready.
+
+## 2026-09-06 — Enterprise-grade SSR application framework with hardware integration
+
+Engineered low-level hardware-conscious streaming and resilience modules:
+- [[Std Html Buffer]]: Unboxed contiguous byte templates, zero-copy slot rendering via `Buffer.copy`, bitwise chunk hex headers, and TCP MSS coalescing (~1460 bytes).
+- [[Std Http Server Stream]]: HTTP/1.1 chunked transport over raw sockets (`Net.sendWithin`) with early flush of `<head>` shells.
+- [[Std Html Stream]]: Streaming document shells, `<head>` early flush, and out-of-order Suspense boundaries with inline DOM resolution scripts.
+- [[Std Http Server Resilience]]: Network profile inspection (`Save-Data`, `ECT: 2g/3g`), 1-RTT 14KB `initcwnd` budget enforcement, and SWR caching headers.
+- [[Std Http Server Security]]: Strict security headers, CSP nonces, origin validation, and constant-time token comparison.
+- [[Std Ui Island]]: `<pudu-island>` container elements, server action forms with CSRF, and ultra-lightweight client micro-runtime (< 1.5 KB).
+- Added `EnterpriseSsr.pudu` reference example and `UsesEnterpriseSsr.pudu` integration test suite registered in `RuntimeSpec.hs`. Updated [[WEB]] streaming verdict to Ready.
+
+## 2026-09-06 — Bounded parallel mapping
+
+[[Std Concurrent]] adds mapBounded and mapResultBounded with fixed workers, input order
+retention via indexed synchronization cells, and preserved typed failures.
+
+## 2026-09-06 — Complete LSP capabilities and client runtime bundle
+
+Completed language server capabilities across bounded modules: references (`textDocument/references`),
+atomic rename (`textDocument/rename`, `textDocument/prepareRename`), document highlight (`textDocument/documentHighlight`),
+semantic tokens (`textDocument/semanticTokens/full`), inlay hints (`textDocument/inlayHint`), signature help
+(`textDocument/signatureHelp`), workspace symbols (`workspace/symbol`), code actions (`textDocument/codeAction`),
+and contextual member/keyword completions (`textDocument/completion`).
+Fixed IDE extension activation failure by bundling flat transitive dependencies (`vscode-languageserver-protocol`,
+`vscode-jsonrpc`) and updated root detection to derive workspace root across directory trees.
+
+## 2026-09-06 — Bounded STD batch concurrency
+
+[[Std Concurrent]] adds parallelBounded and forEachBounded with fixed workers, atomic work
+claiming, retained join failures and no implicit retries. No tests, builds or reviews run.
+
+## 2026-09-06 — Worker handler reuse
+
+[[Std Http Server]] composes middleware once per worker and reuses the immutable handler
+across requests. Standalone serveConnection remains available. No tests or reviews run.
+
+## 2026-09-06 — Bounded server workers
+
+[[Std Http Server]] uses a fixed worker pool and bounded connection queue, configured through
+[[Std App]]. Startup/admission failures close owned resources on ordinary Result paths and
+worker join failures are surfaced. No tests, builds or reviews run.
+
+## 2026-09-06 — Response write deadlines
+
+[[Std Http Server]] now bounds ordinary and fallback response writes through a configurable
+socket-send deadline. [[Std App]] validates server.writeMillis before startup. Documented
+poor-network SSR priorities in [[Application Deployment Contract]]. No tests or reviews run.
+
+## 2026-09-06 — Bounded request reads
+
+Added [[Std Net Bounded Read]] and shared header/body deadlines in [[Std Http Server]],
+configured by [[Std App]]. Delimiter reads cap each receive to the remaining byte budget.
+No tests, builds or reviews run.
+
+## 2026-09-06 — Configuration admission and mail hardening
+
+[[Std App]] rejects malformed server settings before resource startup and exposes request byte
+limits. [[Std Mail]] revalidates public address records at the outbound boundary, rejects header
+controls and mailbox-list delimiters, normalizes SMTP body lines and offers renderChecked.
+[[Application Deployment Contract]] defines process/platform boundaries and remaining obligations.
+No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Reusable server rendering
+
+[[Std Html]] now collects fragments and joins once instead of joining every subtree. Added
+[[Std Html SSR]] with prepared static sections, named typed slots, per-render slot reuse, UTF-8
+output budgets and reusable rendered responses. [[Std Http Server Reply]] consumes prepared
+output directly. No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Linear HTML composition
+
+Added [[Std Html Compose]] with persistent fluent content methods, repeated components and
+document shells. Rewrote [[Notes Web Application]] to remove nested HTML arrays from the page
+handler. Text retains standard escaping. No tests, builds or reviews run.
+
+## 2026-09-06 — Database-backed web composition
+
+Added [[Notes Web Application]] connecting configuration, database lifecycle, schema bootstrap,
+typed row mapping and HTML/JSON routes. Corrected [[Std Http Message]] response Content-Length
+and short-body checks to use UTF-8 bytes. No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Application data and response integration
+
+[[Std App Database]] now exposes driver transactions and typed all/one/optional row queries
+with distinct database and mapping errors. [[Std Http Server Reply]] accepts typed HTML views,
+HTML documents and JSON values through the existing response path. LSP work is left intact.
+No tests, builds, reviews or measurements run, as directed.
+
+## 2026-09-06 — Decompose Foreign.Call into layered dependency graph modules
+
+Decomposed the 606-line monolithic `src/Pudu/Foreign/Call.hs` into a scalable, layered dependency graph FFI architecture strictly under 450 lines per module:
+- Isolated dynamic library handle management (`ForeignHandle`, `openedLibraries`), candidate name resolution (`candidates`, `tryCandidates`), process symbol discovery (`openProcess`), library loading (`openLibrary`), dynamic symbol lookup (`findSymbol`), lock-free address caching (`resolvedSymbols`, `resolveSymbol`), and low-level dynamic linker FFI imports (`c_open`, `c_symbol`, `c_error`) into child module `Pudu.Foreign.Call.Library` (146 lines).
+- Refactored `Pudu.Foreign.Call` into a focused native call bridge and parameter marshaling coordinator (443 lines) retaining `c_call`, argument layout and array staging, slot taking and leaf unrolling, text copying and UTF-8 verification, and record field reconstruction, while re-exporting all library resolution functions for zero public API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Foreign/Call/Library.md`) and updated `Foreign/Call.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Eval.Call into layered dependency graph modules
+
+Decomposed the 563-line monolithic `src/Pudu/Eval/Call.hs` into a scalable, layered dependency graph runtime architecture strictly under 390 lines per module:
+- Isolated dotted path resolution (`readPath`), member chain path lookup (`pathValue`), module name segment extraction (`lastPathSegment`), AST path flattening (`flattenPath`), longest-prefix binding resolution (`longestBinding`), trait-qualified callee dispatch (`qualifiedCallee`, `qualifiedParts`), and type argument syntax extraction (`typeArgumentNames`, `typeArgumentName`) into child module `Pudu.Eval.Call.Path` (133 lines).
+- Migrated pure primitive hash/buffer predicate `isHashingBuiltin` (64 lines) to `Pudu.Eval.Builtin`, keeping pure primitives co-located with their evaluator implementation.
+- Refactored `Pudu.Eval.Call` into a focused invocation, closure application, and task/scope management coordinator (384 lines) while re-exporting `readPath`, `pathValue`, and `lastPathSegment` for zero public API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Call/Path.md`) and updated `Call.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Type.Check.Expression into layered dependency graph modules
+
+Decomposed the 521-line monolithic `src/Pudu/Type/Check/Expression.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:
+- Isolated match arm checking (`checkArms`), closure lambda typing (`lambdaType`), captured assignment enforcement (`checkCapturedAssignment`), loop context scoping (`aroundLoop`), and integer index literal parsing (`literalIndex`) into child module `Pudu.Type.Check.Expression.Control` (151 lines).
+- Refactored `Pudu.Type.Check.Expression` into a focused AST expression coordinator (361 lines) retaining general expression type inference and dispatch, records, calls, members, and operators.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Type/Check/Expression/Control.md`) and updated `Expression.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Runtime.Column into layered dependency graph modules
+
+Decomposed the 521-line monolithic `src/Pudu/Runtime/Column.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:
+- Isolated row validity testing (`isRowValid`), unsigned/float permutation index sorting (`columnSortIndicesU64`, `columnSortIndicesF64`), logarithmic binary search (`columnBinarySearchU64`, `columnBinarySearchF64`), and row permutation gather kernels (`columnGatherU64`, `columnGatherF64`) into child module `Pudu.Runtime.Column.Index` (150 lines).
+- Refactored `Pudu.Runtime.Column` into a focused aggregation and bitmap coordinator (396 lines) retaining continuous memory allocations, SIMD/SWAR vector aggregations (`columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnSumF64`, `columnMinF64`, `columnMaxF64`), vector predicates and projections (`columnFilterGtU64`, `columnProjectU64`, `columnFilterGtF64`, `columnFilterLtF64`, `columnProjectF64`, `columnAddF64`), and bitwise algebra (`columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, `columnBitmapCount`) while re-exporting all index operations.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Runtime/Column/Index.md`) and updated `Column.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Frontend.Expand into layered dependency graph modules
+
+Decomposed the 515-line monolithic `src/Pudu/Frontend/Expand.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:
+- Isolated hygienic parameter substitution (`substituteExpression`), lexical rename scoping (`hygienicName`, `patternNames`, `renamePattern`), and span retagging (`retag`) into child module `Pudu.Frontend.Expand.Substitute` (183 lines).
+- Refactored `Pudu.Frontend.Expand` into a focused expansion coordinator (359 lines) retaining macro declaration collection (`collectMacros`), expansion state monad (`Expand`, `fresh`, `report`), declaration and expression traversals (`expandDeclaration`, `expandExpression`), recursion depth bounding (`expansionLimit`), and parameter kind validation (`checkKind`, `kindHelp`).
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Frontend/Expand/Substitute.md`) and updated `Expand.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Eval.Foreign into layered dependency graph modules
+
+Decomposed the 511-line monolithic `src/Pudu/Eval/Foreign.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:
+- Isolated argument crossing preparation, arity checking (`E7016`), null-character string detection (`E7017`), integer bitwidth overflow/underflow checking (`E7018`), crossing type validation (`E7019`), and record field marshaling (`E7023`) into child module `Pudu.Eval.Foreign.Argument` (133 lines).
+- Refactored `Pudu.Eval.Foreign` into a focused invocation and settlement coordinator (390 lines) retaining symbol resolution, handle liveness preparation and leasing, cancellation masking, slot and result resource claiming, and post-call cleanup.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Foreign/Argument.md`) and updated `Foreign.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Format into layered dependency graph modules
+
+Decomposed the 510-line monolithic `src/Pudu/Format.hs` into a scalable, layered dependency graph architecture strictly under 300 lines per module:
+- Isolated token piece definitions (`Piece`), line classification for brace styles (`Shape`, `BraceStyle`, `Record`, `Selection`, `Block`), prefix vs binary operator detection (`prefixKinds`, `unaryOperators`), and whitespace spacing rules (`wantsSpace`, `spaced`, `isSymbol`) into child module `Pudu.Format.Spacing` (294 lines).
+- Refactored `Pudu.Format` into a focused coordinator (247 lines) retaining `FormatResult`, `formatSource`, `formatText`, token layout on source lines, blank line grouping, line indentation tracking, import run sorting, and line emission while importing and delegating spacing to `Pudu.Format.Spacing`.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Format/Spacing.md`) and updated `Format.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All 7 CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Eval.Operator into layered dependency graph modules
+
+Decomposed the 502-line monolithic `src/Pudu/Eval/Operator.hs` into a scalable, layered dependency graph runtime architecture strictly under 300 lines per module:
+- Isolated collection/string indexing (`readIndex`), record field and variant member dispatch (`readMember`), type reflection (`nominalNameOf`), IDE/REPL autocompletion tables (`builtinMethodNamesFor`), try operator unwinding (`unwrapTry`), and internal method lookup tables (`arrayMethods`, `stringMethods`, `mapMethods`, `setMethods`) into child module `Pudu.Eval.Operator.Access` (291 lines).
+- Refactored `Pudu.Eval.Operator` into a focused arithmetic coordinator (236 lines) retaining unary operations (`applyUnary`), binary combining (`combine`), integer meeting and checked/saturating/wrapping arithmetic, float normalization, and decimal exact operations while re-exporting all access functions with zero API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Operator/Access.md`) and updated `Operator.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Eval.Builtin into layered dependency graph modules
+
+Decomposed the 621-line monolithic `src/Pudu/Eval/Builtin.hs` into a scalable, layered dependency graph runtime architecture strictly under 190 lines per module:
+- Isolated array built-in method dispatch, arity handling, and higher-order callbacks (`map`, `filter`, `reduce`) into `Pudu.Eval.Builtin.Array` (125 lines).
+- Isolated text operations, linear prefix scans, Unicode scalar indexing, and string manipulation into `Pudu.Eval.Builtin.String` (96 lines).
+- Isolated ordered Map and Set constructors, key comparability invariants, and method dispatch into `Pudu.Eval.Builtin.Collection` (134 lines).
+- Isolated decimal primitives, scalar rounding modes, integer type conversion bounds, and Unicode character codepoints into `Pudu.Eval.Builtin.Numeric` (139 lines).
+- Refactored `Pudu.Eval.Builtin` into a thin coordinator (184 lines) retaining display/show formatting, panics, and hardware-specialized hashing/column dispatch while re-exporting all submodules with zero API regression.
+- Complete vault parity established with new mirrored module documentation (`Builtin/Array.md`, `Builtin/String.md`, `Builtin/Collection.md`, `Builtin/Numeric.md`) and updated `Builtin.md` with resolved Grill Log.
+- Registered all 4 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Frontend.ParserExpressionSpec into layered dependency graph modules
+
+Decomposed the 638-line monolithic `test/Pudu/Frontend/ParserExpressionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 180 lines per module:
+- Extracted shared parser runners, block builders, diagnostic extractors, and AST shape normalizers into `Pudu.Frontend.ParserExpression.Common` (178 lines).
+- Isolated binary precedence, associativity, closed binary vocabulary, precedence bands, and line-leading continuation into `Pudu.Frontend.ParserExpression.PrecedenceSpec` (145 lines).
+- Isolated literals, lambda forms, type arguments vs indexing, postfix member/call chaining, await, and collection/record aggregates into `Pudu.Frontend.ParserExpression.PrimarySpec` (133 lines).
+- Isolated unary expressions, conditional blocks, if-let refutable pattern binding, loop/while/for control expressions, and control recovery into `Pudu.Frontend.ParserExpression.ControlSpec` (133 lines).
+- Isolated expression recovery, reserved keyword guidance, hostile nesting chains, ambiguous tails, hostile conditionals, and budget exhaustion into `Pudu.Frontend.ParserExpression.RecoverySpec` (130 lines).
+- Refactored `Pudu.Frontend.ParserExpressionSpec` into a thin coordinator (67 lines) re-exporting all 20 QuickCheck properties with zero semantic delta.
+- Registered all 5 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Repl.SessionSpec into layered dependency graph modules
+
+Decomposed the 681-line monolithic `test/Pudu/Repl/SessionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 330 lines per module:
+- Extracted shared runners, fixture loading, and session evaluation helpers into `Pudu.Repl.Session.Common` (49 lines).
+- Isolated command parsing, submission classification, and member/identifier completion into `Pudu.Repl.Session.CommandSpec` (153 lines).
+- Isolated environment persistence, binding retention, rejection, context inspection, kind arities, describe queries, and interactive imports into `Pudu.Repl.Session.ContextSpec` (193 lines).
+- Isolated interactive evaluation, location offsets, static typing, loops, control transfers, iteration edges, traits, match patterns, and runtime errors into `Pudu.Repl.Session.EvaluationSpec` (326 lines).
+- Refactored `Pudu.Repl.SessionSpec` into a thin coordinator (67 lines) re-exporting all 22 QuickCheck properties with zero semantic delta.
+- Registered all 4 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose EvalSpec into layered dependency graph modules
+
+Decomposed the 983-line monolithic `test/Pudu/EvalSpec.hs` into a scalable, layered dependency graph test architecture strictly under 270 lines per module:
+- Extracted shared runners, expression evaluation, and diagnostic extraction helpers into `Pudu.Eval.Common` (96 lines).
+- Isolated operators, precedence, float arithmetic, and bit-width limits into `Pudu.Eval.ArithmeticSpec` (109 lines).
+- Isolated lexical bindings, assignments, blocks, branching, pattern evaluation, loops, and frame restoration into `Pudu.Eval.BindingFlowSpec` (227 lines).
+- Isolated records, variants, tuples, maps, sets, text operations, and string interpolation into `Pudu.Eval.DataSpec` (211 lines).
+- Isolated functions, closures, default arguments, recursion, and built-in type trait implementations into `Pudu.Eval.FunctionClosureSpec` (138 lines).
+- Isolated async tasks, structured scopes, unsafe capability regions, references, system effects, and resource isolation into `Pudu.Eval.SystemSpec` (261 lines).
+- Refactored `Pudu.EvalSpec` into a thin coordinator (63 lines) re-exporting all 22 QuickCheck properties with zero semantic delta.
+- Registered all 6 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose Type.CheckSpec into layered dependency graph modules
+
+Decomposed the 2468-line monolithic `test/Pudu/Type/CheckSpec.hs` into a scalable, layered dependency graph test architecture strictly under 500 lines per module:
+- Extracted shared runners, typing helpers, diagnostic assertions, and region locators into `Pudu.Type.Check.Common` (80 lines).
+- Isolated primitive types, operators, integer bit-width bounds, float precision, decimals, and text methods into `Pudu.Type.Check.PrimitiveSpec` (263 lines).
+- Isolated tuples, records, sum variants, named variants, keyed collections (maps and sets), and discarded result checks into `Pudu.Type.Check.DataSpec` (397 lines).
+- Isolated branching, let-else, while-let, loops, try operator `?`, exported signatures, phase ordering, and error non-cascading into `Pudu.Type.Check.ControlFlowSpec` (459 lines).
+- Isolated pattern borrowing and match exhaustiveness/reachability into `Pudu.Type.Check.PatternSpec` (246 lines).
+- Isolated closures, function calls, generics, type aliases, generic type instantiation, and dynamic trait objects into `Pudu.Type.Check.FunctionGenericSpec` (314 lines).
+- Isolated trait dispatch, default method resolution, call bounds, ambiguous dispatch, orphan/duplicate coherence, qualified calls, and generic traits into `Pudu.Type.Check.TraitSpec` (478 lines).
+- Isolated references, dereferencing, structural markers (`Copy`, `Send`, `Sync`), unsafe capability regions, compile-time purity, async tasks, structured scopes, and recorded tooling types into `Pudu.Type.Check.SystemSpec` (346 lines).
+- Refactored `Pudu.Type.CheckSpec` into a thin coordinator (109 lines) re-exporting all 43 QuickCheck properties with zero semantic delta.
+- Registered all 8 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
+## 2026-09-06 — Decompose ProgramSpec into layered dependency graph modules
+
+Decomposed the 1269-line monolithic `test/Pudu/Compiler/ProgramSpec.hs` into a scalable, layered dependency graph test architecture:
+- Extracted shared runners and test helpers into `Pudu.Compiler.Program.Common` (97 lines).
+- Isolated dependency graph edges, topological ordering, signature cycles, and interface ambiguity into `Pudu.Compiler.Program.GraphSpec` (94 lines).
+- Isolated type-as-value boundaries, qualified type scoping, and REPL interface context into `Pudu.Compiler.Program.TypeBoundarySpec` (104 lines).
+- Isolated C++ FFI handle crossing, memory leases, slot management, and multithreaded foreign store serialization into `Pudu.Compiler.Program.ForeignSpec` (317 lines).
+- Isolated standard library distribution discovery and shadowing into `Pudu.Compiler.Program.StdlibSpec` (52 lines).
+- Partitioned the 650-line standard library evaluation suite into 4 cohesive domain layers:
+  - `Pudu.Compiler.Program.Eval.DataSpec` (92 lines): collections, structures, trees, buffers, flat maps, and column vectors.
+  - `Pudu.Compiler.Program.Eval.ProtocolSpec` (136 lines): formats, JSON, printers, CSV, TOML, HTTP, TLS, sockets, and network.
+  - `Pudu.Compiler.Program.Eval.ServiceSpec` (259 lines): database clients, SQL schema, query shapes, app lifecycle, probes, metrics, access control, and virtual UI.
+  - `Pudu.Compiler.Program.Eval.RuntimeSpec` (189 lines): language semantics, generic traits, runtime concurrency, effects, and numeric widths.
+  - `Pudu.Compiler.Program.EvalSpec` (27 lines): orchestrates the evaluation layers.
+- Simplified `Pudu.Compiler.ProgramSpec` into a lightweight top-level coordinator (44 lines) re-exporting all 13 properties with identical signatures.
+- All files reduced to well below the 500-line limit (max 317 lines). Registered all new modules in `pudu.cabal`.
+
+## 2026-09-06 — Vectorized column sorting, permutation indexing, binary search, and gather
+
+Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed permutation index sorting, hardware-speed binary search, and zero-copy gather:
+- Introduced `sortIndices`, `binarySearch`, `gather`, `sortIndicesF64`, `binarySearchF64`, and `gatherF64`.
+- Implemented `columnSortIndicesU64` and `columnSortIndicesF64` generating packed permutation index buffers sorted in ascending order with nulls partitioned to the end (`ASC NULLS LAST`).
+- Implemented branch-optimized $O(\log N)$ binary search (`columnBinarySearchU64`, `columnBinarySearchF64`) directly over unboxed column data and permutation buffers with zero intermediate heap allocations.
+- Implemented zero-copy permutation gather (`columnGatherU64`, `columnGatherF64`) materializing reordered unboxed columns while preserving validity bitmaps.
+- Wired 6 new pure builtins across `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, and `Type.Check.Prelude`.
+- Expanded `test-fixtures/stdlib/UsesColumn.pudu` from 20 to 22 assertions with 100% test coverage of all new APIs without nested matches.
+- All 7 CI quality gates verified and passing under `-Werror`.
+
+## 2026-09-06 — Float columnar vectors, vector addition, and SIMD/SWAR bitmap query algebra
+
+Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed 64-bit float columnar vectors (`ColumnF64`),
+vector arithmetic, and SIMD/SWAR bitmap query algebra:
+- Introduced `ColumnF64`, `createF64`, `lengthF64`, `nullCountF64`, `appendF64`, `appendNullF64`, `getF64`, `isNullF64`, `sumF64`, `minF64`, `maxF64`, `filterGtF64`, `filterLtF64`, `projectF64`, and `addF64`.
+- Added bit-parallel 64-row boolean algebra over packed selection masks: `bitmapAnd`, `bitmapOr`, `bitmapNot` (with trailing bit masking), and `bitmapCount` (hardware popcount).
+- All 11 new pure builtins wired across `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call` (immediate dispatch), `Eval.Install`, `Semantic.Prelude`, and `Type.Check.Prelude`.
+- Expanded test fixture `test-fixtures/stdlib/UsesColumn.pudu` from 9 to 20 assertions covering 100% of the public API, zero nested matches, and triple-slash LSP documentation.
+- All 7 CI quality gates verified and passing under `-Werror`.
+
+## 2026-09-06 — Low-level memory primitives and vectorized columnar database engine
+
+Extended [[Runtime Buffer Kernels]], [[Eval Buffer]], and [[Std Buffer]] with 8 high-performance hardware memory primitives:
+`readI64`, `writeI64` (two's-complement arithmetic), `readF64`, `writeF64` (zero-overhead register bit-casting via `castWord64ToDouble`/`castDoubleToWord64`),
+`readU32`, `writeU32` (little-endian 32-bit words), `fill` (contiguous `memset` block stores), and `compare` (lexicographical `memcmp`).
+Implemented a native vectorized columnar engine in [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]], introducing
+`ColumnU64`, `createU64`, `appendU64`, `appendNullU64`, `getU64`, `isNull`, `sum`, `min`, `max`, `filterGt`, and `project`.
+Column storage pairs continuous unboxed scalars with bit-packed validity bitmaps, enabling memory-bus-speed analytical aggregations
+and SIMD/SWAR predicate filtering without per-element boxing.
+Expanded test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (27 assertions) and created `test-fixtures/stdlib/UsesColumn.pudu` (9 assertions)
+with 100% public API test coverage and triple-slash LSP documentation. All 7 CI quality gates passed under `-Werror`.
+
+## 2026-09-06 — SWAR 8-slot parallel group probing in flat hash tables
+
+
+Accelerated [[Runtime SwissTable Kernels]] by implementing SIMD-within-a-register (SWAR) group probing.
+Instead of evaluating one control slot per iteration, lookups, insertions, and deletions inspect packed 64-bit
+control words (`Word64`, 8 control bytes) simultaneously using integer ALU arithmetic:
+`matchByte` and `matchEmpty` compute parallel byte equality in a single cycle, and `countTrailingZeros`
+jumps directly to candidate slot indices. Decreased probe loop iteration overhead by up to 8x.
+Passed all 7 CI quality gates under `-Werror`.
+
+## 2026-09-06 — Unboxed contiguous byte buffers and flat hash tables with control metadata
+
+Implemented low-level cache-aligned unboxed memory buffers (`Pudu.Runtime.Buffer`, `Pudu.Eval.Buffer`,
+`Std.Buffer`) and flat hash tables with control metadata (`Pudu.Runtime.SwissTable`, `Pudu.Eval.SwissTable`,
+`Std.FlatMap`). Introduced 12 pure builtins: `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`,
+`bufferScanU64`, `bufferCopy`, `bufferSize`, `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`,
+`swissTableDelete`, `swissTableEntries`, and `swissTableSize`. Created test fixtures `UsesBuffer.pudu` (23 assertions) and
+`UsesFlatMap.pudu` (31 assertions) asserting all allocation, bounds-checking, indexing, tombstone recycling,
+polymorphic values, rehashing, and mutation invariants across 100% of public APIs using flat helper routines and
+the try operator without nested matches. Wired into `ProgramSpec.hs`.
+All 7 gates passed under `-Werror`.
+
+## 2026-09-06 — Native sparse word member enumeration and BitSet validation
+
+[[Runtime Word Kernels]] and [[Eval Word Map]] now provide pure wired-in `wordMapMembers`,
+dispatching directly to `unpackWords` with hardware `countTrailingZeros` and bit-clearing `w .&. (w - 1)`.
+[[Std BitSet]] delegates `toArray` directly to `wordMapMembers`, recovering ascending member IDs
+in $O(m)$ bit operations without map materialization. Added complete BitSet invariant test fixture
+`test-fixtures/stdlib/UsesBitSet.pudu`, wired into `test/Pudu/Compiler/ProgramSpec.hs`. Cleaned redundant
+imports under GHC 9.10 (`-Werror`). Full CI gates verified and passed.
+
+## 2026-09-06 — Direct word-map payload merging
+
+[[Runtime Word Kernels]] now accepts representation adapters so [[Eval Word Map]] can combine
+original payload trees directly. Preserves complete validation while removing both projected
+input maps and the separate output-encoding map. No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Native sparse word predicates
+
+[[Std BitSet]] subset and disjointness now consume checked host-map predicates in
+[[Runtime Word Kernels]]. Left-first traversal stops at the first counterexample without
+entry arrays, projected maps or result maps. No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Native sparse word algebra
+
+[[Std BitSet]] now delegates four algebra operations to [[Runtime Word Kernels]] through
+[[Eval Word Map]]. Checked UInt64 payload trees combine using native bit operations and omit
+zero results. Removes interpreted merge loops and entry arrays; temporary native-word maps
+remain an allocation tradeoff. No tests, builds, reviews or measurements run.
+
+## 2026-09-06 — Native word-map cardinality
+
+Added [[Runtime Word Kernels]] and [[Eval Word Map]], wired through the pure prelude as
+`wordMapPopCount`. [[Std BitSet]] cardinality now folds host map payloads directly with native
+Word64 population counts, removing entry-array staging and interpreted per-bit loops. Payloads
+are checked before conversion and the result remains UInt128. No tests, builds, reviews or
+measurements run.
+
+## 2026-09-06 — Sparse integer bitsets
+
+Added [[Std BitSet]] with persistent 64-ID words, validated block import, ascending enumeration,
+UInt128 cardinality and block-wise set algebra. Consumes native scalar kernels and ordered bulk
+map construction. No tests, builds, reviews or measurements run, as requested.
+
+## 2026-09-06 — Native bounded shift kernels
+
+- Dispatch validated fixed-width shifts through explicit native carriers.
+- Preserve arithmetic signed shifts, unsigned width masking and wider fallback.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-06 — Immutable HashMap seed storage
+
+- Replace the never-mutated bucket seed IORef with a shared immutable word.
+- Remove mutable-reference reads from bucket mixing while preserving initialization and placement behavior.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-06 — Native bitwise kernels
+
+- Dispatch bounded AND/OR/XOR/complement through native words and declared-width reinterpretation.
+- Retain exact wider and BigInt behavior.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-06 — Balanced collection run assembly
+
+- Bulk-build all monotone input runs and merge them through a balanced carry stack.
+- Preserve chronological key representatives and latest map payloads across merges.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-06 — Bidirectional collection bulk loading
+
+- Detect ascending or descending input prefixes in the shared Map/Set storage kernel.
+- Build canonical ordered trees while preserving duplicate precedence and strict fallback.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-06 — Internal collection kernel API
+
+- Introduce pure generic bulk-construction and enumeration kernels independent of evaluator values.
+- Connect Map, Set and HashMap runtime adapters to the shared API and register it in the library.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Native modular arithmetic kernels
+
+- Compute bounded wrapping add/subtract/multiply in Word64 before declared-width reinterpretation.
+- Avoid arbitrary-precision intermediate results on that path; retain exact wider fallback.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Native scalar wrapping carriers
+
+- Dispatch fixed-width wrapping through explicit signed/unsigned native scalar carriers.
+- Keep exact wide-integer fallback and target-specific platform widths.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Shared scalar bound descriptors
+
+- Share fixed-width intervals across checked arithmetic, saturation and literal fit checks.
+- Use constant admitted signed bounds and existing unsigned masks without narrowing inputs.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Mask-based fixed-width wrapping
+
+- Replace general remainder with exact low-bit masks at the runtime wrapping boundary.
+- Share masks for admitted scalar widths while preserving signed reinterpretation and BigInt behavior.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Direct Unicode text hashing
+
+- Feed canonical UTF-8 bytes into the collection mixer directly from text scalars.
+- Reuse the path for rendered fallback values without requesting an encoded ByteString.
+- Preserve encoding semantics; no measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Scalar integer hash specialization
+
+- Mix word-sized integer keys directly without staging a byte list or packed buffer.
+- Retain full-width fallback and existing magnitude/sign byte encoding.
+- Update runtime contract; no measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Direct collection enumeration
+
+- Build Map, Set and indexed-bucket result arrays through native ascending folds.
+- Remove temporary association lists and discarded key/value pairs from value enumeration.
+- Preserve ordering and immutable results; no measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Sequence-native callback traversal
+
+- Keep array map, filter and reduce in native sequence traversal instead of flattening to lists.
+- Preserve ordered callback effects and first-failure short-circuiting.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Direct persistent-array kernels
+
+- Use direct sequence search, right-end removal and indexed edits in the Haskell runtime.
+- Preserve first-match equality, clamping, empty-array behavior and persistent snapshots.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Direct packed-byte conversions
+
+- Remove list staging from runtime byte/array conversions using length-aware container construction.
+- Preserve ordered byte validation, diagnostics and immutable results.
+- No measurements, tests, builds or reviews run.
+
+## 2026-09-05 — Backend specialization foundation
+
+- Specify evidence-driven storage layouts, scoped builders, fused kernels and a staged backend roadmap.
+- Implement adaptive ordered Map/Set bulk loading with stable duplicate semantics and strict fallback insertion.
+- No tests, builds, reviews or benchmarks run; performance targets remain unmeasured.
+
+- 2026-09-05 · [[Std Db Query]], [[Std Db Schema]], [[Std Db Query Shape]], [[Std Db Store]] · carry a value's type to the backend instead of its spelling. A built statement held `Option[Str]`, so every value crossed as text: `sum(quantity) > '6'` is compared as text, SQLite orders every number before every text, and the comparison is false for every row it could be asked about — an empty report rather than an error. PostgreSQL coerces the text and answers correctly, so one statement meant two things and neither backend said so. `Statement.values` is now `Driver.Value`, and `Schema.Bindable` — which knew the column's type and rendered it away — hands over a number as a number. `Shape.isNumber` writes a numeric comparison by hand, `textValuesOf` renders values for PostgreSQL's text protocol only, and values a caller supplies already spelled stay text, because nothing can recover what they were. The example that recorded the empty report now asserts the two groups that clear the bar, and keeps the text spelling beside it answering none · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Std Db Query Shape]] · exercise the join and aggregate builder, which had no coverage, and record what running it showed. `examples/db/Reports.pudu` writes each query as one `Select` record — what it reads from, answers with, joins and filters at the same indentation — and runs it against the order book, checked against answers worked out by hand. Written through the combinators instead, four clauses nest four deep and the thing a reader wants first ends up furthest in, which is what the type's own comment says it was shaped to avoid. Two findings. A numeric comparison crosses as text, because `is` takes its value as `Str`: SQLite orders every number before every text, so `having sum(quantity) > '6'` is false for any sum and the report is empty, while PostgreSQL coerces it and answers correctly — one query, two answers, no error. And an aggregate takes a column rather than an expression, so `sum(unit_price * quantity)` cannot be said at all. A customer with no orders joins the schema so a left join differs from an inner one · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Std Db ConnectionString]] · hold the connection URI parser to what it accepts. It had no coverage at all, and it is where text a person or an environment supplied becomes the address a program dials — so what it accepts is the whole of what it will connect to. Thirty-five cases now stand: the ordinary form in full, the short scheme, a default port, an absent password, percent escapes, and a bracketed IPv6 host; against another database's scheme, a URI that does not say `sslmode=disable` where no TLS is available, a duplicate or unknown option, a missing user or database, a second at-sign hiding the real host, a path separator naming a different database, a fragment, ports outside 1..65535 and text where digits belong, an unbracketed IPv6 host, and escapes that are not escapes. Every one behaved correctly already; the point is that they now stay that way · risk LOW · issue #193
+
+- 2026-09-05 · [[Std Db Repository]], [[Std Db Store]], [[Std Db]], [[Std Db Postgres]] · let the row mapper read the rows a driver returns. `Repository` was written against `Std.Db.Rows`, the PostgreSQL session's result, so a program on the backend-neutral driver layer could not use the mapper above it at all. It reads `Driver.Rows` now. The session answers every column as text because that is what the wire carries, while a driver answers what a value is, so `whole` takes the number the backend already decoded rather than reading it back out of its digits, `truth` takes a boolean where there is one, and `text` renders a number rather than refusing it — refusing would mean the same query worked on PostgreSQL and failed on SQLite, which is the portability trap this layer exists to close. Bytes are refused as text and say so. `Store` still speaks the session and converts at its edges through `Db.asDriverRows`, which is now the one description of that conversion rather than a copy in the PostgreSQL driver · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Std Db Query]] · let a built statement be spelled for the backend that will run it. `textOf` rendered every placeholder as `$1`, which is PostgreSQL's, while every driver already declared a `Placeholders` dialect that nothing consulted — so a caller wrote a spelling by hand and found out from the database which backends it happened to suit. `textIn` takes the dialect and spells the statement for it. That the old form worked against both backends here proved nothing, because SQLite accepts `$N` as well as `?`; the example now runs the same statement in both spellings, so neither passes by luck. `textOf` is unchanged for a caller with no driver in hand · risk LOW · issue #193
+
+- 2026-09-05 · [[Std Db Driver]], [[Std Db Postgres]], [[Std Db Sqlite]] · give the backend-neutral driver a transaction, and check the database layers against a real database. A `Client` had `query`, `execute` and `close`, so the only way to open a transaction through it was `execute("BEGIN")` — and `execute` takes whatever connection is free, so the begin landed on one and the work on another. Nothing reported it; the transaction held nothing, committed nothing and rolled back nothing. `Client` now carries a `transaction` that hands the action a `Tx` bound to one connection: PostgreSQL holds a pooled connection for the whole action, SQLite holds its lock. Two runnable examples under `examples/db` exercise them against SQLite for real, with a portable schema and a PostgreSQL-only one beside it, and report each check by name. They turned up three things worth knowing: money comes back as a float on SQLite because it has no decimal type, so a `DECIMAL` sum is a float sum; `Query.textOf` writes `$1` and never asks the driver's declared dialect, which does not bite here only because SQLite accepts `$N` too; and the query builder and row mapper are written against the PostgreSQL session's result type rather than the driver's, so a program on the driver layer cannot use them · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Type Check Expression]], [[Type Env]], [[grammar/pudu]] · refuse an assignment to a name a closure only captured. A closure captures a copy, so the write landed on the copy and left the original as it was — accepted in silence, with the old value read somewhere else and no line to look at. It is not hypothetical: a test written that way earlier today accumulated into a captured variable from inside a callback, compiled, ran, and never executed the branch it existed to check. It passed while checking nothing, and was caught only because a count came out one short. The assignment is now `E3076` where it is written, saying to return the value or carry it in what the closure answers. A name the closure declared itself is untouched, as is a write outside any closure, and reaching through a captured value to a field is a question about that value rather than about the capture. Nothing in the library or the examples relied on the old silence · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Type Exhaust]], [[Std Db]], [[Std Db Session]] · cover a constructor across the arms that name it, not in one arm alone. `Err`, `Ok(None)`, `Ok(Some(x))` covers every value a `Result[Option[T], E]` can take, and the checker refused it: a constructor whose payload tested rather than bound covered nothing, which is right for `Ok(1)` and wrong for a payload the arms exhaust between them. It is a false positive on correct code, and it costs a nesting at every call site that meets it — four sites in `Std.Db` had already paid it, and they read flat again. Coverage is now collective and recursive, with the domain one level down read from the constructors the patterns write rather than from the payload's declared type, which is written in the sum's own parameters and would need instantiating first. Only a payload of one value is followed down: two would need every combination accounted for, and answering that needs more than this asks. Where the answer is not certain it stays "not covered", because a false positive costs a wildcard and a false negative accepts a match that finds no arm · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Std Db]], [[Std Db Session]] · refuse a connection kept past the scope that lent it. A connection is a value, so a callback can keep a copy after `withConnection` or `withTransaction` returned — by which time it is back in the pool and may be inside somebody else's transaction, and a statement written through the copy interleaves with theirs and answers the wrong caller. Every connection now carries a shared count of how many times it has been lent and each value the lending it belongs to; the scopes end the lending on the way in and again on the way out, and `write` answers `Expired` when the two disagree. A flag would not do, because the pool lends the same connection again and setting it live would revive every stale copy with it. The connection is untouched — the same statement through the value the scope handed back still works, which is what makes this refusing the copy rather than the connection · risk MEDIUM · issue #193
+
+- 2026-09-05 · [[Std Db]] · take a transaction from a pool without composing it by hand. `transaction` and `transactionWith` hold one connection for the whole operation. The failure they prevent is quiet rather than loud: a caller reaching for the pool once per statement gets a different connection each time, so `BEGIN` lands on one and the work meant to be inside it lands on another — nothing raises, the transaction holds nothing, and the symptom is rows that should have been undone and were not. Holding one connection is also what keeps another caller out from between the `BEGIN` and the `COMMIT`. Checked against the stub with a pool of exactly one connection, so the `BEGIN` and the `COMMIT` are observably on the same session and the connection is shown to come back afterwards · risk LOW · issue #193
+
+- 2026-09-05 · [[Eval Builtin]], [[Type Check Rule]], [[Std Db]], [[Std Db Session]] · give `Array` the `isEmpty` every other container has, and make the standard library compile again. `Str`, `Bytes`, `Map` and `Set` all answer `isEmpty`; `Array` did not, and five call sites across `Std.App` and `Std.Db` had already been written as though it did. Adding it is the smaller change and removes the inconsistency that invited them. Four matches were also refused by the exhaustiveness checker although they cover every case — `Err`, `Ok(None)`, `Ok(Some(x))` is exhaustive, and a constructor whose payload is tested rather than bound covers nothing today — so those bind and re-match until the checker learns collective coverage. Six files committed unformatted are formatted. The library and examples now compile and the suite passes; before this, neither did · risk LOW · issue #193
+
+## 2026-09-05 — Backend-neutral row consumption
+
+- Add typed result readers and row mapping independent of PostgreSQL repository types.
+- Distinguish NULL, missing/ambiguous columns, wrong widths, storage kinds and cardinality.
+- Update module documentation. No tests, builds or reviews run as directed.
+
+## 2026-09-05 — SQLite driver and configurable backend selection
+
+- Add a real SQLite adapter with prepared parameters, typed rows, serialized queries and native resource cleanup.
+- Load SQLite on demand through a fixed native bridge; require no SQLite headers or link-time SQLite dependency.
+- Select PostgreSQL or SQLite from app connection strings and retain explicit third-party driver extension.
+- Update module contracts and examples. No builds, tests, reviews or live database execution run.
+
+## 2026-09-05 — Application database connections and lifecycle failures
+
+- Add PostgreSQL URI parsing with strict percent decoding, explicit transport policy, and direct connection/pool opening.
+- Add backend-neutral `Std.Db.Driver`, a PostgreSQL adapter, and `Std.App.Database` with developer-supplied driver selection, typed parameters and lifecycle ownership.
+- Retain every typed lifecycle failure and report failed shutdown from `App.run`.
+- No tests, builds, or reviews run, as directed; PostgreSQL TLS negotiation remains pending.
+
+- 2026-09-05 · [[Std Db]], [[2026-09-05-database-framing]] · close partially constructed pools, reject zero capacity, gate borrowing on closing state, and propagate settlement and cleanup failures. Query failures drain to ReadyForQuery; malformed and mixed row results are refused. Tests and review intentionally not run · risk HIGH · issue #193
+
+- 2026-09-05 · [[Std Db Protocol]], [[Std Db Session]], [[2026-09-05-database-framing]] · distinguish SQL NULL from invalid or truncated text, require exact row payloads, and bound incoming database frames before body accumulation. Malformed streams close instead of being retried as incomplete input. Tests and review intentionally not run · risk HIGH · issue #193
+
+- 2026-09-04 · [[Eval Foreign]], [[Type Check Foreign]], [[grammar/pudu]] · let a declaration say a result is another counted reference. `counted T by release` completes the three shapes a library returns: what it gives away, what it keeps, and what it counts. `cairo_reference`, `g_object_ref`, `CFRetain` and `AddRef` all return the pointer they were given, so two references are one address and each owes its own drop — a boundary keyed on the address either refuses the second or drops one the program still holds. Each reference is now a claim of its own, releases once, leaves the others usable, and is released at teardown if the program did not. A counted result naming no release is `E3075`, and `E3066` now names all three modes. The parser reads a `by` clause after every mode and lets the check that knows what each means report on it, rather than refusing in the grammar and naming the wrong mode · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Foreign Ownership]] · admit a reference to something already referenced. A claim was keyed by address and a live address could not be claimed twice, which is right for a library that gives a resource away and wrong for one that counts references: `g_object_ref` and `cairo_reference` return the pointer they were given, and each reference owes its own release. Counted claims now live in a second table keyed by the generation, unique per claim, so two references to one address are two claims that release once each, releasing one leaves the other usable, and teardown releases every outstanding reference rather than the address once. The owned table keeps its rule exactly, because that rule catches the common library's mistakes and loosening it would have spent the common case's protection on the rarer one. No language syntax reaches this yet · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Eval Value]], [[Eval Foreign]], [[Type Check Foreign]], [[grammar/pudu]], [[ADR-0018 Calling a Library Written Elsewhere]] · let a declaration say the library keeps what it returned. A handle result had to be `owned T by release`, so binding `GetFontDefault`, `sqlite3_errmsg`, `SDL_GetError` or a GObject getter meant naming a release for an object the library still uses and having teardown call it. The refusal did not withhold that hazard, it required it. `borrowed T` now says the other half: claimed by no store, leased by no call, released at no teardown, and refused before native code if it reaches the release its handle type declared. A result must say which it is — an address does not, and guessing leaks or frees something in use — so saying neither stays `E3066`, and naming a release for a borrowed result is `E3074`. Whether a borrowed value outlives what owns it is unchecked, an assertion of the same kind as the pointer validity and ABI layout every foreign declaration already makes · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Foreign Call]], [[Eval Value]], [[Eval Install]], [[ADR-0018 Calling a Library Written Elsewhere]], [[grammar/pudu]] · ask the loader for the version a declaration names. `version` was parsed, stored on the syntax tree, and read by nothing: the loader was asked only for `libcairo.dylib`, `libcairo.so` and their kind. That is the wrong name on most machines. Every platform writes the version inside the file name — `libcairo.so.2`, `libcairo.2.dylib`, `libcairo-2.dll` — and the unversioned spelling is generally a symlink shipped for building against, so a machine with the library installed and without its headers has only the versioned one and the binding failed where the library was plainly present. Those spellings are now tried first, the unversioned ones still after, and the refusal lists what it asked for. Nothing checks that what opened is the ABI named; that stays the package question · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[ADR-0021-a-value-the-library-owns]], [[architecture/FFI-SELF-HOSTING]], [[decisions/_MOC]] · rewrite the by-value decision so it describes a foreign boundary rather than one library's. Checked against headers on this machine, three shapes recur across unrelated libraries and none survive inferring ownership from pointers. HDF5 names every file, dataset and group by an `int64_t` `hid_t`, and an OpenGL name, a file descriptor and a Windows `HANDLE` are integers too — the first draft refused a pointer-free layout as an ordinary record, which would have made each of them a resource nothing owns. cairo pairs `cairo_reference` with `cairo_destroy` and GObject `g_object_ref` with `g_object_unref`, so two bitwise-equal references each owe a release and merging them by equality leaks one or frees under the other. And `GetFontDefault` returns raylib's own `Font` where `LoadFont` returns an owned one, so the obligation cannot live on the type. Identity and transfer are now declared per result — owned, borrowed, or counted — with identity defaulting to the whole value and narrowable. Still proposed; nothing is built · risk MEDIUM · issue #227
+
+- 2026-09-04 · [[Foreign Ownership]] · prove a lease survives cancellation. A native call is interruptible while it runs, which is the point — an evaluation cancelled inside one must not wait for the library — but the lease still has to end, because an address left marked in use is one nothing can release and teardown waits out its patience and then leaves the resource behind. `withClaims` acquires under a mask and releases through `finally`, and that is now tested rather than read: the leaseholder blocks on an empty variable so the exception lands while the lease is certainly held, and the claim is recovered under a bounded wait, which a lease never given back would exceed. Replacing `finally` with a sequencing operator that skips the release on an exception fails exactly that assertion. This covers the lease, not the evaluator's whole masked interval, which stays unproven · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[ADR-0021-a-value-the-library-owns]], [[decisions/_MOC]] · refuse the identity rule the by-value proposal rests on, and say what replaces it. It inferred one resource from the addresses inside a layout, so a pointer-free layout was refused as an ordinary record — but `raylib.h` as installed has three structs a library releases by value that hold no pointer at any depth, and `Texture2D`, freed by `UnloadTexture`, is among the most used types it has. Declared as a record it would be a resource nothing owns: copy it, unload both copies, no diagnostic. Which scalars are pointers says how the platform places the value, which the design already needs it for, and nothing about what the library counts as one resource. Identity is now declared rather than inferred, a pointer-free layout may be owned, and the ADR stays proposed until it is rewritten on that basis; implementing it as written would put a wrong ownership model under 220 of the 600 functions. A retain/release count still cannot be modelled and still needs a C wrapper · risk MEDIUM · issue #227
+
+- 2026-09-04 · [[architecture/STDLIB]], [[Std Log]] · compile the standard library and the examples in CI. `fmt --check` was the only gate that touched `lib/`, and it stops at the parser, so a Std module was checked where some test happened to import it and the modules no test reaches were never checked at all. All 101 modules and every example pass today — the gate is a floor, not a repair. The one diagnostic it surfaced was a local in `Std.Log` shadowing the module's own `escapedChar` function, in a block about escaping, where the shadowed name is the confusing one; the local is now `escapedValue`. The fixtures stay out of the gate because many are programs that must fail to check · risk LOW · issue #217
+
+- 2026-09-04 · [[Syntax Name]], [[Eval Program]], [[Semantic Interface]], [[Type Interface]] · make an import without `as` run, not merely check. The grammar says `import M` binds the module qualified, and the checker resolved names against the module's last segment accordingly — but the evaluator bound a prefix only where an alias was written, so `import Std.Map` followed by `Map.insert` reported no diagnostics and then aborted at run time with an undefined `Map`. The rule existed as two copies in the checker and none in the evaluator, which is the shape that lets two sides agree on a program that does not run; it is now one function on `ModuleName`, whose segments were already there, and all three sides ask it. Every standard module writes `as` explicitly, which is why nothing had hit it · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Eval Foreign Resource]], [[2026-09-04-ffi-hardening]], [[architecture/FFI-SELF-HOSTING]] · cover cleanup after invalid returned text, the last of the four failure paths that had shipped unproven. The C++ conformance fixture gains a producer that writes a box through a slot and returns text that cannot be decoded, and a program declares it: the call is refused as `E7025`, the native destructor runs once, and no live box is left. The assertion counts destructor calls in the fixture rather than reading a diagnostic, so removing the cleanup fails it with the resource still allocated. Establishing that took four runs, because `cabal test` recompiles the library without relinking the test executable against it — three mutation runs reported success while executing the original code, which is indistinguishable from a test that cannot fail. What remains uncovered at this boundary is cancellation itself: nothing exercises an abort delivered inside the masked interval · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Foreign Ownership]], [[Eval Foreign Result]], [[Pudu Cabal Manifest]], [[2026-09-04-ffi-hardening]] · cover the ownership and conversion failure paths, which three passes had landed without tests. These are the paths a foreign call that succeeds never takes, so they are reached directly rather than through a program: a batch naming one address twice, a batch touching an address already held, an address claimed again after its release, a discard that must settle only its own claims, a store that has closed admission, and every result shape outside its declaration. Each refusal is paired with what must still be admitted, so none of them can be satisfied by refusing everything. Both specs were confirmed to bite by removing the guard each was written for. Cleanup after invalid returned text stays uncovered: it invokes a real destructor through the bridge and needs a fixture library with a release symbol · risk MEDIUM · issue #217
+
+- 2026-09-04 · [[Eval Foreign Result]], [[Eval Foreign]], [[Foreign Call]], [[Foreign Ownership]], [[2026-09-04-ffi-hardening]] · convert a foreign result only into the shape its declaration names, and settle the claims a failed conversion made. A result used to fall through to a generic scalar arm, so a carrier that did not match the declaration still answered with a value of some other type; a record was rebuilt from whatever fields arrived, and slot arity was left to `zip`, which silently returns the shorter of the two. Conversion is now its own module and rejects each of those. A slot count that disagrees with the declaration is a boundary error, and an absent slot is one only where absence is representable — a null text or handle pointer. When conversion aborts after the batch was claimed, the exact generations it claimed are discarded rather than left in the store with nothing above the boundary naming them, on a host exception as well as an ordinary abort. Slot storage that runs out before the arguments do is refused instead of answering with what was collected so far · risk HIGH · issue #217
+
+- 2026-09-04 · [[ADR-0021-a-value-the-library-owns]], [[decisions/_MOC]] · decide how a value the library owns crosses, and narrow what that means. The shape had been described as "structs returned by value" and counted at one hundred and ninety-six; both were wrong. raylib declares thirty-five by-value structs, and twenty of them hold no address at all — a colour, a rectangle, a camera — which have crossed since a record was allowed to hold a record, so a declaration naming them checks today. Fifteen hold an address, and two hundred and twenty of the header's six hundred functions touch one. That is one precise thing rather than a breadth problem: a value the library owns, which the program holds and passes back and must never look inside. It will be declared with a layout naming the scalars it is made of, because a value passed in registers cannot be a black box — the platform places a struct by the sequence of scalar kinds it flattens to, so a struct of two floats and a struct of eight bytes go to different places at one size. The layout has no field names, since naming them would invite reading them and what sits at each offset is the library's business. Identity is the addresses inside it, because the library hands the same resource back as two bit-identical copies and expects one release. Proposed, not accepted; nothing is built · risk MEDIUM · depth MEDIUM · issue #227
+
+- 2026-09-04 · [[Std Byte Cursor]], [[Std Source Buffer]], [[Std Symbol Interner]], [[Std Text Builder]], [[architecture/STDLIB]] · add persistent byte cursors, line indexing, spelling IDs, and text-fragment builders as self-hosting foundations. Written without validation and checked afterwards: all four check clean, format, and answer a program that imports them · issue #217
+
+- 2026-09-04 · [[Foreign Ownership]], [[Eval Foreign Resource]], [[Eval Foreign]], [[Eval Value]], [[Evaluator]], [[2026-09-04-ffi-hardening]] · retain claim generations across allocator address reuse, mask foreign ownership handoffs, defer busy cleanup to final leases, resolve destructors before production, and report cleanup failures with native-output provenance. Validation intentionally not run · risk HIGH · issue #217
+
+- 2026-09-04 · [[2026-09-04-ffi-hardening]], [[architecture/FFI-SELF-HOSTING]], [[architecture/SEMANTICS]], [[architecture/STDLIB]] · reconcile output-slot implementation status and record remaining ownership, buffer, callback, hardware, and self-hosting work without claiming completed validation · issue #217
+
+- 2026-09-04 · [[Foreign Ownership]], [[Foreign Call]], [[Eval Foreign]] · reject duplicate output claims, preserve existing claims on batch failure, and retain returned handles through text-conversion failure for cleanup. No tests, build, benchmark, or completed review; full foreign-boundary assurance remains outstanding · risk HIGH · issue #217
+
+- 2026-09-04 · [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[Type Check Foreign]], [[Pudu FFI Bridge]], [[Pudu FFI C++ Fixture]], [[grammar/pudu]] · let a program hand a library a run of bytes. Sixty-three functions across four libraries take one the library only reads, which is most of what "buffers" means and the only part of it with no lifetime question in it. `Bytes` was already a Pudu value with contiguous storage and the boundary refused it, so a program with bytes to hash, compress, or decode had nothing to pass. It crosses as the address of the run, for the length of the call and no longer, lent rather than copied — the library reads storage the value already had, which is the difference between handing over a large run and making a second one first. Its length travels as an ordinary argument because in C it is one, a run of bytes carrying no terminator. A result declared `Bytes` is refused where it is written, a run the library allocated needing a length and a release no declaration can yet write; so is a `Bytes` record field, a record crossing as the leaves it flattens to and a run not being one. Proven through the conformance fixture over every byte, so a run that crossed short answers differently rather than plausibly: noughts inside it are counted like any other byte, an empty run still names a place the library may read from, and the value is unchanged by having been lent · risk MEDIUM · depth DEEP · issue #225
+
+- 2026-09-04 · [[ADR-0020-handing-a-library-a-run-of-bytes]], [[decisions/_MOC]], [[ADR-0019-getting-a-value-back-out-of-a-library]] · decide how a run of bytes reaches a library, and find that "buffers" is three contracts rather than one. Across four libraries, sixty-three functions take a run the library only reads, nine take one it writes into, and ten return one it allocated — and the first is the only one with no lifetime question in it. Part of what that first column counts already works, a `const char *` with a length beside it being text, so `sqlite3_prepare_v2` is describable today. What is refused is a run of bytes, which `Bytes` already is: a Pudu value with contiguous storage, existing because an array holding one runtime value per byte does not fit input measured in gigabytes. It will cross as the address of its bytes, borrowed for the call, read-only, and not admitted inside a record. The length stays an ordinary parameter because in C it is one, and what that costs is stated rather than hidden. Proposed, not accepted; nothing is built · risk MEDIUM · depth MEDIUM · issue #223
+
+- 2026-09-04 · [[Formatter]] · give a wrapped parameter list back to the declaration it belongs to. Such a line opens with `(`, which can also begin a statement, and the formatter decides indentation from a line's first token — so it read the parameters as a new statement and put them at the margin, where a reader looking for the next declaration finds them instead. The first token cannot decide it alone; what decides it is the line above, a declaration that named a function and never opened its parameters being no statement at all. A leading `(` that really does begin a statement is untouched, and formatting stays idempotent and keeps every token and comment · risk LOW · depth MEDIUM · issue #219
+
+- 2026-09-04 · [[Type Check Rule]], [[Type Check Safety]], [[Type Env]], [[Type Check]], [[Type Check Import]], [[Type Check Foreign]], [[Syntax Tree]] · refuse a call that leaves out an argument. Too many was caught and too few was not: the call was typed as though it were complete, so a three-parameter function called with one took the type of its full result and the mistake arrived as a runtime fault. Nothing was gained by the silence, this language having no currying and no value for a partial application. It was silent because a function type records what each parameter takes and not whether it has to be supplied, so the rule reading only the type could not tell an omitted default from a missing argument. The count that decides it belongs to the declaration and is kept under its name — the parameters less the trailing ones with defaults, since a default written before a parameter without one cannot be skipped without the next argument taking its place. The declaration's total is kept beside it, because the table is keyed by a bare name and that total is what says which declaration a call reached: a predicate parameter named `holds` takes one argument where a declaration of that name takes two. It matters most at a foreign declaration, where no parameter has a default and the signature is an assertion nothing can check · risk MEDIUM · depth DEEP · issue #218
+
+- 2026-09-04 · [[Foreign Call]], [[Eval Foreign]], [[Eval Install]], [[Foreign Ownership]], [[Type Check Foreign]], [[Name Resolution]], [[grammar/pudu]] · let a library hand a value back through storage the caller supplied. `sqlite3_open` writes the database it made through a pointer and answers with a status, which is what most C libraries do and what nothing here could describe: a handle only ever arrived as a result, so there was no value of its type to pass in. A parameter written `out` is one the library writes rather than reads — a native argument and not a Pudu one — and a function carrying any answers one tuple of its native result and each slot in source order. A pointer slot answers `Option`, null being an absence a pointer really carries; a scalar or record slot answers its own type, a written zero and an unwritten cell leaving the same bytes. A handle slot must be owned and name its release, and every resource one call produced — the result's and the slots' — is claimed in one transaction before any of it is visible. A release named on a slot is now recognised as a release: reading only the result's `by` left the program's own call going straight to the library while the claim stayed in the store, and teardown then freed what the library had already destroyed · risk HIGH · depth DEEP · issue #217
+
+- 2026-09-04 · [[Pudu FFI Bridge]], [[Pudu FFI C++ Fixture]], [[Foreign Call]] · let the bridge carry
+  an argument the library writes through, which is how most C libraries hand back the resource they
+  have just made. `sqlite3_open` takes the database it produces through such a slot, and nothing
+  below the language could describe one. The bridge now owns that storage for the call, passes its
+  address, and reads back what was left there; a declaration with no slots passes no slot table and
+  crosses exactly as before. Storage is zeroed first, so a pointer the library never wrote reads back
+  null, which is the absence a pointer can carry — while a scalar it never wrote reads back zero,
+  which is a value, and no portable observation separates that from a written zero. Storage the
+  bridge lays out now carries the alignment its widest member needs rather than an array of bytes
+  promising one, which a returned record with a floating field was relying on the compiler to
+  supply. The conformance surface proves a resource arriving through a slot, a failing status that
+  still yields a resource needing release, an unwritten pointer becoming nothing, a written zero, a
+  record read at the platform's own offsets, and ordinary arguments travelling beside slots. The
+  language above this cannot yet write `out`, so no program changes · risk HIGH · depth DEEP ·
+  issue #212
+
+- 2026-09-04 · [[ADR-0019 Getting a Value Back Out of a Library]], [[grammar/pudu]],
+  [[architecture/SEMANTICS]], [[architecture/STDLIB]] · decide how a C library gives back a value
+  through caller-supplied storage. A foreign `out` slot will be a native argument but not a Pudu
+  call argument, and a call with slots will answer one tuple containing its native result first and
+  each slot in source order. Scalar and record slots assert that the library always writes them;
+  their zero value cannot reveal whether a write occurred. Text and opaque-handle slots use null as
+  real absence and therefore answer `Option`, while every non-null owned direct result and slot joins
+  one atomic claim before exposure. SQLite's fallible `sqlite3_close` cannot masquerade as the
+  current unit destructor, so the real integration will use an honest C binding surface; it will
+  prove both a successful open and a failed open that still returns a handle requiring destruction.
+  Buffers stay separate because capacity, initialized length, mutation, and borrowing are contracts
+  an output slot does not carry. The design is accepted and independently reviewed; implementation
+  and the 0.7.0-draft semantic increment remain pending · risk HIGH · depth DEEP · issue #212
+
+- 2026-09-04 · [[Name Resolution]], [[Resolve Context]], [[Type Check Rule]] · refuse a type where
+  a runtime value was written. Value resolution deliberately fell through to the type namespace so
+  constructor paths could begin with their declaring type, but the same fallback admitted bare and
+  called names such as `Int32` and `Sync`; checking stayed silent and evaluation found no binding.
+  Plain expression heads now require a value while record and variant constructor paths keep the
+  fallback. Members through implicit-prelude types join wired-in and declared types under `E3034`,
+  so forgetting `import Std.Sync as Sync` cannot become valid merely because another dependency
+  happened to load that module · risk MEDIUM · semantic 0.6.1-draft clarification · depth
+  DEEP→DEEP · issue #214
+
+- 2026-09-04 · [[Type Check Rule]], [[Type Formation]] · refuse a member a type does not have. A type is written before a dot for one thing — a variant it declares — and anything else after the dot was accepted in silence, because the check for a module's missing member fires only when something already binds beneath the qualifier and nothing binds beneath a type that declares no variants. So a nonexistent variant, a member on a record, a method reached through a built-in type, and a module that was never imported all compiled and failed where they ran. Two committed fixtures were relying on it: one reached `Int64.toInt`, which does not exist, and one reached `Result.unwrapOr` without importing `Std.Result`, resolving only because the evaluator sees a dependency's frame where the checker does not · risk MEDIUM · depth MEDIUM · issue #208
+
+- 2026-09-04 · [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[ADR-0018 Calling a Library Written Elsewhere]] · let a record hold records. A camera holds two points and a font holds a texture, so a boundary admitting only flat records admitted almost none of what a library passes about — of raylib's five hundred and forty-eight functions, forty-eight per cent were reachable before this and fifty-two per cent are now — twenty more, which is fewer than the fifty estimated, because a font, a sound, and a piece of music hold pointers as well as nesting and stay blocked on the pointer question. What crosses is the leaves a record flattens to, in declaration order, which is the same description the platform derives for the nesting itself; both calling conventions this targets classify a struct by its flattened scalar sequence with its size and alignment, and a nested struct's alignment propagates to its members. That equivalence was measured against a C++ surface before anything was built on it — a record of two records, a record whose nesting sits between fields needing padding, and a record returned by value — so the bridge itself needed no change. A record reached from inside itself is refused where it is written, having no end to its leaves · risk HIGH · depth DEEP → DEEP · issue #209
+
+- 2026-09-04 · [[Format]], [[examples/README]] · line a record's spread up with the fields beside it, and show the boundary working on something whole. A record written as a change to another opens with `..`, which the formatter read as the line above carried on, so the spread sat one level deeper than its own siblings; four places in the standard library carried the misalignment, and neither idempotence nor token preservation could see it because neither looks at shape. Two examples come with it: a window, and Snake — a whole program that holds state across frames, grows an array, reads input, and makes some forty boundary crossings a frame. Uncapped it runs at about eleven hundred frames a second, which is a tenth of the budget a hundred and twenty frames allows · risk LOW · depth SHALLOW · issue #206
+
+- 2026-09-04 · [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[Type Check Foreign]], [[Pudu FFI Bridge]], [[Pudu FFI C++ Fixture]], [[ADR-0018 Calling a Library Written Elsewhere]] · make every admitted scalar and flat-record foreign crossing tell the truth. The upper half of a returned `UInt64` no longer becomes a negative number when its carrier bits are widened; signedness is restored from the declaration for direct results and record fields. `Str` now crosses as UTF-8 rather than process-locale bytes, including pointer fields in by-value records; invalid bytes are `E7025`, while a nought text field is `E7024` rather than silently becoming unit. `()` is result-only, functions and records expose the bridge's 32-item capacities at their declarations, and opaque handles stay top-level where leasing and owned release apply. Oversized records name their 32-field limit, exact-limit declarations remain admitted, and the C++ conformance surface exercises signed extrema, every scalar class, full-width unsigned values, Unicode record text, void, malformed text, and nought text · risk HIGH · semantic 0.6.0-draft→0.6.1-draft · depth DEEP→DEEP · issue #204
+
+- 2026-09-03 · [[Type Check Import]], [[Type Check Safety]], [[Type Env]], [[grammar/pudu]], [[Std App Health]], [[Eval Method]], [[Eval Value]] · make a declared restriction follow its function rather than the spelling that reached it. An imported `unsafe` function became ordinary on import and an imported `comptime` one lost its transitive guarantee, so both boundaries held inside a module and dissolved at the edge — the edge where [[ADR-0018 Calling a Library Written Elsewhere]] recommends bindings live. An imported signature now carries the capabilities and compile-time purity it was declared under, every name a value is reached by inherits them, and a callee is judged by the whole path it was written as, so `Bindings.open`, an aliased `B.open`, and a selected `open` are one function with one requirement. A compile-time body is judged the same way, which turned up two health accessors calling ordinary functions behind a `comptime` claim; they are compile-time now and ask their own reading directly. The built-in method vocabulary moved to [[Eval Method]], returning [[Eval Value]] to 328 lines · risk HIGH · depth MEDIUM→DEEP · issue #200
+
+- 2026-09-04 · [[Foreign Call]], [[Eval Foreign]] · make text a library returns arrive as text. A function declared `-> Str` handed back the address it crossed as, while the checker had already called it a `Str`, so a program printed a number where it had asked for a string and nothing said otherwise — silently wrong, which is the failure this boundary exists to prevent. The bytes are copied out of the library's own storage now, which ends the question of whose buffer it was: a static table, one reused on the next call, or one the caller was meant to free are all the same to a program holding its own copy. A nought address is refused rather than read through, and is not quietly the empty string · risk MEDIUM · depth MEDIUM · issue #202
+
+- 2026-09-04 · [[Language Server]] · stop the suite hanging at random. The generator for the JSON round-trip property recursed at a size that never fell, making it a branching process with mean offspring of exactly one; such a process ends with probability one and has no finite expected size, so nearly every value was small and occasionally one was astronomical — a suite that usually passed and sometimes never finished. The depth halves at every step now, bounding it structurally rather than statistically, and the generator leans towards containers so the property tests more structure than before rather than less · risk LOW · depth SHALLOW · issue #200
+
+- 2026-09-03 · [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[Type Check Foreign]], [[ADR-0018 Calling a Library Written Elsewhere]] · let a record cross by value. A boundary admitting only scalars admits almost nothing real: a colour, a point, and a rectangle are what a library actually passes about, and every raylib call that draws anything takes one. The record is an ordinary Pudu record, declared beside the block that names it, built and read and matched the ordinary way; it crosses when every field crosses, one level deep, in the order the declaration writes them. Where a field sits inside one is asked of the platform rather than calculated, because a calculation is right on the machine it was written for and silently wrong on the next. A record of records and a field that cannot cross are both refused where they are written. Proven through the shim before anything was built on it: four bytes packed into a register, a record of two classes with padding between them, and a record returned by value · risk HIGH · depth MEDIUM→DEEP · issue #200
+
+- 2026-09-03 · [[Foreign Call]] · stop asking the dynamic linker for the same function on every call. A foreign call resolved its symbol each time it ran, which is a lookup through the linker's tables and a fresh copy of the name to hand it — paid once per call in a loop that may run millions of times, which for a library worth calling from a game is the ordinary case rather than the exotic one. An address does not change for the life of the process, so it is remembered, and the read is lock-free because a race costs one redundant lookup and no correctness. Measured over two hundred thousand calls against a pure-Pudu loop of the same shape, the boundary cost fell from 1.7µs to 0.25µs a call · risk LOW · depth MEDIUM · issue #200
+
+- 2026-09-03 · [[Type Check Safety]], [[Type Env]], [[grammar/pudu]] · let a compile-time function call the function it was given. The rule refused every callee it could not name as compile-time, which included every parameter and local — so higher-order compile-time code was unwritable, and the refusal bought no guarantee, because what a fold may reach is already decided when it folds, where an effect is refused at the point it happens and names the effect rather than the indirection. The question is three-way now: a declared function that cannot fold is still refused early, where the diagnostic is best, and what nothing is known about is left to the fold. What is known is held in a map rather than a list, which the call site asks at every call · risk MEDIUM · depth MEDIUM · issue #200
+
+- 2026-09-03 · [[Type Value]], [[Type Unify]], [[Type Check Rule]], [[Parser Type]], [[Parser Capability]], [[grammar/pudu]], [[ADR-0009 Effects in the Type]] · put a function's requirement in its type, so it travels with the value rather than with the name. An unsafe function stored in a variable, returned, or handed to a parameter used to become an ordinary one; three spellings of the same escape are refused now. `unsafe(raw) fn(Int) -> Int` is a type a parameter can accept, which is what keeps a safe wrapper writable — it grants what it needs in one small region and stays ordinary to its own callers. The requirement is a wrapper rather than a field, so the ordinary function type is untouched and carries no empty set, and it is held as bits because two types are compared on every unification. Every call is answered once, at the one point every callee reaches · risk HIGH · depth MEDIUM→DEEP · issue #200
+
+- 2026-09-03 · [[Foreign Ownership]] · make teardown end. Waiting without a bound for every lease to close was a program that hangs on exit with nothing said whenever a foreign call does not return — the one failure that hides every other. Teardown now waits a bounded five seconds expressed as an STM deadline rather than an asynchronous one, reclaims everything nobody is inside, and leaves alone anything still leased, because freeing an address another thread is holding is the exact fault this store exists to prevent · risk MEDIUM · depth MEDIUM · issue #200
+
+- **2026-09-03 — issue #200 review hardening:** Foreign handles now reject qualified basename
+  laundering, retain an atomic lease across native calls, and clean unreleased claims at evaluator
+  teardown through the exact declared native release symbol. LSP hover and definition select
+  foreign declarations by resolved identity so shadowing cannot inherit false provenance.
+
+- 2026-09-03 · [[ADR-0018 Calling a Library Written Elsewhere]], [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[Type Check Foreign]], [[Type Interface]], [[Semantic Interface]], [[Doc]], [[Lsp Server]] · make native resource boundaries usable without turning addresses into integers. A foreign block may declare opaque nominal handles and an owned result names the exact same-block function that releases it. Release shape is checked statically; null ownership, use after release, duplicate ownership, and repeated release are refused before another native call begins. Exported binding modules preserve canonical handle identity across imports. A test-only C++ object crosses through an `extern "C"` surface, is read, and is destroyed exactly once, proving real object lifetime without admitting mangled ABI, layout, templates, or exceptions. A local function may map to an exact native spelling with `symbol`, preserving Pudu naming and editor inference for APIs whose exported names do not fit the language grammar; empty symbols are refused before loading. A separate headless integration gate builds the pinned Raylib 6 shared library and calls `GetRandomValue`, `MemAlloc`, and `MemFree`, proving scalar crossing and owned release through the platform loader against a real ecosystem library. Hover, definition, outline, and completion expose inferred handle signatures while retaining the asserted foreign provenance · risk HIGH · semantic 0.5.0-draft→0.6.0-draft · depth MEDIUM→DEEP · issue #200
+
+- 2026-09-02 · [[Std App Config]], [[architecture/STDLIB]] · make typed configuration refusals keep
+  their provenance. Whole, truth, and exact-decimal reads now report the key, source layer, and
+  supplied text; the previously documented fractional reader is implemented and malformed decimals
+  remain typed failures. The application fixture grows to forty-two checks · risk MEDIUM · depth
+  MEDIUM→MEDIUM · issue #196
+
+- 2026-09-02 · [[Std Http Client]], [[Std Net]], [[Std Tls]], [[Eval Socket]], [[Eval Tls]],
+  [[Eval Effect]], [[Eval Value]], [[Eval Builtin Definition]], [[Semantic Prelude]],
+  [[Type Check Prelude]],
+  [[architecture/STDLIB]], [[architecture/WEB]] · prove the client
+  against the public web as well as against itself. A scheduled and manually dispatched integration
+  gate fetches the IANA-reserved example
+  domain over both HTTPS and HTTP, then fetches a documented JSONPlaceholder resource, requiring a
+  successful status, stable HTML markers, and typed JSON fields through the same
+  `Std.Http.Client.fetch` path a
+  program calls. The ordinary suite keeps its controlled
+  loopback server: DNS, certificate stores, internet access, and someone else's uptime are evidence
+  of interoperability, not deterministic pull-request dependencies, while malformed framing,
+  redirect, credential, and size-limit refusals still require a server the fixture controls. The
+  first public run found that HTTP/1.1 chunk delimiters were being returned as response content; the
+  client now removes transfer framing, checks the body limit after decoding, and stops the transport
+  read at the body allowance plus bounded framing space instead of allocating an unbounded answer
+  before reporting `TooLarge`. Every request now also has a thirty-second default deadline that a
+  caller can replace with `within`; one monotonic budget covers resolution, connect, TLS handshake,
+  send, read, and every redirect rather than restarting for each operation. Timeout interruption
+  closes sockets that have not completed connection or verification, and expiry is a typed `TimedOut`
+  refusal. Loopback fixtures retain both framing and timeout regressions without needing the web
+  and separately named timeout effects preserve the source ABI of existing direct network calls.
+  The closed builtin tags and name table move to [[Eval Builtin Definition]], preserving the
+  established `Eval.Value` import surface while returning that implementation below 500 lines
+  · risk MEDIUM · depth MEDIUM→MEDIUM · issue #196
+
+- 2026-09-02 · [[Std Http Server]], [[Std Http Server Route]], [[Std Http Server Reply]], [[Std Db]], [[Std Db Session]], [[Eval Value]], [[2026-09-01-production-stdlib-recovery]] · finish the two modules that outgrew a page, and find why the full gate never finished. `Std.Http.Server` was 666 lines and `Std.Db` was 768, and both had been left whole on the argument that splitting them needed a wall of forwarding functions. They did not: routing answers what a request means without a connection, a reply is the one part of serving built with nothing else in hand, and a session is what a connection holds between statements. Callers import the piece they use, and the fixtures that guarded each — thirty-five checks and thirty-three — pass unchanged, which is what a no-delta guard is for. The gate that had been recorded as impossible on this host was neither killed nor short of memory; it was spinning, and the reading was wrong because output was block-buffered, so the last line printed named a group that had already passed and every conclusion drawn from it pointed at the wrong place. Through a pseudo-terminal the line buffers and the true position is `structured scopes join every task they start`. Releasing a child from its scope removed it by comparing values, and comparing two closures compared the environments they captured; a closure's captured environment reaches its own scope, so the comparison had no end, and extending a scope to the root module made every release walk the whole program. Closure equality is now identity over name, receiver and function — the question a release is actually asking. The unfiltered suite completes green at 309 groups with no falsification · risk MEDIUM · depth MEDIUM→DEEP · issue #195
+
+- 2026-09-01 · [[Evaluator]], [[Eval Env]], [[Eval Handle]], [[Eval Socket]], [[Eval Concurrent]], [[Eval Entropy]], [[Std Random]], [[Std Sync]], [[Std Db]] · harden recovered runtime resources for embedded production use. Every evaluator run now owns isolated file, socket, worker, channel, mutex, and cell stores, and teardown stops its workers before closing only its sockets and files; one concurrent evaluation can no longer clear another's process-global tables. Bounded channels use constant-time `Seq` queue operations. Mutexes record their acquiring host thread and reject foreign or repeated release instead of manufacturing a second permit. SCRAM client nonces use a reviewed cross-platform operating-system entropy provider, with no clock or deterministic fallback, and both entropy requests and PBKDF2 counts are bounded before arbitrary-precision values become host allocations or iteration counts. Focused gates pass at Concurrent 22, Net 10, HTTP server 35, DB 33, and UUID/entropy 24; the durable unfiltered gate remains required after an earlier run produced 190 successful groups and then terminated without a falsified property · risk HIGH · depth MEDIUM→DEEP · issue #193
+
+- 2026-09-01 · [[2026-09-01-production-stdlib-recovery]], [[architecture/STDLIB]], [[src/Std/_MOC]], [[src/Pudu/Eval/_MOC]] · recover the in-progress issue #193 branch into the FMCF contract before further implementation. Add the missing mirrors for bytes, streams, paths, CSV, UUID, time formatting, benchmarks, concurrency, channels, synchronization, TCP networking, HTTP serving, PostgreSQL protocol/client, and their runtime boundaries; record that file presence is not production readiness, the omnibus branch exceeds the delivery size gate, and focused plus durable full validation and independent review remain required · risk HIGH · depth n/a→specified · issue #193
+
+- 2026-09-01 · [[Pudu REPL]], [[Repl Answer]], [[Repl Session]], [[2026-08-31-static-repl-inspection]] · make asking for a type a static operation. `:type` used the ordinary submission path, so `:type print("TYPE_SIDE_EFFECT")` printed `TYPE_SIDE_EFFECT` before naming the expression `Result[(), Str]`; discarding the value did not discard the effect, and probing a session could replay effects entered earlier. `inspectEntryType` now assembles and compiles the same interactive buffer and stops before evaluation, returning the real source window, compiler diagnostics, and inferred expression type. Both `:type` and completion consume that one probe, so an invalid expression keeps its source-relative diagnostics, a statement says `no type`, and `1 / 0` can be inspected as `Int` without producing the `E7004` runtime diagnostic that proves it ran. A valid expression carrying a warning prints that warning and then its type; only errors are terminal, because a warning never made the expression ill-typed · risk MEDIUM · depth MEDIUM→MEDIUM · issue #189
+
+- 2026-08-31 · [[Std Log]], [[architecture/STDLIB]] · a program can say what it is doing to someone who is not watching. `print` is enough for a script and not enough for anything unattended: no level, so nothing can be turned down; no name, so nothing can be told apart; no fields, so nothing can be searched. A `Logger` carries those as a value, and a line built from it inherits them — which is what lets a request identifier be attached once where the request is known rather than at each of the twenty lines that mention it, the place it is forgotten. Making a line is separate from writing it, as shaping is from writing in [[Std Fmt]], so the whole of the module is checked by comparing values and a library that logs can hand its lines to whatever its caller chose rather than write to a stream the caller did not pick. A format is a **function on a `Line`** rather than a set of options on the logger, so the three that ship have no privileged access and a fourth is a function a program writes: `logfmt` makes every part a pair, message included, because a trailing message is the one part found by counting words from the left and position is what breaks when a field is added; `pretty` puts when, how bad and who first and unlabelled for the reader at a terminal; `json` writes every value as a string, since a field holding `00123` is not a number and a reader that guesses will eventually guess wrong. Levels are ordered so a threshold is a comparison rather than a set, and `Silent` is a level rather than a separate switch — "off" is a threshold like any other, and a flag is a second thing to forget — which also lets a setting spelled `off` or `none` be read by `levelFrom`. The timestamp is given and never read from a clock, so a line is a pure function of what it was told and two runs are comparable; reading the clock is one line at the edge of a program rather than a hidden effect in every call. A value carrying a space, a quote, or a control character is quoted and escaped, matching what [[Std Json]] already does, because a log ingests whatever the program was handed and a stray control character is how a reader ends up parsing something other than what was written; text with nothing to escape is answered unchanged, so the character-by-character pass is taken only by the text that needs it. A seventy-six-check fixture covers a threshold at every level, a field added for one line that must not stay on the logger, a repeated key that keeps both entries, an object that must survive a quote in a key, and a failure that must come back unchanged after being reported · risk LOW · depth SHALLOW→MEDIUM · issue #186
+
+- 2026-08-31 · [[Std Test]], [[Std Test Property]], [[architecture/STDLIB]] · a program can state what it expects. Every test in this repository counted to a number and returned it, and a program written in Pudu had no assertion, no suite, and no way to say which of forty checks broke. A check is a value and running a suite is a pure function from one value to another, which is what lets a suite be built programmatically, read before it runs, run twice with the same answer, and — the test of the design — checked by comparing reports rather than by reading output. Nothing throws, so one run reports every failure rather than the first; a failure says what it expected, what it found, and the path that reaches it, because a suite answering "thirty-nine of forty" has told the reader the least useful true thing about their program. A pending check is counted apart from both, since counting it as a pass lets a suite quietly shrink by deleting what has not been done — a defect this module's own fixture caught in it. A table of cases becomes one named check per row, named by a function rather than by a template with holes in it — a template is a small unchecked language inside a string and a function is checked against the row's own type. A skipped check is pending rather than absent, so a suite cannot quietly shrink on the machine where a condition is false, and focusing is a filter over a suite rather than a mark on a check, which a value does not need. [[Std Test Property]] generates values and reduces a counterexample before reporting it, halving rather than stepping so a failure at a million reduces in about twenty tries, and takes its seed rather than a clock: a property check is a pure function of that seed, reports it beside the counterexample, and can therefore be repeated exactly instead of run again and hoped about · risk LOW · depth SHALLOW→MEDIUM · issue #184
+
+- 2026-08-31 · [[Std Fmt]], [[Eval Operator]], [[architecture/STDLIB]] · settle how a value is shaped before it is written. [[Std Out]] holds the decisions about writing; nothing held the decisions about shaping, so a program aligning a table or padding an identifier assembled the same helpers at each call and `Std.Text.padLeft` was the only piece that shipped. A `Spec` carries width, fill, alignment, sign and grouping as a value, built once and reused, with no format string and nothing parsed at run time — which is the constraint the module was reserved under, and means a wrong spec is a type error rather than a line that comes out wrong. A width is a least width, because losing characters is worse than losing a column, and `truncated` is how the other thing is asked for by name. `zeroPadded` keeps the sign in front of its zeros, and grouping counts digits rather than the sign, which are the two places a padding helper written by hand goes wrong. `fixed` takes a `Decimal` and never a `Float`: a figure shown to two places is money or a measurement, and admitting the type that cannot hold those exactly would reintroduce at the last step the error [[Std Decimal]] exists to prevent. Found while writing its tests: a negative decimal literal checked and then could not run, because negation reached `Int` and `Float` and fell through for `Decimal` while `decimalNegate` sat unused — so `-1.50d` was something a reader could write and not use · risk LOW · depth SHALLOW→MEDIUM · issue #181
+
+- 2026-08-31 · [[Std Http]], [[Std Url]], [[architecture/STDLIB]] · write the lookup tables as tables. `Http.reasonFor` and four smaller siblings were runs of comparisons — first nested `if`s, then a flat `match` — because a `Map` built inside the function is rebuilt on every call and loses to both. A `const` at module scope is evaluated once, and that is what makes a table a table: 20000 lookups at `-O0` cost 236ms for code 404 against the match's 384ms, 230ms for code 500 against 520ms, and 212ms for an unnamed code against 598ms, while the match's advantage survives only at the first few entries — which a status table is not read at. The `const` form is also the only one whose cost does not depend on where the answer sits or how large the table grows. `isHopByHop` becomes a `Set` and a membership test rather than an eight-way comparison. The twenty-three-check fixture that guarded the previous two rewrites guards this one unchanged, which is what a no-delta guard is for · risk LOW · depth SHALLOW→SHALLOW · issue #166
+
+- 2026-08-31 · [[Eval Operator]], [[Eval Install]], [[Std Mappable]] · let a trait implementation for a sum type be called. An implementation is written for the type — `impl Named for Option[Int]` — and the value that reaches dispatch is one of its variants, so looking for the member under `Some` found nothing. The program checked and then failed at the call with an error naming `a Some`, a type the reader never wrote: the checker and the evaluator disagreeing about the same correct program, which is the hardest kind of failure to read. A member on a variant is now looked for on the sum that owns it first, and on the variant afterwards so nothing keyed there stops working. The mechanism already existed for declared sums; the wired-in ones were simply never registered, so `Option` and `Result` were the two types most likely to be reached for and the two that could not be. [[Std Mappable]] gains its `Option` implementation, so `over` and `filled` now serve `Array`, `Option` and [[Std Tree]] from one definition — which is what a trait over the container was for. Covered for a wired-in sum, for both of its variants, for `Result`, and for a program's own sum · risk MEDIUM · depth MEDIUM→MEDIUM · issue #177
+
+- 2026-08-31 · [[ADR-0014 Parameters of Higher Kind]], [[grammar/pudu]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Method]], [[Syntax Tree]], [[Parser Declaration Generic]], [[Std Mappable]] · a type parameter may stand for a constructor. `map` was written five times across `Array`, `Option`, `Result`, `Iter` and `Tree`, and the five could not be related to one another: a trait could not say `F[A] -> F[B]`, because a parameter stood for a type and applying one was refused. A parameter now states how many arguments it takes — `F[_]` one, `F[_, _]` two, a bare `T` none — written in the declaration and never inferred from use, so the declaration says what the parameter is and a wrong application is reported where it is written rather than at whichever use came second. A trait may take such a parameter, so `trait Mappable[F[_]]` is admissible and an implementation names a bare constructor. Unification solves a parameter against a constructor of the same arity and its arguments pairwise; a constructor is never partially applied and never a computation over types, which is what keeps solving terminating and keeps a mismatch about two constructors rather than two unsolved shapes. [[Std Mappable]] proves it carries its weight: `over` and `filled` are written once against the trait and serve `Array` and [[Std Tree]] alike, where before each would have been written per container. `Option` is deliberately absent — a trait implemented for a sum checks and then cannot be called, since the value is a variant and the member is looked for there, which is a separate defect rather than a limit of this one. An unbounded parameter stays opaque: it says how many arguments its constructor takes and never which constructor it is, so nothing may be read from it, and a body that assumed otherwise is refused · risk HIGH · semantic 0.4.0-draft→0.5.0-draft · depth MEDIUM→DEEP · issue #174
+
+- 2026-08-31 · [[Type Formation]], [[grammar/pudu]] · refuse a type parameter given type arguments instead of silently dropping them. `F[Int]` formed its arguments and then discarded them, so it and `F[Str]` were the same `F` and unified: `fn swap[F](value: F[Int]) -> F[Str] { value }` checked clean, promising one type and delivering another with nothing reported. A parameter stands for a type and not for a type constructor, and `E3038` now says so at the span of the application, naming the parameter and pointing at the two things a reader writing it means — a generic type they can name, or a second parameter. Nothing that was legal stops being legal: every standard-library module and every fixture is unaffected, since none applied a parameter. This is what parameters of higher kind would need rather than what they would replace — if one is ever declared to take an argument, this is the check that reports the case where it was not · risk LOW · depth SHALLOW→SHALLOW · issue #175
+
+- 2026-08-31 · [[ADR-0013 Ordered Set Literals and Membership]], [[grammar/pudu]], [[architecture/SEMANTICS]], [[Syntax Tree]], [[Parser Expression]], [[Type Check Collection]], [[Evaluator]], [[Format]], [[Repl Outline]] · make Set a first-class surface collection without inventing a second Set. `#{3, 1, 2, 1}` evaluates every written member from left to right and then becomes the existing persistent key-ordered `#{1, 2, 3}`; `candidate in values` occupies comparison precedence, evaluates candidate before container, and performs the balanced-tree membership lookup. The operator is deliberately Set-only until a separate protocol decides strings, arrays, maps, ranges, user types, borrowing, and complexity together. `#{}` takes its element from an annotation, argument, or return context, and unresolved statement-boundary literals report `E3037` rather than silently choosing a type. Parser budgets, macro hygiene, resolution, type recording, runtime `E7008`, canonical formatting, REPL outline, and the real LSP compatibility document all carry the syntax. Focused tests pin empty and trailing-comma forms, records inside literals, `for … in` disambiguation, comparison grouping, duplicate side effects, candidate-before-Set order, O0/O2 behavior, and warning-free compilation · risk MEDIUM · semantic 0.4.0-draft→0.5.0-draft · depth MEDIUM→MEDIUM · issue #130
+- 2026-08-31 · [[Std Tree]], [[architecture/STDLIB]], [[2026-08-31-std-tree]] · one value with a sequence of trees beneath it, and the walks worth asking of that shape. An outline, a menu, a syntax tree and a reporting line are the same structure written out separately in every program that needs one, and differing subtly each time — one counts the root, another does not. A node with no children is not a special case here but a node whose sequence is empty, which is the `Option` a hand-written hierarchy carries at every branch. `height` of a leaf is 1 and `size` counts the root, so the two never disagree about what a node is; a path is the child index taken at each step, so the root's path is empty and a found root is an empty path rather than an absence; `prune` takes a rejected node's subtree with it rather than promoting grandchildren into a parent that never had them. `foldTree` gives each node the answers from beneath it and is the fold the others follow from. What the language cannot express is recorded rather than faked: `Functor`, `Foldable` and `Traversable` each need a parameter standing for a type constructor, and [[grammar/pudu]] states v1 has no higher-kinded types, so `map`, `fold` and `mapResult` are named on this type as they are on every other collection — `map`, `zipWith`, `flatMap`, `fold`, `foldTree`, `mapResult`, `mapOption`, `sequenceResult`, `sequenceOption` and `unfoldResult` supply between them what those abstractions would have, one carrier at a time, since what the missing feature costs is sharing them rather than having them; and because evaluation is strict, an unbounded `unfold` does not finish, so `unfoldTo` bounds it by depth and the documentation says so. A sixty-seven-check fixture covers a leaf, a branching tree, all three orders, paths leading back to what search found, a search that finds nothing, pruning that does not promote, bounded and self-ending growth, and a transformation that fails partway · risk LOW · depth SHALLOW→MEDIUM · issue #156
+
+- 2026-08-31 · [[Std Out]], [[Eval Io]], [[Eval Effect]], [[Eval Value]], [[Semantic Prelude]], [[Type Check Prelude]], [[architecture/STDLIB]] · say how output is written, rather than only what. `print` takes text and ends the line, so every other decision — what goes between the pieces, what ends the line, whether it is output or errors, how far it is indented — was assembled at the call site, where it could not be named or passed and was rewritten each time. A `Printer` holds those decisions as a value, built once and handed to whatever writes, so a function that reports something takes the printer to report through. The defaults are the familiar ones, a space between pieces and a newline at the end. Rendering is separate from writing: `rendered` answers exactly the text a write would produce, which is what lets every configuration be checked by comparing values instead of capturing output, and every writing function is stated in terms of it. A prefix applies to every line of a piece rather than only the first, so indenting a block indents all of it and indenting an indented printer nests. `print` is `hPutStrLn` and always ends the line, so an empty ending was not merely unspelled but unimplementable: `printPart` and `printErrorPart` join the prelude to write text and leave the line open, which is what a prompt, a progress report, and a line built from several writes all need. Typed formatting remains [[Std Fmt]]'s, still carrying no run-time format-string interpretation. A thirty-five-check fixture covers nothing to print, an empty ending, an empty piece, a piece that already spans lines, a separator that introduces one, nested and negative indents, and builders leaving the printer they were given alone · risk MEDIUM · depth SHALLOW→MEDIUM · issue #170
+
+- 2026-08-31 · [[Language Server]], [[Lsp Protocol]], [[Tooling]] · keep an editor's session alive through what an editor sends. Reading a frame answered one `Maybe`, and the loop read an absent value as the stream ending, so the server stopped on anything it could not decode — and stopped with a success status, so the editor reported a clean shutdown for a session that had faulted. Six kinds of ordinary traffic did it, the worst being a client's own reply: a response carries `id` and `result` and no `method`, which every client sends the moment a server asks it anything, and it was indistinguishable from a broken frame. Reading now answers which of four things happened. A frame that could not be read costs that frame and nothing else, because its body was still exactly `Content-Length` bytes and the stream is still aligned; a frame with no length, or one that stopped short, leaves nothing to resynchronise on and ends the session with a failing status and a reason on the error stream — the truncated case used to wait for bytes that were never coming. Failures while compiling or answering are caught too, and answered with an error to the request that caused them rather than taken out on the session, with the replies forced inside the guard since `answer` builds them lazily. `test/lsp-robustness.mjs` drives nine sessions of exactly this traffic and joins CI; it fails on all six counts against the code before this · risk MEDIUM · depth MEDIUM→MEDIUM · issue #168
+
+- 2026-08-31 · [[Std LruCache]], [[Std PrefixTrie]], [[architecture/STDLIB]] · a map that knows when to let go, and keys reachable by their beginning. A cache without a bound is a map that only grows, which is a leak with a helpful name; [[Std LruCache]] holds a capacity and discards by least recent *use*, so reading keeps an entry alive. That is why its `get` answers a cache alongside the value — a read changes which entry is next to go, and one that did not record itself would let an entry the program depends on be evicted as unused; `peek` is the deliberate exception for looking at a cache rather than using it. The recency order is [[Std LinkedMap]]'s `touch`, reused rather than rewritten, which is the first test of whether that module was worth having. [[Std PrefixTrie]] holds text keys as paths through their characters, so walking a prefix touches one node per character of the prefix rather than one per entry, a stem shared by many keys is stored once, and results arrive in key order without anything being sorted; `longestPrefixOf` needs no comparison afterwards because every prefix of a text lies on one downward walk. Removal prunes, so a trie filled and emptied does not keep the skeleton of every key it held. A hash map was considered and is **not** shipped: `Std.Crypto` has only SHA-256, no `Hash` trait exists, adding one is a language decision belonging beside `Eq` and `Ord`, and it could not win anyway now that `Map` is a balanced tree and nothing in Pudu reaches a bucket in constant time — the reasons are recorded under Deferred rather than left to be rediscovered. A forty-two-check executable fixture covers the parts that are easy to get wrong: that a read counts as use and a peek does not, that shrinking a capacity discards enough rather than one, and that removing a key gives back the path it did not share · risk LOW · depth SHALLOW→MEDIUM · issue #163
+
+- 2026-08-31 · [[Std SortedMap]], [[Std LinkedMap]], [[Std EnumMap]], [[architecture/STDLIB]] · three maps for the three questions `Map` cannot answer. `Map` answers what is under this exact key, and answers it well; a rate table, a version range, and a histogram bucket instead ask what is under the *largest key not greater than* this one, and could only get it by reading every entry out and scanning. [[Std SortedMap]] holds its entries sorted in one array and finds a key by halving the range, so `floor`, `ceiling`, `lower`, `higher`, `range` and `nth` each look at a handful of entries rather than all of them; it also takes the comparison from the caller, which is what makes ordering by a record's field or downwards expressible at all. [[Std LinkedMap]] is the separate insertion-ordered type that [[Eval Keyed]]'s Grill Log left open when it settled that the built-in map must not be one — for the programs that hand something back to a person in the order somebody wrote it, which today keep an array of keys beside a map by hand and forget to update one of them. Its `insert` deliberately does not move a key that is already there, and `touch` is the recency order under its own name. [[Std EnumMap]] removes an `Option` the caller already knew the answer to, as `Std.NonEmpty` does for a sequence: over a fixed domain every key has a value by construction, so `get` answers `V`, the domain cannot grow, and a key from outside it is a defect rather than an input. None of the three is a primitive. A thirty-eight-check executable fixture covers the boundaries these get wrong — a bound landing exactly on an entry, a reversed range, a re-insertion that must not move anything, an absent key, an empty structure · risk LOW · depth SHALLOW→MEDIUM · issue #159
+
+- 2026-08-31 · [[Eval Keyed]], [[Eval Value]], [[Eval Order]], [[Eval Render]] · stop `Map` and `Set` costing the square of what they hold. Both were ordered association lists, so every lookup walked the list and building n entries and reading them back cost n²: measured at `--enable-optimization=2`, doublings to 16000 grew x3.55, x3.92, x4.12, where `bench/README.md` reads x2 as linear, and 16000 entries took three and a half seconds. [[Eval Keyed]]'s own Grill Log had chosen the list deliberately and named the condition for revisiting it — a benchmark showing a keyed collection on a hot path — and predicted the replacement would be invisible to callers; both held. They are now balanced trees keyed by the `OrdValue` the runtime already had, growing x1.97, x2.02, x2.02, with 128000 entries costing less than 16000 did before. The order moved to [[Eval Value]] because the keyed constructors are keyed by it and cannot be declared before it, which would have made the instance an orphan; that put the file 22 lines over the governance limit, so rendering moved out to [[Eval Render]]. A repeated key keeps the key it was first stored under and takes the new value — `insertWith const`, since `1` and `1.0` compare equal but do not print alike. An eighteen-check executable fixture pins the order, uniqueness, override, absence, and iteration promises that must not have changed, and a keyed case joins `bench/scaling.mjs` so the growth is watched rather than remembered · risk MEDIUM · depth MEDIUM→MEDIUM · issue #157
+- 2026-08-31 · [[Std Graph]], [[Std MultiMap]], [[Std Http]], [[Std Url]], [[architecture/STDLIB]] · the graph's adjacency becomes the multi-map it always was, and five lookup tables stop being control flow. `Map[N, Array[N]]` with the add-or-start-an-array dance written inline is what [[Std MultiMap]] was extracted for, so `addEdge` goes from six lines to two and `neighbours` from six to one; it fits because membership is already held apart from the edges, so a node that loses its last edge leaves the adjacency and stays a node. Measured at 4000 nodes: 6155ms before, 6204ms after, best of five, which is the same figure — the claim is readability and the measurement is what allows it to be made without a speed claim attached. Separately, `Http.reasonFor` was thirty-one nested `if`s closing `} } } } ...` on one line, with `methodFrom`, `versionFrom`, `isHopByHop` and `Url.defaultPort` the same shape smaller. A `Map` is the wrong fix and the reason is worth recording: [[grammar/pudu]] allows no top-level executable statements, so there are no module-level constants and a table is rebuilt on every call — for the common early codes that is six times slower than the ladder it replaced. A flat `match` is the right fix and beats both: 169ms against the ladder's 325ms on the common path and 603ms against 2255ms on the rest, while being the only one of the three that reads as a table. Two fixtures pin the behaviour, one of fifteen checks on the graph's edges and one of twenty-three on the tables at both ends and past the end, and both pass against the old and the new code, which is what makes them no-delta guards · risk LOW · depth MEDIUM→MEDIUM · issue #165
+
+- 2026-08-31 · [[Std BiMap]], [[Std MultiMap]], [[Std MultiKeyMap]], [[architecture/STDLIB]] · three maps for data `Map` cannot hold. A pairing — a currency code and its symbol, a user and their session — has no key side: which one it is depends on which way the program is going, and an ordinary map makes the other direction a scan. [[Std BiMap]] holds both, so `flipped` costs nothing, and answers the question `Map` never has to: a value can collide the way a key can, so `insert` displaces the earlier binding to keep both directions total and can leave the map no larger than it was, while `insertChecked` reports instead for input that was meant to be a bijection already. [[Std MultiMap]] keeps a grouping rather than building one, which is the half `Map.groupBy` leaves to the caller; its rule is that a key with no values does not exist, because the hand-written version forgets to remove the key when its last value goes and leaves one that `containsKey` answers true for and `get` answers nothing for. Every write funnels through `setAll` so that rule is stated once. [[Std MultiKeyMap]] is justified only by partial lookup, and says so on its own type: composite keys already work, since `Map[(A, B), V]` is valid and the runtime's order handles tuples, so what is new is asking about one part of a key without reading every entry. It keeps an index per part, which is a third structure written on every write in exchange for the two questions. A forty-two-check executable fixture covers the invariants that break quietly — a colliding value displacing rather than duplicating, a key disappearing with its last value, and a re-insert that must not record a pair in an index twice · risk LOW · depth SHALLOW→MEDIUM · issue #161
+
+- 2026-08-31 · [[Std Json]], [[architecture/STDLIB]], [[2026-08-31-json-string-decoding]] · make JSON string handling one auditable boundary. `readText` now owns only the quoted-text cursor while a private flat dispatcher returns decoded text with its first unread position; the encoder uses the inverse escape table instead of a nested conditional ladder. Backspace and form feed are represented correctly, unnamed controls encode as `\u00XX`, raw controls and unknown escapes are typed failures, and UTF-16 high/low surrogate escapes compose into the Unicode scalar Pudu strings require. The public module remains at nineteen exports and below 500 lines. A focused executable fixture covers success, malformed input, exact error positions, Unicode, termination, and encode/decode regression under both O0 and O2. The standard-library architecture also records the shipped 32-module/945-export surface and admits Haskell precedents only where they add a Pudu invariant: `Tree`, accumulating `Validation`, and `These`, each reserved for its own feature · risk MEDIUM · depth SHALLOW→MEDIUM · issue #154
+
+- 2026-08-30 · [[Pudu Language]], [[Tooling]], [[2026-08-30-public-language-wiki]] · publish a reader-facing GitHub language book from current Pudu compiler, standard-library, test, fixture, and vault evidence. Twenty-seven focused pages separate values, algebraic data, pattern scope, loops, collection choice, task trees, constant evaluation, macros, references, and unsafe boundaries instead of compressing them into a feature survey; nine complete example modules pass the installed formatter and checker. The reference names current gaps—including sequential task evaluation, binder-carrying alternatives, higher-order safety metadata, ownership, overlap, FFI, native output, packages, and streaming—without presenting design targets as shipped behavior. The repository README is a short project index with no embedded program or layout inventory, while the versioned vault remains normative · risk LOW · depth n/a→MEDIUM · issue #152
+
+- 2026-08-29 · [[Language Server]], [[Pudu CLI]], [[Tooling]] · make recent language work reach the editor and the executable the machine actually runs: the real stdio session opens a clean compatibility document covering refutable conditions, refutable binding, repeated pattern matching, carrier propagation, and a diverging/value branch join; refresh installation explicitly replaces `~/.local/bin/pudu` and validates that installed binary rather than trusting the shared pre-release version; CI moves its official checkout and Node setup actions to their current Node 24-based major releases so a green build is free of the old Node 20 deprecation annotation · risk LOW · depth MEDIUM→MEDIUM · issue #150
+
+- 2026-08-29 · [[ADR-0012 Diverging Blocks Preserve Never]], [[Type Check Statement]], [[grammar/pudu]], [[architecture/SEMANTICS]] · preserve the type of a control transfer at the boundary of the block that contains it. A block ending directly in `return`, `break`, or `continue` cannot produce unit, yet resultless blocks were all typed as `()`, so a returning `match` arm failed to join an ordinary `Int` arm. Direct transfer endings now supply `Never`; genuinely fallthrough resultless blocks remain unit, and `let … else` no longer needs a private structural exception to recognize the same fact · risk MEDIUM · semantic 0.3.0-draft→0.4.0-draft · depth DEEP→DEEP · issue #146
+- 2026-08-29 · [[Format]], [[src/Std/_MOC]] · restore the clean integration gate after the propagation sweep: exhaustive test renderers now cover `LetElseStatement` and `WhileLetExpression`, the existing wrong-carrier fixture asserts `E3011`, and the twelve standard-library files named by CI are rewritten only into canonical whitespace with the formatter's token-sequence invariant · risk LOW · depth n/a→n/a · issue #148
+
+- 2026-08-28 · [[ADR-0011 Propagation Over Re-Matching]], [[Type Check Rule]], [[Type Check Statement]], [[Evaluator]], [[Eval Operator]], [[Syntax Tree]], [[Parser Declaration Block]], [[Name Resolution]], [[Macro Expansion]], [[Repl Outline]], [[Format]], [[grammar/pudu]] · say the rule the standard library was not following, and supply what makes it followable. `?` was implemented in every phase and called nowhere: `lib/` carried 49 arms spelled `case Err(e) => Err(e)` and 20 spelled `case None => None`, sixty-nine propagations written by hand beside the operator that performs them. `?` now reads its carrier from the enclosing function's declared result rather than from its target, so one operator serves `Result` and `Option` with no token to tell them apart and a mismatched target stays an ordinary type error. `let PATTERN = EXPRESSION else BLOCK` binds for the rest of its block, paid for by a fallback that cannot reach it — divergence asked of the block's ending rather than its type, since a block ending in `return` has no result expression and one without a result expression is `()`. Which form a `let` opens is one token of lookahead: a binding names a value. `E1057` rejects a pattern that cannot fail, `E3036` a fallback that can carry on. The sweep took `Err` pass-throughs from 49 to the 7 that are `Std.Result`'s own combinator definitions, and nested `match` from 26 to what decides something · risk MEDIUM · semantic 0.2.0-draft→0.3.0-draft · issue #136
+- 2026-08-28 · [[ADR-0010 Refutable Pattern Conditions]], [[Parser Expression Control]], [[Syntax Tree]], [[Name Resolution]], [[Type Check Expression]], [[Evaluator]], [[Repl Outline]], [[grammar/pudu]] · add `if let PATTERN = EXPRESSION` for one-success/one-fallback pattern branching. The subject evaluates once, successful bindings exist only in the then block, else remains optional, and branch values follow ordinary `if` unification. The surface node remains distinct so `:ast` and diagnostics show what the reader wrote, while semantic phases reuse the same pattern machinery as `match`. `E1056` rejects syntactically irrefutable patterns in favor of ordinary `let`. `Std.Http.formDecode` now composes its dependent `Option` operations and branches once instead of nesting two matches · risk MEDIUM · semantic 0.1.0-draft→0.2.0-draft · issue #129
+
+- 2026-08-28 · [[Parser Expression]], [[Parser Block]], [[grammar/pudu]] · let an operator start a continuation line. A condition or arithmetic expression too long for one line could be broken only by ending the line with the operator; putting it at the start of the next line reported `expected expression` at the operator, which is a diagnostic about the one character on the line that was not the mistake. It is decided by the operator rather than by indentation, and only operators with no prefix form continue: a line starting with one of those could not have begun a statement, so its only previous reading was a parse error and joining it cannot change a program that already had a meaning. `-`, `&` and `*` do have a prefix form, and `count()` followed by a line reading `-1` stays two statements. Once a leading-operator chain has already begun, however, meeting one of those three reports `E1055` instead of silently turning `1\n+ 2\n- 3` into seven followed by negative three; the parser carries that exact syntactic fact, and does not guess from indentation, braces, or the expression's AST shape · risk MEDIUM · depth MEDIUM→MEDIUM · issue #127
+
+- 2026-08-28 · [[Std NonEmpty]], [[Std Deque]], [[Std Heap]], [[Std Graph]], [[architecture/STDLIB]] · four collections whose shape answers a question `Array` and `Map` cannot. A sequence that states in its type that it holds something, so `first`, `last` and `maximum` answer values rather than an `Option` the caller already knew the answer to — and `group` at last has a way to say that a run of equal elements is never empty. A queue cheap at both ends, held as two arrays with the front one reversed, because an array is dear at its front and a breadth-first walk takes from the front on every step. A collection that always knows its smallest element, for wanting the next thing rather than everything in order: the ten smallest of a million without putting the million in order. And nodes with directed edges — topological order, cycles, strongly connected groups, components, shortest path — where the ordering answers `None` on a cycle rather than handing back an order that quietly is not one. None of the four is a primitive; each is written in Pudu against what was already there, which is the test of whether that surface is enough · risk LOW · depth SHALLOW→MEDIUM · issue #125
+
+- 2026-08-28 · [[Eval Io]], [[Eval Effect]], [[Eval Value]], [[Semantic Prelude]], [[Type Check Prelude]], [[Std Env]] · ask the machine where to write instead of writing a path down. A program that needed scratch space had nowhere to ask, so the only thing to do was spell `/tmp` into the source — which is one family of operating systems' answer, is not another's, and is not this one's answer when the machine is configured with a different one. `temporaryPath` asks the platform, and `userHome` asks it by both names it uses, so `Std.Env.homeDirectory()` stops answering `None` on every system that calls it `USERPROFILE`. The wrappers are named apart from the builtins they call, because a wrapper sharing its builtin's name calls itself. The fixtures and the effect test now ask as well, and the test asks for a name nothing else holds rather than a fixed one two copies of the suite would have raced for · risk LOW · depth SHALLOW→SHALLOW · issue #122
+
+- 2026-08-28 · [[Eval Io]], [[Eval Effect]], [[Eval Value]], [[Semantic Prelude]], [[Type Check Prelude]], [[Std Io]], [[Std Env]] · ask which character separates the pieces of a path rather than writing one down. `Io.join`, `Io.directoryOf` and `Io.nameOf` were built around a slash, so on a machine that writes a backslash `join` produced something that is not a path and `nameOf` answered with the whole of one; `Env.searchPath` split `PATH` on a colon and read the entirety of it as a single entry wherever the separator is a semicolon, which its own documentation already said it would not do. `pathSeparators` answers with the one to write first and the ones to recognise after, because a path that arrived from another machine still has to come apart correctly even though it is not the shape this one would have written · risk LOW · depth SHALLOW→SHALLOW · issue #122
+
+- 2026-08-27 · [[Type Check Method]], [[Type Check Prelude]], [[Lsp Server]], [[Lsp Documents]] · take the last two modules under the governance limit. What a program has without declaring it — the built-in constructors and the effect signatures — is a table rather than a rule, so it depends on nothing in checking and needed no capability at all, which is the only cut here that did not. What the server knows about each open document moves out of the protocol loop: the store is a value the loop threads rather than a mutable cell, so what a reply says and what the server holds cannot disagree part-way through answering · risk LOW · depth SHALLOW→SHALLOW · issue #115
+
+- 2026-08-27 · [[Pudu REPL]], [[Repl Answer]], [[Repl Options]] · separate what a colon command puts on screen from the loop that reads one, 565 lines to 408. Every one of those takes a session and answers with text, and none of them changes anything, which is what lets them be a module rather than part of the loop. `showState` takes the settings it reads rather than the whole loop context, because taking the context would have made this module import the loop and the loop import this, for one reference · risk LOW · depth SHALLOW→SHALLOW · issue #115
+
+- 2026-08-27 · [[Evaluator]], [[Eval Call]] · move calling, path reading, and task scopes out of the evaluator. `Eval.hs` is 364 lines, from 991 this morning. Two things arrive as a record — an argument is an expression and a function's body is a block — and calling, awaiting, and scoping keep record-free forms in the evaluator, so a caller that only wants to run something does not have to know there is one · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Evaluator]], [[Eval Loop]] · move the looping forms and the protocol a value is iterated by out of the evaluator, 828 lines to 620. A loop's body is a block and a block holds loops, so three things arrive as a record: a condition is an expression, a body is a block, and a sequence's `advance` is a closure the program supplied · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Evaluator]], [[Eval Program]] · separate running a program from evaluating an expression. The surface a caller reaches — an entry point, a module folded for its constants, and the linking that puts a dependency's declarations where the program can see them — depends on the evaluator rather than the other way round, so it takes no capability at all. Every other split in this codebase separated two halves of a real recursion; this one separates a surface from the thing it sits on, and an ordinary import states that exactly. 991 lines to 828 · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Type Check]], [[Type Check Statement]] · finish the checker's cut: what a block and its statements mean moves out, and `Type/Check.hs` reaches 400 lines from the 1071 it started at. Checking a value against an expected type goes with statements rather than expressions, because what it does is push the expectation into the constructs — a match's arms, an `if`'s branches, a block's result — and each of those is a statement's business. A statement needs three things back where an expression needs two, because a statement can declare and an expression cannot · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Type Check]], [[Type Check Expression]], [[Type Check Record]] · cut the checker where its recursion is not. What an expression's type is moves to one module and what a record construction is to another, 1071 lines to 576. Each takes a record of the few things it reaches back for — a block, a type pushed inward, a parameter binding — which is the shape the parser and the call checker already use, and the knot is tied once where declarations are checked. The clusters were chosen by measuring which called what rather than by counting lines: records reach back for two things, expressions for three, and signatures for none at all · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Tooling]] · make the build refuse a warning, in the one place that cannot answer "up to date" without compiling. The tree carries `-Wall` and never carried `-Werror`, and running it locally checked nothing because cabal decided there was nothing to do. On a fresh checkout there always is. It found a fixture bound twice in the test suite the moment it was turned on — one of the two results was being computed and thrown away · risk LOW · depth n/a→SHALLOW · issue #115
+
+- 2026-08-27 · [[Type Check]], [[Type Check Signature]], [[Evaluator]], [[Eval Env]], [[Type Env]], [[Source Text]], [[Tooling]] · make the warning gate do its work, and act on what it found. `cabal build --ghc-options=-Wall -Werror` was answering "Up to date" rather than building, so every report of a warning-clean tree this week checked nothing. Forced to rebuild it found twenty-six, among them an incomplete pattern in `withTally` that would have been a crash rather than a diagnostic had anything aborted inside it, a duplicate export, and three bindings left dead by earlier work — `positionValue`, `resolveCurrent`, and `run`. Separately, what a declaration must state about itself moves to a module of its own: an exported name owes its type, a trait member owes its own, and `Self` stays rigid while its trait is checked. None of it calls back into checking, which is what lets it be a module rather than an argument · risk MED · depth DEEP→DEEP · issue #115
+
+- 2026-08-27 · [[Lsp Server]] · offer the methods a program wrote, not only the built-in sets. `b.` on a type with an `impl` block offered nothing it declared, because the built-in tables answer for `Str` and `Array` and say nothing about anything a reader wrote — which is most of what they are writing. The documentation index already names the type each method was implemented for, so the two sources are offered together · risk LOW · depth MEDIUM→MEDIUM · issue #118
+
+- 2026-08-27 · [[Lsp Server]], [[Type Check]], [[Tooling]] · make the editor answer about what the cursor is on. Hover asked the documentation index, which holds declarations, so it could only ever name the function a cursor was inside: hovering `text` in `text.length()` reported `main : Int`, which is true of every position in that body. It now asks the checker for the narrowest expression there, and the checker records the names that *introduce* things as well as the uses of them, so a binding and a parameter answer about themselves. Completion after a dot offers what the value carries — the twenty-one methods on text rather than the two names the module declares — from the tables dispatch reads · risk MED · depth MEDIUM→MEDIUM · issue #120
+
+- 2026-08-27 · [[Tooling]] · let the editor stop the server. The client pushed what `start` answers with into the editor's subscriptions, and in version 9 of the language client that is a promise rather than something disposable — so nothing was registered to dispose, the editor had no way to stop the server, and it reported that stopping it timed out until it killed the process. The client itself is what is disposable. The session check now holds stdin open, as an editor does, so a server that ignores `exit` and stops only on end of input can no longer pass: ending the pipe made the two indistinguishable, which is why this reached a reader before it reached the build · risk LOW · depth SHALLOW→SHALLOW · issue #119
+
+- 2026-08-27 · [[Repl Session]] · stop a loaded file moving where the entry sits. The buffer is assembled as a list of line groups joined by one `unlines`, and the loaded file's text arrived carrying the newline every file ends with — so it became a second, the buffer held a blank line that counting the groups' lines did not, and every offset after it was short by one. Nothing about the text was wrong, so the buffer compiled and ran correctly the whole time; what broke was every question asked about a position. `:type` reported the runtime shape of whatever the misplaced window landed on, so `"hello"` came back as `string` rather than `Str` for the entire session once any file was loaded · risk MED · depth SHALLOW→SHALLOW · issue #117
+
+- 2026-08-27 · [[Repl Complete]], [[Repl Session]], [[Eval Operator]] · offer what a value carries after a dot. `[1, 2].` now completes the array methods and `"hello".` the text ones, from the same tables dispatch reads, so what the prompt offers and what a call finds cannot disagree. The receiver's type is asked for without running it — a reader pressing tab after `removeFile("notes")` has asked what a result carries, not for the file to be removed — and a receiver that does not type offers nothing rather than everything, because a list of names that do not apply costs more than no list · risk LOW · depth SHALLOW→MEDIUM · issue #118
+
+- 2026-08-27 · [[Repl Session]] · read a function written as a value at the prompt. `fn(x: Int) -> Int => x` was classified as a declaration, so it was parsed as one missing its name and answered `E1001: expected identifier` — for an entry that names nothing because it is not naming anything. The name is the only thing that separates the two, and the same held after `async`, where `async fn(..)` and `async with scope { .. }` were both refused. `:type` failed on all three for the same reason, and now reports `fn(Int) -> Int`; `async with scope` at the prompt now says a structured scope needs an async function rather than `expected (` · risk LOW · depth SHALLOW→SHALLOW · issue #116
+
+- 2026-08-27 · [[Type Formation]], [[Type Interface]], [[Type Env]], [[grammar/pudu]] · report a type a module does not declare (`E3035`). Only the head of a type path is resolved, because a later segment selects through a module and that needs types to decide; nothing then decided them, so an unfound qualified name became a nominal type of its own named after what was written. `Mp.Map[Str, Int]` was a different type from `Map[Str, Int]`, and the reader was told "expected Mp.Map[Str, Int], found Map[a, b]" — two names that read alike, about a type that never existed, at a line that was not the mistake. Judged only where the module named was actually read: a type a module really declares looks exactly like one it does not when its interface was never available, which is what made an earlier attempt report correct code in the standard library, so the qualifiers whose interface was found are now carried alongside the names they brought · risk MED · depth MEDIUM→MEDIUM · issue #109
+
+- 2026-08-27 · [[Source Text]], [[Type Unify]], [[Type Env]] · take the last two quadratics out of reading a file. The line index added earlier accumulated into a lazy tuple, and `foldl'` forces what it accumulates only to weak head normal form — a tuple already is — so the offset and the running position each built a chain of unevaluated work as long as the text, paid for at the end and held in memory the whole way. A strict record fixed it. Separately, solving a variable to another variable left chains that every reader walked, and there are two walkers rather than one — `shallow`, which goes through the checker's state, and `resolveFinal`, which is an ordinary function and cannot write anything back — so shortening either alone changed nothing and both had to be done together: 4,516,579 walks became 22,513. Four thousand statements in one body now check in 0.34s against 13.05s and format in 0.14s against 7.42s, and both are linear where both were growing at better than the square · risk MED · depth MEDIUM→MEDIUM · issue #112
+
+- 2026-08-27 · [[Source Text]] · find a position without counting to it. `offsetPosition` folded over the first *n* characters of the text on every call, so it cost what it skipped, and everything that reports a position asks per token rather than once — laying out a file asked for every token it held, which made formatting cost the square of the file's size. Where each line begins is now built once, in the pass that already reads the text, and a position is a lookup. Formatting 4000 statements went from 7.42s to 1.23s and checking them from 13.05s to 2.88s. Found by `bench/profile.sh`, which named the cost centre, after `bench/scaling.mjs` said there was one to look for · risk MED · depth MEDIUM→MEDIUM · issue #112
+
+- 2026-08-27 · [[Evaluator]], [[Eval Env]], [[Tooling]] · add the tools for optimising the compiler, in the order they are worth using. `bench/scaling.mjs` builds inputs at doubling sizes and reports the ratio between them, which is what a growth problem looks like and what instruction selection never shows; `bench/profile.sh` names the cost centre; `bench/ir.sh` dumps one module's core, stg, cmm, and instructions at the optimisation the shipped build uses, and points at where a name appears in each. `pudu explain` answers the other question — what a Pudu program cost to run, in names looked up and closures called, because a Pudu program has no machine code and those are the costs this implementation has. Found straight away: a block costs the square of the statements it holds, filed as issue #112 · risk LOW · depth n/a→SHALLOW · issue #112
+
+- 2026-08-26 · [[Type Env]], [[Type Check]], [[Evaluator]], [[Eval Env]], [[Eval Match]], [[grammar/pudu]] · enforce a declared width on every value, not only on one written with a suffix. `fn add(a: Int8, b: Int8) -> Int8 { a + b }` called with `127, 127` answered `254`, and `let x: Int8 = 127` then `x + x` did the same, while `127i8 + 127i8` reported `E7005` as the grammar says it should. The evaluator built every suffixless literal as a platform integer on the stated assumption that the checker defaults an unconstrained literal to `Int` — true, but the literal is not unconstrained when an annotation or a parameter says otherwise. Inference now publishes what it settled on for each literal, keyed by its whole span so a program and its dependencies share one table, and the literal is built as the type it is · risk MED · depth DEEP→DEEP · issue #110
+
+- 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
+
+- 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
+
+- 2026-08-26 · [[Expand]], [[Evaluator]], [[Eval Builtin]], [[Eval Effect]], [[Tooling]] · give every diagnostic code one meaning. `E1049` meant both a statement written on the same line as another and a macro argument of the wrong kind; `E7005` meant both an integer that could not hold a result and a match no arm accepted; `E7002` meant both an evaluation limit and a built-in given arguments it does not accept. In each pair the grammar states one of the two, so the other moved: macro argument kind to `E1054`, a match with no arm to `E7011`, a built-in's arguments to `E7012`. A reader who looked one of these up was told about whichever meaning they found first. A CI check now refuses a code reported from two modules unless it is listed with why both sites mean one thing to a reader · risk LOW · depth n/a→SHALLOW · issue #3
+
+- 2026-08-26 · [[Eval Builtin]], [[architecture/STDLIB]] · give `Std.Text.Parse` the vocabulary a format needs, and a way to scan a run in one step. Absent before: `count`, so "exactly four digits" could not be said and an ISO date could not be expressed at all; `manyTill`, `sepEndBy`, `skipMany`, `option`, `lookAhead`, `notFollowedBy`; `newline`, `line`, `restOfLine`, `lineEnd`, so a line-oriented file could not be read and a `\r\n` file left a stray return on every field; `signed`, `hexadecimal`; and `label`, so a problem said what the grammar wanted rather than what the reader meant. `takeOf` and `takeNotOf` consume a run against a character set — the vocabulary `oneOf` and `noneOf` already take — through two new methods, `spanOf` and `spanNotOf`. Reading the lines of a 257 KB file went from 6.07s to 0.65s, and a FASTA file of that size from 6.93s to 0.75s. `explainIn` counts the line and column once, when a person is about to read it, so a problem says `line 3, column 1` rather than `position 18` · risk MED · depth MEDIUM→MEDIUM · issue #107
+
+- 2026-08-26 · [[Evaluator]], [[Eval Builtin]], [[grammar/pudu]] · make a parser able to reach a file. `Std.Text.Parse` held an index into the whole input and read with `charAt`, which walks from the start, so every character cost what had already been passed and a scan cost the square of its length — 64000 characters took 4.4s and the ratio per doubling was climbing past 2.5. `Input` now carries the text it has not read yet, advancing with two new methods, `drop` and `take`, that cost what they move rather than what the text holds; the same scan is linear and the ratio sits at 2.0. Separately, every loop stopped at 100000 steps, so no program could read more than that many characters whatever the parser did. A loop is now bounded only while effects are refused, which is exactly when a `const` is folded and a loop that never ends would be a build that never ends · risk MED · depth DEEP→DEEP · issue #107
+
+- 2026-08-26 · [[Evaluator]] · reach an implementation written for a sum from a value of one of its variants. `impl Shaped for Round` compiled, `shape.area()` type checked, and the program failed with `no field or method area on a Circle` — every method lookup used the variant's own name, and the implementation sits under the type that declares it. No trait method worked on any sum type, by either spelling, directly or through the trait, or behind a `dynamic`. All three lookups now try the variant and then what it belongs to · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Type Check Call]] · refuse a named variant used as a value through an import too. `Shapes.Circle(5)` resolved by name before qualified member typing was consulted, so the rule that keeps one spelling reaching the value never ran across a module boundary and the run-time failure it exists to prevent came back. Asking at the top of callee resolution catches it and, by answering rather than falling through, stops the local case reporting twice · risk LOW · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Evaluator]], [[Eval Env]], [[Eval Install]] · iterate a type by the `Sequence` it wrote. The checker asks for `begin` and `advance` first and falls back to a sum's payload only when neither exists; the evaluator did the opposite, so a program that implemented `Sequence` for its own list type checked against the implementation and then ran against the payload — a binder the checker called `Int` held a variant, reported as `cannot apply + to a Int and a Cons`, and with named payloads as `cannot iterate a Cons`. The two now decide in the same order. A value names the variant it is rather than the type that declares it, so each variant's owning type is recorded as it is installed, which is what lets a `Cons` reach `List`'s implementation · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Eval Match]] · make a record pattern match the name it writes. Matching compared fields and ignored the tag on both sides, which held while a record pattern could only name a record type — one shape, so the tag could not differ. A variant that names its payload broke it: `Add{ left, right }` and `Mul{ left, right }` declare the same fields, so `case Add{left, right}` accepted a `Mul` and an expression evaluator silently computed sums for products, with no diagnostic anywhere. Found by writing a recursive parser and getting 5 for `2*3` · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Type Check]], [[Type Check Pattern]], [[Type Check Rule]], [[Type Env]], [[Type Formation]], [[Type Exhaust]], [[grammar/pudu]] · make a variant able to name its payload, which the grammar has always stated and nothing implemented. `type Shape = Circle{ radius: Int }` compiled without a word and dropped the names, so `Circle{radius: 2}` was `E3007` and `case Circle{radius}` was `E3005` — both far from the declaration that caused them. The names are now kept beside the payload, and a construction and a pattern find their shape through them. The declaration chooses the spelling and only one reaches the value (`E3034`): admitting both built two things that no one pattern could match, and a program mixing them type checked and then found no arm at run time. Naming a variant is also a test rather than a binding, so a match on one is not exhaustive · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Type Exhaust]] · report the arm an earlier arm already took. `W5001` fired only after a wildcard, so writing `case Red` twice — or `case 1` twice — compiled without a word, and the second arm looked live to every reader of the file. The check now walks the arms once carrying what has been taken, and only whole names and whole literals count: `case Ok(1)` names part of `Ok`, so a later `case Ok(n)` stays reachable, which is the same rule that already stops a tested payload claiming coverage · risk LOW · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Type Check Rule]] · make `E3033` tell the three cases apart rather than guess between them: a name in scope unqualified is a prelude binding reached through a module, a name in the built-in method tables is a method written as a module function, and anything else is a spelling the module does not have — where the only honest advice is to look at what it exports. Guessing is what made the first two versions of this help confidently wrong · risk LOW · depth SHALLOW→SHALLOW · issue #3
+- 2026-08-26 · [[Type Check Rule]], [[grammar/pudu]] · make `E3033`'s help say which mistake was made: a name already in scope unqualified is a prelude binding reached through a module — `Io.writeFile` for the `writeFile` every program can call — and telling the reader it is a method on the value would send them somewhere it is not. Also records how a program reaches concurrency at all: `main` itself is declared `async`, because a `Task` is not a `Result` and `.await` is legal only inside an `async fn` · risk LOW · depth SHALLOW→SHALLOW · issue #3
+- 2026-08-26 · [[grammar/pudu]], [[architecture/STDLIB]] · state where a value's methods come from: the closed sets wired into `Array`, `Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes — everything else is a module function taking the value as an argument. The rule is mechanical but not guessable from outside, and `Option.unwrapOr(value, fallback)` versus `value.unwrapOr(fallback)` is where a reader meets it. Adds `UsesRegistry`, a fixture where traits, dynamic values, bounded generics, and `Decimal` compose in one program · risk LOW · depth n/a→SHALLOW · issue #3
+- 2026-08-26 · [[Parser Expression Recovery]] · stop the parser adding `expected expression` over a token the lexer already diagnosed. `"{}"` reported the vague message first and the precise one — an interpolation with no expression, with the `\{` escape in its help — second · risk LOW · depth SHALLOW→SHALLOW · issue #3
+- 2026-08-26 · [[Type Check Rule]], [[Type Env]], [[grammar/pudu]] · report a member a module does not export (`E3033`). `Std.Text.length` type-checked and failed at run time with `undefined name T`, naming the alias rather than the member and pointing at the wrong thing entirely — `nameType` returned `ErrorType` with no diagnostic and `ErrorType` absorbs. Found by writing an ordinary program in the language rather than by reading the compiler · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Evaluator]], [[Eval Install]] · split installing a module's declarations out of the evaluator. The order is the module's whole reason to exist — functions and variant constructors before any constant runs, so forward references work as resolution promised — and a constant's initialiser reaches evaluation through a capability, because it needs the environment the module is still building. 980 lines to 857 · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Type Check]], [[Type Check Call]] · split call resolution out of the checker behind a capability record, the same shape the parser uses: a call's arguments are expressions and an expression may be a call, so one direction has to be an argument. 1094 lines to 988 · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Lsp Server]], [[Lsp Protocol]], [[Tooling]] · replace the language-server CI check with one that drives a real session: it opens a document, and asserts CRLF framing on raw bytes, published diagnostics on the line that is wrong, a hover carrying the inferred signature, a definition pointing at the declaration, and document symbols carrying their types. The old check asserted only that `initialize` answered, which is true of a server that then returns nothing useful · risk LOW · depth n/a→SHALLOW · issue #101
+- 2026-08-26 · [[Pudu REPL]], [[Repl Input]] · split deciding when a prompt entry is finished into its own module, taking `Repl.hs` under the governance limit at 513 lines — the completeness check reads real tokens rather than text, so a brace inside a string can never leave the session waiting for input that will not come · risk LOW · depth n/a→SHALLOW · issue #3
+- 2026-08-26 · [[Eval Builtin]], [[Eval Effect]] · split the operations that reach outside the program into their own module, taking `Eval.Builtin` under the governance limit at 477 lines. The effects were already the one part with a rule of their own — every one answers with `Result` and none may run while a constant is folded — so they were the part that wanted separating · risk LOW · depth n/a→MEDIUM · issue #3
+- 2026-08-26 · [[Type Check]], [[Type Check Safety]], [[Type Check Iteration]] · split the checker: compile-time purity and unsafe capabilities into one module, which puts the two transitive checks [[ADR-0009]] proposes unifying where they can be seen side by side, and the `for` binder's typing into another. 1301 lines to 1094 · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Evaluator]], [[Eval Builtin]] · split the prelude's implementations out of the evaluator — the effects, the built-in methods on arrays, text, maps, sets, and characters, and the conversions nothing in the language can express. 1557 lines to 980. Only the array methods take the apply capability, because only they call back into a value the caller supplied; threading it through the other four families claimed a dependency none of them has · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-26 · [[Parser Expression]], [[Parser Expression Aggregate]], [[Parser Expression Postfix]], [[Parser Expression Control]], [[Parser Expression Recovery]] · finish splitting the expression parser: 1060 lines to 418 across five modules, each under the governance limit. The capability record proved out on the control forms and carried the aggregate and postfix ones unchanged, so the recursion is expressed once as an argument rather than four times as a cycle · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Parser Expression]], [[Parser Expression Control]], [[Parser Expression Recovery]], [[Parser State]] · split the expression parser: recovery and the closed vocabularies out first because they never recurse, then the branching and looping forms behind a capability record — control forms contain expressions and expressions contain control forms, so one direction has to be an argument, the same trick the block parser already used. 1060 lines to 802 · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-26 · [[Parser Expression]], [[Parser Expression Recovery]] · split expression recovery, the unsafe-capability vocabulary, and the unary operator list out of the expression parser — the part with no recursion, which can leave without the capability-passing the rest of the module's mutual recursion would need. 1060 lines to 945; the file is still over the governance limit and so are six others · risk LOW · depth n/a→SHALLOW · issue #3
+- 2026-08-26 · [[architecture/PATTERNS]], [[Parser Macro]] · record what happened when every design pattern was written in Pudu and run — most dissolve because the language already does what the pattern worked around, a few are ordinary generics with `Std.Iter`'s adapters being Decorator resolved statically, and every one that failed failed for the same missing feature — and add the mirror page `Parser Macro` never had · risk LOW · depth n/a→SHALLOW · issue #3
+- 2026-08-26 · [[Parser State]], [[grammar/pudu]] · stop emitting parse diagnostics once the nesting budget is exhausted, which the budget's own documentation had promised and nothing implemented: five thousand nested parentheses reported one `E1099` and then four and a half thousand `E1001`s as recovery unwound past each unmatched delimiter, amplifying one hostile file into thousands of diagnostics. Now one, and eighteen times faster for not building the rest · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-26 · [[Parser State]], [[Parser Block]], [[grammar/pudu]] · close the two frontend contracts issue #3 asked for and never had: two statements written on one line are rejected with `E1049` — `{ 1 2 }` was accepted and evaluated to 2 — and input that ends before a construct is closed reports `E1000` rather than `E1001`, because a file that ran out is a different mistake from a wrong token. Both stay quiet where recovery has already spoken, so a 300-brace flood still reports exactly one `E1099` · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-25 · [[Doc Query]], [[Doc Search]], [[Doc Site]] · make a dynamic type searchable and let an unqualified name match a qualified signature — a reader asking for `Circle` is asking about a type, not about where it was declared, and a query that does qualify is still matched in full; both rules exist in two implementations, the CLI's and the browser page's, so the parity harness now covers them · risk MED · depth SHALLOW→SHALLOW · issue #105
+- 2026-08-25 · [[Syntax Tree]], [[Token]], [[Parser Type]], [[Type Value]], [[Type Formation]], [[Type Unify]], [[Type Check]], [[Type Check Method]], [[Doc Signature]], [[Format]], [[grammar/pudu]] · add `dynamic Trait`, a value implementing a trait whose own type is not named — the one feature every design pattern needing an open set of implementations was missing, since a sum closes the set and a bound names one type per call site; a concrete type widens into it wherever one is expected, the expectation reaches into `if`, `match`, array literals, and blocks so branches widen against the context rather than against each other, and a trait written in type position without it now says so (`E3030`) instead of forming a phantom type that failed at the first call · risk HIGH · depth DEEP→DEEP · issue #105
+- 2026-08-25 · [[Evaluator]], [[Eval Env]] · give each module's functions the module that declared them, so a private helper can no longer be replaced by another module's export of the same name — every module shared one namespace and the last one linked won for everybody, which is how `Std.Random`'s private `orElse` became `Std.Option.orElse`; keep implementations in a table of their own outside the frame stack, because an implementation is true everywhere in a program once it exists anywhere in it and a library's adapter must still dispatch to a type linked long after it · risk HIGH · depth DEEP→DEEP · issue #102
+- 2026-08-25 · [[Integer Literal]], [[architecture/STDLIB]], [[decisions/ADR-0006-integer-widths-and-std-numerics]] · close ADR-0006's two recorded gaps: `Std.Random`'s `below`, `between`, and `numbers` take the bound as a type witness so a caller drawing in `UInt8` stays in `UInt8`, and `Std.Text.Parse` gains `bigInteger` and `integerIn`, accumulating a magnitude in `BigInt` and reporting a value the caller's type cannot hold as a parse problem at the position it was read rather than wrapping it; make arbitrary precision *absorb* in a mixed operation, since the narrower kind winning overflowed `total * 10 + digit` part way through a number `BigInt` was chosen to hold · risk MED · depth MEDIUM→MEDIUM · issue #102
+- 2026-08-25 · [[Language Server]], [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Pudu CLI]], [[Tooling]], [[Format]] · add `pudu lsp`, a language server that *is* the compiler rather than a second analyser beside it: diagnostics are the ordinary compile's, hover shows the signature the checker inferred, definition and the outline come from the same index `pudu doc` publishes, and formatting is `pudu fmt` applied as one edit; the protocol layer frames by bytes because counting characters desynchronises the stream on the first non-ASCII identifier, `answer` is a pure function of what was compiled so every feature is tested without a client, and only implemented capabilities are announced so an editor keeps its own fallback for the rest; ships a VS Code client, and fixes the formatter reading `-> Int { a }` as a record construction · risk MED · depth n/a→MEDIUM · issue #101
+- 2026-08-25 · [[Type Check]], [[Type Check Pattern]], [[Type Check Rule]], [[Type Check Method]], [[Type Interface]], [[Evaluator]], [[Eval Operator]], [[Format]], [[architecture/STDLIB]], [[decisions/ADR-0006-integer-widths-and-std-numerics]], [[grammar/pudu]] · make user data types generic and `for` mean something: a type declaration's parameters are instantiated at every use, an implementation may carry its own parameters with `Self` keeping its arguments and bounds at call sites, a module may implement an imported trait without colliding with itself, and `for` binds from a coherent begin/advance protocol; add `Std.Iter.Sequence` with passed state, lazy map/filter/take/drop/zip adapters, allocation-free terminal operations, total empty-sequence sums, and an `Integer` bound so `Range[N]` preserves caller width without admitting floats; trait-qualified calls now reach exact wired-in scalar implementations too · risk HIGH · depth DEEP→DEEP · issue #100
+- 2026-08-25 · [[Type Check]], [[Type Check Method]], [[grammar/pudu]] · make a generic trait's type parameters real: they are rigid inside the trait's members rather than formed as nominal types named after themselves, and a trait-qualified call is typed from the implementation it will run rather than from the declaration that deliberately leaves those parameters open — `trait Holds[T]` reported `expected Int, found T` at every use before, and the checker and the evaluator disagreed about what `Trait.method(&value)` meant · risk MED · depth DEEP→DEEP · issue #99
+- 2026-08-25 · [[Format]], [[Pudu CLI]], [[Tooling]], [[grammar/pudu]] · add `pudu fmt`, the formatter the grammar has always required: it works from the token stream rather than the parsed tree, so the token sequence out is provably the token sequence in and only whitespace moves; it never joins or splits a line, because a newline here delimits a statement and reflowing would rewrite programs; it decides the two adjacencies tokens alone cannot — record brace versus block brace, prefix operator versus binary — from following shape and preceding operand rather than from what the writer happened to type; a file that does not lex comes back untouched; and CI now fails on any committed Pudu file that is not formatted · risk MED · depth n/a→MEDIUM · issue #98
+- 2026-08-25 · [[Repl Session]], [[Compiler Program]] · compile an interactive session that has imported anything as a program rather than as a lone module, so an import typed at the prompt reaches the same files on disk a compiled program's would — `Std.Math.factorial` was a name the checker knew and the evaluator did not, and a misspelt module produced no diagnostic at all · risk MED · depth MEDIUM→MEDIUM · issue #97
+- 2026-08-25 · [[decisions/ADR-0007-decimal-precision-and-rounding]], [[Decimal Literal]], [[Token]], [[Lexer Number]], [[Syntax Tree]], [[Type Formation]], [[Type Env]], [[Type Check Rule]], [[Type Check Method]], [[Eval Value]], [[Eval Operator]], [[Eval Order]], [[Eval Match]], [[Evaluator]], [[Semantic Prelude]], [[architecture/STDLIB]], [[grammar/pudu]] · make `Decimal` an ordinary type by deciding the rounding policy it was waiting on: a coefficient and a base-ten scale, trailing zeros preserved but not compared, addition/subtraction/multiplication always exact, division exact or `E7010` rather than silently rounded, seven rounding modes reachable only by naming one, no implicit conversion in either direction, a `d` literal suffix, and `Std.Decimal` as the typed surface over it; retire `E3022` · risk HIGH · depth n/a→MEDIUM · issue #37
+- 2026-08-25 · [[Syntax Tree]], [[Token]], [[Parser Expression]], [[Parser Block]], [[Resolve Context]], [[Name Resolution]], [[Type Env]], [[Type Check]], [[Eval Env]], [[Evaluator]], [[Repl Session]], [[grammar/pudu]] · add labelled loops and `break` with a value: a loop may be named `@label` and `break @label` leaves the loop it names from inside any nesting, `loop` takes the type its breaks carry and is `Never` when nothing leaves it, a value may not be carried out of `while` or `for` because they can finish without ever reaching a break (`E3029`), and a jump with no loop to act on becomes a compile error (`E2016`, `E2017`, `W2002`) instead of the runtime `E7006` it was · risk HIGH · depth MEDIUM→DEEP · issue #95
+- 2026-08-25 · [[Doc Site]], [[Doc Query]], [[Doc Json]], [[Doc Search]], [[Pudu CLI]], [[Tooling]] · add `pudu doc --html` as a self-contained static documentation website with compiler-inferred signatures, browser-side name and type-shape ranking, deep-linked queries, accessible empty states, no runtime network dependency, and a separate JSON-to-HTML raw-text escape boundary; make the already-documented leading-arrow result query (`-> Result[a, e]`) work in both CLI and browser search, and preserve documentation output while returning non-zero for any root with compile errors · risk MED · depth n/a→MEDIUM, SHALLOW→SHALLOW · issue #93
+- 2026-08-24 · [[Type Formation]], [[architecture/STDLIB]] · expand a generic type alias into what it names instead of leaving it nominal and unifiable with nothing, and land `Std.Text.Parse` — parser combinators whose `Parser[T]` is a plain function, whose failures carry a position, and whose `lazy` is what lets a recursive grammar be written at all · risk MED · depth MEDIUM→MEDIUM · issue #90
+- 2026-08-24 · [[architecture/STDLIB]] · land `Std.Random` and `Std.Crypto`, both written in the language: a reproducible generator over `UInt64` and a SHA-256 over `UInt32` that matches the algorithm's published vectors byte for byte, which only holds if the width-correct rotations, wrapping addition, and masking are exactly right · risk LOW · depth n/a→SHALLOW · issue #89
+- 2026-08-24 · [[Syntax Tree]], [[Parser Expression]], [[Parser State]], [[Type Check]], [[Type Check Rule]], [[Evaluator]], [[Semantic Prelude]], [[grammar/pudu]] · admit explicit type arguments on a call so a caller can pin what inference cannot settle, inferring any that are left out and carrying the same obligations either way, and give `convertInteger` the shape that needed them — `convertInteger[UInt8](300)` rather than an example value standing in for a type · risk MED · depth DEEP→DEEP · issue #88
+- 2026-08-24 · [[decisions/ADR-0006-integer-widths-and-std-numerics]], [[architecture/STDLIB]], [[Semantic Prelude]], [[Type Check Method]], [[Evaluator]] · audit every `Int` in a public `Std` signature and generalise the ones naming a caller's value — the whole of `Std.Math` and four helpers in `Std.List` — leaving the ones naming a position or a count, and add `convertInteger` as the one integer operation nothing in the language can express · risk MED · depth MEDIUM→MEDIUM · issue #87
+- 2026-08-24 · [[decisions/ADR-0006-integer-widths-and-std-numerics]], [[Type Interface]], [[Type Check Rule]], [[Parser Expression]], [[architecture/STDLIB]] · make the standard library's numeric surface generic over traits rather than `Int`-only — `Eq`/`Ord` in `Std.Order`, `Zero`/`One`/`Add`/`Sub`/`Mul`/`Div` in the new `Std.Num`, and `Bits` in `Std.Bits` with each type answering for its own width — discharge a trait obligation against every implementation in the program rather than only imported ones, bind a prefix operator tighter than every binary one so `*a * *b` is a product of dereferences, and let a shift count be a plain count · risk HIGH · depth MEDIUM→DEEP · issue #87
+- 2026-08-24 · [[decisions/ADR-0006-integer-widths-and-std-numerics]], [[Integer Literal]], [[Eval Operator]], [[Eval Value]], [[Type Check Method]], [[architecture/SEMANTICS]] · give every integer its width and signedness at run time so a fixed-width type stops being a compile-time fiction, separate checked from wrapping from saturating arithmetic, take bitwise operations over the type's own width with `E7005` for a checked overflow and `E7004` for an out-of-range shift, and let an implementation for a wired-in type be reached so a trait-bounded generic works over `Int` and `Str` · risk HIGH · depth MEDIUM→DEEP · issue #87
+- 2026-08-24 · [[Eval Clock]], [[Evaluator]], [[Semantic Prelude]], [[Type Check Method]], [[architecture/STDLIB]] · add calendar time and subprocesses as effects, keeping the system clock separate from the monotonic one so a duration is never measured with a clock that can move backwards, and land `Std.Time` with distinct `Instant`, `Duration`, and `Date` types and `Std.Process` · risk MED · depth n/a→SHALLOW · issue #86
+- 2026-08-24 · [[Lexer Quoted]], [[Lexer Cursor]], [[Parser Expression]], [[Parser State]], [[Source Token]], [[Semantic Prelude]], [[grammar/pudu]] · admit string interpolation as sugar for concatenation, lexing each hole with the same scanner so its tokens carry real spans, and add `display` beside `show` so a message keeps a string's own content while an inspection keeps its quotes · risk MED · depth MEDIUM→MEDIUM · issue #85
+- 2026-08-24 · [[Eval Io]], [[Evaluator]], [[Eval Env]], [[Compiler Pipeline]], [[Semantic Prelude]], [[Type Check Method]], [[Pudu CLI]], [[architecture/STDLIB]], [[grammar/pudu]] · run evaluation over `IO` so a program can reach the world, deny every effect while constants are folded and report `E7009` when one is reached for, add fourteen effects that answer with `Result` rather than raising, make `main`'s whole number the exit status, and land `Std.Io` and `Std.Env` · risk HIGH · depth DEEP→DEEP, n/a→SHALLOW · issue #84
+- 2026-08-24 · [[architecture/STDLIB]], [[Lexer Quoted]], [[Semantic Prelude]], [[grammar/pudu]] · add `show` to the prelude so any value can be rendered, admit `\{` and `\}` as escaped braces so JSON and templates can be written as literals at all, and land `Std.Show`, `Std.Json`, `Std.Url`, `Std.Http`, and `Std.Http.Message` — the whole protocol surface that does not touch a socket · risk MED · depth n/a→SHALLOW · issue #83
+- 2026-08-24 · [[architecture/STDLIB]], [[Eval Keyed]], [[Eval Order]], [[Eval Value]], [[Type Check Rule]], [[Type Check]], [[Semantic Prelude]], [[grammar/pudu]] · add `Map[K, V]` and `Set[T]` as wired-in types kept in key order so two are equal when their contents are, refuse a key the language cannot order with `E7008`, type an empty tuple as unit so `Ok(())` checks against `Result[(), E]`, and grow the standard library to thirteen modules and 422 documented exports · risk HIGH · depth n/a→MEDIUM, DEEP→DEEP · issue #82
+- 2026-08-24 · [[architecture/STDLIB]], [[Syntax Tree]], [[Parser Expression]], [[Type Check]], [[Type Check Rule]], [[Evaluator]], [[Eval Env]], [[Eval Array]], [[Semantic Prelude]], [[grammar/pudu]] · admit function literals that capture the environment they were written in, index a tuple by a literal position instead of typing every member as the first, add `Array.concat`, `charFromCode`, and `Char.toText` as the operations a library cannot express, pass a module-qualified function as a value, and grow the standard library to nine modules and 214 documented exports · risk HIGH · depth DEEP→DEEP, n/a→SHALLOW · issue #81
+- 2026-08-24 · [[Doc Index]], [[Doc Signature]], [[Doc Query]], [[Doc Search]], [[Doc Json]], [[Type Boundary]], [[Type Check]], [[Source Token]], [[Compiler Pipeline]], [[Pudu CLI]], [[Pudu REPL]] · build a documentation index from the checker's own inferred schemes rather than from written annotations, admit `///` and `/** */` doc comments as their own trivia, add Hoogle-style search by type shape through `pudu search` and `:search`, expose the index as JSON for editors, and tie a function body's inferred signature back to the module-scope name so an unannotated `fn add(a, b) { a + b }` reports `Int -> Int` instead of two unresolved variables · risk HIGH · depth n/a→MEDIUM, DEEP→DEEP · issue #79
+- 2026-08-24 · [[architecture/STDLIB]], [[Compiler Library]], [[Compiler Program]], [[Type Check Rule]], [[Doc Index]], [[Evaluator]], [[Eval Env]], [[Repl Session]], [[Eval Operator]], [[Type Check Rule]], [[Pudu CLI]], [[grammar/pudu]] · establish the `Std` namespace as a standard library shipped with the compiler, resolve it from the program's source root first and the distribution second with no network or version step, land `Std.Math` and `Std.List` as its first modules, let indexing follow a borrow so a function taking `&Array[T]` reads no worse than one that copies, attach documentation to the nearest token before a declaration so an `export` modifier no longer detaches it, link a program's imported modules into evaluation so a call into an imported module finds the function it named, add `pudu run` to compile a program and call its `main`, report `W3002` when a statement discards the new collection a built-in method answered with, and give `Str` a closed set of seventeen built-in methods indexed by Unicode scalar so `Std.Text` can be written in the language rather than reaching past it, let a match read through a borrow so a generic helper can take `&Option[T]`, give `Char` its scalar value, and land `Std.Text`, `Std.Option`, `Std.Result`, and `Std.Char` · risk MED · depth n/a→SHALLOW, DEEP→DEEP · issue #80
+- 2026-08-24 · [[Syntax Tree]], [[Parser Expression]], [[Type Check]], [[Eval Env]], [[Evaluator]], [[grammar/pudu]] · admit `async with scope { ... }`, adopt every task started inside as a child, join unawaited children in start order when the scope exits or a transfer leaves it, select the earliest failing child, and require an async enclosing function with `E3026` · risk HIGH · depth DEEP→DEEP · issue #45
+- 2026-08-24 · [[Repl Describe]], [[Repl Command]], [[Repl Session]], [[Pudu REPL]] · expand the prompt into a working inspection surface: `:info` renders a name back in its written form, `:kind` reports declared arity, `:instances` lists a type's implementations, `:set +t`/`+s` report the checked type and elapsed time per entry, and `:show bindings|declarations|imports|settings` says what the session holds · risk LOW · depth n/a→SHALLOW, SHALLOW→SHALLOW · issue #78
+- 2026-08-24 · [[Macro Design]], [[Macro Expansion]], [[Syntax Tree]], [[Parser Expression]], [[Compiler Pipeline]], [[grammar/pudu]] · finalize the macro form as hygienic typed syntax transformers, expand `name!(...)` calls before name resolution with kind and arity diagnostics, rename every introduced binding so it cannot capture or leak, and bound expansion depth; repetition stays open with its reason recorded · risk HIGH · depth n/a→DEEP · issue #44
+- 2026-08-24 · [[Syntax Tree]], [[Parser Function]], [[Type Check]], [[Type Env]], [[Compiler Pipeline]], [[grammar/pudu]] · admit `comptime fn`, enforce its evaluator's capability set transitively with `E3025`, and evaluate module constants at compile time so an initializer's failure or exhausted budget is a compile diagnostic · risk HIGH · depth DEEP→DEEP, SHALLOW→MEDIUM · issue #43
+- 2026-08-24 · [[Unsafe Capabilities]], [[Syntax Tree]], [[Parser Expression]], [[Parser Function]], [[Type Check]], [[Type Env]], [[Evaluator]], [[grammar/pudu]] · admit `unsafe` regions and function modifiers that grant named capabilities from the boundary's own vocabulary, contain unsafe calls with `E3023` naming the missing capability, report unused grants with `W3001`, and gate `null` behind its capability with `E3024` · risk HIGH · depth n/a→MEDIUM, DEEP→DEEP · issue #42
+- 2026-08-24 · [[Type Formation]], [[Type Env]], [[Type Marker]], [[grammar/pudu]] · refuse the reserved `Decimal` type with `E3022` wherever it is written, once per occurrence, instead of admitting it silently in signatures and failing later with a confusing mismatch; a module declaring its own `Decimal` is unaffected · risk LOW · depth MEDIUM→MEDIUM · issue #37
+- 2026-08-24 · [[Type Check]], [[Type Check Method]], [[Type Check Rule]], [[Type Env]], [[Evaluator]], [[grammar/pudu]] · admit trait- and type-qualified method calls that select one provider, move same-module method ambiguity from the declaration to the call that cannot resolve it with `E3013` naming both qualified forms, and dispatch a trait-qualified call on its receiver's type at run time · risk MED · depth DEEP→DEEP · issue #33
+- 2026-08-24 · [[Type Marker]], [[Type Check Method]], [[Type Check Coherence]], [[Type Env]] · decide `Copy`, `Send`, and `Sync` from a type's structure so builtin and user aggregates satisfy their bounds without a written implementation, keep owned text, growable collections, and exclusive borrows out of `Copy`, and reject a hand-written `Copy` implementation with `E3021` · risk MED · depth n/a→MEDIUM, DEEP→DEEP · issue #39
+- 2026-08-24 · [[Type Check Rule]], [[Type Unify]], [[Eval Operator]], [[Repl Outline]], [[grammar/pudu]] · admit prefix `*` as the explicit dereference the language lacked, report `E3020` for dereferencing a non-reference, name the closing operator when a mismatch differs only by a borrow, and render array literals in `:ast` instead of failing the session · risk LOW · depth MEDIUM→MEDIUM · issue #24
+- 2026-08-24 · [[Float Literal]], [[Number Scanner]], [[Type Check Rule]], [[Eval Value]], [[Eval Match]], and [[Eval Operator]] · admit explicit `f32`/`f64` literal suffixes, keep unsuffixed floats at `Float64`, reject selected-width infinity with `E3019`, and retain/normalize runtime binary32 precision across arithmetic · risk HIGH · depth n/a→MEDIUM, MEDIUM→MEDIUM · issue #36
+- 2026-08-24 · [[Integer Literal]], [[Number Scanner]], [[Type Env]], [[Type Check Rule]], [[Type Check]], and [[Eval Match]] · admit fixed-width integer suffixes, defer unsuffixed literal selection to context, default only unresolved literals to `Int`, enforce exact signed/unsigned bounds with `E3018`, and share arbitrary-precision base decoding across typing and evaluation · risk HIGH · depth n/a→MEDIUM, MEDIUM→MEDIUM, DEEP→DEEP · issue #34
+- 2026-08-24 · [[Type Check]], [[Type Check Rule]], [[Evaluator]], and [[Eval Value]] · normalize complete async signatures to `Task[S, E]`, require async parameter/return annotations with `E3010` so forward calls remain order-independent, enforce `.await` capability/task/failure rules with `E3016`/`E3017`, retain cold prepared task values until await, and auto-drive only async host entries; scheduling and cancellation remain separate · risk HIGH · depth DEEP→DEEP, MEDIUM→MEDIUM · issue #41
+- 2026-08-24 · [[Pudu CLI]], [[Repl Session]], and [[Compiler Program]] · route `pudu check` through transitive program compilation with diagnostic-owning source rendering, and retain the admitted semantic/type context after REPL file loads so later entries resolve imported methods; issue #29's static cross-module boundary is complete while runtime dependency linking remains separate · risk MED · depth SHALLOW→SHALLOW, MEDIUM→MEDIUM · issue #29
+- 2026-08-24 · [[Compiler Program]] and [[Compiler Pipeline]] · add deterministic canonical-path module discovery, structured root/import `E2014` and path/header `E2015`, transitive memoization, SCC signature-cycle ordering, program-wide semantic/type interfaces, retained source snapshots, and pure contextual compilation; CLI and REPL adoption remain the next issue #29 partition · risk HIGH · depth n/a→DEEP, SHALLOW→MEDIUM · issue #29
+- 2026-08-23 · [[Type Check Import]], [[Type Check]], [[Type Check Method]], [[Type Env]], [[Type Unify]], and [[Type Boundary]] · install body-free dependency signatures, constructors, aliases, selected traits, default metadata, and implementations under canonical keys; diagnose incomplete exported constants with `E3010`, imported/imported or imported/local method ambiguity with `E3013`, and same-spelling canonical mismatches with qualified identities · risk HIGH · depth n/a→MEDIUM, DEEP→DEEP · issue #29
+- 2026-08-23 · [[Type Interface]] and [[src/Pudu/Type/_MOC]] · project parsed modules into body-free exported ABI declarations, private formation-only nominal shells, canonical selected/qualified import maps, and trait-default availability; checker installation remains the next issue #29 partition · risk MED · depth n/a→DEEP · issue #29
+- 2026-08-23 · [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Check]], [[Type Check Method]], [[Type Check Rule]], [[Type Check Pattern]], and [[Type Exhaust]] · replace basename nominal/trait/method identity with canonical declaring-module `NominalId` keys across formation, bounds, implementations, fields, variants, patterns, exhaustiveness, and dispatch; body-free imported interfaces remain the next issue #29 partition · risk HIGH · depth DEEP→DEEP · issue #29
+- 2026-08-23 · [[Semantic Interface]], [[Name Resolution]], and [[Semantic Boundary]] · add a pure namespace-aware export index, authoritative selected-import privacy diagnostics with `E2013`, module qualifier bindings, and `resolveModuleWith`; filesystem discovery and type interfaces remain the next issue #29 partitions · risk MED · depth n/a→MEDIUM, DEEP→DEEP · issue #29
+- 2026-08-23 · [[Type Check Coherence]], [[Type Check]], [[Type Check Method]], [[Parser Trait]], [[src/Pudu/Type/_MOC]] · reject orphan implementations with `E3014` unless the current module declares the trait or the target's expanded nominal record/sum identity; expand transparent generic aliases without granting them ownership, keep non-nominal targets ownerless, and preserve exact duplicate `E3015` behavior · risk MED · depth MEDIUM→DEEP, DEEP→DEEP · issue #28
+- 2026-08-23 · [[Type Check Coherence]], [[Type Check]], [[Type Check Method]], [[src/Pudu/Type/_MOC]] · reject every implementation after the first identical qualified trait+target head once with `E3015`; preserve full paths, alpha-normalize implementation generic parameters, and structurally key every admitted type syntax; orphan ownership remains issue #28 and general unification overlap waits for resolved typed implementation heads · risk MED · depth n/a→MEDIUM, DEEP→DEEP · issue #27
+- 2026-08-23 · [[Resolve Context]], [[Name Resolution]], [[src/Pudu/Semantic/_MOC]] · author the missing mirror for `src/Pudu/Semantic/Resolve/Context.hs`, the `Resolver` state monad that owns scope frames, symbol introduction, duplicate/shadow classification, and value/type name resolution; the facade's [[Name Resolution]] page linked the context module but no mirrored page existed, closing the parity gap before the trait slice · risk LOW · depth n/a→DEEP · issue #3
+- 2026-08-23 · [[Name Resolution]], [[Type Check Rule]], [[Eval Dispatch]] · fix array literal crash and method type errors: add missing `ArrayExpression` case in `walkExpression` (was a non-exhaustive pattern crash), add `arrayMethodType` to `memberType` so built-in array methods type-check instead of reporting E3005, and reconcile [[Eval Dispatch]] wiki page with inline dispatch in [[Evaluator]] · risk MED · depth DEEP→DEEP, MEDIUM→MEDIUM · issue #57
+- 2026-08-23 · [[Parser Expression]], [[Syntax Tree]], [[Eval Value]], [[Eval Array]], [[Eval Operator]], [[Type Check]], [[grammar/pudu]] · add Array[T] collection type with `[a, b, c]` literal syntax, fingertree-backed persistent runtime values (`Data.Sequence`), O(1) append, O(log n) index/insert/remove, accessor methods (length, get, indexOf, contains, push, pop, insert, remove, slice, reverse, map, filter, reduce), iteration in `for` loops, and type inference as `NominalType "Array" [T]` · risk MED · depth DEEP→DEEP · issue #58
+- 2026-08-23 · [[Token]], [[Parser Expression]], [[Eval Operator]], [[grammar/pudu]] · add bitwise shift operators `<<` (left shift) and `>>` (right shift) to the lexer symbol table, binary operator table (precedence 6, between additive and range), and integer evaluator; longest-match scanner resolves `<`/`<<` and `>`/`>>` ambiguity · risk LOW · depth MEDIUM→MEDIUM, DEEP→DEEP · issue #52
+- 2026-08-23 · [[Token]], [[Parser Expression]], [[Eval Operator]], [[grammar/pudu]] · add bitwise NOT (`~`) as a unary prefix operator and XOR (`^`) as a binary operator (precedence 5, same band as range); both map to integer operations via `complement` and `xor` in the evaluator · risk LOW · depth MEDIUM→MEDIUM, DEEP→DEEP · issue #53
+- 2026-08-23 · [[Parser Expression]], [[Eval Operator]], [[grammar/pudu]] · wire `&` as a bitwise AND binary operator (precedence 6, same band as shifts); prefix `&`/`&mut` remains a borrow because the Pratt parser disambiguates by position (prefix vs infix), so no context-sensitive rule or token-table change is needed · risk LOW · depth DEEP→DEEP · issue #54
+- 2026-08-23 · [[Parser Expression]] · add `E1041` reserved-keyword guidance for `enum`/`struct`/`task`/`spawn`/`module`/`mut` in expression position with line-boundary recovery to prevent cascading parse errors · risk LOW · depth DEEP→DEEP · issues #46 #47 #48
+- 2026-08-23 · [[Type Check Method]] · fix duplicate `E3013` on ambiguous trait method dispatch by returning `Just (monotype ErrorType)` from `methodScheme` so `checkCallee` does not fall through to `rigidMethod` and report the diagnostic a second time · risk LOW · depth DEEP→DEEP · issues #35 #38 #30 #31 #32
+- 2026-08-23 · [[Evaluator]], [[Eval Value]], [[Eval Env]] · add `panic` builtin (`E7007`), raise call depth limit from 256 to 4096, report ambiguous trait method dispatch with `E3013`, merge rigid bounds with `Map.fromListWith`, and wire `Float` as an alias for `Float64` · risk MED · depth DEEP→DEEP · issues #35 #38 #30 #31 #32
+- 2026-08-22 · [[Type Check]] and [[Type Check Method]] · fix trait default bodies that call other trait methods on `Self` by treating `Self` as a rigid parameter during body checking, routing method calls through `rigidMethod` and the trait bound `selfBoundAsBound` installs; fixes #23, #25, and #26 (generic dispatch through trait defaults) · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-22 · [[Repl Session]] · add REPL session test coverage for `while`, `loop`/`break`, `for` over tuples and strings, and `continue`, exercising iteration through the interactive session's statement replay and value reporting · risk LOW · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-22 · [[Type Exhaust]] · check match coverage over closed sums and `Bool`, require an irrefutable arm for open domains, exclude guarded arms from coverage, and warn on unreachable arms with `E5001`/`W5001` · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-22 · [[Type Check Method]], [[Evaluator]], and [[Semantic Prelude]] · admit trait method dispatch with `Self` aliasing and inherited defaults, wire the `Option` and `Result` constructors into every phase, and implement `?` propagation with `E3011` · risk HIGH · depth DEEP→DEEP · issue #3
+- 2026-08-22 · [[Type Boundary]], [[Type Check]], [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], and [[Type Check Pattern]] · establish the typing phase with local bidirectional inference, rigid declared generics instantiated per use, record and variant shapes, exported-signature annotation, and `E3xxx` diagnostics; `puduci`'s `:type` now reports static types · risk HIGH · depth n/a→DEEP · issue #3
+- 2026-08-21 · [[Parser Expression]], [[Syntax Tree]], [[Evaluator]], and [[grammar/pudu]] · admit record construction expressions with field shorthand, withheld before a block to keep `if Name {  }` unambiguous · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-21 · [[Pudu REPL]] and [[Repl Complete]] · add line editing, persistent history, Ctrl-C line cancellation, and Tab completion over commands, filenames, keywords, wired-in types, prelude names, and session bindings · risk MED · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-21 · [[Pudu REPL]], [[Repl Session]], [[Repl Command]], [[Repl Outline]], and [[Pudu CLI]] · establish the `puduci` interactive session with persistent context, multi-line entry, colon commands, file loading, and the `pudu` executable · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Evaluator]], [[Eval Value]], [[Eval Env]], [[Eval Match]], and [[Eval Operator]] · establish tree-walking evaluation with unwinding control flow, total pattern matching, bounded recursion and iteration, and `E7xxx` runtime diagnostics · risk HIGH · depth n/a→DEEP · issue #3
+- 2026-08-21 · [[Diagnostic Render]] · establish source-quoting diagnostic rendering with carets, related notes, help, and an interactive line mapping · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Expression]] and [[grammar/pudu]] · admit tuple expressions, closing the gap between tuple types and tuple patterns · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-21 · [[Name Resolution]] · admit unqualified variant names while unambiguous and report `E2012` when two types share a spelling, matching the grammar's qualification rule · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-21 · [[Name Resolution]], [[Symbol Model]], [[Scope Model]], and [[Semantic Prelude]] · establish two-pass lexical name resolution with namespaced symbols, Haskell-style wired-in and implicit-prelude scope layering, and `E2001`/`E2010`/`E2011`/`W2001` diagnostics · risk HIGH · depth n/a→DEEP · issue #3
+- 2026-08-21 · [[Parser Trait]] and [[Parser Type Declaration]] · implement record, sum, and alias `type` declarations, trait contracts with optional default bodies, and `impl` blocks with `E1052` member recovery · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Pattern]] and [[Parser Generic]] · implement the closed pattern vocabulary with alternation, ranges, and record rests, plus shared generic parameters, bounds, and `where` clauses · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Syntax Tree]] and [[Token]] · extend the surface data to patterns, match arms, loops, jumps, function types, generics, and the type/trait/impl declaration family, and admit `=>` into the closed symbol vocabulary · risk HIGH · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Expression]] · admit `match`, `while`, `loop`, `for`, indexing, `?` propagation, and `.await`, replacing the reserved `E1043` postfix diagnostic · risk HIGH · depth DEEP→DEEP · issue #3
+- 2026-08-21 · [[Parser Declaration]], [[Parser]], and [[Compiler Pipeline]] · complete the first frontend slice with compilation-unit orchestration, `export` ownership, `E1034`/`E1038`/`E1039` recovery, and source-to-module phase gating · risk HIGH · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Function]] · implement `async`/`fn` signatures, parameters with optional types and defaults, return types, block and expression bodies, and `E1032`/`E1033` recovery · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Block]] · implement newline-delimited block statements, block results, `return` statements, line-sensitive expression continuation, and latched `E1099` recovery · risk HIGH · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Binding]] · implement module constants and local `let`/`var`/`const` bindings with `E1012`/`E1013` name classes, single-`E1001` unadmitted-keyword recovery, and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Binding]] · specify scope-safe module constants and local bindings with value/constant name classes and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Import]] · implement modular bounded absolute imports, exclusive alias/selection suffixes, trailing commas, and E1030/E1031 recovery · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Expression]] · specify closed-vocabulary bounded precedence, postfix, conditional, E1040/E1042/E1043 recovery · risk HIGH · depth n/a→DEEP · issue #3
+- 2026-08-21 · [[Parser Type]] · specify bounded reference, tuple/unit/grouped, named, generic, trailing-comma, and E1020 recovery syntax · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser State]] and [[Parser Name]] · establish source-bound EOF normalization, bounded suffix traversal, opaque diagnostics, and segmented paths · risk MED · depth n/a→DEEP/MEDIUM · issue #3
+- 2026-08-21 · [[Syntax]] · establish located segmented recovery-capable untyped surface data · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Quoted Scanner]] and [[Lexer Facade]] · establish bounded quoted decoding, total lossless tokenization, E0002/E0005–E0008, and E0099 recovery · risk MED · depth n/a→MEDIUM · issue #8
+- 2026-08-21 · [[Number Scanner]] and [[Symbol Scanner]] · establish textual numeric validation, E0004 recovery, and longest-match symbols · risk MED · depth n/a→MEDIUM · issue #7
+- 2026-08-21 · [[Trivia Scanner]] and [[Identifier Scanner]] · establish modular Unicode trivia/name scanning and E0003 recovery · risk MED · depth n/a→MEDIUM · issue #6
+- 2026-08-21 · [[Lexer Cursor]] · establish strict snapshot-safe traversal, committed segments, and deterministic completion · risk MED · depth n/a→DEEP · issue #12
+- 2026-08-21 · [[Pudu Language]] · establish FMCF vault and resolve v1 architecture, semantics, and ownership foundation · risk HIGH · depth n/a→specified · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]]
+- 2026-08-21 · [[Engineering Delivery]] · establish issue/branch/PR/agent-review/release construction · risk MED · depth n/a→specified · [[ADR-0004-team-delivery-and-agent-review]]
+- 2026-08-21 · [[Performance Constitution]] · lock compiler-throughput and low-level generated-code optimization laws · risk HIGH · depth n/a→specified · [[ADR-0005-performance-and-low-level-optimization]]
+- 2026-08-21 · [[architecture/SEMANTICS]] · clarify default evaluation, module constants, and structural `Copy` before implementation · risk HIGH · depth specified→reviewed · [[ADR-0003-ownership-and-resource-safety]]
+- 2026-08-21 · [[architecture/SEMANTICS]] · define replacement/reinitialization and normalized sync/async failure signatures before implementation · risk HIGH · depth reviewed→grilled · [[ADR-0003-ownership-and-resource-safety]]
+- 2026-08-21 · [[Source]] · establish opaque snapshot identity, cached Unicode-scalar bounds, overflow-safe offsets, and allocation-conscious positions · risk MED · depth n/a→MEDIUM · issue #2
+- 2026-08-21 · [[Diagnostic Model]] · establish deterministic structured diagnostics, ordered causality, and severity-only error gating · risk MED · depth n/a→MEDIUM · issue #9
+- 2026-08-21 · [[architecture/SEMANTICS]] · fix diagnostic-code shape and severity-family compatibility before phase publication · risk MED · depth grilled→clarified · issue #9
+- 2026-08-21 · [[Token]] · establish closed keyword/symbol vocabulary and lossless token/trivia representation · risk MED · depth n/a→MEDIUM · issue #5
+
+## Referenced by
+
+[[00-INDEX]] · [[FMCF Workflow]]
+
+## 2026-09-08 REPL inspection candidate fix
+
+[[Repl Session]] now sequences token-based session extension in IO in the type
+inspection path, correcting the reported `IO Session` versus `Session` build error.
+No builds, tests, reviews or measurements run.

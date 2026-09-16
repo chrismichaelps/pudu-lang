@@ -1,17 +1,37 @@
-# Files
-fmcf.md
-
-# Proposal
-lang_proposal.md
-
-# goal
-goal.md
 
 # Claude Code
-.claude/
-claude/
-.claude.json
-
 # Codex
+# Haskell build artifacts
+# Private project inputs
+.claude.json
+.claude/
 .codex/
+cabal.project.local
+claude/
 codex/
+dist-ir
+dist-newstyle/
+dist-o2/
+dist-prof
+dist-prof-*
+docs/superpowers/
+fmcf.md
+fmfc.md
+goal.md
+lang_proposal.md
+proposal.md
+pudu.prof
+# Editor workspace files a local extension writes for itself
+.vscode/
+
+# Editor client dependencies, fetched rather than committed
+editors/vscode/node_modules/
+editors/vscode/package-lock.json
+
+# The scratch database the database example leaves behind.
+examples/db/orders.db
+
+dist/packages/
+scripts/__pycache__/
+# Private commercial manuscript and publication artifacts.
+book/

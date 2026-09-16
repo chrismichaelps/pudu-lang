@@ -1,0 +1,13 @@
+module RedundantBool
+
+export fn rightTrue(value: Bool) -> Bool { value == true }
+
+export fn leftTrue(value: Bool) -> Bool { true == value }
+
+export fn rightFalse(value: Bool) -> Bool { value != false }
+
+export fn leftFalse(value: Bool) -> Bool { false != value }
+
+export fn keepNegation(value: Bool) -> Bool { value == false }
+
+export fn keepLiteral(value: Bool) -> Bool { value != true }

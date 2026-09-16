@@ -1,0 +1,265 @@
+module Std.Order
+
+/// How one value stands to another.
+export type Ordering = Less | Equal | Greater
+
+/// Two whole numbers compared.
+export fn compareInt(left: Int, right: Int) -> Ordering {
+  if left < right { Less } else { if left > right { Greater } else { Equal } }
+}
+
+/// Two texts compared by their characters, in scalar order.
+export fn compareText(left: Str, right: Str) -> Ordering {
+  var index = 0
+  let shorter = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < shorter {
+    let step = compareChar(left.charAt(index), right.charAt(index))
+    match step {
+      case Equal => {}
+      case _ => { return step }
+    }
+    index = index + 1
+  }
+  compareInt(left.length(), right.length())
+}
+
+/// Two characters compared by scalar value.
+export fn compareChar(left: Char, right: Char) -> Ordering {
+  compareInt(left.code(), right.code())
+}
+
+/// Two truth values compared, with false before true.
+export fn compareBool(left: Bool, right: Bool) -> Ordering {
+  compareInt(toRank(left), toRank(right))
+}
+
+/// The opposite ordering, which is how a descending sort is written from an
+/// ascending comparison.
+export fn reverse(value: Ordering) -> Ordering {
+  match value {
+    case Less => Greater
+    case Equal => Equal
+    case Greater => Less
+  }
+}
+
+/// The first ordering unless it is `Equal`, in which case the second.
+/// This is how a comparison on one field falls through to the next.
+export fn thenBy(first: Ordering, second: Ordering) -> Ordering {
+  match first {
+    case Equal => second
+    case _ => first
+  }
+}
+
+/// Whether an ordering says the first value comes first.
+export fn isLess(value: &Ordering) -> Bool {
+  match value {
+    case Less => true
+    case _ => false
+  }
+}
+
+/// Whether an ordering says the two values are equivalent.
+export fn isEqual(value: &Ordering) -> Bool {
+  match value {
+    case Equal => true
+    case _ => false
+  }
+}
+
+/// Whether an ordering says the second value comes first.
+export fn isGreater(value: &Ordering) -> Bool {
+  match value {
+    case Greater => true
+    case _ => false
+  }
+}
+
+/// An ordering as the "sorts before" predicate the sorting functions take.
+/// A sort needs one answer, not three, and this is the honest conversion:
+/// equivalent values do not sort before one another.
+export fn before(value: Ordering) -> Bool { isLess(&value) }
+
+/// An ordering as a whole number: -1, 0, or 1.
+export fn toInt(value: Ordering) -> Int {
+  match value {
+    case Less => 0 - 1
+    case Equal => 0
+    case Greater => 1
+  }
+}
+
+/// The smaller of two values under a comparison.
+export fn min[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
+  if isGreater(&compare(left, right)) { right } else { left }
+}
+
+/// The larger of two values under a comparison.
+export fn max[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
+  if isLess(&compare(left, right)) { right } else { left }
+}
+
+/// A comparison turned into the predicate the sorting functions take.
+export fn ascending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
+  isLess(&compare(left, right))
+}
+
+/// A comparison turned into a descending predicate.
+export fn descending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
+  isGreater(&compare(left, right))
+}
+
+/// A truth value's rank, so booleans can be compared as numbers.
+fn toRank(value: Bool) -> Int { if value { 1 } else { 0 } }
+
+/// A type whose values can be compared for equality.
+/// Structural equality already works for every value; this trait exists so a
+/// generic function can *say* that it compares, and so a type can give equality
+/// a meaning of its own where structure is not it.
+export trait Eq { fn equals(self: &Self, other: &Self) -> Bool }
+
+/// A type whose values are ordered.
+/// One method rather than three, because `before` is what a sort needs and the
+/// rest follow from it without a type having to keep them in step.
+export trait Ord {
+  /// Return true when this value belongs strictly before `other` in the type's order.
+  fn before(self: &Self, other: &Self) -> Bool
+}
+
+/// A value's number, for a collection that reaches its entries by one.
+///
+/// The law is one direction only: two values that are equal must hash the
+/// same, and two values that hash the same need not be equal. A collection
+/// built on this settles identity with `Eq` and uses the number only to decide
+/// where to look, so a collision costs a comparison rather than an answer.
+///
+/// This is not a digest. A value hashed here is not hidden, and two runs of a
+/// program are not promised the same number for the same value — a hash map
+/// mixes the result against a value chosen when the process started, so that a
+/// caller who can choose keys cannot choose which of them collide. Anything
+/// that must be secret or repeatable across runs wants `Std.Crypto`.
+export trait Hash { fn hash(self: &Self) -> Int }
+
+/// The number a value hashes to, for a caller writing their own container.
+export fn hashed[T: Hash](value: &T) -> Int { value.hash() }
+
+/// Whether two values are equal under their own rule.
+export fn same[T: Eq](left: &T, right: &T) -> Bool { left.equals(right) }
+
+/// Whether two values differ under their own rule.
+export fn different[T: Eq](left: &T, right: &T) -> Bool { !left.equals(right) }
+
+/// Whether the first value sorts before the second.
+export fn precedes[T: Ord](left: &T, right: &T) -> Bool { left.before(right) }
+
+/// Whether the first value sorts after the second.
+export fn follows[T: Ord](left: &T, right: &T) -> Bool { right.before(left) }
+
+/// Whether two values are equivalent under the ordering.
+/// Distinct from equality: an ordering may call two values equivalent that a
+/// type's own equality separates, which is why sorting is stable rather than
+/// deduplicating.
+export fn equivalent[T: Ord](left: &T, right: &T) -> Bool {
+  !left.before(right) && !right.before(left)
+}
+
+/// How one value stands to another, under its own ordering.
+export fn ordering[T: Ord](left: &T, right: &T) -> Ordering {
+  if left.before(right) { Less } else {
+    if right.before(left) { Greater } else { Equal }
+  }
+}
+
+/// The smaller of two values under their own ordering.
+export fn smaller[T: Ord](left: &T, right: &T) -> T {
+  if right.before(left) { *right } else { *left }
+}
+
+/// The larger of two values under their own ordering.
+export fn larger[T: Ord](left: &T, right: &T) -> T {
+  if left.before(right) { *right } else { *left }
+}
+
+/// A value confined to a range, under its own ordering.
+export fn clamped[T: Ord](value: &T, lower: &T, upper: &T) -> T {
+  if value.before(lower) { *lower } else {
+    if upper.before(value) { *upper } else { *value }
+  }
+}
+
+/// Implementations for every type the language wires in. Written out because
+/// the language has no deriving, and here rather than in each caller because a
+/// bound exists so a caller does not repeat it.
+
+/// Every wired-in type hashes through the runtime, which reads the value
+/// rather than its rendering: a number is mixed from its own bytes, and text
+/// and byte sequences from theirs. Two values that are equal are the same
+/// value here, so the law holds by construction.
+impl Hash for Int { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int8 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int16 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int32 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int64 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int128 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt8 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt16 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt32 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt64 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt128 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for BigInt { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Str { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Char { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Bool { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Bytes { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Decimal { fn hash(self: &Self) -> Int { hashOf(*self) } }
+/// A floating value hashes through the number it is, so the two zeros that
+/// compare equal hash the same. Adding zero is what normalizes the sign
+/// without changing any other value.
+impl Hash for Float32 { fn hash(self: &Self) -> Int { hashOf((*self) + 0.0f32) } }
+impl Hash for Float64 { fn hash(self: &Self) -> Int { hashOf((*self) + 0.0) } }
+
+impl Eq for Int { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Int8 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Int16 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Int32 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Int64 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Int128 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt8 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt16 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt32 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt64 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for UInt128 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for BigInt { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Float32 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Float64 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+/// Two decimals are equal as the numbers they are, not as the digits they
+/// store, so `1.50d` equals `1.5d` even though only one renders with a
+/// trailing zero.
+impl Eq for Decimal { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Str { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Char { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Eq for Bool { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+impl Ord for Int { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Int8 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Int16 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Int32 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Int64 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Int128 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt8 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt16 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt32 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt64 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for UInt128 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for BigInt { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Float32 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Float64 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Decimal { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Str { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Char { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Bool {
+  fn before(self: &Self, other: &Self) -> Bool { !(*self) && (*other) }
+}

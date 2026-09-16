@@ -1,0 +1,157 @@
+module UsesProcessStream
+
+import Std.Process as Process
+
+/// A shell command started, with nothing to give it on its input.
+///
+/// Every check below starts a program the same way, so the starting is written
+/// once: what each check is about is what it does with the program, not how it
+/// began.
+fn shell(command: Str) -> Result[Process.Started, Str] {
+  let running = Process.start("/bin/sh", &["-c", command]) ?
+  let _closed = Process.closeInput(&running)
+  Ok(running)
+}
+
+/// A program that will not finish on its own, for the checks about stopping.
+fn sleeping() -> Result[Process.Started, Str] { shell("sleep 5") }
+
+/// What a shell command wrote to its output.
+fn outputOf(command: Str) -> Result[Str, Str] {
+  Process.drain(&shell(command) ?)
+}
+
+/// The status a shell command left.
+fn statusOf(command: Str) -> Result[Int, Str] {
+  Process.wait(&shell(command) ?)
+}
+
+/// What a program gives back when handed text on its input.
+fn echoed(text: Str) -> Result[Str, Str] {
+  let running = Process.start("/bin/cat", &[]) ?
+  let _written = Process.writeText(&running, text) ?
+  let _closed = Process.closeInput(&running) ?
+  Process.drain(&running)
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. A started program can be waited for and reports its status
+  if statusOf("exit 3") == Ok(3) {
+    held = held + 1
+  }
+
+  // 2. Its output is read while it is running rather than in one piece
+  match Process.start("/bin/sh", &["-c", "printf 'one\\ntwo\\n'"]) {
+    case Err(_) => {}
+    case Ok(running) => {
+      let _closed = Process.closeInput(&running)
+      match Process.drain(&running) {
+        case Ok(text) => {
+          if text == "one\ntwo\n" {
+            held = held + 1
+          }
+        }
+        case Err(_) => {}
+      }
+    }
+  }
+
+  // 3. What a program is given on its input reaches it
+  if echoed("through the pipe") == Ok("through the pipe") {
+    held = held + 1
+  }
+
+  // 4. A program's error stream is kept apart from its output, so a caller
+  //    reading output as data never finds a warning in the middle of it
+  if outputOf("printf 'out'; printf 'bad' >&2") == Ok("out") {
+    held = held + 1
+  }
+
+  // 5. A program that has not finished answers nothing rather than blocking
+  match sleeping() {
+    case Err(_) => {}
+    case Ok(running) => {
+      if Process.waitWithin(&running, 50) == Ok(None) {
+        held = held + 1
+      }
+      let _stopped = Process.stop(&running)
+    }
+  }
+
+  // 6. And stopping it is an answer, not a request: it is gone afterwards,
+  //    rather than being cleaned up at some later moment
+  match sleeping() {
+    case Err(_) => {}
+    case Ok(running) => {
+      let _stopped = Process.stop(&running)
+      match Process.waitWithin(&running, 0) {
+        case Ok(Some(_)) => { held = held + 1 }
+        case _ => {}
+      }
+    }
+  }
+
+  // 7. A program given a deadline it meets answers what it wrote
+  match Process.within("/bin/sh", &["-c", "printf 'quick'"], 5000) {
+    case Ok(Some(finished)) => {
+      if finished.output == "quick" && finished.status == 0 {
+        held = held + 1
+      }
+    }
+    case _ => {}
+  }
+
+  // 8. A program that overruns its deadline is stopped and reported as such
+  match Process.within("/bin/sh", &["-c", "sleep 5; printf 'late'"], 100) {
+    case Ok(None) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 9. Output larger than a pipe holds does not look like overrunning. A
+  //     deadline waited on without reading would stop the program at the
+  //     moment its pipe filled, which is a fact about the buffer rather than
+  //     about the time it took.
+  match Process.within("/bin/sh", &["-c", "yes hello | head -n 20000"], 30000) {
+    case Ok(Some(finished)) => {
+      if finished.output.length() == 120000 {
+        held = held + 1
+      }
+    }
+    case _ => {}
+  }
+
+  // 10. One program's output feeds another's input
+  match Process.pipe("/bin/sh", &["-c", "printf 'b\\na\\nc\\n'"], "/usr/bin/sort", &[]) {
+    case Ok(finished) => {
+      if finished.output == "a\nb\nc\n" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 12. A pipeline reports the status of the program at its end
+  match Process.pipe("/bin/sh", &["-c", "printf 'x'"], "/bin/sh", &["-c", "cat > /dev/null; exit 7"]) {
+    case Ok(finished) => {
+      if finished.status == 7 {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 13. A program that is not there fails to start rather than failing later
+  match Process.start("/nowhere/at/all", &[]) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 14. The blocking form still works beside the streaming one
+  if Process.output("/bin/sh", &["-c", "printf 'both'"]) == Ok("both") {
+    held = held + 1
+  }
+
+  held
+}

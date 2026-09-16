@@ -1,0 +1,217 @@
+module Std.App.IsrCache
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// One cached rendered response.
+export type CacheEntry = {
+  key: Str,
+  content: Bytes,
+  etag: Str,
+  tags: Array[Str],
+  expiresAt: Int,
+  staleUntil: Int
+}
+
+/// Internal state tracked within the synchronized cell.
+export type CacheState = {
+  entries: Array[CacheEntry],
+  capacity: Int,
+  hits: Int,
+  staleHits: Int,
+  misses: Int
+}
+
+/// A thread-safe, zero-copy Incremental Static Regeneration cache.
+export type IsrCache = {
+  state: Sync.Cell[CacheState],
+  lock: Sync.Mutex
+}
+
+/// The result of an ISR cache lookup.
+export type CacheLookup
+  = Fresh(Bytes, Str)
+  | Stale(Bytes, Str)
+  | Miss
+
+fn emptyState(capacity: Int) -> CacheState {
+  CacheState {
+    entries: [],
+    capacity: capacity,
+    hits: 0,
+    staleHits: 0,
+    misses: 0
+  }
+}
+
+/// Helper to check if a tag exists in an array of tags.
+fn hasTag(tags: &Array[Str], target: Str) -> Bool {
+  for t in tags {
+    if t == target { return true }
+  }
+  false
+}
+
+/// Creates a new thread-safe ISR cache with bounded capacity.
+export fn create(capacity: Int) -> IsrCache {
+  IsrCache {
+    state: Sync.cell(emptyState(capacity)),
+    lock: Sync.mutex()
+  }
+}
+
+/// Looks up an entry by key, returning Fresh, Stale, or Miss.
+export fn get(cache: &IsrCache, key: Str, now: Int) -> CacheLookup {
+  let decision = Sync.withLock(&cache.lock, fn() -> CacheLookup {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      var foundIndex = -1
+      var idx = 0
+      while idx < st.entries.length() {
+        if st.entries[idx].key == key {
+          foundIndex = idx
+        }
+        idx = idx + 1
+      }
+
+      if foundIndex >= 0 {
+        let entry = st.entries[foundIndex]
+        if now < entry.expiresAt {
+          let _s = Sync.set(&cache.state, CacheState{..st, hits: st.hits + 1})
+          Fresh(entry.content, entry.etag)
+        } else {
+          if now < entry.staleUntil {
+            let _s = Sync.set(&cache.state, CacheState{..st, staleHits: st.staleHits + 1})
+            Stale(entry.content, entry.etag)
+          } else {
+            let _s = Sync.set(&cache.state, CacheState{..st, misses: st.misses + 1})
+            Miss
+          }
+        }
+      } else {
+        let _s = Sync.set(&cache.state, CacheState{..st, misses: st.misses + 1})
+        Miss
+      }
+    })
+  Result.unwrapOr(decision, Miss)
+}
+
+/// Stores or replaces an entry with lifetime and stale-while-revalidate duration.
+export fn put(
+  cache: &IsrCache,
+  key: Str,
+  content: &Bytes,
+  etag: Str,
+  tags: &Array[Str],
+  ttlSeconds: Int,
+  staleSeconds: Int,
+  now: Int
+) -> () {
+  let _res = Sync.withLock(&cache.lock, fn() -> () {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      var retained: Array[CacheEntry] = []
+      for existing in st.entries {
+        if existing.key != key {
+          retained = retained.push(existing)
+        }
+      }
+
+      let newEntry = CacheEntry {
+        key: key,
+        content: *content,
+        etag: etag,
+        tags: *tags,
+        expiresAt: now + ttlSeconds,
+        staleUntil: now + ttlSeconds + staleSeconds
+      }
+
+      // Enforce capacity bounds
+      if retained.length() >= st.capacity && retained.length() > 0 {
+        retained = retained.slice(1, retained.length())
+      }
+
+      retained = retained.push(newEntry)
+      let _s = Sync.set(&cache.state, CacheState{..st, entries: retained})
+    })
+}
+
+/// Marks all entries with the matching tag as stale (expired).
+///
+/// Subsequent lookups return `Stale`, allowing immediate serving while triggering revalidation.
+export fn revalidateTag(cache: &IsrCache, tag: Str, now: Int) -> Int {
+  let result = Sync.withLock(&cache.lock, fn() -> Int {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      var updated: Array[CacheEntry] = []
+      var count = 0
+
+      for entry in st.entries {
+        if hasTag(&entry.tags, tag) {
+          // Set expiration to the past to mark stale
+          let staleEntry = CacheEntry {
+            ..entry,
+            expiresAt: now - 1
+          }
+          updated = updated.push(staleEntry)
+          count = count + 1
+        } else {
+          updated = updated.push(entry)
+        }
+      }
+
+      let _s = Sync.set(&cache.state, CacheState{..st, entries: updated})
+      count
+    })
+  Result.unwrapOr(result, 0)
+}
+
+/// Evicts all entries bearing the specified tag immediately from cache.
+export fn purgeTag(cache: &IsrCache, tag: Str) -> Int {
+  let result = Sync.withLock(&cache.lock, fn() -> Int {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      var retained: Array[CacheEntry] = []
+      var removed = 0
+
+      for entry in st.entries {
+        if hasTag(&entry.tags, tag) {
+          removed = removed + 1
+        } else {
+          retained = retained.push(entry)
+        }
+      }
+
+      let _s = Sync.set(&cache.state, CacheState{..st, entries: retained})
+      removed
+    })
+  Result.unwrapOr(result, 0)
+}
+
+/// Evicts an entry by key.
+export fn purgeKey(cache: &IsrCache, key: Str) -> Bool {
+  let result = Sync.withLock(&cache.lock, fn() -> Bool {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      var retained: Array[CacheEntry] = []
+      var found = false
+
+      for entry in st.entries {
+        if entry.key == key {
+          found = true
+        } else {
+          retained = retained.push(entry)
+        }
+      }
+
+      let _s = Sync.set(&cache.state, CacheState{..st, entries: retained})
+      found
+    })
+  Result.unwrapOr(result, false)
+}
+
+/// Returns (currentEntries, freshHits, staleHits, misses).
+export fn stats(cache: &IsrCache) -> (Int, Int, Int, Int) {
+  let result = Sync.withLock(&cache.lock, fn() -> (Int, Int, Int, Int) {
+      let st = Result.unwrapOr(Sync.get(&cache.state), emptyState(10))
+      (st.entries.length(), st.hits, st.staleHits, st.misses)
+    })
+  Result.unwrapOr(result, (0, 0, 0, 0))
+}

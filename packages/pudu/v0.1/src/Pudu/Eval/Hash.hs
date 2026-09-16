@@ -1,0 +1,206 @@
+{-| @Eval.Hash.Module — hashing the library cannot afford to write itself
+
+    `Std.Crypto` implements SHA-256 in Pudu, and that implementation is the
+    evidence that the language's bit work is correct: it produces byte-exact
+    digests for the algorithm's published vectors. It is kept.
+
+    What it cannot do is be used in a loop. A digest of a short message
+    measures 23.6 ms unoptimised, and the key derivation a database handshake
+    performs is four thousand and ninety-six iterations of two digests each —
+    a minute of arithmetic to open one connection. The same figure is what
+    stops a hash map: a lookup that hashes its key cannot pay a digest for it.
+
+    So the algorithms live here as well, and the boundary is visible: a program
+    that wants to read how SHA-256 works reads `Std.Crypto`, and one that needs
+    to run it many times reaches these. Both answer the same digests, which the
+    fixtures check against each other. -}
+module Pudu.Eval.Hash
+  ( hashOfBytes
+  , hashOfValue
+  , hmacSha256
+  , pbkdf2Sha256
+  , sha256
+  , sha512
+  , sha3_256
+  , sha3_512
+  , blake2b256
+  , blake2b512
+  , hmacSha512
+  , constantTimeEqual
+  ) where
+
+import qualified Crypto.Hash as Hash
+import qualified Crypto.KDF.PBKDF2 as Pbkdf2
+import qualified Crypto.MAC.HMAC as Hmac
+import Data.Bits (shiftR, xor, (.&.))
+import qualified Data.ByteArray as ByteArray
+import qualified Data.ByteString as ByteString
+import Data.Char (ord)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Data.Word (Word64, Word8)
+import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Value (Value (..))
+
+
+
+
+
+{-| The SHA-256 digest of bytes, as its thirty-two bytes. -}
+sha256 :: ByteString.ByteString -> ByteString.ByteString
+sha256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA256)
+
+
+
+
+{-| The SHA-512 digest of bytes, as its sixty-four bytes.
+
+    Beside SHA-256 rather than instead of it: a signature algorithm names the
+    digest it is defined over, and a reader implementing one cannot substitute
+    the digest they happen to have. -}
+sha512 :: ByteString.ByteString -> ByteString.ByteString
+sha512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA512)
+
+{-| The SHA3-256 digest of bytes, as its thirty-two bytes.
+
+    A sponge construction unrelated to SHA-2, so a weakness found in one family
+    does not carry to the other, and a protocol that names it cannot be served
+    by SHA-256. -}
+sha3_256 :: ByteString.ByteString -> ByteString.ByteString
+sha3_256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA3_256)
+
+{-| The SHA3-512 digest of bytes, as its sixty-four bytes. -}
+sha3_512 :: ByteString.ByteString -> ByteString.ByteString
+sha3_512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA3_512)
+
+{-| The BLAKE2b digest of bytes at thirty-two bytes.
+
+    Faster than SHA-2 in software at the same security margin, which is why
+    content addressing and integrity checks over large files reach for it. -}
+blake2b256 :: ByteString.ByteString -> ByteString.ByteString
+blake2b256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.Blake2b_256)
+
+{-| The BLAKE2b digest of bytes at sixty-four bytes. -}
+blake2b512 :: ByteString.ByteString -> ByteString.ByteString
+blake2b512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.Blake2b_512)
+
+{-| The keyed digest over SHA-512, for protocols defined over it. -}
+hmacSha512 :: ByteString.ByteString -> ByteString.ByteString -> ByteString.ByteString
+hmacSha512 key message =
+  ByteArray.convert (Hmac.hmac key message :: Hmac.HMAC Hash.SHA512)
+
+{-| Whether two byte strings are equal, in time that depends only on their
+    lengths rather than on where they first differ. -}
+constantTimeEqual :: ByteString.ByteString -> ByteString.ByteString -> Bool
+constantTimeEqual = ByteArray.constEq
+
+{-| The keyed digest, which is what proves a message came from someone holding
+    the key rather than only that it was not altered.
+
+    A key longer than a block is replaced by its own digest, and a shorter one
+    padded with zeros, exactly as the construction requires. Getting either
+    wrong produces a value that looks like a digest and authenticates nothing. -}
+hmacSha256 :: ByteString.ByteString -> ByteString.ByteString -> ByteString.ByteString
+hmacSha256 key message =
+  ByteArray.convert (Hmac.hmac key message :: Hmac.HMAC Hash.SHA256)
+
+
+{-| A key derived from a password by iterating the keyed digest.
+
+    The iteration count is the point: it is what makes guessing a password cost
+    the guesser the same as it cost the owner, once, and it is why this cannot
+    be written in the language at the speed the language currently runs. -}
+pbkdf2Sha256
+  :: ByteString.ByteString -> ByteString.ByteString -> Int -> Int -> ByteString.ByteString
+pbkdf2Sha256 password salt iterations wanted =
+  Pbkdf2.fastPBKDF2_SHA256
+    Pbkdf2.Parameters{Pbkdf2.iterCounts = iterations, Pbkdf2.outputLength = wanted}
+    password
+    salt
+
+
+
+{-| A number for a value, for a collection that reaches its entries by one.
+
+    Not a digest. This is the mixing a hash map wants — cheap, well spread, and
+    stable within a run — and it is deliberately not offered as anything else:
+    a value hashed with this is not hidden, and two programs are not promised
+    the same number for the same value. `sha256` is what a caller needing
+    either of those reaches for.
+
+    A value is hashed through the text it renders as, so two values that print
+    the same hash the same and every shape the language has is covered without
+    this needing a case for each. That costs the rendering, which is why the
+    byte and text cases below skip it. -}
+hashOfValue :: Value -> Integer
+hashOfValue value = case value of
+  StrValue text -> hashOfText text
+  BytesValue bytes -> hashOfBytes bytes
+  IntValue _ number -> mixInteger number
+  other -> hashOfText (renderValue other)
+
+{-| The bytes mixed into one number, by the multiply-and-exclusive-or walk that
+    spreads a changed byte across the whole result rather than leaving it in
+    the position it changed. -}
+hashOfBytes :: ByteString.ByteString -> Integer
+hashOfBytes = fromIntegral . ByteString.foldl' mixByte offsetBasis
+
+{-| Feed canonical UTF-8 bytes directly, without constructing an encoded value. -}
+hashOfText :: Text -> Integer
+hashOfText = fromIntegral . Text.foldl' mixScalar offsetBasis
+
+mixScalar :: Word64 -> Char -> Word64
+mixScalar accumulated character
+  | code < 0x80 = emit accumulated code
+  | code < 0x800 =
+      continuation (emit accumulated (0xc0 + (code `shiftR` 6))) code
+  | code < 0x10000 =
+      continuation
+        (continuation (emit accumulated (0xe0 + (code `shiftR` 12))) (code `shiftR` 6)) code
+  | otherwise =
+      continuation
+        (continuation
+          (continuation (emit accumulated (0xf0 + (code `shiftR` 18))) (code `shiftR` 12))
+          (code `shiftR` 6)) code
+ where
+  code = ord character
+  emit held byte = mixByte held (fromIntegral byte)
+  continuation held byte = emit held (0x80 + (byte .&. 0x3f))
+{-# INLINE mixScalar #-}
+
+offsetBasis :: Word64
+offsetBasis = 0xcbf29ce484222325
+
+mixByte :: Word64 -> Word8 -> Word64
+mixByte accumulated byte = (accumulated `xor` fromIntegral byte) * 0x100000001b3
+{-# INLINE mixByte #-}
+
+{-| Word-sized magnitudes are folded without staging bytes in a list or buffer.
+    Admission happens before narrowing; the general path retains every bit. -}
+mixInteger :: Integer -> Integer
+mixInteger number = fromIntegral (mixByte magnitudeHash sign)
+ where
+  magnitude = abs number
+  sign = if number < 0 then 1 else 0
+  magnitudeHash
+    | magnitude <= fromIntegral (maxBound :: Word64) = mixWord (fromInteger magnitude)
+    | otherwise = foldl' mixByte offsetBasis (bytesOfInteger magnitude)
+
+mixWord :: Word64 -> Word64
+mixWord number = begin 56
+ where
+  begin shift
+    | shift > 0 && number `shiftR` shift == 0 = begin (shift - 8)
+    | otherwise = consume shift offsetBasis
+  consume shift accumulated =
+    let next = mixByte accumulated (fromIntegral (number `shiftR` shift))
+     in if shift == 0 then next else next `seq` consume (shift - 8) next
+
+bytesOfInteger :: Integer -> [Word8]
+bytesOfInteger number
+  | number == 0 = [0]
+  | otherwise = go number []
+ where
+  go remaining built
+    | remaining == 0 = built
+    | otherwise = go (remaining `shiftR` 8) (fromIntegral (remaining .&. 0xff) : built)

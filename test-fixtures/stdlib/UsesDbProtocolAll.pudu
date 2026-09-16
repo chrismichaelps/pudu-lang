@@ -1,0 +1,397 @@
+module UsesDbProtocolAll
+
+import Std.Bytes as Bytes
+import Std.Db.Protocol as Wire
+import Std.Option as Option
+import Std.Result as Result
+
+/// The letter a framed message starts with, or a mark no message carries.
+fn letterOf(message: &Bytes) -> Str { Result.unwrapOr(Bytes.toText(&message.take(1)), "?") }
+
+/// The length a framed message states.
+///
+/// The protocol counts the four bytes holding the number but not the letter
+/// before them, so a well-framed message states one less than its own size.
+/// That is the whole of what a reader has to go on: a number one too small
+/// leaves a byte behind that the next read takes for a letter, and one too
+/// large waits for bytes the sender never sends.
+fn statedLength(message: &Bytes) -> Int {
+  match Bytes.getU32Be(&message.drop(1)) {
+    case Ok(read) => Option.unwrapOr(convertInteger[Int](read[0]), 0 - 1)
+    case Err(_) => 0 - 1
+  }
+}
+
+/// Whether a message states its own size the way the protocol states it.
+fn framedWell(message: &Bytes) -> Bool {
+  statedLength(message) == message.length() - 1
+}
+
+/// The bytes after the letter and the length.
+fn payloadOf(message: &Bytes) -> Bytes { message.drop(5) }
+
+/// The payload as hex, which compares a message against the wire rather than
+/// against whatever this module happens to produce.
+fn payloadHex(message: &Bytes) -> Str { Bytes.encodeHex(&payloadOf(message)) }
+
+/// Whether reading something out of a message failed for being cut short.
+fn cutShort[T](outcome: &Result[T, Wire.ProtocolError]) -> Bool {
+  match *outcome {
+    case Err(Wire.Truncated(_, _)) => true
+    case _ => false
+  }
+}
+
+/// Whether reading something out of a message failed on a field.
+fn badField[T](outcome: &Result[T, Wire.ProtocolError]) -> Bool {
+  match *outcome {
+    case Err(Wire.BadField(_)) => true
+    case _ => false
+  }
+}
+
+/// A column description as the server writes one: the name, then the eighteen
+/// fixed bytes after it.
+fn columnBytes(name: Str, oid: UInt32, format: UInt16) -> Bytes {
+  Bytes.join(&[
+      Wire.cString(name),
+      Bytes.putU32Be(16384u32),
+      Bytes.putU16Be(1u16),
+      Bytes.putU32Be(oid),
+      Bytes.putU16Be(4u16),
+      Bytes.putU32Be(4294967295u32),
+      Bytes.putU16Be(format)
+    ])
+}
+
+/// Every export of `Std.Db.Protocol`.
+///
+/// Every message this builds is checked against the wire rather than against
+/// the reader beside it: the letter it starts with, the length it states, and
+/// the bytes after that length. A pair of functions that wrote and read the
+/// same wrong shape would agree with each other and with nothing else, and a
+/// round trip is the one check that cannot tell.
+///
+/// The length is checked on every message because it is the field a server has
+/// nothing else to go on: one byte short leaves a byte behind that the next
+/// read takes for a letter, and one byte long waits for a byte that never
+/// comes. Both look like a hang rather than like a malformed message.
+///
+/// The readers are asked for the case they exist for as well as the case they
+/// are written for. A field that is absent is not a field that is empty — the
+/// protocol spells one as a length of minus one and the other as a length of
+/// zero, and a reader that treated them alike would answer nothing where the
+/// column holds the empty string.
+export fn main() -> Int {
+  var held = 0
+
+  // The version, as a major and minor number packed into one word: three and
+  // zero. Written out rather than restated, since restating it would agree
+  // with any number at all.
+  let version: Int = Wire.VERSION
+  if version == 3 * 65536 { held = held + 1 }
+
+  // Text the protocol's way: what was there, and the byte that ends it.
+  if Bytes.encodeHex(&Wire.cString("ab")) == "616200" { held = held + 1 }
+  if Bytes.encodeHex(&Wire.cString("")) == "00" { held = held + 1 }
+
+  // And back, leaving what followed.
+  let twoStrings = Bytes.join(&[Wire.cString("ab"), Wire.cString("cd")])
+  match Wire.readCString(&twoStrings) {
+    case Ok(read) => {
+      if read[0] == "ab" && read[1].length() == 3 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A string with no terminator is a message cut short, not a string running
+  // to the end: read as one, a message cut between fields looks like a whole
+  // message with a shorter last field.
+  if cutShort(&Wire.readCString(&Bytes.fromText("ab"))) { held = held + 1 }
+  if badField(&Wire.readCString(&Bytes.join(&[bytesOf([255u8]), bytesOf([0u8])]))) {
+    held = held + 1
+  }
+
+  // The one message with no letter, because the server does not yet know what
+  // version is speaking and so cannot know how to read one. Its length counts
+  // itself: four for the length, four for the version, the pairs, and the
+  // byte that ends them.
+  let opening = Wire.startup(&[("user", "ada"), ("database", "db")])
+  if opening.length() == 4 + 4 + 9 + 12 + 1 { held = held + 1 }
+  // With no letter in front, the length is the first thing there is, and it
+  // counts the whole message including itself.
+  match Bytes.getU32Be(&opening) {
+    case Ok(read) => {
+      if Option.unwrapOr(convertInteger[Int](read[0]), 0) == opening.length() {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  match Bytes.getU32Be(&opening.drop(4)) {
+    case Ok(read) => { if read[0] == 196608u32 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if Bytes.contains(&opening, &Wire.cString("ada")) { held = held + 1 }
+  // Nothing to say still says the version and the ending byte.
+  if Wire.startup(&[]).length() == 9 { held = held + 1 }
+
+  // Text planned and run in one step. This carries no values, which is why
+  // `bind` exists: text with a value pasted into it is a query whose shape
+  // depends on the value, and that is how a value becomes an instruction.
+  let asked = Wire.query("select 1")
+  if letterOf(&asked) == "Q" && framedWell(&asked) { held = held + 1 }
+  if payloadHex(&asked) == Bytes.encodeHex(&Wire.cString("select 1")) { held = held + 1 }
+
+  // A statement left with holes in it, named so it can be spoken of again.
+  let planned = Wire.parse("byName", "select * from people where name = $1")
+  if letterOf(&planned) == "P" && framedWell(&planned) { held = held + 1 }
+  if Bytes.startsWith(&payloadOf(&planned), &Wire.cString("byName")) { held = held + 1 }
+  // The two zero bytes at the end say the client names no types for the holes
+  // and leaves the server to decide.
+  if Bytes.endsWith(&payloadOf(&planned), &Bytes.putU16Be(0u16)) { held = held + 1 }
+
+  // Values for the holes, sent as text because text means the same thing on a
+  // server this client did not build.
+  let supplied = Wire.bind("", "byName", &[Some("ada"), None, Some("")])
+  if letterOf(&supplied) == "B" && framedWell(&supplied) { held = held + 1 }
+  // A value that is absent is a length of minus one; one that is empty is a
+  // length of zero. The protocol tells them apart and so must this.
+  if Bytes.contains(&supplied, &Bytes.putU32Be(4294967295u32)) { held = held + 1 }
+  if Bytes.contains(&supplied, &Bytes.fromText("ada")) { held = held + 1 }
+
+  // Asking what shape a planned statement produces. The `S` inside says the
+  // question is about the statement rather than about a portal.
+  let described = Wire.describeStatement("byName")
+  if letterOf(&described) == "D" && framedWell(&described) { held = held + 1 }
+  if payloadHex(&described) == "53" + Bytes.encodeHex(&Wire.cString("byName")) {
+    held = held + 1
+  }
+
+  // Running what was bound, with a limit of nothing meaning every row.
+  let ran = Wire.execute("", 0)
+  if letterOf(&ran) == "E" && framedWell(&ran) { held = held + 1 }
+  if payloadHex(&ran) == "0000000000" { held = held + 1 }
+  if Bytes.contains(&payloadOf(&Wire.execute("", 64)), &Bytes.putU32Be(64u32)) {
+    held = held + 1
+  }
+
+  // The end of a sequence, which is what makes the server report and become
+  // ready again. A client that never sends it waits for a reply that is
+  // waiting for it.
+  if Bytes.encodeHex(&Wire.sync()) == "5300000004" { held = held + 1 }
+  if Bytes.encodeHex(&Wire.terminate()) == "5800000004" { held = held + 1 }
+
+  // A secret sent as the server asked for it, and the two halves of a
+  // challenge. All three travel under the same letter, which is why the
+  // client has to remember what it asked.
+  let secret = Wire.password("hunter2")
+  if letterOf(&secret) == "p" && framedWell(&secret) { held = held + 1 }
+  if payloadHex(&secret) == Bytes.encodeHex(&Wire.cString("hunter2")) { held = held + 1 }
+
+  let opened = Wire.saslInitial("SCRAM-SHA-256", "n,,n=,r=rOprNGfw")
+  if letterOf(&opened) == "p" && framedWell(&opened) { held = held + 1 }
+  if Bytes.startsWith(&payloadOf(&opened), &Wire.cString("SCRAM-SHA-256")) {
+    held = held + 1
+  }
+  // The opening text carries its own length, because the mechanism's name
+  // ended with a zero byte and the text after it may hold one.
+  if Bytes.contains(&opened, &Bytes.putU32Be(16u32)) { held = held + 1 }
+
+  let answered = Wire.saslResponse("c=biws,r=rOprNGfw")
+  if letterOf(&answered) == "p" && framedWell(&answered) { held = held + 1 }
+  // A later message is the text alone, with no length and no ending byte.
+  if payloadHex(&answered) == Bytes.encodeHex(&Bytes.fromText("c=biws,r=rOprNGfw")) {
+    held = held + 1
+  }
+
+  // What a framed message says about its own size, before anything allocates
+  // or asks the socket for a body.
+  let head = Bytes.join(&[Bytes.fromText("R"), Bytes.putU32Be(8u32)])
+  if Result.unwrapOr(Wire.messageSize(&head), 0) == 9 { held = held + 1 }
+  if Option.unwrapOr(Wire.bodyLength(&head), 0 - 1) == 4 { held = held + 1 }
+  // Five bytes are what it takes to know. Fewer is not a malformed message,
+  // it is a message that has not arrived.
+  if cutShort(&Wire.messageSize(&Bytes.fromText("R"))) { held = held + 1 }
+  if Option.isNone(&Wire.bodyLength(&Bytes.fromText("R"))) { held = held + 1 }
+  // A length below four does not count its own four bytes, and one above the
+  // signed range is a number the protocol cannot have written.
+  if badField(&Wire.messageSize(&Bytes.join(&[Bytes.fromText("R"), Bytes.putU32Be(3u32)]))) {
+    held = held + 1
+  }
+  if badField(
+      &Wire.messageSize(&Bytes.join(&[Bytes.fromText("R"), Bytes.putU32Be(2147483648u32)]))
+  ) {
+    held = held + 1
+  }
+
+  // One whole message out of a stream, with what followed left behind. A
+  // reader that answered the rest wrongly would lose the next message or read
+  // this one twice.
+  let stream = Bytes.join(&[Wire.sync(), Wire.terminate()])
+  match Wire.readMessage(&stream) {
+    case Ok(read) => {
+      let first: Wire.Message = read[0]
+      if first.kind == "S" && first.payload.isEmpty() && read[1].length() == 5 {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  // A message whose bytes have not all arrived is not a message yet.
+  if cutShort(&Wire.readMessage(&Wire.query("select 1").take(7))) { held = held + 1 }
+
+  // What kind of authentication the server asked for, read from the message
+  // that asks. Five is the challenge; nought is the word that no proof is
+  // wanted, which a client must not mistake for a challenge it failed to read.
+  if Result.unwrapOr(Wire.authenticationKind(&Bytes.putU32Be(5u32)), 0 - 1) == 5 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Wire.authenticationKind(&Bytes.putU32Be(0u32)), 0 - 1) == 0 {
+    held = held + 1
+  }
+  if cutShort(&Wire.authenticationKind(&bytesOf([0u8, 0u8]))) { held = held + 1 }
+
+  // The columns a result will have. The name is a string and everything after
+  // it is fixed, so a reader off by a byte reads a type from a column number.
+  let shape = Bytes.join(&[
+      Bytes.putU16Be(2u16),
+      columnBytes("id", 23u32, 0u16),
+      columnBytes("name", 25u32, 0u16)
+    ])
+  match Wire.readRowDescription(&shape) {
+    case Ok(columns) => {
+      if columns.length() == 2 { held = held + 1 }
+      let first: Wire.Column = columns[0]
+      if first.name == "id" && first.oid == 23 { held = held + 1 }
+      if columns[1].name == "name" && columns[1].oid == 25 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // Every value was asked for as text, so a column the server says it will
+  // send as bytes is a disagreement rather than a column to read differently.
+  if badField(&Wire.readRowDescription(&Bytes.join(&[
+          Bytes.putU16Be(1u16),
+          columnBytes("id", 23u32, 1u16)
+        ]))) {
+    held = held + 1
+  }
+  // A count that promises more columns than follow, and bytes left over after
+  // the ones it promised. Either means the message was not what it said.
+  if cutShort(&Wire.readRowDescription(&Bytes.putU16Be(1u16))) { held = held + 1 }
+  if badField(&Wire.readRowDescription(&Bytes.join(&[
+          Bytes.putU16Be(1u16),
+          columnBytes("id", 23u32, 0u16),
+          bytesOf([7u8])
+        ]))) {
+    held = held + 1
+  }
+
+  // One row of values. The sentinel length is the only thing that means the
+  // column held nothing; a length of zero means it held the empty string.
+  let row = Bytes.join(&[
+      Bytes.putU16Be(3u16),
+      Bytes.putU32Be(3u32),
+      Bytes.fromText("ada"),
+      Bytes.putU32Be(4294967295u32),
+      Bytes.putU32Be(0u32)
+    ])
+  match Wire.readDataRow(&row) {
+    case Ok(values) => {
+      if values.length() == 3 { held = held + 1 }
+      if Option.unwrapOr(values[0], "") == "ada" { held = held + 1 }
+      if Option.isNone(&values[1]) { held = held + 1 }
+      // The case the sentinel exists to be told apart from.
+      if Option.isSome(&values[2]) && Option.unwrapOr(values[2], "x") == "" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  // A field that says it is longer than what followed, and a negative length
+  // that is not the sentinel. Neither is a column holding nothing.
+  if cutShort(&Wire.readDataRow(&Bytes.join(&[
+          Bytes.putU16Be(1u16),
+          Bytes.putU32Be(9u32),
+          Bytes.fromText("ada")
+        ]))) {
+    held = held + 1
+  }
+  if badField(&Wire.readDataRow(&Bytes.join(&[
+          Bytes.putU16Be(1u16),
+          Bytes.putU32Be(4294967294u32)
+        ]))) {
+    held = held + 1
+  }
+  // Text a column cannot hold, which is a field to refuse rather than a field
+  // that is absent.
+  if badField(&Wire.readDataRow(&Bytes.join(&[
+          Bytes.putU16Be(1u16),
+          Bytes.putU32Be(1u32),
+          bytesOf([255u8])
+        ]))) {
+    held = held + 1
+  }
+  if cutShort(&Wire.readDataRow(&Bytes.empty())) { held = held + 1 }
+
+  // What an error carries, kept as the letters the protocol uses: the set
+  // grows between server versions, and a client that dropped what it did not
+  // recognise would lose exactly the detail a newer server added to help.
+  let reported = Bytes.join(&[
+      Bytes.fromText("S"),
+      Wire.cString("ERROR"),
+      Bytes.fromText("C"),
+      Wire.cString("42601"),
+      Bytes.fromText("M"),
+      Wire.cString("syntax error at or near \"slect\""),
+      bytesOf([0u8])
+    ])
+  let fields = Wire.readFields(&reported)
+  if fields.length() == 3 { held = held + 1 }
+  if Wire.fieldOf(&fields, "S") == "ERROR" { held = held + 1 }
+  if Wire.fieldOf(&fields, "C") == "42601" { held = held + 1 }
+  if Wire.fieldOf(&fields, "M") == "syntax error at or near \"slect\"" { held = held + 1 }
+  // A letter this server did not send. Nothing rather than the first field,
+  // which is what a lookup written with the wrong comparison would answer.
+  if Wire.fieldOf(&fields, "Z") == "" { held = held + 1 }
+  // An error with nothing in it is the ending byte alone.
+  if Wire.readFields(&bytesOf([0u8])).length() == 0 { held = held + 1 }
+  // A field cut off before its terminator ends the reading rather than
+  // inventing a field out of the rest.
+  let cut = Bytes.join(&[Bytes.fromText("S"), Bytes.fromText("ERROR")])
+  if Wire.readFields(&cut).length() == 0 { held = held + 1 }
+  // The first letter wins when one is sent twice, which is the answer that
+  // does not depend on how far the reader happened to get.
+  let twice = Bytes.join(&[
+      Bytes.fromText("S"),
+      Wire.cString("ERROR"),
+      Bytes.fromText("S"),
+      Wire.cString("FATAL"),
+      bytesOf([0u8])
+    ])
+  if Wire.fieldOf(&Wire.readFields(&twice), "S") == "ERROR" { held = held + 1 }
+
+  // The kind a message is named by is text rather than a variant per message,
+  // because a server may send a kind this client has never heard of and the
+  // only correct thing to do with most of them is to read past them. So the
+  // error for one has to be able to hold its name.
+  let unknown: Wire.ProtocolError = Wire.UnknownMessage("ẑ")
+  match unknown {
+    case Wire.UnknownMessage(named) => { if named == "ẑ" { held = held + 1 } }
+    case _ => {}
+  }
+  // What a message cut short says: what it needed and what was there.
+  match Wire.messageSize(&Bytes.fromText("R")) {
+    case Err(Wire.Truncated(wanted, got)) => {
+      if wanted == 5 && got == 1 { held = held + 1 }
+    }
+    case _ => {}
+  }
+
+  // Any message can be framed, including a kind this module names no builder
+  // for, which is what keeps a new server message from needing a new function.
+  let copied = Wire.frame("C", &Wire.cString("SELECT 1"))
+  if letterOf(&copied) == "C" && framedWell(&copied) { held = held + 1 }
+  if Bytes.encodeHex(&Wire.frame("S", &Bytes.empty())) == "5300000004" { held = held + 1 }
+
+  held
+}

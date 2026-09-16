@@ -1,0 +1,9 @@
+module RejectsEmptyForeignSymbol
+
+foreign "c" {
+  fn absolute symbol "" (value: Int32) -> Int32
+}
+
+export fn main() -> Int32 {
+  unsafe(foreign) { absolute(-1i32) }
+}

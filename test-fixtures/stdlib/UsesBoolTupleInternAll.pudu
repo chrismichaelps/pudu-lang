@@ -1,0 +1,132 @@
+module UsesBoolTupleInternAll
+
+import Std.Bool as Bool
+import Std.Intern as Intern
+import Std.Option as Option
+import Std.Tuple as Tuple
+
+/// Every export of `Std.Bool`, `Std.Tuple` and `Std.Intern`.
+///
+/// The connectives are asked at every combination of their inputs rather than
+/// at one that happens to hold, because a connective is only pinned down by
+/// its whole table: `and` and `xor` agree on three of the four rows, and a
+/// check that asked only those three would accept either for the other.
+///
+/// The pairing functions are asked at a pair whose two sides have different
+/// types, which is what separates reading the first from reading the second: a
+/// function reaching for the wrong side of a pair of two integers answers a
+/// number either way and nothing about the answer says which side it came
+/// from.
+///
+/// The spelling table is checked for the promise that makes it worth having —
+/// one identifier per spelling, however many times it is offered. So the same
+/// spelling is interned twice and the two answers compared, and a table asked
+/// for an identifier it never issued must answer nothing rather than reach
+/// past what it holds.
+export fn main() -> Int {
+  var held = 0
+
+  // Every row of every connective. Two rows for the one-input case, four for
+  // each of the rest.
+  if !Bool.not(true) && Bool.not(false) { held = held + 1 }
+  if Bool.and(true, true) && !Bool.and(true, false) { held = held + 1 }
+  if !Bool.and(false, true) && !Bool.and(false, false) { held = held + 1 }
+  if Bool.or(true, true) && Bool.or(true, false) { held = held + 1 }
+  if Bool.or(false, true) && !Bool.or(false, false) { held = held + 1 }
+  // The row that separates `xor` from `or`, and the pair that separates it
+  // from `and`.
+  if !Bool.xor(true, true) && Bool.xor(true, false) { held = held + 1 }
+  if Bool.xor(false, true) && !Bool.xor(false, false) { held = held + 1 }
+  // A false left holds whatever the right says, which is the row a reader
+  // expecting an ordinary connective gets wrong.
+  if Bool.implies(false, false) && Bool.implies(false, true) { held = held + 1 }
+  if Bool.implies(true, true) && !Bool.implies(true, false) { held = held + 1 }
+
+  // Choosing between two values. The arguments are the false one first, so a
+  // reader taking them the other way round answers the other value.
+  if Bool.select(true, "no", "yes") == "yes" { held = held + 1 }
+  if Bool.select(false, "no", "yes") == "no" { held = held + 1 }
+  if Bool.toInt(true) == 1 && Bool.toInt(false) == 0 { held = held + 1 }
+  if Bool.toText(true) == "true" && Bool.toText(false) == "false" { held = held + 1 }
+
+  // Folding a collection of them. The empty cases go opposite ways: nothing
+  // fails an every-check and nothing satisfies an any-check.
+  if Bool.all(&[true, true]) && !Bool.all(&[true, false]) { held = held + 1 }
+  if Bool.any(&[false, true]) && !Bool.any(&[false, false]) { held = held + 1 }
+  let noBools: Array[Bool] = []
+  if Bool.all(&noBools) && !Bool.any(&noBools) { held = held + 1 }
+
+  // A pair whose sides have different types, so which side an answer came
+  // from is visible in the answer.
+  let labelled = Tuple.of("left", 7)
+  if Tuple.first(labelled) == "left" { held = held + 1 }
+  if Tuple.second(labelled) == 7 { held = held + 1 }
+  if Tuple.swap(labelled) == (7, "left") { held = held + 1 }
+  if Tuple.duplicate("x") == ("x", "x") { held = held + 1 }
+
+  // Transforming one side leaves the other exactly as it was.
+  if Tuple.mapFirst(labelled, fn(text: Str) -> Int => text.length()) == (4, 7) {
+    held = held + 1
+  }
+  if Tuple.mapSecond(labelled, fn(n: Int) -> Int => n * 2) == ("left", 14) {
+    held = held + 1
+  }
+  // Both sides at once, which needs them to be the same type.
+  if Tuple.mapBoth((2, 3), fn(n: Int) -> Int => n * 10) == (20, 30) {
+    held = held + 1
+  }
+
+  // A function of two arguments read as a function of one pair, and back. The
+  // function is not symmetric, so an implementation handing it the sides in
+  // the wrong order answers something else.
+  let minus = fn(left: Int, right: Int) -> Int => left - right
+  if Tuple.uncurry(minus, (10, 3)) == 7 { held = held + 1 }
+  let ofPair = fn(pair: (Int, Int)) -> Int => pair[0] - pair[1]
+  if Tuple.curry(ofPair, 10, 3) == 7 { held = held + 1 }
+
+  // A spelling table, threaded forward from one that holds nothing.
+  let start: Intern.Pool = Intern.empty()
+  if Intern.size(&start) == 0 { held = held + 1 }
+  if Option.isNone(&Intern.resolve(&start, 0)) { held = held + 1 }
+  if Option.isNone(&Intern.lookup(&start, "alpha")) { held = held + 1 }
+
+  let firstAdd = Intern.intern(&start, "alpha")
+  let afterAlpha = firstAdd[0]
+  let alphaId = firstAdd[1]
+  if Intern.size(&afterAlpha) == 1 { held = held + 1 }
+  if Option.unwrapOr(Intern.resolve(&afterAlpha, alphaId), "") == "alpha" {
+    held = held + 1
+  }
+  if Option.unwrapOr(Intern.lookup(&afterAlpha, "alpha"), 0 - 1) == alphaId {
+    held = held + 1
+  }
+
+  // The same spelling offered again keeps its identifier and adds nothing.
+  let secondAdd = Intern.intern(&afterAlpha, "alpha")
+  if secondAdd[1] == alphaId && Intern.size(&secondAdd[0]) == 1 {
+    held = held + 1
+  }
+  // A different spelling gets a different one.
+  let thirdAdd = Intern.intern(&afterAlpha, "beta")
+  if thirdAdd[1] != alphaId && Intern.size(&thirdAdd[0]) == 2 { held = held + 1 }
+
+  // An identifier outside what the table issued, on both sides of the range.
+  if Option.isNone(&Intern.resolve(&afterAlpha, 0 - 1)) { held = held + 1 }
+  if Option.isNone(&Intern.resolve(&afterAlpha, 1)) { held = held + 1 }
+
+  // Interning a run at once, with a repeat inside it: one identifier per
+  // occurrence, and the repeat carrying the identifier its first showing got.
+  let batch = Intern.internAll(&start, &["a", "b", "a", "c"])
+  let filled = batch[0]
+  let ids = batch[1]
+  if ids.length() == 4 { held = held + 1 }
+  if ids[0] == ids[2] && ids[0] != ids[1] { held = held + 1 }
+  if Intern.size(&filled) == 3 { held = held + 1 }
+  if Option.unwrapOr(Intern.resolve(&filled, ids[3]), "") == "c" { held = held + 1 }
+  // Interning nothing leaves the table where it was.
+  let noSpellings: Array[Str] = []
+  let unchanged = Intern.internAll(&filled, &noSpellings)
+  if unchanged[1] == [] && Intern.size(&unchanged[0]) == 3 { held = held + 1 }
+
+  held
+}

@@ -1,0 +1,279 @@
+module Std.IntervalTree
+
+/// Closed 1D interval where low <= high.
+export type Interval = {
+  low: Int,
+  high: Int
+}
+
+/// Internal interval tree node storing subtree maximum endpoint.
+export type IntervalNode = {
+  interval: Interval,
+  maxHigh: Int,
+  left: Array[IntervalNode],
+  right: Array[IntervalNode]
+}
+
+/// Augmented Interval Tree indexing closed 1D intervals with O(log n + k) queries.
+export type IntervalTree = {
+  root: Array[IntervalNode],
+  count: Int
+}
+
+/// Validates and constructs an interval where low <= high.
+export fn interval(low: Int, high: Int) -> Option[Interval] {
+  if low > high {
+    None
+  } else {
+    Some(Interval{low: low, high: high})
+  }
+}
+
+/// Creates an empty interval tree.
+export fn empty() -> IntervalTree {
+  IntervalTree {
+    root: [],
+    count: 0
+  }
+}
+
+/// Returns the number of intervals stored in the tree.
+export fn size(tree: &IntervalTree) -> Int {
+  tree.count
+}
+
+/// Returns whether the tree contains no intervals.
+export fn isEmpty(tree: &IntervalTree) -> Bool {
+  tree.count == 0
+}
+
+fn overlaps(a: &Interval, b: &Interval) -> Bool {
+  a.low <= b.high && b.low <= a.high
+}
+
+fn insertNode(node: IntervalNode, item: Interval) -> IntervalNode {
+  var l = node.left
+  var r = node.right
+  if item.low < node.interval.low {
+    if l.length() == 0 {
+      l = [IntervalNode {
+          interval: item,
+          maxHigh: item.high,
+          left: [],
+          right: []
+        }]
+    } else {
+      l = [insertNode(l[0], item)]
+    }
+  } else {
+    if r.length() == 0 {
+      r = [IntervalNode {
+          interval: item,
+          maxHigh: item.high,
+          left: [],
+          right: []
+        }]
+    } else {
+      r = [insertNode(r[0], item)]
+    }
+  }
+  var m = node.interval.high
+  if item.high > m {
+    m = item.high
+  }
+  if l.length() > 0 && l[0].maxHigh > m {
+    m = l[0].maxHigh
+  }
+  if r.length() > 0 && r[0].maxHigh > m {
+    m = r[0].maxHigh
+  }
+  IntervalNode {
+    interval: node.interval,
+    maxHigh: m,
+    left: l,
+    right: r
+  }
+}
+
+/// Inserts an interval into the tree and updates subtree maximum endpoints.
+export fn insert(tree: &IntervalTree, item: Interval) -> IntervalTree {
+  if tree.root.length() == 0 {
+    return IntervalTree {
+      root: [IntervalNode {
+          interval: item,
+          maxHigh: item.high,
+          left: [],
+          right: []
+        }],
+      count: 1
+    }
+  }
+  let newRoot = insertNode(tree.root[0], item)
+  IntervalTree {
+    root: [newRoot],
+    count: tree.count + 1
+  }
+}
+
+fn mergeIntervals(left: &Array[Interval], right: &Array[Interval]) -> Array[Interval] {
+  let nL = left.length()
+  let nR = right.length()
+  var out = []
+  var i = 0
+  var j = 0
+  while i < nL && j < nR {
+    let a = left[i]
+    let b = right[j]
+    if a.low < b.low || (a.low == b.low && a.high <= b.high) {
+      out = out.push(a)
+      i = i + 1
+    } else {
+      out = out.push(b)
+      j = j + 1
+    }
+  }
+  while i < nL {
+    out = out.push(left[i])
+    i = i + 1
+  }
+  while j < nR {
+    out = out.push(right[j])
+    j = j + 1
+  }
+  out
+}
+
+fn sortIntervals(items: &Array[Interval]) -> Array[Interval] {
+  let n = items.length()
+  if n <= 1 {
+    return *items
+  }
+  let mid = n / 2
+  var left = []
+  var i = 0
+  while i < mid {
+    left = left.push(items[i])
+    i = i + 1
+  }
+  var right = []
+  while i < n {
+    right = right.push(items[i])
+    i = i + 1
+  }
+  let sortedLeft = sortIntervals(&left)
+  let sortedRight = sortIntervals(&right)
+  mergeIntervals(&sortedLeft, &sortedRight)
+}
+
+fn buildBalanced(sorted: &Array[Interval], start: Int, end: Int) -> Array[IntervalNode] {
+  if start > end {
+    return []
+  }
+  let mid = start + (end - start) / 2
+  let iv = sorted[mid]
+  let leftSub = buildBalanced(sorted, start, mid - 1)
+  let rightSub = buildBalanced(sorted, mid + 1, end)
+  var m = iv.high
+  if leftSub.length() > 0 && leftSub[0].maxHigh > m {
+    m = leftSub[0].maxHigh
+  }
+  if rightSub.length() > 0 && rightSub[0].maxHigh > m {
+    m = rightSub[0].maxHigh
+  }
+  [IntervalNode {
+      interval: iv,
+      maxHigh: m,
+      left: leftSub,
+      right: rightSub
+    }]
+}
+
+/// Builds a balanced interval tree from an array of intervals in O(n log n) time.
+export fn fromIntervals(intervals: &Array[Interval]) -> IntervalTree {
+  let n = intervals.length()
+  if n == 0 {
+    return empty()
+  }
+  let sorted = sortIntervals(intervals)
+  let rootNodes = buildBalanced(&sorted, 0, n - 1)
+  IntervalTree {
+    root: rootNodes,
+    count: n
+  }
+}
+
+fn queryOverlaps(nodes: &Array[IntervalNode], q: &Interval) -> Array[Interval] {
+  if nodes.length() == 0 {
+    return []
+  }
+  let curr = nodes[0]
+  var result = []
+  if curr.left.length() > 0 && curr.left[0].maxHigh >= q.low {
+    result = result.concat(queryOverlaps(&curr.left, q))
+  }
+  if overlaps(&curr.interval, q) {
+    result = result.push(curr.interval)
+  }
+  if curr.right.length() > 0 && curr.interval.low <= q.high {
+    result = result.concat(queryOverlaps(&curr.right, q))
+  }
+  result
+}
+
+/// Finds all intervals in the tree that overlap with the query interval.
+export fn findOverlaps(tree: &IntervalTree, queryRange: Interval) -> Array[Interval] {
+  queryOverlaps(&tree.root, &queryRange)
+}
+
+/// Stabbing query finding all intervals containing the given point.
+export fn pointQuery(tree: &IntervalTree, point: Int) -> Array[Interval] {
+  let q = Interval{low: point, high: point}
+  findOverlaps(tree, q)
+}
+
+fn checkOverlap(nodes: &Array[IntervalNode], q: &Interval) -> Bool {
+  if nodes.length() == 0 {
+    return false
+  }
+  let curr = nodes[0]
+  if overlaps(&curr.interval, q) {
+    return true
+  }
+  if curr.left.length() > 0 && curr.left[0].maxHigh >= q.low {
+    if checkOverlap(&curr.left, q) {
+      return true
+    }
+  }
+  if curr.right.length() > 0 && curr.interval.low <= q.high {
+    if checkOverlap(&curr.right, q) {
+      return true
+    }
+  }
+  false
+}
+
+/// Tests whether any interval in the tree overlaps with the query interval.
+export fn hasOverlap(tree: &IntervalTree, queryRange: Interval) -> Bool {
+  checkOverlap(&tree.root, &queryRange)
+}
+
+fn collectInOrder(nodes: &Array[IntervalNode]) -> Array[Interval] {
+  if nodes.length() == 0 {
+    return []
+  }
+  let curr = nodes[0]
+  var out = []
+  if curr.left.length() > 0 {
+    out = out.concat(collectInOrder(&curr.left))
+  }
+  out = out.push(curr.interval)
+  if curr.right.length() > 0 {
+    out = out.concat(collectInOrder(&curr.right))
+  }
+  out
+}
+
+/// Materializes all intervals sorted by low endpoint in O(n) time.
+export fn toIntervals(tree: &IntervalTree) -> Array[Interval] {
+  collectInOrder(&tree.root)
+}

@@ -1,0 +1,184 @@
+module Std.Bench
+
+import Std.List as List
+
+/// The timings one measurement collected.
+/// The times are kept rather than reduced as they arrive, because a single
+/// number cannot say whether a run was steady or whether one reading in ten
+/// took twenty times as long, and that difference is usually the finding.
+export type Sample = {
+  name: Str,
+  batch: Int,
+  times: Array[Int]
+}
+
+/// What a sample says once it has been read.
+/// `perRun` is in microseconds because the clock counts milliseconds: an
+/// operation worth measuring is usually faster than the clock can see, and a
+/// figure per batch would be a number about the batch rather than about the
+/// operation.
+export type Report = {
+  name: Str,
+  runs: Int,
+  batch: Int,
+  best: Int,
+  worst: Int,
+  median: Int,
+  mean: Int,
+  spread: Int,
+  total: Int,
+  perRun: Int
+}
+
+/// Run an action and answer how long each batch of it took.
+///
+/// The clock counts whole milliseconds, so an operation faster than that reads
+/// as taking no time at all. `batch` is the answer: the action is run that
+/// many times between two clock readings, and the report divides. A batch that
+/// leaves the best reading at zero has not been made large enough, and
+/// `tooFast` says so rather than letting a reader believe the zero.
+///
+/// The first batch is run and discarded. A first run pays for whatever the
+/// program had not done yet, and including it would make every measurement a
+/// measurement of that instead.
+export fn measure(name: Str, runs: Int, batch: Int, action: fn() -> ()) -> Sample {
+  repeat(batch, action)
+  var times: Array[Int] = []
+  var taken = 0
+  while taken < runs {
+    let started = clock()
+    repeat(batch, action)
+    times = times.push(clock() - started)
+    taken = taken + 1
+  }
+  Sample{name: name, batch: batch, times: times}
+}
+
+fn repeat(count: Int, action: fn() -> ()) -> () {
+  var done = 0
+  while done < count {
+    action()
+    done = done + 1
+  }
+  ()
+}
+
+/// What a sample says.
+///
+/// The median is reported beside the mean because they answer different
+/// questions: a machine that paused once during the run moves the mean and
+/// leaves the median where it was, and the gap between them is the evidence
+/// that it happened.
+export fn summarize(sample: &Sample) -> Report {
+  let ordered = List.sorted(&sample.times)
+  let count = ordered.length()
+  if count == 0 {
+    Report {
+      name: sample.name,
+      runs: 0,
+      batch: sample.batch,
+      best: 0,
+      worst: 0,
+      median: 0,
+      mean: 0,
+      spread: 0,
+      total: 0,
+      perRun: 0
+    }
+  } else {
+    var total = 0
+    for time in ordered { total = total + time }
+    let best = ordered[0]
+    let worst = ordered[count - 1]
+    let divisor = if sample.batch > 0 { sample.batch } else { 1 }
+    Report {
+      name: sample.name,
+      runs: count,
+      batch: sample.batch,
+      best: best,
+      worst: worst,
+      median: ordered[count / 2],
+      mean: total / count,
+      spread: worst - best,
+      total: total,
+      perRun: best * 1000 / divisor
+    }
+  }
+}
+
+/// Measure and read in one step.
+export fn run(name: Str, runs: Int, batch: Int, action: fn() -> ()) -> Report {
+  summarize(&measure(name, runs, batch, action))
+}
+
+/// Whether the batch was too small for the clock to see.
+/// A best reading of zero means the whole batch finished inside one tick, so
+/// every figure derived from it is a claim the measurement cannot support.
+export fn tooFast(report: &Report) -> Bool { report.best == 0 }
+
+/// One report written as a line.
+/// The best reading leads, because it is the one with the least of the
+/// machine's other work in it: a run cannot go faster than the operation, but
+/// it can go slower for reasons that have nothing to do with the code.
+export fn render(report: &Report) -> Str {
+  if tooFast(report) {
+    report.name + ": too fast to measure at a batch of " + show(report.batch)
+      + "; raise the batch until the best reading is not zero"
+  } else {
+    report.name + ": " + show(report.perRun) + "us/run"
+      + " (best " + show(report.best) + "ms"
+      + ", median " + show(report.median) + "ms"
+      + ", mean " + show(report.mean) + "ms"
+      + ", spread " + show(report.spread) + "ms"
+      + " over " + show(report.runs) + " runs of " + show(report.batch) + ")"
+  }
+}
+
+/// Every report written, one to a line.
+export fn renderAll(reports: &Array[Report]) -> Str {
+  var out = ""
+  for report in reports { out = out + render(&report) + "\n" }
+  out
+}
+
+/// How one measurement compares with another, in hundredths.
+///
+/// A hundred means the two took the same time, two hundred means the
+/// candidate took twice as long. Reported as a whole number of hundredths
+/// rather than as a ratio, because these are counts of milliseconds and a
+/// floating quotient would suggest a precision the clock does not have.
+export fn ratio(baseline: &Report, candidate: &Report) -> Int {
+  if baseline.perRun == 0 { 0 } else { candidate.perRun * 100 / baseline.perRun }
+}
+
+/// Whether a candidate is faster than a baseline by more than a stated margin.
+///
+/// The margin is why this takes one: two measurements of the same code differ
+/// from one run to the next, and a comparison that called any difference a
+/// change would report a result every time it was asked.
+export fn fasterThan(baseline: &Report, candidate: &Report, marginPercent: Int) -> Bool {
+  ratio(baseline, candidate) < 100 - marginPercent
+}
+
+/// Whether a candidate is slower than a baseline by more than a stated margin.
+export fn slowerThan(baseline: &Report, candidate: &Report, marginPercent: Int) -> Bool {
+  ratio(baseline, candidate) > 100 + marginPercent
+}
+
+/// Two measurements written as a line saying which won and by how much.
+export fn compare(baseline: &Report, candidate: &Report) -> Str {
+  let measured = ratio(baseline, candidate)
+  if measured == 0 {
+    candidate.name + " cannot be compared: the baseline was too fast to measure"
+  } else {
+    if measured < 100 {
+      candidate.name + " is " + show(100 - measured) + "% faster than " + baseline.name
+    } else {
+      if measured > 100 {
+        candidate.name + " is " + show(measured - 100) + "% slower than " + baseline.name
+      } else {
+        candidate.name + " and " + baseline.name + " measured the same"
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+module Service.Queries
+
+import Std.App.Database as Database
+import Db.Tasks as Tasks
+
+/// The read side: everything that answers a question without changing one.
+///
+/// A view is shaped for what is being shown rather than for how it is stored.
+/// The board below carries its own counts, because the page shows them and
+/// counting them in the template would put a question about the data inside
+/// something whose job is arrangement — and would count again on every render.
+export type Board = {
+  tasks: Array[Tasks.Task],
+  total: Int,
+  done: Int,
+  remaining: Int
+}
+
+/// Everything the page shows, read once.
+///
+/// One read rather than one per figure. Three separate counts would be three
+/// round trips and, worse, three moments — a task completed between them would
+/// produce a page whose own numbers disagree.
+export fn board(db: &Database.Database) -> Result[Board, Tasks.StoreError] {
+  let tasks = Tasks.all(db) ?
+  var done = 0
+  for entry in tasks {
+    if entry.done { done = done + 1 }
+  }
+  Ok(Board{tasks: tasks, total: tasks.length(), done: done, remaining: tasks.length() - done})
+}
+
+/// One task, for a client asking about exactly one.
+export fn one(db: &Database.Database, id: Int) -> Result[Option[Tasks.Task], Tasks.StoreError] {
+  Tasks.find(db, id)
+}

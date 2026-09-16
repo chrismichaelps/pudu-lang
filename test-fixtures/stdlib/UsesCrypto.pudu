@@ -1,0 +1,28 @@
+module UsesCrypto
+
+import Std.Crypto as Crypto
+import Std.Random as Random
+
+export fn main() -> Int {
+  var total = 0
+  if Crypto.sha256Hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+    total = total + 1
+  }
+  if Crypto.sha256Hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+    total = total + 1
+  }
+  if Crypto.sha256Hex("héllo") == "3c48591d8d098a4538f5e013dfcf406e948eac4d3277b10bf614e295d6068179" {
+    total = total + 1
+  }
+  if Crypto.secretsMatch("token", "token") { total = total + 1 }
+  if !Crypto.secretsMatch("token", "tokes") { total = total + 1 }
+  if Crypto.digestsMatch(&Crypto.sha256("a"), &Crypto.sha256("a")) { total = total + 1 }
+  if !Crypto.digestsMatch(&Crypto.sha256("a"), &Crypto.sha256("b")) { total = total + 1 }
+  let first = Random.below(&Random.fromSeed(42u64), 1000)
+  let again = Random.below(&Random.fromSeed(42u64), 1000)
+  if first[1] == again[1] { total = total + 1 }
+  let shuffled = Random.shuffle(&Random.fromSeed(7u64), &[1, 2, 3, 4, 5])
+  if shuffled[1].length() == 5 { total = total + 1 }
+  if Random.identifier(&Random.fromSeed(9u64), 12)[1].length() == 12 { total = total + 1 }
+  total
+}

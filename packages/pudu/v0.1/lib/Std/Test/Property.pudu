@@ -1,0 +1,174 @@
+module Std.Test.Property
+
+import Std.Fmt as Fmt
+import Std.Random as Random
+import Std.Test {Check, Outcome, Failed, Held}
+
+/// A source of values of one type.
+///
+/// The same shape `Std.Random` already uses — a generator in, a generator and a
+/// value out — so anything in that module is one of these without adapting, and
+/// a caller writes their own the same way.
+export type Gen[T] = fn(Random.Generator) -> (Random.Generator, T)
+
+/// Smaller candidates to try in place of a value that failed.
+///
+/// Ordered nearest-to-simplest first. A shrink that answers the value it was
+/// given, or anything not smaller, would not terminate; the runner bounds its
+/// own work rather than trusting that, but a shrink that grows is still wrong.
+export type Shrink[T] = fn(T) -> Array[T]
+
+/// Simpler whole numbers to try: zero, then halfway back toward it, and the
+/// positive twin of a negative.
+///
+/// Halving rather than stepping, so a counterexample of a million reduces in
+/// about twenty tries rather than a million.
+export fn shrinkInt(value: Int) -> Array[Int] {
+  if value == 0 { [] } else {
+    var out = if value < 0 { [0 - value, 0] } else { [0] }
+    var step = value / 2
+    while step != 0 && step != value {
+      out = out.push(value - step)
+      step = step / 2
+    }
+    out
+  }
+}
+
+/// Shorter sequences to try: whole chunks removed first, then one element
+/// simplified at a time.
+///
+/// Chunks first because a counterexample is usually short and reaching it by
+/// removing one element at a time takes as many tries as the sequence is long.
+export fn shrinkArray[T](values: &Array[T]) -> Array[Array[T]] {
+  let count = values.length()
+  if count == 0 { [] } else {
+    var out = [[]]
+    var chunk = count / 2
+    while chunk > 0 {
+      out = out.push(values.slice(chunk, count))
+      out = out.push(values.slice(0, count - chunk))
+      chunk = chunk / 2
+    }
+    var index = 0
+    while index < count {
+      out = out.push(values.slice(0, index).concat(values.slice(index + 1, count)))
+      index = index + 1
+    }
+    out
+  }
+}
+
+/// Shorter text to try, by the same rule sequences use.
+export fn shrinkText(value: Str) -> Array[Str] {
+  let count = value.length()
+  if count == 0 { [] } else {
+    var out = [""]
+    var chunk = count / 2
+    while chunk > 0 {
+      out = out.push(value.slice(chunk, count))
+      out = out.push(value.slice(0, count - chunk))
+      chunk = chunk / 2
+    }
+    out
+  }
+}
+
+/// Nothing simpler to try, for a value with no smaller form.
+export fn shrinkNothing[T](value: T) -> Array[T] { [] }
+
+/// The smallest failing value reachable from one that failed.
+///
+/// Each round takes the first candidate that still fails and starts again from
+/// it, so the search follows one path down rather than exploring every branch.
+/// The round count is bounded because a `Shrink` that does not shrink would
+/// otherwise never finish, and a test that hangs is worse than one that reports
+/// a large counterexample.
+fn reduce[T](
+  value: T,
+  smaller: Shrink[T],
+  holds: fn(T) -> Bool,
+  rounds: Int
+) -> (T, Int) {
+  var current = value
+  var steps = 0
+  var round = 0
+  var going = true
+  while going && round < rounds {
+    var found = false
+    for candidate in smaller(current) {
+      if !found && !holds(candidate) {
+        current = candidate
+        steps = steps + 1
+        found = true
+      }
+    }
+    going = found
+    round = round + 1
+  }
+  (current, steps)
+}
+
+/// A check that a property holds for every generated value.
+///
+/// The seed is given rather than taken from a clock, so the check is a pure
+/// function of it and a suite stays a value that can be run twice with the same
+/// answer. A failure reports the seed alongside the counterexample, which is
+/// what makes a random test something a reader can reproduce instead of
+/// something they run again and hope about.
+///
+/// A counterexample is reduced before it is reported, and the report says how
+/// many steps that took — a value shrunk from one that was found is worth more
+/// than either alone, because it shows the property was tested at scale and
+/// still fails at the smallest size.
+export fn forAll[T](
+  name: Str,
+  seed: UInt64,
+  runs: Int,
+  produce: Gen[T],
+  smaller: Shrink[T],
+  holds: fn(T) -> Bool
+) -> Check {
+  var source = Random.fromSeed(seed)
+  var attempt = 0
+  var failing = None
+  while attempt < runs {
+    let step = produce(source)
+    source = step[0]
+    if failing == None && !holds(step[1]) { failing = Some(step[1]) }
+    attempt = attempt + 1
+  }
+  match failing {
+    case None =>
+    Check{name: name + " (" + Fmt.int(&Fmt.spec(), runs) + " runs)", outcome: Held}
+    case Some(counterexample) => {
+      let reduced = reduce(counterexample, smaller, holds, 64)
+      Check {
+        name: name,
+        outcome: Failed(
+          "the property to hold",
+          show(reduced[0]) + " (shrunk in " + Fmt.int(&Fmt.spec(), reduced[1])
+            + " steps, seed " + show(seed) + ")"
+        )
+      }
+    }
+  }
+}
+
+/// A property over whole numbers below a bound.
+export fn forAllInts(
+  name: Str,
+  seed: UInt64,
+  runs: Int,
+  bound: Int,
+  holds: fn(Int) -> Bool
+) -> Check {
+  forAll(
+    name,
+    seed,
+    runs,
+    fn(source: Random.Generator) -> (Random.Generator, Int) => Random.below(&source, bound),
+    shrinkInt,
+    holds
+  )
+}

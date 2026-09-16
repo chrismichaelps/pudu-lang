@@ -1,0 +1,65 @@
+module LaunchAudioStream
+
+import Std.Audio as Audio
+import Std.Audio.Device as Device
+import Std.Audio.Graph as Graph
+
+export fn main() -> Result[Int, Device.DeviceError] {
+  let requested = deviceOrAudio(Audio.format(16000, 1)) ?
+  let target = Device.streamPlan(requested, 256, 3, 2000) ?
+  let stream = Device.openStream(&target) ?
+  let node = Graph.tone(Graph.Triangle, 64, 5000)
+  let first = deviceOrGraph(Graph.render(&node, &stream.format, 0, 1024)) ?
+  if Device.write(&stream, &first) ? != 1024 {
+    let _closed = Device.closeStream(&stream, false, 1000)
+    return Err(Device.PlatformFailure("audio stream did not accept the first slice"))
+  }
+  Device.pause(&stream) ?
+  let paused = Device.snapshot(&stream) ?
+  if paused.state != Device.Paused || paused.submittedFrames != 1024 {
+    let _closed = Device.closeStream(&stream, false, 1000)
+    return Err(Device.PlatformFailure("audio stream pause state was not observable"))
+  }
+  Device.setVolume(&stream, 0.25) ?
+  Device.resume(&stream) ?
+  var start = 1024
+  while start < 4096 {
+    let chunk = deviceOrGraph(Graph.render(&node, &stream.format, start, 1024)) ?
+    if Device.write(&stream, &chunk) ? != 1024 {
+      let _closed = Device.closeStream(&stream, false, 1000)
+      return Err(Device.PlatformFailure("audio stream did not accept a complete slice"))
+    }
+    start = start + 1024
+  }
+  let observed = Device.snapshot(&stream) ?
+  if observed.submittedFrames != 4096 || observed.acquiredFrames > observed.submittedFrames ||
+  observed.clockFrames <= 0 || observed.clockNanoseconds <= 0
+  {
+    let _closed = Device.closeStream(&stream, false, 1000)
+    return Err(Device.PlatformFailure("audio stream telemetry did not progress"))
+  }
+  Device.closeStream(&stream, true, 3000) ?
+  match Device.snapshot(&stream) {
+    case Err(Device.ClosedStream) => Ok(observed.clockFrames)
+    case Err(problem) => Err(problem)
+    case Ok(_) => Err(Device.PlatformFailure("closed audio stream remained usable"))
+  }
+}
+
+fn deviceOrAudio[T](
+  value: Result[T, Audio.AudioError]
+) -> Result[T, Device.DeviceError] {
+  match value {
+    case Ok(shape) => Ok(shape)
+    case Err(problem) => Err(Device.InvalidFormat(problem))
+  }
+}
+
+fn deviceOrGraph(
+  value: Result[Audio.Pcm, Graph.GraphError]
+) -> Result[Audio.Pcm, Device.DeviceError] {
+  match value {
+    case Ok(clip) => Ok(clip)
+    case Err(_) => Err(Device.PlatformFailure("audio graph preparation failed"))
+  }
+}

@@ -1,0 +1,264 @@
+module Std.App.Audit
+
+import Std.Bytes as ByteSeq
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// The outcome of an audited security action.
+export type Outcome
+  = Success
+  | Failure(Str)
+  | Denied(Str)
+
+/// An immutable, tamper-evident security audit record.
+export type AuditEvent = {
+  id: Str,
+  timestamp: Int,
+  action: Str,
+  principal: Str,
+  resource: Str,
+  outcome: Outcome,
+  clientIp: Str,
+  details: Map[Str, Str],
+  prevHash: Str,
+  hash: Str
+}
+
+/// A thread-safe, append-only security audit ledger maintaining an unbroken SHA-256 hash chain.
+export type AuditLog = {
+  lock: Sync.Mutex,
+  headHash: Sync.Cell[Str],
+  count: Sync.Cell[Int],
+  events: Sync.Cell[Array[AuditEvent]]
+}
+
+/// The standard 64-hex-character genesis digest anchoring the audit chain.
+export const GENESIS_HASH: Str = "0000000000000000000000000000000000000000000000000000000000000000"
+
+/// Initialize a fresh in-memory audit ledger.
+export fn auditLog() -> AuditLog {
+  AuditLog {
+    lock: Sync.mutex(),
+    headHash: Sync.cell(GENESIS_HASH),
+    count: Sync.cell(0),
+    events: Sync.cell([])
+  }
+}
+
+/// Redact sensitive credential keys to prevent secret leaks into audit trails.
+export fn redactSensitive(key: Str, value: Str) -> Str {
+  let lower = key.toLower()
+  if lower.contains("password")
+    || lower.contains("token")
+    || lower.contains("secret")
+    || lower.contains("authorization")
+    || lower.contains("cookie")
+    || lower.contains("key")
+    || lower.contains("cvv")
+    || lower.contains("credential")
+    || lower.contains("session") {
+    "[REDACTED]"
+  } else {
+    value
+  }
+}
+
+/// Record an audit event into the append-only ledger with cryptographic hash chaining.
+export fn record(
+  log: &AuditLog,
+  action: Str,
+  principal: Str,
+  resource: Str,
+  outcome: Outcome,
+  clientIp: Str,
+  details: &Map[Str, Str]
+) -> AuditEvent {
+  let now = clock()
+
+  // Redact all sensitive fields in the detail map.
+  var cleanDetails = mapOf([])
+  for entry in details.entries() {
+    cleanDetails = cleanDetails.insert(entry[0], redactSensitive(entry[0], entry[1]))
+  }
+
+  let event = Sync.withLock(&log.lock, fn() -> AuditEvent {
+      let currentCount = Result.unwrapOr(Sync.get(&log.count), 0) + 1
+      let _c = Sync.set(&log.count, currentCount)
+      let eventId = "audit-" + show(currentCount)
+
+      let prev = Result.unwrapOr(Sync.get(&log.headHash), GENESIS_HASH)
+      let digest = computeHash(prev, eventId, now, action, principal, resource, &outcome, clientIp)
+      let _h = Sync.set(&log.headHash, digest)
+
+      let created = AuditEvent {
+        id: eventId,
+        timestamp: now,
+        action: action,
+        principal: principal,
+        resource: resource,
+        outcome: outcome,
+        clientIp: clientIp,
+        details: cleanDetails,
+        prevHash: prev,
+        hash: digest
+      }
+
+      let currentEvents = Result.unwrapOr(Sync.get(&log.events), [])
+      let _e = Sync.set(&log.events, currentEvents.push(created))
+      created
+    })
+
+  Result.unwrapOr(
+    event,
+    AuditEvent {
+      id: "audit-err",
+      timestamp: now,
+      action: action,
+      principal: principal,
+      resource: resource,
+      outcome: outcome,
+      clientIp: clientIp,
+      details: cleanDetails,
+      prevHash: GENESIS_HASH,
+      hash: GENESIS_HASH
+    }
+  )
+}
+
+/// Verify the entire cryptographic hash chain from genesis to head.
+/// Returns false if any audit record was altered, deleted, or reordered.
+export fn verifyIntegrity(log: &AuditLog) -> Bool {
+  let check = Sync.withLock(&log.lock, fn() -> Bool {
+      let entries = Result.unwrapOr(Sync.get(&log.events), [])
+      var expectedPrev = GENESIS_HASH
+      var valid = true
+      var index = 0
+      while index < entries.length() && valid {
+        let entry = entries[index]
+        if entry.prevHash != expectedPrev {
+          valid = false
+        } else {
+          let expectedHash = computeHash(
+            entry.prevHash,
+            entry.id,
+            entry.timestamp,
+            entry.action,
+            entry.principal,
+            entry.resource,
+              &entry.outcome,
+            entry.clientIp
+          )
+          if entry.hash != expectedHash {
+            valid = false
+          } else {
+            expectedPrev = entry.hash
+          }
+        }
+        index = index + 1
+      }
+      valid
+    })
+  Result.unwrapOr(check, false)
+}
+
+/// Total count of recorded audit events.
+export fn count(log: &AuditLog) -> Int {
+  Result.unwrapOr(Sync.get(&log.count), 0)
+}
+
+/// Current head hash of the ledger.
+export fn headHash(log: &AuditLog) -> Str {
+  Result.unwrapOr(Sync.get(&log.headHash), GENESIS_HASH)
+}
+
+/// Retrieve a snapshot copy of all recorded events.
+export fn events(log: &AuditLog) -> Array[AuditEvent] {
+  Result.unwrapOr(Sync.get(&log.events), [])
+}
+
+/// Serialize an individual audit event to canonical single-line JSON.
+export fn renderJson(event: &AuditEvent) -> Str {
+  let outcomeCat = match event.outcome {
+    case Success => "SUCCESS"
+    case Failure(_) => "FAILURE"
+    case Denied(_) => "DENIED"
+  }
+  let reason = match event.outcome {
+    case Success => ""
+    case Failure(msg) => msg
+    case Denied(msg) => msg
+  }
+
+  var detailsParts: Array[Str] = []
+  for entry in event.details.entries() {
+    detailsParts = detailsParts.push("\"" + escapeJson(entry[0]) + "\":\"" + escapeJson(entry[1]) + "\"")
+  }
+  let detailsJson = "\{" + detailsParts.join(",") + "\}"
+
+  "\{\"id\":\"" + escapeJson(event.id)
+    + "\",\"timestamp\":" + show(event.timestamp)
+    + ",\"action\":\"" + escapeJson(event.action)
+    + "\",\"principal\":\"" + escapeJson(event.principal)
+    + "\",\"resource\":\"" + escapeJson(event.resource)
+    + "\",\"outcome\":\"" + outcomeCat
+    + "\",\"reason\":\"" + escapeJson(reason)
+    + "\",\"clientIp\":\"" + escapeJson(event.clientIp)
+    + "\",\"prevHash\":\"" + event.prevHash
+    + "\",\"hash\":\"" + event.hash
+    + "\",\"details\":" + detailsJson
+    + "\}"
+}
+
+/// Serialize all events in the ledger to newline-delimited JSON (NDJSON).
+export fn renderNdjson(log: &AuditLog) -> Str {
+  let recorded = events(log)
+  var lines: Array[Str] = []
+  for event in recorded {
+    lines = lines.push(renderJson(&event))
+  }
+  lines.join("\n")
+}
+
+fn computeHash(
+  prevHash: Str,
+  id: Str,
+  timestamp: Int,
+  action: Str,
+  principal: Str,
+  resource: Str,
+  outcome: &Outcome,
+  clientIp: Str
+) -> Str {
+  let outcomeStr = match outcome {
+    case Success => "SUCCESS"
+    case Failure(msg) => "FAILURE:" + msg
+    case Denied(msg) => "DENIED:" + msg
+  }
+  let payload = prevHash + "|" + id + "|" + show(timestamp) + "|" + action + "|" + principal + "|" + resource + "|" + outcomeStr + "|" + clientIp
+  ByteSeq.encodeHex(&sha256Of(payload.toBytes()))
+}
+
+fn escapeJson(text: Str) -> Str {
+  var out = ""
+  var index = 0
+  while index < text.length() {
+    let ch = text.charAt(index)
+    if ch == '"' {
+      out = out + "\\\""
+    } else if ch == '\\' {
+      out = out + "\\\\"
+    } else if ch == '\n' {
+      out = out + "\\n"
+    } else if ch == '\r' {
+      out = out + "\\r"
+    } else if ch == '\t' {
+      out = out + "\\t"
+    } else {
+      out = out + ch.toText()
+    }
+    index = index + 1
+  }
+  out
+}

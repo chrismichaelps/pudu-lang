@@ -1,0 +1,182 @@
+module Std.NonEmpty
+
+import Std.List as List
+import Std.Order {Eq, Ord}
+
+/// A sequence that has at least one element, and says so in its type.
+///
+/// `List.first` and `List.maximum` answer `Option` because an array may be
+/// empty and there is nothing honest to return when it is. A caller that
+/// already knows its data is not empty pays for that everywhere: an `Option`
+/// unwrapped at each step, or a fallback invented for a case that cannot
+/// happen. Stating it once, here, removes the question from every call after.
+export type NonEmpty[T] = { head: T, tail: Array[T] }
+
+/// A sequence of one.
+export fn one[T](value: T) -> NonEmpty[T] { NonEmpty{head: value, tail: []} }
+
+/// A head and the rest.
+export fn make[T](head: T, tail: Array[T]) -> NonEmpty[T] {
+  NonEmpty{head: head, tail: tail}
+}
+
+/// An array as a non-empty sequence, or `None` when it is empty.
+///
+/// The only way in from ordinary data, and the one place the question is
+/// asked. Everything after it may assume the answer.
+export fn fromArray[T](values: &Array[T]) -> Option[NonEmpty[T]] {
+  if values.length() == 0 { None } else {
+    Some(NonEmpty{head: values[0], tail: List.rest(values)})
+  }
+}
+
+/// Every element, as an ordinary array.
+export fn toArray[T](values: &NonEmpty[T]) -> Array[T] {
+  [values.head].concat(values.tail)
+}
+
+/// The first element. There is always one.
+export fn first[T](values: &NonEmpty[T]) -> T { values.head }
+
+/// The last element. There is always one.
+export fn last[T](values: &NonEmpty[T]) -> T {
+  if values.tail.length() == 0 { values.head } else {
+    values.tail[values.tail.length() - 1]
+  }
+}
+
+/// Everything after the first element, which may be empty.
+export fn rest[T](values: &NonEmpty[T]) -> Array[T] { values.tail }
+
+/// How many elements there are, which is never fewer than one.
+export fn length[T](values: &NonEmpty[T]) -> Int { 1 + values.tail.length() }
+
+/// Every element transformed. A sequence that had one still has one.
+export fn map[A, B](values: &NonEmpty[A], transform: fn(A) -> B) -> NonEmpty[B] {
+  NonEmpty{head: transform(values.head), tail: values.tail.map(transform)}
+}
+
+/// An element added to the front.
+export fn prepend[T](values: &NonEmpty[T], value: T) -> NonEmpty[T] {
+  NonEmpty{head: value, tail: toArray(values)}
+}
+
+/// An element added to the end.
+export fn append[T](values: &NonEmpty[T], value: T) -> NonEmpty[T] {
+  NonEmpty{head: values.head, tail: values.tail.push(value)}
+}
+
+/// Two sequences joined.
+export fn concat[T](left: &NonEmpty[T], right: &NonEmpty[T]) -> NonEmpty[T] {
+  NonEmpty{head: left.head, tail: left.tail.concat(toArray(right))}
+}
+
+/// The elements in the opposite order.
+export fn reversed[T](values: &NonEmpty[T]) -> NonEmpty[T] {
+  let backwards = List.reversed(&toArray(values))
+  NonEmpty{head: backwards[0], tail: List.rest(&backwards)}
+}
+
+/// The elements combined from the left, starting from the first one.
+///
+/// No initial value is asked for, because the first element is one. This is
+/// the fold that cannot be given the wrong starting point.
+export fn reduce[T](values: &NonEmpty[T], combine: fn(T, T) -> T) -> T {
+  var total = values.head
+  for item in values.tail { total = combine(total, item) }
+  total
+}
+
+/// The elements combined from the left, starting from a value of your own.
+export fn fold[T, A](values: &NonEmpty[T], start: A, combine: fn(A, T) -> A) -> A {
+  var total = combine(start, values.head)
+  for item in values.tail { total = combine(total, item) }
+  total
+}
+
+/// The smallest element under an ordering. There is always one.
+export fn minimumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
+  var best = values.head
+  for item in values.tail { if before(item, best) { best = item } }
+  best
+}
+
+/// The largest element under an ordering. There is always one.
+export fn maximumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
+  var best = values.head
+  for item in values.tail { if before(best, item) { best = item } }
+  best
+}
+
+/// The smallest element. There is always one, so this answers a value rather
+/// than an `Option`.
+export fn minimum[T: Ord](values: &NonEmpty[T]) -> T {
+  var best = values.head
+  for item in values.tail { if item.before(&best) { best = item } }
+  best
+}
+
+/// The largest element. There is always one.
+export fn maximum[T: Ord](values: &NonEmpty[T]) -> T {
+  var best = values.head
+  for item in values.tail { if best.before(&item) { best = item } }
+  best
+}
+
+/// The elements in order under an ordering of your own.
+export fn sortBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> NonEmpty[T] {
+  let ordered = List.sortBy(&toArray(values), before)
+  NonEmpty{head: ordered[0], tail: List.rest(&ordered)}
+}
+
+/// The elements in order.
+export fn sorted[T: Ord](values: &NonEmpty[T]) -> NonEmpty[T] {
+  let ordered = List.sorted(&toArray(values))
+  NonEmpty{head: ordered[0], tail: List.rest(&ordered)}
+}
+
+/// Whether an element is present.
+export fn contains[T: Eq](values: &NonEmpty[T], wanted: T) -> Bool {
+  toArray(values).contains(wanted)
+}
+
+/// Whether every element satisfies a test.
+export fn all[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Bool {
+  List.all(&toArray(values), test)
+}
+
+/// Whether any element satisfies a test.
+export fn any[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Bool {
+  List.any(&toArray(values), test)
+}
+
+/// The elements that satisfy a test, as an ordinary array — filtering can
+/// remove every element, so what comes back may be empty.
+export fn filter[T](values: &NonEmpty[T], keep: fn(T) -> Bool) -> Array[T] {
+  toArray(values).filter(keep)
+}
+
+/// The first element satisfying a test, or `None`.
+export fn find[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Option[T] {
+  List.find(&toArray(values), test)
+}
+
+/// Adjacent equal elements gathered, each group non-empty by construction.
+///
+/// This is what the type is for: `List.group` answers arrays that are known to
+/// hold at least one element, and had no way to say so.
+export fn groupBy[T](values: &Array[T], same: fn(T, T) -> Bool) -> Array[NonEmpty[T]] {
+  var groups = []
+  for chunk in List.groupBy(values, same) {
+    match fromArray(&chunk) {
+      case Some(run) => groups = groups.push(run)
+      case None => {}
+    }
+  }
+  groups
+}
+
+/// Adjacent equal elements gathered.
+export fn group[T: Eq](values: &Array[T]) -> Array[NonEmpty[T]] {
+  groupBy(values, fn(left: T, right: T) -> Bool => left == right)
+}

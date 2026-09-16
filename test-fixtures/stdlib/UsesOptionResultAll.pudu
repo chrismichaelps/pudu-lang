@@ -1,0 +1,159 @@
+module UsesOptionResultAll
+
+import Std.Option as Option
+import Std.Result as Result
+
+/// Every export of `Std.Option` and `Std.Result`, checked on both sides.
+///
+/// Each is asked of a value that is there and one that is not, because these
+/// two modules exist for the absent case: a function that only answers for the
+/// present one is the half nobody needed.
+fn some() -> Option[Int] { Some(1) }
+
+fn nothing() -> Option[Int] { None }
+
+fn good() -> Result[Int, Str] { Ok(1) }
+
+fn bad() -> Result[Int, Str] { Err("no") }
+
+export fn main() -> Int {
+  var held = 0
+
+  // Which one it is.
+  if Option.isSome(&some()) && !Option.isSome(&nothing()) { held = held + 1 }
+  if Option.isNone(&nothing()) && !Option.isNone(&some()) { held = held + 1 }
+  if Option.exists(some()) && !Option.exists(nothing()) { held = held + 1 }
+
+  // Getting the value out.
+  if Option.unwrapOr(some(), 9) == 1 && Option.unwrapOr(nothing(), 9) == 9 { held = held + 1 }
+  if Option.unwrapOrElse(nothing(), fn() -> Int => 9) == 9 { held = held + 1 }
+  if Option.unwrapOrElse(some(), fn() -> Int => 9) == 1 { held = held + 1 }
+
+  // Changing what is there, leaving what is not.
+  if Option.unwrapOr(Option.map(some(), fn(n: Int) -> Int => n + 1), 0) == 2 { held = held + 1 }
+  if Option.isNone(&Option.map(nothing(), fn(n: Int) -> Int => n + 1)) { held = held + 1 }
+  if Option.unwrapOr(Option.andThen(some(), fn(n: Int) -> Option[Int] => Some(n + 1)), 0) == 2 {
+    held = held + 1
+  }
+  if Option.isNone(&Option.andThen(some(), fn(_n: Int) -> Option[Int] => None)) { held = held + 1 }
+  if Option.unwrapOr(Option.map2(some(), Some(2), fn(a: Int, b: Int) -> Int => a + b), 0) == 3 {
+    held = held + 1
+  }
+  if Option.isNone(&Option.map2(some(), None, fn(a: Int, b: Int) -> Int => a + b)) {
+    held = held + 1
+  }
+
+  // Keeping or dropping by a test.
+  if Option.unwrapOr(Option.keepIf(some(), fn(n: Int) -> Bool => n > 0), 0) == 1 { held = held + 1 }
+  if Option.isNone(&Option.keepIf(some(), fn(n: Int) -> Bool => n > 9)) { held = held + 1 }
+  if Option.isNone(&Option.dropIf(some(), fn(n: Int) -> Bool => n > 0)) { held = held + 1 }
+  if Option.unwrapOr(Option.dropIf(some(), fn(n: Int) -> Bool => n > 9), 0) == 1 { held = held + 1 }
+  if Option.holds(&some(), fn(n: Int) -> Bool => n == 1) { held = held + 1 }
+  if !Option.holds(&nothing(), fn(n: Int) -> Bool => true) { held = held + 1 }
+
+  // Choosing between two.
+  if Option.unwrapOr(Option.orElse(nothing(), Some(2)), 0) == 2 { held = held + 1 }
+  if Option.unwrapOr(Option.orElse(some(), Some(2)), 0) == 1 { held = held + 1 }
+
+  // Collapsing and folding.
+  if Option.unwrapOr(Option.flatten(Some(Some(1))), 0) == 1 { held = held + 1 }
+  if Option.isNone(&Option.flatten[Int](Some(None))) { held = held + 1 }
+  if Option.fold(some(), fn(n: Int) -> Int => n + 1, 0) == 2 { held = held + 1 }
+  if Option.fold(nothing(), fn(n: Int) -> Int => n + 1, 0) == 0 { held = held + 1 }
+  if Option.unwrapOr(Option.zip(some(), Some(2)), (0, 0)) == (1, 2) { held = held + 1 }
+  let absent: Option[Int] = None
+  if Option.isNone(&Option.zip(some(), absent)) { held = held + 1 }
+
+  // Crossing to and from other shapes.
+  if Option.toArray(some()) == [1] && Option.toArray(nothing()) == [] { held = held + 1 }
+  if Option.unwrapOr(Option.fromArray(&[1, 2]), 0) == 1 { held = held + 1 }
+  if Option.isNone(&Option.fromArray[Int](&[])) { held = held + 1 }
+  if Result.isOk(&Option.okOr(some(), "no")) { held = held + 1 }
+  if Result.isErr(&Option.okOr(nothing(), "no")) { held = held + 1 }
+  if Result.isErr(&Option.okOrElse(nothing(), fn() -> Str => "no")) { held = held + 1 }
+  if Option.unwrapOr(Option.when(true, 5), 0) == 5 { held = held + 1 }
+  if Option.isNone(&Option.when(false, 5)) { held = held + 1 }
+
+  // Over arrays of them.
+  if Option.present(&[Some(1), None, Some(2)]) == [1, 2] { held = held + 1 }
+  if Option.mapPresent(&[1, 2, 3], fn(n: Int) -> Option[Int] => if n > 1 { Some(n) } else { None })
+    == [2, 3] {
+    held = held + 1
+  }
+  if Option.unwrapOr(Option.allPresent(&[Some(1), Some(2)]), []) == [1, 2] { held = held + 1 }
+  if Option.isNone(&Option.allPresent(&[Some(1), None])) { held = held + 1 }
+  if Option.unwrapOr(Option.firstPresent(&[None, Some(2)]), 0) == 2 { held = held + 1 }
+  if Option.isNone(&Option.firstPresent[Int](&[None, None])) { held = held + 1 }
+
+  // Which one a result is.
+  if Result.isOk(&good()) && !Result.isOk(&bad()) { held = held + 1 }
+  if Result.isErr(&bad()) && !Result.isErr(&good()) { held = held + 1 }
+  if Result.unwrapOr(good(), 9) == 1 && Result.unwrapOr(bad(), 9) == 9 { held = held + 1 }
+  if Result.unwrapOrElse(bad(), fn(_e: Str) -> Int => 9) == 9 { held = held + 1 }
+  if Result.errOr(bad(), "other") == "no" && Result.errOr(good(), "other") == "other" {
+    held = held + 1
+  }
+
+  // Each side, as an option.
+  if Option.unwrapOr(Result.ok(good()), 0) == 1 && Option.isNone(&Result.ok(bad())) {
+    held = held + 1
+  }
+  if Option.unwrapOr(Result.err(bad()), "") == "no" && Option.isNone(&Result.err(good())) {
+    held = held + 1
+  }
+  if Option.unwrapOr(Result.toOption(good()), 0) == 1 { held = held + 1 }
+
+  // Changing one side and not the other.
+  if Result.unwrapOr(Result.map(good(), fn(n: Int) -> Int => n + 1), 0) == 2 { held = held + 1 }
+  if Result.isErr(&Result.map(bad(), fn(n: Int) -> Int => n + 1)) { held = held + 1 }
+  if Result.errOr(Result.mapErr(bad(), fn(e: Str) -> Str => e + "!"), "") == "no!" {
+    held = held + 1
+  }
+  if Result.isOk(&Result.mapErr(good(), fn(e: Str) -> Str => e + "!")) { held = held + 1 }
+  if Result.unwrapOr(Result.andThen(good(), fn(n: Int) -> Result[Int, Str] => Ok(n + 1)), 0) == 2 {
+    held = held + 1
+  }
+  if Result.isErr(&Result.andThen(good(), fn(_n: Int) -> Result[Int, Str] => Err("z"))) {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map2(good(), Ok(2), fn(a: Int, b: Int) -> Int => a + b), 0) == 3 {
+    held = held + 1
+  }
+  if Result.isErr(&Result.map2(good(), bad(), fn(a: Int, b: Int) -> Int => a + b)) {
+    held = held + 1
+  }
+
+  // Choosing, folding, turning around.
+  if Result.unwrapOr(Result.orElse(bad(), Ok(2)), 0) == 2 { held = held + 1 }
+  if Result.unwrapOr(Result.orElse(good(), Ok(2)), 0) == 1 { held = held + 1 }
+  if Result.fold(good(), fn(n: Int) -> Int => n, fn(_e: Str) -> Int => 0) == 1 { held = held + 1 }
+  if Result.fold(bad(), fn(n: Int) -> Int => n, fn(_e: Str) -> Int => 0) == 0 { held = held + 1 }
+  if Result.unwrapOr(Result.flatten(Ok(good())), 0) == 1 { held = held + 1 }
+  if Result.isErr(&Result.swap(good())) && Result.isOk(&Result.swap(bad())) { held = held + 1 }
+  if Result.holds(&good(), fn(n: Int) -> Bool => n == 1) { held = held + 1 }
+  if !Result.holds(&bad(), fn(n: Int) -> Bool => true) { held = held + 1 }
+  if Result.toArray(good()) == [1] && Result.toArray(bad()) == [] { held = held + 1 }
+
+  // A condition as a result.
+  if Result.isOk(&Result.require(true, "no")) && Result.isErr(&Result.require(false, "no")) {
+    held = held + 1
+  }
+
+  // Over arrays of them.
+  if Result.successes(&[good(), bad(), Ok(2)]) == [1, 2] { held = held + 1 }
+  if Result.failures(&[good(), bad()]) == ["no"] { held = held + 1 }
+  if Result.partition(&[good(), bad()]) == ([1], ["no"]) { held = held + 1 }
+  if Result.unwrapOr(Result.all(&[good(), Ok(2)]), []) == [1, 2] { held = held + 1 }
+  if Result.isErr(&Result.all(&[good(), bad()])) { held = held + 1 }
+  if Result.unwrapOr(
+    Result.traverse(&[1, 2], fn(n: Int) -> Result[Int, Str] => Ok(n * 2)),
+    []
+  ) == [2, 4] {
+    held = held + 1
+  }
+  if Result.isErr(&Result.traverse(&[1], fn(_n: Int) -> Result[Int, Str] => Err("z"))) {
+    held = held + 1
+  }
+
+  held
+}

@@ -1,0 +1,76 @@
+module Std.Http.Server.Stream
+
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
+import Std.Http as Http
+import Std.Http.Safe as Safe
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+
+/// Sends HTTP status and headers immediately with `Transfer-Encoding: chunked`.
+export fn sendHead(
+  connection: &Net.Connection,
+  statusCode: Int,
+  headers: &Array[(Str, Str)],
+  millis: Int
+) -> Result[(), Net.NetError] {
+  var effectiveHeaders = *headers
+  var hasChunked = false
+  for pair in effectiveHeaders {
+    if pair[0].toLower() == "transfer-encoding" && pair[1].toLower().contains("chunked") {
+      hasChunked = true
+    }
+  }
+  if !hasChunked {
+    effectiveHeaders = effectiveHeaders.push(("Transfer-Encoding", "chunked"))
+  }
+
+  if let Err(_) = Safe.headersWritable(&effectiveHeaders) {
+    return Err(Net.Other("malformed headers with line breaks"))
+  }
+
+  let status = Http.status(statusCode)
+  var head = Http.renderStatusLine(&status) + "\r\n"
+  for pair in effectiveHeaders {
+    head = head + pair[0] + ": " + pair[1] + "\r\n"
+  }
+  head = head + "\r\n"
+
+  Net.sendWithin(connection, &head.toBytes(), millis)
+}
+
+/// Sends a single chunk framed as `<hex-length>\r\n<data>\r\n`.
+export fn sendChunk(
+  connection: &Net.Connection,
+  chunk: &Bytes,
+  millis: Int
+) -> Result[(), Net.NetError] {
+  if chunk.length() == 0 { return Ok(()) }
+  let framed = HtmlBuffer.frameChunk(chunk)
+  Net.sendWithin(connection, &framed, millis)
+}
+
+/// Emits the HTTP/1.1 chunked terminator frame `0\r\n\r\n`.
+export fn finishChunked(
+  connection: &Net.Connection,
+  millis: Int
+) -> Result[(), Net.NetError] {
+  let terminator = bytesOf([48u8, 13u8, 10u8, 13u8, 10u8])
+  Net.sendWithin(connection, &terminator, millis)
+}
+
+/// Coordinates complete chunked response delivery over the socket.
+export fn streamChunks(
+  connection: &Net.Connection,
+  status: Int,
+  headers: &Array[(Str, Str)],
+  chunks: &Array[Bytes],
+  millis: Int
+) -> Result[(), Net.NetError] {
+  sendHead(connection, status, headers, millis) ?
+  for chunk in chunks {
+    sendChunk(connection, &chunk, millis) ?
+  }
+  finishChunked(connection, millis)
+}

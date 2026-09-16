@@ -1,0 +1,139 @@
+module UsesDbRow
+
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Decimal as Decimal
+import Std.Option as Option
+import Std.Result as Result
+
+/// What reading a row promises.
+///
+/// A result set is a plain value — columns, and rows of values under them — so
+/// everything here is checked against one built in this file rather than
+/// against a database. That is the whole point of the layer: a program decides
+/// what a row means without a connection open, and so can a test.
+///
+/// Checked hardest where a database will actually hurt: a column that is not
+/// there, a row past the end, a null where a value was wanted, and a value of
+/// the wrong kind. Those four are what a query meets the first time a schema
+/// changes underneath it, and answering them with the wrong row or a default
+/// is how a report becomes quietly wrong instead of loudly broken.
+fn sample() -> Driver.Rows {
+  Driver.Rows {
+    columns: [
+      Driver.Column{name: "id", nativeType: Some("int8")},
+      Driver.Column{name: "name", nativeType: Some("text")},
+      Driver.Column{name: "balance", nativeType: Some("numeric")},
+      Driver.Column{name: "rate", nativeType: Some("float8")},
+      Driver.Column{name: "active", nativeType: Some("bool")},
+      Driver.Column{name: "note", nativeType: Some("text")}
+    ],
+    rows: [
+      [
+        Driver.IntegerValue(1i64),
+        Driver.TextValue("Ada"),
+        Driver.DecimalValue(Decimal.fromInt(250)),
+        Driver.RealValue(1.5f64),
+        Driver.BooleanValue(true),
+        Driver.NullValue
+      ],
+      [
+        Driver.IntegerValue(2i64),
+        Driver.TextValue("Grace"),
+        Driver.DecimalValue(Decimal.fromInt(0)),
+        Driver.RealValue(0.0f64),
+        Driver.BooleanValue(false),
+        Driver.TextValue("second")
+      ]
+    ],
+    command: "SELECT"
+  }
+}
+
+fn empty() -> Driver.Rows {
+  Driver.Rows{columns: [Driver.Column{name: "id", nativeType: None}], rows: [], command: "SELECT"}
+}
+
+export fn main() -> Int {
+  var held = 0
+  let result = sample()
+
+  // A column is found by the name it was given, and the position it is found
+  // at is the position it sits in.
+  if Result.unwrapOr(Row.indexOf(&result, "id"), 0 - 1) == 0 { held = held + 1 }
+  if Result.unwrapOr(Row.indexOf(&result, "active"), 0 - 1) == 4 { held = held + 1 }
+
+  // A column nobody declared is an error rather than the first column. This is
+  // the one that matters: answering a misspelled name with column zero reads
+  // every row wrong and says nothing.
+  if Result.isErr(&Row.indexOf(&result, "nickname")) { held = held + 1 }
+
+  // Each kind of value is read as what it is.
+  if Result.unwrapOr(Row.integer(&result, 0, "id"), 0i64) == 1i64 { held = held + 1 }
+  if Result.unwrapOr(Row.text(&result, 0, "name"), "") == "Ada" { held = held + 1 }
+  if Result.unwrapOr(Row.truth(&result, 0, "active"), false) { held = held + 1 }
+  if Result.unwrapOr(Row.real(&result, 0, "rate"), 0.0f64) == 1.5f64 { held = held + 1 }
+  let balance = Result.unwrapOr(Row.decimal(&result, 0, "balance"), Decimal.fromInt(0))
+  if Option.unwrapOr(Decimal.toInt(balance), 0) == 250 { held = held + 1 }
+
+  // A second row is a different row.
+  if Result.unwrapOr(Row.text(&result, 1, "name"), "") == "Grace" { held = held + 1 }
+  if Result.unwrapOr(Row.integer(&result, 1, "id"), 0i64) == 2i64 { held = held + 1 }
+  if !Result.unwrapOr(Row.truth(&result, 1, "active"), true) { held = held + 1 }
+
+  // A row past the end is an error, not the last row and not an empty one.
+  if Result.isErr(&Row.text(&result, 2, "name")) { held = held + 1 }
+  if Result.isErr(&Row.text(&result, 0 - 1, "name")) { held = held + 1 }
+  if Result.isErr(&Row.text(&empty(), 0, "id")) { held = held + 1 }
+
+  // A null is refused where a value was wanted, and offered where one was not.
+  // A null read as text must not become the empty string: a missing note and a
+  // note that says nothing are different facts about the world.
+  if Result.isErr(&Row.text(&result, 0, "note")) { held = held + 1 }
+  let absent = Result.unwrapOr(Row.nullable(&result, 0, "note"), Some(Driver.NullValue))
+  if Option.isNone(&absent) { held = held + 1 }
+  let present = Result.unwrapOr(Row.nullable(&result, 1, "note"), None)
+  if Option.isSome(&present) { held = held + 1 }
+
+  // A value of one kind is not read as another. A name is not a number, and
+  // answering zero for it would put a wrong figure in a report that no later
+  // check would catch.
+  if Result.isErr(&Row.integer(&result, 0, "name")) { held = held + 1 }
+  if Result.isErr(&Row.text(&result, 0, "id")) { held = held + 1 }
+  if Result.isErr(&Row.truth(&result, 0, "name")) { held = held + 1 }
+
+  // A whole result set becomes values of the program's own type, in order.
+  let named = Row.map(&result, fn(rows: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+      Row.text(&rows, index, "name")
+    })
+  if Result.unwrapOr(named, []) == ["Ada", "Grace"] { held = held + 1 }
+
+  // Asking for one when there are two is an error, because a query that meant
+  // one and found two has found something the program did not expect.
+  let single = Row.one(&result, fn(rows: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+      Row.text(&rows, index, "name")
+    })
+  if Result.isErr(&single) { held = held + 1 }
+
+  // Asking for at most one is None when there are none, and an error when
+  // there are more than one.
+  let none = Row.optional(&empty(), fn(rows: Driver.Rows, index: Int) -> Result[Int64, Row.RowError] {
+      Row.integer(&rows, index, "id")
+    })
+  let nothing = Result.unwrapOr(none, Some(0i64))
+  if Option.isNone(&nothing) { held = held + 1 }
+
+  let several = Row.optional(&result, fn(rows: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+      Row.text(&rows, index, "name")
+    })
+  if Result.isErr(&several) { held = held + 1 }
+
+  // A mapper that fails fails the whole read rather than dropping the row, so
+  // a result set is all of its rows or none of them.
+  let broken = Row.map(&result, fn(rows: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+      Row.text(&rows, index, "missing")
+    })
+  if Result.isErr(&broken) { held = held + 1 }
+
+  held
+}

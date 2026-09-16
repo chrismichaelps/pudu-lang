@@ -1,0 +1,126 @@
+module Std.Buffer
+
+/// A contiguous, unboxed sequence of raw bytes.
+///
+/// Backed directly by cache-aligned primitive byte storage without per-element
+/// boxing. All scalar read, write, and scan operations are bounds-checked.
+export type Buffer = { data: Bytes }
+
+/// Allocates a new contiguous buffer of `bytes` length initialized to zero.
+export fn alloc(bytes: Int) -> Buffer {
+  Buffer{data: bufferAlloc(bytes)}
+}
+
+/// The length of the buffer in bytes.
+export fn size(buf: &Buffer) -> Int {
+  bufferSize(buf.data)
+}
+
+/// Reads an unsigned 64-bit integer at the given byte `offset` in little-endian order.
+///
+/// Returns `None` if `offset` or `offset + 8` exceeds buffer bounds.
+export fn readU64(buf: &Buffer, offset: Int) -> Option[UInt64] {
+  bufferReadU64(buf.data, offset)
+}
+
+/// Writes an unsigned 64-bit integer at the given byte `offset` in little-endian order.
+///
+/// Returns an updated buffer snapshot, or `None` if the write spans beyond buffer capacity.
+export fn writeU64(buf: &Buffer, offset: Int, value: UInt64) -> Option[Buffer] {
+  let updated = bufferWriteU64(buf.data, offset, value) ?
+  Some(Buffer{data: updated})
+}
+
+/// Scans up to `count` 64-bit words starting at `offset` for `needle`.
+///
+/// Returns the 0-based word index if found, or `None` if the value is not present
+/// or the range exceeds buffer boundaries.
+export fn scanU64(buf: &Buffer, offset: Int, count: Int, needle: UInt64) -> Option[Int] {
+  bufferScanU64(buf.data, offset, count, needle)
+}
+
+/// Copies `len` bytes from `src` at `srcOff` into `dst` at `dstOff`.
+///
+/// Returns the updated destination buffer, or `None` if any offset or length
+/// violates memory boundaries.
+export fn copy(src: &Buffer, srcOff: Int, dst: &Buffer, dstOff: Int, len: Int) -> Option[Buffer] {
+  let updated = bufferCopy(src.data, srcOff, dst.data, dstOff, len) ?
+  Some(Buffer{data: updated})
+}
+
+/// Exposes the underlying raw `Bytes` representation of the buffer.
+export fn toBytes(buf: &Buffer) -> Bytes {
+  buf.data
+}
+
+/// Wraps an existing `Bytes` sequence into a `Buffer`.
+export fn fromBytes(bytes: Bytes) -> Buffer {
+  Buffer{data: bytes}
+}
+
+/// Reads a signed 64-bit integer at the given byte `offset` in little-endian two's-complement representation.
+///
+/// Returns `None` if `offset` or `offset + 8` exceeds buffer bounds.
+export fn readI64(buf: &Buffer, offset: Int) -> Option[Int64] {
+  bufferReadI64(buf.data, offset)
+}
+
+/// Writes a signed 64-bit integer at the given byte `offset` in little-endian two's-complement representation.
+///
+/// Returns an updated buffer snapshot, or `None` if the write spans beyond buffer capacity.
+export fn writeI64(buf: &Buffer, offset: Int, value: Int64) -> Option[Buffer] {
+  let updated = bufferWriteI64(buf.data, offset, value) ?
+  Some(Buffer{data: updated})
+}
+
+/// Reads a 64-bit IEEE 754 double-precision floating-point number at `offset` in little-endian order.
+///
+/// Utilizes hardware bit-casting with zero software decoding overhead.
+/// Returns `None` if `offset` or `offset + 8` exceeds buffer bounds.
+export fn readF64(buf: &Buffer, offset: Int) -> Option[Float64] {
+  bufferReadF64(buf.data, offset)
+}
+
+/// Writes a 64-bit IEEE 754 double-precision floating-point number at `offset` in little-endian order.
+///
+/// Utilizes hardware bit-casting directly into machine register representation.
+/// Returns an updated buffer snapshot, or `None` if the write spans beyond buffer capacity.
+export fn writeF64(buf: &Buffer, offset: Int, value: Float64) -> Option[Buffer] {
+  let updated = bufferWriteF64(buf.data, offset, value) ?
+  Some(Buffer{data: updated})
+}
+
+/// Reads an unsigned 32-bit integer at `offset` in little-endian order.
+///
+/// Returns `None` if `offset` or `offset + 4` exceeds buffer bounds.
+export fn readU32(buf: &Buffer, offset: Int) -> Option[UInt32] {
+  bufferReadU32(buf.data, offset)
+}
+
+/// Writes an unsigned 32-bit integer at `offset` in little-endian order.
+///
+/// Returns an updated buffer snapshot, or `None` if the write spans beyond buffer capacity.
+export fn writeU32(buf: &Buffer, offset: Int, value: UInt32) -> Option[Buffer] {
+  let updated = bufferWriteU32(buf.data, offset, value) ?
+  Some(Buffer{data: updated})
+}
+
+/// Fills `len` consecutive bytes starting at `offset` with `byte`.
+///
+/// Dispatches directly to contiguous memory block initialization (memset semantics).
+/// Returns an updated buffer snapshot, or `None` if the fill range exceeds buffer bounds.
+export fn fill(buf: &Buffer, offset: Int, len: Int, byte: UInt8) -> Option[Buffer] {
+  let updated = bufferFill(buf.data, offset, len, byte) ?
+  Some(Buffer{data: updated})
+}
+
+/// Compares `len` bytes between buffer `a` at `aOff` and buffer `b` at `bOff`.
+///
+/// Follows standard lexicographical ordering (memcmp semantics):
+/// - Returns `Some(0)` if both byte sequences are identical.
+/// - Returns `Some(-1)` if the slice in `a` is lexicographically less than `b`.
+/// - Returns `Some(1)` if the slice in `a` is lexicographically greater than `b`.
+/// - Returns `None` if either range exceeds its respective buffer bounds.
+export fn compare(a: &Buffer, aOff: Int, b: &Buffer, bOff: Int, len: Int) -> Option[Int] {
+  bufferCompare(a.data, aOff, b.data, bOff, len)
+}

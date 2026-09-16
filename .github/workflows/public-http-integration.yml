@@ -1,0 +1,27 @@
+name: public HTTP integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-http-integration
+  cancel-in-progress: false
+
+jobs:
+  public-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - run: cabal update
+      - name: Fetch public HTTP and HTTPS endpoints with Pudu
+        run: cabal run -v0 pudu -- run test-fixtures/integration/FetchPublicHttp.pudu

@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Run what CI runs, in the order CI runs it, and say which gate failed.
+#
+# A fresh checkout cannot be up to date, so CI's warning gate always compiles.
+# Locally it frequently does not: cabal answers "Up to date" after a source
+# changed, and a gate that did not compile reports a clean tree while checking
+# none of it. That has hidden real errors here more than once.
+#
+# `--ghc-options=-fforce-recomp` does not fix it, and believing otherwise cost
+# an hour: that flag is GHC's, and when cabal decides the package is up to date
+# it never invokes GHC, so the flag is never seen. Only removing the build
+# products makes the next build real. That is what this does, which is why it
+# takes minutes rather than seconds — and why the answer is worth having.
+set -u
+
+BUILD_ROOT=$(find dist-newstyle/build -maxdepth 3 -type d -name 'pudu-*' 2>/dev/null | head -1)
+
+failed=0
+
+run() {
+  local name="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf '  ok    %s\n' "$name"
+  else
+    printf '  FAIL  %s\n' "$name"
+    failed=1
+  fi
+}
+
+
+printf 'gates\n'
+if [ -n "${BUILD_ROOT}" ]; then
+  rm -rf "${BUILD_ROOT}/opt" "${BUILD_ROOT}/noopt" "${BUILD_ROOT}/x" "${BUILD_ROOT}/t"
+fi
+run 'no warnings, optimized' \
+  cabal build all --enable-optimization=2 --ghc-options='-Werror'
+run 'full suite, optimized' \
+  cabal test all --enable-optimization=2 --test-show-details=direct
+
+# `cabal list-bin` answers for the configuration it is asked about, not the one
+# that was built. Asked plainly it names the unoptimized path: right after the
+# build products are removed above that file does not exist, and on a tree that
+# has also been built unoptimized it names a binary from some earlier day, so
+# the gates below pass while testing something nobody just compiled. Resolved
+# once, with the flag the build used, and exported so the gates that run in a
+# child shell see the same answer.
+export PUDU
+PUDU=$(cabal list-bin pudu --enable-optimization=2)
+# The directories are given to the formatter rather than expanded here: a
+# shell expansion that matches nothing passes this gate while checking nothing.
+run 'every committed Pudu file is formatted' \
+  bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
+run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
+run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
+run 'the fixtures still reach as much of the library' \
+  bash -c 'node test/api-coverage.mjs "$PUDU"'
+run 'a streaming reader holds as much at ten times the input' \
+  bash -c 'python3 test/residency.py "$PUDU"'
+run 'a generated project works outside the repository' \
+  bash -c 'node test/scaffold.mjs "$PUDU"'
+run 'typed lint findings and safe fixes work through the real CLI' \
+  bash -c 'node test/lint.mjs "$PUDU"'
+run 'the language server answers a real session' \
+  bash -c 'node test/lsp-session.mjs "$PUDU"'
+run 'the language server survives what an editor sends it' \
+  bash -c 'node test/lsp-robustness.mjs "$PUDU"'
+run 'the documentation site keeps its contract' \
+  bash -c 'cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
+
+if [ "$failed" -ne 0 ]; then
+  printf '\nat least one gate failed\n'
+  exit 1
+fi
+printf '\nevery gate passed\n'

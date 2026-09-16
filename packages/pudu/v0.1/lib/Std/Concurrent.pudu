@@ -1,0 +1,182 @@
+module Std.Concurrent
+
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// Why a thread could not be started, or what it said when it failed.
+export type ConcurrentError
+  = Failed(Str)
+  | Missing
+  | Other(Str)
+
+/// A thread the program started.
+export type Task = { token: Int }
+
+/// Start an action on a thread of its own.
+///
+/// The action is given the environment as it stands at the call, which is the
+/// same environment an ordinary call would run in. Sharing it is safe because
+/// every value in it is immutable: the things two threads can both change are
+/// a channel, a lock, and a cell, and each of those is reached through
+/// `Std.Channel` or `Std.Sync` rather than by writing to a variable.
+///
+/// A thread that failed does not take the program down. It reports what it
+/// said to whoever joins it, which is the same rule every other operation
+/// that reaches outside the program follows: the caller decides.
+export fn start(action: fn() -> ()) -> Result[Task, ConcurrentError] {
+  Result.map(
+    Result.mapErr(spawnThread(action), causeOf),
+    fn(token: Int) -> Task { Task{token: token} }
+  )
+}
+
+/// Wait for a thread to finish, and report what it said if it failed.
+/// Joining twice answers the same way both times, so a scope joining its
+/// children and a caller that already joined one do not race.
+export fn join(worker: &Task) -> Result[(), ConcurrentError] {
+  Result.mapErr(joinThread(worker.token), causeOf)
+}
+
+/// Wait for every thread, in the order they were started.
+///
+/// The order is what makes a failure among them predictable: with several
+/// threads failing, the one reported is the one started first rather than
+/// whichever happened to finish first. A caller reading a report should not
+/// have to run the program twice to see the same answer.
+export fn joinAll(tasks: &Array[Task]) -> Result[(), ConcurrentError] {
+  var failure: Option[ConcurrentError] = None
+  for worker in tasks {
+    let outcome = join(&worker)
+    if let Err(reason) = outcome {
+      if let None = failure { failure = Some(reason) }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(()) }
+}
+
+/// Run every action at once and wait for all of them.
+///
+/// Every thread is started before any is joined. Starting and joining one at a
+/// time would run them in sequence while looking like it did not, which is the
+/// mistake this exists to make impossible to write by accident.
+export fn parallel(actions: &Array[fn() -> ()]) -> Result[(), ConcurrentError] {
+  var tasks: Array[Task] = []
+  var failure: Option[ConcurrentError] = None
+  for action in actions {
+    let started = start(action)
+    if let Ok(worker) = started { tasks = tasks.push(worker) }
+    if let Err(reason) = started {
+      if let None = failure { failure = Some(reason) }
+    }
+  }
+  let joined = joinAll(&tasks)
+  if let Some(reason) = failure { Err(reason) } else { joined }
+}
+
+/// Wait, without holding the machine while waiting.
+export fn sleep(millis: Int) -> Result[(), ConcurrentError] {
+  Result.mapErr(sleepMillis(millis), causeOf)
+}
+
+fn causeOf(message: Str) -> ConcurrentError {
+  if message.contains("no such thread") { Missing } else { Failed(message) }
+}
+
+/// Run a batch with bounded workers; each action is claimed at most once.
+export fn parallelBounded(actions: &Array[fn() -> ()], workers: Int) -> Result[(), ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  let work = *actions
+  if work.isEmpty() { return Ok(()) }
+  let cursor = Sync.counter(0)
+  let count = if workers < work.length() { workers } else { work.length() }
+  let claimingFailure: Sync.Cell[Option[Str]] = Sync.cell(None)
+  var tasks: Array[Task] = []
+  var failure: Option[ConcurrentError] = None
+  var index = 0
+  while index < count {
+    let started = start(fn() -> () {
+        var going = true
+        while going {
+          match Sync.increment(&cursor, 1) {
+            case Err(problem) => {
+              let _recorded = Sync.set(&claimingFailure, Some(show(problem)))
+              going = false
+            }
+            case Ok(next) => {
+              if next > work.length() { going = false } else { (work[next - 1])() }
+            }
+          }
+        }
+      })
+    match started {
+      case Ok(worker) => { tasks = tasks.push(worker) }
+      case Err(problem) => {
+        failure = Some(problem)
+        break
+      }
+    }
+    index = index + 1
+  }
+  let joined = joinAll(&tasks)
+  if let Some(problem) = failure { return Err(problem) }
+  joined ?
+  let claimed = Result.mapErr(Sync.get(&claimingFailure), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
+  if let Some(problem) = claimed { Err(Other(problem)) } else { Ok(()) }
+}
+
+/// Apply an action to values with bounded concurrency, without implicit retries.
+export fn forEachBounded[T](items: &Array[T], workers: Int, action: fn(T) -> ()) -> Result[(), ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  var actions: Array[fn() -> ()] = []
+  for item in items {
+    actions = actions.push(fn() -> () { action(item) })
+  }
+  parallelBounded(&actions, workers)
+}
+
+/// Map values with bounded concurrency, preserving input order and typed failures.
+export fn mapBounded[T, U](items: &Array[T], workers: Int, transform: fn(T) -> U) -> Result[Array[U], ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  let total = items.length()
+  if total == 0 { return Ok([]) }
+  var slots: Array[Sync.Cell[Option[U]]] = []
+  var i = 0
+  while i < total {
+    let emptySlot: Option[U] = None
+    slots = slots.push(Sync.cell(emptySlot))
+    i = i + 1
+  }
+  var actions: Array[fn() -> ()] = []
+  var index = 0
+  for item in items {
+    let slot = slots[index]
+    actions = actions.push(fn() -> () {
+        let result = transform(item)
+        let _saved = Sync.set(&slot, Some(result))
+      })
+    index = index + 1
+  }
+  parallelBounded(&actions, workers) ?
+  var results: Array[U] = []
+  for slot in slots {
+    let held = Result.mapErr(Sync.get(&slot), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
+    match held {
+      case Some(value) => { results = results.push(value) }
+      case None => { return Err(Other("missing slot result")) }
+    }
+  }
+  Ok(results)
+}
+
+/// Apply a fallible transform with bounded concurrency, returning the first error in input order.
+export fn mapResultBounded[T, U, E](items: &Array[T], workers: Int, transform: fn(T) -> Result[U, E]) -> Result[Result[Array[U], E], ConcurrentError] {
+  let mapped = mapBounded(items, workers, transform) ?
+  var collected: Array[U] = []
+  for item in mapped {
+    match item {
+      case Ok(value) => { collected = collected.push(value) }
+      case Err(problem) => { return Ok(Err(problem)) }
+    }
+  }
+  Ok(Ok(collected))
+}

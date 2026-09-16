@@ -1,0 +1,149 @@
+name: release
+
+# A release is cut only from main, only when a push changed the compiler package,
+# and only when the package's version has no tag yet; scripts/release-plan.py
+# decides, from the full list of changed paths. A push that changes only the
+# README, the website, the examples, or the wiki does not start this workflow.
+# The filter ignores those paths rather than naming the package's, because
+# GitHub stops evaluating a path filter past 300 changed files, and a merge from
+# dev is far larger than that: named paths would never match it and the release
+# would silently not run. A release/ branch builds and checks the same archives
+# without publishing them.
+on:
+  push:
+    branches: [main, "release/**"]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "website/**"
+      - "examples/**"
+      - "wiki/**"
+      - "book/**"
+      - "editors/**"
+      - "public/**"
+      - "deploy/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      release: ${{ steps.decide.outputs.release }}
+      prerelease: ${{ steps.decide.outputs.prerelease }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+      notes: ${{ steps.decide.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Test the release decision
+        run: python3 test/release-plan.test.py
+      - id: decide
+        name: Decide
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          python3 scripts/release-plan.py --ref "$REF_NAME" --before "$BEFORE" --after "$AFTER" --base origin/main \
+            | tee -a "$GITHUB_OUTPUT"
+
+  archives:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+          - runner: macos-14
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - name: Install native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
+          sudo apt-get install -y libffi-dev zlib1g-dev libgmp-dev
+      - run: cabal update
+      - name: Assemble archive
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          binary="$(python3 scripts/build-package.py)"
+          python3 scripts/package-binary.py --binary "$binary" --target "${{ matrix.target }}"
+      - name: Run a program from the unpacked archive, outside the repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$PWD/dist/packages/pudu-${{ needs.plan.outputs.version }}-${{ matrix.target }}.tar.gz"
+          (cd dist/packages && shasum -a 256 -c "$(basename "$archive").sha256")
+          away="$(mktemp -d)"
+          tar -xzf "$archive" -C "$away"
+          pudu="$away/pudu-${{ needs.plan.outputs.version }}-${{ matrix.target }}/bin/pudu"
+          printf 'module Hello\n\nimport Std.Io as Io\n\nfn main() -> Int {\n  let _written = Io.writeLine("hello from the archive")\n  0\n}\n' > "$away/Hello.pudu"
+          cd "$away"
+          test "$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$pudu" version)" = "pudu ${{ needs.plan.outputs.version }}"
+          test "$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$pudu" run Hello.pudu)" = "hello from the archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-${{ needs.plan.outputs.version }}-${{ matrix.target }}
+          path: dist/packages/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [plan, archives]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      NOTES: ${{ needs.plan.outputs.notes }}
+      PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pudu-${{ needs.plan.outputs.version }}-*
+          path: packages
+          merge-multiple: true
+      - name: Tag the release
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists; nothing is published twice" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Pudu $VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" packages/* --verify-tag --title "Pudu $VERSION" --notes-file "$NOTES" "${flags[@]}"

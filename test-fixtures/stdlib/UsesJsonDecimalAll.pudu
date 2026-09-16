@@ -1,0 +1,244 @@
+module UsesJsonDecimalAll
+
+import Std.Decimal as D
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+
+/// Read a value out of text, answering a null for text that could not be read.
+/// Every piece of text this fixture decodes is valid, so a null where one was
+/// not expected is a failure rather than a reading accident.
+fn readOf(source: Str) -> Json.Json {
+  Result.unwrapOr(Json.decode(source), Json.Null)
+}
+
+/// What stopped the reader, or the empty string when nothing did.
+fn failureOf(source: Str) -> Str {
+  match Json.decode(source) {
+    case Ok(_) => ""
+    case Err(problem) => Json.explain(&problem)
+  }
+}
+
+/// Every export of `Std.Json` and `Std.Decimal`.
+///
+/// The reader is asked about the case that separates a whole number from a
+/// fractional one: a decoder that read every number as a float answers the same
+/// value for `1` and `1.0` and loses the difference a caller asked it to keep,
+/// so both are decoded and written back out, where the difference shows.
+/// Failures are asked for by kind rather than counted, since a reader that
+/// reported the same failure for every kind of bad text would pass a check that
+/// only asked whether it refused.
+///
+/// The exact numbers are checked where binary floating point would give a
+/// different answer — adding tenths, and a scale that survives a value being
+/// equal to one written with fewer digits. Every rounding mode is asked about
+/// the same halfway case, because that is the one case where the modes
+/// disagree; away from a half they all answer the same, and a check taken there
+/// would accept any of them for any other.
+export fn main() -> Int {
+  var held = 0
+
+  // Each kind of value, read and written back as the text it came from.
+  if Json.isNull(&readOf("null")) { held = held + 1 }
+  if Option.unwrapOr(Json.asBool(&readOf("true")), false) { held = held + 1 }
+  if !Option.unwrapOr(Json.asBool(&readOf("false")), true) { held = held + 1 }
+  if Option.unwrapOr(Json.asInt(&readOf("42")), 0) == 42 { held = held + 1 }
+  if Option.unwrapOr(Json.asInt(&readOf("-7")), 0) == 0 - 7 { held = held + 1 }
+  if Option.unwrapOr(Json.asText(&readOf("\"hi\"")), "") == "hi" { held = held + 1 }
+
+  // A whole number and a fractional one are different values, and the
+  // difference survives being written back out. A reader that decoded both as
+  // one numeric kind answers the same for the two.
+  if Json.encode(&readOf("1")) == "1" { held = held + 1 }
+  if Json.encode(&readOf("1.0")) == "1.0" { held = held + 1 }
+  if Option.isNone(&Json.asInt(&readOf("1.5"))) { held = held + 1 }
+  // Nothing is rounded on the way through, however many digits there are.
+  if Json.encode(&readOf("0.10000000000000000001")) == "0.10000000000000000001" {
+    held = held + 1
+  }
+
+  // Asking a value for what it is not answers nothing rather than a default.
+  if Option.isNone(&Json.asInt(&readOf("\"5\""))) { held = held + 1 }
+  if Option.isNone(&Json.asText(&readOf("5"))) { held = held + 1 }
+  if Option.isNone(&Json.asBool(&readOf("null"))) { held = held + 1 }
+  if !Json.isNull(&readOf("0")) { held = held + 1 }
+
+  // A list, read as one and asked for its members by position.
+  let numbers = readOf("[1,2,3]")
+  if Option.unwrapOr(Json.asList(&numbers), []).length() == 3 { held = held + 1 }
+  if Option.unwrapOr(Json.asInt(&Option.unwrapOr(Json.at(&numbers, 1), Json.Null)), 0) == 2 {
+    held = held + 1
+  }
+  if Option.isNone(&Json.at(&numbers, 3)) { held = held + 1 }
+  if Option.isNone(&Json.at(&numbers, 0 - 1)) { held = held + 1 }
+  // Asking a value that is not a list for a position answers nothing.
+  if Option.isNone(&Json.at(&readOf("5"), 0)) { held = held + 1 }
+  if Option.isNone(&Json.asList(&readOf("5"))) { held = held + 1 }
+
+  // An object, read as one and asked for its keys in the order written.
+  let record = readOf("\{\"b\":1,\"a\":\{\"deep\":\"here\"\}\}")
+  if Json.keys(&record) == ["b", "a"] { held = held + 1 }
+  if Option.unwrapOr(Json.asObject(&record), []).length() == 2 { held = held + 1 }
+  if Option.unwrapOr(Json.asInt(&Option.unwrapOr(Json.field(&record, "b"), Json.Null)), 0) == 1 {
+    held = held + 1
+  }
+  if Option.isNone(&Json.field(&record, "missing")) { held = held + 1 }
+  // Asking a value that is not an object answers nothing, and no keys.
+  if Option.isNone(&Json.field(&readOf("[1]"), "a")) { held = held + 1 }
+  if Option.isNone(&Json.asObject(&readOf("[1]"))) { held = held + 1 }
+  if Json.keys(&readOf("[1]")) == [] { held = held + 1 }
+
+  // A path of keys walked in one call, and one that leaves the object part way
+  // down, which answers nothing rather than what it reached.
+  let reached = Json.path(&record, &["a", "deep"])
+  if Option.unwrapOr(Json.asText(&Option.unwrapOr(reached, Json.Null)), "") == "here" {
+    held = held + 1
+  }
+  if Option.isNone(&Json.path(&record, &["a", "missing"])) { held = held + 1 }
+  if Option.isNone(&Json.path(&record, &["b", "deep"])) { held = held + 1 }
+  // An empty path is the value itself.
+  let noSteps: Array[Str] = []
+  if Json.keys(&Option.unwrapOr(Json.path(&record, &noSteps), Json.Null)) == ["b", "a"] {
+    held = held + 1
+  }
+
+  // Values built rather than read, and written out compactly.
+  let built = Json.object(&[("n", Json.Number(1)), ("t", Json.Text("x"))])
+  if Json.encode(&built) == "\{\"n\":1,\"t\":\"x\"\}" { held = held + 1 }
+  let members = Json.list(&[Json.Number(1), Json.Boolean(true), Json.Null])
+  if Json.encode(&members) == "[1,true,null]" { held = held + 1 }
+  let noMembers: Array[Json.Json] = []
+  if Json.encode(&Json.list(&noMembers)) == "[]" { held = held + 1 }
+  let noEntries: Array[(Str, Json.Json)] = []
+  if Json.encode(&Json.object(&noEntries)) == "\{\}" { held = held + 1 }
+
+  // A key added, and a key replaced in the place it already held rather than
+  // appended, which is what keeps the written order stable.
+  let added = Json.withField(&built, "z", Json.Number(9))
+  if Json.keys(&added) == ["n", "t", "z"] { held = held + 1 }
+  let replaced = Json.withField(&built, "n", Json.Number(2))
+  if Json.keys(&replaced) == ["n", "t"] { held = held + 1 }
+  if Option.unwrapOr(Json.asInt(&Option.unwrapOr(Json.field(&replaced, "n"), Json.Null)), 0) == 2 {
+    held = held + 1
+  }
+  // Adding a key to something that is not an object leaves it alone.
+  if Json.encode(&Json.withField(&Json.Number(1), "a", Json.Null)) == "1" {
+    held = held + 1
+  }
+
+  // Written across lines, two spaces to a level. The compact form and this one
+  // read back as the same value, which is what makes either safe to store.
+  if Json.encodePretty(&Json.Number(1)) == "1" { held = held + 1 }
+  if Json.encodePretty(&built) == "\{\n  \"n\": 1,\n  \"t\": \"x\"\n\}" {
+    held = held + 1
+  }
+  if Json.encode(&readOf(Json.encodePretty(&built))) == Json.encode(&built) {
+    held = held + 1
+  }
+
+  // Text that cannot be read, each kind of failure asked for by name rather
+  // than counted, since a reader reporting one failure for everything would
+  // pass a check that only asked whether it refused.
+  if failureOf("") == "no value at all" { held = held + 1 }
+  if failureOf("   ") == "no value at all" { held = held + 1 }
+  if failureOf("1 2") == "unexpected text after the value at 2" { held = held + 1 }
+  // The unfinished kinds say which construct ran out, not merely that
+  // something did.
+  if failureOf("\"unclosed") == "unterminated string" { held = held + 1 }
+  if failureOf("[1,") == "unterminated list" { held = held + 1 }
+  if failureOf("tru") == "expected a value at 0" { held = held + 1 }
+
+  // Exact numbers, where a binary float answers something near instead.
+  if 0.1d + 0.2d == 0.3d { held = held + 1 }
+  if D.zero() == 0d && D.one() == 1d { held = held + 1 }
+  if D.fromInt(7) == 7d && D.scale(D.fromInt(7)) == 0 { held = held + 1 }
+  if Option.unwrapOr(D.parse("2.50"), 0d) == 2.5d { held = held + 1 }
+  if Option.isNone(&D.parse("not a number")) { held = held + 1 }
+  if D.parseOr("2.50", 0d) == 2.5d && D.parseOr("nonsense", 0d) == 0d {
+    held = held + 1
+  }
+
+  // Scale is carried but not compared: two values equal as numbers can be
+  // written differently, which is what keeps an amount in cents.
+  if 1.50d == 1.5d && D.scale(1.50d) == 2 && D.scale(1.5d) == 1 { held = held + 1 }
+  if D.toText(1.50d) == "1.50" && D.toText(1.5d) == "1.5" { held = held + 1 }
+  if D.rescale(1.5d, 2) == 1.5d && D.toText(D.rescale(1.5d, 2)) == "1.50" {
+    held = held + 1
+  }
+
+  // Crossing to the other numeric types. A whole value crosses to an integer
+  // and a fractional one refuses rather than dropping what it cannot carry.
+  if Option.unwrapOr(D.toInt(7d), 0) == 7 { held = held + 1 }
+  if Option.isNone(&D.toInt(7.5d)) { held = held + 1 }
+  if D.toFloat64(0.5d) == 0.5f64 { held = held + 1 }
+
+  // Sign and magnitude, asked on both sides of nought and at it.
+  if D.isZero(0d) && !D.isZero(0.1d) { held = held + 1 }
+  if D.isNegative(0d - 1d) && !D.isNegative(0d) && !D.isNegative(1d) {
+    held = held + 1
+  }
+  if D.abs(0d - 2.5d) == 2.5d && D.abs(2.5d) == 2.5d { held = held + 1 }
+  if D.negate(2.5d) == 0d - 2.5d && D.negate(0d - 2.5d) == 2.5d { held = held + 1 }
+  if D.signum(2.5d) == 1 && D.signum(0d) == 0 && D.signum(0d - 2.5d) == 0 - 1 {
+    held = held + 1
+  }
+  if D.max(1d, 2d) == 2d && D.min(1d, 2d) == 1d { held = held + 1 }
+  if D.max(0d - 1d, 0d - 2d) == 0d - 1d { held = held + 1 }
+
+  // Every rounding mode at the one case where they disagree. Away from a half
+  // they all answer the same, so a check taken there would accept any of them
+  // for any other.
+  if D.round(0.5d, 0, D.Up) == 1d { held = held + 1 }
+  if D.round(0.5d, 0, D.Down) == 0d { held = held + 1 }
+  if D.round(0.5d, 0, D.Ceiling) == 1d { held = held + 1 }
+  if D.round(0.5d, 0, D.Floor) == 0d { held = held + 1 }
+  if D.round(0.5d, 0, D.HalfUp) == 1d { held = held + 1 }
+  if D.round(0.5d, 0, D.HalfDown) == 0d { held = held + 1 }
+  if D.round(0.5d, 0, D.HalfEven) == 0d && D.round(1.5d, 0, D.HalfEven) == 2d {
+    held = held + 1
+  }
+  // Away from nought the two that follow the number line part from the two
+  // that follow the magnitude.
+  if D.round(0d - 0.5d, 0, D.Ceiling) == 0d && D.round(0d - 0.5d, 0, D.Floor) == 0d - 1d {
+    held = held + 1
+  }
+  if D.round(0d - 0.5d, 0, D.Up) == 0d - 1d && D.round(0d - 0.5d, 0, D.Down) == 0d {
+    held = held + 1
+  }
+  if D.defaultRounding() == D.HalfEven { held = held + 1 }
+  if D.roundHalfEven(2.5d, 0) == 2d && D.roundHalfEven(3.5d, 0) == 4d {
+    held = held + 1
+  }
+
+  // The three whole-number roundings named for what they do, checked below
+  // nought where truncating and flooring part company.
+  if D.truncate(1.9d) == 1d && D.truncate(0d - 1.9d) == 0d - 1d { held = held + 1 }
+  if D.floor(1.9d) == 1d && D.floor(0d - 1.1d) == 0d - 2d { held = held + 1 }
+  if D.ceiling(1.1d) == 2d && D.ceiling(0d - 1.9d) == 0d - 1d { held = held + 1 }
+
+  // Division to a stated number of digits, which is the answer for a quotient
+  // that does not terminate. Only a divisor of nought has no answer.
+  if Option.unwrapOr(D.divide(1d, 3d, 4, D.HalfEven), 0d) == 0.3333d {
+    held = held + 1
+  }
+  if Option.unwrapOr(D.divide(2d, 3d, 4, D.Down), 0d) == 0.6666d { held = held + 1 }
+  if Option.unwrapOr(D.divideHalfEven(2d, 3d, 4), 0d) == 0.6667d { held = held + 1 }
+  if Option.isNone(&D.divide(1d, 0d, 2, D.HalfEven)) { held = held + 1 }
+  if Option.isNone(&D.divideHalfEven(1d, 0d, 2)) { held = held + 1 }
+
+  // Collections. The two empty cases go to the two identities rather than to
+  // the same one.
+  if D.sum([1.1d, 2.2d, 3.3d]) == 6.6d { held = held + 1 }
+  let noValues: Array[Decimal] = []
+  if D.sum(noValues) == 0d && D.product(noValues) == 1d { held = held + 1 }
+  if D.product([1.5d, 2d]) == 3d { held = held + 1 }
+  if Option.unwrapOr(D.mean([1d, 2d, 4d], 2), 0d) == 2.33d { held = held + 1 }
+  if Option.isNone(&D.mean(noValues, 2)) { held = held + 1 }
+
+  // A share of a value, to a stated number of digits.
+  if Option.unwrapOr(D.percentOf(200d, 15d, 2), 0d) == 30d { held = held + 1 }
+  if Option.unwrapOr(D.percentOf(19.99d, 8.25d, 2), 0d) == 1.65d { held = held + 1 }
+
+  held
+}
