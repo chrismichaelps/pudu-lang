@@ -125,10 +125,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # The archives land outside the working tree's own directories: a checkout puts the
+      # compiler's sources at packages/pudu, so downloading beside them makes a directory
+      # the asset list would match and the upload would refuse.
       - uses: actions/download-artifact@v4
         with:
           pattern: pudu-${{ needs.plan.outputs.version }}-*
-          path: packages
+          path: dist/release-assets
           merge-multiple: true
       - name: Tag the release
         run: |
@@ -141,9 +144,21 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Pudu $VERSION" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
+      # A release that fails partway leaves gh's own half-made release removed but the tag
+      # pushed, and the tag step refuses a tag that exists; the tag goes with it so a re-run
+      # publishes the same version rather than wedging it.
       - name: Publish the release
         run: |
           set -euo pipefail
           flags=()
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" packages/* --verify-tag --title "Pudu $VERSION" --notes-file "$NOTES" "${flags[@]}"
+          assets=()
+          while IFS= read -r asset; do assets+=("$asset"); done < <(find dist/release-assets -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "no archives were downloaded for $VERSION" >&2
+            exit 1
+          fi
+          if ! gh release create "$TAG" "${assets[@]}" --verify-tag --title "Pudu $VERSION" --notes-file "$NOTES" "${flags[@]}"; then
+            git push --delete origin "refs/tags/$TAG"
+            exit 1
+          fi
