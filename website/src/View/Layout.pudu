@@ -16,19 +16,51 @@ export fn page(
   structured: Option[Json.Json],
   content: Html.Html
 ) -> Html.Html {
+  document(siteUrl, title, description, path, indexable, structured, "", [
+      H.a().class("skip").href("#content").says("Skip to content"),
+      masthead(path),
+      H.main().id("content").class("shell").holds(content),
+      footer()
+    ])
+}
+
+/// A page that is a tool rather than a document: the masthead, then the tool
+/// filling the rest of the window, with no footer beneath it to scroll to.
+export fn workspace(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json],
+  content: Html.Html
+) -> Html.Html {
+  document(siteUrl, title, description, path, indexable, structured, "workspace-page", [
+      H.a().class("skip").href("#content").says("Skip to content"),
+      masthead(path),
+      H.main().id("content").class("workspace-shell").holds(content)
+    ])
+}
+
+fn document(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json],
+  bodyClass: Str,
+  parts: Array[H.Node]
+) -> Html.Html {
+  let body = if bodyClass.isEmpty() { H.body() } else { H.body().class(bodyClass) }
   H.html().lang("en").holding([
       H.head().holding([
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=15")
+          H.link().rel("stylesheet").href("/assets/site.css?v=20")
         ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
-      H.body().holding([
-          H.a().class("skip").href("#content").says("Skip to content"),
-          masthead(path),
-          H.main().id("content").class("shell").holds(content),
-          footer()
-        ])
+      body.holding(parts)
     ]).html()
 }
 
@@ -77,6 +109,7 @@ fn navigation(path: Str, classes: Str) -> H.Node {
   H.nav().class(classes).label("Main navigation").holding([
       navigationLink("/docs", "Docs", isDocumentation(path)),
       navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || isSymbol(path)),
+      navigationLink("/playground", "Playground", path == "/playground" || path.startsWith("/playground/")),
       navigationLink("/download", "Download", path == "/download"),
       navigationLink("/about", "About", path == "/about"),
       navigationLink("/donate", "Donate", path == "/donate")
@@ -112,6 +145,7 @@ fn footer() -> H.Node {
               ("/docs", "Documentation"),
               ("/docs/introduction", "Getting started"),
               ("/modules", "Standard library"),
+              ("/playground", "Playground"),
               ("/search", "Search the API")
             ]),
           footerColumn("Get Pudu", &[

@@ -15,7 +15,7 @@ aliases: [Lsp Completion]
 
 ## Purpose
 
-Provide code completion items for member methods following dot access, as well as in-scope declarations, primitive types, and keywords in general positions.
+Provide completions that depend on where the cursor is. After `value.`, the fields of a record the file declares and the methods of the receiver's type, or the members of an imported module after `Alias.`; never keywords. Elsewhere, bindings in scope (from name resolution, which answers even when the program does not type-check), the file's declarations, imports, the everyday prelude, keywords, and built-in types. `completionRepaired` answers from a [[Lsp Repair|repaired copy]] when the written text has no types.
 
 ## Interface
 

@@ -1,0 +1,42 @@
+module Site
+
+import Config as Config
+import Error as SiteError
+import Service.Catalog as Catalog
+import Service.Docs as Docs
+import Service.Documents as Documents
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import Service.Releases as Releases
+
+/// Everything the complete site serves, loaded once before the first request.
+///
+/// The local server, the one-page renderer, and the prerender all serve this
+/// same value, so what a page shows cannot depend on which of them rendered it.
+export type Site = {
+  siteUrl: Str,
+  catalog: Catalog.Catalog,
+  docs: Docs.Docs,
+  release: Releases.Release,
+  documents: Documents.Documents,
+  playground: Playground.Playground,
+  gates: Playground.Gates
+}
+
+/// The site the settings describe, or the first thing that stopped it loading.
+export fn load(settings: &Config.Config) -> Result[Site, SiteError.SiteError] {
+  let catalog = Catalog.load(settings.cataloguePath) ?
+  let docs = Docs.load(settings.docsPath) ?
+  let release = Releases.load(settings.releasesPath, settings.releaseNotesPath) ?
+  let documents = Documents.load(settings.documentsPath) ?
+  let examples = Examples.load(settings.playground.examplesPath) ?
+  Ok(Site {
+      siteUrl: settings.siteUrl,
+      catalog: catalog,
+      docs: docs,
+      release: release,
+      documents: documents,
+      playground: Playground.configured(&settings.playground, &examples),
+      gates: Playground.gatesFor(&settings.playground)
+    })
+}

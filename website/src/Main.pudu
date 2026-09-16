@@ -4,45 +4,31 @@ import Std.Http.Server as Server
 import Std.Io as Io
 import Config as Config
 import Error as SiteError
-import Service.Catalog as Catalog
-import Service.Docs as Docs
-import Service.Documents as Documents
-import Service.Releases as Releases
+import Site as Site
 import Web.Routes as Web
 
 fn main() -> Int {
   match Config.load() {
     case Err(problem) => fail(&problem)
     case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
+      match Site.load(&settings) {
         case Err(problem) => fail(&problem)
-        case Ok(catalog) => {
-          match Docs.load(settings.docsPath) {
-            case Err(problem) => fail(&problem)
-            case Ok(docs) => {
-              match Releases.load(settings.releasesPath, settings.releaseNotesPath) {
-                case Err(problem) => fail(&problem)
-                case Ok(release) => {
-                  match Documents.load(settings.documentsPath) {
-                    case Err(problem) => fail(&problem)
-                    case Ok(documents) => serve(&settings, &catalog, &docs, &release, &documents)
-                  }
-                }
-              }
-            }
-          }
-        }
+        case Ok(site) => serve(&settings, &site)
       }
     }
   }
 }
 
-fn serve(settings: &Config.Config, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release, documents: &Documents.Documents) -> Int {
+fn serve(settings: &Config.Config, site: &Site.Site) -> Int {
   match Server.start(settings.host, settings.port) {
     case Err(_) => fail(&SiteError.ListenFailed)
     case Ok(live) => {
       let _announced = Io.writeLine("Pudu docs listening on http://" + settings.host + ":" + show(Server.portOf(&live)))
-      let result = Server.run(&Server.server(&Web.routes(settings.siteUrl, catalog, docs, release, documents)), &live, settings.connections)
+      if site.playground.enabled {
+        let _playground = Io.writeLine("Playground runs programs with runner " + settings.playground.runner)
+      }
+      let served = Server.server(&Web.routes(site)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536)
+      let result = Server.run(&served, &live, settings.connections)
       let _stopped = Server.stop(&live)
       match result {
         case Ok(_) => 0

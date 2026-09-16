@@ -47,6 +47,7 @@ tags: [moc, handoff]
 - [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
 - [[2026-08-31-json-string-decoding]] — standard-library handoff for linear, strict JSON string escape decoding and encoding.
 - [[2026-09-15-places-and-documentation-book]] — language and website handoff for assignment through `&mut`, `mut` fields, and array elements, and the twenty-chapter documentation.
+- [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
 ## Referenced by
 

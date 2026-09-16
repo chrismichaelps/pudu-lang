@@ -1,0 +1,137 @@
+module Service.Playground.Remote
+
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Option as Option
+import Std.Result as Result
+import Std.Url as Url
+import Domain.Playground as Play
+import Service.Playground.Wire as Wire
+
+/// A runner reached over HTTP.
+///
+/// `endpoint` is the runner's `/run` address and `token` the secret both sides
+/// share. The website never runs a program where it is served: a serverless
+/// function holds the platform's credentials in its environment and has no
+/// way to hide them from a child, so a program is only ever run by a runner
+/// built to isolate it.
+export type Endpoint = { url: Str, token: Str }
+
+/// The header that says which reader a run is for.
+///
+/// The runner admits runs per reader. It sees only the website's address, so
+/// the website names the reader, and the runner believes the name only on a
+/// request that carried the shared token.
+export const CLIENT_HEADER: Str = "x-pudu-client"
+
+/// Time allowed beyond the run itself for the request carrying it.
+const TRANSPORT_MILLIS: Int = 5000
+
+/// Room in an answer beyond the output it carries: two streams and the JSON
+/// around them, whose escaping can make text longer than it was.
+const ANSWER_OVERHEAD_BYTES: Int = 65536
+
+/// How long a question may take, as the runner bounds it, and the room its
+/// answer may need.
+const QUESTION_MILLIS: Int = 8000
+const ANSWER_BYTES: Int = 8388608
+
+/// Ask the runner to run or format one program. `endpoint.url` is the
+/// runner's `/run` address.
+export fn run(endpoint: &Endpoint, submission: &Play.Submission, limits: &Play.Limits, client: Str) -> Play.Outcome {
+  let sent = send(
+    endpoint,
+    endpoint.url,
+    Wire.request(submission.source, &submission.action),
+    limits.runMillis + TRANSPORT_MILLIS,
+    limits.outputBytes * 12 + ANSWER_OVERHEAD_BYTES,
+    client
+  )
+  match sent {
+    case Err(reason) => Play.Unavailable(reason)
+    case Ok(answer) => read(&answer)
+  }
+}
+
+/// Ask the runner's language server one question, at the runner's `/assist`
+/// address beside `/run`.
+export fn ask(endpoint: &Endpoint, submission: &Play.Submission, question: &Play.Question, client: Str) -> Play.Answer {
+  let target = assistUrl(endpoint.url)
+  let sent = send(endpoint, target, Wire.question(submission.source, question), QUESTION_MILLIS + TRANSPORT_MILLIS, ANSWER_BYTES, client)
+  match sent {
+    case Err(reason) => Play.NotAnswered(reason)
+    case Ok(answer) => {
+      if answer.status.code != 200 {
+        return Play.NotAnswered(refusalOf(&answer))
+      }
+      Option.unwrapOr(Wire.answerOf(answer.body), Play.NotAnswered("The playground runner answered with something that is not an answer."))
+    }
+  }
+}
+
+/// Why a runner did not answer a question, in the reader's words.
+fn refusalOf(answer: &Http.Response) -> Str {
+  match read(answer) {
+    case Play.Refused(reason) => reason
+    case Play.Unavailable(reason) => reason
+    case _other => "The playground runner refused the question (" + show(answer.status.code) + ")."
+  }
+}
+
+/// The runner's `/assist` address, from its `/run` address.
+export fn assistUrl(runUrl: Str) -> Str {
+  if runUrl.endsWith("/run") { runUrl.take(runUrl.length() - "/run".length()) + "/assist" } else { runUrl + "/assist" }
+}
+
+fn send(endpoint: &Endpoint, target: Str, body: Str, millis: Int, bytes: Int, client: Str) -> Result[Http.Response, Str] {
+  let host = match Url.parse(target) {
+    case Ok(place) => place.host
+    case Err(_) => { return Err("The playground runner address is not a URL.") }
+  }
+  let bounds = Client.limits()
+    .within(millis)
+    .reading(bytes)
+    .following(0)
+    .reaching(&[host])
+  let request = Http.Request {
+    method: Http.Post,
+    target: target,
+    headers: [
+      ("content-type", "application/json"),
+      ("accept", "application/json"),
+      ("authorization", "Bearer " + endpoint.token),
+      (CLIENT_HEADER, client)
+    ],
+    body: body,
+    binaryBody: None
+  }
+  match Client.send(&request, &bounds) {
+    case Err(Client.TimedOut(_)) => Err("The playground runner did not answer in time. Try again in a moment.")
+    case Err(_) => Err("The playground runner cannot be reached right now.")
+    case Ok(answer) => Ok(answer)
+  }
+}
+
+/// What a runner's answer means for the reader.
+export fn read(answer: &Http.Response) -> Play.Outcome {
+  let code = answer.status.code
+  if code == 429 {
+    let wait = Option.unwrapOr(Http.header(&answer.headers, "retry-after"), "a few")
+    return Play.Refused("Too many runs from here. Try again in " + wait + " seconds.")
+  }
+  if code == 503 {
+    return Play.Unavailable("The playground is busy. Try again in a moment.")
+  }
+  if code != 200 {
+    return Play.Unavailable("The playground runner refused the request (" + show(code) + ").")
+  }
+  Option.unwrapOr(
+    Wire.decode(answer.body),
+    Play.Unavailable("The playground runner answered with something that is not a result.")
+  )
+}
+
+/// Whether an endpoint is complete enough to be asked anything.
+export fn isComplete(endpoint: &Endpoint) -> Bool {
+  !endpoint.token.isEmpty() && Result.isOk(&Url.parse(endpoint.url))
+}

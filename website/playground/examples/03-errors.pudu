@@ -1,0 +1,52 @@
+// Errors as values
+// Work that can fail answers a Result, and ? passes a failure up to the caller.
+module Main
+
+import Std.Io as Io
+import Std.Text as Text
+
+type ParseError =
+  | Empty
+  | NotANumber(Str)
+  | OutOfRange(Int)
+
+fn explain(problem: &ParseError) -> Str {
+  match problem {
+    case Empty => "nothing was written"
+    case NotANumber(text) => "'{text}' is not a number"
+    case OutOfRange(value) => "{value} is not a percentage"
+  }
+}
+
+fn percentage(text: Str) -> Result[Int, ParseError] {
+  let trimmed = text.trim()
+  if trimmed.isEmpty() { return Err(Empty) }
+  let value = match Text.wholeOf(trimmed) {
+    case Some(number) => number
+    case None => { return Err(NotANumber(trimmed)) }
+  }
+  if value < 0 || value > 100 { Err(OutOfRange(value)) } else { Ok(value) }
+}
+
+fn average(texts: &Array[Str]) -> Result[Int, ParseError] {
+  var total = 0
+  for text in *texts {
+    total = total + percentage(text) ?
+  }
+  Ok(total / texts.length())
+}
+
+fn report(texts: &Array[Str]) -> () {
+  match average(texts) {
+    case Ok(value) => { let _said = Io.writeLine("average: {value}%") }
+    case Err(problem) => { let _said = Io.writeLine("refused: " + explain(&problem)) }
+  }
+}
+
+fn main() -> Int {
+  report(&["40", "60", "95"])
+  report(&["40", "sixty"])
+  report(&["40", "140"])
+  report(&["", "10"])
+  0
+}
