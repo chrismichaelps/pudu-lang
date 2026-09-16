@@ -80,6 +80,7 @@ chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 # built from, so the two cannot disagree about which pages exist.
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
   PUDU_DOCS_PATH="$root/website/docs" \
+  PUDU_RELEASES_PATH="$root/website/data/releases.json" \
   "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
 # `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and
@@ -98,21 +99,36 @@ printf '%s\n' \
 
 chmod 644 "$function_dir/.vc-config.json" 2>/dev/null || true
 
-printf '%s\n' \
-  '{' \
-  '  "version": 3,' \
-  '  "routes": [' \
-  '    { "handle": "filesystem" },' \
-  '    { "src": "/", "dest": "/index.html" },' \
-  '    { "src": "/guide", "dest": "/guide/index.html" },' \
-  '    { "src": "/about", "dest": "/about/index.html" },' \
-  '    { "src": "/donate", "dest": "/donate/index.html" },' \
-  '    { "src": "/modules", "dest": "/modules/index.html" },' \
-  '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
-  '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
-  '    { "src": "/search", "dest": "/dynamic" },' \
-  '    { "src": "/.*", "dest": "/dynamic" }' \
-  '  ]' \
-  '}' > "$output/config.json"
+# The guide became the documentation. Its old address is answered with a
+# permanent redirect rather than a second rendering, so a link to it keeps
+# working, a crawler is told which address to keep, and the sitemap carries one
+# address for one page.
+#
+# A page reaches the CDN only when a route sends it there. The list used to be
+# written by hand, so every page added after it was written fell through to the
+# catch-all and was answered by the function, which serves only search and the
+# no-index fallback. It is read from what was actually rendered instead: every
+# top-level directory holding an index.html gets the route that serves it.
+page_routes=""
+while IFS= read -r page; do
+  name="$(basename "$(dirname "$page")")"
+  page_routes="$page_routes    { \"src\": \"/$name\", \"dest\": \"/$name/index.html\" },
+"
+done < <(find "$output/static" -mindepth 2 -maxdepth 2 -name index.html | sort)
+
+{
+  printf '%s\n' '{' '  "version": 3,' '  "routes": [' '    { "handle": "filesystem" },'
+  printf '%s' "$page_routes"
+  printf '%s\n' \
+    '    { "src": "/", "dest": "/index.html" },' \
+    '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
+    '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
+    '    { "src": "/docs/([^/]+)", "dest": "/docs/$1/index.html" },' \
+    '    { "src": "/guide", "status": 308, "headers": { "Location": "/docs" } },' \
+    '    { "src": "/search", "dest": "/dynamic" },' \
+    '    { "src": "/.*", "dest": "/dynamic" }' \
+    '  ]' \
+    '}'
+} > "$output/config.json"
 
 echo "Built $output"

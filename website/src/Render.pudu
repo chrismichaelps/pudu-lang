@@ -9,6 +9,8 @@ import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Documents as Documents
+import Service.Releases as Releases
 import Web.Routes as Web
 
 fn main() -> Int {
@@ -21,8 +23,16 @@ fn main() -> Int {
           match Docs.load(settings.docsPath) {
             case Err(problem) => failed(&problem)
             case Ok(docs) => {
+              let release = match Releases.load(settings.releasesPath, settings.releaseNotesPath) {
+                case Ok(loaded) => loaded
+                case Err(problem) => { return failed(&problem) }
+              }
+              let documents = match Documents.load(settings.documentsPath) {
+                case Ok(loaded) => loaded
+                case Err(problem) => { return failed(&problem) }
+              }
               let target = Option.unwrapOr(Env.at(0), "/")
-              let response = Web.render(settings.siteUrl, &catalog, &docs, target)
+              let response = Web.render(settings.siteUrl, &catalog, &docs, &release, &documents, target)
               let _written = Io.writeLine(envelope(&response))
               0
             }

@@ -11,6 +11,9 @@ export type Config = {
   connections: Int,
   cataloguePath: Str,
   docsPath: Str,
+  releasesPath: Str,
+  documentsPath: Str,
+  releaseNotesPath: Str,
   siteUrl: Str
 }
 
@@ -28,6 +31,9 @@ export fn load() -> Result[Config, SiteError.SiteError] {
       connections: connections,
       cataloguePath: Env.variableOr("PUDU_CATALOG_PATH", "website/data/api.json"),
       docsPath: Env.variableOr("PUDU_DOCS_PATH", "website/docs"),
+      releasesPath: Env.variableOr("PUDU_RELEASES_PATH", "website/data/releases.json"),
+      documentsPath: Env.variableOr("PUDU_DOCUMENTS_PATH", "."),
+      releaseNotesPath: Env.variableOr("PUDU_RELEASE_NOTES_PATH", "packages/pudu/v0.1/release-notes"),
       siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?
     })
 }

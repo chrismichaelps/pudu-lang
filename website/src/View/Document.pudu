@@ -1,0 +1,46 @@
+module View.Document
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Constants as Constants
+import Service.Documents as Documents
+import View.Layout as Layout
+import View.Markdown as Markdown
+
+/// What a document is called in navigation and in its own heading, and the
+/// sentence that stands in when the file opens with a heading and no prose.
+fn describe(slug: Str) -> (Str, Str, Str) {
+  if slug == "conduct" {
+    ("Code of Conduct", "conduct", "The standards everyone taking part in Pudu is held to, and how to report behaviour that breaks them.")
+  } else if slug == "contributing" {
+    ("Contributing", "contributing", "How to build Pudu, what a change has to pass before it lands, and how to send one.")
+  } else if slug == "security" {
+    ("Security", "security", "How to report a vulnerability in Pudu privately, what is in scope, and what to expect after reporting.")
+  } else if slug == "community" {
+    ("Community", "community", "Where to ask a question about Pudu, report what went wrong, and say what got in the way.")
+  } else if slug == "privacy" {
+    ("Privacy", "privacy", "What this site collects, which is nothing, and what reaching a server makes unavoidable.")
+  } else {
+    ("Brand and logo", "brand", "How to write the Pudu name and use its logo, and what needs asking first.")
+  }
+}
+
+/// One published document, rendered from the file the repository keeps.
+export fn page(siteUrl: Str, documents: &Documents.Documents, slug: Str) -> Option[Html.Html] {
+  let found = Documents.find(documents, slug) ?
+  let read = Markdown.parse(&found.lines)
+  let described = describe(slug)
+  let title = described[0]
+  let summary = if read.summary.isEmpty() { described[2] } else { read.summary }
+  let opening = [
+    H.span().class("kind").says(described[1]),
+    H.h1().says(title),
+    H.p().class("document-source").holding([
+        H.span().says("This page is "),
+        H.a().href(Constants.REPOSITORY_SOURCE_URL + found.file).at("rel", "external noopener noreferrer").says(found.file),
+        H.span().says(" in the repository, and changing it changes this page.")
+      ])
+  ]
+  let article = H.article().class("doc document").holding(opening.concat(read.blocks))
+  Some(Layout.page(siteUrl, title, summary, "/" + slug, true, None, article.html()))
+}

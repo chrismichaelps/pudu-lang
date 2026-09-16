@@ -19,6 +19,7 @@ Main / Render / Prerender                    Function
        Web.Routes                          Web.Dynamic
        /   |     \                           /      \
    View  Service.Catalog  Service.Docs  View.Dynamic  Service.Search
+            Service.Releases
      \        /               /              \          /
       Seo / Constants   View.Markdown         Domain.Entry
 
@@ -42,6 +43,19 @@ Dependencies point downward. Domain code knows no HTTP or HTML. Services know ca
 values, not requests. Views receive values and return typed `Std.Html` trees. The static router owns
 the complete crawlable documentation graph. The dynamic router owns only search and the no-index
 fallback, so the Lambda closure does not retain static-page machinery.
+
+## Downloads
+
+The archives `/download` offers are read from `website/data/releases.json`, which
+`website/scripts/generate-releases.mjs` writes from the published releases before a deployment.
+[[website Service Releases]] loads that document once, before any request, so the page is part of
+the static graph and answers from the CDN: a reader waits for no API, and a rate limit or an outage
+at the forge cannot take the download page down. A new release reaches the page on the next
+deployment, which is the trip its announcement takes anyway.
+
+The page publishes each archive's SHA-256 beside it, fetched from the checksum the release itself
+publishes rather than recomputed, so the page cannot disagree with the file it links to. A document
+that carries no archive stops the site from starting rather than serving a page with nothing to take.
 
 ## Search contract
 

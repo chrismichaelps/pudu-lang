@@ -9,6 +9,8 @@ import Domain.Entry as Domain
 import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Documents as Documents
+import Service.Releases as Releases
 import Service.Search as Search
 import View.Markdown as Markdown
 import Web.Dynamic as DynamicWeb
@@ -40,6 +42,41 @@ fn everyResultHasKind(hits: &Array[Domain.Hit], kind: Str) -> Bool {
   true
 }
 
+/// Every archive the release publishes is offered, by name and by link.
+fn downloadOffersEvery(response: &Http.Response, release: &Releases.Release) -> Bool {
+  if release.downloads.length() == 0 { return false }
+  for download in release.downloads {
+    if !response.body.contains(download.file) { return false }
+    if !response.body.contains(download.url) { return false }
+  }
+  true
+}
+
+/// A reader can check what they downloaded, so each checksum is on the page.
+fn downloadShowsChecksums(response: &Http.Response, release: &Releases.Release) -> Bool {
+  for download in release.downloads {
+    if download.checksum.isEmpty() { return false }
+    if !response.body.contains(download.checksum) { return false }
+  }
+  true
+}
+
+/// The pages a crawler is told about are the pages that were rendered.
+fn sitemapHasAll(response: &Http.Response, origin: Str, paths: &Array[Str]) -> Bool {
+  for path in paths {
+    if !response.body.contains("<loc>" + origin + path + "</loc>") { return false }
+  }
+  true
+}
+
+/// Every page carries the footer, so the project pages are reachable from any of them.
+fn footerLinks(response: &Http.Response) -> Bool {
+  for path in ["/download", "/releases", "/contributing", "/conduct", "/security"] {
+    if !response.body.contains("href=\"" + path + "\"") { return false }
+  }
+  true
+}
+
 fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   for entry in entries {
     if entry.documentation.length() == 0 { return false }
@@ -57,12 +94,20 @@ export fn main() -> Int {
     case Ok(value) => value
     case Err(_) => { return 0 }
   }
+  let release = match Releases.load("website/data/releases.json", "packages/pudu/v0.1/release-notes") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let documents = match Documents.load(".") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
   let origin = "https://pudu.example"
-  let docsIndex = Web.render(origin, &catalog, &docs, "/docs")
-  let docsPage = Web.render(origin, &catalog, &docs, "/docs/errors")
-  let docsMissing = Web.render(origin, &catalog, &docs, "/docs/not-a-page")
-  let modulesIndex = Web.render(origin, &catalog, &docs, "/modules")
-  let guide = Web.render(origin, &catalog, &docs, "/guide")
+  let docsIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/docs")
+  let docsPage = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/errors")
+  let docsMissing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/not-a-page")
+  let modulesIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/modules")
+  let guide = Web.render(origin, &catalog, &docs, &release, &documents, "/guide")
   let written = Markdown.parse(
       &[
       "# Title",
@@ -78,18 +123,26 @@ export fn main() -> Int {
     ]
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
-  let home = Web.render(origin, &catalog, &docs, "/")
-  let search = Web.render(origin, &catalog, &docs, "/search?q=checksum")
-  let hostile = Web.render(origin, &catalog, &docs, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-  let modulePage = Web.render(origin, &catalog, &docs, "/module/Std.Adler32")
-  let symbol = Web.render(origin, &catalog, &docs, "/docs/Std.Adler32/fn/checksum")
-  let missing = Web.render(origin, &catalog, &docs, "/docs/Std.Adler32/fn/notThere")
-  let robots = Web.render(origin, &catalog, &docs, "/robots.txt")
-  let sitemap = Web.render(origin, &catalog, &docs, "/sitemap.xml")
-  let health = Web.render(origin, &catalog, &docs, "/health")
-  let donation = Web.render(origin, &catalog, &docs, "/donate")
-  let about = Web.render(origin, &catalog, &docs, "/about")
-  let overloads = Web.render(origin, &catalog, &docs, "/docs/Std.Bits/fn/width")
+  let home = Web.render(origin, &catalog, &docs, &release, &documents, "/")
+  let search = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=checksum")
+  let hostile = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(origin, &catalog, &docs, &release, &documents, "/module/Std.Adler32")
+  let symbol = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(origin, &catalog, &docs, &release, &documents, "/robots.txt")
+  let sitemap = Web.render(origin, &catalog, &docs, &release, &documents, "/sitemap.xml")
+  let health = Web.render(origin, &catalog, &docs, &release, &documents, "/health")
+  let donation = Web.render(origin, &catalog, &docs, &release, &documents, "/donate")
+  let about = Web.render(origin, &catalog, &docs, &release, &documents, "/about")
+  let overloads = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Bits/fn/width")
+  let download = Web.render(origin, &catalog, &docs, &release, &documents, "/download")
+  let releases = Web.render(origin, &catalog, &docs, &release, &documents, "/releases")
+  let conduct = Web.render(origin, &catalog, &docs, &release, &documents, "/conduct")
+  let contributing = Web.render(origin, &catalog, &docs, &release, &documents, "/contributing")
+  let security = Web.render(origin, &catalog, &docs, &release, &documents, "/security")
+  let community = Web.render(origin, &catalog, &docs, &release, &documents, "/community")
+  let privacy = Web.render(origin, &catalog, &docs, &release, &documents, "/privacy")
+  let brand = Web.render(origin, &catalog, &docs, &release, &documents, "/brand")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -112,6 +165,24 @@ export fn main() -> Int {
     ])
 
   let suite = Test.suite("website", &[
+      Test.that("download page answers", download.status.code == 200),
+      Test.that("release notes answer", releases.status.code == 200),
+      Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),
+      Test.that("code of conduct answers", conduct.status.code == 200),
+      Test.that("code of conduct names how to report", conduct.body.contains("chrisperezsantiago1@gmail.com")),
+      Test.that("contributing answers", contributing.status.code == 200),
+      Test.that("security policy answers", security.status.code == 200),
+      Test.that("security policy names what is in scope", security.body.contains("in scope")),
+      Test.that("community page answers", community.status.code == 200),
+      Test.that("privacy page answers", privacy.status.code == 200),
+      Test.that("brand page answers", brand.status.code == 200),
+      Test.that("every published document is in the sitemap", sitemapHasAll(&sitemap, origin, &["/download", "/releases", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand"])),
+      Test.that("the footer links the project pages", footerLinks(&about)),
+      Test.that("download page offers every published archive", downloadOffersEvery(&download, &release)),
+      Test.that("download page names the version", download.body.contains("Pudu " + release.version)),
+      Test.that("download page publishes each checksum", downloadShowsChecksums(&download, &release)),
+      Test.that("download page is in the sitemap", sitemap.body.contains(origin + "/download")),
+      Test.that("download page is linked from every page", about.body.contains("href=\"/download\"")),
       Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.0"),
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
       Test.that("every public declaration has documentation", everyEntryHasDocumentation(&catalog.entries)),

@@ -5,16 +5,23 @@ import Std.Html as Html
 import Std.Url as Url
 import Seo as Seo
 import Service.Catalog as Catalog
+import Service.Releases as Releases
 import View.Dynamic as Dynamic
 import View.Layout as Layout
 
-export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
+export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Release) -> Html.Html {
   let intro = H.section().class("intro").holding([
+      H.p().class("hero-release").holding([
+          H.a().href("/releases").holding([
+              H.span().class("release-pill").says(if release.prerelease { "Pre-release" } else { "Latest" }),
+              H.span().says("Pudu " + release.version + " is out")
+            ])
+        ]),
       H.h1().says("Programs that say what they do."),
       H.p().says("Pudu is a statically typed language where a signature tells you what a function takes, what it gives back, whether it can fail, and whether it changes what it was given."),
       H.p().class("hero-actions").holding([
           H.a().class("button").href("/docs/introduction").says("Start learning"),
-          H.a().class("button button-quiet").href("/modules").says("Browse the standard library")
+          H.a().class("button button-quiet").href("/download").says("Download " + release.version)
         ]),
       H.h2().class("hero-search-title").says("Search the API"),
       H.p().says("Find any public function, type, trait, constructor, or constant by name or by type."),
@@ -61,13 +68,19 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
                 principle("Checked patterns", "match lists the shapes a value may have, so each case can be handled directly.")
               ])
           ]),
-        H.section().class("home-section haskell-note").holding([
-            H.div().holding([
-                H.span().class("kind").says("Compiler"),
-                H.h2().says("Built on a Haskell foundation"),
-                H.p().says("The first Pudu compiler is written in Haskell. Its strong types and functional style help keep compiler stages explicit and testable.")
+        H.section().class("home-section").holding([
+            H.h2().says("The library is already there"),
+            H.p().class("section-lead").says("The standard library ships inside the archive. There is nothing to add to a manifest before a program can read a file, answer a request, or talk to a database."),
+            H.div().class("principles").holding([
+                principle("Services", "HTTP clients and servers, TLS that verifies its chain and hostname, sockets, and routing."),
+                principle("Data", "JSON, CSV, TOML, YAML and XML, with readers that hold a flat memory peak as a file grows."),
+                principle("Storage", "SQLite, and PostgreSQL over its own wire protocol with parameters bound rather than pasted."),
+                principle("Work", "Workers, bounded channels, locks, and a testing module with property checks.")
               ]),
-            H.p().holding([H.a().href("/about").says("Learn about Pudu and its author")])
+            H.p().class("home-actions").holding([
+                H.a().href("/modules").says("Browse all " + show(catalog.modules.length()) + " modules"),
+                H.a().href("/download").says("Download Pudu " + release.version)
+              ])
           ])
       ]).html())
 }

@@ -105,7 +105,7 @@ export fn robots(siteUrl: Str) -> Str {
 /// paths are deduplicated here: rendering one twice is work done twice, and
 /// listing it twice is a sitemap a crawler reports as containing duplicates.
 export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Array[Str] {
-  var found = ["/", "/docs", "/about", "/donate", "/modules"]
+  var found = ["/", "/docs", "/download", "/releases", "/about", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand", "/donate", "/modules"]
   for page in docs.pages {
     found = found.push("/docs/" + Url.encodeComponent(page.slug))
   }
