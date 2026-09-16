@@ -40,6 +40,12 @@ The active role returns to **Language Architect** for the next critical readines
 - `41bf08f` — the documentation is twenty chapters in five parts; all 87 examples ran, and the
   website suite holds 100 assertions.
 
+- Release pipeline — `.github/workflows/release.yml` with [[Release Plan]] publishes from `main` only
+  for a change under `packages/pudu/` at an untagged version, marked pre-release for `0.x`; README,
+  website, example, and wiki merges never start it. `release/0.1.0` builds and checks the Linux and
+  macOS archives without publishing, and the release PR to `main` is open. A locally built
+  `darwin-arm64` archive ran a program outside the repository with an empty environment.
+
 ## Open
 
 - Critical readiness rows remain for resource ownership and cancellation, package tooling (`lock`,
@@ -48,6 +54,7 @@ The active role returns to **Language Architect** for the next critical readines
 
 ## Next action
 
-Read [[architecture/PACKAGES]] and the CLI command table, then write the mirrored page and Grill Log
-for a `pudu lock` command that resolves a package's local dependencies and writes the lockfile the
-architecture specifies.
+Merge the `release/0.1.0` pull request into `main` with a merge commit once its checks and the
+`release` workflow's archive jobs are green; the workflow then tags `v0.1.0` and publishes the
+pre-release. After that, read [[architecture/PACKAGES]] and write the mirrored page and Grill Log for
+`pudu lock`.
