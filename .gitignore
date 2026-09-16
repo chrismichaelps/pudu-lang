@@ -31,7 +31,7 @@ editors/vscode/package-lock.json
 # The scratch database the database example leaves behind.
 examples/db/orders.db
 
-dist/packages/
+dist/
 scripts/__pycache__/
 # Private commercial manuscript and publication artifacts.
 book/

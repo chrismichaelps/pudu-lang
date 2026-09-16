@@ -128,6 +128,7 @@ fn footer() -> H.Node {
       H.div().class("footer-base").holding([
           H.small().says(Constants.COPYRIGHT),
           H.span().class("footer-base-links").holding([
+              H.a().href(Constants.LICENSE_URL).at("rel", "external noopener noreferrer").says("Apache-2.0"),
               H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub"),
               H.a().href("/donate").says("Donate")
             ])
