@@ -318,7 +318,7 @@ testRuntimeEvaluation = do
         (aliasDispatch === Just "224")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "107")
+        (enterpriseSsr === Just "109")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")
