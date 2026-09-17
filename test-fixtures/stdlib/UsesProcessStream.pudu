@@ -148,6 +148,11 @@ fn main() -> Int {
     case Err(_) => { held = held + 1 }
   }
 
+  // 15. A character a read cuts in two arrives whole, with the text around it
+  if outputOf("printf 'caf\\303'; sleep 0.2; printf '\\251 \\360\\237'; sleep 0.2; printf '\\220\\221'") == Ok("café 🐑") {
+    held = held + 1
+  }
+
   // 14. The blocking form still works beside the streaming one
   if Process.output("/bin/sh", &["-c", "printf 'both'"]) == Ok("both") {
     held = held + 1

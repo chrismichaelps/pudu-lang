@@ -28,6 +28,7 @@ testRuntimeEvaluation = do
   named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
   ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
   acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
+  aliasDispatch <- runEntry "test-fixtures/aliasdispatch/Main.pudu"
   sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   longLoops <- runEntry "test-fixtures/stdlib/UsesLongLoops.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
@@ -313,9 +314,11 @@ testRuntimeEvaluation = do
     , counterexample
         "threads share a channel, a lock, and a cell without losing a write"
         (threads === Just "32")
+    , counterexample "an import alias spelled like a type does not take over its methods"
+        (aliasDispatch === Just "224")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "107")
+        (enterpriseSsr === Just "109")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")

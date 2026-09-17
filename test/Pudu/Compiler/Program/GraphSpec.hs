@@ -14,7 +14,7 @@ import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   )
-import Pudu.Compiler.Program.Common (codes)
+import Pudu.Compiler.Program.Common (codes, runEntry)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -77,9 +77,17 @@ testPathDependencies = do
 testAliasedReexport :: IO Property
 testAliasedReexport = do
   layered <- codes "test-fixtures/typealias/Root.pudu"
-  pure $ counterexample
-    "a type re-exported under its own name is still the type that declared it"
-    (layered === [])
+  throughField <- codes "test-fixtures/aliasfield/Main.pudu"
+  ran <- runEntry "test-fixtures/aliasfield/Main.pudu"
+  pure $ conjoin
+    [ counterexample
+        "a type re-exported under its own name is still the type that declared it"
+        (layered === [])
+    , counterexample
+        "an alias a record field names from a third module is what it stands for"
+        (throughField === [])
+    , counterexample "the record's alias fields hold text and a function" (ran === Just "43")
+    ]
 
 testDiscoveryFailures :: IO Property
 testDiscoveryFailures = do

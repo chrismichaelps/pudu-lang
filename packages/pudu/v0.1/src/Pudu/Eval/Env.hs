@@ -14,6 +14,7 @@ module Pudu.Eval.Env
   , ascend
   , bind
   , bindMethod
+  , lookupMethod
   , callLimit
   , captureEnvironment
   , currentFrame
@@ -353,6 +354,16 @@ lookupName name =
     current : rest -> case Map.lookup name current of
       Just found -> Just found
       Nothing -> search rest
+
+{-| The implementation a type provides under this name, and nothing else.
+
+    A method call on a receiver asks this rather than `lookupName`. The frames
+    also hold every name an import made, and an alias spelled like a type —
+    `import Std.Bytes as Bytes` — binds `Bytes.toText` there. Searching them
+    for a method dispatched a built-in type's method to whichever module some
+    other file had imported under that name. -}
+lookupMethod :: Text -> Evaluator (Maybe Value)
+lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup name (envMethods env)) env)
 
 {-| Record an implementation's method, where every module can reach it. -}
 bindMethod :: Text -> Value -> Evaluator ()

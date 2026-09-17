@@ -28,6 +28,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Check.Rule
   ( instantiate
+  , memberType
   , namedVariantAsValue
   , qualifiedMemberType
   )
@@ -88,7 +89,15 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
             resolved <- zonk targetType
             method <- methodScheme calleeSpan resolved (locatedValue member)
             case method of
-              Nothing -> (\found -> (found, Nothing)) <$> runCheck checker declared rigid located
+              {-| Not a method, so a field, typed from the receiver just checked.
+                  Checking the member expression again would check the receiver
+                  again, and each call in a chain would double the work and the
+                  diagnostics of every call before it. -}
+              Nothing -> do
+                found <- memberType calleeSpan targetType (locatedValue member)
+                resolvedMember <- zonk found
+                recordExpression calleeSpan resolvedMember
+                pure (found, Nothing)
               Just scheme -> do
                 instantiated <- instantiate calleeSpan scheme
                 (applied, changesReceiver) <- case instantiated of

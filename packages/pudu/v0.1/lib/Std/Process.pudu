@@ -1,6 +1,7 @@
 module Std.Process
 
 import Std.Concurrent as Concurrent
+import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -187,17 +188,57 @@ fn textOrNothing(piece: &Bytes) -> Str {
   }
 }
 
+/// How many bytes a character takes, read from the byte it starts with.
+///
+/// The high bits of a UTF-8 lead byte say the length: `0xxxxxxx` stands alone,
+/// `110xxxxx` starts two bytes, `1110xxxx` three, and `11110xxx` four.
+fn characterWidth(lead: UInt8) -> Int {
+  if (lead & 128u8) == 0u8 { return 1 }
+  if (lead & 224u8) == 192u8 { return 2 }
+  if (lead & 240u8) == 224u8 { return 3 }
+  4
+}
+
+/// How many of a run's last bytes begin a character the run does not finish.
+///
+/// A read ends wherever the pipe's buffer did, which can be partway through a
+/// character. Those bytes are not text yet; they are held back and read again
+/// at the front of the next piece. Continuation bytes are `10xxxxxx`, so the
+/// start of the last character is at most three bytes from the end.
+fn unfinishedTail(octets: &Bytes) -> Int {
+  let length = octets.length()
+  var back = 1
+  while back <= 3 && back <= length {
+    let octet = Option.unwrapOr(octets.at(length - back), 0u8)
+    if (octet & 192u8) != 128u8 {
+      return if characterWidth(octet) > back { back } else { 0 }
+    }
+    back = back + 1
+  }
+  0
+}
+
 /// Everything a stream carries, read until it ends, failing if a read does.
+///
+/// Each piece is decoded as it arrives, less the start of a character the piece
+/// cut short, which waits for the rest. A piece decoded on its own would lose
+/// both halves of that character and every other character read with them.
 fn collect(running: &Started, next: Chunks) -> Result[Str, Str] {
   var collected = ""
+  var pending = "".toBytes()
   var reading = true
   while reading {
     match next(running) ? {
-      case Some(piece) => { collected = collected + textOrNothing(&piece) }
+      case Some(piece) => {
+        let buffered = pending.concat(piece)
+        let whole = buffered.length() - unfinishedTail(&buffered)
+        collected = collected + textOrNothing(&buffered.take(whole))
+        pending = buffered.drop(whole)
+      }
       case None => { reading = false }
     }
   }
-  Ok(collected)
+  Ok(collected + textOrNothing(&pending))
 }
 
 /// Everything a program writes, read until it stops writing.

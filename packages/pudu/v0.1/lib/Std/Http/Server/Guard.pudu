@@ -8,6 +8,7 @@ import Std.Http as Http
 import Std.Http.Safe as Safe
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
+import Std.LruCache as Cache
 import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
@@ -301,52 +302,59 @@ export fn traced(recordedWhenNew: Bool) -> Route.Middleware {
   }
 }
 
+/// How many peers a rate limiter remembers unless told otherwise.
+export const RATE_LIMIT_PEERS: Int = 10000
+
+/// One peer's current window: when it began and how many requests it has used.
+type RateWindow = { began: Int, used: Int }
+
 /// A rate limiting middleware that restricts requests per peer within a moving window.
 ///
 /// Refuses requests exceeding `maxRequests` per `windowSeconds` with RFC 6585 status 429
-/// and sets the `Retry-After` header.
+/// and sets the `Retry-After` header. It remembers the `RATE_LIMIT_PEERS` peers
+/// seen most recently; `rateLimitedTracking` names another bound.
 export fn rateLimited(maxRequests: Int, windowSeconds: Int) -> Route.Middleware {
+  rateLimitedTracking(maxRequests, windowSeconds, RATE_LIMIT_PEERS)
+}
+
+/// A rate limiter remembering at most `peers` peers.
+///
+/// The table is bounded because a server that stays up meets an unbounded
+/// number of addresses, and one that remembered each would grow with every one
+/// of them. The peer seen least recently is forgotten to make room, and starts a
+/// fresh window when it returns: the answer it would have had once its window
+/// ended. A refused peer counts as seen, so a flood of new addresses cannot
+/// push a peer that is being refused out of the table and hand it a new window.
+export fn rateLimitedTracking(maxRequests: Int, windowSeconds: Int, peers: Int) -> Route.Middleware {
+  let bound = if peers < 1 { 1 } else { peers }
   let lock = Sync.mutex()
-  let state: Sync.Cell[Map[Str, (Int, Int)]] = Sync.cell(mapOf([]))
+  let state: Sync.Cell[Cache.LruCache[Str, RateWindow]] = Sync.cell(Cache.withCapacity(bound))
 
   fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let peerKey = if request.peer.length() > 0 { request.peer } else { "client" }
     let now = clock() / 1000
 
-    let decision = Sync.withLock(&lock, fn() -> (Bool, Int) {
-        let currentMap = Result.unwrapOr(Sync.get(&state), mapOf([]))
-        match currentMap.get(peerKey) {
-          case Some(entry) => {
-            let windowStart = entry[0]
-            let count = entry[1]
-            if now - windowStart < windowSeconds {
-              if count >= maxRequests {
-                var retry = windowSeconds - (now - windowStart)
-                if retry <= 0 { retry = 1 }
-                (false, retry)
-              } else {
-                let updated = currentMap.insert(peerKey, (windowStart, count + 1))
-                let _s = Sync.set(&state, updated)
-                (true, 0)
-              }
-            } else {
-              let updated = currentMap.insert(peerKey, (now, 1))
-              let _s = Sync.set(&state, updated)
-              (true, 0)
-            }
+    let decision = Sync.withLock(&lock, fn() -> Int {
+        let held = Result.unwrapOr(Sync.get(&state), Cache.withCapacity(bound))
+        let current = match Cache.peek(&held, peerKey) {
+          case Some(window) => {
+            if now - window.began < windowSeconds { window } else { RateWindow{began: now, used: 0} }
           }
-          case None => {
-            let updated = currentMap.insert(peerKey, (now, 1))
-            let _s = Sync.set(&state, updated)
-            (true, 0)
-          }
+          case None => RateWindow{began: now, used: 0}
+        }
+        if current.used >= maxRequests {
+          let _seen = Sync.set(&state, Cache.put(&held, peerKey, current))
+          let retry = windowSeconds - (now - current.began)
+          if retry < 1 { 1 } else { retry }
+        } else {
+          let counted = RateWindow{began: current.began, used: current.used + 1}
+          let _kept = Sync.set(&state, Cache.put(&held, peerKey, counted))
+          0
         }
       })
 
-    let outcome = Result.unwrapOr(decision, (true, 0))
-    let allowed = outcome[0]
-    let retryAfter = outcome[1]
-    if !allowed {
+    let retryAfter = Result.unwrapOr(decision, 0)
+    if retryAfter > 0 {
       Reply.tooManyRequests(retryAfter)
     } else {
       next(request)
