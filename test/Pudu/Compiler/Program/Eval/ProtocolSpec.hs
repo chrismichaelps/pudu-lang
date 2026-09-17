@@ -350,7 +350,7 @@ testProtocolEvaluation = do
         ends on its own is only read from if both are running at once. -}
     , counterexample
         "a started program streams, honours a deadline, is stopped, and pipes into another"
-        (childProcesses === Just "13")
+        (childProcesses === Just "14")
     {-| The document is checked against the shape a collector requires rather
         than against itself, because a round trip through one writer and its
         own reader agrees however wrong both are. Two of these are about what
