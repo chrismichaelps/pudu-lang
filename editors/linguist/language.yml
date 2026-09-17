@@ -1,0 +1,12 @@
+# The entry Pudu adds to Linguist's lib/linguist/languages.yml.
+#
+# `language_id` is left out on purpose: Linguist assigns it with
+# `script/update-ids` in its own checkout. `color` is the site's brand colour,
+# the `--brand` token in website/public/site.css.
+Pudu:
+  type: programming
+  color: "#6686fc"
+  extensions:
+  - ".pudu"
+  tm_scope: source.pudu
+  ace_mode: text

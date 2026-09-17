@@ -35,7 +35,7 @@ import Pudu.Diagnostic
   )
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.CodeAction (codeActionsAt)
-import Pudu.Lsp.Completion (completionAt)
+import Pudu.Lsp.Completion (completionAt, completionRepaired)
 import Pudu.Lsp.Definition (definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
@@ -73,7 +73,7 @@ import Pudu.Lsp.Protocol
 import Pudu.Lsp.References (referencesAt)
 import Pudu.Lsp.Rename (prepareRenameAt, renameAt)
 import Pudu.Lsp.SemanticTokens (semanticTokensFull, semanticTokensLegend)
-import Pudu.Lsp.SignatureHelp (signatureHelpAt)
+import Pudu.Lsp.SignatureHelp (signatureHelpAt, signatureHelpRepaired)
 import Pudu.Lsp.WorkspaceSymbols (workspaceSymbolsAt)
 import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
 import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
@@ -207,9 +207,27 @@ loop store = do
 prepare :: Documents -> Message -> IO (Documents, [Text])
 prepare documents message = do
   documents' <- refresh documents message
-  let (documents'', replies) = answer documents' message
+  (documents'', replies) <- case message of
+    Request identity "textDocument/completion" parameters -> do
+      items <- completionRepaired (reanalyse documents' parameters) documents' parameters
+      pure (documents', [response identity items])
+    Request identity "textDocument/signatureHelp" parameters -> do
+      help <- case located documents' parameters of
+        Just (value, offset) -> signatureHelpRepaired (reanalyse documents' parameters) value offset
+        Nothing -> pure JsonNull
+      pure (documents', [response identity help])
+    _ -> pure (answer documents' message)
   mapM_ (evaluate . Text.length) replies
   pure (documents'', replies)
+
+{-| Compile other text as the document a request names, for an answer the text
+    as written cannot give. Nothing is stored: the editor's copy stays the one
+    every other answer is read from. -}
+reanalyse :: Documents -> Json -> Text -> IO Analysis
+reanalyse documents parameters content = do
+  let uri = fromMaybe "" (uriOf parameters)
+  root <- resolveSourceRoot (workspaceRoot documents) uri
+  analyseIn root uri content
 
 excuse :: Message -> SomeException -> IO [Text]
 excuse message failure = do
@@ -265,9 +283,16 @@ isExit message = case message of
   Notification "exit" _ -> True
   _ -> False
 
+{-| Write one framed message as UTF-8.
+
+    The handle is in binary mode, where writing text keeps only the low byte of
+    each scalar. The frame's length counts UTF-8 bytes, so text written that way
+    is shorter than its header says whenever it holds anything beyond ASCII —
+    a documentation comment with a dash is enough — and the client then waits
+    for bytes that never come. The frame is encoded before it is written. -}
 emit :: Handle -> Text -> IO ()
 emit handle body = do
-  TextIO.hPutStr handle (frame body)
+  ByteString.hPut handle (Encoding.encodeUtf8 (frame body))
   hFlush handle
 
 answer :: Documents -> Message -> (Documents, [Text])

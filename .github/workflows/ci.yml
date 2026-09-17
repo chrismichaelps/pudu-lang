@@ -69,6 +69,38 @@ jobs:
       # excluded because many of them are programs that must fail to check.
       - name: Verify the standard library and examples compile
         run: cabal run -v0 pudu -- check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
+      # The documentation promises that every example is a complete program
+      # that runs as written, and the playground opens on its examples. A
+      # documentation edit that broke one used to reach readers unnoticed.
+      - name: Verify every documentation and playground example runs
+        run: python3 test/docs-examples.py --pudu "$PUDU" --run
+      # The website is a Pudu program too: nothing else compiles it, formats
+      # it, or runs its suites. `PUDU` is what the playground suite's sandbox
+      # runs programs with, so it exercises the compiler this job built.
+      - name: Verify the website compiles, is formatted, and passes its suites
+        run: |
+          "$PUDU" check $(find website/src -name '*.pudu')
+          "$PUDU" fmt --check website/src website/playground/examples
+          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu
+      # The sandbox fails closed: asked to isolate a program on a host where it
+      # cannot, it runs nothing and says so with its own status.
+      - name: Verify the playground sandbox refuses to run unisolated
+        run: |
+          work="$(mktemp -d)"
+          printf 'module Main\n\nfn main() -> Int {\n  0\n}\n' > "$work/Main.pudu"
+          set +e
+          PATH=/usr/bin:/bin website/playground/sandbox.sh --workdir "$work" --program Main.pudu \
+            --compiler "$PUDU" --library packages/pudu/v0.1/lib --isolation bwrap \
+            --memory-mb 64 --cpu-seconds 2 --
+          status=$?
+          set -e
+          if command -v bwrap >/dev/null; then
+            echo "bubblewrap is installed on this runner; the refusal path is not what ran"
+          else
+            test "$status" -eq 125
+          fi
+      - name: Verify the Linguist submission is consistent
+        run: python3 scripts/linguist.py check --pudu "$PUDU"
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       # A merge that changes only documentation, the website, or the examples

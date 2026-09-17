@@ -19,3 +19,5 @@ export const REPOSITORY_SOURCE_URL: Str = "https://github.com/chrismichaelps/pud
 export const CATALOGUE_PATH: Str = "website/data/api.json"
 export const RELEASES_PATH: Str = "website/data/releases.json"
 export const STYLESHEET_PATH: Str = "website/public/site.css"
+/// Where the playground's script modules are kept, one folder per layer.
+export const PLAYGROUND_SCRIPTS_DIRECTORY: Str = "website/public/assets/playground"

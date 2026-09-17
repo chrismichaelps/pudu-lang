@@ -181,6 +181,8 @@ library
     Pudu.Lsp.WorkspaceSymbols
     Pudu.Lsp.CodeAction
     Pudu.Lsp.Completion
+    Pudu.Lsp.Repair
+    Pudu.Eval.Confinement
     Pudu.IntegerLiteral
     Pudu.Doc
     Pudu.Doc.Json

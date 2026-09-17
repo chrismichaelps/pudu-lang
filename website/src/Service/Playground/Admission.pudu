@@ -1,0 +1,88 @@
+module Service.Playground.Admission
+
+import Std.Http.Server.Route as Route
+import Std.LruCache as Cache
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// How many runs one reader may ask for, and how many readers are remembered.
+///
+/// `clients` bounds the table itself. A reader forgotten to make room starts a
+/// fresh window, which is what it would have had once its window ended, so the
+/// bound costs at most one window's allowance for a reader who is evicted —
+/// and a flood of new addresses cannot make the table grow.
+export type Policy = { runs: Int, windowSeconds: Int, clients: Int }
+
+/// One reader's current window: when it began and how many runs it has used.
+type Window = { began: Int, used: Int }
+
+/// A decision about one reader: `wait` answers how many seconds they must
+/// wait, or nothing when the run is admitted and counted.
+///
+/// A decision rather than a middleware so a page can answer a refused reader
+/// with a page that says so, and an API with the JSON its callers read. The
+/// state lives behind the function, so every holder of a gate shares one table.
+export type Gate = { wait: fn(Str) -> Int }
+
+/// A gate admitting at most `policy.runs` runs per reader per window.
+export fn gate(policy: &Policy) -> Gate {
+  let rules = *policy
+  let lock = Sync.mutex()
+  let table: Sync.Cell[Cache.LruCache[Str, Window]] = Sync.cell(Cache.withCapacity(rules.clients))
+  let decide = fn(reader: Str) -> Int {
+    let now = clock() / 1000
+    let decided = Sync.withLock(&lock, fn() -> Int {
+        let held = Result.unwrapOr(Sync.get(&table), Cache.withCapacity(rules.clients))
+        let current = match Cache.peek(&held, reader) {
+          case Some(window) => {
+            if now - window.began < rules.windowSeconds { window } else { Window{began: now, used: 0} }
+          }
+          case None => Window{began: now, used: 0}
+        }
+        if current.used >= rules.runs {
+          let wait = rules.windowSeconds - (now - current.began)
+          if wait < 1 { 1 } else { wait }
+        } else {
+          let counted = Window{began: current.began, used: current.used + 1}
+          let _kept = Sync.set(&table, Cache.put(&held, reader, counted))
+          0
+        }
+      })
+    Result.unwrapOr(decided, 0)
+  }
+  Gate{wait: decide}
+}
+
+/// How long a reader must wait, or nothing when the run is admitted and
+/// counted. Called through a local binding for the reason `Playground.execute`
+/// gives.
+export fn waitFor(admits: &Gate, reader: Str) -> Int {
+  let decide = admits.wait
+  decide(reader)
+}
+
+/// A gate that admits every run, for rendering pages that run nothing.
+export fn open() -> Gate {
+  Gate{wait: fn(_reader: Str) -> Int { 0 }}
+}
+
+/// The reader a request came from, as the platform in front of this program
+/// reports it.
+///
+/// For a program only a platform can reach, which replaces the header with the
+/// address it saw rather than appending to one a client wrote. The first
+/// address is that one; a request without the header falls back to its peer.
+export fn forwardedReader(request: &Route.Request) -> Str {
+  let forwarded = match Route.header(request, "x-forwarded-for") {
+    case Some(value) => value.split(",")[0].trim()
+    case None => ""
+  }
+  if forwarded.isEmpty() { peerReader(request) } else { forwarded }
+}
+
+/// The reader a request came from, when nothing stands in front of this
+/// program: its connection's peer. A header naming another address is not
+/// believed here, since any client can write one.
+export fn peerReader(request: &Route.Request) -> Str {
+  if request.peer.isEmpty() { "unknown" } else { request.peer }
+}

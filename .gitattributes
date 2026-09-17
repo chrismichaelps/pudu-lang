@@ -1,0 +1,13 @@
+# How GitHub's language statistics read this repository.
+#
+# Pudu sources are named as Pudu. Linguist counts a file under the language an
+# override names only when it knows that language, so until Pudu is listed in
+# Linguist these lines change nothing — and from the deployment that lists it,
+# every `.pudu` file is counted and highlighted without another commit. The
+# submission itself is prepared under `editors/linguist/`.
+*.pudu linguist-language=Pudu linguist-detectable=true
+
+# Generated files are folded in diffs and left out of the statistics: they are
+# written by a tool from a source that is already counted.
+website/data/api.json linguist-generated=true
+website/data/releases.json linguist-generated=true

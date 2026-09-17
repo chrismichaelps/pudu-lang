@@ -7,10 +7,7 @@ import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Seo as Seo
-import Service.Catalog as Catalog
-import Service.Docs as Docs
-import Service.Documents as Documents
-import Service.Releases as Releases
+import Site as Site
 import Web.Routes as Web
 
 /// Every page the site has, written to disk.
@@ -37,66 +34,49 @@ fn main() -> Int {
     let _said = Io.writeErrorLine("usage: prerender <output directory>")
     return 1
   }
-  match Config.load() {
-    case Err(problem) => failed(&problem)
-    case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
-        case Err(problem) => failed(&problem)
-        case Ok(catalog) => {
-          let docs = match Docs.load(settings.docsPath) {
-            case Ok(loaded) => loaded
-            case Err(problem) => { return failed(&problem) }
-          }
-          // The pages, and the two files that are not pages: a crawler asks for
-          // both before it asks for anything else, and neither belongs in the
-          // sitemap that one of them points at.
-          let release = match Releases.load(settings.releasesPath, settings.releaseNotesPath) {
-            case Ok(loaded) => loaded
-            case Err(problem) => { return failed(&problem) }
-          }
-          let documents = match Documents.load(settings.documentsPath) {
-            case Ok(loaded) => loaded
-            case Err(problem) => { return failed(&problem) }
-          }
-          var routes = Seo.paths(&catalog, &docs)
-          routes = routes.push("/robots.txt")
-          routes = routes.push("/sitemap.xml")
+  let settings = match Config.load() {
+    case Ok(loaded) => loaded
+    case Err(problem) => { return failed(&problem) }
+  }
+  let site = match Site.load(&settings) {
+    case Ok(loaded) => loaded
+    case Err(problem) => { return failed(&problem) }
+  }
+  // The pages, and the two files that are not pages: a crawler asks for both
+  // before it asks for anything else, and neither belongs in the sitemap that
+  // one of them points at.
+  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples)
+  routes = routes.push("/robots.txt")
+  routes = routes.push("/sitemap.xml")
 
-          var written = 0
-          var refused = 0
-          for route in routes {
-            let response = Web.render(settings.siteUrl, &catalog, &docs, &release, &documents, route)
-            if response.status.code != 200 {
-              // A route that does not answer is reported rather than written.
-              // Written, it would be a page serving whatever the error rendered
-              // as, which reads as a working page with wrong content — and the
-              // sitemap would point a crawler at it.
-              let _said = Io.writeErrorLine(
-                "prerender: " + route + " answered " + show(response.status.code))
-              refused = refused + 1
-            } else {
-              match write(into, route, &response) {
-                case Ok(_) => { written = written + 1 }
-                case Err(problem) => {
-                  let _said = Io.writeErrorLine("prerender: " + route + ": " + problem)
-                  refused = refused + 1
-                }
-              }
-            }
-          }
-
-          let _reported = Io.writeLine(
-            "prerendered " + show(written) + " pages into " + into)
-          if refused > 0 {
-            let _also = Io.writeErrorLine(
-              "prerender: " + show(refused) + " routes did not render")
-            1
-          } else {
-            0
-          }
+  var written = 0
+  var refused = 0
+  for route in routes {
+    let response = Web.render(&site, route)
+    if response.status.code != 200 {
+      // A route that does not answer is reported rather than written.
+      // Written, it would be a page serving whatever the error rendered as,
+      // which reads as a working page with wrong content — and the sitemap
+      // would point a crawler at it.
+      let _said = Io.writeErrorLine("prerender: " + route + " answered " + show(response.status.code))
+      refused = refused + 1
+    } else {
+      match write(into, route, &response) {
+        case Ok(_) => { written = written + 1 }
+        case Err(problem) => {
+          let _said = Io.writeErrorLine("prerender: " + route + ": " + problem)
+          refused = refused + 1
         }
       }
     }
+  }
+
+  let _reported = Io.writeLine("prerendered " + show(written) + " pages into " + into)
+  if refused > 0 {
+    let _also = Io.writeErrorLine("prerender: " + show(refused) + " routes did not render")
+    1
+  } else {
+    0
   }
 }
 

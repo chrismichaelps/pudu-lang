@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-16 — The playground is an editor, and the language server answers while a program is half written
+
+- [[Website Playground Script]] is a layered set of modules: highlighting, a gutter that marks problem
+  lines, completion as the reader types, signature help on `(` and `,`, hover, F8 to the next problem,
+  paired brackets, indentation, comment toggling, a resizable split, examples and Reset in place, and
+  output whose diagnostic places move the caret. The language server is the only source of meaning.
+- [[LSP Repair]] answers completion and signature help from a nearby text that compiles further, so
+  `total.` lists the members of `total` and `area(width, ` shows `area`'s parameters.
+  [[LSP Completion]] offers bindings in scope, record fields, and module members; after a dot it never
+  offers keywords. [[LSP SignatureHelp]] reads the callee's type from the checker, covering built-in and
+  trait methods.
+- `pudu run` writes every diagnostic to standard error, so standard output is only what the program
+  wrote. `pudu run --confined` ([[Eval Confinement]]) refuses files, programs, the network, and foreign
+  calls with `E7027`, and [[Playground Sandbox]] runs every program that way; `confined` isolation lets
+  the serverless function run programs itself.
+- The Vercel build routes both playground APIs to the function and ships the compiler, library, and
+  sandbox beside it.
+
 ## 2026-09-15 — A release is published only from main, only for a compiler change
 
 - [[Release Workflow]] builds `linux-amd64` and `darwin-arm64` archives, verifies each checksum, runs a

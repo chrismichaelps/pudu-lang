@@ -11,6 +11,8 @@ export type SiteError
   | ReleaseNotesUnreadable(Str)
   | ReleasesInvalid
   | ReleasesEmpty
+  | ExamplesUnreadable(Str)
+  | PlaygroundMisconfigured(Str)
   | ListenFailed
 
 export fn explain(problem: &SiteError) -> Str {
@@ -25,6 +27,8 @@ export fn explain(problem: &SiteError) -> Str {
     case ReleaseNotesUnreadable(version) => "the release notes for " + version + " could not be read"
     case ReleasesInvalid => "the published releases are not a valid release document"
     case ReleasesEmpty => "the published releases carry no archive to download"
+    case ExamplesUnreadable(path) => "the playground examples could not be read at " + path
+    case PlaygroundMisconfigured(reason) => "the playground is misconfigured: " + reason
     case ListenFailed => "the website listener could not start"
   }
 }

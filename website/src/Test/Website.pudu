@@ -2,16 +2,22 @@ module Test.Website
 
 import Std.Html.Build as H
 import Std.Http as Http
+import Std.Io as Io
 import Std.Json as Json
 import Std.Result as Result
 import Std.Test as Test
 import Domain.Entry as Domain
+import Domain.Playground as Play
 import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
 import Service.Documents as Documents
+import Service.Playground.Admission as Admission
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
 import Service.Releases as Releases
 import Service.Search as Search
+import Site as Site
 import View.Markdown as Markdown
 import Web.Dynamic as DynamicWeb
 import Web.Routes as Web
@@ -77,6 +83,57 @@ fn footerLinks(response: &Http.Response) -> Bool {
   true
 }
 
+/// Whether a stylesheet's blocks all close, and a rule meant for every screen
+/// is outside every media query.
+///
+/// A rule missing its closing brace swallows everything after it into the
+/// block it was in, which is how the documentation lost its layout and its
+/// code background on every screen wider than a phone.
+fn stylesheetIsWellFormed(css: Str, topLevelRule: Str) -> Bool {
+  var depth = 0
+  var quoted = false
+  var ruleAtTop = false
+  var index = 0
+  let characters = css.chars()
+  let rule = topLevelRule.chars()
+  while index < characters.length() {
+    let character = characters[index]
+    if character == '"' { quoted = !quoted }
+    if !quoted {
+      if character == '{' { depth = depth + 1 }
+      if character == '}' {
+        depth = depth - 1
+        if depth < 0 { return false }
+      }
+      if depth == 0 && startsAt(&characters, index, &rule) { ruleAtTop = true }
+    }
+    index = index + 1
+  }
+  depth == 0 && ruleAtTop
+}
+
+fn startsAt(characters: &Array[Char], index: Int, wanted: &Array[Char]) -> Bool {
+  if index + wanted.length() > characters.length() { return false }
+  var offset = 0
+  while offset < wanted.length() {
+    if characters[index + offset] != wanted[offset] { return false }
+    offset = offset + 1
+  }
+  true
+}
+
+/// Whether the first rule for a selector declares each of the declarations, in
+/// whatever order the rule writes them.
+fn ruleDeclares(css: Str, selector: Str, declarations: &Array[Str]) -> Bool {
+  let pieces = css.split("\n" + selector + "\{")
+  if pieces.length() < 2 { return false }
+  let body = pieces[1].split("\}")[0]
+  for declaration in declarations {
+    if !body.contains(declaration) { return false }
+  }
+  true
+}
+
 fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   for entry in entries {
     if entry.documentation.length() == 0 { return false }
@@ -102,12 +159,30 @@ export fn main() -> Int {
     case Ok(value) => value
     case Err(_) => { return 1 }
   }
+  let examples = match Examples.load("website/playground/examples") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let stylesheet = match Io.read("website/public/site.css") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
   let origin = "https://pudu.example"
-  let docsIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/docs")
-  let docsPage = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/errors")
-  let docsMissing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/not-a-page")
-  let modulesIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/modules")
-  let guide = Web.render(origin, &catalog, &docs, &release, &documents, "/guide")
+  let runsNothing = Playground.disabled("not in this suite")
+  let site = Site.Site {
+    siteUrl: origin,
+    catalog: catalog,
+    docs: docs,
+    release: release,
+    documents: documents,
+    playground: Playground.using(&runsNothing, &examples, &Play.defaultLimits()),
+    gates: Playground.openGates()
+  }
+  let docsIndex = Web.render(&site, "/docs")
+  let docsPage = Web.render(&site, "/docs/errors")
+  let docsMissing = Web.render(&site, "/docs/not-a-page")
+  let modulesIndex = Web.render(&site, "/modules")
+  let guide = Web.render(&site, "/guide")
   let written = Markdown.parse(
       &[
       "# Title",
@@ -123,26 +198,26 @@ export fn main() -> Int {
     ]
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
-  let home = Web.render(origin, &catalog, &docs, &release, &documents, "/")
-  let search = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=checksum")
-  let hostile = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-  let modulePage = Web.render(origin, &catalog, &docs, &release, &documents, "/module/Std.Adler32")
-  let symbol = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/checksum")
-  let missing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/notThere")
-  let robots = Web.render(origin, &catalog, &docs, &release, &documents, "/robots.txt")
-  let sitemap = Web.render(origin, &catalog, &docs, &release, &documents, "/sitemap.xml")
-  let health = Web.render(origin, &catalog, &docs, &release, &documents, "/health")
-  let donation = Web.render(origin, &catalog, &docs, &release, &documents, "/donate")
-  let about = Web.render(origin, &catalog, &docs, &release, &documents, "/about")
-  let overloads = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Bits/fn/width")
-  let download = Web.render(origin, &catalog, &docs, &release, &documents, "/download")
-  let releases = Web.render(origin, &catalog, &docs, &release, &documents, "/releases")
-  let conduct = Web.render(origin, &catalog, &docs, &release, &documents, "/conduct")
-  let contributing = Web.render(origin, &catalog, &docs, &release, &documents, "/contributing")
-  let security = Web.render(origin, &catalog, &docs, &release, &documents, "/security")
-  let community = Web.render(origin, &catalog, &docs, &release, &documents, "/community")
-  let privacy = Web.render(origin, &catalog, &docs, &release, &documents, "/privacy")
-  let brand = Web.render(origin, &catalog, &docs, &release, &documents, "/brand")
+  let home = Web.render(&site, "/")
+  let search = Web.render(&site, "/search?q=checksum")
+  let hostile = Web.render(&site, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(&site, "/module/Std.Adler32")
+  let symbol = Web.render(&site, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(&site, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(&site, "/robots.txt")
+  let sitemap = Web.render(&site, "/sitemap.xml")
+  let health = Web.render(&site, "/health")
+  let donation = Web.render(&site, "/donate")
+  let about = Web.render(&site, "/about")
+  let overloads = Web.render(&site, "/docs/Std.Bits/fn/width")
+  let download = Web.render(&site, "/download")
+  let releases = Web.render(&site, "/releases")
+  let conduct = Web.render(&site, "/conduct")
+  let contributing = Web.render(&site, "/contributing")
+  let security = Web.render(&site, "/security")
+  let community = Web.render(&site, "/community")
+  let privacy = Web.render(&site, "/privacy")
+  let brand = Web.render(&site, "/brand")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -157,14 +232,42 @@ export fn main() -> Int {
   let typeKinds = Search.find(&catalog.entries, "Listener kind:type", 20)
   let invalidFilter = Search.find(&catalog.entries, "kind:not-a-kind", 20)
   let multiTerm = Search.find(&catalog.entries, "adler checksum", 10)
-  let dynamicSearch = DynamicWeb.render(origin, &searchCatalog, "/search?q=checksum")
-  let dynamicMissing = DynamicWeb.render(origin, &searchCatalog, "/not-a-page")
+  let edge = DynamicWeb.Dynamic {
+    siteUrl: origin,
+    catalog: searchCatalog,
+    playground: site.playground,
+    gates: Playground.openGates()
+  }
+  let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
+  let dynamicMissing = DynamicWeb.render(&edge, "/not-a-page")
+  let dynamicPlayground = DynamicWeb.render(&edge, "/playground/shared?code=module%20Main")
+  let playgroundPage = Web.render(&site, "/playground")
+  let postedEvent = Json.object(&[
+      ("body", Json.Text("\{\"method\":\"POST\",\"path\":\"/api/playground/run\",\"headers\":\{\"Content-Type\":\"application/json\",\"X-Forwarded-For\":\"203.0.113.9\"\},\"encoding\":\"base64\",\"body\":\"eyJzb3VyY2UiOiIifQ==\"\}")),
+      ("Action", Json.Text("Invoke"))
+    ])
+  let posted = Function.requestOf(&postedEvent)
   let vercelEvent = Json.object(&[
       ("body", Json.Text("\{\"method\":\"GET\",\"path\":\"/search?q=map\"\}")),
       ("Action", Json.Text("Invoke"))
     ])
 
   let suite = Test.suite("website", &[
+      Test.that("a playground script module is served by its path", Web.isModulePath("main.js") && Web.isModulePath("lsp/completion-list.js")),
+      Test.not("a path outside the script folder is not a module", Web.isModulePath("../site.css.js") || Web.isModulePath("lsp//x.js") || Web.isModulePath("Main.js") || Web.isModulePath("lsp/x.css")),
+      Test.that("the stylesheet styles the playground editor", stylesheetIsWellFormed(stylesheet, ".playground-source\{")),
+      Test.that("the stylesheet closes every block and styles code blocks on every screen", stylesheetIsWellFormed(stylesheet, ".code-block\{")),
+      Test.that("documentation code blocks use the code background", stylesheet.contains(".code-block\{margin:1.25em 0;padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--code)")),
+      Test.that("the playground's printed output uses the code background", ruleDeclares(stylesheet, ".playground-stream", &["background:var(--code)", "color:#1d2750", "font-family:"])),
+      Test.that("the playground puts the editor beside its output", ruleDeclares(stylesheet, ".playground-panes", &["display:grid", "grid-template-columns:minmax(0,1fr) minmax(0,1fr)"])),
+      Test.that("the playground renders", playgroundPage.status.code == 200 && playgroundPage.body.contains("id=\"playground-source\"")),
+      Test.that("the playground is in the navigation", about.body.contains("href=\"/playground\">Playground")),
+      Test.that("the playground and its examples are in the sitemap", sitemap.body.contains(origin + "/playground</loc>") && sitemap.body.contains(origin + "/playground/shapes</loc>")),
+      Test.not("the opening example is listed once, as the playground", sitemap.body.contains(origin + "/playground/hello</loc>")),
+      Test.that("the function serves a shared program", dynamicPlayground.status.code == 200 && dynamicPlayground.body.contains("playground-link")),
+      Test.that("a platform post keeps its method", posted.message.method == Http.Post && posted.path == "/api/playground/run"),
+      Test.that("a platform post keeps its headers in lower case", Http.header(&posted.message.headers, "x-forwarded-for") == Some("203.0.113.9")),
+      Test.that("a platform post decodes its base64 body", posted.message.body == "\{\"source\":\"\"\}"),
       Test.that("download page answers", download.status.code == 200),
       Test.that("release notes answer", releases.status.code == 200),
       Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),

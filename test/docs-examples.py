@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Check every Pudu example in the documentation.
+"""Check every Pudu example in the documentation and the playground.
 
 The documentation promises that each example is a complete program that runs as
 written, so each fenced `pudu` block in `website/docs/` is written to a file
-named for its module and put through the compiler, then run. Every example is
+named for its module and put through the compiler, then run. Each program in
+`website/playground/examples/` is a whole example of its own and is held to the
+same promise: it is what a reader runs first. Every example is
 expected to finish on its own: the one that can listen for requests asks for a
 flag before it does, so nothing here is excused from running and an example that
 begins to hang is a failure rather than an exception someone has to maintain.
@@ -19,24 +21,32 @@ import sys
 import tempfile
 from pathlib import Path
 
-DOCS = Path(__file__).resolve().parent.parent / "website" / "docs"
+ROOT = Path(__file__).resolve().parent.parent
+DOCS = ROOT / "website" / "docs"
+PLAYGROUND = ROOT / "website" / "playground" / "examples"
 BLOCK = re.compile(r"^```pudu\n(.*?)^```", re.S | re.M)
 MODULE = re.compile(r"^module\s+([A-Za-z_][A-Za-z0-9_.]*)", re.M)
 TEST_IMPORT = re.compile(r"^import\s+Std\.Test\b", re.M)
 
 
 def examples():
-  """Every fenced Pudu block, as (chapter, index, module name, source)."""
+  """Every example, as (chapter, index, module name, source).
+
+  A playground example is its own chapter, so it is never laid out beside
+  another program that declares the same module."""
   found = []
   for chapter in sorted(DOCS.glob("*.md")):
     for index, match in enumerate(BLOCK.finditer(chapter.read_text()), start=1):
-      source = match.group(1)
-      name = MODULE.search(source)
-      if not name:
-        found.append((chapter.name, index, None, source))
-      else:
-        found.append((chapter.name, index, name.group(1), source))
+      found.append((chapter.name, index, module_of(match.group(1)), match.group(1)))
+  for program in sorted(PLAYGROUND.glob("*.pudu")):
+    source = program.read_text()
+    found.append(("playground/" + program.name, 1, module_of(source), source))
   return found
+
+
+def module_of(source):
+  name = MODULE.search(source)
+  return name.group(1) if name else None
 
 
 def place(directory, module, source):

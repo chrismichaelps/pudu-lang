@@ -86,6 +86,7 @@ import Pudu.Eval.Socket
   , sendOnWithin
   , shutdownWriteAt
   )
+import Pudu.Eval.Confinement (guardConfined, keptWhenConfined)
 import Pudu.Eval.Io
 import Pudu.Eval.Entropy (secureBytes)
 import Pudu.Eval.Env
@@ -236,6 +237,7 @@ effectBuiltins =
     to stop has nothing left to decide. -}
 callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
 callEffect spanValue builtin arguments = do
+  guardConfined spanValue (builtinName builtin) (keptWhenConfined builtin)
   admitted <- effectsAdmitted
   handles <- currentHandleStore
   sockets <- currentSocketStore

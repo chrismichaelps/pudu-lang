@@ -1,0 +1,18 @@
+// Hello, Pudu
+// A complete program: a module, an import, and a main function whose result is the exit status.
+module Main
+
+import Std.Io as Io
+
+const GREETING: Str = "Hello"
+
+fn greet(name: Str) -> Str {
+  "{GREETING}, {name}!"
+}
+
+fn main() -> Int {
+  for name in ["Pudu", "playground"] {
+    let _said = Io.writeLine(greet(name))
+  }
+  0
+}

@@ -1,0 +1,276 @@
+module Service.Playground.Sandbox
+
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Process as Process
+import Std.Result as Result
+import Std.Sync as Sync
+import Domain.Playground as Play
+import Service.Playground.Language as Language
+
+/// How a program is run on this machine.
+///
+/// `script` is the sandbox program (`website/playground/sandbox.sh`), which
+/// owns isolation: the program is run inside it and never directly. What it is
+/// told is passed as arguments rather than through the environment, because
+/// the environment of the process running this is the one thing the program
+/// under it must not be able to read.
+export type Settings = {
+  script: Str,
+  compiler: Str,
+  library: Str,
+  workspace: Str,
+  isolation: Str,
+  memoryMegabytes: Int
+}
+
+/// How often a running process is looked at while it is waited for.
+///
+/// Short enough that a program that has written past the output bound is
+/// stopped promptly, long enough that waiting costs nothing measurable.
+const POLL_MILLIS: Int = 25
+
+/// How long the language server may take over one question.
+const QUESTION_MILLIS: Int = 8000
+
+/// How much a language server's answers may amount to. A completion list for a
+/// program that imports much of the library is the largest of them.
+const TRANSCRIPT_BYTES: Int = 4194304
+
+/// Where the sandbox mounts a program's directory, as the program sees it.
+const ISOLATED_ROOT: Str = "/work"
+
+/// Run or format one accepted program and report what it did.
+///
+/// The program gets a directory of its own, removed afterwards whatever
+/// happened. Its two streams are read as bytes while it runs, each kept up to
+/// the output bound; a program that writes past the bound is stopped then
+/// rather than when its deadline passes, so an endless print costs the bound
+/// and not the whole deadline's worth of memory.
+export fn run(settings: &Settings, submission: &Play.Submission, limits: &Play.Limits) -> Play.Outcome {
+  let placed = match place(settings, submission) {
+    case Ok(found) => found
+    case Err(reason) => { return Play.Unavailable(reason) }
+  }
+  let action = match submission.action {
+    case Play.Run => "run"
+    case Play.Format => "fmt"
+  }
+  let done = execute(settings, &placed, action, "", limits.runMillis, limits.outputBytes)
+  let _removed = Fs.removeTree(placed.directory)
+  outcomeOf(&withoutLibraryPrefix(settings, &done), &submission.action)
+}
+
+/// What a run wrote, with the library's directory left out of every place a
+/// diagnostic names: `Std/Io.pudu:45:49` says where the problem is, and the
+/// machine's own layout is not the reader's business.
+fn withoutLibraryPrefix(settings: &Settings, done: &Execution) -> Execution {
+  let prefix = match Fs.canonical(settings.library) {
+    case Ok(found) => found + "/"
+    case Err(_) => { return *done }
+  }
+  Execution{..*done, output: done.output.replace(prefix, ""), errors: done.errors.replace(prefix, "")}
+}
+
+/// Ask the language server one question about a program.
+export fn ask(settings: &Settings, submission: &Play.Submission, question: &Play.Question) -> Play.Answer {
+  let placed = match place(settings, submission) {
+    case Ok(found) => found
+    case Err(reason) => { return Play.NotAnswered(reason) }
+  }
+  let root = if settings.isolation == "none" { placed.directory } else { ISOLATED_ROOT }
+  let uri = "file://" + root + "/" + placed.relative
+  let said = Language.conversation("file://" + root, uri, submission.source, question)
+  let done = execute(settings, &placed, "lsp", said, QUESTION_MILLIS, TRANSCRIPT_BYTES)
+  let _removed = Fs.removeTree(placed.directory)
+  match done.ending {
+    case Exited(status) => {
+      if status == Play.SANDBOX_REFUSED {
+        return Play.NotAnswered("The playground cannot isolate programs on this machine, so it is not reading them.")
+      }
+      Language.answerIn(done.output, question)
+    }
+    case Overflowed(_) => Play.NotAnswered("The language server's answer was too long.")
+    case OutOfTime => Language.answerIn(done.output, question)
+    case Lost(problem) => Play.NotAnswered("The playground lost track of the language server: " + problem)
+  }
+}
+
+/// Where a program was written: its own directory, and its path inside it.
+type Placed = { directory: Str, relative: Str }
+
+fn place(settings: &Settings, submission: &Play.Submission) -> Result[Placed, Str] {
+  let workspace = if settings.workspace.isEmpty() { Env.temporaryDirectory() } else { settings.workspace }
+  let directory = match Fs.temporaryDirectoryIn(workspace, "pudu-play-") {
+    case Ok(made) => made
+    case Err(_) => { return Err("The playground could not prepare a place to run programs.") }
+  }
+  let relative = Play.pathOf(submission.moduleName)
+  if Result.isErr(&written(directory + "/" + relative, submission.source)) {
+    let _removed = Fs.removeTree(directory)
+    return Err("The playground could not write the program.")
+  }
+  Ok(Placed{directory: directory, relative: relative})
+}
+
+fn written(program: Str, source: Str) -> Result[(), Str] {
+  Io.makeDirectory(Io.directoryOf(program)) ?
+  Io.write(program, source)
+}
+
+/// What one sandboxed process did.
+type Execution = { ending: Ending, output: Str, errors: Str, millis: Int, truncated: Bool }
+
+/// How waiting for a process ended.
+type Ending
+  = Exited(Int)
+  | Overflowed(Int)
+  | OutOfTime
+  | Lost(Str)
+
+/// Start the sandbox for one action, give it `input`, and read what it writes
+/// until it exits, writes past `outputBytes`, or runs past `millis`.
+///
+/// The readers start before the input is written, so a process that answers
+/// while it is still being told things never blocks on a pipe nobody reads.
+fn execute(settings: &Settings, placed: &Placed, action: Str, input: Str, millis: Int, outputBytes: Int) -> Execution {
+  let started = Env.elapsedMilliseconds()
+  let running = match Process.start(settings.script, &arguments(settings, placed, action, millis)) {
+    case Ok(value) => value
+    case Err(problem) => {
+      return Execution{ending: Lost("the sandbox could not be started: " + problem), output: "", errors: "", millis: 0, truncated: false}
+    }
+  }
+
+  let overflowed = Sync.cell(false)
+  let output = Sync.cell(ByteSeq.empty())
+  let errors = Sync.cell(ByteSeq.empty())
+  let outputReader = capture(&running, Process.read, &output, &overflowed, outputBytes)
+  let errorReader = capture(&running, Process.readErrors, &errors, &overflowed, outputBytes)
+  if !input.isEmpty() {
+    let _given = Process.writeText(&running, input)
+  }
+  let _closed = Process.closeInput(&running)
+
+  let ending = waitFor(&running, &overflowed, started + millis)
+  let _outputDone = joined(&outputReader)
+  let _errorsDone = joined(&errorReader)
+  let shownOutput = Play.textWithin(&Result.unwrapOr(Sync.get(&output), ByteSeq.empty()), outputBytes)
+  let shownErrors = Play.textWithin(&Result.unwrapOr(Sync.get(&errors), ByteSeq.empty()), outputBytes)
+  Execution {
+    ending: ending,
+    output: shownOutput[0],
+    errors: shownErrors[0],
+    millis: Env.elapsedMilliseconds() - started,
+    truncated: shownOutput[1] || shownErrors[1]
+  }
+}
+
+/// A run or a formatting, as the reader is told about it.
+fn outcomeOf(done: &Execution, action: &Play.Action) -> Play.Outcome {
+  let seen = Play.Run{status: 0, output: done.output, errors: done.errors, millis: done.millis, truncated: done.truncated}
+  match done.ending {
+    case Exited(status) => {
+      if status == Play.SANDBOX_REFUSED {
+        return Play.Unavailable("The playground cannot isolate programs on this machine, so it is not running them.")
+      }
+      let formatted = match action {
+        case Play.Format => status == 0 && !done.truncated
+        case Play.Run => false
+      }
+      if formatted { Play.Formatted(done.output) } else { Play.Finished(Play.Run{..seen, status: status}) }
+    }
+    case Overflowed(status) => Play.Finished(Play.Run{..seen, status: status, truncated: true})
+    case OutOfTime => Play.TimedOut(Play.Run{..seen, status: -1})
+    case Lost(problem) => Play.Unavailable("The playground lost track of the program: " + problem)
+  }
+}
+
+/// What the sandbox is told: where the program is, what to do with it, and
+/// what it may use.
+fn arguments(settings: &Settings, placed: &Placed, action: Str, millis: Int) -> Array[Str] {
+  [
+    "--workdir", placed.directory,
+    "--program", placed.relative,
+    "--compiler", settings.compiler,
+    "--library", settings.library,
+    "--isolation", settings.isolation,
+    "--memory-mb", show(settings.memoryMegabytes),
+    "--cpu-seconds", show(millis / 1000 + 2),
+    "--action", action,
+    "--"
+  ]
+}
+
+/// Wait for a process until it exits, writes past its bound, or runs out of
+/// time, stopping it in the last two cases.
+fn waitFor(running: &Process.Started, overflowed: &Sync.Cell[Bool], deadline: Int) -> Ending {
+  loop {
+    match Process.waitWithin(running, POLL_MILLIS) {
+      case Err(problem) => { return Lost(problem) }
+      case Ok(Some(status)) => { return Exited(status) }
+      case Ok(None) => {
+        if Result.unwrapOr(Sync.get(overflowed), false) {
+          return Overflowed(stopped(running))
+        }
+        if Env.elapsedMilliseconds() >= deadline {
+          let _status = stopped(running)
+          return OutOfTime
+        }
+      }
+    }
+  }
+}
+
+fn stopped(running: &Process.Started) -> Int {
+  Result.unwrapOr(Process.stop(running), -1)
+}
+
+/// Read one stream to its end on a thread of its own, keeping at most one byte
+/// past `limit`.
+///
+/// Reading continues past the bound so the process never blocks on a full
+/// pipe; what arrives then is dropped. The one byte kept past the bound is
+/// what lets the text shown say that output was cut. The bytes are handled
+/// through `Std.Bytes` by name, for the reason `Play.textWithin` gives.
+fn capture(
+  running: &Process.Started,
+  next: fn(&Process.Started) -> Result[Option[Bytes], Str],
+  into: &Sync.Cell[Bytes],
+  overflowed: &Sync.Cell[Bool],
+  limit: Int
+) -> Result[Concurrent.Task, Concurrent.ConcurrentError] {
+  let held = *running
+  let target = *into
+  let flag = *overflowed
+  Concurrent.start(fn() -> () {
+      var kept = ByteSeq.empty()
+      var reading = true
+      while reading {
+        match next(&held) {
+          case Ok(Some(piece)) => {
+            if ByteSeq.length(&kept) <= limit {
+              kept = ByteSeq.concat(&kept, &piece)
+              if ByteSeq.length(&kept) > limit {
+                kept = ByteSeq.take(&kept, limit + 1)
+                let _flagged = Sync.set(&flag, true)
+              }
+            }
+          }
+          case Ok(None) => { reading = false }
+          case Err(_) => { reading = false }
+        }
+      }
+      let _kept = Sync.set(&target, kept)
+    })
+}
+
+fn joined(reader: &Result[Concurrent.Task, Concurrent.ConcurrentError]) -> Bool {
+  match *reader {
+    case Ok(worker) => Result.isOk(&Concurrent.join(&worker))
+    case Err(_) => false
+  }
+}

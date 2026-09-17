@@ -1,0 +1,273 @@
+module Web.Playground
+
+import Std.Http as Http
+import Std.Http.Safe as Safe
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Option as Option
+import Domain.Playground as Play
+import Service.Playground.Admission as Admission
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import Service.Playground.Wire as Wire
+import View.Playground as View
+
+/// What the playground routes are served with.
+///
+/// `reader` names who a request is from, `gates` decide whether that reader
+/// may run another program or ask another question now, and `missing` answers
+/// an address the playground does not have. The routes are shared by the
+/// site's own server and by the serverless function, which differ in exactly
+/// these three.
+export type Serving = {
+  siteUrl: Str,
+  playground: Playground.Playground,
+  reader: fn(&Route.Request) -> Str,
+  gates: Playground.Gates,
+  missing: fn(Str) -> Http.Response
+}
+
+/// The media type the APIs read and answer.
+const JSON_TYPE: Str = "application/json"
+
+/// Every playground route, in the order they are tried.
+///
+/// The fixed addresses are listed before the example pattern, which would
+/// otherwise read `shared` or `open` as the name of an example.
+export fn routes(serving: &Serving) -> Array[Route.Route] {
+  let held = *serving
+  [
+    Route.get(View.PAGE_PATH, fn(_request: Route.Request) -> Http.Response {
+        let first = Examples.first(&held.playground.examples)
+        Reply.page(200, View.page(held.siteUrl, &held.playground, &View.opening(&first)))
+      }),
+    Route.get(View.SHARED_PATH, fn(asked: Route.Request) -> Http.Response {
+        shared(&held, &asked)
+      }),
+    Route.get(View.OPEN_PATH, fn(asked: Route.Request) -> Http.Response {
+        opened(&held, &asked)
+      }),
+    Route.get(View.PAGE_PATH + "/:example", fn(asked: Route.Request) -> Http.Response {
+        let slug = Option.unwrapOr(Route.param(&asked, "example"), "")
+        match Examples.find(&held.playground.examples, slug) {
+          case Some(example) => Reply.page(200, View.page(held.siteUrl, &held.playground, &View.opening(&example)))
+          case None => {
+            let absent = held.missing
+            absent(asked.path)
+          }
+        }
+      }),
+    Route.post(View.PAGE_PATH, fn(asked: Route.Request) -> Http.Response {
+        submitted(&held, &asked)
+      }),
+    Route.post(View.RUN_API_PATH, fn(asked: Route.Request) -> Http.Response {
+        runApi(&held, &asked)
+      }),
+    Route.post(View.ASSIST_API_PATH, fn(asked: Route.Request) -> Http.Response {
+        assistApi(&held, &asked)
+      })
+  ]
+}
+
+/// A program opened from a shared link.
+fn shared(serving: &Serving, asked: &Route.Request) -> Http.Response {
+  let source = Play.normalized(Option.unwrapOr(Route.queryParam(asked, "code"), ""))
+  let screen = View.Screen {
+    source: source,
+    example: exampleWith(&serving.playground.examples, source),
+    outcome: None,
+    shared: true
+  }
+  let answer = Reply.page(200, View.page(serving.siteUrl, &serving.playground, &screen))
+  withHeaders(&answer, &[("cache-control", "public, max-age=300"), ("x-robots-tag", "noindex")])
+}
+
+/// The example the page's picker names, reached without a script.
+///
+/// The picker is a form that asks for this address with the example's name; the
+/// answer sends the reader on to the example's own page, which is the address
+/// worth keeping. A name that is not an example goes to the playground.
+fn opened(serving: &Serving, asked: &Route.Request) -> Http.Response {
+  let slug = Option.unwrapOr(Route.queryParam(asked, "example"), "")
+  let target = match Examples.find(&serving.playground.examples, slug) {
+    case Some(example) => View.examplePath(example.slug)
+    case None => View.PAGE_PATH
+  }
+  withHeaders(&Guard.redirect(303, target, &[]), &[("x-robots-tag", "noindex")])
+}
+
+/// A program posted from the page's form, answered with the page and what
+/// happened.
+///
+/// This is how the playground works with no script at all: the form posts,
+/// and the answer is the whole page again with the program still in the editor
+/// — formatted, when formatting was asked for — and what it did beside it.
+fn submitted(serving: &Serving, asked: &Route.Request) -> Http.Response {
+  if !fromThisSite(asked, serving.siteUrl) {
+    return private(&Reply.text(403, "The playground runs programs submitted from its own page."))
+  }
+  if !Route.carriesFields(asked) {
+    return private(&Reply.unsupportedMediaType(&["application/x-www-form-urlencoded"]))
+  }
+  let fields = Route.fieldsOf(asked)
+  let source = Play.normalized(Option.unwrapOr(fields.get("code"), ""))
+  let action = Option.unwrapOr(Play.actionFrom(Option.unwrapOr(fields.get("action"), "run")), Play.Run)
+  let wait = waitingFor(serving, &serving.gates.runs, asked)
+  let outcome = if wait > 0 { tooMany(wait) } else { Playground.run(&serving.playground, source, action, readerOf(serving, asked)) }
+  let shown = match outcome {
+    case Play.Formatted(formatted) => formatted
+    case _other => source
+  }
+  let screen = View.Screen {
+    source: shown,
+    example: exampleWith(&serving.playground.examples, shown),
+    outcome: Some(outcome),
+    shared: false
+  }
+  private(&Reply.page(statusFor(&outcome, wait), View.page(serving.siteUrl, &serving.playground, &screen)))
+}
+
+/// A program posted as JSON to be run or formatted, answered as JSON.
+///
+/// Browsers cannot send a JSON body to another site's address without asking
+/// that site first, and this one never agrees, so the media type is the check
+/// that the request came from the page's own script or from a program that is
+/// not a browser at all.
+fn runApi(serving: &Serving, asked: &Route.Request) -> Http.Response {
+  if !carriesJson(asked) { return private(&Reply.unsupportedMediaType(&[JSON_TYPE])) }
+  let requested = match Wire.requestOf(Route.body(asked)) {
+    case Some(found) => found
+    case None => {
+      return private(&Reply.jsonValue(400, Wire.outcomeValue(&Play.Refused("The request body is not \{\"source\": \"...\", \"action\": \"run\"\}."))))
+    }
+  }
+  let wait = waitingFor(serving, &serving.gates.runs, asked)
+  let outcome = if wait > 0 { tooMany(wait) } else { Playground.run(&serving.playground, requested[0], requested[1], readerOf(serving, asked)) }
+  let described = Json.withField(
+      &Json.withField(&Wire.outcomeValue(&outcome), "headline", Json.Text(Play.headline(&outcome, &serving.playground.limits))),
+    "meaning",
+    match Play.statusMeaning(&outcome) {
+      case Some(meaning) => Json.Text(meaning)
+      case None => Json.Null
+    }
+  )
+  let answer = Reply.jsonValue(statusFor(&outcome, wait), described)
+  private(&withHeaders(&answer, &retryAfter(wait)))
+}
+
+/// A question an editor asked about a program, answered with what the language
+/// server said.
+fn assistApi(serving: &Serving, asked: &Route.Request) -> Http.Response {
+  if !carriesJson(asked) { return private(&Reply.unsupportedMediaType(&[JSON_TYPE])) }
+  let requested = match Wire.questionOf(Route.body(asked)) {
+    case Some(found) => found
+    case None => {
+      return private(&Reply.json(400, Wire.answerText(&Play.NotAnswered("The request body is not \{\"source\", \"method\", \"line\", \"character\"\}."))))
+    }
+  }
+  let wait = waitingFor(serving, &serving.gates.questions, asked)
+  if wait > 0 {
+    let refused = Reply.json(429, Wire.answerText(&Play.NotAnswered("Too many questions. Try again in " + show(wait) + " seconds.")))
+    return private(&withHeaders(&refused, &retryAfter(wait)))
+  }
+  let answer = Playground.ask(&serving.playground, requested[0], &requested[1], readerOf(serving, asked))
+  let status = match answer {
+    case Play.Answered{..} => 200
+    case Play.NotAnswered(_) => if serving.playground.enabled { 422 } else { 503 }
+  }
+  private(&Reply.json(status, Wire.answerText(&answer)))
+}
+
+fn carriesJson(asked: &Route.Request) -> Bool {
+  Option.unwrapOr(Route.header(asked, "content-type"), "").toLower().startsWith(JSON_TYPE)
+}
+
+/// How long the reader must wait before this request, or nothing.
+///
+/// A playground that runs nothing counts nothing, so a reader of a site with
+/// the playground switched off is told why rather than told to wait.
+fn waitingFor(serving: &Serving, gate: &Admission.Gate, asked: &Route.Request) -> Int {
+  if !serving.playground.enabled { return 0 }
+  Admission.waitFor(gate, readerOf(serving, asked))
+}
+
+/// Who a request is from, by the serving's own rule. Called through a local
+/// binding for the reason `Playground.execute` gives.
+fn readerOf(serving: &Serving, asked: &Route.Request) -> Str {
+  let identify = serving.reader
+  identify(asked)
+}
+
+fn tooMany(wait: Int) -> Play.Outcome {
+  Play.Refused("You have run a lot of programs in a short time. Try again in " + show(wait) + " seconds.")
+}
+
+fn retryAfter(wait: Int) -> Array[(Str, Str)] {
+  if wait > 0 { [("retry-after", show(wait))] } else { [] }
+}
+
+/// The status a run is answered with.
+///
+/// A program that ran is a success of the request whatever the program did; a
+/// refusal is the reader's to fix; a playground that could not run anything is
+/// unavailable, which a client may retry.
+fn statusFor(outcome: &Play.Outcome, wait: Int) -> Int {
+  if wait > 0 { return 429 }
+  match outcome {
+    case Play.Finished(_) => 200
+    case Play.TimedOut(_) => 200
+    case Play.Formatted(_) => 200
+    case Play.Refused(_) => 422
+    case Play.Unavailable(_) => 503
+  }
+}
+
+/// The example a program is, when it is one unchanged, so the menu can mark it.
+fn exampleWith(examples: &Examples.Examples, source: Str) -> Option[Examples.Example] {
+  for example in examples.entries {
+    if Play.normalized(example.source) == source { return Some(example) }
+  }
+  None
+}
+
+/// Whether a form post came from a page of this site.
+///
+/// A browser says where a request came from in `Sec-Fetch-Site`, and only this
+/// origin counts: a sibling on the same site is another program. A browser
+/// too old to say so still sends `Origin` with a post, which is compared with
+/// the site's own origin and with the host the request was sent to. A post
+/// carrying neither is refused: nothing but a page should be posting this
+/// form, and a program has the JSON API.
+export fn fromThisSite(asked: &Route.Request, siteUrl: Str) -> Bool {
+  match Safe.provenanceOf(&asked.message.headers) {
+    case Safe.SameOrigin => true
+    case Safe.DirectlyEntered => true
+    case Safe.SameSite => false
+    case Safe.FromAnotherSite => false
+    case Safe.Unstated => {
+      match Route.header(asked, "origin") {
+        case Some(origin) => {
+          let host = Option.unwrapOr(Route.header(asked, "host"), "")
+          origin == siteUrl || (!host.isEmpty() && (origin == "https://" + host || origin == "http://" + host))
+        }
+        case None => false
+      }
+    }
+  }
+}
+
+/// A response that is about one reader's program: never stored by a cache,
+/// never indexed.
+fn private(response: &Http.Response) -> Http.Response {
+  withHeaders(response, &[("cache-control", "no-store"), ("x-robots-tag", "noindex")])
+}
+
+fn withHeaders(response: &Http.Response, added: &Array[(Str, Str)]) -> Http.Response {
+  var headers = response.headers
+  for header in *added {
+    headers = Http.setHeader(&headers, header[0], header[1])
+  }
+  Http.Response{..*response, headers: headers}
+}

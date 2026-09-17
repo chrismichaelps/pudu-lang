@@ -1,0 +1,171 @@
+module Service.Playground.Wire
+
+import Std.Json as Json
+import Std.Option as Option
+import Domain.Playground as Play
+
+/// The JSON a playground run is asked and answered in.
+///
+/// One format for three readers: the website asking a runner, the runner
+/// answering it, and the page's script asking the website. A request is
+/// `{"source": "...", "action": "run"}`, where `action` is `run` or `format`
+/// and is `run` when left out. An answer always carries `outcome`, one of
+/// `finished`, `timedOut`, `formatted`, `refused`, or `unavailable`; the first
+/// two carry the run's `status`, `output`, `errors`, `millis`, and
+/// `truncated`, `formatted` carries the formatted `source`, and the last two
+/// carry a `reason`.
+
+/// The body that asks for something to be done with a program.
+export fn request(source: Str, action: &Play.Action) -> Str {
+  Json.encode(&Json.object(&[("source", Json.Text(source)), ("action", Json.Text(Play.actionName(action)))]))
+}
+
+/// The program a request body carries and what to do with it, when the body
+/// is a request. An action that is not one the playground knows is not one.
+export fn requestOf(body: Str) -> Option[(Str, Play.Action)] {
+  let document = match Json.decode(body) {
+    case Ok(value) => value
+    case Err(_) => { return None }
+  }
+  let source = text(&document, "source") ?
+  match Json.field(&document, "action") {
+    case None => Some((source, Play.Run))
+    case Some(named) => {
+      let name = Json.asText(&named) ?
+      let action = Play.actionFrom(name) ?
+      Some((source, action))
+    }
+  }
+}
+
+/// The body that asks the language server a question about a program.
+export fn question(source: Str, asked: &Play.Question) -> Str {
+  Json.encode(&Json.object(&[
+        ("source", Json.Text(source)),
+        ("method", Json.Text(asked.method)),
+        ("line", Json.Number(asked.line)),
+        ("character", Json.Number(asked.character))
+      ]))
+}
+
+/// The program and question a body carries, when it carries both. A question
+/// with no position asks about the start of the program.
+export fn questionOf(body: Str) -> Option[(Str, Play.Question)] {
+  let document = match Json.decode(body) {
+    case Ok(value) => value
+    case Err(_) => { return None }
+  }
+  let source = text(&document, "source") ?
+  let method = text(&document, "method") ?
+  let line = Option.unwrapOr(whole(&document, "line"), 0)
+  let character = Option.unwrapOr(whole(&document, "character"), 0)
+  Some((source, Play.Question{method: method, line: line, character: character}))
+}
+
+/// An answer as the JSON value it is sent as. The server's own JSON is carried
+/// as it was written, so nothing it said is re-encoded on the way.
+export fn answerText(answer: &Play.Answer) -> Str {
+  match answer {
+    case Play.Answered{result, diagnostics} => "\{\"outcome\":\"answered\",\"result\":" + result + ",\"diagnostics\":" + diagnostics + "\}"
+    case Play.NotAnswered(reason) => Json.encode(&reasonValue("notAnswered", reason))
+  }
+}
+
+/// The answer a runner's reply describes, when it describes one.
+export fn answerOf(body: Str) -> Option[Play.Answer] {
+  let document = match Json.decode(body) {
+    case Ok(value) => value
+    case Err(_) => { return None }
+  }
+  match text(&document, "outcome") ? {
+    case "answered" => {
+      let result = match Json.field(&document, "result") {
+        case Some(value) => Json.encode(&value)
+        case None => "null"
+      }
+      let diagnostics = match Json.field(&document, "diagnostics") {
+        case Some(value) => Json.encode(&value)
+        case None => "[]"
+      }
+      Some(Play.Answered{result: result, diagnostics: diagnostics})
+    }
+    case "notAnswered" => Some(Play.NotAnswered(text(&document, "reason") ?))
+    case _other => None
+  }
+}
+
+/// An outcome as the JSON value it is sent as.
+export fn outcomeValue(outcome: &Play.Outcome) -> Json.Json {
+  match outcome {
+    case Play.Finished(run) => runValue("finished", &run)
+    case Play.TimedOut(run) => runValue("timedOut", &run)
+    case Play.Formatted(source) => Json.object(&[("outcome", Json.Text("formatted")), ("source", Json.Text(source))])
+    case Play.Refused(reason) => reasonValue("refused", reason)
+    case Play.Unavailable(reason) => reasonValue("unavailable", reason)
+  }
+}
+
+/// An outcome as the text it is sent as.
+export fn encode(outcome: &Play.Outcome) -> Str {
+  Json.encode(&outcomeValue(outcome))
+}
+
+/// The outcome an answer describes, when it describes one.
+///
+/// A document that does not is `None` rather than a guessed outcome: the
+/// caller is talking to something that is not a runner, and says so.
+export fn decode(body: Str) -> Option[Play.Outcome] {
+  let document = match Json.decode(body) {
+    case Ok(value) => value
+    case Err(_) => { return None }
+  }
+  let kind = text(&document, "outcome") ?
+  match kind {
+    case "finished" => Some(Play.Finished(runIn(&document) ?))
+    case "timedOut" => Some(Play.TimedOut(runIn(&document) ?))
+    case "formatted" => Some(Play.Formatted(text(&document, "source") ?))
+    case "refused" => Some(Play.Refused(text(&document, "reason") ?))
+    case "unavailable" => Some(Play.Unavailable(text(&document, "reason") ?))
+    case _other => None
+  }
+}
+
+fn runValue(kind: Str, run: &Play.Run) -> Json.Json {
+  Json.object(&[
+      ("outcome", Json.Text(kind)),
+      ("status", Json.Number(run.status)),
+      ("output", Json.Text(run.output)),
+      ("errors", Json.Text(run.errors)),
+      ("millis", Json.Number(run.millis)),
+      ("truncated", Json.Boolean(run.truncated))
+    ])
+}
+
+fn reasonValue(kind: Str, reason: Str) -> Json.Json {
+  Json.object(&[("outcome", Json.Text(kind)), ("reason", Json.Text(reason))])
+}
+
+fn runIn(document: &Json.Json) -> Option[Play.Run] {
+  Some(Play.Run {
+      status: whole(document, "status") ?,
+      output: text(document, "output") ?,
+      errors: text(document, "errors") ?,
+      millis: whole(document, "millis") ?,
+      truncated: Option.unwrapOr(flag(document, "truncated"), false)
+    })
+}
+
+fn text(document: &Json.Json, name: Str) -> Option[Str] {
+  let held = Json.field(document, name) ?
+  Json.asText(&held)
+}
+
+fn whole(document: &Json.Json, name: Str) -> Option[Int] {
+  let held = Json.field(document, name) ?
+  Json.asInt(&held)
+}
+
+fn flag(document: &Json.Json, name: Str) -> Option[Bool] {
+  let held = Json.field(document, name) ?
+  Json.asBool(&held)
+}

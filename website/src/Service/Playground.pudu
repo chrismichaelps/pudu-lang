@@ -1,0 +1,203 @@
+module Service.Playground
+
+import Std.Crypto as Crypto
+import Std.LruCache as Cache
+import Std.Result as Result
+import Std.Sync as Sync
+import Config as Config
+import Domain.Playground as Play
+import Service.Playground.Admission as Admission
+import Service.Playground.Examples as Examples
+import Service.Playground.Remote as Remote
+import Service.Playground.Sandbox as Sandbox
+
+/// Something that runs or formats an accepted program, and answers questions
+/// about one, for a named reader.
+///
+/// A record of functions rather than a trait, because the runners are
+/// chosen from configuration while the site starts, and each one closes over
+/// what it was built with: an endpoint and its secret, a sandbox and its
+/// paths, or another runner it remembers answers for. The pages and routes see
+/// only this, so a new way of running programs is one more constructor here.
+export type Runner = {
+  run: fn(Play.Submission, Str) -> Play.Outcome,
+  ask: fn(Play.Submission, Play.Question, Str) -> Play.Answer
+}
+
+/// Ask a runner a question, for the reason `execute` gives through a local.
+export fn question(runner: &Runner, submission: Play.Submission, asked: Play.Question, client: Str) -> Play.Answer {
+  let act = runner.ask
+  act(submission, asked, client)
+}
+
+/// Run a submission with a runner.
+///
+/// The runner's function is taken into a local and called from there rather
+/// than called as `runner.run(...)`: method syntax on a value is resolved at
+/// run time against every module function of that name in the program, and a
+/// program that has a module or a function called `run` would be dispatched
+/// there instead of to the field.
+export fn execute(runner: &Runner, submission: Play.Submission, client: Str) -> Play.Outcome {
+  let act = runner.run
+  act(submission, client)
+}
+
+/// The playground as the site serves it.
+export type Playground = {
+  runner: Runner,
+  examples: Examples.Examples,
+  limits: Play.Limits,
+  enabled: Bool
+}
+
+/// The reason a playground with no runner gives.
+export const DISABLED_REASON: Str = "Running programs is not enabled on this site. Install Pudu to run this program on your own machine."
+
+/// A runner that runs nothing and says why.
+export fn disabled(reason: Str) -> Runner {
+  Runner {
+    run: fn(_submission: Play.Submission, _client: Str) -> Play.Outcome { Play.Unavailable(reason) },
+    ask: fn(_submission: Play.Submission, _asked: Play.Question, _client: Str) -> Play.Answer { Play.NotAnswered(reason) }
+  }
+}
+
+/// A runner that runs programs on this machine, inside the sandbox.
+export fn local(settings: &Sandbox.Settings, limits: &Play.Limits) -> Runner {
+  let held = *settings
+  let bounds = *limits
+  Runner {
+    run: fn(submission: Play.Submission, _client: Str) -> Play.Outcome { Sandbox.run(&held, &submission, &bounds) },
+    ask: fn(submission: Play.Submission, asked: Play.Question, _client: Str) -> Play.Answer { Sandbox.ask(&held, &submission, &asked) }
+  }
+}
+
+/// A runner that asks a runner service.
+export fn remote(endpoint: &Remote.Endpoint, limits: &Play.Limits) -> Runner {
+  let held = *endpoint
+  let bounds = *limits
+  Runner {
+    run: fn(submission: Play.Submission, client: Str) -> Play.Outcome { Remote.run(&held, &submission, &bounds, client) },
+    ask: fn(submission: Play.Submission, asked: Play.Question, client: Str) -> Play.Answer { Remote.ask(&held, &submission, &asked, client) }
+  }
+}
+
+/// A runner that answers a program it has already run from memory.
+///
+/// The examples are the programs run most, and every reader who opens one and
+/// presses Run asks for the same answer. Answers are kept by the SHA-256 of the
+/// action and the program, only when running it again would answer the same
+/// way, and at most `capacity` of them, the least recently used going first.
+/// Questions pass straight through: they are asked while a program changes,
+/// so the same one is rarely asked twice.
+export fn remembering(inner: &Runner, capacity: Int) -> Runner {
+  if capacity < 1 { return *inner }
+  let next = *inner
+  let lock = Sync.mutex()
+  let answers: Sync.Cell[Cache.LruCache[Str, Play.Outcome]] = Sync.cell(Cache.withCapacity(capacity))
+  let answer = fn(submission: Play.Submission, client: Str) -> Play.Outcome {
+    let key = Crypto.sha256Hex(Play.actionName(&submission.action) + "\n" + submission.source)
+    let known = Sync.withLock(&lock, fn() -> Option[Play.Outcome] {
+        let held = Result.unwrapOr(Sync.get(&answers), Cache.withCapacity(capacity))
+        let looked = Cache.get(&held, key)
+        let _kept = Sync.set(&answers, looked[1])
+        looked[0]
+      })
+    match Result.unwrapOr(known, None) {
+      case Some(outcome) => outcome
+      case None => {
+        let outcome = execute(&next, submission, client)
+        if Play.isRepeatable(&outcome) {
+          let _stored = Sync.withLock(&lock, fn() -> () {
+              let held = Result.unwrapOr(Sync.get(&answers), Cache.withCapacity(capacity))
+              let _kept = Sync.set(&answers, Cache.put(&held, key, outcome))
+            })
+        }
+        outcome
+      }
+    }
+  }
+  Runner{run: answer, ask: next.ask}
+}
+
+/// The length of the window the playground counts runs in.
+export const RUN_WINDOW_SECONDS: Int = 60
+
+/// The gates the settings describe: one for runs and one for questions.
+///
+/// An editor asks a question every time a reader pauses, so questions have an
+/// allowance of their own, larger than the one for runs, and neither spends
+/// the other's.
+export type Gates = { runs: Admission.Gate, questions: Admission.Gate }
+
+/// The gates the settings describe, each remembering at most so many readers.
+export fn gatesFor(settings: &Config.Playground) -> Gates {
+  Gates {
+    runs: Admission.gate(&Admission.Policy{runs: settings.runsPerMinute, windowSeconds: RUN_WINDOW_SECONDS, clients: settings.trackedClients}),
+    questions: Admission.gate(&Admission.Policy{runs: settings.questionsPerMinute, windowSeconds: RUN_WINDOW_SECONDS, clients: settings.trackedClients})
+  }
+}
+
+/// Gates that admit everything, for rendering pages that run nothing.
+export fn openGates() -> Gates { Gates{runs: Admission.open(), questions: Admission.open()} }
+
+/// The playground the settings describe.
+export fn configured(settings: &Config.Playground, examples: &Examples.Examples) -> Playground {
+  let limits = Play.sane(&Play.Limits {
+      sourceBytes: settings.sourceBytes,
+      runMillis: settings.runMillis,
+      outputBytes: settings.outputBytes
+    })
+  let chosen = runnerFor(settings, &limits)
+  Playground {
+    runner: remembering(&chosen[0], settings.cacheEntries),
+    examples: *examples,
+    limits: limits,
+    enabled: chosen[1]
+  }
+}
+
+/// A playground that runs programs with the runner given, for a test or for a
+/// program that chose its runner itself.
+export fn using(runner: &Runner, examples: &Examples.Examples, limits: &Play.Limits) -> Playground {
+  Playground{runner: *runner, examples: *examples, limits: Play.sane(limits), enabled: true}
+}
+
+fn runnerFor(settings: &Config.Playground, limits: &Play.Limits) -> (Runner, Bool) {
+  if settings.runner == Config.RUNNER_OFF { return (disabled(DISABLED_REASON), false) }
+  if settings.runner == Config.RUNNER_LOCAL { return (local(&sandboxOf(settings), limits), true) }
+  (remote(&Remote.Endpoint{url: settings.runner, token: settings.token}, limits), true)
+}
+
+/// The sandbox the settings describe, for a runner that runs programs here.
+export fn sandboxOf(settings: &Config.Playground) -> Sandbox.Settings {
+  Sandbox.Settings {
+    script: settings.sandbox,
+    compiler: settings.compiler,
+    library: settings.library,
+    workspace: settings.workspace,
+    isolation: settings.isolation,
+    memoryMegabytes: settings.memoryMegabytes
+  }
+}
+
+/// Run or format what a reader submitted, or say why it was not.
+export fn run(playground: &Playground, source: Str, action: Play.Action, client: Str) -> Play.Outcome {
+  if !playground.enabled { return execute(&playground.runner, Play.Submission{source: "", moduleName: "", action: action}, client) }
+  match Play.accept(source, action, &playground.limits) {
+    case Err(reason) => Play.Refused(reason)
+    case Ok(submission) => execute(&playground.runner, submission, client)
+  }
+}
+
+/// Answer a question a reader's editor asked, or say why it was not.
+export fn ask(playground: &Playground, source: Str, asked: &Play.Question, client: Str) -> Play.Answer {
+  if !playground.enabled { return question(&playground.runner, Play.Submission{source: "", moduleName: "", action: Play.Run}, *asked, client) }
+  let checked = match Play.askable(asked) {
+    case Ok(value) => value
+    case Err(reason) => { return Play.NotAnswered(reason) }
+  }
+  match Play.acceptForQuestion(source, &playground.limits) {
+    case Err(reason) => Play.NotAnswered(reason)
+    case Ok(submission) => question(&playground.runner, submission, checked, client)
+  }
+}

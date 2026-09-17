@@ -3,7 +3,7 @@ module Pudu.Compiler.ProgramSpec
   ( programProperties
   ) where
 
-import Pudu.Compiler.Program.EvalSpec (testProgramEvaluation)
+import Pudu.Compiler.Program.EvalSpec (testLinkedNames, testProgramEvaluation)
 import Pudu.Compiler.Program.ForeignSpec
   ( testForeignHandles
   , testForeignOwnershipStore
@@ -40,6 +40,7 @@ programProperties =
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
+  , ("linking publishes what a module declared, not what it imported", testLinkedNames)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
   , ("a type-only name cannot masquerade as a runtime value", testTypeNamesAreNotValues)
   , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)

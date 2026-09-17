@@ -55,6 +55,23 @@ const foreignSource = [
   "",
 ].join("\n");
 
+// A program that imports a module and documents a function with text beyond
+// ASCII. Every reply about it carries that text, and a reply is framed by its
+// length in UTF-8 bytes, so a server writing anything but UTF-8 sends frames
+// shorter than their headers and the client waits forever.
+const importingUri = "file:///pudu-fixtures/Importing.pudu";
+const importingSource = [
+  "module Importing",
+  "import Std.Io as Io",
+  "/// Greets a reader — in any language: ¡hola, 世界! 🦌",
+  "fn greet(name: Str) -> Str { name }",
+  "fn main() -> Int {",
+  "  let _said = Io.writeLine(greet(\"pudu\"))",
+  "  0",
+  "}",
+  "",
+].join("\n");
+
 const messages = [
   { id: 1, method: "initialize", params: { processId: null, rootUri: null, capabilities: {} } },
   { method: "initialized", params: {} },
@@ -75,9 +92,26 @@ const messages = [
     },
   },
   {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: importingUri, languageId: "pudu", version: 1, text: importingSource },
+    },
+  },
+  {
     id: 2,
     method: "textDocument/hover",
     params: { textDocument: { uri }, position: { line: 1, character: 4 } },
+  },
+  // Completion straight after `Io.`, where `Io` names an imported module.
+  {
+    id: 21,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: importingUri }, position: { line: 5, character: 17 } },
+  },
+  {
+    id: 22,
+    method: "textDocument/hover",
+    params: { textDocument: { uri: importingUri }, position: { line: 3, character: 4 } },
   },
   {
     id: 3,
@@ -388,6 +422,22 @@ assert(sigHelp?.signatures && sigHelp.signatures.length > 0, "signatureHelp did 
 // Workspace symbols
 const wsSyms = replyTo(19)?.result;
 assert(Array.isArray(wsSyms) && wsSyms.some(s => s.name === "double"), "workspace symbols did not find double");
+
+// A module named before a dot offers that module's declarations.
+const moduleOffered = replyTo(21)?.result;
+const moduleItems = Array.isArray(moduleOffered) ? moduleOffered : (moduleOffered?.items ?? []);
+const moduleLabels = moduleItems.map(entry => entry.label);
+for (const expected of ["writeLine", "read", "write"]) {
+  assert(moduleLabels.includes(expected), `completion after Io. did not offer ${expected}`);
+}
+assert(!moduleLabels.includes("isOk"), "completion after Io. offered another module's declarations");
+
+// Text beyond ASCII arrives as it was written.
+const unicodeHover = JSON.stringify(replyTo(22)?.result ?? null);
+assert(
+  unicodeHover.includes("— in any language: ¡hola, 世界! 🦌"),
+  `hover lost text beyond ASCII: ${unicodeHover}`,
+);
 
 // Code actions
 const codeActions = replyTo(20)?.result;

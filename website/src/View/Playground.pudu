@@ -1,0 +1,352 @@
+module View.Playground
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Json as Json
+import Std.Option as Option
+import Std.Ui.Island as Island
+import Std.Url as Url
+import Constants as Constants
+import Domain.Playground as Play
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import View.Layout as Layout
+
+/// Where the playground and its parts are served.
+export const PAGE_PATH: Str = "/playground"
+export const SHARED_PATH: Str = "/playground/shared"
+export const OPEN_PATH: Str = "/playground/open"
+export const RUN_API_PATH: Str = "/api/playground/run"
+export const ASSIST_API_PATH: Str = "/api/playground/assist"
+export const SCRIPT_PATH: Str = "/assets/playground/main.js"
+
+/// The version the script is addressed with, so a deployment that changes it
+/// is fetched fresh past every cache.
+const ASSET_VERSION: Str = "10"
+
+/// The island the editor script mounts on.
+///
+/// The form is the island's server-rendered fallback, so the page works in full
+/// before the script arrives and without it; the script adds the editor on top
+/// of the same elements rather than rendering them again.
+export const ISLAND_NAME: Str = "playground"
+
+/// The longest link a shared program is given. Past this a link is not
+/// reliably carried by browsers, chat clients, and CDNs, so the page says the
+/// program is too long to share as a link rather than giving one that breaks.
+export const SHARE_LINK_LIMIT: Int = 8000
+
+/// What one rendering of the playground shows.
+///
+/// `example` is the example the program came from, when it came from one;
+/// `outcome` is what running or formatting it did, when that was asked.
+/// `shared` marks a page reached through a shared link, which offers that link
+/// back to the reader.
+export type Screen = {
+  source: Str,
+  example: Option[Examples.Example],
+  outcome: Option[Play.Outcome],
+  shared: Bool
+}
+
+/// The screen an example opens as.
+export fn opening(example: &Examples.Example) -> Screen {
+  Screen{source: example.source, example: Some(*example), outcome: None, shared: false}
+}
+
+/// The address of one example.
+export fn examplePath(slug: Str) -> Str { PAGE_PATH + "/" + Url.encodeComponent(slug) }
+
+/// The link that opens a program in the playground.
+export fn shareLink(siteUrl: Str, source: Str) -> Str {
+  siteUrl + SHARED_PATH + "?code=" + Url.encodeComponent(source)
+}
+
+/// The playground page: a tool that fills the window, a toolbar above an
+/// editor and its output.
+///
+/// An example's page is canonical and indexed; the example the playground
+/// opens with is canonical at `/playground` itself. Every other rendering — a
+/// run, a shared program — is a page about one reader's program, so it names
+/// the playground as canonical and asks not to be indexed.
+export fn page(siteUrl: Str, playground: &Playground.Playground, screen: &Screen) -> Html.Html {
+  let indexable = isCanonical(screen)
+  let firstSlug = Examples.first(&playground.examples).slug
+  let path = match screen.example {
+    case Some(example) => if indexable && example.slug != firstSlug { examplePath(example.slug) } else { PAGE_PATH }
+    case None => PAGE_PATH
+  }
+  let title = if path == PAGE_PATH { "Playground" } else {
+    match screen.example {
+      case Some(example) => example.title + " · Playground"
+      case None => "Playground"
+    }
+  }
+  let description = match screen.example {
+    case Some(example) => if example.summary.isEmpty() { "Write, run, and share Pudu programs in your browser." } else { example.summary + " Run it in the Pudu playground." }
+    case None => "Write, run, and share Pudu programs in your browser."
+  }
+  let app = H.form().id("playground-form").class("playground-app").action(PAGE_PATH).method("post")
+    .holding([
+      toolbar(playground, screen),
+      H.div().class("playground-panes").holding([
+          editor(playground, screen),
+          output(playground, screen)
+        ])
+    ])
+  let body = H.div().class("playground").holding([
+      H.h1().class("skip").says("Pudu Playground"),
+      notice(playground),
+      H.nothing().holds(Island.islandWithHydration(ISLAND_NAME, editorProps(playground), app.html(), Island.Eager)),
+      H.form().id("playground-open").action(OPEN_PATH).method("get"),
+      sharePanel(siteUrl, screen),
+      shareDialog(),
+      H.nothing().holds(Island.microRuntime("")),
+      H.script().kind("module").src(SCRIPT_PATH + "?v=" + ASSET_VERSION)
+    ])
+  Layout.workspace(siteUrl, title, description, path, indexable, Some(schema(siteUrl)), body.html())
+}
+
+/// What the editor island is told: where to ask, and what it may do.
+fn editorProps(playground: &Playground.Playground) -> Str {
+  Json.encode(&Json.object(&[
+        ("run", Json.Text(RUN_API_PATH)),
+        ("assist", Json.Text(ASSIST_API_PATH)),
+        ("share", Json.Text(SHARED_PATH)),
+        ("enabled", Json.Boolean(playground.enabled)),
+        ("shareLimit", Json.Number(SHARE_LINK_LIMIT)),
+        ("runMillis", Json.Number(playground.limits.runMillis))
+      ]))
+}
+
+/// Whether the page shows an example exactly as published.
+fn isCanonical(screen: &Screen) -> Bool {
+  match screen.example {
+    case Some(example) => !screen.shared && Option.isNone(&screen.outcome) && example.source == screen.source
+    case None => false
+  }
+}
+
+fn notice(playground: &Playground.Playground) -> H.Node {
+  if playground.enabled { return H.nothing() }
+  H.p().class("playground-notice").role("note").holding([
+      H.span().says("Running programs is switched off on this site right now. You can still edit and share programs, and "),
+      H.a().href("/download").says("install Pudu"),
+      H.span().says(" to run them on your own machine.")
+    ])
+}
+
+/// The row of controls above the editor.
+///
+/// Run and Format submit the form with the action they name. Share asks for the
+/// shared page with the program in its address. The example picker belongs to
+/// a form of its own outside this one — a form cannot hold another — and names
+/// it; without a script its Open button sends it, and with one, choosing an
+/// example is enough.
+fn toolbar(playground: &Playground.Playground, screen: &Screen) -> H.Node {
+  H.div().class("playground-toolbar").role("toolbar").label("Playground").holding([
+      H.button().submit().class("tool tool-primary").id("playground-run").name("action").value("run")
+        .title("Run the program (Ctrl + Enter)").says("Run"),
+      H.button().submit().class("tool").id("playground-format").name("action").value("format")
+        .title("Format the program (Shift + Alt + F)").says("Format"),
+      H.a().class("tool").id("playground-reset").href(resetPath(screen))
+        .title("Put back the program this page opened with").says("Reset"),
+      H.button().submit().class("tool").id("playground-share").at("formaction", SHARED_PATH).at("formmethod", "get")
+        .title("Get a link to this program").says("Share"),
+      H.labelFor().at("for", "playground-example").class("skip").says("Example"),
+      H.select().id("playground-example").class("tool-select").name("example").at("form", "playground-open")
+        .holding(exampleOptions(&playground.examples, screen)),
+      H.button().submit().class("tool tool-open").at("form", "playground-open").says("Open"),
+      H.span().class("tool-spacer"),
+      H.span().class("tool-status").id("playground-assist-status").at("aria-live", "polite"),
+      help(playground),
+      H.a().class("tool tool-link").href("/docs").says("Docs")
+    ])
+}
+
+/// Where Reset goes without a script: the example the program came from, or
+/// the playground's opening program.
+fn resetPath(screen: &Screen) -> Str {
+  match screen.example {
+    case Some(example) => examplePath(example.slug)
+    case None => PAGE_PATH
+  }
+}
+
+fn exampleOptions(examples: &Examples.Examples, screen: &Screen) -> Array[H.Node] {
+  let current = match screen.example {
+    case Some(shown) => shown.slug
+    case None => ""
+  }
+  var options: Array[H.Node] = []
+  if current.isEmpty() {
+    options = options.push(H.option().value("").flag("selected").says("Your program"))
+  }
+  for example in examples.entries {
+    let option = H.option().value(example.slug).title(example.summary).says(example.title)
+    options = options.push(if example.slug == current { option.flag("selected") } else { option })
+  }
+  options
+}
+
+/// What the controls do and what the playground allows, one click away.
+fn help(playground: &Playground.Playground) -> H.Node {
+  let limits = playground.limits
+  H.tag("details").class("tool-help").holding([
+      H.tag("summary").class("tool").says("Help"),
+      H.div().class("tool-help-panel").holding([
+          H.h2().says("Using the playground"),
+          H.dl().holding([
+              H.dt().says("Run"),
+              H.dd().says("Compile the program and run its main function. Ctrl + Enter, or ⌘ + Enter."),
+              H.dt().says("Format"),
+              H.dd().says("Rewrite the program in the standard layout. Shift + Alt + F."),
+              H.dt().says("Share"),
+              H.dd().says("A link that opens this program for anyone."),
+              H.dt().says("Completion"),
+              H.dd().says("Suggestions appear after a dot, or on Ctrl + Space. The arrows choose, Enter or Tab accepts, Esc closes."),
+              H.dt().says("Explanations"),
+              H.dd().says("Rest the pointer on a name to see its type and documentation. Problems are underlined as you type."),
+              H.dt().says("The editor"),
+              H.dd().says("Tab indents. Press Esc, then Tab, to move on from the editor.")
+            ]),
+          H.p().class("tool-help-limits").says(
+            "A program runs for up to " + show(limits.runMillis / 1000) + " seconds with no network, may be "
+              + show(limits.sourceBytes / 1024) + " KB long, and its output is kept up to "
+              + show(limits.outputBytes / 1024) + " KB."
+          )
+        ])
+    ])
+}
+
+fn editor(playground: &Playground.Playground, screen: &Screen) -> H.Node {
+  H.div().class("playground-editor").holding([
+      H.pre().class("playground-gutter").id("playground-gutter").at("aria-hidden", "true").says(lineNumbers(screen.source)),
+      H.div().class("playground-code").holding([
+          H.pre().class("playground-highlight").at("aria-hidden", "true").holding([H.code().id("playground-highlight")]),
+          H.labelFor().at("for", "playground-source").class("skip").says("Program source"),
+          // A leading line break is dropped by the HTML parser after the
+          // opening tag, so one is always written: a program that begins with a
+          // blank line keeps it.
+          H.textarea()
+            .id("playground-source")
+            .name("code")
+            .class("playground-source")
+            .at("wrap", "off")
+            .at("spellcheck", "false")
+            .at("autocapitalize", "off")
+            .at("autocomplete", "off")
+            .at("autocorrect", "off")
+            .at("maxlength", show(playground.limits.sourceBytes))
+            .required()
+            .says("\n" + screen.source)
+        ])
+    ])
+}
+
+/// One number per line of a program, the gutter the editor shows beside it.
+export fn lineNumbers(source: Str) -> Str {
+  let count = source.split("\n").length()
+  var numbers: Array[Str] = []
+  var line = 1
+  while line <= count {
+    numbers = numbers.push(show(line))
+    line = line + 1
+  }
+  numbers.join("\n")
+}
+
+fn output(playground: &Playground.Playground, screen: &Screen) -> H.Node {
+  let shown = match screen.outcome {
+    case None => [
+      H.p().class("playground-status").id("playground-status").says("Press Run to see what the program prints.")
+    ]
+    case Some(outcome) => outcomeNodes(&outcome, &playground.limits)
+  }
+  H.section().class("playground-output").id("playground-output").at("aria-live", "polite").label("Output").holding(
+    [H.h2().class("playground-output-title").says("Output")].concat(shown)
+  )
+}
+
+fn outcomeNodes(outcome: &Play.Outcome, limits: &Play.Limits) -> Array[H.Node] {
+  var nodes = [
+    H.p().class("playground-status " + statusClass(outcome)).id("playground-status").says(Play.headline(outcome, limits))
+  ]
+  if let Some(meaning) = Play.statusMeaning(outcome) {
+    nodes = nodes.push(H.p().class("playground-meaning").says(meaning))
+  }
+  if let Some(run) = Play.runOf(outcome) {
+    if !run.output.isEmpty() {
+      nodes = nodes.push(H.pre().class("playground-stream").label("Standard output").holding([H.code().says(run.output)]))
+    }
+    if !run.errors.isEmpty() {
+      nodes = nodes.push(H.pre().class("playground-stream is-errors").label("Standard error").holding([H.code().says(run.errors)]))
+    }
+    if run.output.isEmpty() && run.errors.isEmpty() {
+      nodes = nodes.push(H.p().class("playground-empty").says("The program printed nothing."))
+    }
+  }
+  nodes
+}
+
+/// The class naming how a status reads: a success, a program that failed, or a
+/// playground that could not act on it.
+export fn statusClass(outcome: &Play.Outcome) -> Str {
+  match outcome {
+    case Play.Finished(run) => if run.status == 0 { "is-ok" } else { "is-failed" }
+    case Play.TimedOut(_) => "is-failed"
+    case Play.Formatted(_) => "is-ok"
+    case Play.Refused(_) => "is-refused"
+    case Play.Unavailable(_) => "is-refused"
+  }
+}
+
+/// The link to a shared program, on the page the link opens.
+fn sharePanel(siteUrl: Str, screen: &Screen) -> H.Node {
+  if !screen.shared { return H.nothing() }
+  let link = shareLink(siteUrl, screen.source)
+  if link.length() > SHARE_LINK_LIMIT {
+    return H.section().class("playground-share").label("Share").holding([
+        H.p().says("This program is too long to share as a link. Save it as a file, or share a shorter version.")
+      ])
+  }
+  H.section().class("playground-share").label("Share").holding([
+      H.labelFor().at("for", "playground-link").says("Anyone with this link sees this program:"),
+      H.input().id("playground-link").class("playground-link").kind("url").value(link).at("readonly", "readonly")
+    ])
+}
+
+/// The dialog the script opens when Share is pressed, so the link can be
+/// copied without leaving the program.
+fn shareDialog() -> H.Node {
+  H.tag("dialog").id("playground-share-dialog").class("playground-dialog").label("Share").holding([
+      H.form().method("dialog").holding([
+          H.h2().says("Share this program"),
+          H.labelFor().at("for", "playground-share-link").says("Anyone with this link sees this program. The address bar shows it too."),
+          H.div().class("playground-dialog-row").holding([
+              H.input().id("playground-share-link").class("playground-link").kind("url").at("readonly", "readonly"),
+              H.button().kind("button").class("tool tool-primary").id("playground-copy").says("Copy link")
+            ]),
+          H.p().class("playground-dialog-note").id("playground-share-note"),
+          H.div().class("playground-dialog-actions").holding([
+              H.button().class("tool").value("close").says("Done")
+            ])
+        ])
+    ])
+}
+
+fn schema(siteUrl: Str) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("WebApplication")),
+      ("name", Json.Text("Pudu Playground")),
+      ("url", Json.Text(siteUrl + PAGE_PATH)),
+      ("applicationCategory", Json.Text("DeveloperApplication")),
+      ("operatingSystem", Json.Text("Any")),
+      ("isPartOf", Json.object(&[
+            ("@type", Json.Text("WebSite")),
+            ("name", Json.Text(Constants.SITE_NAME)),
+            ("url", Json.Text(siteUrl))
+          ]))
+    ])
+}

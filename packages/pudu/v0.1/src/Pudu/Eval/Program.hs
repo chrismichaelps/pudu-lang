@@ -14,6 +14,7 @@ module Pudu.Eval.Program
   , evaluateInteractiveBlock
   , evaluateProgramEntry
   , evaluateProgramTallied
+  , linkedNames
   ) where
 
 import Control.Monad (unless)
@@ -48,7 +49,7 @@ import Pudu.Frontend.Syntax.Tree
   , Function (..)
   , Module (..)
   )
-import Data.IORef (newIORef, readIORef)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Pudu.Source (Span)
 import Pudu.Eval
   ( EvalOutcome (..)
@@ -270,6 +271,22 @@ scopeMethodsDeclaredBy before environment = do
   let declaredHere = Map.map (scopeTo environment) (Map.difference after before)
   replaceMethods (Map.union declaredHere after)
 
+{-| Every name linking a program's dependencies binds, in no particular order.
+
+    What linking costs grows with this list, and the program never sees most of
+    it, so it is the measure a test holds linking to. -}
+linkedNames :: [(Text, Module)] -> IO [Text]
+linkedNames dependencies = do
+  found <- newIORef []
+  _ <- runWithEffects False $ do
+    _ <- linkDependencies dependencies
+    frames <- captureEnvironment
+    Evaluator $ \env -> do
+      writeIORef found (concatMap Map.keys frames)
+      pure (Done () env)
+    pure UnitValue
+  readIORef found
+
 linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
 linkDependencies dependencies = do
   pushFrame Map.empty
@@ -282,6 +299,13 @@ linkDependencies dependencies = do
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports dependency)
+    {-| The module's own declarations get a frame above its imports, so what is
+        published under its path is what it declared. Publishing the whole frame
+        also published every alias the module imported, and each importer
+        republished those under its own alias in turn: the names grew with the
+        depth of the import graph, and a site of sixty modules linked millions
+        of them before its first request. -}
+    pushFrame Map.empty
     inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations dependency)
     loaded <- currentFrame
