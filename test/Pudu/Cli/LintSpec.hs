@@ -27,6 +27,7 @@ lintCommandProperties =
   , ("source lint directives have exact scope", testSourceAllow)
   , ("malformed lint policy is a visible failure", testMalformedPolicy)
   , ("compiler errors remain in machine lint output", testCompilerError)
+  , ("human lint output starts every diagnostic on its own line", testHumanLines)
   , ("directory lint output follows canonical path order", testDirectoryOrder)
   ]
 
@@ -135,6 +136,25 @@ testCompilerError = withSource (Text.unlines
       [ lintCommandSuccess result === False
       , property (Text.isInfixOf "\"code\":\"E2010\"" (lintCommandStdout result))
       , property (Text.isInfixOf "\"rule\":\"compiler\"" (lintCommandStdout result))
+      ]
+
+testHumanLines :: IO Property
+testHumanLines = withSource (Text.unlines
+  [ "module Main"
+  , "fn two(a: Int, b: Int) -> Int { a + b }"
+  , "fn main() -> Int {"
+  , "  let x = two(1)"
+  , "  let y = two(1, 2, 3)"
+  , "  x + y"
+  , "}"
+  ]) $ \_ path -> do
+    result <- lintCommand PlainStyle [path]
+    let output = lintCommandStdout result
+        headers = filter (Text.isPrefixOf "error[") (Text.lines output)
+    pure $ conjoin
+      [ counterexample (Text.unpack output) (length headers === 2)
+      , counterexample "the output ends its last line" (Text.takeEnd 1 output === "\n")
+      , counterexample "no header is joined to the line before it" (count "error[" output === length headers)
       ]
 
 testDirectoryOrder :: IO Property
