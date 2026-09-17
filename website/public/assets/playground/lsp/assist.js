@@ -56,11 +56,17 @@ export function startAssist(editor, { endpoint, enabled }) {
     nextProblem,
     hideAll,
     // The text changed from `before` to `after`, by typing `typed` when known.
+    //
+    // Completion and signature help look at the caret, which an editor change
+    // such as typing `(` as `()` places only after the text has changed, so
+    // they read it once that change is over.
     changed(before, after, typed) {
       diagnostics.changed(before, after);
       hover.hide();
-      completion.typed(typed);
-      signature.typed(typed);
+      queueMicrotask(() => {
+        completion.typed(typed);
+        signature.typed(typed);
+      });
     },
     // A program replaced whole: an example opened, or the editor reset.
     replaced() {

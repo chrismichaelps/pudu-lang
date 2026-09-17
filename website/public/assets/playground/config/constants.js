@@ -28,7 +28,7 @@ export const DEFAULT_RUN_MILLIS = 10000;
 export const MAX_COMPLETIONS_SHOWN = 100;
 export const COMPLETION_PAGE_ROWS = 8;
 
-export const SPLIT = Object.freeze({ storageKey: "pudu-playground-split", min: 25, max: 80, fallback: 60, step: 5 });
+export const SPLIT = Object.freeze({ storageKey: "pudu-playground-split", min: 25, max: 80, fallback: 50, step: 5 });
 
 // The protocol's numbers for what a completion is, as the list names them.
 export const COMPLETION_KIND_NAMES = Object.freeze({

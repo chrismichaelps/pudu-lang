@@ -122,6 +122,18 @@ fn startsAt(characters: &Array[Char], index: Int, wanted: &Array[Char]) -> Bool 
   true
 }
 
+/// Whether the first rule for a selector declares each of the declarations, in
+/// whatever order the rule writes them.
+fn ruleDeclares(css: Str, selector: Str, declarations: &Array[Str]) -> Bool {
+  let pieces = css.split("\n" + selector + "\{")
+  if pieces.length() < 2 { return false }
+  let body = pieces[1].split("\}")[0]
+  for declaration in declarations {
+    if !body.contains(declaration) { return false }
+  }
+  true
+}
+
 fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   for entry in entries {
     if entry.documentation.length() == 0 { return false }
@@ -246,7 +258,8 @@ export fn main() -> Int {
       Test.that("the stylesheet styles the playground editor", stylesheetIsWellFormed(stylesheet, ".playground-source\{")),
       Test.that("the stylesheet closes every block and styles code blocks on every screen", stylesheetIsWellFormed(stylesheet, ".code-block\{")),
       Test.that("documentation code blocks use the code background", stylesheet.contains(".code-block\{margin:1.25em 0;padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--code)")),
-      Test.that("the playground's editor and output use the code background", stylesheet.contains(".playground-source\{") && stylesheet.contains("background:var(--code);color:#1d2750;font-family") && stylesheet.contains(".playground-output\{")),
+      Test.that("the playground's printed output uses the code background", ruleDeclares(stylesheet, ".playground-stream", &["background:var(--code)", "color:#1d2750", "font-family:"])),
+      Test.that("the playground puts the editor beside its output", ruleDeclares(stylesheet, ".playground-panes", &["display:grid", "grid-template-columns:minmax(0,1fr) minmax(0,1fr)"])),
       Test.that("the playground renders", playgroundPage.status.code == 200 && playgroundPage.body.contains("id=\"playground-source\"")),
       Test.that("the playground is in the navigation", about.body.contains("href=\"/playground\">Playground")),
       Test.that("the playground and its examples are in the sitemap", sitemap.body.contains(origin + "/playground</loc>") && sitemap.body.contains(origin + "/playground/shapes</loc>")),
