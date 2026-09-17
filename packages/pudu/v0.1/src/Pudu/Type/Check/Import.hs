@@ -68,7 +68,7 @@ import Pudu.Type.Value
 
 collectImportedDeclared :: ImportTypes -> Checker DeclaredTypes
 collectImportedDeclared imported = do
-  collected <- foldM collectOne emptyDeclared (importedInterfaces imported)
+  collected <- foldM collectOne emptyDeclared (dependencyOrder (importedInterfaces imported))
   let aliases = Map.fromList
         [ (localName, target)
         | (localName, identity) <- Map.toList (importedNames imported)
@@ -86,6 +86,28 @@ collectImportedDeclared imported = do
       accumulated{declaredNames = interfaceNames available value <> declaredNames accumulated}
       (interfaceModule value)
       (interfacePrivateDeclarations value <> interfaceDeclarations value)
+
+{-| Interfaces in an order where each follows the modules it imports.
+
+    Collecting an interface forms the types its declarations name, and a record
+    field naming another module's alias can only become what the alias stands
+    for once that module's aliases are collected. The interfaces arrive in name
+    order, so `Lib.Holder` was collected before the `Lib.Names` it reads, and
+    its field stayed an opaque `Name`. -}
+dependencyOrder :: [TypeInterface] -> [TypeInterface]
+dependencyOrder interfaces = reverse (snd (foldl visit (Set.empty, []) interfaces))
+ where
+  byName = Map.fromList [(interfaceModule value, value) | value <- interfaces]
+  visit (seen, ordered) value
+    | Set.member (interfaceModule value) seen = (seen, ordered)
+    | otherwise =
+        let (reached, placed) = foldl visit (Set.insert (interfaceModule value) seen, ordered) (dependencies value)
+         in (reached, value : placed)
+  dependencies value =
+    [ dependency
+    | Located _ imported <- interfaceImports value
+    , Just dependency <- [Map.lookup (locatedValue (importModule imported)) byName]
+    ]
 
 declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 declareImportedTypes declared imported = do
