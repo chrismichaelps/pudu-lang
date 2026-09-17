@@ -26,7 +26,7 @@ import Pudu.Eval.Env
   ( Evaluator
   , Unwind (ReturnUnwind)
   , abortAt
-  , lookupName
+  , lookupMethod
   , unwind
   , variantOwner
   )
@@ -264,7 +264,7 @@ readMethodAmong spanValue receiver owners reported member = case owners of
     abortAt (Just spanValue) "E7001"
       ("no field or method " <> member <> " on a " <> reported) Nothing
   owner : rest -> do
-    found <- lookupName (owner <> "." <> member)
+    found <- lookupMethod (owner <> "." <> member)
     case found of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -272,7 +272,7 @@ readMethodAmong spanValue receiver owners reported member = case owners of
 
 readMethod :: Span -> Value -> Text -> Text -> Evaluator Value
 readMethod spanValue receiver owner member = do
-  found <- lookupName (owner <> "." <> member)
+  found <- lookupMethod (owner <> "." <> member)
   case found of
     Just (FunctionValue closure) ->
       pure (FunctionValue closure{closureSelf = Just receiver})

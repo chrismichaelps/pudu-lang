@@ -73,7 +73,7 @@ import Pudu.Eval.Env
   , ascend
   , catchUnwind
   , descend
-  , lookupName
+  , lookupMethod
   , unwind
   , Unwind (..)
   , withFrame
@@ -161,7 +161,7 @@ evaluateCall needs spanValue callee arguments = do
  where
   fallbackWith lentHere receiver member vals = do
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupName (owner <> "." <> member)) owners
+    method <- firstBound (\owner -> lookupMethod (owner <> "." <> member)) owners
     calleeVal <- case method of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -279,7 +279,7 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
   MemberExpression target member -> do
     receiver <- callEvaluate needs target
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupName (owner <> "." <> locatedValue member)) owners
+    method <- firstBound (\owner -> lookupMethod (owner <> "." <> locatedValue member)) owners
     case method of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})

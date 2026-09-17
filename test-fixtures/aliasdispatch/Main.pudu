@@ -1,0 +1,21 @@
+module Main
+
+import Lib.Decoder as Decoder
+
+/// A method call on a built-in value reaches the built-in method, whatever
+/// another module imported under the type's name: `Bytes.toText()` answers an
+/// `Option`, and `Std.Bytes.toText` a `Result`.
+fn main() -> Int {
+  let raw = "hi".toBytes()
+  let viaMethod = match raw.toText() {
+    case Some(text) => text.length()
+    case None => 0
+  }
+  let viaModule = match Decoder.decoded(&raw) {
+    case Ok(text) => text.length()
+    case Err(_) => 0
+  }
+  let table = mapOf([("a", 1), ("b", 2)])
+  let sized = table.size() + Decoder.counted(&table)
+  viaMethod * 100 + viaModule * 10 + sized
+}
