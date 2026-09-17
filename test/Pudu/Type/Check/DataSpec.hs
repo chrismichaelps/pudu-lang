@@ -184,8 +184,31 @@ testRecords = do
     , "type User = { id: Int, name: Str }"
     , "fn run(user: User) -> Str { user.missing }"
     ]
+  -- A chain whose first call fails reports it once. Each later call used to
+  -- check the chain before it twice, so four calls reported it eight times.
+  unknownChain <- codes
+    [ "module M"
+    , "type Box = { value: Int }"
+    , "fn run() -> Int {"
+    , "  let made = Box{value: 1}.first().second().third().fourth()"
+    , "  0"
+    , "}"
+    ]
+  fieldCall <- codes
+    [ "module M"
+    , "type Holder = { apply: fn(Int) -> Int }"
+    , "fn run(held: Holder) -> Int { held.apply(3) }"
+    ]
+  wrongFieldCall <- codes
+    [ "module M"
+    , "type Holder = { apply: fn(Int) -> Int }"
+    , "fn run(held: Holder) -> Str { held.apply(3) }"
+    ]
   pure $ conjoin
     [ built === []
+    , counterexample "an unknown member early in a chain is reported once" (unknownChain === ["E3005"])
+    , counterexample "a function held in a field is called" (fieldCall === [])
+    , counterexample "a field call is typed by the function the field holds" (wrongFieldCall === ["E3001"])
     , wrongField === ["E3001"]
     , missingField === ["E3008"]
     , unknownField === ["E3005"]
