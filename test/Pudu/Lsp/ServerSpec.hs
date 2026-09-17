@@ -236,6 +236,9 @@ testHover = do
   documents <- opened demo
   let shown = request "textDocument/hover" (atPosition 3 12) documents
       body = shown >>= lookupField "contents" >>= lookupField "value" >>= textOf
+      callerBody =
+        request "textDocument/hover" (atPosition 5 5) documents
+          >>= lookupField "contents" >>= lookupField "value" >>= textOf
   pure $ conjoin
     [ counterexample "the signature comes first, being the answer to what is this"
         (property (maybe False (Text.isInfixOf "add : Int -> Int -> Int") body))
@@ -245,6 +248,12 @@ testHover = do
         (property (maybe False (Text.isInfixOf "function in") body))
     , counterexample "hovering nothing answers null"
         (request "textDocument/hover" (atPosition 1 0) documents === Just JsonNull)
+    , counterexample "a keyword is not named after the declaration around it"
+        (request "textDocument/hover" (atPosition 5 1) documents === Just JsonNull)
+    , counterexample "an operator is not named either"
+        (request "textDocument/hover" (atPosition 5 13) documents === Just JsonNull)
+    , counterexample "a function taking nothing shows that it takes nothing"
+        (property (maybe False (Text.isInfixOf "caller : () -> Int") callerBody))
     ]
 
 {-| A reader asks for the definition of a *use*, which is nowhere near the

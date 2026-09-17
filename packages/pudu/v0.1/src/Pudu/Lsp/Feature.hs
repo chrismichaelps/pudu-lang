@@ -13,6 +13,7 @@ module Pudu.Lsp.Feature
   , symbolAt
   , symbolKind
   , wordAt
+  , wordSpanAt
   ) where
 
 import Data.Char (isAlphaNum)
@@ -20,7 +21,7 @@ import Data.List (sortOn)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
-import Pudu.Doc.Signature (renderSignature)
+import Pudu.Doc.Signature (Signature (..), renderSignature)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (Position (..), Range (..), rangeJson)
 import Pudu.Semantic.Resolve (Resolution (..))
@@ -135,9 +136,14 @@ coversSpan offset spanValue =
 {-| The identifier the cursor is inside, which is what a reader asking for a
     definition is pointing at. -}
 wordAt :: Text -> Int -> Maybe Text
-wordAt content offset
+wordAt content offset = fst <$> wordSpanAt content offset
+
+{-| The identifier the cursor is inside, with the scalar offsets where it starts
+    and ends. -}
+wordSpanAt :: Text -> Int -> Maybe (Text, (Int, Int))
+wordSpanAt content offset
   | Text.null found = Nothing
-  | otherwise = Just found
+  | otherwise = Just (found, (offset - Text.length before, offset + Text.length after))
  where
   before = Text.takeWhileEnd wordScalar (Text.take offset content)
   after = Text.takeWhile wordScalar (Text.drop offset content)
@@ -158,7 +164,18 @@ hoverContents entry =
     "```pudu\n" <> docName entry <> signatureSuffix <> "\n```"
   signatureSuffix = case docSignature entry of
     Nothing -> Text.empty
-    Just value -> " : " <> renderSignature value
+    Just value -> " : " <> takesNothing value <> renderSignature value
+  {-| A callable with no arguments shows it takes none, so `main` does not read
+      as a constant of its result type. -}
+  takesNothing value
+    | callable (docKind entry) && null (signatureArguments value) = "() -> "
+    | otherwise = Text.empty
+  callable kind = case kind of
+    DocFunction -> True
+    DocTraitMethod _ -> True
+    DocMethod _ -> True
+    DocForeign _ -> True
+    _ -> False
   documentation =
     [Text.intercalate "\n" (docComment entry) | not (null (docComment entry))]
   origin = "*" <> kindText (docKind entry) <> " in `" <> docModule entry <> "`*"

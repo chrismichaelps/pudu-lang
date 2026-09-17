@@ -10,6 +10,7 @@ module Pudu.Type
   , renderType
   , typeAt
   , narrowestAt
+  , narrowestSpanAt
   , widestWithin
   ) where
 
@@ -96,9 +97,13 @@ widestWithin start end (TypeInfo entries) =
     `text.length()` asks about `text`, not about the call that contains it, and
     not about the function that contains that. -}
 narrowestAt :: Int -> TypeInfo -> Maybe Type
-narrowestAt offset (TypeInfo entries) =
+narrowestAt offset info = snd <$> narrowestSpanAt offset info
+
+{-| The smallest expression covering this offset, with the span it occupies. -}
+narrowestSpanAt :: Int -> TypeInfo -> Maybe ((Int, Int), Type)
+narrowestSpanAt offset (TypeInfo entries) =
   case sortOn (\((from, to), _) -> to - from) (filter covers (Map.toList entries)) of
-    (_, found) : _ -> Just found
+    found : _ -> Just found
     [] -> Nothing
  where
   covers ((from, to), _) = from <= offset && offset <= to
