@@ -360,9 +360,11 @@ renderResult style options changed analysis =
         , lintCommandChanged = changed
         }
 
+{-| Every report ends its own line, as `pudu check` prints them, so a reader
+    going line by line finds each header at the start of one. -}
 renderHuman :: RenderStyle -> [Reported] -> Text
 renderHuman style reports = Text.concat
-  [ renderDiagnosticsWith (defaultRenderConfig style) source [lintDiagnostic finding]
+  [ Text.dropWhileEnd (== '\n') (renderDiagnosticsWith (defaultRenderConfig style) source [lintDiagnostic finding]) <> "\n"
   | Reported source finding <- reports
   ]
 
