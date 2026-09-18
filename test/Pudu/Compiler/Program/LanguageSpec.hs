@@ -1,6 +1,7 @@
 {-| @Test.Compiler.Program.LanguageSpec — function literals, ranges, slices, and destructuring bindings -}
 module Pudu.Compiler.Program.LanguageSpec
-  ( testDestructuringBindings
+  ( testCapturedScope
+  , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
   , testRangesAndSlices
@@ -40,6 +41,22 @@ testRangesAndSlices = do
     , counterexample "indexing by a range reads the stretch it names"
         (slices === Just "147")
     ]
+
+{-| What a function literal can still reach after it leaves the scope it was
+    written in.
+
+    A literal holds the names it mentions and the program's own declarations,
+    not everything that happened to be in scope beside it — so a literal stored
+    in a table no longer holds the array that was standing next to it. That is a
+    narrowing, and a narrowing is only safe if nothing it drops was reachable,
+    which is what the fixture checks: every way a literal reaches a name, asked
+    after the literal has been carried away from where it was written. -}
+testCapturedScope :: IO Property
+testCapturedScope = do
+  answer <- runEntry (fixture "Captures")
+  pure $
+    counterexample "every way a literal reaches a name survives being carried away"
+      (answer === Just "1155")
 
 {-| A binding takes a record, a tuple, and a sequence apart, and the names it
     introduces belong to the block it stands in. -}

@@ -25,6 +25,11 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- A sequence pattern checks the **length first**: without a rest the value must have exactly as many
+  elements as the pattern names, with one it must have at least that many. Both are one comparison,
+  so a pattern that does not apply fails before a single element is matched. A tuple is admitted
+  beside an array, because both are a fixed run of values reached by position.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.

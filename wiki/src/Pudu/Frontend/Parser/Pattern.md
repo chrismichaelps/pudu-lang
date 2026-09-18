@@ -29,6 +29,11 @@ parsePattern :: Parser (Located Pattern)
 
 ### Governance
 
+- A sequence pattern admits **at most one** `..`, because two would leave no way to say which holds
+  a given element. What precedes it is taken from the front and what follows it from the back, so
+  the pattern reads in the order the sequence does however much of the middle it skips. `..` alone
+  and `.._` skip what they cover; `..name` holds it.
+
 - The pattern start is decided by the token itself: `_` never binds, a lowercase identifier always binds, an uppercase path is a constructor even with no payload, and a literal is a literal.
 - A constructor path reuses [[Parser Name]]'s segmented path with `E1011` casing, so `Core.Result.Err(e)` and `Err(e)` share one rule.
 - A numeric pattern literal admits a leading `-`, preserved inside the literal's own text rather than as a unary expression node, so `-5..=5` is one range pattern.

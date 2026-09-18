@@ -22,10 +22,10 @@ import Pudu.Eval.Env
   ( Env (..)
   , integerKindAt
   , tally
-  , captureEnvironment
   , Eval (..)
   , Evaluator (..)
   , abortAt
+  , capturedFrames
   , bind
   , expectBool
   , lookupName
@@ -56,6 +56,7 @@ import Pudu.Eval.Keyed (setContains, setFromMembers)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Order (comparableValue)
 import Pudu.Eval.Place (placeOf, storePlace)
+import Pudu.Eval.Capture (reachableNames)
 import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
@@ -294,8 +295,13 @@ evaluateHere (Located spanValue expression) = case expression of
     {-| A literal captures the environment it was written in, so calling it
         later means what it meant then. A declaration does not, and the two
         cases are distinguished by this field rather than by asking what kind
-        of function it is. -}
-    captured <- captureEnvironment
+        of function it is.
+
+        What it captures is what it can reach: module scope whole, and of the
+        frames a call pushed, only the names the literal mentions. Capturing the
+        whole stack kept every value that happened to be in scope alive for as
+        long as the literal was. -}
+    captured <- capturedFrames (reachableNames value)
     pure (FunctionValue (Closure lambdaName value Nothing (Just captured)))
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do

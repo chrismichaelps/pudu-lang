@@ -19,7 +19,8 @@ import Pudu.Compiler.Program.GraphSpec
   , testPathDependencies
   )
 import Pudu.Compiler.Program.LanguageSpec
-  ( testDestructuringBindings
+  ( testCapturedScope
+  , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
   , testRangesAndSlices
@@ -48,6 +49,7 @@ programProperties =
   , ("a function literal is a value wherever a value goes", testFunctionLiterals)
   , ("a range counts rather than building what it counts", testRangesAndSlices)
   , ("a binding takes a record, a tuple, and a sequence apart", testDestructuringBindings)
+  , ("a function literal keeps reaching what it mentions", testCapturedScope)
   , ("ranges, slices, and destructuring refuse what they cannot mean", testLanguageRefusals)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("linking publishes what a module declared, not what it imported", testLinkedNames)

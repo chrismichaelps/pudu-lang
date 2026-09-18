@@ -35,6 +35,7 @@ tags: [moc, module]
 - [[Eval Order]] — which values may be keys, and the order they are compared by.
 - [[Evaluator]] — declaration installation, statement and expression walking, and bounded execution.
 - [[Eval Dispatch]] — array method dispatch (currently inline in Eval.hs, extraction planned).
+- [[Eval Capture]] — which names a function literal can reach, so a capture holds only those.
 - [[Eval Range]] — what a range is, and what can be asked of one without walking it.
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
 - [[Eval Method]] — the closed vocabulary of built-in methods a value answers to, and the name each is spelled by.

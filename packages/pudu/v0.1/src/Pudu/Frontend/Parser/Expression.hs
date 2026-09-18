@@ -532,29 +532,63 @@ parseBinaryTail
 parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity crossedLeading left = do
   kind <- peekKind
   newLine <- peekStartsLine
-  case rangeInfo kind of
-    Just inclusive
-      | rangePrecedence >= minimumPrecedence
-      , not newLine -> do
-      operator <- advanceToken
-      upper <- parseRangeUpper recovery blockParser inclusive (tokenSpan operator)
-      let ending = maybe (tokenSpan operator) locatedSpan upper
-          combined = Located (mergedOrLeft (locatedSpan left) ending)
-            (RangeExpression (Just left) inclusive upper)
-      {-| A range is not chainable: `1..2..3` names no value, and reading it as
-          one range inside another would report a type error about a shape the
-          writer never meant to build. -}
-      following <- peekKind
-      case rangeInfo following of
-        Just _ -> do
-          token <- peekToken
-          emitParseError "E1062" (tokenSpan token) "a range cannot be chained"
-            (Just "a range has two ends; parenthesize if an end is itself a range")
-        Nothing -> pure ()
-      parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity
-        (crossedLeading || newLine) combined
-    _ -> parseOperatorTail recovery blockParser minimumPrecedence mayReportAmbiguity
-      crossedLeading left kind newLine
+  {-| A line beginning with a function literal's bar starts a statement rather
+      than joining the line above. `|` is spelled the same as the operator that
+      joins two values, so without this a literal written as a block's result —
+      which is where a literal most often goes in a language whose blocks are
+      expressions — was read as a bitwise or of the statement before it, and
+      reported as an unresolved parameter name somewhere else entirely. -}
+  lambdaAhead <- opensShortLambda
+  if newLine && lambdaAhead
+    then pure (left, crossedLeading)
+    else case rangeInfo kind of
+      Just inclusive
+        | rangePrecedence >= minimumPrecedence
+        , not newLine -> do
+        operator <- advanceToken
+        upper <- parseRangeUpper recovery blockParser inclusive (tokenSpan operator)
+        let ending = maybe (tokenSpan operator) locatedSpan upper
+            combined = Located (mergedOrLeft (locatedSpan left) ending)
+              (RangeExpression (Just left) inclusive upper)
+        {-| A range is not chainable: `1..2..3` names no value, and reading it as
+            one range inside another would report a type error about a shape the
+            writer never meant to build. -}
+        following <- peekKind
+        case rangeInfo following of
+          Just _ -> do
+            token <- peekToken
+            emitParseError "E1062" (tokenSpan token) "a range cannot be chained"
+              (Just "a range has two ends; parenthesize if an end is itself a range")
+          Nothing -> pure ()
+        parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity
+          (crossedLeading || newLine) combined
+      _ -> parseOperatorTail recovery blockParser minimumPrecedence mayReportAmbiguity
+        crossedLeading left kind newLine
+
+{-| Whether the parser is looking at the bar that opens a function literal's
+    parameter list, rather than at the operator or the alternation that share
+    its spelling.
+
+    What follows decides it, because what precedes it cannot: both appear where
+    no value does. A parameter list holds lowercase names and continues with a
+    bar, a comma, or a type annotation; an alternative or a variant names a
+    constructor, which is capitalised. The same three tokens decide it in
+    [[Format Spacing]], and for the same reason. -}
+opensShortLambda :: Parser Bool
+opensShortLambda = do
+  kind <- peekKind
+  following <- lookaheadKind 1
+  after <- lookaheadKind 2
+  pure (kind == Symbol SymPipe && parameterName following && continuesParameters after)
+ where
+  parameterName kind = case kind of
+    Identifier value ->
+      maybe False (\(scalar, _) -> scalar == '_' || (scalar >= 'a' && scalar <= 'z'))
+        (Text.uncons value)
+    _ -> False
+  continuesParameters kind = case kind of
+    Symbol symbol -> symbol `elem` [SymPipe, SymComma, SymColon]
+    _ -> False
 
 {-| The two range spellings, and whether the end they name is included. -}
 rangeInfo :: TokenKind -> Maybe Bool

@@ -35,6 +35,12 @@ body.
 
 ### Governance
 
+- A range holds **two ends and a rule for reading them**, not the values between them. Either end may
+  be absent, which is what lets `items[2..]` mean the tail of something whose length the writer never
+  had to ask for; the value that is indexed supplies what is missing. Two ranges compare by where
+  they start, then by how far they reach, so an ordered collection holds them in the order they
+  cover.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - `boolValue`, `trueValue`, `falseValue`, `zeroValue`, and `oneValue` are shared constants to avoid heap-allocating boolean and small numeric results across tight loop iterations.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.

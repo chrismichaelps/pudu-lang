@@ -27,6 +27,7 @@ import Pudu.Eval.Env
   , captureEnvironment
   , currentFrame
   , currentMethods
+  , markModuleScope
   , pushFrame
   , replaceFrame
   , replaceMethods
@@ -129,6 +130,10 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
         that calls back reported the function's own imports as undefined —
         at run time, having type-checked. -}
     scopeRootDeclarations inherited
+    {-| Every frame now on the stack is the program's own. What a call pushes
+        above this line holds only names somebody wrote, which is what lets a
+        function literal capture the ones it mentions instead of all of them. -}
+    markModuleScope
     found <- lookupName entryName
     case found of
       Just (FunctionValue closure) -> do
@@ -159,6 +164,7 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     scopeRootDeclarations inherited
     pushFrame locals
+    markModuleScope
   let Evaluator execute = evaluateBlockInFrame block
   Evaluator $ \env -> do
     result <- execute env

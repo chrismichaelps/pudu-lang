@@ -25,6 +25,15 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- A function literal's capture is **narrowed to what it can reach**. Module scope — every frame that
+  was on the stack when the program's declarations finished loading, recorded as `envModuleDepth` —
+  is kept whole and by reference, because a name in it may be looked up by a key no syntax spells and
+  because it is alive for the length of the program anyway. The frames a call pushed hold only names
+  somebody wrote, so the literal is given the ones [[Eval Capture]] says it mentions, collapsed into
+  one frame. The result is forced rather than left as a thunk: an unforced restriction holds the
+  frames it was taken from, which is exactly what it exists to drop, and the leak would be invisible
+  because the answer is correct either way.
+
 - The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
 
 - The environment also carries one runtime resource set allocated for the evaluation. Foreign

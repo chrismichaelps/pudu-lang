@@ -39,7 +39,6 @@ import Pudu.Eval.Value
   , CharMethod (..)
   , Closure (..)
   , MapMethod (..)
-  , RangeMethod (..)
   , SetMethod (..)
   , StringMethod (..)
   , Value (..)

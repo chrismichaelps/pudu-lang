@@ -29,6 +29,16 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- A range's two ends **meet each other before either meets `Int`**, so a range written between two
+  values of one wrong type is one mistake and one diagnostic rather than the same complaint about
+  each end. Its type is `Range[Int]`: that is the type an index is, and therefore the type a range is
+  useful at.
+
+- Indexing by a number reads one element and indexing by a range reads a stretch, and the index
+  decides which. A stretch of an array is an array, of text is text, of bytes is bytes; a tuple is
+  refused, because its members may differ and the type of a stretch of one depends on which stretch
+  — a number the checker does not have.
+
 - Binary `in` requires `left : T` and `right : Set[T]`, returning `Bool`. This closed operator rule
   deliberately does not search methods or trait implementations.
 

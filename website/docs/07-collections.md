@@ -30,6 +30,74 @@ fn main() -> Int {
 
 `push` answered a new array, so `primes` still has four elements. Reading a position that is not there stops the program; `items.get(i)` answers an `Option` instead when a position might be missing.
 
+## Ranges and slices
+
+A range is two ends written with `..`, or `..=` when the last value is included. It is a value: it
+can be named, passed to a function, and asked questions. It does not build the numbers it covers, so
+a range over millions of values costs the same as a range over three:
+
+```pudu
+module Ranges
+
+fn main() -> Int {
+  let span = 1..4
+  let inclusive = 1..=4
+
+  var total = 0
+  for n in 0..1000 {
+    total = total + n
+  }
+
+  if span.length() == 3
+    && inclusive.length() == 4
+    && span.contains(2)
+    && span.toArray() == [1, 2, 3]
+    && span.map(|n| n * n) == [1, 4, 9]
+    && span.sum() == 6
+    && total == 499500
+  {
+    0
+  } else {
+    1
+  }
+}
+```
+
+Indexing with a range reads a stretch rather than one value. Either end may be left off, and the
+value being indexed supplies the one that is missing:
+
+```pudu
+module Slices
+
+fn main() -> Int {
+  let primes = [2, 3, 5, 7, 11]
+  let middle = primes[1..3]
+  let tail = primes[2..]
+  let front = primes[..2]
+  let whole = primes[..]
+  let upToAndIncluding = primes[1..=3]
+
+  let text = "hello world"
+  let greeting = text[0..5]
+
+  if middle == [3, 5]
+    && tail == [5, 7, 11]
+    && front == [2, 3]
+    && whole.length() == 5
+    && upToAndIncluding == [3, 5, 7]
+    && greeting == "hello"
+  {
+    0
+  } else {
+    1
+  }
+}
+```
+
+A slice that reaches past the end stops the program, the same way reading a position that is not
+there does. It is not quietly shortened, because a shorter answer would hide the arithmetic that
+asked for too much.
+
 ## Building an array step by step
 
 A `var` holding an array grows one value at a time:

@@ -140,7 +140,7 @@ callRangeMethod apply spanValue method receiver arguments =
       | stride <= 0 ->
           abortAt (Just spanValue) "E7004" "a step must be positive"
             (Just "step by one or more; a range only ever counts upward")
-      | otherwise -> arrayOf . every (fromInteger stride) <$> elements "step"
+      | otherwise -> arrayOf . every (fromInteger stride :: Int) <$> elements "step"
     (RangeMap, [function]) -> do
       values <- elements "map"
       mapped <- mapM (\held -> apply spanValue function [intOf (fromIntegral held)]) values

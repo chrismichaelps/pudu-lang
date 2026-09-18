@@ -141,6 +141,24 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 
 ### Governance
 
+- `RangeExpression` holds two **optional** ends. A range is not a binary operator on two values,
+  because either end may be absent and a binary node has no way to say so; an absent end means "as
+  far as the thing this is applied to goes", which is what makes `items[2..]` the tail of a sequence
+  the writer never measured.
+
+- `ArrayPattern` holds the elements before the rest and the elements after it **apart**, rather than
+  in one list with a marker inside. That is the shape the matcher needs — a prefix read from the
+  front, a suffix from the back, and the rest between — and one list would mean finding the marker
+  again at every use.
+
+- `LetPatternStatement` carries the binding kind and an optional annotation, so `var {x, y} = point`
+  binds parts that may be assigned and a reader can state the type of a value that never receives
+  one name. It is a separate statement from `LetElseStatement` because the two ask opposite things
+  of their pattern: with a fallback it must be able to fail, without one it must not.
+
+- The short function literal builds `LambdaExpression` exactly as `fn(...)` does. **No node records
+  which spelling was written**, so nothing after the parser can behave differently for one of them.
+
 - `SetExpression` retains every written member in source order. It does not deduplicate in the
   frontend: duplicate expressions must still resolve, type-check, expand, and evaluate before the
   runtime Set collapses equal values.

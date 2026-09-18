@@ -163,10 +163,9 @@ inferExpression around declared rigid spanValue expression = case expression of
         memberType spanValue targetType (locatedValue member)
   {-| A range is a value like any other, so it is typed where it is written
       rather than only where it is used. -}
-  RangeExpression lower inclusive upper -> do
+  RangeExpression lower _ upper -> do
     lowerType <- mapM (checkExpression around declared rigid) lower
     upperType <- mapM (checkExpression around declared rigid) upper
-    _ <- pure inclusive
     rangeType spanValue lowerType upperType
   {-| Indexing by a number reads one element; indexing by a range reads the
       stretch it names. One expression, because it is one question asked of one

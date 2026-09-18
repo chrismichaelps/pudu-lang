@@ -50,6 +50,23 @@ spaced         :: [Piece] -> Text
 
 ## Governance
 
+- A range is written **tight**, both ends and either end absent: `0..n`, `0..=n`, `items[2..]`,
+  `items[..2]`. It reads as one value that way, which is what it is.
+
+- `|` is spelled three ways — the operator that joins two values, the separator between a sum's
+  variants and a pattern's alternatives, and the pair holding a function literal's parameters. The
+  first is told by what precedes it, since an operator follows a value and a literal's bar does not.
+  The other two cannot be, because both appear where no value precedes them, so **what follows
+  decides**: a parameter list holds lowercase names and continues with a bar, a comma, or a type
+  annotation, while a variant or an alternative names a capitalised constructor. The closing bar is
+  found as the partner of the opening one, because on its own it is spelled exactly like the
+  operator.
+
+- A brace in **pattern position** — after `let`, `var`, `const`, `case`, a field's colon, or an
+  opening delimiter — holds its fields tight like the record construction it matches. Opened by a
+  keyword it keeps the space that separates it from the keyword, which is the pair of answers an
+  import's selection list already gives.
+
 - **Two adjacencies tokens alone cannot decide:**
   1. Record construction (`User{id: 1}`, tight) vs block (`if ready { 1 }`, padded) vs import selection list (`import Std.Num {Add}`, detached, unpadded).
   2. Ambiguous unary prefix operators (`!`, `-`, `&`, `~`, `*`, `..`) vs binary operators.

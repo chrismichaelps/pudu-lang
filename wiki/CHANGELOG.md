@@ -30,6 +30,12 @@ tags: [changelog]
   skips what they did not take. A pattern that tests a tag has nowhere to go and is `E1059`, which
   points at `let … else`; a sequence of the wrong length is `E7013` where the binding runs, the way
   reading past the end of the same sequence already is.
+- **A function literal holds what it mentions.** [[Eval Capture]] answers which names a literal's
+  body can reach, and [[Eval Env]] gives it those together with module scope, which is kept whole
+  because a name in it may be looked up by a key no syntax spells. Two hundred literals made in a
+  loop beside a twenty-thousand element array held 416MB and hold 76MB — the same as the loop that
+  makes none. A line beginning with `|x|` now starts a statement rather than continuing the line
+  above, so a literal written as a block's result is read as one.
 - New codes: `E1059` a binding whose pattern can fail, `E1062` a chained range, `E1063` an inclusive
   range with no end, `E7013` a sequence of the wrong length at a binding.
 

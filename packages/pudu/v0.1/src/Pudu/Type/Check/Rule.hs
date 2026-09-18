@@ -710,16 +710,18 @@ mapMethodType spanValue member key held = case member of
     types every spelling. -}
 rangeType :: Span -> Maybe Type -> Maybe Type -> Checker Type
 rangeType spanValue lower upper = do
-  {-| The two ends meet each other before either meets `Int`, so a range
-      written between two values of one wrong type is one mistake and one
-      diagnostic rather than the same complaint about each end. -}
+  {-| The two ends meet each other before either meets `Int`, so a range written
+      between two values of one wrong type is one mistake and one diagnostic
+      rather than the same complaint about each end. Once they have met, holding
+      one of them to `Int` holds both. -}
   case (lower, upper) of
-    (Just low, Just high) -> unify spanValue low high >> pure ()
-    _ -> pure ()
-  mapM_ (unify spanValue integerType) lower
-  case (lower, upper) of
-    (Just _, _) -> pure ()
-    _ -> mapM_ (unify spanValue integerType) upper
+    (Just low, Just high) -> do
+      unified <- unify spanValue low high
+      _ <- unify spanValue integerType unified
+      pure ()
+    (Just low, Nothing) -> unify spanValue integerType low >> pure ()
+    (Nothing, Just high) -> unify spanValue integerType high >> pure ()
+    (Nothing, Nothing) -> pure ()
   pure (NominalType "Range" [integerType])
 
 {-| The type of a slice: the value that was sliced.

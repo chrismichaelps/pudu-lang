@@ -181,6 +181,13 @@ indentLines = go [] []
           comma as a continuation indented each of them one level past the item
           they line up with. -}
       Symbol SymComma -> False
+      {-| A function literal's bar opens a statement, because the parser reads
+          it as one: a literal written as a block's result begins its own line,
+          and indenting it as a continuation would say it belongs to the line
+          above when it does not. A bar that joins two values still continues,
+          as does the one that separates a sum's variants, and the three are
+          told apart the way [[Format Spacing]] tells them apart. -}
+      Symbol SymPipe | opensParameters pieces -> False
       {-| Where statements are written, a symbol that can open a prefix
           expression opens a statement when it starts a line: the parser reads
           `*count = 0` on its own line as an assignment through a reference, never
@@ -193,6 +200,23 @@ indentLines = go [] []
       Keyword KwElse -> True
       _ -> False
     _ -> False
+
+  {-| Whether a line's leading bar opens a function literal's parameter list,
+      decided by what follows it: lowercase names, ending with a bar, a comma,
+      or a type annotation. A constructor is capitalised, which is what a
+      variant or an alternative names. -}
+  opensParameters pieces = case [token | TokenPiece token <- dropWhile isComment pieces] of
+    _ : first : second : _ -> parameterName (tokenKind first) && continuesList (tokenKind second)
+    _ -> False
+   where
+    parameterName kind = case kind of
+      Identifier value ->
+        maybe False (\(scalar, _) -> scalar == '_' || (scalar >= 'a' && scalar <= 'z'))
+          (Text.uncons value)
+      _ -> False
+    continuesList kind = case kind of
+      Symbol symbol -> symbol `elem` [SymPipe, SymComma, SymColon]
+      _ -> False
 
   {-| Whether this line finishes a declaration the line above began.
 
