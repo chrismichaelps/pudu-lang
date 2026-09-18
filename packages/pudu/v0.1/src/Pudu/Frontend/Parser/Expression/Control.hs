@@ -8,6 +8,7 @@ module Pudu.Frontend.Parser.Expression.Control
   , parseMatch
   , parseWhile
   , patternCanFail
+  , patternTestsValue
   ) where
 
 import Data.Text (Text)
@@ -114,6 +115,10 @@ patternCanFail pattern' = case pattern' of
   LiteralPattern _ -> True
   RangePattern{} -> True
   TuplePattern members -> any (patternCanFail . locatedValue) members
+  {-| A sequence pattern names a length, and a sequence has whatever length it
+      has. Even `[..rest]`, which names none, is written to be a sequence and
+      fails against anything else. -}
+  ArrayPattern{} -> True
   ConstructorPattern{} -> True
   RecordPattern path fields _ ->
     maybe (any fieldCanFail fields) (const True) path
@@ -122,6 +127,34 @@ patternCanFail pattern' = case pattern' of
  where
   fieldCanFail (Located _ field) =
     maybe False (patternCanFail . locatedValue) (fieldPatternValue field)
+
+{-| Whether a pattern asks a question a plain `let` has no way to answer.
+
+    A `let` that takes a value apart has nowhere to go when the pattern does not
+    apply, so a pattern that tests a tag, a literal, or a range belongs in
+    `let ... else`, which does. A sequence's length is the one exception: it is
+    checked where the binding runs and reported there, exactly as reading past
+    the end of the same sequence already is, and requiring a fallback for it
+    would mean writing one at every `let [first, ..rest] = items`.
+
+    Reported at parse time rather than at typing, because the answer is the
+    pattern's own shape and the reader is looking at it. -}
+patternTestsValue :: Pattern -> Bool
+patternTestsValue pattern' = case pattern' of
+  WildcardPattern -> False
+  BindingPattern _ -> False
+  LiteralPattern _ -> True
+  RangePattern{} -> True
+  TuplePattern members -> any (patternTestsValue . locatedValue) members
+  ArrayPattern prefix _ suffix -> any (patternTestsValue . locatedValue) (prefix <> suffix)
+  ConstructorPattern{} -> True
+  RecordPattern path fields _ ->
+    maybe (any fieldTestsValue fields) (const True) path
+  AlternativePattern _ -> True
+  InvalidPattern -> False
+ where
+  fieldTestsValue (Located _ field) =
+    maybe False (patternTestsValue . locatedValue) (fieldPatternValue field)
 
 parseElse :: ExpressionParsers -> BlockParser -> Parser (Maybe (Located Expression))
 parseElse parsers blockParser = do

@@ -1,6 +1,7 @@
 {-| @Program.Syntax.Tree — models recoverable surface structure -}
 module Pudu.Frontend.Syntax.Tree
-  ( BindingKind (..)
+  ( ArrayRest (..)
+  , BindingKind (..)
   , Block (..)
   , Capability (..)
   , Constraint (..)
@@ -294,6 +295,21 @@ data Statement
       the enclosing block, which the fallback pays for by not being able to
       reach it. -}
   | LetElseStatement !(Located Pattern) !(Located Expression) !(Located Block)
+  {-| `let PATTERN = EXPRESSION`, where the pattern takes a value apart rather
+      than naming it whole: `let {x, y} = point`, `let (a, b) = pair`,
+      `let [head, ..rest] = items`.
+
+      It carries the binding kind so `var {x, y} = point` binds parts that may
+      be assigned, and an optional annotation for the subject as a whole, which
+      is the only place a reader can state the type of a value that is never
+      given one name. A pattern here may only fail on a sequence's length; one
+      that tests a tag or a literal needs `let ... else`, which has somewhere
+      to go when the test fails. -}
+  | LetPatternStatement
+      !BindingKind
+      !(Located Pattern)
+      !(Maybe (Located TypeSyntax))
+      !(Located Expression)
   | InvalidStatement
   deriving stock (Eq, Show)
 
@@ -315,10 +331,29 @@ data Pattern
   | LiteralPattern !Literal
   | RangePattern !Literal !Bool !Literal
   | TuplePattern ![Located Pattern]
+  {-| A sequence taken apart by position: `[first, second]`, or
+      `[first, ..rest]` where the rest is everything the named elements did not
+      take.
+
+      The elements before the rest and the elements after it are held apart
+      rather than in one list with a marker inside it, because that is the
+      shape the matcher needs: a prefix is read from the front, a suffix from
+      the back, and what lies between them is the rest. Holding them in one
+      list would mean finding the marker again at every use. -}
+  | ArrayPattern ![Located Pattern] !(Maybe ArrayRest) ![Located Pattern]
   | ConstructorPattern !ModuleName ![Located Pattern]
   | RecordPattern !(Maybe ModuleName) ![Located FieldPattern] !Bool
   | AlternativePattern ![Located Pattern]
   | InvalidPattern
+  deriving stock (Eq, Show)
+
+{-| The `..` in a sequence pattern, and the name it binds when it binds one.
+
+    `..` skips what it covers and `..rest` holds it, so a program that only
+    needs the front of a sequence does not have to name what follows. -}
+data ArrayRest
+  = IgnoredRest !Span
+  | BoundRest !(Located Text)
   deriving stock (Eq, Show)
 
 {-| @Program.Syntax.FieldPattern — one record field pattern; an absent value
@@ -415,6 +450,14 @@ data Expression
   | CallExpression !(Located Expression) ![Located Expression]
   | MemberExpression !(Located Expression) !(Located Text)
   | IndexExpression !(Located Expression) !(Located Expression)
+  {-| `a..b`, `a..=b`, `a..`, `..b`, `..`.
+
+      A range is its own node rather than a binary operator on two numbers,
+      because either end may be absent and a binary node has no way to say so.
+      An absent end means "as far as the thing being indexed goes", which is
+      what makes `items[2..]` the tail of a sequence without the writer having
+      to ask how long it is. -}
+  | RangeExpression !(Maybe (Located Expression)) !Bool !(Maybe (Located Expression))
   | TryExpression !(Located Expression)
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]

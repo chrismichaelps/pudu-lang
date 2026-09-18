@@ -1,0 +1,7 @@
+module RejectsTextRange
+
+/// A range counts, so its ends are whole numbers.
+export fn main() -> Int {
+  let span = "a".."z"
+  span.length()
+}

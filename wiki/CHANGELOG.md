@@ -5,6 +5,34 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-17 — A function literal is two tokens, a range is a value, and a binding takes a value apart
+
+- **The short function literal.** `|x| x + 1` builds the same value `fn(x) => x + 1` builds, with
+  `||body` for one that takes nothing, `|x: Int| -> Int { … }` where the types are worth stating, and
+  `async |x| …` for one that awaits. Nothing after the parser can tell which spelling was written.
+  The bars cannot be confused with the operator or the variant separator they share a spelling with:
+  a bar in operand position is never either of those, and [[Format Spacing]] tells the three apart by
+  what follows the bar rather than by what precedes it.
+- **A range is a value, and it does not build what it counts.** `0..n`, `0..=n`, `2..`, `..5`, and
+  `..` are all `Range[Int]` — bound to a name, passed, compared, rendered as written. [[Eval Range]]
+  holds two ends and a rule for reading them, so `for i in 0..20_000_000` walks one value at a time
+  and the memory the loop costs does not depend on how far it counts. It was a tuple built eagerly
+  before, which meant `for i in 0..5` did not run at all: the checker called it a `Range` and nothing
+  could iterate one. The range answers `length`, `contains`, `start`, `end` and the rest by
+  arithmetic, and hands back its values only when asked.
+- **Indexing by a range is a slice.** `items[2..5]`, `items[2..]`, `items[..5]`, `items[..]` over
+  arrays, text, and bytes. An absent end is answered by the value being sliced rather than by the
+  writer measuring it first; a slice past the end is `E7004` rather than a quiet clamp, because a
+  clamped slice hands back a different sequence than the one asked for.
+- **A binding takes a value apart.** `let {x, y} = point`, `let (a, b) = pair`,
+  `let [head, ..rest] = items`, with `var` for parts that may be assigned and an annotation for the
+  subject as a whole. A sequence pattern names elements from either end or both, and `..` holds or
+  skips what they did not take. A pattern that tests a tag has nowhere to go and is `E1059`, which
+  points at `let … else`; a sequence of the wrong length is `E7013` where the binding runs, the way
+  reading past the end of the same sequence already is.
+- New codes: `E1059` a binding whose pattern can fail, `E1062` a chained range, `E1063` an inclusive
+  range with no end, `E7013` a sequence of the wrong length at a binding.
+
 ## 2026-09-16 — The playground is an editor, and the language server answers while a program is half written
 
 - [[Website Playground Script]] is a layered set of modules: highlighting, a gutter that marks problem

@@ -8,6 +8,7 @@ module Pudu.Format.Spacing
   , classify
   , prefixKinds
   , braceKinds
+  , lambdaBars
   , unaryOperators
   , openers
   , closers
@@ -53,6 +54,9 @@ spaced pieces = case zip pieces (classify pieces) of
 data Shape = Shape
   { shapeBrace :: !BraceStyle
   , shapePrefix :: !Bool
+  {-| Whether this piece is the bar that closes a function literal's parameter
+      list, which takes no space before it: `|x| x + 1`. -}
+  , shapeClosingBar :: !Bool
   }
 
 {-| @Format.BraceStyle — which of the three things a brace pair is.
@@ -75,7 +79,10 @@ paddedBrace style = style == Block
 
 {-| Classify every piece on a line. -}
 classify :: [Piece] -> [Shape]
-classify pieces = zipWith Shape (braceKinds pieces) (prefixKinds pieces)
+classify pieces =
+  zipWith3 Shape (braceKinds pieces) (prefixKinds pieces bars) (map (== Just False) bars)
+ where
+  bars = lambdaBars pieces
 
 {-| Whether each piece is a prefix operator rather than a binary one.
 
@@ -84,43 +91,111 @@ classify pieces = zipWith Shape (braceKinds pieces) (prefixKinds pieces)
     prefix follows anything else. `a - b` subtracts and `(-b)` negates, `a * b`
     multiplies and `*handle` reads through a borrow. A prefix binds to its
     operand and takes no space after it. -}
-prefixKinds :: [Piece] -> [Bool]
-prefixKinds pieces = go Nothing pieces
+prefixKinds :: [Piece] -> [Maybe Bool] -> [Bool]
+prefixKinds pieces bars = go Nothing (zip pieces bars)
  where
   go _ [] = []
-  go previous (piece : rest) = case piece of
+  go previous ((piece, bar) : rest) = case piece of
     CommentPiece _ -> False : go previous rest
     TokenPiece token ->
       let kind = tokenKind token
           isPrefix = case kind of
+            {-| The bar that opens a parameter list attaches to the first
+                parameter, exactly as a prefix operator attaches to its
+                operand. -}
+            Symbol SymPipe -> bar == Just True
             Symbol symbol | symbol `elem` unaryOperators -> not (endsOperand previous)
             _ -> False
        in isPrefix : go (Just kind) rest
 
-  endsOperand previous = case previous of
-    Nothing -> False
-    Just kind -> case kind of
-      Identifier _ -> True
-      IntegerLiteral _ -> True
-      FloatLiteral _ -> True
-      DecimalLiteral _ -> True
-      StringLiteral _ -> True
-      TemplateLiteral _ -> True
-      CharLiteral _ -> True
-      Keyword keyword -> keyword `elem` [KwTrue, KwFalse, KwNull]
-      Symbol symbol -> symbol `elem` [SymRightParen, SymRightBracket, SymRightBrace, SymQuestion]
-      _ -> False
+{-| Whether what precedes a symbol was a value, which is what separates a binary
+    operator from a prefix one and a bar that joins from a bar that opens a
+    function literal. -}
+endsOperand :: Maybe TokenKind -> Bool
+endsOperand previous = case previous of
+  Nothing -> False
+  Just kind -> case kind of
+    Identifier _ -> True
+    IntegerLiteral _ -> True
+    FloatLiteral _ -> True
+    DecimalLiteral _ -> True
+    StringLiteral _ -> True
+    TemplateLiteral _ -> True
+    CharLiteral _ -> True
+    Keyword keyword -> keyword `elem` [KwTrue, KwFalse, KwNull]
+    Symbol symbol -> symbol `elem` [SymRightParen, SymRightBracket, SymRightBrace, SymQuestion]
+    _ -> False
 
 {-| The symbols that attach to what follows them when nothing precedes them as
     an operand.
 
-    `..` is here for the record written as a change to another: after the brace
-    there is no operand, so it attaches — `Thing{..base}`. Between two operands
-    it is the range it has always been and is spaced as one, which is why
-    membership in this list is not the whole test. -}
+    `..` is here for the record written as a change to another — `Thing{..base}`
+    — and for a range with no lower end, `items[..5]`. A range between two
+    operands is spelled tight as well, which the range rule in `wantsSpace`
+    decides rather than this list.
+
+    A bar is not here. `|` is spelled the same as the operator that joins two
+    values and as the separator between a sum's variants, and telling those from
+    a function literal's parameter list takes more than what precedes it, which
+    is what `lambdaBars` does. -}
 unaryOperators :: [SymbolKind]
 unaryOperators =
   [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar, SymRangeExclusive]
+
+{-| Which bars belong to a function literal's parameter list, and which end of
+    one each is.
+
+    `|` is spelled three ways in this language: the operator that joins two
+    values, the separator between a sum's variants and between a pattern's
+    alternatives, and the pair that holds a function literal's parameters. The
+    first is told apart by what precedes it — an operator follows a value and a
+    literal's bar does not.
+
+    The second cannot be, because both are written where no value precedes them:
+    `| Stale(V)` on its own line separates variants and `|x| x * 2` opens a
+    literal. What follows decides instead. A literal's parameter list holds
+    lowercase names and ends with a bar, a comma, or a type annotation; a
+    variant or an alternative names a constructor, which is capitalised. So a
+    bar is a literal's when the name after it is lowercase and the token after
+    that could close or continue a parameter list.
+
+    The closing bar is found as the partner of the opening one, because on its
+    own it is spelled exactly like the operator. -}
+lambdaBars :: [Piece] -> [Maybe Bool]
+lambdaBars pieces = go Nothing False (tails' pieces)
+ where
+  tails' values = case values of
+    [] -> []
+    _ : rest -> values : tails' rest
+
+  go _ _ [] = []
+  go previous open (current : remaining) = case current of
+    [] -> []
+    piece : rest -> case piece of
+      CommentPiece _ -> Nothing : go previous open remaining
+      TokenPiece token ->
+        let kind = tokenKind token
+         in case kind of
+              Symbol SymPipe
+                | open -> Just False : go (Just kind) False remaining
+                | not (endsOperand previous) && opensParameters rest ->
+                    Just True : go (Just kind) True remaining
+              _ -> Nothing : go (Just kind) open remaining
+
+  {-| Whether what follows a bar reads as a parameter list. An empty one is
+      written `||`, which the lexer gives as one token, so a bar immediately
+      followed by another is not this. -}
+  opensParameters rest = case [token | TokenPiece token <- rest] of
+    first : second : _ -> lowercaseName (tokenKind first) && continues (tokenKind second)
+    _ -> False
+
+  lowercaseName kind = case kind of
+    Identifier value -> maybe False (\(scalar, _) -> scalar == '_' || (scalar >= 'a' && scalar <= 'z')) (Text.uncons value)
+    _ -> False
+
+  continues kind = case kind of
+    Symbol symbol -> symbol `elem` [SymPipe, SymComma, SymColon]
+    _ -> False
 
 openers :: [SymbolKind]
 openers = [SymLeftBrace, SymLeftParen, SymLeftBracket]
@@ -154,7 +229,8 @@ braceKinds pieces
       Symbol SymLeftBrace ->
         let style
               | setAt index = Record
-              | not inHead && recordAt index = Record
+              | not inHead && recordAt index =
+                  if keywordBefore index then Selection else Record
               | otherwise = Block
          in style : go (style : stack) False heads rest
       Symbol SymRightBrace -> case stack of
@@ -182,12 +258,33 @@ braceKinds pieces
     [] -> False
     earlier -> tokenKind (last earlier) == Symbol SymHash
 
-  namedBefore index = case [token | (position, token) <- tokens, position < index] of
-    [] -> False
-    earlier -> case tokenKind (last earlier) of
-      Identifier _ -> True
-      Symbol SymRightBracket -> True
-      _ -> False
+  {-| Whether what precedes a brace admits a record shape rather than a block.
+
+      A name before it is the construction `User{id: 1}`. A binding keyword, a
+      `case`, a field's colon, or an opening delimiter is a pattern position,
+      where `{x, y}` takes a record apart and no block is admissible — so it
+      holds its fields against the braces, like the record it matches. -}
+  namedBefore index = case precedingKind index of
+    Just (Identifier _) -> True
+    Just (Symbol SymRightBracket) -> True
+    Just (Keyword keyword) -> keyword `elem` patternKeywords
+    Just (Symbol symbol) ->
+      symbol `elem` [SymColon, SymComma, SymLeftParen, SymLeftBracket]
+    _ -> False
+
+  {-| A record pattern opened by a keyword keeps the space that separates it
+      from the keyword — `let {x, y}`, not `let{x, y}` — while still holding
+      its fields tight. That is the same pair of answers an import's selection
+      list gives, which is why it is written as one. -}
+  keywordBefore index = case precedingKind index of
+    Just (Keyword keyword) -> keyword `elem` patternKeywords
+    _ -> False
+
+  precedingKind index = case [token | (position, token) <- tokens, position < index] of
+    [] -> Nothing
+    earlier -> Just (tokenKind (last earlier))
+
+  patternKeywords = [KwLet, KwVar, KwConst, KwCase]
 
   fieldsAfter index = case [token | (position, token) <- tokens, position > index] of
     {-| An empty pair right after a name is a record construction with no
@@ -250,6 +347,13 @@ wantsSpace leftShape shape before after = case (before, after) of
     | isSymbol left SymDot || isSymbol right SymDot = False
     {-| A label is one thing: `@outer`, never `@ outer`. -}
     | isSymbol left SymAt = False
+    {-| A range is written tight, both ends and either end absent: `0..n`,
+        `0..=n`, `items[2..]`, `items[..2]`. It reads as one value that way,
+        which is what it is. -}
+    | isRange left || isRange right = False
+    {-| The bar that closes a function literal's parameter list attaches to the
+        last parameter, matching the bar that opened the list. -}
+    | shapeClosingBar shape = False
     | shapePrefix leftShape = False
     | isSymbol right SymColon = False
     | isSymbol left SymColon = True
@@ -266,6 +370,8 @@ wantsSpace leftShape shape before after = case (before, after) of
     | otherwise = True
 
   closesGroup kind = any (isSymbol kind) closers
+
+  isRange kind = isSymbol kind SymRangeExclusive || isSymbol kind SymRangeInclusive
 
   {-| A `(` follows its callee with no space, and follows a keyword with one:
       `run(x)` but `if (a)`. -}

@@ -1,0 +1,43 @@
+module Destructuring
+
+/// `let` taking a value apart rather than naming it whole.
+///
+/// The three shapes a value has are the three a binding admits: a record by
+/// field, a tuple by position, and a sequence by position with a rest for
+/// whatever the named elements did not take. A `var` form binds parts that may
+/// be assigned, and an annotation describes the subject — which is the only
+/// place a reader can state the type of a value that never receives one name.
+
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+
+export fn main() -> Int {
+  let point = Point{x: 3, y: 4}
+  let {x, y} = point
+  let {x: renamedX, y: renamedY} = point
+  let annotated: Point = point
+  let {x: fromAnnotated} = annotated
+
+  let line = Line{from: Point{x: 1, y: 2}, to: Point{x: 5, y: 6}}
+  let {from: {x: fromX}, to: {y: toY}} = line
+
+  var {x: movable} = point
+  movable = movable + 1
+
+  let pair = (7, 8)
+  let (first, second) = pair
+  let nested = ((1, 2), 3)
+  let ((inner, alsoInner), outer) = nested
+
+  let values = [10, 20, 30, 40, 50]
+  let [head, next, ..rest] = values
+  let [..front, last] = values
+  let [only, .._] = values
+  let [a, b, c, d, e] = values
+
+  x + y + renamedX + renamedY + fromAnnotated
+    + fromX + toY + movable
+    + first + second + inner + alsoInner + outer
+    + head + next + rest.length() + front.length() + last + only
+    + a + b + c + d + e
+}

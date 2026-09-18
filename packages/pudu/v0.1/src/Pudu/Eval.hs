@@ -127,6 +127,7 @@ blockIntroducesBindings block = any statementIntroduces (blockStatements block)
   statementIntroduces (Located _ statement) = case statement of
     DeclarationStatement (Located _ BindingDeclaration{}) -> True
     LetElseStatement{} -> True
+    LetPatternStatement{} -> True
     _ -> False
 
 {-| Interactive top-level bindings use the frame their context retains. Nested
@@ -161,6 +162,19 @@ evaluateStatement (Located _ statement) = case statement of
     case matchPattern pattern' value of
       Just bindings -> mapM_ (uncurry bind) bindings
       Nothing -> evaluateBlock fallback >> pure ()
+  {-| A destructuring binding has no fallback, because the parser admitted only
+      a pattern that tests nothing a binding could not answer. What is left is a
+      sequence's length, and a sequence of the wrong length is reported here —
+      where the binding is, with the pattern the reader wrote beside it. -}
+  LetPatternStatement _ pattern' _ subject -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> mapM_ (uncurry bind) bindings
+      Nothing ->
+        abortAt (Just (locatedSpan pattern')) "E7013"
+          ("this pattern does not match the " <> valueKind value <> " it was given")
+          (Just "check the number of elements the pattern names against the value")
+          >> pure ()
   InvalidStatement -> pure ()
 
 {-| Evaluation is not counted per expression.
@@ -191,6 +205,18 @@ scopeTo = Call.scopeTo
 
 callNeeds :: CallNeeds
 callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock}
+
+{-| A range's end, which must be a whole number.
+
+    The checker already requires it, so reaching this means an `unsafe` region
+    or a foreign value produced something else, and a range built from it would
+    silently cover nothing. -}
+rangeBound :: Span -> Value -> Evaluator Integer
+rangeBound spanValue value = case value of
+  IntValue _ number -> pure number
+  _ ->
+    abortAt (Just spanValue) "E7001"
+      ("a range end must be a whole number, not a " <> valueKind value) Nothing
 
 loopNeeds :: LoopNeeds
 loopNeeds =
@@ -230,6 +256,12 @@ evaluateHere (Located spanValue expression) = case expression of
       Nothing -> do
         value <- evaluate target
         readMember spanValue value (locatedValue member)
+  {-| Both ends are evaluated once, here, so a range used twice reads its ends
+      once each rather than once per use. -}
+  RangeExpression lower inclusive upper -> do
+    low <- mapM (fmap (rangeBound spanValue) . evaluate) lower
+    high <- mapM (fmap (rangeBound spanValue) . evaluate) upper
+    RangeValue <$> sequence low <*> pure inclusive <*> sequence high
   IndexExpression target index -> do
     tally "index"
     container <- evaluate target

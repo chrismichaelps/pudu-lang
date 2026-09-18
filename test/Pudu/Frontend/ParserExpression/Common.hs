@@ -33,7 +33,8 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
 import Pudu.Frontend.Syntax
-  ( Block (..)
+  ( ArrayRest (..)
+  , Block (..)
   , Expression (..)
   , FieldInit (..)
   , FieldPattern (..)
@@ -102,6 +103,9 @@ shape (Located _ expression) = case expression of
     "fn(" <> Text.intercalate "," (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ")"
   MemberExpression target member -> shape target <> "." <> locatedValue member
   IndexExpression target index -> shape target <> "[" <> shape index <> "]"
+  RangeExpression lower inclusive upper ->
+    "(" <> foldMap shape lower <> (if inclusive then "..=" else "..")
+      <> foldMap shape upper <> ")"
   TryExpression target -> shape target <> "?"
   AwaitExpression target -> shape target <> ".await"
   BlockExpression _ -> "block"
@@ -151,6 +155,10 @@ patternShape (Located _ value) = case value of
   RangePattern lower inclusive upper ->
     literalShape lower <> (if inclusive then "..=" else "..") <> literalShape upper
   TuplePattern members -> "(" <> Text.intercalate "," (map patternShape members) <> ")"
+  ArrayPattern prefix rest suffix ->
+    "[" <> Text.intercalate ","
+      (map patternShape prefix <> foldMap (pure . restShape) rest <> map patternShape suffix)
+      <> "]"
   ConstructorPattern path arguments ->
     moduleNameText path
       <> if null arguments then Text.empty
@@ -161,6 +169,11 @@ patternShape (Located _ value) = case value of
       <> (if rest then ",.." else Text.empty) <> "}"
   AlternativePattern alternatives -> Text.intercalate "|" (map patternShape alternatives)
   InvalidPattern -> "invalid"
+
+restShape :: ArrayRest -> Text
+restShape rest = case rest of
+  IgnoredRest _ -> ".."
+  BoundRest name -> ".." <> locatedValue name
 
 fieldShape :: Located FieldPattern -> Text
 fieldShape (Located _ field) =

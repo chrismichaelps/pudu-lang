@@ -12,7 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
-import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
+import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
 import Pudu.Source (Span)
 import Pudu.Type.Check.Rule (countText, literalType)
 import Pudu.Type.Env
@@ -111,6 +111,18 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     memberTypes <- mapM (const freshVariable) members
     _ <- unify patternSpan subjectType (TupleTypeValue memberTypes)
     sequence_ (zipWith (bindPattern declared rigid) members memberTypes)
+  {-| Every element of a sequence has the one element type, and the rest holds
+      a sequence of the same. A tuple is not admitted here: its members may
+      differ, and a pattern that bound them all at one type would be claiming
+      something the tuple does not say. -}
+  ArrayPattern prefix rest suffix -> do
+    element <- freshVariable
+    _ <- unify patternSpan subjectType (NominalType "Array" [element])
+    mapM_ (\part -> bindPattern declared rigid part element) (prefix <> suffix)
+    case rest of
+      Just (BoundRest name) ->
+        bindName (locatedValue name) (monotype (NominalType "Array" [element]))
+      _ -> pure ()
   ConstructorPattern path arguments -> do
     let name = NonEmpty.last (moduleNameSegments path)
     variant <- variantForPath declared path name

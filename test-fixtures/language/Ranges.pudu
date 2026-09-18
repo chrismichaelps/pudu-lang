@@ -1,0 +1,45 @@
+module Ranges
+
+/// Ranges as values, not as a loop header that happens to be spelled with dots.
+///
+/// A range is bound to a name, passed to a function, asked questions, and
+/// walked. What it is never asked to do is exist: `0..20000000` below is
+/// counted rather than built, which is the whole reason a range is two numbers
+/// and a rule instead of the values between them.
+
+fn extent(span: Range[Int]) -> Int { span.length() }
+
+export fn main() -> Int {
+  var walked = 0
+  for i in 0..5 {
+    walked = walked + i
+  }
+
+  let exclusive = 1..4
+  let inclusive = 1..=4
+  let open = 2..
+
+  var counted = 0
+  for _ in 0..20000000 {
+    counted = counted + 1
+  }
+
+  let mapped = exclusive.map(|x| x * x)
+  let kept = inclusive.filter(|x| x % 2 == 0)
+  let folded = inclusive.reduce(|carried, x| carried + x, 0)
+
+  walked
+    + exclusive.length() + inclusive.length()
+    + exclusive.sum() + inclusive.sum()
+    + extent(exclusive)
+    + (if exclusive.contains(3) { 1 } else { 0 })
+    + (if inclusive.contains(4) { 1 } else { 0 })
+    + (if open.isBounded() { 1 } else { 0 })
+    + (if inclusive.isInclusive() { 1 } else { 0 })
+    + (if (5..5).isEmpty() { 1 } else { 0 })
+    + exclusive.toArray().length()
+    + exclusive.reverse()[0]
+    + (0..10).step(3).length()
+    + mapped.length() + kept.length() + folded
+    + (counted / 20000000)
+}

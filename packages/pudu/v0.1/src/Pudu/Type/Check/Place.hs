@@ -282,13 +282,27 @@ writable access (Located spanValue expression) = case expression of
       Just other | settled other ->
         notAPlace spanValue ("a " <> renderType other <> " has no field to assign") Nothing
       _ -> pure False
-  IndexExpression target _ -> do
-    base <- recordedType target
-    case base of
-      Just (ReferenceTypeValue False _) -> refuseShared spanValue
-      Just (ReferenceTypeValue True inner) -> elementOf target inner
-      Just held -> elementOf target held
-      Nothing -> pure False
+  {-| Indexing by a number names one element, which an array's may be assigned.
+      Indexing by a range names a stretch, which is a value the slice built
+      rather than a place the original holds — writing to it would change
+      something nothing else can see. -}
+  IndexExpression target index -> do
+    indexType <- recordedType index
+    case indexType of
+      Just (NominalType "Range" _) ->
+        notAPlace spanValue "a slice is not a place that can be written"
+          ( Just
+              ( "a slice is a new value, not part of the one it came from; "
+                  <> "assign the elements, or build the sequence you want"
+              )
+          )
+      _ -> do
+        base <- recordedType target
+        case base of
+          Just (ReferenceTypeValue False _) -> refuseShared spanValue
+          Just (ReferenceTypeValue True inner) -> elementOf target inner
+          Just held -> elementOf target held
+          Nothing -> pure False
   UnaryExpression "*" operand -> do
     held <- recordedType operand
     case held of

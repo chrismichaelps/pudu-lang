@@ -120,6 +120,7 @@ library
     Pudu.Eval.Compress
     Pudu.Eval.Tls
     Pudu.Eval.Order
+    Pudu.Eval.Range
     Pudu.Eval.Render
     Pudu.Eval.Value
     Pudu.Frontend.Expand

@@ -47,6 +47,10 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
   NominalType "Array" [element] -> pure element
   NominalType "Str" [] -> pure charType
   NominalType "Set" [element] -> pure element
+  {-| A range yields the numbers it covers. A range with no last value has
+      nothing to yield in order, which the evaluator reports where the loop
+      runs; nothing here can know whether the ends were written. -}
+  NominalType "Range" [element] -> pure element
   NominalType "Map" [key, held] -> pure (TupleTypeValue [key, held])
   UnitTypeValue -> freshVariable
   {-| A tuple's members must agree, because one binder cannot hold two types. -}

@@ -35,13 +35,14 @@ testLineLeadingOperators = do
   let continuingOperators =
         [ "=", "||", "|", "&&", "==", "!=", "<", "<=", ">", ">="
         , "in"
-        , "..", "..=", "^", "<<", ">>", "+", "&+", "&-", "+|", "-|"
+        , "^", "<<", ">>", "+", "&+", "&-", "+|", "-|"
         , "/", "%", "&*", "*|"
         ]
   continued <- traverse (\operator -> parse ("a\n" <> operator <> " b")) continuingOperators
   let expected = map (\operator -> "(a" <> operator <> "b)") continuingOperators
   trailing <- parse "a +\nb"
-  prefixed <- traverse parse ["a\n- b", "a\n& b", "a\n* b"]
+  {-| A range is prefix-capable too: `..end` is a range with no start. -}
+  prefixed <- traverse parse ["a\n- b", "a\n& b", "a\n* b", "a\n.. b", "a\n..= b"]
   mixed <- traverse parse
     [ "a\n+ b\n- c", "a\n== b\n& c", "a\n/ b\n* c", "a == b\n+ c\n- d" ]
   delimited <- traverse parse
@@ -60,10 +61,12 @@ testLineLeadingOperators = do
     , counterexample "a trailing operator still continues"
         (validShape trailing === "(a+b)")
     , counterexample "an operator that can begin an expression is left for the next statement"
-        (map (shape . firstOf) prefixed === ["a", "a", "a"])
+        (map (shape . firstOf) prefixed === ["a", "a", "a", "a", "a"])
     , counterexample "and the operator itself is still waiting in the stream"
         (map remainingOf prefixed
-          === [Symbol SymMinus, Symbol SymAmpersand, Symbol SymStar])
+          === [ Symbol SymMinus, Symbol SymAmpersand, Symbol SymStar
+              , Symbol SymRangeExclusive, Symbol SymRangeInclusive
+              ])
     , counterexample "a prefix spelling after a leading-operator chain is refused once"
         (map codes mixed === replicate 4 ["E1055"])
     , counterexample "the ambiguous operator remains available to the statement parser"

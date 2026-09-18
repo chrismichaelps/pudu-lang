@@ -5,7 +5,7 @@ module Pudu.Frontend.Parser.Declaration.Block
 
 import Pudu.Frontend.Parser.Declaration.Binding (parseLocalBinding)
 import Pudu.Frontend.Parser.Expression (parseExpression)
-import Pudu.Frontend.Parser.Expression.Control (patternCanFail)
+import Pudu.Frontend.Parser.Expression.Control (patternCanFail, patternTestsValue)
 import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.State
   ( Parser
@@ -24,10 +24,12 @@ import Pudu.Frontend.Parser.State
   , withRecursionBudget
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Block (..), Expression, Pattern (..), Statement (..))
+import Pudu.Frontend.Parser.Type (parseTypeSyntax)
+import Pudu.Frontend.Syntax.Tree
+  ( BindingKind (..), Block (..), Expression, Pattern (..), Statement (..), TypeSyntax )
 import Pudu.Frontend.Token
   ( Keyword (KwBreak, KwConst, KwContinue, KwElse, KwLet, KwReturn, KwVar)
-  , SymbolKind (SymAt, SymLeftBrace, SymLeftParen)
+  , SymbolKind (SymAt, SymLeftBrace, SymLeftBracket, SymLeftParen)
   , Token (..)
   , TokenKind (..)
   )
@@ -97,8 +99,10 @@ parseStatement = do
   case kind of
     Keyword KwLet -> do
       following <- lookaheadKind 1
-      if beginsPattern following then parseLetElse else declarationStatement
-    Keyword KwVar -> declarationStatement
+      if beginsPattern following then parseLetPattern Immutable else declarationStatement
+    Keyword KwVar -> do
+      following <- lookaheadKind 1
+      if beginsPattern following then parseLetPattern Mutable else declarationStatement
     Keyword KwConst -> declarationStatement
     Keyword KwReturn -> parseReturn
     Keyword KwBreak -> parseBreak
@@ -123,37 +127,79 @@ beginsPattern kind = case kind of
   DecimalLiteral _ -> True
   StringLiteral _ -> True
   CharLiteral _ -> True
-  Symbol symbol -> symbol `elem` [SymLeftParen, SymLeftBrace]
+  Symbol symbol -> symbol `elem` [SymLeftParen, SymLeftBrace, SymLeftBracket]
   _ -> False
 
-{-| `let PATTERN = EXPRESSION else BLOCK`.
+{-| `let PATTERN = EXPRESSION [else BLOCK]`.
 
-    The binding outlives the statement, which is what a fallback that cannot
-    fall through pays for. Whether it can is a typing rule, decided where types
-    are known; here the shape is read and the pattern is required to be one that
-    can fail, since a binding that always matches wants ordinary `let`. -}
-parseLetElse :: Parser (Located Statement)
-parseLetElse = do
+    Both forms are read here because until the value has been read there is
+    nothing to tell them apart, and the pattern is the same pattern either way.
+    The `else` is what decides which statement this is, and each form asks the
+    opposite thing of the pattern: with a fallback the pattern must be able to
+    fail, since one that always matches makes the fallback unreachable; without
+    one it must not test anything a `let` could not recover from, since there is
+    nowhere for it to go.
+
+    An annotation is admitted on the destructuring form and describes the
+    subject as a whole. It is the only place a reader can state the type of a
+    value that never receives one name. -}
+parseLetPattern :: BindingKind -> Parser (Located Statement)
+parseLetPattern bindingKind = do
   keyword <- advanceToken
   pattern' <- parsePattern
-  case locatedValue pattern' of
-    InvalidPattern -> pure ()
-    value | patternCanFail value -> pure ()
-    _ ->
-      emitParseError "E1057" (locatedSpan pattern') "let else pattern always matches"
-        ( Just
-            ( "use let without else for an unconditional binding, or choose a "
-                <> "pattern that can fail"
-            )
-        )
+  annotation <- parseOptionalType
   _ <- expectSymbol "=" "between the pattern and its value"
   subject <- parseExpression parseBlock
-  _ <- expectKeyword KwElse "before the fallback block"
-  fallback <- parseBlock
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan fallback))
-        (LetElseStatement pattern' subject fallback)
-    )
+  elseKeyword <- peekKind
+  if elseKeyword == Keyword KwElse
+    then do
+      requireFallible pattern'
+      _ <- expectKeyword KwElse "before the fallback block"
+      fallback <- parseBlock
+      pure
+        ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan fallback))
+            (LetElseStatement pattern' subject fallback)
+        )
+    else do
+      requireIrrefutable pattern'
+      pure
+        ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan subject))
+            (LetPatternStatement bindingKind pattern' annotation subject)
+        )
+
+parseOptionalType :: Parser (Maybe (Located TypeSyntax))
+parseOptionalType = do
+  colon <- peekKind
+  if isSymbol ":" colon
+    then do
+      _ <- advanceToken
+      Just <$> parseTypeSyntax
+    else pure Nothing
+
+requireFallible :: Located Pattern -> Parser ()
+requireFallible pattern' = case locatedValue pattern' of
+  InvalidPattern -> pure ()
+  value | patternCanFail value -> pure ()
+  _ ->
+    emitParseError "E1057" (locatedSpan pattern') "let else pattern always matches"
+      ( Just
+          ( "use let without else for an unconditional binding, or choose a "
+              <> "pattern that can fail"
+          )
+      )
+
+requireIrrefutable :: Located Pattern -> Parser ()
+requireIrrefutable pattern' =
+  if patternTestsValue (locatedValue pattern')
+    then
+      emitParseError "E1059" (locatedSpan pattern')
+        "this binding's pattern can fail"
+        ( Just
+            ( "add else and a block for when it does not match, or match it "
+                <> "with case"
+            )
+        )
+    else pure ()
 
 {-| Reject a second statement written on the line a first one ended.
 

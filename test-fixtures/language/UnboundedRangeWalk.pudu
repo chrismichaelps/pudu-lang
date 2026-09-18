@@ -1,0 +1,8 @@
+module UnboundedRangeWalk
+
+/// A range with no end has no last value, so a method that hands back the
+/// values it covers is refused by name rather than running out of memory.
+export fn main() -> Int {
+  let endless = 1..
+  endless.toArray().length()
+}

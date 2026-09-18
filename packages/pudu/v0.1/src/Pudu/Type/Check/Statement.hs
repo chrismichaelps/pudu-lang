@@ -156,18 +156,20 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
               )
           )
     bindPattern declared rigid pattern' subjectType
+  {-| A destructuring binding checks like an ordinary one and binds like a
+      pattern: the annotation, when written, describes the subject as a whole,
+      and the pattern's names take the types their positions in it imply. -}
+  LetPatternStatement _ pattern' annotation subject -> do
+    expected <- formOptionalType declared rigid annotation
+    borrowed <- case annotation of
+      Just _ -> checkAgainst needs declared rigid expected subject
+      Nothing -> statementExpression needs declared rigid subject
+    unified <- unify (locatedSpan subject) expected borrowed
+    resolved <- zonk unified
+    requireConcreteSetLiteral (locatedSpan subject) (locatedValue subject) resolved
+    subjectType <- throughBorrow resolved
+    bindPattern declared rigid pattern' subjectType
   InvalidStatement -> pure ()
-
-{-| Check a `break`, against the loop it leaves.
-
-    A `break` carrying a value must leave a `loop`: `while` and `for` finish on
-    their own condition, so a value carried out of one would be produced on
-    some runs and not others, and there is no type for that. Reported here
-    rather than made to work, because the honest fix is a `loop` and saying so
-    is more use than inventing a default.
-
-    Every `break` leaving the same loop must carry the same type, which is what
-    unifying against the loop's result variable enforces. -}
 
 {-| Check a `break`, against the loop it leaves.
 

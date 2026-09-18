@@ -153,6 +153,7 @@ statementWork statement = case statement of
   BreakStatement _ expression -> maybeToList (ExpressionWork <$> expression)
   ContinueStatement {} -> []
   LetElseStatement _ expression fallback -> [ExpressionWork expression, BlockWork fallback]
+  LetPatternStatement _ _ _ expression -> [ExpressionWork expression]
   InvalidStatement -> []
 
 expressionWork :: Expression -> [Work]
@@ -164,6 +165,7 @@ expressionWork expression = case expression of
   CallExpression callee arguments -> ExpressionWork callee : map ExpressionWork arguments
   MemberExpression receiver _ -> [ExpressionWork receiver]
   IndexExpression receiver index -> [ExpressionWork receiver, ExpressionWork index]
+  RangeExpression lower _ upper -> map ExpressionWork (maybeToList lower <> maybeToList upper)
   TryExpression operand -> [ExpressionWork operand]
   AwaitExpression operand -> [ExpressionWork operand]
   TupleExpression members -> map ExpressionWork members

@@ -18,6 +18,12 @@ import Pudu.Compiler.Program.GraphSpec
   , testAliasedReexport
   , testPathDependencies
   )
+import Pudu.Compiler.Program.LanguageSpec
+  ( testDestructuringBindings
+  , testFunctionLiterals
+  , testLanguageRefusals
+  , testRangesAndSlices
+  )
 import Pudu.Compiler.Program.StdlibSpec (testStandardLibrary)
 import Pudu.Compiler.Program.TypeBoundarySpec
   ( testQualifiedTypeNames
@@ -39,6 +45,10 @@ programProperties =
   , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
+  , ("a function literal is a value wherever a value goes", testFunctionLiterals)
+  , ("a range counts rather than building what it counts", testRangesAndSlices)
+  , ("a binding takes a record, a tuple, and a sequence apart", testDestructuringBindings)
+  , ("ranges, slices, and destructuring refuse what they cannot mean", testLanguageRefusals)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("linking publishes what a module declared, not what it imported", testLinkedNames)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)

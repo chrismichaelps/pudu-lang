@@ -94,6 +94,7 @@ import Pudu.Eval.Place
   , storePlace
   , withFrameKeeping
   )
+import Pudu.Eval.Range (callRangeMethod)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
@@ -236,6 +237,8 @@ dispatchCall needs spanValue lent target values =
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
     SetMethodValue method receiver -> callSetMethod spanValue method receiver values
+    RangeMethodValue method receiver ->
+      callRangeMethod (applyFunction needs) spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
     BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
@@ -382,6 +385,8 @@ applyFunction needs spanValue function arguments = case function of
   StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
   MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
   SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
+  RangeMethodValue method receiver ->
+    callRangeMethod (applyFunction needs) spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
   BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments

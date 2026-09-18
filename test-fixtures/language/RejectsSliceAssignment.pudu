@@ -1,0 +1,9 @@
+module RejectsSliceAssignment
+
+/// A slice is a new value, not part of the one it came from, so writing to it
+/// would change something nothing else can see.
+export fn main() -> Int {
+  var values = [1, 2, 3, 4]
+  values[1..3] = [9, 9]
+  values.length()
+}

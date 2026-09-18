@@ -1,6 +1,7 @@
 {-| @Program.Parser.Expression.Recovery — bounded recovery for expression starts -}
 module Pudu.Frontend.Parser.Expression.Recovery
   ( AmbiguityRecovery (..)
+  , beginsExpression
   , continuesAcrossLineBreak
   , invalidAtCurrent
   , invalidPrefix
@@ -241,16 +242,55 @@ unaryOperators :: [SymbolKind]
 unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
 
 {-| A line-leading binary symbol continues exactly when it cannot instead be
-    read as a prefix expression. -}
+    read as a prefix expression.
+
+    A range is among the ones that can: `..end` is a range with no start, so a
+    line beginning with `..` may open an expression rather than continue the one
+    above it, and it is left for the next statement the way `-` and `*` are. -}
 continuesAcrossLineBreak :: TokenKind -> Bool
 continuesAcrossLineBreak kind = case kind of
-  Symbol symbol -> symbol `notElem` unaryOperators
+  Symbol symbol -> symbol `notElem` (unaryOperators <> rangeOperators)
   Keyword KwIn -> True
   _ -> False
 
+{-| The two range spellings, which are prefix-capable and binary alike. -}
+rangeOperators :: [SymbolKind]
+rangeOperators = [SymRangeExclusive, SymRangeInclusive]
+
+{-| Whether a token could start an expression.
+
+    Asked where an operand is optional — the end of a range, which may be left
+    off — so that `items[2..]` reads the bracket as the end of the range rather
+    than as the start of one more operand. The set is the one `parsePrefix`
+    dispatches on, and the two are kept together for that reason: a new prefix
+    form added there without being added here would be read as an absent
+    operand and reported somewhere else entirely. -}
+beginsExpression :: TokenKind -> Bool
+beginsExpression kind = case kind of
+  Identifier _ -> True
+  IntegerLiteral _ -> True
+  FloatLiteral _ -> True
+  DecimalLiteral _ -> True
+  StringLiteral _ -> True
+  TemplateLiteral _ -> True
+  CharLiteral _ -> True
+  Invalid _ -> True
+  EndOfFile -> False
+  Keyword keyword ->
+    keyword
+      `elem` [ KwTrue, KwFalse, KwNull, KwIf, KwMatch, KwWhile, KwUnsafe
+             , KwFn, KwAsync, KwLoop, KwFor
+             ]
+  Symbol symbol ->
+    symbol
+      `elem` [ SymLeftParen, SymLeftBrace, SymLeftBracket, SymHash, SymAt
+             , SymPipe, SymLogicalOr
+             ]
+      || symbol `elem` (unaryOperators <> rangeOperators)
+
 isPrefixCapableBinary :: TokenKind -> Bool
 isPrefixCapableBinary kind = case kind of
-  Symbol symbol -> symbol `elem` [SymMinus, SymAmpersand, SymStar]
+  Symbol symbol -> symbol `elem` ([SymMinus, SymAmpersand, SymStar] <> rangeOperators)
   _ -> False
 
 isRecoveryBoundary :: TokenKind -> Bool

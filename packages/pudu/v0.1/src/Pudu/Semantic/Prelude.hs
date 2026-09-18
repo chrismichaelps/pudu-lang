@@ -21,6 +21,7 @@ wiredInTypeNames =
   , "Float32", "Float64", "Float"
   , "Bool", "Char", "Str", "Never", "BigInt", "Decimal"
   , "Option", "Result", "Array", "Task", "Map", "Set", "Bytes", "Buckets"
+  , "Range"
   , "Copy"
   ]
 

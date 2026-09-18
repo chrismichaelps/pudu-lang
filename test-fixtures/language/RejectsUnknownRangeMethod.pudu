@@ -1,0 +1,8 @@
+module RejectsUnknownRangeMethod
+
+/// The methods a range answers to are a closed set, so an unknown one is
+/// reported against the range rather than dispatched.
+export fn main() -> Int {
+  let span = 1..4
+  span.middle()
+}

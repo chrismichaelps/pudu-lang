@@ -61,6 +61,7 @@ recordNames (Located _ pattern') = case pattern' of
       <> concatMap fieldNames fields
   ConstructorPattern _ arguments -> concatMap recordNames arguments
   TuplePattern members -> concatMap recordNames members
+  ArrayPattern prefix _ suffix -> concatMap recordNames (prefix <> suffix)
   AlternativePattern alternatives -> concatMap recordNames alternatives
   _ -> []
  where
@@ -197,6 +198,9 @@ irrefutable isVariant (Located _ pattern') = case pattern' of
   WildcardPattern -> True
   BindingPattern _ -> True
   TuplePattern members -> all (irrefutable isVariant) members
+  {-| A sequence pattern names a length and a sequence has whatever length it
+      has, so it never stands for every value the way a binding does. -}
+  ArrayPattern{} -> False
   {-| Naming a variant is a test. `case Circle{radius}` matches one variant of
       several, so it cannot stand for the whole type the way a record type's own
       pattern does. -}

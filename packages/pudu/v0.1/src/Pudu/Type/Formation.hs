@@ -210,6 +210,7 @@ rejectUnknownQualifiedType declared typeSpan path
 builtinTypeNames :: [Text]
 builtinTypeNames =
   [ "Array", "Str", "Bytes", "Buckets", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
+  , "Range"
   , "Int", "UInt", "BigInt", "Decimal", "Float", "Float32", "Float64"
   , "Int8", "Int16", "Int32", "Int64", "Int128"
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"

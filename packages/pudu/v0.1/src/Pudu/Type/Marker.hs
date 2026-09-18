@@ -87,6 +87,11 @@ nominal marker visiting owner arguments
   | name == "Array" = case arguments of
       [element] -> if marker == "Copy" then pure False else decide marker visiting element
       _ -> pure False
+  {-| A range holds two numbers and a rule for reading them, so it is copied,
+      sent and shared wherever the numbers themselves are. -}
+  | name == "Range" = case arguments of
+      [element] -> decide marker visiting element
+      _ -> pure False
   | name == "Task" = pure False
   | otherwise = declared marker (Set.insert owner visiting) owner arguments
  where

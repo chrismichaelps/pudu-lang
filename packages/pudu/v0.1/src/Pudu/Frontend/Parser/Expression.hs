@@ -29,6 +29,7 @@ import Pudu.Frontend.Parser.Expression.Control
 import Pudu.Frontend.Parser.Expression.Postfix (parsePostfix)
 import Pudu.Frontend.Parser.Expression.Recovery
   ( AmbiguityRecovery (..)
+  , beginsExpression
   , continuesAcrossLineBreak
   , invalidAtCurrent
   , invalidPrefix
@@ -154,6 +155,7 @@ parsePrefix recovery blockParser = do
   token <- peekToken
   following <- lookaheadKind 1
   let nextIsFunction = following == Keyword KwFn
+      nextIsShortLambda = following `elem` [Symbol SymPipe, Symbol SymLogicalOr]
   case tokenKind token of
     IntegerLiteral value -> literal token (IntegerValue value)
     FloatLiteral value -> literal token (FloatValue value)
@@ -171,11 +173,23 @@ parsePrefix recovery blockParser = do
     Keyword KwFn -> parseLambda recovery blockParser
     Keyword KwAsync
       | nextIsFunction -> parseLambda recovery blockParser
+      {-| `async |x| ...` is the short literal of an asynchronous function, the
+          way `async fn(x) => ...` is the long one. Without it the short form
+          would be the spelling a reader reaches for until the moment the body
+          has to await something, and then they would have to rewrite it. -}
+      | nextIsShortLambda -> advanceToken >> parseShortLambda True recovery blockParser
       | otherwise -> parseScope blockParser
     Keyword KwLoop -> parseLoop controlParsers blockParser Nothing
     Keyword KwFor -> parseFor controlParsers blockParser Nothing
     Identifier name -> parseNameOrRecord controlParsers blockParser token name
     Symbol SymAt -> parseLabelled controlParsers blockParser
+    Symbol SymPipe -> parseShortLambda False recovery blockParser
+    {-| `||` is the zero-parameter short literal. The lexer cannot know that —
+        it sees the boolean operator's spelling — so the decision is made here,
+        where a binary operator could not appear anyway. -}
+    Symbol SymLogicalOr -> parseShortLambda False recovery blockParser
+    Symbol SymRangeExclusive -> parseOpenLowerRange recovery blockParser False
+    Symbol SymRangeInclusive -> parseOpenLowerRange recovery blockParser True
     Symbol symbol
       | symbol == SymLeftParen -> withRecords (parseGrouped controlParsers blockParser)
       | symbol == SymLeftBrace -> blockExpression controlParsers blockParser
@@ -267,7 +281,7 @@ parseLambda recovery blockParser = do
   asyncKeyword <- matchKeyword KwAsync
   _ <- expectKeyword KwFn "to start a function literal"
   _ <- expectSymbol "(" "before the parameter list"
-  parameters <- parseLambdaParameters []
+  parameters <- parseLambdaParameters ")" []
   _ <- expectSymbol ")" "after the parameter list"
   returnType <- parseLambdaReturn
   body <- parseLambdaBody recovery blockParser
@@ -290,10 +304,15 @@ parseLambda recovery blockParser = do
         )
     )
 
-{-| A literal's parameters: a name and an optional type, separated by commas. -}
-parseLambdaParameters :: [Located Parameter] -> Parser [Located Parameter]
-parseLambdaParameters reversed = do
-  closing <- isSymbol ")" <$> peekKind
+{-| A literal's parameters: a name and an optional type, separated by commas.
+
+    The closing delimiter is given rather than assumed, because the two literal
+    spellings close their parameter list differently — `fn(x)` with a bracket,
+    `|x|` with the bar it opened with — and everything between the delimiters is
+    the same in both. -}
+parseLambdaParameters :: Text -> [Located Parameter] -> Parser [Located Parameter]
+parseLambdaParameters closer reversed = do
+  closing <- isSymbol closer <$> peekKind
   if closing
     then pure (reverse reversed)
     else do
@@ -309,8 +328,99 @@ parseLambdaParameters reversed = do
           extended = parameter : reversed
       separator <- matchSymbol ","
       case separator of
-        Just _ -> parseLambdaParameters extended
+        Just _ -> parseLambdaParameters closer extended
         Nothing -> pure (reverse extended)
+
+{-| Parse the short function literal: `|x| x + 1`, `|x: Int| x + 1`, `||42`.
+
+    It is the same value `fn(x) => x + 1` builds, written the way a reader
+    writes one when the literal is an argument and the interesting part is the
+    body. `fn` says what a function *is*, which a declaration needs; passing one
+    to `map` does not, and three tokens of ceremony around a one-token body is
+    the difference between a program that reads as what it does and one that
+    reads as how it is spelled.
+
+    The bars cannot be mistaken for the operator they share a spelling with. A
+    binary `|` never appears where an operand is expected, which is the only
+    position this is read in, so a leading bar here is always a literal's.
+
+    The body is one expression, and `{` opens a block expression as it does
+    anywhere else, so `|x| { ... }` needs no rule of its own. A result type may
+    follow the bars — `|x| -> Int { ... }` — because `->` cannot begin an
+    expression and so cannot be mistaken for the body; that keeps the short form
+    able to say everything the long one says rather than being the form a reader
+    has to abandon the moment they want to write a type down.
+
+    A parameter takes no default, for the reason the long form takes none: a
+    caller holding a value of function type has nowhere to learn that an
+    argument was optional. -}
+parseShortLambda
+  :: Bool -> AmbiguityRecovery -> BlockParser -> Parser (Located Expression)
+parseShortLambda asynchronous recovery blockParser = do
+  start <- peekToken
+  parameters <- case tokenKind start of
+    Symbol SymLogicalOr -> advanceToken >> pure []
+    _ -> do
+      _ <- advanceToken
+      declared <- parseLambdaParameters "|" []
+      _ <- expectSymbol "|" "after the parameter list"
+      pure declared
+  returnType <- parseLambdaReturn
+  body <- parseExpressionAtWith recovery blockParser 0
+  pure
+    ( Located (mergedOrLeft (tokenSpan start) (locatedSpan body))
+        ( LambdaExpression
+            Function
+              { functionVisibility = Private
+              , functionAsync = asynchronous
+              , functionUnsafe = Nothing
+              , functionComptime = False
+              , functionName = Located (tokenSpan start) lambdaName
+              , functionTypeParams = []
+              , functionParameters = parameters
+              , functionReturn = returnType
+              , functionConstraints = []
+              , functionBody = Just (Located (locatedSpan body) (ExpressionBody body))
+              }
+        )
+    )
+
+{-| Parse a range written with no lower end: `..upper`, `..=upper`, or `..`.
+
+    It means "from the beginning", which only an indexable value can answer, so
+    the absent end is carried to the index rather than resolved here. A bare
+    `..` is admitted because `items[..]` is the whole of something whose length
+    the writer does not have to ask for; `..=` with no upper end is not, because
+    an inclusive end that is not written includes nothing in particular. -}
+parseOpenLowerRange
+  :: AmbiguityRecovery -> BlockParser -> Bool -> Parser (Located Expression)
+parseOpenLowerRange recovery blockParser inclusive = do
+  operator <- advanceToken
+  upper <- parseRangeUpper recovery blockParser inclusive (tokenSpan operator)
+  let ending = maybe (tokenSpan operator) locatedSpan upper
+  pure (Located (mergedOrLeft (tokenSpan operator) ending) (RangeExpression Nothing inclusive upper))
+
+{-| The end of a range, where one is written.
+
+    Whether one is written is decided by the token that follows rather than by
+    trying and recovering: a range's end is genuinely optional, so a `]` after
+    `..` is the range ending rather than a mistake, and only a token that could
+    begin an expression is read as one. A line break ends it too, because a
+    statement ends at a line break here. -}
+parseRangeUpper
+  :: AmbiguityRecovery -> BlockParser -> Bool -> Span -> Parser (Maybe (Located Expression))
+parseRangeUpper recovery blockParser inclusive operatorSpan = do
+  kind <- peekKind
+  newLine <- peekStartsLine
+  if beginsExpression kind && not newLine
+    then Just <$> parseExpressionAtWith recovery blockParser (rangePrecedence + 1)
+    else
+      if inclusive
+        then do
+          emitParseError "E1063" operatorSpan "an inclusive range needs an end"
+            (Just "write the last value after ..=, or use .. for a range with no end")
+          pure Nothing
+        else pure Nothing
 
 parseLambdaAnnotation :: Parser (Maybe (Located TypeSyntax))
 parseLambdaAnnotation = do
@@ -422,6 +532,54 @@ parseBinaryTail
 parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity crossedLeading left = do
   kind <- peekKind
   newLine <- peekStartsLine
+  case rangeInfo kind of
+    Just inclusive
+      | rangePrecedence >= minimumPrecedence
+      , not newLine -> do
+      operator <- advanceToken
+      upper <- parseRangeUpper recovery blockParser inclusive (tokenSpan operator)
+      let ending = maybe (tokenSpan operator) locatedSpan upper
+          combined = Located (mergedOrLeft (locatedSpan left) ending)
+            (RangeExpression (Just left) inclusive upper)
+      {-| A range is not chainable: `1..2..3` names no value, and reading it as
+          one range inside another would report a type error about a shape the
+          writer never meant to build. -}
+      following <- peekKind
+      case rangeInfo following of
+        Just _ -> do
+          token <- peekToken
+          emitParseError "E1062" (tokenSpan token) "a range cannot be chained"
+            (Just "a range has two ends; parenthesize if an end is itself a range")
+        Nothing -> pure ()
+      parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity
+        (crossedLeading || newLine) combined
+    _ -> parseOperatorTail recovery blockParser minimumPrecedence mayReportAmbiguity
+      crossedLeading left kind newLine
+
+{-| The two range spellings, and whether the end they name is included. -}
+rangeInfo :: TokenKind -> Maybe Bool
+rangeInfo kind = case kind of
+  Symbol SymRangeExclusive -> Just False
+  Symbol SymRangeInclusive -> Just True
+  _ -> Nothing
+
+{-| Where a range binds. Between the bitwise operators and comparison, so
+    `0..n + 1` runs to `n + 1` and `x in 0..n` compares the range rather than
+    ranging over the comparison. -}
+rangePrecedence :: Int
+rangePrecedence = 5
+
+parseOperatorTail
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Int
+  -> Bool
+  -> Bool
+  -> Located Expression
+  -> TokenKind
+  -> Bool
+  -> Parser (Located Expression, Bool)
+parseOperatorTail recovery blockParser minimumPrecedence mayReportAmbiguity crossedLeading left kind newLine = do
   case binaryInfo kind of
     Just (operator, precedence, rightAssociative)
       | precedence >= minimumPrecedence
@@ -476,8 +634,6 @@ operatorInfo symbol = case symbol of
   SymLessEqual -> binary 4 False
   SymGreater -> binary 4 False
   SymGreaterEqual -> binary 4 False
-  SymRangeExclusive -> binary 5 False
-  SymRangeInclusive -> binary 5 False
   SymCaret -> binary 5 False
   SymLeftShift -> binary 6 False
   SymRightShift -> binary 6 False

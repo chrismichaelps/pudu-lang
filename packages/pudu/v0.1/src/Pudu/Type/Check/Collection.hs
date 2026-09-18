@@ -45,6 +45,7 @@ emptySets located@(Located _ expression) = case expression of
   CallExpression callee arguments -> descend (callee : arguments)
   MemberExpression target _ -> descend [target]
   IndexExpression target index -> descend [target, index]
+  RangeExpression lower _ upper -> descend (maybe [] pure lower <> maybe [] pure upper)
   TryExpression target -> descend [target]
   AwaitExpression target -> descend [target]
   TupleExpression members -> descend members
@@ -70,13 +71,34 @@ emptySets located@(Located _ expression) = case expression of
   ForExpression _ _ source body -> descend [source] <> blockEmptySets body
   LiteralExpression _ -> []
   NameExpression _ -> []
-  LambdaExpression _ -> []
+  {-| A literal's body is ordinary expression, and an empty set written inside
+      one is as unresolved as one written outside it. -}
+  LambdaExpression function -> case Tree.functionBody function of
+    Just (Located _ (Tree.ExpressionBody body)) -> descend [body]
+    Just (Located _ (Tree.BlockBody block)) -> blockEmptySets block
+    Nothing -> []
   InvalidExpression -> []
  where
   descend = concatMap emptySets
 
+{-| A block's statements are searched beside its result, because an empty set
+    written in one is as unresolved as one written in the other. -}
 blockEmptySets :: Located Block -> [Located Expression]
-blockEmptySets (Located _ block) = maybe [] emptySets (blockResult block)
+blockEmptySets (Located _ block) =
+  concatMap statementEmptySets (blockStatements block)
+    <> maybe [] emptySets (blockResult block)
+
+statementEmptySets :: Located Tree.Statement -> [Located Expression]
+statementEmptySets (Located _ statement) = case statement of
+  Tree.DeclarationStatement (Located _ (Tree.BindingDeclaration _ _ _ _ value)) -> emptySets value
+  Tree.DeclarationStatement _ -> []
+  Tree.ExpressionStatement value -> emptySets value
+  Tree.ReturnStatement value -> maybe [] emptySets value
+  Tree.BreakStatement _ value -> maybe [] emptySets value
+  Tree.ContinueStatement _ -> []
+  Tree.LetElseStatement _ subject fallback -> emptySets subject <> blockEmptySets fallback
+  Tree.LetPatternStatement _ _ _ subject -> emptySets subject
+  Tree.InvalidStatement -> []
 
 armExpressions :: Located MatchArm -> [Located Expression]
 armExpressions (Located _ arm) = maybe [] pure (armGuard arm) <> [armBody arm]

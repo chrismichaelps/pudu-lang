@@ -33,12 +33,14 @@ import Pudu.Eval.Env
 import Pudu.Eval.Keyed (mapEntries, setMembers)
 import Pudu.Eval.Match (matchPattern)
 import Pudu.Eval.Operator (nominalNameOf)
+import Pudu.Eval.Range (rangeElements)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.IntegerLiteral (defaultIntegerKind)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Expression (..)
@@ -136,19 +138,6 @@ evaluateLoop needs spanValue label body = loop (0 :: Int)
     state to start from and `advance` answers the next item and the state after
     it, so an iterator is an ordinary value in a language whose values are
     ordinary. -}
-
-{-| Iterate a value.
-
-    The shapes the evaluator can enumerate directly — arrays, tuples, strings,
-    a variant's payload — are walked as a list. Anything else is asked whether
-    it is a sequence: a type carrying `begin` and `advance` produces its items
-    one at a time, which is how a user type becomes iterable without the
-    evaluator knowing anything about it.
-
-    The protocol passes state rather than mutating it. `begin` answers the
-    state to start from and `advance` answers the next item and the state after
-    it, so an iterator is an ordinary value in a language whose values are
-    ordinary. -}
 evaluateFor :: LoopNeeds -> Span -> Maybe Text -> Located Pattern -> Value -> Located Block -> Evaluator Value
 evaluateFor needs spanValue label binder iterated body = case elements of
   Just values -> step values
@@ -204,6 +193,12 @@ evaluateFor needs spanValue label binder iterated body = case elements of
 
   elements = case iterated of
     TupleValue members -> Just members
+    {-| A range is walked from its own ends rather than turned into an array
+        first. The list is lazy, so a loop that breaks early reads only as far
+        as it got and `for i in 0..1_000_000` allocates nothing up front. An
+        unbounded range has no last value, so it is not iterable and says so
+        through the ordinary refusal below. -}
+    RangeValue{} -> map (IntValue defaultIntegerKind) <$> rangeElements iterated
     ArrayValue members -> Just (toList members)
     StrValue text -> Just (map CharValue (Text.unpack text))
     {-| A set yields its members and a map its pairs, which is what
