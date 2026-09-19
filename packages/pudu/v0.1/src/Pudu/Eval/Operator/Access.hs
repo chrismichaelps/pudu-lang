@@ -66,9 +66,6 @@ readIndex spanValue container key = case (container, key) of
   (BytesValue bytes, RangeValue{}) -> do
     (from, count) <- rangeBounds spanValue key (ByteString.length bytes)
     pure (BytesValue (ByteString.take count (ByteString.drop from bytes)))
-  (TupleValue members, RangeValue{}) -> do
-    (from, count) <- rangeBounds spanValue key (length members)
-    pure (TupleValue (take count (drop from members)))
   (TupleValue members, IntValue _ index)
     | index >= 0 && fromInteger index < length members -> pure (members !! fromInteger index)
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing

@@ -31,7 +31,10 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 ## Governance
 
-- `readIndex` handles tuples, strings, and arrays with strict non-negative bounds checking, raising `E7004` on out-of-range indices.
+- `readIndex` handles scalar tuple indices and scalar or range indices over text and arrays with
+  strict non-negative bounds checking, raising `E7004` on out-of-range indices. A tuple does not
+  admit a range slice because its positions may have different types; the checker and evaluator
+  enforce the same boundary.
 - `readMember` searches records and nominal sums before falling back to built-in method tables (`Array`, `Str`, `Map`, `Set`, `Bytes`, `Buckets`, `Char`), mapping member names (such as `escapeHtml` -> `StringEscapeHtml`) to their closed method representations.
 - `unwrapTry` returns the inner value for `Ok` and `Some`, or unwinds with `ReturnUnwind` for `Err` and `None`.
 - `builtinMethodNamesFor` provides IDE/REPL autocompletion by reading from the exact same method tables used during evaluation dispatch.

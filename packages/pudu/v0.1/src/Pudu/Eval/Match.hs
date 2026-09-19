@@ -81,12 +81,13 @@ matchPattern (Located _ pattern') value = case pattern' of
   AlternativePattern alternatives -> firstMatch alternatives
   InvalidPattern -> Nothing
  where
-  {-| The shapes a sequence pattern applies to. A tuple is admitted beside an
-      array because both are a fixed run of values reached by position, and a
-      reader taking one apart by position means the same thing about either. -}
+  {-| A sequence pattern applies to an array. Not to a tuple: a tuple's members
+      may differ, and binding them all at the one element type the pattern
+      implies would claim something the tuple does not say — which is what the
+      checker tells a reader who tries, so nothing here should quietly allow it
+      anyway. -}
   sequenceElements held = case held of
     ArrayValue members -> Just (toList members)
-    TupleValue members -> Just members
     _ -> Nothing
 
   restBinding rest middle = case rest of

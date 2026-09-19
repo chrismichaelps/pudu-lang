@@ -1,0 +1,66 @@
+module DestructureRecords
+
+/// A binding taking a record apart, in every shape the pattern takes.
+///
+/// A field with no `:` binds the field to its own name; one with a `:` binds it
+/// to another name or to a pattern of its own. `..` ends the list when the rest
+/// of the fields are not wanted. `var` binds parts that may be assigned, and an
+/// annotation describes the subject rather than any one part.
+
+type Point = { x: Int, y: Int }
+type Line = { from: Point, to: Point }
+type Wide = { a: Int, b: Int, c: Int, d: Int }
+type Mixed = { count: Int, pair: (Int, Int), items: Array[Int] }
+
+fn origin() -> Point { Point{x: 0, y: 0} }
+
+export fn main() -> Int {
+  let point = Point{x: 3, y: 4}
+
+  // Each field by its own name.
+  let {x, y} = point
+
+  // Renamed, and only some of the fields.
+  let {x: across, y: down} = point
+  let {x: onlyAcross} = point
+
+  // The rest of the fields left unnamed.
+  let wide = Wide{a: 1, b: 2, c: 3, d: 4}
+  let {a, ..} = wide
+  let {a: firstOf, b: secondOf, ..} = wide
+
+  // Nested records, and a field taken apart by a pattern of its own.
+  let line = Line{from: Point{x: 1, y: 2}, to: Point{x: 5, y: 6}}
+  let {from: {x: fromX, y: fromY}, to: {x: toX}} = line
+  let {from: start} = line
+
+  // A field that holds a tuple or an array is taken apart in place.
+  let mixed = Mixed{count: 2, pair: (7, 8), items: [1, 2, 3]}
+  let {count, pair: (left, right), items: [firstItem, ..restItems]} = mixed
+
+  // A wildcard names nothing, which is how a field is required without being used.
+  let {x: _, y: keptY} = point
+
+  // `var` binds parts that may be assigned again.
+  var {x: movable} = point
+  movable = movable + 1
+
+  // The subject may be annotated as a whole.
+  let annotated: Point = origin()
+  let {x: fromAnnotated} = annotated
+
+  // The subject is read against the scope as it stands, so a binding of the
+  // same name outside is what the right-hand side sees.
+  let shadowed = Point{x: 100, y: 200}
+  let {x: shadowedX} = shadowed
+
+  // The names a binding introduces last for the rest of the block, so a later
+  // statement sees them.
+  let laterUse = x + y
+
+  x + y + across + down + onlyAcross
+    + a + firstOf + secondOf
+    + fromX + fromY + toX + start.x + start.y
+    + count + left + right + firstItem + restItems.length()
+    + keptY + movable + fromAnnotated + shadowedX + laterUse
+}

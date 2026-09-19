@@ -1,0 +1,8 @@
+module SliceNegativeInclusive
+
+/// An inclusive bound is validated as the writer supplied it. Converting -1
+/// to the half-open end 0 must not hide that the written index is outside.
+export fn main() -> Int {
+  let values = [1, 2, 3]
+  values[..=-1].length()
+}

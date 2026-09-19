@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-19-language-foundations-audit]] — active production-readiness audit for function
+  literals, ranges and slicing, destructuring bindings, and closure capture.
+
 - [[2026-09-12-release-readiness-ui]] — corrected first-release audit and checked UI patch application on `dev`.
 
 - [[2026-09-10-private-book-and-website]] — private book completion, website verification, and disk-space blocker before the Vercel preview.

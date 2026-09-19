@@ -5,6 +5,29 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-19 — The new language foundations agree at their edges
+
+- An unbounded range no longer reports `length() == 0`. It has no finite extent, so `length()` now
+  reports `E7004` with guidance to test `isBounded()` or supply both ends; `contains()` still answers
+  because a missing end excludes nothing.
+- `length()` and `sum()` now report `E7005` when their declared `Int` result cannot hold the exact
+  answer. They no longer construct an out-of-range integer value behind the checker's type.
+- Slice bounds are validated as written before an inclusive end is converted to an exclusive one,
+  so `[..=-1]` is refused rather than becoming an empty prefix. Runtime slice diagnostics point at
+  the range inside the brackets, and tuple slicing is refused by both checker and evaluator.
+- A sequence pattern applies to an array, not a tuple. The checker already refused a tuple because
+  its members may have different types; [[Eval Match]] now follows the same rule instead of quietly
+  accepting the shape if evaluation reached it.
+- Short-literal formatting recognizes Unicode parameter names, and an async short literal is held
+  as a cold task until awaited.
+- Captured environments retain the module boundary with their frames. A literal created inside an
+  imported function or a later interactive entry therefore narrows transient locals instead of
+  retaining the whole foreign call stack or prior session.
+- Comprehensive fixtures exercise every range spelling, range methods and control-flow forms,
+  slices over arrays, text, and bytes, both function-literal spellings in value positions,
+  higher-order and async composition, nested record destructuring, imported closure capture, open
+  range extent failures, invalid steps and bounds, integer overflow, and tuple-pattern parity.
+
 ## 2026-09-17 — A function literal is two tokens, a range is a value, and a binding takes a value apart
 
 - **The short function literal.** `|x| x + 1` builds the same value `fn(x) => x + 1` builds, with
@@ -1700,8 +1723,6 @@ map construction. No tests, builds, reviews or measurements run, as requested.
 - 2026-08-27 · [[Evaluator]], [[Eval Env]], [[Tooling]] · add the tools for optimising the compiler, in the order they are worth using. `bench/scaling.mjs` builds inputs at doubling sizes and reports the ratio between them, which is what a growth problem looks like and what instruction selection never shows; `bench/profile.sh` names the cost centre; `bench/ir.sh` dumps one module's core, stg, cmm, and instructions at the optimisation the shipped build uses, and points at where a name appears in each. `pudu explain` answers the other question — what a Pudu program cost to run, in names looked up and closures called, because a Pudu program has no machine code and those are the costs this implementation has. Found straight away: a block costs the square of the statements it holds, filed as issue #112 · risk LOW · depth n/a→SHALLOW · issue #112
 
 - 2026-08-26 · [[Type Env]], [[Type Check]], [[Evaluator]], [[Eval Env]], [[Eval Match]], [[grammar/pudu]] · enforce a declared width on every value, not only on one written with a suffix. `fn add(a: Int8, b: Int8) -> Int8 { a + b }` called with `127, 127` answered `254`, and `let x: Int8 = 127` then `x + x` did the same, while `127i8 + 127i8` reported `E7005` as the grammar says it should. The evaluator built every suffixless literal as a platform integer on the stated assumption that the checker defaults an unconstrained literal to `Int` — true, but the literal is not unconstrained when an annotation or a parameter says otherwise. Inference now publishes what it settled on for each literal, keyed by its whole span so a program and its dependencies share one table, and the literal is built as the type it is · risk MED · depth DEEP→DEEP · issue #110
-
-- 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
 
 - 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
 

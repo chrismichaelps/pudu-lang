@@ -1,0 +1,9 @@
+module RejectsTupleSequencePattern
+
+/// A sequence pattern has one element type. A tuple may give every position a
+/// different type, so it is taken apart with a tuple pattern instead.
+export fn main() -> Int {
+  let pair = (1, 2)
+  let [first, second] = pair
+  first + second
+}

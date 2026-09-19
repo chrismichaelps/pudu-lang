@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.6.1-draft"
+semantic_version: "1.0.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -105,6 +105,11 @@ Supporting judgements:
 - A block evaluates statements sequentially and yields its final expression. A resultless block whose final statement directly transfers control with `return`, `break`, or `continue` has type `Never`; every other resultless block yields unit.
 - Assignment evaluates the target place once — its root and every index key — then the right side, then stores. A place is a `var` binding, a `mut` field of a place, an element of an array place, or `*r` for an exclusive reference. A `&mut` argument lends a place for the length of its call: the callee is given the value, and on every exit — its last expression, `return`, or `?` — each `&mut` parameter's final value is stored back into the place it was lent from. Because an exclusive reference can only be a parameter and loans to one call cannot overlap, nothing observes the place during the call, and this is exactly writing through it. See [[ADR-0022-lending-a-place]].
 - Pattern guards evaluate only after structural pattern success.
+- A range has a finite extent only when both ends are present. `length()` on `a..`, `..b`, or `..`
+  reports `E7004`; `isBounded()` exposes that boundary, `isEmpty()` is false when the extent is
+  unknown, and `contains(value)` remains defined because an absent end removes a restriction. A
+  sequence pattern applies to an array, while a tuple is taken apart by a tuple pattern. See
+  [[ADR-0023-bounded-range-extent]].
 - Optimizations must preserve all observable ordering: IO, mutation, panic, failure propagation, destruction, and cancellation points.
 
 ## Control-Flow Typing
@@ -260,6 +265,10 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
+  missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
+  `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple
+  where the checker requires an array sequence pattern. See [[ADR-0023-bounded-range-extent]].
 - **0.7.0-draft · 2026-09-15:** Admitted places: a `var`, a `mut` field of a place, an element of an array place, and `*r` for an exclusive reference are assignable, and `&mut place` lends a place to one call and receives the parameter's final value on every exit. Assignment to a `let`, a parameter, or a pattern binding, a write through `&T`, overlapping loans, and an exclusive reference anywhere but a parameter are refused. A program that assigned to a `let` or a parameter no longer checks; no committed source did. See [[ADR-0022-lending-a-place]].
 - **0.6.0-draft · 2026-09-03:** Added opaque nominal foreign handles, explicit same-block release ownership, pre-dispatch liveness refusals, reusable exported binding modules with canonical handle identity, and C++ interoperability through `extern "C"` only. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft · 2026-09-04:** Made every admitted scalar and flat-record foreign crossing exact: full-domain `UInt64`, locale-independent UTF-8 text fields and results, result-only unit, and declaration-time bridge capacity checks. See [[ADR-0018-calling-a-library-written-elsewhere]].
