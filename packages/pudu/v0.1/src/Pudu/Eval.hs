@@ -267,7 +267,7 @@ evaluateHere (Located spanValue expression) = case expression of
     tally "index"
     container <- evaluate target
     key <- evaluate index
-    readIndex spanValue container key
+    readIndex (locatedSpan index) container key
   TryExpression target -> do
     value <- evaluate target
     unwrapTry spanValue value

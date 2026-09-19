@@ -72,7 +72,7 @@ import Pudu.Diagnostic
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Value (Captured (..), Value (..))
 import Pudu.Foreign.Ownership (ForeignStore)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Set (Set)
@@ -506,7 +506,7 @@ markModuleScope =
     The names are an over-approximation, which is the only safe direction: one
     collected that the literal cannot use costs a map entry, and one missed
     would be a binding that vanished. -}
-capturedFrames :: Set Text -> Evaluator [Map Text Value]
+capturedFrames :: Set Text -> Evaluator Captured
 capturedFrames reachable = Evaluator $ \env -> do
   let frames = envFrames env
       localCount = length frames - envModuleDepth env
@@ -516,7 +516,7 @@ capturedFrames reachable = Evaluator $ \env -> do
       against. -}
   pure $
     if envModuleDepth env <= 0 || localCount <= 0
-      then Done frames env
+      then Done (Captured frames (envModuleDepth env)) env
       else
         let (locals, moduleScope) = splitAt localCount frames
             {-| Innermost first, so `Map.unions` keeps the binding that shadows. -}
@@ -525,7 +525,8 @@ capturedFrames reachable = Evaluator $ \env -> do
             holds the frames it was taken from, which is every value that was in
             scope — exactly what this is for dropping, and the leak would have
             been invisible because the answer is correct either way. -}
-         in Map.size picked `seq` Done (picked : moduleScope) env
+            captured = Captured (picked : moduleScope) (length moduleScope)
+         in Map.size picked `seq` Done captured env
 
 {-| Run an action in a captured environment, restoring the caller's afterwards.
 
@@ -533,14 +534,23 @@ capturedFrames reachable = Evaluator $ \env -> do
     lets a module's functions see each other. A literal passes the frames it
     captured, so a free name means what it meant where the literal was
     written — not what it happens to mean where it is finally called. -}
-withCaptured :: Maybe [Map Text Value] -> Evaluator a -> Evaluator a
+withCaptured :: Maybe Captured -> Evaluator a -> Evaluator a
 withCaptured Nothing action = action
-withCaptured (Just frames) (Evaluator action) =
+withCaptured (Just captured) (Evaluator action) =
   Evaluator $ \env -> do
-    outcome <- action env{envFrames = frames}
+    outcome <- action env
+      { envFrames = capturedEnvironment captured
+      , envModuleDepth = capturedModuleDepth captured
+      }
     pure $ case outcome of
-      Done value next -> Done value next{envFrames = envFrames env}
-      Unwound transfer next -> Unwound transfer next{envFrames = envFrames env}
+      Done value next -> Done value next
+        { envFrames = envFrames env
+        , envModuleDepth = envModuleDepth env
+        }
+      Unwound transfer next -> Unwound transfer next
+        { envFrames = envFrames env
+        , envModuleDepth = envModuleDepth env
+        }
       Aborted stop -> Aborted stop
 
 {-| Remove the lexical frame a `withFrame` introduced while retaining every

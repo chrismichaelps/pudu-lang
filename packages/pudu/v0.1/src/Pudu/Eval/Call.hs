@@ -98,6 +98,7 @@ import Pudu.Eval.Range (callRangeMethod)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
+  , Captured (..)
   , Closure (..)
   , intOf
   , Value (..)
@@ -331,9 +332,9 @@ evaluateScope needs spanValue body = do
 
 scopeTo :: [Map Text Value] -> Value -> Value
 scopeTo environment value = case value of
-  FunctionValue closure
-    | closureCaptured closure == Nothing ->
-        FunctionValue closure{closureCaptured = Just environment}
+  FunctionValue closure@Closure{closureCaptured = Nothing} ->
+    FunctionValue closure
+      { closureCaptured = Just (Captured environment (length environment)) }
   other -> other
 
 
@@ -495,5 +496,3 @@ callSpawnThread apply spanValue arguments = case arguments of
     Left problem -> Just (Text.pack (show problem))
     Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
     Right _ -> Nothing
-
-

@@ -101,6 +101,13 @@ find.
 `evaluateInteractiveBlock` rebuilds module frames around a retained local frame,
 resets method/variant registries, merges checked integer-kind maps to preserve
 captured closure spans, links dependencies and runs only the supplied new block.
+It marks the rebuilt declarations as module scope before pushing retained locals,
+so literals created by later REPL entries narrow those locals instead of treating
+the whole retained session as durable module state.
 Resolved Grill Log: declaration evaluation remains separate from local statement
 execution; callers must check compatibility before retaining values across source
 changes. Module constants may be folded again; prior local effects never replay.
+
+Resolved Grill Log: Mark module scope before restoring retained locals. Reversing
+that order classifies every previous REPL binding as module state and defeats
+selective capture for long-running sessions.

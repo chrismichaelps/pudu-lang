@@ -1,0 +1,105 @@
+module LambdaForms
+
+/// Every spelling of a function literal, and every place one can be written.
+///
+/// The two spellings build the same value, so each pair below is written both
+/// ways and both answers are added: a difference between them would show up as
+/// a wrong total rather than as a compile error.
+
+import Std.Map as Map
+
+type Tagged = { name: Str, run: fn(Int) -> Int }
+
+type Choice =
+  | Doubled(Int)
+  | Ignored
+
+export fn main() -> Int {
+  // The two spellings of one parameter and one expression.
+  let shortOne = |n| n + 1
+  let longOne = fn(n: Int) => n + 1
+
+  // Typed parameters and a stated result.
+  let shortTyped = |n: Int| -> Int { n * 2 }
+  let longTyped = fn(n: Int) -> Int { n * 2 }
+
+  // No parameters. The bars are written together.
+  let shortNone = || 5
+  let longNone = fn() => 5
+
+  // Several parameters.
+  let shortMany = |a, b, c| a + b + c
+  let longMany = fn(a: Int, b: Int, c: Int) => a + b + c
+
+  // Value names follow the language's Unicode identifier rules.
+  let unicode = |π| π + 1
+
+  // A block body, in both spellings.
+  let shortBlock = |n| {
+    let doubled = n * 2
+    doubled + 1
+  }
+  let longBlock = fn(n: Int) -> Int {
+    let doubled = n * 2
+    doubled + 1
+  }
+
+  // Control forms are expressions, so either can be a body outright.
+  let branching = |n| if n > 0 { 1 } else { 0 }
+  let matching = |n| match n {
+    case 0 => 10
+    case _ => 20
+  }
+  let looping = |n| {
+    var total = 0
+    for step in 0..n {
+      total = total + step
+    }
+    total
+  }
+
+  // A literal answering with a value that is not a number.
+  let toText = |n| "{n}"
+  let toRecord = |n| Tagged{name: "made", run: |m| m + n}
+  let toVariant = |n| if n > 0 { Doubled(n * 2) } else { Ignored }
+  let toLiteral = |n| |m| n + m
+
+  // A literal written where a value goes: an argument, an element, a field, a
+  // member of a pair, a map's value, the body of a match arm.
+  let inArray = [|n| n + 1, |n| n + 2]
+  let inRecord = Tagged{name: "held", run: |n| n * 3}
+  let inTuple = ("tag", |n| n + 4)
+  let (_, fromTuple) = inTuple
+  let inMap = Map.singleton("first", |n| n + 5)
+  let fromArm = match 1 {
+    case 1 => |n| n + 6
+    case _ => |n| n
+  }
+
+  // Applied where it is written.
+  let immediate = (|n| n + 100)(1)
+
+  // A literal as the last expression of a block, which is where one most often
+  // goes in a language whose blocks are expressions.
+  let asResult = {
+    let step = 7
+    |n| n + step
+  }
+
+  let variantAnswer = match toVariant(2) {
+    case Doubled(value) => value
+    case Ignored => 0
+  }
+
+  shortOne(1) + longOne(1)
+    + shortTyped(2) + longTyped(2)
+    + shortNone() + longNone()
+    + shortMany(1, 2, 3) + longMany(1, 2, 3)
+    + unicode(1)
+    + shortBlock(3) + longBlock(3)
+    + branching(5) + branching(0 - 5) + matching(0) + matching(9) + looping(4)
+    + toText(12).length() + toRecord(1).run(1) + variantAnswer + toLiteral(1)(2)
+    + inArray[0](1) + inArray[1](1) + inRecord.run(2) + fromTuple(1)
+    + Map.getOr(&inMap, "first", |n| n)(1)
+    + fromArm(1) + immediate + asResult(1)
+}

@@ -29,6 +29,7 @@ data Piece
 data Shape = Shape
   { shapeBrace  :: !BraceStyle
   , shapePrefix :: !Bool
+  , shapeClosingBar :: !Bool
   }
 
 data BraceStyle = Record | Selection | Block
@@ -37,8 +38,9 @@ attachedBrace :: BraceStyle -> Bool
 paddedBrace   :: BraceStyle -> Bool
 
 classify       :: [Piece] -> [Shape]
-prefixKinds    :: [Piece] -> [Bool]
+prefixKinds    :: [Piece] -> [Maybe Bool] -> [Bool]
 braceKinds     :: [Piece] -> [BraceStyle]
+lambdaBars     :: [Piece] -> [Maybe Bool]
 unaryOperators :: [SymbolKind]
 openers        :: [SymbolKind]
 closers        :: [SymbolKind]
@@ -57,10 +59,10 @@ spaced         :: [Piece] -> Text
   variants and a pattern's alternatives, and the pair holding a function literal's parameters. The
   first is told by what precedes it, since an operator follows a value and a literal's bar does not.
   The other two cannot be, because both appear where no value precedes them, so **what follows
-  decides**: a parameter list holds lowercase names and continues with a bar, a comma, or a type
-  annotation, while a variant or an alternative names a capitalised constructor. The closing bar is
-  found as the partner of the opening one, because on its own it is spelled exactly like the
-  operator.
+  decides**: a parameter list holds value names — including Unicode names admitted by the lexer —
+  and continues with a bar, a comma, or a type annotation, while a variant or an alternative names
+  a capitalised constructor. The closing bar is found as the partner of the opening one, because on
+  its own it is spelled exactly like the operator.
 
 - A brace in **pattern position** — after `let`, `var`, `const`, `case`, a field's colon, or an
   opening delimiter — holds its fields tight like the record construction it matches. Opened by a

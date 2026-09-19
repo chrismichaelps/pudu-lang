@@ -1,0 +1,5 @@
+module Main
+
+import Lib.Maker as Maker
+
+export fn main() -> fn(Int) -> Int { Maker.make(40) }

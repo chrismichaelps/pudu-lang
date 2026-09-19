@@ -163,8 +163,8 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     scopeRootDeclarations inherited
-    pushFrame locals
     markModuleScope
+    pushFrame locals
   let Evaluator execute = evaluateBlockInFrame block
   Evaluator $ \env -> do
     result <- execute env

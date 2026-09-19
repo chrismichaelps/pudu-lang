@@ -23,6 +23,7 @@ module Pudu.Eval.Value
   , StringMethod (..)
   , charMethodName
   , stringMethodName
+  , Captured (..)
   , Closure (..)
   , Value (..)
   , ForeignBinding (..)
@@ -247,17 +248,23 @@ falseValue = BoolValue False
     receiver is bound to the first parameter, which is what `value.method()`
     means.
 
-    `closureCaptured` is present for a function *literal* and absent for a
-    declaration. A declaration is called in the environment it is called from,
-    which is what lets a module's functions see each other and an imported
-    module's frame stay reachable. A literal cannot work that way: it may be
-    returned, stored, and called long after the block that gave its free names
-    meaning has ended, so it carries that environment with it. -}
+    `closureCaptured` carries both the retained frames and the module boundary.
+    A literal may be returned, stored, and called long after the block that gave
+    its free names meaning has ended, so it carries its narrowed environment.
+    A declaration is scoped to the module frames installed by the linker. The
+    boundary travels with either capture so a nested literal can still tell
+    durable module bindings from transient call locals. -}
+data Captured = Captured
+  { capturedEnvironment :: ![Map Text Value]
+  , capturedModuleDepth :: !Int
+  }
+  deriving stock (Show)
+
 data Closure = Closure
   { closureName :: !Text
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
-  , closureCaptured :: !(Maybe [Map Text Value])
+  , closureCaptured :: !(Maybe Captured)
   }
   deriving stock (Show)
 
@@ -417,4 +424,3 @@ shapeRank value = case value of
   ForeignHandleValue _ _ _ -> 26
   RangeValue{} -> 27
   RangeMethodValue _ _ -> 28
-

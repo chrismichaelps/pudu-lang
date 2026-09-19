@@ -18,6 +18,7 @@ module Pudu.Format.Spacing
   , spaced
   ) where
 
+import Data.Char (isUpper)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Token
@@ -186,11 +187,11 @@ lambdaBars pieces = go Nothing False (tails' pieces)
       written `||`, which the lexer gives as one token, so a bar immediately
       followed by another is not this. -}
   opensParameters rest = case [token | TokenPiece token <- rest] of
-    first : second : _ -> lowercaseName (tokenKind first) && continues (tokenKind second)
+    first : second : _ -> valueName (tokenKind first) && continues (tokenKind second)
     _ -> False
 
-  lowercaseName kind = case kind of
-    Identifier value -> maybe False (\(scalar, _) -> scalar == '_' || (scalar >= 'a' && scalar <= 'z')) (Text.uncons value)
+  valueName kind = case kind of
+    Identifier value -> maybe False (\(scalar, _) -> scalar == '_' || not (isUpper scalar)) (Text.uncons value)
     _ -> False
 
   continues kind = case kind of

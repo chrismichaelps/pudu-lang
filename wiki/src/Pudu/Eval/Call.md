@@ -56,6 +56,8 @@ readPath       :: CallNeeds -> ...
 - Built-in string methods on `StrValue` receivers are fast-dispatched directly in
   `evaluateCall` via `callStringMethodFast`, bypassing `receiverOwners` queries and
   avoiding intermediate `StringMethodValue` heap closure allocations.
+- `scopeTo` classifies every frame it attaches to a linked declaration as module scope. Calls then
+  carry that exact boundary into nested literals instead of inheriting the calling module's depth.
 
 ### Linkage
 
@@ -90,6 +92,10 @@ constructor.
   read query on the environment with no dependency on closures or task execution.
 - **Q:** Why fast-path `MemberExpression` on `StrValue` in `evaluateCall`?
   **A:** Repeated text method calls in tight loops (such as text scanning and tokenization) incurred significant heap allocation from intermediate `StringMethodValue` closures and redundant environment trait queries, leading to GC-induced superlinear scaling pauses.
+- **Q:** Why does `scopeTo` store `length environment` beside the frames? **A:** A linked
+  declaration's scoped environment is wholly module scope. _Rationale:_ recording that fact once
+  keeps nested literal capture correct across root, dependency, and interactive callers.
+  _Rejected:_ relying on whatever boundary the caller currently has.
 
 ## Referenced by
 

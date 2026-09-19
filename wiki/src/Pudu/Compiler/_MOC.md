@@ -10,6 +10,8 @@ aliases: [Program Compiler Module Map]
   orchestration.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.
 - [[Standard Library Program Spec]] — loaded-standard-library discovery and qualified-member diagnostic regressions.
+- [[Program Test Common]] — complete-program evaluation and exact diagnostic observations for tests.
+- [[Language Foundation Program Spec]] — function literal, capture, range, slice, and destructuring regressions.
 
 Dependency direction: Library → Program. Only [[Compiler Program]] reads files.
 

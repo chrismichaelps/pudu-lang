@@ -45,6 +45,9 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - An unwind carries what the transfer needs to find its owner. A break and a continue carry their optional label, so a loop can tell one addressed to it from one meant for a loop further out and re-raise the latter untouched; a break also carries the value its loop will produce, which is unit when none was written.
 - Lexical and captured frames are restored on both ordinary completion and control unwind. A `return`, `break`, or `continue` may cross any number of blocks without leaking their bindings into the construct that catches it; captured callbacks likewise restore the caller before forwarding an unwind.
+- Entering a captured closure replaces both its frames and `envModuleDepth`; leaving restores both.
+  Swapping only the frames makes a dependency function inherit the root module's boundary, so a
+  nested literal can retain an entire imported call stack instead of just the names it reaches.
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
@@ -79,6 +82,10 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Why not express frame restoration as `push; action; pop` in the evaluator monad? **A:** An unwind deliberately short-circuits monadic continuation, so the `pop` would never run and a block-local binding could change later dispatch. _Rationale:_ `withFrame` and `withCaptured` inspect the nested outcome and restore frames for both completion paths. _Rejected:_ cleanup in an ordinary bind continuation.
+- **Q:** Can a captured environment borrow `envModuleDepth` from its caller? **A:** No. The caller's
+  depth classifies a different frame stack. _Rationale:_ `Captured` transports the boundary with the
+  frames and `withCaptured` restores the caller's pair on both completion paths. _Rejected:_ frame-
+  only capture switching.
 - **Q:** Keep process-global resource tables? **A:** No. _Rationale:_ one evaluation's teardown could
   close another concurrently evaluated program's live resources. _Rejected:_ serializing all
   embedded evaluations behind one global lock.
