@@ -1,0 +1,7 @@
+module OpenRangeLength
+
+/// A range with neither end has no finite extent and cannot answer `length`.
+export fn main() -> Int {
+  let endless =..
+  endless.length()
+}

@@ -25,6 +25,8 @@ import qualified Data.Sequence as Seq
 
 import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Value (RangeMethod (..), Value (..), intOf, rangeMethodName)
+import Pudu.IntegerLiteral
+  ( defaultIntegerKind, integerKindFits, integerKindName )
 import Pudu.Source (Span)
 
 {-| The methods a range answers to, in the spelling the checker types them by. -}
@@ -86,10 +88,15 @@ rangeBounds :: Span -> Value -> Int -> Evaluator (Int, Int)
 rangeBounds spanValue value size = case value of
   RangeValue lower inclusive upper -> do
     let start = maybe 0 id lower
+        sizeValue = fromIntegral size
         endExclusive = case upper of
-          Nothing -> fromIntegral size
+          Nothing -> sizeValue
           Just high -> if inclusive then high + 1 else high
-    if start < 0 || endExclusive > fromIntegral size
+        startOutside = start < 0 || start > sizeValue
+        endOutside = case upper of
+          Nothing -> False
+          Just high -> high < 0 || if inclusive then high >= sizeValue else high > sizeValue
+    if startOutside || endOutside
       then
         abortAt (Just spanValue) "E7004" "slice range out of bounds"
           ( Just
@@ -127,7 +134,15 @@ callRangeMethod
   -> Evaluator Value
 callRangeMethod apply spanValue method receiver arguments =
   case (method, arguments) of
-    (RangeLength, []) -> pure (intOf (fromIntegral (maybe 0 id (rangeLength receiver))))
+    {-| An unbounded range has no extent, and answering nought would be a
+        number rather than an answer: it would say the range is as long as an
+        empty one while `isEmpty` says it is not. Ask `isBounded` first. -}
+    (RangeLength, []) -> case rangeLength receiver of
+      Just extent -> checkedInt "length" extent
+      Nothing ->
+        abortAt (Just spanValue) "E7004"
+          "length needs a range with both ends"
+          (Just "check isBounded first, or give the range a start and an end")
     (RangeIsEmpty, []) -> pure (BoolValue (maybe False (== 0) (rangeLength receiver)))
     (RangeContains, [IntValue _ probe]) -> pure (BoolValue (covers probe))
     (RangeStart, []) -> pure (optionOfInteger lowerBound)
@@ -152,7 +167,7 @@ callRangeMethod apply spanValue method receiver arguments =
     (RangeReduce, [function, initial]) -> do
       values <- elements "reduce"
       foldMWith function initial values
-    (RangeSum, []) -> intOf . fromIntegral . sum <$> elements "sum"
+    (RangeSum, []) -> elements "sum" >>= checkedInt "sum" . sum
     _ ->
       abortAt (Just spanValue) "E7012"
         ("wrong arguments for " <> rangeMethodName method) Nothing
@@ -164,6 +179,13 @@ callRangeMethod apply spanValue method receiver arguments =
   covers probe =
     maybe True (probe >=) lowerBound
       && maybe True (\high -> if inclusiveEnd then probe <= high else probe < high) upperBound
+
+  checkedInt what value
+    | integerKindFits defaultIntegerKind value = pure (intOf value)
+    | otherwise =
+        abortAt (Just spanValue) "E7005"
+          (integerKindName defaultIntegerKind <> " cannot hold this range's " <> what)
+          (Just "narrow the range or compute with BigInt values explicitly")
 
   {-| A method that hands back the values needs both ends. Refused by name, so
       the reader is told which method could not be answered rather than being

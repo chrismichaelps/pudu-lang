@@ -1,0 +1,9 @@
+module UnboundedRangeLength
+
+/// A range without both ends has no finite extent. Reporting zero would make
+/// it indistinguishable from an empty range even though `isEmpty` says it is
+/// not empty.
+export fn main() -> Int {
+  let endless = 1..
+  endless.length()
+}

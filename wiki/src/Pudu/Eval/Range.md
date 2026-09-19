@@ -53,6 +53,13 @@ callRangeMethod
   bounds, so a range past the end is `E7004` where it was written.
 - **`length` and `contains` are computed, not counted.** They are subtraction and comparison whatever
   lies between the ends, so they answer in the same time for three values and for three billion.
+  `contains` answers for an unbounded range too, since a missing end excludes nothing; `length` does
+  not, because nought would say the range is as long as an empty one while `isEmpty` says it is
+  not. A computed length or sum must still fit `Int`; `E7005` refuses one that does not rather than
+  constructing a value its declared type cannot hold.
+- **Slice bounds are validated as written.** An inclusive end is checked before it is converted to
+  the half-open end used by sequence storage, so `..=-1` remains an out-of-bounds written index
+  rather than becoming the apparently valid empty interval `[0, 0)`.
 - **The method set is closed.** That is what lets [[Type Check Rule]] type each one exactly and
   report an unknown one against the range rather than dispatching it.
 - **Everything that skips or reverses answers with an array.** A range counts upward by one; a
