@@ -1,5 +1,6 @@
 module Std.Html.Ssr
 
+import Std.Html.Buffer as Buffer
 import Std.Html as Html
 
 /// Part of a page: either fixed markup or a named hole.
@@ -12,6 +13,12 @@ export type Plan = { parts: Array[Prepared] }
 export type RenderError = MissingSlot(Str) | InvalidLimit(Int) | TooLarge(Int)
 /// A rendered page and its length in bytes.
 export type Rendered = { body: Str, byteLength: Int }
+/// A reusable SSR plan retaining encoded static bytes and exact lengths.
+export type EncodedPlan = { bytes: Buffer.CompactBytePlan }
+/// Encoded response parts and their exact combined byte length.
+export type EncodedSegments = { parts: Array[Bytes], byteLength: Int }
+/// One contiguous encoded response and its exact byte length.
+export type EncodedResponse = { body: Bytes, byteLength: Int }
 
 /// Render static sections once; the plan never stores request-specific slots.
 export fn prepare(pieces: &Array[Piece]) -> Plan {
@@ -50,6 +57,35 @@ fn flushStatic(parts: Array[Prepared], pending: Array[Str]) -> Array[Prepared] {
   if pending.isEmpty() { parts } else { parts.push(Markup([pending.join("")])) }
 }
 
+/// Render and encode static sections once without retaining request values.
+export fn prepareBytes(pieces: &Array[Piece]) -> EncodedPlan {
+  var rawParts: Array[Buffer.RawChunk] = []
+  var pending: Array[Str] = []
+  for piece in pieces {
+    match piece {
+      case Fixed(view) => {
+        for renderedPart in Html.renderChunks(&view) {
+          if !renderedPart.isEmpty() { pending = pending.push(renderedPart) }
+        }
+      }
+      case Slot(name) => {
+        rawParts = flushEncodedStatic(rawParts, pending)
+        pending = []
+        rawParts = rawParts.push(Buffer.Dynamic(name))
+      }
+    }
+  }
+  rawParts = flushEncodedStatic(rawParts, pending)
+  EncodedPlan{bytes: Buffer.compileCompact(&rawParts)}
+}
+
+fn flushEncodedStatic(
+  parts: Array[Buffer.RawChunk],
+  pending: Array[Str]
+) -> Array[Buffer.RawChunk] {
+  if pending.isEmpty() { parts } else { parts.push(Buffer.Static(pending.join("").toBytes())) }
+}
+
 /// The page as its pieces, in order, so a caller may write them as they come.
 export fn chunks(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
   assemble(plan, values, None)
@@ -77,6 +113,48 @@ export fn renderWithin(plan: &Plan, values: &Map[Str, Html.Html], maxBytes: Int)
 export fn fragment(view: &Html.Html) -> Rendered { completed(Html.render(view)) }
 /// A whole view rendered with its length, without a plan.
 export fn document(view: &Html.Html) -> Rendered { completed(Html.document(view)) }
+
+fn encodeValues(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[Map[Str, Bytes], Buffer.AssembleError] {
+  var encoded: Map[Str, Bytes] = mapOf([])
+  for part in plan.bytes.parts {
+    match part {
+      case Buffer.StaticBlock(_, _) => {}
+      case Buffer.DynamicBlock(name) => {
+        if let None = encoded.get(name) {
+          let view = match values.get(name) {
+            case None => { return Err(Buffer.MissingSlot(name)) }
+            case Some(held) => held
+          }
+          encoded = encoded.insert(name, Html.render(&view).toBytes())
+        }
+      }
+    }
+  }
+  Ok(encoded)
+}
+
+/// Render each used slot once and retain segmented encoded output with its exact length.
+export fn byteSegments(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[EncodedSegments, Buffer.AssembleError] {
+  let encoded = encodeValues(plan, values) ?
+  let segments = Buffer.segmentsCompactChecked(&plan.bytes, &encoded) ?
+  Ok(EncodedSegments{parts: segments.parts, byteLength: segments.byteLength})
+}
+
+/// Render encoded output into one exact-size checked byte buffer.
+export fn finishBytes(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[EncodedResponse, Buffer.AssembleError] {
+  let encoded = encodeValues(plan, values) ?
+  let body = Buffer.renderCompactChecked(&plan.bytes, &encoded) ?
+  Ok(EncodedResponse{body: body, byteLength: body.length()})
+}
 
 fn completed(body: Str) -> Rendered {
   Rendered{body: body, byteLength: body.toBytes().length()}

@@ -35,6 +35,17 @@ Document adds a doctype; plans themselves add none unless a fixed view explicitl
 A plan is a public record: prepared markup is an explicit trusted representation, not a security
 barrier against manual construction. Caller-provided Html.Trusted retains its existing meaning.
 
+`prepareBytes(Array[Piece])` is the additive byte-native preparation path. It renders and encodes
+static views once, compacts adjacent static byte runs without crossing a slot, and returns an
+`EncodedPlan` backed by `Std.Html.Buffer.CompactBytePlan`; no request value enters that plan.
+`byteSegments(plan, values)` returns `EncodedSegments { parts, byteLength }`. It visits slots in
+document order, renders and UTF-8 encodes each unique used `Html` value once for that call, reuses
+those bytes at every repeated position, and preserves empty byte parts as valid values.
+`finishBytes(plan, values)` returns `EncodedResponse { body, byteLength }` and delegates contiguous
+completion to the checked byte assembler. Both functions return `Std.Html.Buffer.AssembleError`, so
+missing slots, invalid public metadata, overflow, refused copies, and final-length mismatch remain
+typed rather than becoming partial output.
+
 ## Complexity and limits
 
 Static HTML rendering is paid once per prepare. Each unique used slot is rendered once per call;
@@ -48,6 +59,11 @@ transport policy.
 The output budget limits accepted output bytes, not peak allocation: a dynamic slot is rendered
 before its fragments are counted. No streaming transport, hydration, automatic cache invalidation
 or performance measurement is claimed. Existing Html escaping is reused rather than reimplemented.
+The byte-native path stores static UTF-8 once per reusable plan. Per request it encodes each unique
+used slot once, even when that slot occurs repeatedly, and counts every occurrence from retained byte
+lengths. Segmented delivery performs no final join; contiguous delivery performs one exact-size
+allocation and checked copies. The legacy text path retains its established chunking, errors, and
+results.
 
 ## Grill Log
 
@@ -63,9 +79,19 @@ or performance measurement is claimed. Existing Html escaping is reused rather t
 - **Q:** Promise a hard static-block byte limit here? **A:** No; splitting UTF-8 safely would add a
   second policy unrelated to eliminating adjacent fragments. Existing preparation preserves fine
   chunks, while compact preparation deliberately retains one block per static run.
+- **Q:** Replace `Plan`, `finish`, or `renderWithin` with bytes? **A:** No; their public text results
+  and error order remain compatible. Byte preparation and completion are additive.
+- **Q:** Cache encoded slots in the reusable plan? **A:** No; only static bytes are shared. Slot
+  rendering and encoding use a fresh per-call map and cannot cross request boundaries.
+- **Q:** Count Unicode characters as response length? **A:** No; retained lengths count UTF-8 bytes,
+  including multibyte scalars and bytes introduced by HTML escaping.
+- **Q:** Join segments merely to learn their length? **A:** No; checked buffer resolution returns
+  segments and their exact length together. Only `finishBytes` requests a contiguous body.
 
 ## Dependencies and consumers
-[[Std Html]] supplies rendering. [[Std Http Server Reply]] consumes Rendered responses.
+[[Std Html]] supplies rendering. [[Std Html Buffer]] supplies compact encoded plans, checked
+segmentation, and contiguous completion. [[Std Http Server Reply]] consumes Rendered responses.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]]
+[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
+[[2026-09-20-encoded-ssr-responses]]

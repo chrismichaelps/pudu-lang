@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — SSR can retain encoded response bytes and exact lengths
+
+- `Std.Html.Ssr.prepareBytes` renders, joins, and UTF-8 encodes each complete static run once while
+  retaining every slot boundary. The reusable plan contains no request-specific value.
+- `byteSegments` renders and encodes each unique used dynamic slot once per request, reuses those
+  bytes at repeated positions, and returns the ordered segments with their exact combined length.
+  `finishBytes` produces one contiguous response through checked byte-plan assembly.
+- Existing text plans and results remain unchanged. Focused checks cover empty output, multibyte
+  Unicode, escaped expansion, repeated slots, exact lengths, cross-request isolation, missing slots,
+  and byte-for-byte parity with legacy text rendering for issue #259.
+- In a warm optimized same-machine probe of 500 132,016-byte responses, retained segmented bytes
+  reduced measured heap allocation from 1,131,969,376 to 1,041,871,032 bytes and process maximum RSS
+  from 97,026,048 to 94,961,664 bytes; both paths measured 0.28s elapsed. The probe includes compiler
+  and evaluator overhead and is comparative evidence, not a portable service guarantee.
+
 ## 2026-09-20 — Checked HTML byte plans report assembly failures
 
 - `Std.Html.Buffer.renderChecked` and `renderCompactChecked` add typed assembly without changing the

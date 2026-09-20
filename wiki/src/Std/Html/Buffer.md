@@ -37,6 +37,10 @@ Provides network transport optimizations:
   every dynamic slot before allocation, validates public metadata, and propagates copy refusal.
 - `renderCompactChecked(plan: &CompactBytePlan, values: &Map[Str, Bytes]) -> Result[Bytes,
   AssembleError]`: Applies the same contract to retained compact block lengths.
+- `Segments = { parts: Array[Bytes], byteLength: Int }`: Validated byte parts in document order and
+  their exact combined length.
+- `segmentsChecked` and `segmentsCompactChecked`: Resolve and validate a plan without joining its
+  byte parts, so a transport can retain segmentation and exact length without another encoding pass.
 - `formatHexChunkHeader(len: Int) -> Bytes`: Bitwise nibble shift-and-mask (`>> 4`, `& 0x0F`) formatting of HTTP chunk length hex headers (`<hex>\r\n`) without string allocations.
 - `coalesceToMss(chunks: &Array[Bytes], maxMss: Int) -> Array[Bytes]`: Batches small streaming chunks up to the TCP Maximum Segment Size (MSS, ~1460 bytes) before socket transmission, minimizing OS socket syscalls and cellular radio power transitions.
 
@@ -58,6 +62,9 @@ total so overflow can be refused before allocation, then the actual static lengt
 compared with that declaration. Compact plans additionally compare every retained `StaticBlock`
 length with its bytes. Writing uses only the resolved parts, propagates any `Buffer.copy` refusal, and
 requires the final cursor to equal the allocated length before exposing bytes.
+The checked renderers consume the same validated `Segments` representation exposed by the segmented
+APIs; validation and length accounting therefore have one contract for segmented and contiguous
+delivery.
 
 ## Grill Log
 
@@ -83,6 +90,8 @@ requires the final cursor to equal the allocated length before exposing bytes.
   every static length before allocation succeeds.
 - **Q:** Advance after a refused copy? **A:** No; checked writing returns `CopyFailed` immediately and
   never exposes its partial destination.
+- **Q:** Recompute length when a caller wants segmented output? **A:** No; resolution returns the
+  validated parts and exact length together, and contiguous completion consumes that same shape.
 
 ## Dependencies and consumers
 
@@ -93,4 +102,4 @@ requires the final cursor to equal the allocated length before exposing bytes.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
-[[2026-09-20-html-byte-plan-errors]]
+[[2026-09-20-html-byte-plan-errors]] · [[2026-09-20-encoded-ssr-responses]]

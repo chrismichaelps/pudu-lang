@@ -6,7 +6,8 @@ tags: [moc, module, stdlib]
 # Standard Library Module Map
 
 - [[Std Html Build]] — persistent fluent nodes delegating exact rendering to `Std.Html`.
-- [[Std Html SSR]] — reusable and opt-in compact static render plans, typed slots and output budgets.
+- [[Std Html SSR]] — reusable text or retained-byte render plans, typed slots, exact lengths, and
+  output budgets.
 - [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
   static blocks, typed failures, and MSS coalescing.
 - [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.

@@ -34,9 +34,10 @@ export type AssembleError
   | CopyFailed(Int, Int)
   | LengthMismatch(Int, Int)
 
-type ResolvedPlan = {
+/// Validated byte parts and their exact combined length.
+export type Segments = {
   parts: Array[Bytes],
-  totalLength: Int
+  byteLength: Int
 }
 
 const INT_MAX: Int = 9223372036854775807
@@ -183,7 +184,7 @@ fn checkedLength(total: Int, added: Int) -> Result[Int, AssembleError] {
   }
 }
 
-fn resolve(plan: &BytePlan, values: &Map[Str, Bytes]) -> Result[ResolvedPlan, AssembleError] {
+fn resolve(plan: &BytePlan, values: &Map[Str, Bytes]) -> Result[Segments, AssembleError] {
   if plan.totalStaticBytes < 0 {
     return Err(InvalidStaticSize(plan.totalStaticBytes, 0))
   }
@@ -221,13 +222,13 @@ fn resolve(plan: &BytePlan, values: &Map[Str, Bytes]) -> Result[ResolvedPlan, As
   if actualStaticBytes != plan.totalStaticBytes {
     return Err(InvalidStaticSize(plan.totalStaticBytes, actualStaticBytes))
   }
-  Ok(ResolvedPlan{parts: parts, totalLength: totalLength})
+  Ok(Segments{parts: parts, byteLength: totalLength})
 }
 
 fn resolveCompact(
   plan: &CompactBytePlan,
   values: &Map[Str, Bytes]
-) -> Result[ResolvedPlan, AssembleError] {
+) -> Result[Segments, AssembleError] {
   if plan.totalStaticBytes < 0 {
     return Err(InvalidStaticSize(plan.totalStaticBytes, 0))
   }
@@ -269,13 +270,13 @@ fn resolveCompact(
   if actualStaticBytes != plan.totalStaticBytes {
     return Err(InvalidStaticSize(plan.totalStaticBytes, actualStaticBytes))
   }
-  Ok(ResolvedPlan{parts: parts, totalLength: totalLength})
+  Ok(Segments{parts: parts, byteLength: totalLength})
 }
 
-fn writeResolved(plan: ResolvedPlan) -> Result[Bytes, AssembleError] {
-  if plan.totalLength == 0 { return Ok(ByteSeq.empty()) }
+fn writeResolved(plan: Segments) -> Result[Bytes, AssembleError] {
+  if plan.byteLength == 0 { return Ok(ByteSeq.empty()) }
 
-  var dst = Buffer.alloc(plan.totalLength)
+  var dst = Buffer.alloc(plan.byteLength)
   var cursor = 0
   for bytes in plan.parts {
     let length = bytes.length()
@@ -289,10 +290,26 @@ fn writeResolved(plan: ResolvedPlan) -> Result[Bytes, AssembleError] {
     }
   }
 
-  if cursor != plan.totalLength {
-    return Err(LengthMismatch(plan.totalLength, cursor))
+  if cursor != plan.byteLength {
+    return Err(LengthMismatch(plan.byteLength, cursor))
   }
   Ok(Buffer.toBytes(&dst))
+}
+
+/// Resolves a byte plan into validated segments without joining them.
+export fn segmentsChecked(
+  plan: &BytePlan,
+  values: &Map[Str, Bytes]
+) -> Result[Segments, AssembleError] {
+  resolve(plan, values)
+}
+
+/// Resolves a compact byte plan into validated segments without joining them.
+export fn segmentsCompactChecked(
+  plan: &CompactBytePlan,
+  values: &Map[Str, Bytes]
+) -> Result[Segments, AssembleError] {
+  resolveCompact(plan, values)
 }
 
 /// Assembles a byte plan while reporting missing slots and invalid public metadata.
@@ -300,7 +317,7 @@ export fn renderChecked(
   plan: &BytePlan,
   values: &Map[Str, Bytes]
 ) -> Result[Bytes, AssembleError] {
-  let resolved = resolve(plan, values) ?
+  let resolved = segmentsChecked(plan, values) ?
   writeResolved(resolved)
 }
 
@@ -309,7 +326,7 @@ export fn renderCompactChecked(
   plan: &CompactBytePlan,
   values: &Map[Str, Bytes]
 ) -> Result[Bytes, AssembleError] {
-  let resolved = resolveCompact(plan, values) ?
+  let resolved = segmentsCompactChecked(plan, values) ?
   writeResolved(resolved)
 }
 

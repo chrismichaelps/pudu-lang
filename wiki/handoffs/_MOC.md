@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-encoded-ssr-responses]] — issue #259 reusable encoded static runs, per-request unique
+  slot encoding, exact segmented lengths, and checked contiguous completion.
+
 - [[2026-09-20-html-byte-plan-errors]] — issue #258 checked ordinary and compact byte-plan assembly
   with typed missing-slot, metadata, overflow, copy, and final-length failures.
 

@@ -140,5 +140,67 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  let emptyEncoded = Ssr.prepareBytes(&[])
+  if emptyEncoded.bytes.parts.isEmpty() { held = held + 1 }
+  match Ssr.byteSegments(&emptyEncoded, &mapOf([])) {
+    case Ok(output) => {
+      if output.parts.isEmpty() && output.byteLength == 0 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Ssr.finishBytes(&emptyEncoded, &mapOf([])) {
+    case Ok(output) => {
+      if output.body.isEmpty() && output.byteLength == 0 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  let encodedPieces = [
+    Ssr.Fixed(Html.text("é<&")),
+    Ssr.Slot("item"),
+    Ssr.Fixed(Html.trusted("|")),
+    Ssr.Slot("item")
+  ]
+  let encodedPlan = Ssr.prepareBytes(&encodedPieces)
+  if encodedPlan.bytes.parts.length() == 4 && encodedPlan.bytes.totalStaticBytes == 12 {
+    held = held + 1
+  }
+  let snow = values("item", Html.text("雪&"))
+  match Ssr.byteSegments(&encodedPlan, &snow) {
+    case Ok(output) => {
+      if output.parts.length() == 4 && output.byteLength == 28 { held = held + 1 }
+      if ByteSeq.toText(&ByteSeq.join(&output.parts)) == Ok("é&lt;&amp;雪&amp;|雪&amp;") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  match Ssr.finishBytes(&encodedPlan, &snow) {
+    case Ok(output) => {
+      if output.byteLength == 28
+        && ByteSeq.toText(&output.body) == Ok("é&lt;&amp;雪&amp;|雪&amp;") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  let textPlan = Ssr.prepare(&encodedPieces)
+  match (Ssr.render(&textPlan, &snow), Ssr.finishBytes(&encodedPlan, &snow)) {
+    case (Ok(text), Ok(output)) => {
+      if ByteSeq.toText(&output.body) == Ok(text) { held = held + 1 }
+    }
+    case _ => {}
+  }
+  match Ssr.finishBytes(&encodedPlan, &values("item", Html.text("x"))) {
+    case Ok(output) => {
+      if ByteSeq.toText(&output.body) == Ok("é&lt;&amp;x|x") { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(HtmlBuffer.MissingSlot("item")) = Ssr.finishBytes(&encodedPlan, &mapOf([])) {
+    held = held + 1
+  }
+
   held
 }
