@@ -15,6 +15,17 @@ export type BytePlan = {
   totalStaticBytes: Int
 }
 
+/// A compact template part with retained static length metadata.
+export type PreparedChunk
+  = StaticBlock(Bytes, Int)
+  | DynamicBlock(Str)
+
+/// A byte plan whose adjacent static runs were joined during compilation.
+export type CompactBytePlan = {
+  parts: Array[PreparedChunk],
+  totalStaticBytes: Int
+}
+
 /// Pre-compiles a list of chunks, aggregating static byte metrics.
 export fn compile(chunks: &Array[RawChunk]) -> BytePlan {
   var staticBytes = 0
@@ -25,6 +36,38 @@ export fn compile(chunks: &Array[RawChunk]) -> BytePlan {
     }
   }
   BytePlan{parts: *chunks, totalStaticBytes: staticBytes}
+}
+
+/// Joins adjacent static chunks once and preserves every dynamic boundary.
+export fn compileCompact(chunks: &Array[RawChunk]) -> CompactBytePlan {
+  var parts: Array[PreparedChunk] = []
+  var pending: Array[Bytes] = []
+  var pendingBytes = 0
+  var staticBytes = 0
+  for chunk in chunks {
+    match chunk {
+      case Static(bytes) => {
+        let size = bytes.length()
+        if size > 0 {
+          pending = pending.push(bytes)
+          pendingBytes = pendingBytes + size
+          staticBytes = staticBytes + size
+        }
+      }
+      case Dynamic(name) => {
+        if pendingBytes > 0 {
+          parts = parts.push(StaticBlock(ByteSeq.join(&pending), pendingBytes))
+          pending = []
+          pendingBytes = 0
+        }
+        parts = parts.push(DynamicBlock(name))
+      }
+    }
+  }
+  if pendingBytes > 0 {
+    parts = parts.push(StaticBlock(ByteSeq.join(&pending), pendingBytes))
+  }
+  CompactBytePlan{parts: parts, totalStaticBytes: staticBytes}
 }
 
 /// Assembles the byte plan and runtime slot values directly into a contiguous unboxed buffer.
@@ -72,6 +115,48 @@ export fn renderToBytes(plan: &BytePlan, values: &Map[Str, Bytes]) -> Bytes {
     }
   }
 
+  Buffer.toBytes(&dst)
+}
+
+/// Assembles a compact plan using the static lengths retained at compilation.
+export fn renderCompactToBytes(plan: &CompactBytePlan, values: &Map[Str, Bytes]) -> Bytes {
+  var totalLength = plan.totalStaticBytes
+  for part in plan.parts {
+    match part {
+      case StaticBlock(_, _) => {}
+      case DynamicBlock(name) => {
+        if let Some(held) = values.get(name) {
+          totalLength = totalLength + held.length()
+        }
+      }
+    }
+  }
+
+  if totalLength <= 0 { return ByteSeq.empty() }
+
+  var dst = Buffer.alloc(totalLength)
+  var cursor = 0
+  for part in plan.parts {
+    match part {
+      case StaticBlock(bytes, len) => {
+        if len > 0 {
+          let src = Buffer.fromBytes(bytes)
+          dst = Option.unwrapOr(Buffer.copy(&src, 0, &dst, cursor, len), dst)
+          cursor = cursor + len
+        }
+      }
+      case DynamicBlock(name) => {
+        if let Some(held) = values.get(name) {
+          let len = held.length()
+          if len > 0 {
+            let src = Buffer.fromBytes(held)
+            dst = Option.unwrapOr(Buffer.copy(&src, 0, &dst, cursor, len), dst)
+            cursor = cursor + len
+          }
+        }
+      }
+    }
+  }
   Buffer.toBytes(&dst)
 }
 

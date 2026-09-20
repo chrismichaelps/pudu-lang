@@ -13,6 +13,7 @@ testServiceEvaluation = do
   addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  compactMarkup <- runEntry "test-fixtures/stdlib/UsesHtmlCompact.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
@@ -119,6 +120,9 @@ testServiceEvaluation = do
     , counterexample
         "text placed in a page stays text"
         (markup === Just "66")
+    , counterexample
+        "compact HTML plans join static runs without crossing typed slots"
+        (compactMarkup === Just "19")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than

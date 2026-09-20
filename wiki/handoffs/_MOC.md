@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-html-plan-compaction]] — issue #257 compact static text and byte-plan runs, exact
+  compatibility tests, and same-machine preparation/render measurements.
+
 - [[2026-09-20-owned-foreign-values]] — accepted issue #227's nested ABI layout, explicit identity,
   and generation-qualified ownership design; implementation remains deliberately unavailable.
 

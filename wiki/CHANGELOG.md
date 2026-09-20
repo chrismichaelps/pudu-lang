@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Static HTML plan runs compact once
+
+- `Std.Html.Ssr.prepareCompact` joins each adjacent rendered static run during preparation and
+  flushes before every typed slot. The existing `prepare`, public `Plan`, output, escaping, explicit
+  trusted markup, destination checks, event-handler blocking, missing-slot diagnostics, output
+  budgets, document order, and per-request repeated-slot memoization remain unchanged.
+- `Std.Html.Buffer.compileCompact` produces an additive compact byte-plan type. Each joined static
+  byte block retains its exact length, while dynamic slots remain separate ordering boundaries.
+  Existing `BytePlan`, `compile`, and `renderToBytes` remain source-compatible.
+- A focused same-machine optimized probe prepared forty plans of 1,200 adjacent fixed pieces and
+  rendered one plan eighty times. Compaction changed response traversal from 1,200 static parts to
+  one. Preparation measured 0.67s/86.6MB ordinary and 0.62s/85.5MB compact; rendering measured
+  0.26s/87.6MB ordinary and 0.06s/84.4MB compact. These include compiler/runtime startup and are
+  comparison evidence, not portable guarantees. Exact empty, static-only, mixed, repeated-slot,
+  escaping, trusted, refusal, byte-plan, and output-parity checks cover issue #257.
+
 ## 2026-09-20 — Owned foreign values have an accepted boundary
 
 - [[ADR-0021-a-value-the-library-owns]] now accepts the design for resources a library passes by

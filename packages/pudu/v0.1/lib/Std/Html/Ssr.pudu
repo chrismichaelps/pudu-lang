@@ -25,6 +25,31 @@ export fn prepare(pieces: &Array[Piece]) -> Plan {
   Plan{parts: parts}
 }
 
+/// Render and join each adjacent static run once without crossing a slot.
+export fn prepareCompact(pieces: &Array[Piece]) -> Plan {
+  var parts: Array[Prepared] = []
+  var pending: Array[Str] = []
+  for piece in pieces {
+    match piece {
+      case Fixed(view) => {
+        for renderedPart in Html.renderChunks(&view) {
+          if !renderedPart.isEmpty() { pending = pending.push(renderedPart) }
+        }
+      }
+      case Slot(name) => {
+        parts = flushStatic(parts, pending)
+        pending = []
+        parts = parts.push(Hole(name))
+      }
+    }
+  }
+  Plan{parts: flushStatic(parts, pending)}
+}
+
+fn flushStatic(parts: Array[Prepared], pending: Array[Str]) -> Array[Prepared] {
+  if pending.isEmpty() { parts } else { parts.push(Markup([pending.join("")])) }
+}
+
 /// The page as its pieces, in order, so a caller may write them as they come.
 export fn chunks(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
   assemble(plan, values, None)

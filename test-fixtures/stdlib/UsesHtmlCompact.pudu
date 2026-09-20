@@ -1,0 +1,80 @@
+module UsesHtmlCompact
+
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
+import Std.Html as Html
+import Std.Html.Ssr as Ssr
+import Std.Result as Result
+
+fn values(name: Str, view: Html.Html) -> Map[Str, Html.Html] {
+  mapOf([(name, view)])
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  let empty = Ssr.prepareCompact(&[])
+  if empty.parts.isEmpty() { held = held + 1 }
+  if Ssr.render(&empty, &mapOf([])) == Ok("") { held = held + 1 }
+
+  let staticPieces = [
+    Ssr.Fixed(Html.element("h1", &[], &[Html.text("A")])),
+    Ssr.Fixed(Html.text(" & ")),
+    Ssr.Fixed(Html.element("p", &[], &[Html.text("B")]))
+  ]
+  let ordinaryStatic = Ssr.prepare(&staticPieces)
+  let compactStatic = Ssr.prepareCompact(&staticPieces)
+  if ordinaryStatic.parts.length() == 3 { held = held + 1 }
+  if compactStatic.parts.length() == 1 { held = held + 1 }
+  let ordinaryText = Ssr.render(&ordinaryStatic, &mapOf([]))
+  let compactText = Ssr.render(&compactStatic, &mapOf([]))
+  if compactText == ordinaryText { held = held + 1 }
+  if compactText == Ok("<h1>A</h1> &amp; <p>B</p>") { held = held + 1 }
+
+  let mixed = Ssr.prepareCompact(&[
+      Ssr.Fixed(Html.text("a")),
+      Ssr.Fixed(Html.text("b")),
+      Ssr.Slot("item"),
+      Ssr.Fixed(Html.text("c")),
+      Ssr.Slot("item"),
+      Ssr.Fixed(Html.text("d"))
+    ])
+  if mixed.parts.length() == 5 { held = held + 1 }
+  let escaped = Ssr.render(&mixed, &values("item", Html.text("<x>")))
+  if escaped == Ok("ab&lt;x&gt;c&lt;x&gt;d") { held = held + 1 }
+  if Result.isErr(&Ssr.render(&mixed, &mapOf([]))) { held = held + 1 }
+  let mixedChunks = Result.unwrapOr(Ssr.chunks(&mixed, &values("item", Html.text("<x>"))), [])
+  if mixedChunks.join("") == "ab&lt;x&gt;c&lt;x&gt;d" { held = held + 1 }
+  if Ssr.render(&mixed, &values("item", Html.trusted("<em>x</em>")))
+    == Ok("ab<em>x</em>c<em>x</em>d") {
+    held = held + 1
+  }
+  if Result.isErr(&Html.attribute("onclick", "run()")) { held = held + 1 }
+  if Result.isErr(&Html.destination("javascript:run()")) { held = held + 1 }
+
+  let raw = [
+    HtmlBuffer.Static("A".toBytes()),
+    HtmlBuffer.Static("B".toBytes()),
+    HtmlBuffer.Dynamic("item"),
+    HtmlBuffer.Static("C".toBytes()),
+    HtmlBuffer.Static("D".toBytes()),
+    HtmlBuffer.Dynamic("item")
+  ]
+  let ordinaryBytes = HtmlBuffer.compile(&raw)
+  let compactBytes = HtmlBuffer.compileCompact(&raw)
+  if ordinaryBytes.parts.length() == 6 { held = held + 1 }
+  if compactBytes.parts.length() == 4 && compactBytes.totalStaticBytes == 4 {
+    held = held + 1
+  }
+  let byteValues = mapOf([("item", "!".toBytes())])
+  let ordinaryOutput = HtmlBuffer.renderToBytes(&ordinaryBytes, &byteValues)
+  let compactOutput = HtmlBuffer.renderCompactToBytes(&compactBytes, &byteValues)
+  if compactOutput == ordinaryOutput { held = held + 1 }
+  if ByteSeq.toText(&compactOutput) == Ok("AB!CD!") { held = held + 1 }
+
+  let noBytes = HtmlBuffer.compileCompact(&[HtmlBuffer.Static(ByteSeq.empty())])
+  if noBytes.parts.isEmpty() { held = held + 1 }
+  if HtmlBuffer.renderCompactToBytes(&noBytes, &mapOf([])).isEmpty() { held = held + 1 }
+
+  held
+}
