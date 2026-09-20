@@ -129,6 +129,49 @@ export fn main() -> Int {
   let page = Html.html(&[("lang", "en")], &[Html.head(&[Html.title("Shop")]), Html.body(&[], &[])])
   if Html.document(&page).contains("<!DOCTYPE html>") { held = held + 1 }
   if Html.document(&page).contains("<title>Shop</title>") { held = held + 1 }
+  if Html.document(&Html.nothing()) == "<!DOCTYPE html>\n" { held = held + 1 }
+  // Public fragment boundaries stay exact for prepared SSR consumers. A
+  // handler that bypassed the checked constructor still contributes no chunk.
+  let chunks = Html.renderChunks(
+      &Html.div(
+        &[("id", "x"), ("onclick", "steal()"), ("title", "<&\"'")],
+        &[Html.text("<"), Html.trusted("<b>x</b>")]
+    )
+  )
+  if chunks
+    == [
+    "<div",
+    " id=\"x\"",
+    " title=\"&lt;&amp;&quot;&#39;\"",
+    ">",
+    "&lt;",
+    "<b>x</b>",
+    "</div>"
+  ]
+  {
+    held = held + 1
+  }
+
+  // Wide sibling sets are consumed by one cursor instead of being scheduled
+  // onto the traversal stack all at once.
+  var wide: Array[Html.Html] = []
+  var wideIndex = 0
+  while wideIndex < 1200 {
+    wide = wide.push(Html.span(&[], &[Html.text("x")]))
+    wideIndex = wideIndex + 1
+  }
+  let wideMarkup = Html.render(&Html.fragment(&wide))
+  if wideMarkup.length() == 16800 { held = held + 1 }
+  if wideMarkup.startsWith("<span>x</span><span>x</span>") { held = held + 1 }
+  if wideMarkup.endsWith("<span>x</span><span>x</span>") { held = held + 1 }
+
+  var manyAttributes: Array[(Str, Str)] = []
+  var attributeIndex = 0
+  while attributeIndex < 40 {
+    manyAttributes = manyAttributes.push(("data-item", "value"))
+    attributeIndex = attributeIndex + 1
+  }
+  if Html.renderChunks(&Html.div(&manyAttributes, &[])).length() == 43 { held = held + 1 }
 
   // A title escapes like any other text, so a page named with a bracket does
   // not close its own head.

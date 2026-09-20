@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-html-renderer-overhead]] — review-ready issue #256 cursor-frame renderer optimization
+  with exact chunk, escaping, and document-prefix compatibility.
+
 - [[2026-09-19-language-foundations-audit]] — active production-readiness audit for function
   literals, ranges and slicing, destructuring bindings, and closure capture.
 

@@ -5,6 +5,26 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — HTML rendering advances one child at a time
+
+- `Std.Html` now keeps one active child cursor and suspends only its parent when descending. It no
+  longer slices the traversal stack once per step or schedules every sibling in reverse before any
+  of them renders. Deep traversal remains iterative and public `renderChunks` boundaries are
+  unchanged.
+- Empty non-void elements close immediately; nested elements retain their closing tag in the one
+  continuation that restores the parent cursor. Text escaping, explicit trusted markup, void
+  spelling, ordered attributes, and event-handler blocking retain exact output coverage.
+- `Std.Html.document` still writes `<!DOCTYPE html>\n`; `Std.Html.Build.document` still writes the
+  compact `<!DOCTYPE html>`, but the builder now prepends that fragment before the final join instead
+  of materializing and copying the complete body first.
+- A focused depth-1,600, width-1,200, 40-attribute probe reduced evaluator steps by 12.7%, host heap
+  allocation by 14.6%, peak residency by 12.1%, and elapsed time by 24.7% on the same local
+  no-optimization build. These are comparison measurements, not portable guarantees.
+- Exact chunk/output fixtures now cover accepted and refused attributes, escaped text, trusted
+  markup, empty documents, both document prefixes, 1,200 siblings, 40 attributes, and the existing
+  1,600-level renderer regression. The clean optimized full repository gate passes. See
+  [[2026-09-20-html-renderer-overhead]] · issue #256.
+
 ## 2026-09-19 — The new language foundations agree at their edges
 
 - An unbounded range no longer reports `length() == 0`. It has no finite extent, so `length()` now
