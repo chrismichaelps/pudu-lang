@@ -30,6 +30,13 @@ Provides network transport optimizations:
 - `renderToBytes(plan: &BytePlan, values: &Map[Str, Bytes]) -> Bytes`: Assembles template into contiguous `Bytes` using exact capacity allocation and memory block copying.
 - `renderCompactToBytes(plan: &CompactBytePlan, values: &Map[Str, Bytes]) -> Bytes`: Uses cached
   static block lengths while preserving the same missing-dynamic-as-empty behavior.
+- `AssembleError = MissingSlot(Str) | InvalidStaticSize(Int, Int) | SizeOverflow(Int, Int) |
+  CopyFailed(Int, Int) | LengthMismatch(Int, Int)`: Checked assembly refusals with expected/observed
+  or cursor/length context.
+- `renderChecked(plan: &BytePlan, values: &Map[Str, Bytes]) -> Result[Bytes, AssembleError]`: Resolves
+  every dynamic slot before allocation, validates public metadata, and propagates copy refusal.
+- `renderCompactChecked(plan: &CompactBytePlan, values: &Map[Str, Bytes]) -> Result[Bytes,
+  AssembleError]`: Applies the same contract to retained compact block lengths.
 - `formatHexChunkHeader(len: Int) -> Bytes`: Bitwise nibble shift-and-mask (`>> 4`, `& 0x0F`) formatting of HTTP chunk length hex headers (`<hex>\r\n`) without string allocations.
 - `coalesceToMss(chunks: &Array[Bytes], maxMss: Int) -> Array[Bytes]`: Batches small streaming chunks up to the TCP Maximum Segment Size (MSS, ~1460 bytes) before socket transmission, minimizing OS socket syscalls and cellular radio power transitions.
 
@@ -42,6 +49,15 @@ bytes plus one cached length. Per response it visits one static part per run and
 length instead of visiting every source fragment and asking each for its length. A dynamic slot is a
 hard boundary; equal or repeated names remain separate output positions. The legacy `BytePlan`,
 `compile`, and `renderToBytes` contracts remain unchanged.
+
+Checked assembly performs two bounded phases. Resolution walks in document order, looks up each
+unique dynamic name once, and records one byte part per output position; a repeated name therefore
+reuses its resolved value but remains repeated in output. Missing names fail before allocation, while
+a supplied empty value is a present zero-length part. Capacity begins with the plan's declared static
+total so overflow can be refused before allocation, then the actual static lengths are summed and
+compared with that declaration. Compact plans additionally compare every retained `StaticBlock`
+length with its bytes. Writing uses only the resolved parts, propagates any `Buffer.copy` refusal, and
+requires the final cursor to equal the allocated length before exposing bytes.
 
 ## Grill Log
 
@@ -57,6 +73,16 @@ hard boundary; equal or repeated names remain separate output positions. The leg
   block's exact byte length beside it.
 - **Q:** Join across `Dynamic` when the value is absent? **A:** No; presence is request-specific and
   a dynamic position remains an ordering boundary even when one request supplies no bytes.
+- **Q:** Change permissive callers to fail on missing slots? **A:** No; `renderToBytes` and
+  `renderCompactToBytes` retain compatibility. Checked assembly is additive and callers migrate
+  explicitly.
+- **Q:** Treat missing and empty as the same output? **A:** No; an absent map entry is
+  `MissingSlot`, while present empty bytes are a valid zero-length value.
+- **Q:** Trust public size metadata because `compile` produced it? **A:** No; callers can construct
+  both public plan records and compact variants directly, so checked assembly recomputes and compares
+  every static length before allocation succeeds.
+- **Q:** Advance after a refused copy? **A:** No; checked writing returns `CopyFailed` immediately and
+  never exposes its partial destination.
 
 ## Dependencies and consumers
 
@@ -66,4 +92,5 @@ hard boundary; equal or repeated names remain separate output positions. The leg
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]]
+[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
+[[2026-09-20-html-byte-plan-errors]]

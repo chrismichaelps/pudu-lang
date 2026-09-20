@@ -26,6 +26,21 @@ export type CompactBytePlan = {
   totalStaticBytes: Int
 }
 
+/// A checked byte-plan assembly failure.
+export type AssembleError
+  = MissingSlot(Str)
+  | InvalidStaticSize(Int, Int)
+  | SizeOverflow(Int, Int)
+  | CopyFailed(Int, Int)
+  | LengthMismatch(Int, Int)
+
+type ResolvedPlan = {
+  parts: Array[Bytes],
+  totalLength: Int
+}
+
+const INT_MAX: Int = 9223372036854775807
+
 /// Pre-compiles a list of chunks, aggregating static byte metrics.
 export fn compile(chunks: &Array[RawChunk]) -> BytePlan {
   var staticBytes = 0
@@ -158,6 +173,144 @@ export fn renderCompactToBytes(plan: &CompactBytePlan, values: &Map[Str, Bytes])
     }
   }
   Buffer.toBytes(&dst)
+}
+
+fn checkedLength(total: Int, added: Int) -> Result[Int, AssembleError] {
+  if total < 0 || added < 0 || added > INT_MAX - total {
+    Err(SizeOverflow(total, added))
+  } else {
+    Ok(total + added)
+  }
+}
+
+fn resolve(plan: &BytePlan, values: &Map[Str, Bytes]) -> Result[ResolvedPlan, AssembleError] {
+  if plan.totalStaticBytes < 0 {
+    return Err(InvalidStaticSize(plan.totalStaticBytes, 0))
+  }
+
+  var parts: Array[Bytes] = []
+  var cached: Map[Str, Bytes] = mapOf([])
+  var totalLength = plan.totalStaticBytes
+  var actualStaticBytes = 0
+
+  for part in plan.parts {
+    match part {
+      case Static(bytes) => {
+        actualStaticBytes = checkedLength(actualStaticBytes, bytes.length()) ?
+        parts = parts.push(bytes)
+      }
+      case Dynamic(name) => {
+        let held = match cached.get(name) {
+          case Some(found) => found
+          case None => {
+            match values.get(name) {
+              case None => { return Err(MissingSlot(name)) }
+              case Some(found) => {
+                cached = cached.insert(name, found)
+                found
+              }
+            }
+          }
+        }
+        totalLength = checkedLength(totalLength, held.length()) ?
+        parts = parts.push(held)
+      }
+    }
+  }
+
+  if actualStaticBytes != plan.totalStaticBytes {
+    return Err(InvalidStaticSize(plan.totalStaticBytes, actualStaticBytes))
+  }
+  Ok(ResolvedPlan{parts: parts, totalLength: totalLength})
+}
+
+fn resolveCompact(
+  plan: &CompactBytePlan,
+  values: &Map[Str, Bytes]
+) -> Result[ResolvedPlan, AssembleError] {
+  if plan.totalStaticBytes < 0 {
+    return Err(InvalidStaticSize(plan.totalStaticBytes, 0))
+  }
+
+  var parts: Array[Bytes] = []
+  var cached: Map[Str, Bytes] = mapOf([])
+  var totalLength = plan.totalStaticBytes
+  var actualStaticBytes = 0
+
+  for part in plan.parts {
+    match part {
+      case StaticBlock(bytes, declaredLength) => {
+        let actualLength = bytes.length()
+        if declaredLength != actualLength {
+          return Err(InvalidStaticSize(declaredLength, actualLength))
+        }
+        actualStaticBytes = checkedLength(actualStaticBytes, actualLength) ?
+        parts = parts.push(bytes)
+      }
+      case DynamicBlock(name) => {
+        let held = match cached.get(name) {
+          case Some(found) => found
+          case None => {
+            match values.get(name) {
+              case None => { return Err(MissingSlot(name)) }
+              case Some(found) => {
+                cached = cached.insert(name, found)
+                found
+              }
+            }
+          }
+        }
+        totalLength = checkedLength(totalLength, held.length()) ?
+        parts = parts.push(held)
+      }
+    }
+  }
+
+  if actualStaticBytes != plan.totalStaticBytes {
+    return Err(InvalidStaticSize(plan.totalStaticBytes, actualStaticBytes))
+  }
+  Ok(ResolvedPlan{parts: parts, totalLength: totalLength})
+}
+
+fn writeResolved(plan: ResolvedPlan) -> Result[Bytes, AssembleError] {
+  if plan.totalLength == 0 { return Ok(ByteSeq.empty()) }
+
+  var dst = Buffer.alloc(plan.totalLength)
+  var cursor = 0
+  for bytes in plan.parts {
+    let length = bytes.length()
+    if length > 0 {
+      let src = Buffer.fromBytes(bytes)
+      match Buffer.copy(&src, 0, &dst, cursor, length) {
+        case None => { return Err(CopyFailed(cursor, length)) }
+        case Some(next) => { dst = next }
+      }
+      cursor = cursor + length
+    }
+  }
+
+  if cursor != plan.totalLength {
+    return Err(LengthMismatch(plan.totalLength, cursor))
+  }
+  Ok(Buffer.toBytes(&dst))
+}
+
+/// Assembles a byte plan while reporting missing slots and invalid public metadata.
+export fn renderChecked(
+  plan: &BytePlan,
+  values: &Map[Str, Bytes]
+) -> Result[Bytes, AssembleError] {
+  let resolved = resolve(plan, values) ?
+  writeResolved(resolved)
+}
+
+/// Assembles a compact plan while validating every retained static length.
+export fn renderCompactChecked(
+  plan: &CompactBytePlan,
+  values: &Map[Str, Bytes]
+) -> Result[Bytes, AssembleError] {
+  let resolved = resolveCompact(plan, values) ?
+  writeResolved(resolved)
 }
 
 /// Converts an integer nibble (0-15) into its ASCII lowercase hex byte.

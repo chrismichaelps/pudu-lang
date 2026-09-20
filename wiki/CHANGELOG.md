@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Checked HTML byte plans report assembly failures
+
+- `Std.Html.Buffer.renderChecked` and `renderCompactChecked` add typed assembly without changing the
+  permissive renderers. Missing dynamic slots fail before allocation, while supplied empty bytes
+  remain valid and repeated names resolve once but retain every document position.
+- Checked assembly treats public plan metadata as untrusted. It validates ordinary static totals,
+  each compact block length, and compact totals; refuses checked-capacity overflow; propagates
+  `Buffer.copy` refusal; and requires the final write cursor to match the allocated length.
+- Focused success, failure, regression, and exact-output checks cover ordinary and compact parity,
+  missing-versus-empty values, repeated slots, invalid metadata, negative metadata, and overflow for
+  issue #258.
+
 ## 2026-09-20 — Static HTML plan runs compact once
 
 - `Std.Html.Ssr.prepareCompact` joins each adjacent rendered static run during preparation and

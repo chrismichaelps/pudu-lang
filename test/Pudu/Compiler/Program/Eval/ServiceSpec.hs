@@ -122,7 +122,7 @@ testServiceEvaluation = do
         (markup === Just "66")
     , counterexample
         "compact HTML plans join static runs without crossing typed slots"
-        (compactMarkup === Just "19")
+        (compactMarkup === Just "29")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than

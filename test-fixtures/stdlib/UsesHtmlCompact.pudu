@@ -76,5 +76,69 @@ export fn main() -> Int {
   if noBytes.parts.isEmpty() { held = held + 1 }
   if HtmlBuffer.renderCompactToBytes(&noBytes, &mapOf([])).isEmpty() { held = held + 1 }
 
+  if HtmlBuffer.renderChecked(&ordinaryBytes, &byteValues) == Ok(ordinaryOutput) {
+    held = held + 1
+  }
+  if HtmlBuffer.renderCompactChecked(&compactBytes, &byteValues) == Ok(compactOutput) {
+    held = held + 1
+  }
+  if let Err(HtmlBuffer.MissingSlot("item")) = HtmlBuffer.renderChecked(&ordinaryBytes, &mapOf([])) {
+    held = held + 1
+  }
+
+  let emptyValue = mapOf([("item", ByteSeq.empty())])
+  match HtmlBuffer.renderChecked(&ordinaryBytes, &emptyValue) {
+    case Ok(bytes) => { if ByteSeq.toText(&bytes) == Ok("ABCD") { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  let repeated = HtmlBuffer.compile(&[
+      HtmlBuffer.Dynamic("item"),
+      HtmlBuffer.Static("/".toBytes()),
+      HtmlBuffer.Dynamic("item")
+    ])
+  match HtmlBuffer.renderChecked(&repeated, &byteValues) {
+    case Ok(bytes) => { if ByteSeq.toText(&bytes) == Ok("!/!") { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  let badStatic = HtmlBuffer.BytePlan {
+    parts: [HtmlBuffer.Static("x".toBytes())],
+    totalStaticBytes: 2
+  }
+  if let Err(HtmlBuffer.InvalidStaticSize(2, 1)) = HtmlBuffer.renderChecked(&badStatic, &mapOf([])) {
+    held = held + 1
+  }
+  let negativeStatic = HtmlBuffer.BytePlan{parts: [], totalStaticBytes: 0 - 1}
+  if let Err(HtmlBuffer.InvalidStaticSize(-1, 0))
+    = HtmlBuffer.renderChecked(&negativeStatic, &mapOf([])) {
+    held = held + 1
+  }
+  let overflowing = HtmlBuffer.BytePlan {
+    parts: [HtmlBuffer.Dynamic("item")],
+    totalStaticBytes: 9223372036854775807
+  }
+  if let Err(HtmlBuffer.SizeOverflow(9223372036854775807, 1))
+    = HtmlBuffer.renderChecked(&overflowing, &byteValues) {
+    held = held + 1
+  }
+
+  let badBlock = HtmlBuffer.CompactBytePlan {
+    parts: [HtmlBuffer.StaticBlock("x".toBytes(), 2)],
+    totalStaticBytes: 2
+  }
+  if let Err(HtmlBuffer.InvalidStaticSize(2, 1))
+    = HtmlBuffer.renderCompactChecked(&badBlock, &mapOf([])) {
+    held = held + 1
+  }
+  let badCompactTotal = HtmlBuffer.CompactBytePlan {
+    parts: [HtmlBuffer.StaticBlock("x".toBytes(), 1)],
+    totalStaticBytes: 2
+  }
+  if let Err(HtmlBuffer.InvalidStaticSize(2, 1))
+    = HtmlBuffer.renderCompactChecked(&badCompactTotal, &mapOf([])) {
+    held = held + 1
+  }
+
   held
 }

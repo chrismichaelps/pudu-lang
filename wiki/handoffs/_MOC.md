@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-html-byte-plan-errors]] — issue #258 checked ordinary and compact byte-plan assembly
+  with typed missing-slot, metadata, overflow, copy, and final-length failures.
+
 - [[2026-09-20-html-plan-compaction]] — issue #257 compact static text and byte-plan runs, exact
   compatibility tests, and same-machine preparation/render measurements.
 

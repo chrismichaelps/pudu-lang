@@ -7,7 +7,8 @@ tags: [moc, module, stdlib]
 
 - [[Std Html Build]] — persistent fluent nodes delegating exact rendering to `Std.Html`.
 - [[Std Html SSR]] — reusable and opt-in compact static render plans, typed slots and output budgets.
-- [[Std Html Buffer]] — byte templates with opt-in compact static blocks, exact-size assembly, and MSS coalescing.
+- [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
+  static blocks, typed failures, and MSS coalescing.
 - [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
