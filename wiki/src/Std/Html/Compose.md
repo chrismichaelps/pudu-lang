@@ -17,6 +17,9 @@ Each adding method returns new Content, preserving earlier values and insertion 
 methods produce existing Html values. `document(title, Content)` supplies html/head/title/UTF-8
 metadata/body; the reply layer remains responsible for adding a doctype through Reply.page.
 `documentIn(language, title, Content)` additionally sets the html language attribute.
+`documentShell(title, bodySlot)` and `documentShellIn(language, title, bodySlot)` build the same
+typed html/head/metadata/title/body structure as a reusable [[Std Html SSR]] `Shell`, with the named
+slot as the body's complete child fragment. They accept no string templates or dynamic attributes.
 
 ## Algorithm and invariants
 
@@ -26,6 +29,8 @@ including deliberate trust escapes. `each` calls its mapper once per item in ord
 those nodes directly. `when` conditionally appends an already evaluated view; it is not lazy.
 No hidden state, IO, new grammar or compiler handling is required. Generic elements and attributes
 remain available through Html and add, so this layer does not replace the complete node model.
+The document-shell helpers reuse the same fixed head construction as ordinary documents; only the
+body child changes from supplied `Content` nodes to one typed slot.
 
 ## Grill Log
 
@@ -35,11 +40,16 @@ remain available through Html and add, so this layer does not replace the comple
 - **Q:** Escape helper text before creating nodes? **A:** No; rendering performs escaping once.
 - **Q:** Impose one application layout? **A:** No; document supplies a minimal shell, while
   fragment and add allow application-defined shells and components.
+- **Q:** Put a string marker into the document and replace it later? **A:** No; the helper builds a
+  typed `ShellElement` tree with a `ShellSlot` child, and `Std.Html.Ssr` compiles that structure.
+- **Q:** Offer dynamic title, language, or attributes here? **A:** No; issue #260 admits complete
+  child-fragment slots only. Callers may choose another prepared shell or construct `Shell` directly.
 
 ## Dependencies and consumers
 
-[[Std Html]] supplies nodes and rendering. [[Notes Web Application]] demonstrates composition;
-[[Std Http Server Reply]] accepts the resulting document. Unvalidated at user direction.
+[[Std Html]] supplies nodes and rendering. [[Std Html SSR]] supplies typed reusable shell plans.
+[[Notes Web Application]] demonstrates composition; [[Std Http Server Reply]] accepts the resulting
+document. Unvalidated at user direction.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[2026-09-06-application-stack]]
+[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-typed-html-shells]]

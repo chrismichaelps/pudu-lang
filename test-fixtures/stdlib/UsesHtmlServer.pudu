@@ -101,5 +101,78 @@ export fn main() -> Int {
   )
   if spoken.contains("fr") { held = held + 1 }
 
+  let shell = Compose.documentShell("Orders", "body")
+  let shellPlan = Ssr.prepareShell(&shell)
+  let shellBody = Compose.content().paragraph("two < orders").fragment()
+  let ordinaryPage = Html.render(&Compose.document("Orders", Compose.content().paragraph("two < orders")))
+  if Ssr.render(&shellPlan, &filled("body", shellBody)) == Ok(ordinaryPage) {
+    held = held + 1
+  }
+
+  let frenchShell = Compose.documentShellIn("fr", "Commandes", "body")
+  let frenchPlan = Ssr.prepareShell(&frenchShell)
+  let frenchBody = Compose.content().paragraph("une ligne").fragment()
+  if Ssr.render(&frenchPlan, &filled("body", frenchBody)) == Ok(spoken) { held = held + 1 }
+
+  let attributed = Ssr.ShellElement("div", [
+      ("z", "<"),
+      ("onclick", "run()"),
+      ("a", "&")
+    ], [Ssr.ShellSlot("body")])
+  let attributedPlan = Ssr.prepareShell(&attributed)
+  if Ssr.render(&attributedPlan, &filled("body", Html.text("<x>")))
+    == Ok("<div z=\"&lt;\" a=\"&amp;\">&lt;x&gt;</div>") {
+    held = held + 1
+  }
+  if Ssr.render(&attributedPlan, &filled("body", Html.trusted("<em>x</em>")))
+    == Ok("<div z=\"&lt;\" a=\"&amp;\"><em>x</em></div>") {
+    held = held + 1
+  }
+
+  let repeatedShell = Ssr.ShellFragment([
+      Ssr.ShellElement("section", [], [Ssr.ShellSlot("item")]),
+      Ssr.ShellElement("section", [], [Ssr.ShellSlot("item")])
+    ])
+  let repeatedPlan = Ssr.prepareShell(&repeatedShell)
+  if Ssr.render(&repeatedPlan, &filled("item", Html.text("x")))
+    == Ok("<section>x</section><section>x</section>") {
+    held = held + 1
+  }
+
+  let missingShell = Ssr.ShellFragment([Ssr.ShellSlot("first"), Ssr.ShellSlot("second")])
+  let missingPlan = Ssr.prepareShell(&missingShell)
+  if let Err(Ssr.MissingSlot("first")) = Ssr.render(&missingPlan, &mapOf([])) {
+    held = held + 1
+  }
+
+  let voidShell = Ssr.ShellElement("img", [
+      ("alt", "x"),
+      ("onclick", "run()")
+    ], [Ssr.ShellSlot("ignored")])
+  let voidPlan = Ssr.prepareShell(&voidShell)
+  if Ssr.render(&voidPlan, &mapOf([])) == Ok("<img alt=\"x\" />") { held = held + 1 }
+
+  var deepShell = Ssr.ShellSlot("leaf")
+  var depth = 0
+  while depth < 1600 {
+    deepShell = Ssr.ShellElement("div", [], [deepShell])
+    depth = depth + 1
+  }
+  let deepPlan = Ssr.prepareShell(&deepShell)
+  match Ssr.render(&deepPlan, &filled("leaf", Html.text("end"))) {
+    case Ok(output) => { if output.length() == 17603 { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  let mixedShell = Ssr.ShellElement("main", [], [
+      Ssr.ShellFixed(Html.element("h1", &[], &[Html.text("Title")])),
+      Ssr.ShellFragment([Ssr.ShellFixed(Html.text(" ")), Ssr.ShellSlot("body")])
+    ])
+  let mixedPlan = Ssr.prepareShell(&mixedShell)
+  if Ssr.render(&mixedPlan, &filled("body", Html.text("done")))
+    == Ok("<main><h1>Title</h1> done</main>") {
+    held = held + 1
+  }
+
   held
 }

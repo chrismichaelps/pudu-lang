@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Typed SSR shells prepare nested child slots once
+
+- `Std.Html.Ssr.Shell` adds a structural tree of fixed `Html`, named complete-child slots, elements,
+  and fragments. `prepareShell` compiles it iteratively through renderer-produced element boundaries
+  into the existing prepared-plan operations; it adds no template parser, string marker replacement,
+  dynamic attributes, or second HTML serializer.
+- `Std.Html.Compose.documentShell` and `documentShellIn` provide reusable versions of the existing
+  typed document shell with one named body slot. Request values remain outside prepared shells, and
+  ordinary `Plan` rendering preserves deterministic missing errors and per-request repeated-slot
+  reuse.
+- Focused checks cover ordinary document parity, language-qualified pages, ordered and escaped
+  attributes, handler blocking, trusted children, repeated and missing slots, void elements, mixed
+  fixed/slot fragments, and 1,600-level non-recursive compilation for issue #260.
+- In a same-machine optimized probe rendering 5,000 changing bodies, the reusable shell reduced
+  measured heap allocation from 3,514,992,160 to 2,262,937,928 bytes, process maximum RSS from
+  93,896,704 to 86,622,208 bytes, and elapsed time from 0.99s to 0.75s. The probe includes compiler
+  and evaluator overhead and is comparative evidence, not a portable service guarantee.
+
 ## 2026-09-20 — SSR can retain encoded response bytes and exact lengths
 
 - `Std.Html.Ssr.prepareBytes` renders, joins, and UTF-8 encodes each complete static run once while

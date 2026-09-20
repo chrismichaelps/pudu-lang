@@ -5,6 +5,12 @@ import Std.Html as Html
 
 /// Part of a page: either fixed markup or a named hole.
 export type Piece = Fixed(Html.Html) | Slot(Str)
+/// A typed reusable HTML tree whose dynamic positions are complete child fragments.
+export type Shell
+  = ShellFixed(Html.Html)
+  | ShellSlot(Str)
+  | ShellElement(Str, Array[(Str, Str)], Array[Shell])
+  | ShellFragment(Array[Shell])
 /// A piece after preparing: rendered text, or the hole still to fill.
 export type Prepared = Markup(Array[Str]) | Hole(Str)
 /// A page prepared once, ready to be filled and rendered many times.
@@ -84,6 +90,75 @@ fn flushEncodedStatic(
   pending: Array[Str]
 ) -> Array[Buffer.RawChunk] {
   if pending.isEmpty() { parts } else { parts.push(Buffer.Static(pending.join("").toBytes())) }
+}
+
+type ShellWriting
+  = ResumeShell(Array[Shell], Int)
+  | CloseShell(Str, Array[Shell], Int)
+
+/// Compile a typed nested shell without placing request values in the reusable plan.
+export fn prepareShell(shell: &Shell) -> Plan {
+  var parts: Array[Prepared] = []
+  var current: Array[Shell] = [*shell]
+  var index = 0
+  var pending: Array[ShellWriting] = []
+
+  while index < current.length() || pending.length() > 0 {
+    if index >= current.length() {
+      let step = pending[pending.length() - 1]
+      pending = pending.pop()
+      match step {
+        case ResumeShell(parent, next) => {
+          current = parent
+          index = next
+        }
+        case CloseShell(closing, parent, next) => {
+          parts = parts.push(Markup([closing]))
+          current = parent
+          index = next
+        }
+      }
+    } else {
+      let node = current[index]
+      index = index + 1
+      match node {
+        case ShellFixed(view) => { parts = parts.push(Markup(Html.renderChunks(&view))) }
+        case ShellSlot(name) => { parts = parts.push(Hole(name)) }
+        case ShellFragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(ResumeShell(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case ShellElement(name, attributes, children) => {
+          let shallow = Html.element(name, &attributes, &[Html.trusted("")])
+          let boundary = Html.renderChunks(&shallow)
+          let split = boundary.length() >= 2 && boundary[boundary.length() - 2].isEmpty()
+          if split {
+            var opening: Array[Str] = []
+            var at = 0
+            while at < boundary.length() - 2 {
+              opening = opening.push(boundary[at])
+              at = at + 1
+            }
+            parts = parts.push(Markup(opening))
+            let closing = boundary[boundary.length() - 1]
+            if children.length() == 0 {
+              parts = parts.push(Markup([closing]))
+            } else {
+              pending = pending.push(CloseShell(closing, current, index))
+              current = children
+              index = 0
+            }
+          } else {
+            parts = parts.push(Markup(boundary))
+          }
+        }
+      }
+    }
+  }
+  Plan{parts: parts}
 }
 
 /// The page as its pieces, in order, so a caller may write them as they come.

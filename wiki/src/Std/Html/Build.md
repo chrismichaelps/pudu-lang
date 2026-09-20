@@ -45,6 +45,9 @@ body to one string and then concatenate the prefix. Its prefix deliberately has 
 The module depends only on [[Std Html]]. Its fluent API is exercised by
 `test-fixtures/stdlib/UsesHtmlBuild.pudu`; server-side rendering consumers may convert a node through
 `html` and then use the lower-level prepared or streaming APIs.
+Nested reusable slots remain the responsibility of [[Std Html SSR]] `Shell`. The builder keeps
+`Node.children` as `Array[Html]`; callers may place a built node's `Html` in `ShellFixed` and combine
+it with typed shell elements and child slots.
 
 ## Grill Log
 
@@ -61,7 +64,10 @@ The module depends only on [[Std Html]]. Its fluent API is exercised by
 - **Q:** Prefix after rendering? **A:** No; prepend it to the fragment collection before the one
   final join. _Rationale:_ the body should not be materialized and then copied solely to add a
   constant prefix. _Rejected:_ string concatenation after `Html.render`.
+- **Q:** Add slots directly to `Node.children`? **A:** No; changing that array would duplicate the
+  shell model and weaken the builder's simple conversion contract. Reusable child slots compose
+  through `Std.Html.Ssr.Shell`.
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Html]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Html]] · [[architecture/STDLIB]] · [[2026-09-20-typed-html-shells]]

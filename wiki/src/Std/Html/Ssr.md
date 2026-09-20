@@ -46,6 +46,15 @@ completion to the checked byte assembler. Both functions return `Std.Html.Buffer
 missing slots, invalid public metadata, overflow, refused copies, and final-length mismatch remain
 typed rather than becoming partial output.
 
+`Shell = ShellFixed(Html) | ShellSlot(Str) | ShellElement(Str, Array[(Str, Str)], Array[Shell]) |
+ShellFragment(Array[Shell])` is an additive typed reusable tree. A slot is always a complete child
+fragment; there is no attribute, script, style, text-string, or raw-markup interpolation form.
+`prepareShell(&Shell) -> Plan` compiles the tree iteratively into the existing `Markup` and `Hole`
+operations. Element boundaries come from the one `Std.Html` renderer, preserving ordered
+attributes, escaping, handler blocking, void spelling, and trusted values without a second
+serializer. Explicit child cursors and closing continuations keep compilation non-recursive, and
+request values never enter the resulting plan.
+
 ## Complexity and limits
 
 Static HTML rendering is paid once per prepare. Each unique used slot is rendered once per call;
@@ -64,6 +73,9 @@ used slot once, even when that slot occurs repeatedly, and counts every occurren
 lengths. Segmented delivery performs no final join; contiguous delivery performs one exact-size
 allocation and checked copies. The legacy text path retains its established chunking, errors, and
 results.
+Shell compilation is paid once. Rendering its ordinary `Plan` keeps the established behavior: each
+unique used slot renders once, repeated positions reuse it, unused values are ignored, and the first
+missing slot in document order fails deterministically.
 
 ## Grill Log
 
@@ -87,6 +99,16 @@ results.
   including multibyte scalars and bytes introduced by HTML escaping.
 - **Q:** Join segments merely to learn their length? **A:** No; checked buffer resolution returns
   segments and their exact length together. Only `finishBytes` requests a contiguous body.
+- **Q:** Add a second template language for nested slots? **A:** No; `Shell` is ordinary typed data
+  whose only dynamic operation is a named complete-child position.
+- **Q:** Reimplement HTML opening and closing serialization? **A:** No; shell compilation asks
+  `Std.Html.renderChunks` for a typed shallow element boundary and retains those renderer-produced
+  fragments around compiled child operations.
+- **Q:** Allow a slot inside a void element? **A:** It has no output position, exactly like an
+  ordinary child supplied to a void `Html.Element`; compilation retains the void element and ignores
+  its children.
+- **Q:** Compile by recursive descent? **A:** No; an explicit cursor/continuation stack handles deep
+  shells without consuming the host call stack.
 
 ## Dependencies and consumers
 [[Std Html]] supplies rendering. [[Std Html Buffer]] supplies compact encoded plans, checked
@@ -94,4 +116,4 @@ segmentation, and contiguous completion. [[Std Http Server Reply]] consumes Rend
 
 ## Referenced by
 [[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
-[[2026-09-20-encoded-ssr-responses]]
+[[2026-09-20-encoded-ssr-responses]] · [[2026-09-20-typed-html-shells]]

@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-typed-html-shells]] — issue #260 structural nested child slots, iterative shell
+  preparation, Compose document helpers, deep coverage, and comparative measurements.
+
 - [[2026-09-20-encoded-ssr-responses]] — issue #259 reusable encoded static runs, per-request unique
   slot encoding, exact segmented lengths, and checked contiguous completion.
 
