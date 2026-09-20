@@ -275,6 +275,11 @@ These obligations require executable property/conformance tests now and mechaniz
 - **0.6.1-draft clarification · 2026-09-04:** Restored the existing namespace rule at expression
   heads: type-only names no longer masquerade as runtime values, while constructor and qualified
   variant paths retain their deliberate type lookup. This changes no conforming program.
+- **0.6.1-draft clarification 2 · 2026-09-20:** Clarified that ordinary nested foreign records retain
+  their declared aggregate tree when the native bridge asks the target for layout and call
+  classification; enumerating scalar leaves for validation never meant flattening the ABI shape.
+  [[ADR-0021-a-value-the-library-owns]] separately accepts the design of opaque owned by-value
+  resources, but changes no accepted program until its complete implementation slice lands.
 - **0.5.0-draft · 2026-08-31:** Added ordered Set literals and Set-only membership expressions, preserving source-order evaluation, key-order identity, contextual typing for the empty literal, and the existing `E7008` key-order boundary. See [[ADR-0013-ordered-set-literals-and-membership]].
 - **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
 - **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].

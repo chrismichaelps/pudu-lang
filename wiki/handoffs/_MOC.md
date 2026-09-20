@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-owned-foreign-values]] — accepted issue #227's nested ABI layout, explicit identity,
+  and generation-qualified ownership design; implementation remains deliberately unavailable.
+
 - [[2026-09-20-html-renderer-overhead]] — completed issue #256 cursor-frame renderer optimization
   with exact chunk, escaping, and document-prefix compatibility.
 

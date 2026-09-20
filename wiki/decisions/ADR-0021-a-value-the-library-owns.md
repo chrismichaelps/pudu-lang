@@ -1,6 +1,6 @@
 ---
 type: decision
-status: PROPOSED
+status: ACCEPTED
 date: 2026-09-04
 tags: [decision, language, ffi, foreign, ownership]
 aliases: [ADR-0021-a-value-the-library-owns]
@@ -21,7 +21,8 @@ typedef struct Font   { int baseSize, glyphCount, glyphPadding; Texture2D textur
                         Rectangle *recs; GlyphInfo *glyphs; } Font;
 ```
 
-It is not a record: a field of it is an address, and a record crosses as the scalars it flattens to.
+It is not an ordinary record: one field is an address that source must never observe, while an
+ordinary record exposes its admitted fields and crosses with its declared aggregate tree preserved.
 It is not a handle: a handle **is** an address, and this merely contains one — it arrives in
 registers or on the stack, not through a pointer.
 
@@ -57,13 +58,13 @@ holds and passes back, and must never look inside.**
 
 ## Decision
 
-**A foreign block may declare a value type it owns, and the declaration says how large it is by
-naming the scalars it is made of.**
+**A foreign block may declare an opaque by-value type, and its declaration preserves the aggregate
+shape and scalar classes that the target ABI needs to place it.**
 
 ```pudu
 foreign "raylib" version "6" {
   type Image = (Ptr, Int32, Int32, Int32, Int32)
-  type Font  = (Int32, Int32, Int32, UInt32, Int32, Int32, Int32, Int32, Ptr, Ptr)
+  type Font  = (Int32, Int32, Int32, (UInt32, Int32, Int32, Int32, Int32), Ptr, Ptr)
 
   fn loadImage       symbol "LoadImage"      (path: Str)    -> owned Image by unloadImage
   fn unloadImage     symbol "UnloadImage"    (image: Image) -> ()
@@ -73,18 +74,31 @@ foreign "raylib" version "6" {
 }
 ```
 
-The type says how the value crosses. Each result says what it transfers, because the same type does
-different things in different functions.
+The type says how the value crosses. Parentheses inside the layout preserve a nested C struct as a
+nested aggregate rather than flattening it. Each result says what it transfers, because the same
+type does different things in different functions.
 
 What follows.
 
-**The layout is written, and it has no field names.** It has to be written because a value passed in
-registers cannot be a black box: the platform classifies a struct by the sequence of scalar kinds it
-flattens to together with its size and alignment, so a struct of two floats and a struct of eight
-bytes go to different places at the same size. Guessing that is not a diagnostic, it is a corrupted
-call frame. It has **no field names** because naming them would invite reading them, and what sits at
-each offset is the library's business and changes between its versions while its functions do not. A
+**The layout is written, nested aggregates stay nested, and it has no field names.** It has to be
+written because a value passed in registers cannot be a black box: the platform classifies a struct
+from aggregate shape, scalar classes, size, and alignment, so a struct of two floats and a struct of
+eight bytes go to different places at the same size. Flattening is not generally equivalent either:
+the platform may classify a nested aggregate differently from the same scalar leaves written as one
+flat aggregate. Guessing that is not a diagnostic, it is a corrupted call frame. The compiler asks
+the target bridge for natural C offsets, size, alignment, and call classification; it does not
+calculate host layout in the frontend. Packed structs, explicit over-alignment, unions, bit fields,
+flexible members, and target-specific vector classes are refused until a later declaration can state
+their contracts exactly.
+
+The layout has **no field names** because naming them would invite reading them, and what sits at each
+offset is the library's business and changes between its versions while its functions do not. A
 program reaches the width through `GetImageWidth`, not through `image.width`.
+
+Writing the layout by hand is the accepted first cost. A future header generator may emit the same
+declaration and record the header and target it observed, but generated provenance does not weaken
+checking and does not create a second binding format. The checked-in declaration remains the source
+contract a reviewer can compare with the supported headers.
 
 **`Ptr` names a scalar the size of an address, and exists only inside such a layout.** It is not a
 type a program may write, hold, or compare. Its whole content is "this many bytes, classified as a
@@ -104,8 +118,10 @@ attached to the type cannot say which, so the obligation belongs to each result:
 All three are implemented for handle results as of 2026-09-04, under
 [[ADR-0018-calling-a-library-written-elsewhere]]: `owned T by release`, `borrowed T`, and
 `counted T by release`. That part of this decision needed nothing from the layout question below,
-which is why it did not wait for it. What remains proposed here is the by-value layout: a struct the
-library passes in registers, and the identity rule for one.
+which is why it did not wait for it. The implemented handle modes remain unchanged. This accepted
+decision specifies the by-value layout and identity model; it does not claim their parser, checker,
+runtime, or native bridge support exists. Until that complete slice lands, such declarations are
+rejected and a C wrapper returning an opaque handle remains the supported binding strategy.
 
 **Identity is declared, and never inferred from which scalars are pointers.** Which fields are
 addresses tells the platform how to place the value, which the layout is written for. It says nothing
@@ -114,14 +130,43 @@ and group by an `int64_t` `hid_t`; raylib's `Texture` is five integers; an OpenG
 descriptor and a Windows `HANDLE` are all integers. A rule keyed on addresses cannot express any of
 them, and a rule refusing pointer-free layouts cannot reach them.
 
-The default is the whole value: two values equal in every scalar are one resource. A declaration may
-narrow that to the scalars that identify it, for a library that varies a field it does not consider
+The default is the whole value: two live values with the same exact declared scalar representations
+are one resource. Identity is an ordered key of scalar storage bits in declaration order; padding is
+never part of it. This is representation equality, not Pudu value equality, so floating NaN payloads
+and positive and negative zero remain distinct when a declaration includes them. A declaration may
+narrow identity to one or more layout paths, for a library that varies a field it does not consider
 part of the identity — raylib's `Music` carries a `looping` flag beside the context pointer that owns
-the resource.
+the resource. Paths are zero-based index sequences through the written aggregate shape:
+
+```pudu
+type Music = ((Ptr, Ptr, UInt32, UInt32, UInt32), UInt32, Bool, Int32, Ptr)
+  identity ([0], [4])
+```
+
+`[0]` selects the complete nested stream aggregate and `[4]` the context pointer. A path may descend,
+such as `[0, 1]`; it may never escape the declared layout, repeat or overlap another path, or select
+no scalar. Paths are canonicalized into declaration order before the key is built, so their written
+order cannot change identity. The identity clause is declaration metadata only. It does not create a
+projection expression and does not make the selected bytes observable to Pudu code.
+
+An owned live identity has one store claim and one monotonically assigned claim generation. A second
+owned result with that identity while the claim is live is refused rather than silently merged. Once
+release completes, the same bits may identify a new resource and receive a new generation. Every
+runtime value carries the generation it was issued, so an old copy cannot become valid again merely
+because a library reused an address or integer name. This is the same address-reuse defence already
+implemented for opaque handles, generalized to a declared by-value identity key.
 
 **A counted result is not merged with anything.** Two references from `g_object_ref` are bitwise
 equal and each owes an unref, so identity-merging is exactly wrong for them, which is why the mode is
 declared rather than derived from equality.
+
+**An opaque by-value type is non-`Copy` in every transfer mode.** Ordinary source cannot copy,
+construct, compare, hash, destructure, or project it. Passing an owned or counted value to a
+non-release foreign function leases its live claim for the duration of the call; passing it to its
+declared release consumes the claim. A borrowed result carries no claim and is never released by
+Pudu, but it remains non-`Copy`: it may be used repeatedly only through foreign calls whose ordinary
+argument handling borrows the value for the call. These rules keep native ABI copying inside the
+unsafe call boundary without turning that machine-level copy into language `Copy` semantics.
 
 **The three modes are about ownership, not about how a value crosses.** They apply to a handle result
 exactly as they do to a value passed by value: an opaque `cairo_t *` from `cairo_reference` is
@@ -141,7 +186,7 @@ construct one, and there is no literal for it.
 **A pointer as an ordinary type.** `Ptr` stays inside a layout. Admitting it as a value would make an
 address an integer, which every part of this boundary has refused.
 
-**A resource holding another resource.** A `Font` embeds a `Texture`, and `UnloadFont` frees the
+**Separately exposing an interior resource.** A `Font` embeds a `Texture`, and `UnloadFont` frees the
 atlas with it. Nothing here says whether the inner one may be named separately, released separately,
 or survives its container, and a library that lends out an interior resource — `Model` holding
 `Material` holding `Texture` is the same shape — needs an answer before its bindings are safe. The
@@ -159,13 +204,21 @@ hold it after the value is released, compare it, or do arithmetic on it. The lay
 described to the platform, not to be seen.
 
 **Treat the whole struct as opaque bytes of a declared size.** Rejected: size is not enough. The
-platform places a value by the classes of the scalars it flattens to, so a description that gave only
+platform places a value by its aggregate nesting and scalar classes, so a description that gave only
 a size would put a struct of two floats where a struct of eight bytes goes, on the machine where
 those differ.
 
 **Ask the platform for the layout at run time, as record offsets already are.** Rejected: the offsets
 of a struct can be asked for only once its member kinds are known, which is exactly what is missing.
 The declaration is where they enter.
+
+**Flatten nested aggregates to their scalar leaves.** Rejected: equal leaves do not imply equal ABI
+classification. The declaration preserves the source aggregate tree and lets the target bridge
+derive its placement.
+
+**Make a header generator the only source of bindings.** Rejected: generation can reduce typing but
+cannot replace a reviewable language contract, and not every supported target has the same headers
+available when a Pudu program is compiled. A generator may produce the accepted declaration form.
 
 **Return it as a handle by having the binding allocate one.** Rejected: it means a C shim for every
 such function, and the point of a foreign declaration is to call the library rather than a layer
@@ -204,11 +257,12 @@ are unrelated.
 - A C conformance fixture passes and returns a struct holding an address beside scalars, and proves
   the value that comes back is the one that went in.
 - The classification is proven where it can differ: a layout of two floats, a layout of an address
-  and scalars, and a layout large enough to be returned through memory rather than registers.
+  and scalars, a nested aggregate compared with a flat aggregate containing the same leaves, and a
+  layout large enough to be returned through memory rather than registers.
 - Ownership is proven as it is for handles: release once, refuse a second, refuse use after release,
   release at teardown what the program did not.
-- Two copies the declaration says are one resource are one claim, and releasing either releases it
-  once.
+- A second owned result with an identity already live is refused without releasing or otherwise
+  changing the existing claim.
 - A `Ptr` written outside a layout is refused, as is a field read through such a value.
 - A pointer-free layout the library releases by value is owned and refuses a second release. Prove it
   on an integer identity, not a pointer one: raylib's `Texture2D` or an HDF5 `hid_t`.
@@ -217,10 +271,30 @@ are unrelated.
 - A counted result is not merged with an equal one: two references each release once, and the object
   outlives the first release.
 - A declaration narrowing identity to part of the layout treats two values differing only outside
-  that part as one resource.
+  that part as one resource, rejects duplicate live ownership, and admits reused identity bits only
+  under a fresh generation after release.
 - The pointer-free structs that no release takes keep crossing as ordinary records.
+
+## Grill Log
+
+- **Q:** Must authors write layouts before a header generator exists? **A:** Yes. _Rationale:_ the
+  target ABI needs the shape, and one declaration format remains reviewable whether written or
+  generated. _Rejected:_ opaque byte sizes; generator-only bindings.
+- **Q:** Does admitting `Ptr` in a layout admit pointer values? **A:** No. _Rationale:_ it is an ABI
+  scalar class inside an unreadable declaration, not an expression type. _Rejected:_ record fields
+  of pointer type; address arithmetic or comparison.
+- **Q:** Does address reuse revive an old resource value? **A:** No. _Rationale:_ identity selects the
+  live claim while a generation distinguishes successive resources with identical bits. _Rejected:_
+  permanent tombstones; equality without generations.
+- **Q:** Is identity ordinary scalar equality? **A:** No. _Rationale:_ NaNs and signed zero make
+  semantic equality unsuitable for native resource identity. The key is exact declared scalar
+  representation in canonical declaration order, excluding padding. _Rejected:_ Pudu equality;
+  whole-struct byte comparison including padding.
+- **Q:** Can nested C aggregates be flattened? **A:** No. _Rationale:_ target ABIs may classify the
+  nested and flat shapes differently. _Rejected:_ one scalar-leaf list as a universal layout.
 
 ## Referenced by
 
 [[ADR-0018-calling-a-library-written-elsewhere]] · [[ADR-0019-getting-a-value-back-out-of-a-library]]
-· [[ADR-0020-handing-a-library-a-run-of-bytes]] · [[grammar/pudu]] · [[Foreign Crossing]]
+· [[ADR-0020-handing-a-library-a-run-of-bytes]] · [[grammar/pudu]] · [[Foreign Crossing]] ·
+[[architecture/FFI-SELF-HOSTING]] · [[2026-09-20-owned-foreign-values]]

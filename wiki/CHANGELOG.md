@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Owned foreign values have an accepted boundary
+
+- [[ADR-0021-a-value-the-library-owns]] now accepts the design for resources a library passes by
+  value. Their opaque declarations preserve nested aggregate shape and ABI scalar classes; the
+  target bridge derives natural C offsets, size, alignment, and call classification. Packed,
+  over-aligned, union, bit-field, flexible-member, and target-vector layouts remain refused.
+- Ownership mode stays on each result. Identity defaults to the whole representation and may narrow
+  through unreadable zero-based layout paths. Live claims carry generations, so repeated live
+  ownership is refused while reused address or integer bits after release create a distinct claim.
+- `Ptr` remains declaration-only ABI metadata. By-value resources are move-only and cannot be read,
+  constructed, compared, hashed, destructured, or projected by source code. This closes issue #227's
+  design questions; implementation remains a separate complete compiler/runtime/native-bridge slice,
+  and unsupported declarations must continue to be rejected.
+
 ## 2026-09-20 — HTML rendering advances one child at a time
 
 - `Std.Html` now keeps one active child cursor and suspends only its parent when descending. It no
