@@ -368,7 +368,9 @@ export fn dialog() -> Node { tag("dialog") }
 export fn progress() -> Node { tag("progress") }
 
 /// Renders a node as a whole document, prefixed with `<!DOCTYPE html>`.
-export fn document(root: &Node) -> Str { "<!DOCTYPE html>" + Html.render(&root.html()) }
+export fn document(root: &Node) -> Str {
+  ["<!DOCTYPE html>"].concat(Html.renderChunks(&root.html())).join("")
+}
 
 /// Renders a node on its own, without a doctype.
 export fn render(node: &Node) -> Str { Html.render(&node.html()) }

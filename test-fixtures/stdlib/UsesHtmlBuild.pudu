@@ -101,7 +101,7 @@ export fn main() -> Int {
   if rendered(&H.tag("custom-thing")) == "<custom-thing></custom-thing>" { held = held + 1 }
 
   // A whole document carries the doctype; a fragment does not.
-  if H.document(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
+  if H.document(&H.html()) == "<!DOCTYPE html><html></html>" { held = held + 1 }
   if !rendered(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
 
   // Every tag function names the element it is called after.

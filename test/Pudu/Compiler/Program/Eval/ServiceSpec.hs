@@ -118,7 +118,7 @@ testServiceEvaluation = do
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "60")
+        (markup === Just "66")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than

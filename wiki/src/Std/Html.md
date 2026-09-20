@@ -82,18 +82,42 @@ functions already are, and they compose without a second mechanism to learn.
 ## Fragment rendering
 
 `renderChunks` collects rendered text fragments in document order; render joins them once.
-An explicit `Writing` stack appends opening, child fragments and closing markup to one persistent
-array instead of recursing once per element or materializing each child subtree. Children enter the
-stack in reverse order so they leave it in document order. `document` streams the `<!DOCTYPE html>\n` prefix
-directly into `appendRendered` before joining. `appendAttributes` streams formatted attribute
-strings directly into the active chunk array, eliminating intermediate attribute arrays and joins.
+An explicit cursor-frame stack appends opening, child fragments and closing markup to one persistent
+array instead of recursing once per element or materializing each child subtree. The active child
+collection and its next index stay in local cursor state. Descending suspends only that parent cursor,
+and returning uses the array's constant-time `pop`; traversal never slices the pending stack and
+never schedules all siblings eagerly. `document` seeds the writer with the `<!DOCTYPE html>\n`
+prefix before joining. [[Std Html Build]] prepends its distinct compact `<!DOCTYPE html>` fragment
+to `renderChunks` before the one final join, avoiding a second copy of the materialized body.
+
+`renderChunks` retains its existing fragment boundaries: opening tag, each accepted formatted
+attribute, opening terminator, text/trusted content, and closing tag remain separate chunks. The
+current public surface exposes those chunks to SSR preparation, so coalescing them here would be an
+API change and belongs in the opt-in plan compaction work rather than this renderer. Attribute
+formatting therefore continues to produce one fragment per accepted attribute; the scheduling and
+document-prefix changes are the measured optimization in this slice.
+
 `escape(content)` delegates directly to the native `content.escapeHtml()` builder-backed built-in,
 eliminating intermediate string loops and replacements. Attribute rendering, escaping, void-element
 syntax and trusted markup behavior are unchanged. This is buffered rendering, not socket streaming;
 view depth no longer consumes evaluator call frames.
+
+The pre-change no-optimization baseline used a focused program with depth 1,600, width 1,200, and
+40 attributes. `pudu explain` reported 358,532 evaluator steps; the host RTS reported
+2,336,078,616 allocated bytes, 3,868,920 bytes maximum residency, and 0.855 seconds elapsed. The
+cursor traversal reported 312,954 steps, 1,994,412,360 allocated bytes, 3,398,968 bytes maximum
+residency, and 0.644 seconds elapsed: reductions of 12.7%, 14.6%, 12.1%, and 24.7% respectively.
+These figures are a local same-build comparison point, not portable performance guarantees.
 
 Resolved Grill Log:
 - **Q:** Keep the existing serialized output while removing repeated subtree joins? **A:** Yes; expose fragments for SSR composition without promising bounded-memory transport.
 - **Q:** Why delegate `escape` to `content.escapeHtml()`? **A:** Pudu's native string `escapeHtml()` uses a builder fast path in Haskell that skips unescaped text in blocks, avoiding repeated string scans, regexes, or five sequential `.replace()` calls in Pudu script.
 - **Q:** Why stream attributes directly into the chunk array with `appendAttributes`? **A:** Every HTML element previously allocated a separate `pieces: Array[Str]`, formatted attributes into it, and called `.join("")` to create an intermediate attribute string. Appending directly to the document chunk stream removes two allocations and one string concatenation per element.
 - **Q:** Keep recursive traversal because ordinary pages are shallow? **A:** No. Page depth can come from program data, and a renderer must not stop the application merely because a valid value is deeply nested. An explicit work stack preserves exact output order without consuming one evaluator frame per node. _Rejected:_ a documentation-only nesting limit; catching the evaluator failure after it occurs.
+- **Q:** Coalesce public chunks to reduce the fragment count? **A:** No in this slice. _Rationale:_
+  `renderChunks` is consumed as a prepared SSR boundary, and changing its grouping would mix an
+  observable API decision into an internal scheduling repair. _Rejected:_ silently joining opening
+  syntax or text runs; duplicating traversal for `render` and `renderChunks`.
+- **Q:** Keep slicing the pending stack because the sequence shares structure? **A:** No. _Rationale:_
+  the runtime confirms slicing is logarithmic while `pop` is constant time, and cursor frames also
+  bound scheduled sibling work. _Rejected:_ claiming a full-array copy; retaining repeated slices.

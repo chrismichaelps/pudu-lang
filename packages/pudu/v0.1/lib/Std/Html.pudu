@@ -319,10 +319,10 @@ export fn render(view: &Html) -> Str { renderChunks(view).join("") }
 /// Buffered output fragments, in document order, without joining child subtrees.
 export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
 
-/// One step of writing a view: a node still to write, or text already decided.
+/// A suspended parent cursor, with an optional closing tag to write on return.
 type Writing
-  = Pending(Html)
-  | Written(Str)
+  = Resume(Array[Html], Int)
+  | CloseAndResume(Str, Array[Html], Int)
 
 /// A view's markup appended to what was written before it.
 ///
@@ -331,25 +331,49 @@ type Writing
 /// level let a deep enough document stop the program.
 fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
   var out = pieces
-  var pending: Array[Writing] = [Pending(*view)]
-  while pending.length() > 0 {
-    let last = pending.length() - 1
-    let step = pending[last]
-    pending = pending.slice(0, last)
-    match step {
-      case Written(piece) => { out = out.push(piece) }
-      case Pending(node) => {
-        match node {
-          case Text(content) => { out = out.push(escape(content)) }
-          case Trusted(markup) => { out = out.push(markup) }
-          case Fragment(children) => { pending = withChildren(pending, &children) }
-          case Element(name, attributes, children) => {
-            out = appendAttributes(&attributes, out.push("<" + name))
-            if VOID_ELEMENTS.contains(name) {
-              out = out.push(" />")
+  var current: Array[Html] = [*view]
+  var index = 0
+  var pending: Array[Writing] = []
+  while index < current.length() || pending.length() > 0 {
+    if index >= current.length() {
+      let step = pending[pending.length() - 1]
+      pending = pending.pop()
+      match step {
+        case Resume(parent, next) => {
+          current = parent
+          index = next
+        }
+        case CloseAndResume(name, parent, next) => {
+          out = out.push("</" + name + ">")
+          current = parent
+          index = next
+        }
+      }
+    } else {
+      let node = current[index]
+      index = index + 1
+      match node {
+        case Text(content) => { out = out.push(escape(content)) }
+        case Trusted(markup) => { out = out.push(markup) }
+        case Fragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(Resume(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case Element(name, attributes, children) => {
+          out = appendAttributes(&attributes, out.push("<" + name))
+          if VOID_ELEMENTS.contains(name) {
+            out = out.push(" />")
+          } else {
+            out = out.push(">")
+            if children.length() == 0 {
+              out = out.push("</" + name + ">")
             } else {
-              out = out.push(">")
-              pending = withChildren(pending.push(Written("</" + name + ">")), &children)
+              pending = pending.push(CloseAndResume(name, current, index))
+              current = children
+              index = 0
             }
           }
         }
@@ -357,17 +381,6 @@ fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
     }
   }
   out
-}
-
-/// Children placed on the stack so the first is written first.
-fn withChildren(pending: Array[Writing], children: &Array[Html]) -> Array[Writing] {
-  var held = pending
-  var index = children.length() - 1
-  while index >= 0 {
-    held = held.push(Pending(children[index]))
-    index = index - 1
-  }
-  held
 }
 
 /// A whole document, with the declaration that says which one it is.
