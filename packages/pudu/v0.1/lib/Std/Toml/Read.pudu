@@ -249,7 +249,7 @@ fn dotted(pieces: &Array[Str]) -> Str {
   out
 }
 
-// Building the document 
+// Building the document
 
 /// Where a key of a table under construction points: a value, a table, or the
 /// tables of a repeated section in the order they were opened.

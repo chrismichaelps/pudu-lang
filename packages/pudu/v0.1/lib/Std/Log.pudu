@@ -52,7 +52,7 @@ export type Logger = {
   printer: Out.Printer
 }
 
-// Reading a value back out of `show` 
+// Reading a value back out of `show`
 
 /// Text as `show` would have rendered it, with the quotes it adds taken off.
 ///
@@ -98,7 +98,7 @@ fn unescapeShown(value: Str) -> Str {
   pieces.join("")
 }
 
-// Building a logger 
+// Building a logger
 
 /// A logger to the output stream, keeping everything from `Info` up.
 ///
@@ -184,7 +184,7 @@ export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
   value.carrying(key, unshown(show(held)))
 }
 
-// Reading a logger back 
+// Reading a logger back
 
 /// The level a logger keeps from.
 export fn leastOf(value: &Logger) -> Level { value.least }

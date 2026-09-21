@@ -82,7 +82,7 @@ export fn main() -> Int {
     held = held + 1
   }
 
-  // Quoting 
+  // Quoting
 
   // A value with nothing in it to confuse a reader is written bare.
   if Log.quoted("A17") == "A17" { held = held + 1 }
@@ -194,7 +194,7 @@ export fn main() -> Int {
     held = held + 1
   }
 
-  // Formats 
+  // Formats
 
   // The line is held apart from how it reads, so a format is a function on it.
   let line = Log.lineOf(&paid, "2026-08-31T12:00:00Z", Log.Info, "captured")
@@ -275,7 +275,7 @@ export fn main() -> Int {
   let terse = bare.shapedBy(fn(l: Log.Line) -> Str => Log.levelName(l.level))
   if Log.rendered(&terse, Log.Error, "ignored") == "ERROR" { held = held + 1 }
 
-  // Writing 
+  // Writing
 
   // A logger can be pointed at another printer without losing what it carries.
   let redirected = paid.through(&Out.stderr())
