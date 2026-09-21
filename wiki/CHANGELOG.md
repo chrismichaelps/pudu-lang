@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Unchanged modules are not compiled again
+
+- `check`, `run`, `explain`, and `test` keep each module's parsed and checked products across runs.
+  A module whose text was parsed before is not lexed or parsed again; one checked before in a
+  program presenting the same interfaces is not checked again. Editing a function body re-checks
+  only that module. `PUDU_CACHE=off` compiles everything from source.
+- Stored products are keyed by content and position-free interface fingerprints, verified by a
+  digest, written atomically, bounded in number, and never hold diagnostics. A stored module's
+  declarations and function bodies are read only when first used.
+- On the full-stack example a warm `check` takes 25ms and allocates 24MB (from 0.745s and 1.92GB),
+  peak live memory falls from 72.8MB to 4.3MB, and the service reaches `listening` in 70ms instead
+  of 746ms (issues #272 and #273).
+
 ## 2026-09-21 — An ordinary run keeps no evaluator tally
 
 - `pudu run` links and enters the program through the same action `pudu explain` uses, without

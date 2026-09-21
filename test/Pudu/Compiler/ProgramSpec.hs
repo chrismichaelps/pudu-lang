@@ -9,6 +9,11 @@ import Pudu.Compiler.Program.ForeignSpec
   , testForeignOwnershipStore
   , testForeignTeardownEnds
   )
+import Pudu.Compiler.Program.CacheSpec
+  ( testCacheCorruption
+  , testCacheEquivalence
+  , testCacheInvalidation
+  )
 import Pudu.Compiler.Program.GraphSpec
   ( testDiscoveryFailures
   , testGraphEdges
@@ -47,6 +52,9 @@ programProperties =
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
+  , ("stored products compile and run exactly as source does", testCacheEquivalence)
+  , ("stored products are never reused for changed input", testCacheInvalidation)
+  , ("damaged stored products fall back and are replaced", testCacheCorruption)
   , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)

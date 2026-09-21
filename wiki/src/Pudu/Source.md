@@ -74,6 +74,8 @@ offsetPosition :: Source -> Offset -> Maybe Position
   so it costs a step per line; folding a record over every character allocated twice per character
   of every file read, on every run. A carriage return, a lone newline, and each half of a CRLF pair
   begin column one exactly as before.
+- **A source's content digest is formed at most once, and only when asked.** A cache of compiled
+  products keys by it; nothing else pays for it.
 - **`sameSource` compares ingestion identity**, which two readings of one file with the same name and
   contents do not share; the lexer uses it to refuse a mark taken on another snapshot.
 - The line starts are read straight off the rule a count would follow, so the answers agree with what counting gave: a carriage return begins a line, a newline after one continues it rather than beginning another, and a newline alone begins one. A carriage-return-newline pair records twice, once after each half, because a position between them is column one as surely as the position after them is.

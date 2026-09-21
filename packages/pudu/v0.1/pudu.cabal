@@ -64,7 +64,9 @@ library
     Pudu.Lint.Config
     Pudu.Version
     Pudu.Bundle
+    Pudu.Cache.Persist
     Pudu.Compiler
+    Pudu.Compiler.Cache
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program

@@ -55,7 +55,7 @@ data CompileResult = CompileResult
       A literal written without a suffix is not a platform `Int` merely because
       it was written plainly, and only the checker knows what it became. The
       evaluator reads this to build the literal as the type it is. -}
-  , compileIntegerKinds :: !(Map Span Text)
+  , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
   }

@@ -42,6 +42,9 @@ pudu help            print usage
 
 ### Governance
 
+- `check`, `run`, `explain`, and `test` compile through the [[Compiler Cache]]: unchanged modules'
+  products from earlier runs are reused. `PUDU_CACHE=off` compiles everything from source.
+
 - `pudu lsp` speaks the language server protocol over stdio. It takes no arguments and reads until the client closes the stream; everything it answers comes from the same compile the other commands run.
 - A refresh installation must overwrite the selected executable path deliberately. Until the
   binary version advances per build, freshness is proven behaviorally: the installed executable

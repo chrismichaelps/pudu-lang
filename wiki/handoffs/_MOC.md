@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-product-cache]] — issues #272 and #273 compiled products kept across runs under
+  content and interface keys, lazily read stored trees, integrity, bounds, and warm-start evidence.
+
 - [[2026-09-21-untallied-entry]] — issue #269 one entry action for ordinary and tallied runs, with
   counters only when asked for.
 

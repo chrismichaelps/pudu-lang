@@ -55,6 +55,11 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - Cycles are allowed for declaration signatures. Interface skeletons for an SCC are available before bodies in that SCC are checked; no module-scope runtime initialization is introduced.
 - The graph compiles through [[Semantic Interface]] and [[Type Interface]]. It never concatenates ASTs or pretends dependency declarations belong to the root module.
 - Diagnostics retain their original source identities and are stable-sorted once across the program.
+- `compileProgramCached` reuses stored products from the [[Compiler Cache]]: a module whose text
+  was parsed before is not lexed or parsed, and one checked before in a program presenting the
+  same interfaces is not expanded, resolved, or checked. The compile context is built only when a
+  module has to be checked. Reused modules carry no tokens, resolution, types, or documentation,
+  so tooling that reads those compiles with `compileProgram`.
 - `finish` prepares one [[Type Interface Graph]] from every admitted module's interface and every
   module checks against it, so interface order, collection, and installation happen once per
   program rather than once per module.
@@ -130,4 +135,4 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 
 ## Referenced by
 
-[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]]
+[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]] · [[Compiler Cache]]

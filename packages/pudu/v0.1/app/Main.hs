@@ -41,9 +41,11 @@ import Pudu.Bundle
   , writeBundledOnto
   )
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Cache (openProductCache)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileProgramCached
   , programDependencies
   , programIntegerKinds
   , programDocs
@@ -403,6 +405,14 @@ startRepl style initial =
 
 {-| Check every named file, report all diagnostics, and fail only after the last
     one so a broken first file cannot hide the rest. -}
+{-| Compile a program, reusing what earlier runs stored for the modules that
+    have not changed. Every command that only reports and runs goes through
+    this; tooling that reads tokens and types compiles from scratch. -}
+compileReusing :: FilePath -> IO ProgramResult
+compileReusing path = do
+  cache <- openProductCache
+  compileProgramCached cache path
+
 checkPaths :: RenderStyle -> [FilePath] -> IO ()
 checkPaths style paths
   | null paths = do
@@ -414,7 +424,7 @@ checkPaths style paths
 
 checkOne :: RenderStyle -> FilePath -> IO Bool
 checkOne style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -441,7 +451,7 @@ checkOne style path = do
     the machine is busy and two runs of the same program agree. -}
 explainProgram :: RenderStyle -> FilePath -> IO ()
 explainProgram style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -485,7 +495,7 @@ renderTally counted =
     both streams can tell the program's words from the tool's. -}
 runProgram :: RenderStyle -> FilePath -> IO ()
 runProgram style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.hPutStrLn stderr (renderProgramDiagnostics style program diagnostics)
@@ -858,7 +868,7 @@ isPuduFile path = takeExtension path == ".pudu"
     and produces no runtime diagnostics. The integer is the assertion count. -}
 runTestFile :: RenderStyle -> FilePath -> IO (Bool, Int)
 runTestFile style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)

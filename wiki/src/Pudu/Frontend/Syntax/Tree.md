@@ -141,6 +141,10 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 
 ### Governance
 
+- Every node has a stored form ([[Cache Persist]]). A module's declarations and a function's body
+  are stored as blocks of their own and read when first reached, so loading a stored module reads
+  its name and imports and leaves the rest until something looks at it.
+
 - `RangeExpression` holds two **optional** ends. A range is not a binary operator on two values,
   because either end may be absent and a binary node has no way to say so; an absent end means "as
   far as the thing this is applied to goes", which is what makes `items[2..]` the tail of a sequence

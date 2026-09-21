@@ -5,6 +5,8 @@ module Pudu.Frontend.Syntax.Name
   , moduleQualifier
   ) where
 
+import GHC.Generics (Generic)
+import Pudu.Cache.Persist (Persist)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
@@ -12,7 +14,7 @@ import qualified Data.Text as Text
 
 {-| @Module.Syntax.Identity — stores non-empty path segments -}
 newtype ModuleName = ModuleName {moduleNameSegments :: NonEmpty Text}
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
 
 moduleNameText :: ModuleName -> Text
 moduleNameText = Text.intercalate "." . NonEmpty.toList . moduleNameSegments
@@ -26,3 +28,5 @@ moduleNameText = Text.intercalate "." . NonEmpty.toList . moduleNameSegments
     where the two can agree on a program that does not run. -}
 moduleQualifier :: ModuleName -> Text
 moduleQualifier = NonEmpty.last . moduleNameSegments
+
+instance Persist (ModuleName)

@@ -7,6 +7,7 @@ module Pudu.Semantic.Interface
   , emptyExportIndex
   , exportIndex
   , importBindings
+  , moduleExportKeys
   , moduleExports
   ) where
 
@@ -64,6 +65,10 @@ emptyExportIndex = ExportIndex Map.empty
 
 exportIndex :: Map ModuleName Module -> ExportIndex
 exportIndex modules = ExportIndex (Map.map moduleExports modules)
+
+{-| What a module exports, by namespace and name alone. -}
+moduleExportKeys :: ModuleExports -> [(Namespace, Text)]
+moduleExportKeys (ModuleExports exported) = Map.keys exported
 
 moduleExports :: Module -> ModuleExports
 moduleExports moduleValue =

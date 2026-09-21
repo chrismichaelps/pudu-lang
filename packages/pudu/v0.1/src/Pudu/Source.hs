@@ -14,6 +14,7 @@ module Pudu.Source
   , offsetPosition
   , sourceLength
   , sameSource
+  , sourceDigest
   , sourceName
   , sourceText
   , spanEnd
@@ -24,10 +25,14 @@ module Pudu.Source
   , zeroOffset
   ) where
 
+import Crypto.Hash (Blake2b_256, Digest, hash)
+import qualified Data.ByteArray as ByteArray
+import Data.ByteString (ByteString)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
 import Data.Unique (Unique, newUnique)
 
 {-| @Source.Text.Identity — names one immutable source -}
@@ -66,6 +71,9 @@ data Source = Source
       out a file cost the square of its size. This is built once, in the pass
       that already reads the text. -}
   , sourceLineStarts :: !(Map Int Int)
+  {-| The text's content digest, formed at most once and only when something
+      keys work by this text, as a cache of compiled products does. -}
+  , sourceDigestValue :: ~ByteString
   }
 
 {-| @Source.Text.Span — identifies a half-open range in one snapshot -}
@@ -125,12 +133,17 @@ newSource name textValue = do
       , sourceTextValue = textValue
       , sourceScalarLength = Text.length textValue
       , sourceLineStarts = lineStartsOf textValue
+      , sourceDigestValue =
+          ByteArray.convert (hash (Encoding.encodeUtf8 textValue) :: Digest Blake2b_256)
       }
 
 {-| Whether two values are the same ingestion of a text, which two readings of
     one file with the same name and contents are not. -}
 sameSource :: Source -> Source -> Bool
 sameSource left right = sourceIdentity left == sourceIdentity right
+
+sourceDigest :: Source -> ByteString
+sourceDigest = sourceDigestValue
 
 sourceName :: Source -> SourceName
 sourceName = identityName . sourceIdentity
