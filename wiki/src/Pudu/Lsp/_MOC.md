@@ -19,7 +19,8 @@ tags: [moc, tooling, lsp]
 - [[Lsp Workspace Symbols]] — symbol search across all indexed open documents.
 - [[Lsp Code Action]] — context-sensitive quick fixes and formatting actions.
 - [[Lsp Completion]] — member method, symbol, keyword, and primitive type completions.
-- [[Lsp Context]] — syntax-directed completion positions and visible closed-sum facts.
+- [[Lsp Context]] — syntax- and token-directed completion positions.
+- [[Lsp Shapes]] — declared sum and record shapes by canonical identity, with generic substitution.
 - [[Lsp Import Completion]] — whole module paths offered while an import is written.
 - [[Lsp Module Catalog]] — every module an import could reach, found once per source root.
 - [[Lsp Pattern Completion]] — typed sum candidates, conservative coverage, and payload details.

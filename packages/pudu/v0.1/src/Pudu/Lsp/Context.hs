@@ -2,23 +2,14 @@
 module Pudu.Lsp.Context
   ( CompletionContext (..)
   , ImportSite (..)
-  , SumShape (..)
-  , VariantShape (..)
   , contextAt
   , importSiteAt
-  , programSums
-  , sumShapes
   ) where
 
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler (CompileContext (..), CompileResult (..))
-import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Constraint (..)
@@ -51,8 +42,6 @@ import Pudu.Frontend.Token
   , TriviaKind (..)
   )
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
-import Pudu.Type.Interface (interfaceDeclarations)
-import Pudu.Type.Interface.Graph (graphInterfaces)
 
 {-| What may be written where the cursor stands.
 
@@ -81,59 +70,6 @@ data ImportSite
   {-| After `as`, where a new name is chosen and nothing is offered. -}
   | ImportAlias
   deriving stock (Eq, Show)
-
-data VariantShape
-  = UnitVariant
-  | TupleVariant ![Located TypeSyntax]
-  | RecordVariant ![(Text, Located TypeSyntax)]
-  deriving stock (Eq, Show)
-
-{-| A sum type as a pattern sees it: its owner, parameters, and payloads. -}
-data SumShape = SumShape
-  { sumModule :: !ModuleName
-  , sumTypeParams :: ![Text]
-  , sumVariants :: ![(Text, VariantShape)]
-  }
-  deriving stock (Eq, Show)
-
-{-| The sums a module's declarations define, by the name the type is declared
-    under. -}
-sumShapes :: ModuleName -> [Located Declaration] -> [(Text, SumShape)]
-sumShapes owner declarations =
-  [ ( locatedValue (typeName value)
-    , SumShape owner (map paramName (typeTypeParams value)) (map variantShape variants)
-    )
-  | Located _ (TypeDeclaration value) <- declarations
-  , Located _ (SumDefinition variants) <- [typeDefinition value]
-  ]
- where
-  variantShape (Located _ variant) =
-    ( locatedValue (variantName variant)
-    , case variantPayload variant of
-        UnitPayload -> UnitVariant
-        TuplePayload members -> TupleVariant members
-        RecordPayload fields ->
-          RecordVariant
-            [ (locatedValue (fieldName field), fieldType field)
-            | Located _ field <- fields
-            ]
-    )
-
-{-| Every sum type the program can see: the document's own, and every sum an
-    interface in its program exports, by canonical name. -}
-programSums :: ProgramResult -> Map Text SumShape
-programSums program =
-  Map.fromList
-    ( [ (moduleNameText owner <> "." <> name, shape)
-      | (owner, interface) <- Map.toList (graphInterfaces (contextTypes (programContext program)))
-      , (name, shape) <- sumShapes owner (interfaceDeclarations interface)
-      ]
-        <> [ (moduleNameText owner <> "." <> name, shape)
-           | Just parsed <- [rootCompileResult program >>= compileSyntax]
-           , let owner = locatedValue (moduleName parsed)
-           , (name, shape) <- sumShapes owner (moduleDeclarations parsed)
-           ]
-    )
 
 {-| The construct at `offset`. Comments, quoted text, and imports are read
     from the tokens, which the lexer gives for any text, so they are known

@@ -22,7 +22,7 @@ What the server knows about each open document: one compile's answers, kept by t
 ## Interface
 
 ```haskell
-data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, .. }
+data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, .. }
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
@@ -43,7 +43,7 @@ uriOf            :: Json -> Maybe Text
   documentation index, resolved symbol identities, and what the checker made of each expression by
   span. Hover and definition use resolution to distinguish a foreign declaration from a local or
   parameter with the same spelling.
-- The ordinary lexer tokens, successfully parsed root module, and the program's canonical sum shapes stay beside those
+- The ordinary lexer tokens, tooling tree of the root module, and the program's canonical sum and record shapes ([[Lsp Shapes]]) stay beside those
   semantic products. Syntax-directed features can therefore identify the cursor's construct and
   combine it with the same compile's checked type without reparsing or consulting stale global data.
 - **Two documentation indexes, because a span belongs to one file.** `analysisFileIndex` holds this

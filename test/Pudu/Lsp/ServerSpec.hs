@@ -40,6 +40,7 @@ serverProperties =
   , ("the module catalog names every module under a root", testModuleCatalog)
   , ("pattern completion survives a match the checker rejects", testPatternCompletionRejected)
   , ("completion offers only the bindings in scope at the cursor", testLexicalScopeCompletion)
+  , ("field completion reads the receiver's canonical record", testRecordFieldCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -532,6 +533,44 @@ testLexicalScopeCompletion = do
     , counterexample "a let-else binding stays for the rest of the block" (property ("kept" `elem` tail'))
     , counterexample "a let is not visible in its own initializer" (property ("fresh" `notElem` initializer))
     , counterexample "a module function declared later is offered" (property ("later" `elem` tail'))
+    ]
+
+testRecordFieldCompletion :: IO Property
+testRecordFieldCompletion = do
+  local <- opened $ Text.unlines
+    [ "module Demo"
+    , "type Box[T] = { mut value: T, plain: T, nested: Array[Option[T]], call: fn(T) -> Str }"
+    , "type Boxed = Box[Int]"
+    , "fn main(box: Box[Int], borrowed: &Box[Str], aliased: Boxed) -> Int {"
+    , "  box.plain"
+    , "  borrowed.plain"
+    , "  aliased.plain"
+    , "}"
+    ]
+  importedContent <- TextIO.readFile "test-fixtures/lsprecords/Main.pudu"
+  importedAnalysis <- analyseIn "test-fixtures/lsprecords" uri importedContent
+  let imported = rememberAnalysis uri importedAnalysis emptyDocuments
+      boxItems = request "textDocument/completion" (atPosition 4 6) local
+      borrowedItems = request "textDocument/completion" (atPosition 5 11) local
+      aliasedItems = request "textDocument/completion" (atPosition 6 10) local
+      importedLabels = completionLabels (request "textDocument/completion" (atPosition 7 4) imported)
+  pure $ conjoin
+    [ counterexample "a mutable field is offered with its instantiated type"
+        (completionDetail "value" boxItems === Just "mut Int")
+    , counterexample "an immutable field is offered with its instantiated type"
+        (completionDetail "plain" boxItems === Just "Int")
+    , counterexample "nested generics substitute the argument"
+        (completionDetail "nested" boxItems === Just "Array[Option[Int]]")
+    , counterexample "a function-typed field is one field"
+        (completionDetail "call" boxItems === Just "fn(Int) -> Str")
+    , counterexample "a reference receiver reaches its record"
+        (completionDetail "plain" borrowedItems === Just "Str")
+    , counterexample "an alias receiver reaches the record it names"
+        (completionDetail "plain" aliasedItems === Just "Int")
+    , counterexample ("an imported record's fields are offered: " <> show importedLabels)
+        (property (all (`elem` importedLabels) ["x", "label"]))
+    , counterexample "a local record of the same name lends no fields"
+        (property ("unrelated" `notElem` importedLabels))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

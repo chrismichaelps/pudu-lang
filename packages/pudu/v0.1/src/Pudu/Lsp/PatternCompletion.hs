@@ -11,7 +11,7 @@ import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameSegments, moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (moduleNameSegments, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Expression
   , FieldPattern (..)
@@ -19,11 +19,10 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   , Module (..)
   , Pattern (..)
-  , TypeSyntax (..)
   )
-import Pudu.Lsp.Context (SumShape (..), VariantShape (..))
+import Pudu.Lsp.Shapes (SumShape (..), VariantShape (..), renderTypeSyntax)
 import Pudu.Type (Type (..), TypeInfo, renderType, typeAt)
-import Pudu.Type.Value (NominalId (..), capabilityName, nominalKey)
+import Pudu.Type.Value (NominalId (..), nominalKey)
 
 data PatternCandidate = PatternCandidate
   { candidateLabel :: !Text
@@ -139,28 +138,6 @@ payloadDetail :: [Text] -> Text
 payloadDetail members
   | null members = ""
   | otherwise = "(" <> Text.intercalate ", " members <> ")"
-
-renderTypeSyntax :: Map Text Type -> Located TypeSyntax -> Text
-renderTypeSyntax substitutions (Located _ syntax) = case syntax of
-  NamedType path arguments ->
-    case (moduleNameSegments path, arguments) of
-      (name NonEmpty.:| [], []) -> maybe (moduleNameText path) renderType (Map.lookup name substitutions)
-      _ -> moduleNameText path <> typeArguments arguments
-  DynamicType path -> "dynamic " <> moduleNameText path
-  ReferenceType mutable target -> (if mutable then "&mut " else "&") <> renderTypeSyntax substitutions target
-  TupleType members -> "(" <> Text.intercalate ", " (map (renderTypeSyntax substitutions) members) <> ")"
-  FunctionType asynchronous inputs result ->
-    (if asynchronous then "async fn(" else "fn(")
-      <> Text.intercalate ", " (map (renderTypeSyntax substitutions) inputs)
-      <> ") -> " <> renderTypeSyntax substitutions result
-  UnsafeType capabilities target ->
-    "unsafe(" <> Text.intercalate ", " (map (capabilityName . locatedValue) capabilities)
-      <> ") " <> renderTypeSyntax substitutions target
-  UnitType -> "()"
-  InvalidType -> "?"
- where
-  typeArguments [] = ""
-  typeArguments arguments = "[" <> Text.intercalate ", " (map (renderTypeSyntax substitutions) arguments) <> "]"
 
 throughReferenceType :: Type -> Type
 throughReferenceType typeValue = case typeValue of

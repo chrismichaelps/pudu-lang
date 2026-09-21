@@ -39,7 +39,6 @@ import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
-import Pudu.Lsp.Context (programSums)
 import Pudu.Lsp.Definition (definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
@@ -62,6 +61,7 @@ import Pudu.Lsp.Highlight (documentHighlightAt)
 import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
 import Pudu.Lsp.ModuleCatalog (moduleCatalog)
+import Pudu.Lsp.Shapes (programRecords, programSums)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
   ( Incoming (..)
@@ -122,6 +122,7 @@ analyseIn root uri content = do
       , analysisTokens = maybe (lexTokens (lexSource source)) compileTokens (rootCompileResult program)
       , analysisModule = rootCompileResult program >>= compileSyntax
       , analysisSums = programSums program
+      , analysisRecords = programRecords program
       }
 
 {-| Determine the project root for compilation.

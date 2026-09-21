@@ -29,6 +29,7 @@ data Analysis = Analysis
   , analysisTokens       :: ![Token]
   , analysisModule       :: !(Maybe Module)
   , analysisSums         :: !(Map Text SumShape)
+  , analysisRecords      :: !(Map Text RecordShape)
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis
@@ -54,7 +55,7 @@ serverCapabilities :: Json
   within one keystroke would otherwise compile the program three times.
 - The stored analysis retains the root module's resolver result. Hover and definition therefore use
   symbol identity from the same compile as diagnostics and types rather than guessing by spelling.
-- The stored analysis also retains the parsed root module and visible sum shapes. Completion can
+- The stored analysis also retains the root module's tooling tree and visible sum and record shapes ([[Lsp Shapes]]). Completion can
   derive syntax context and legal constructors from one coherent compile rather than reparsing an
   editor buffer or scanning unrelated documentation entries.
 - A document's tokens are always stored, lexed directly when the compile produced no root result,

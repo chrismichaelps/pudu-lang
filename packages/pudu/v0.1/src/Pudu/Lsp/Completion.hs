@@ -1,7 +1,7 @@
 {-| @Program.Lsp.Completion — member and identifier completions -}
 module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 
-import Data.Char (isAlphaNum, isSpace)
+import Data.Char (isAlphaNum)
 import Data.List (nub, sort)
 import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
@@ -26,13 +26,14 @@ import Pudu.Lsp.Json (Json (..), lookupField)
 import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
+import Pudu.Lsp.Shapes (RecordShape (..), renderTypeSyntax)
 import Pudu.Semantic.Prelude (wiredInTypeNames)
 import Pudu.Semantic.Resolve (Resolution (..))
 import Pudu.Semantic.ScopeIndex (visibleAt)
 import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
 import Pudu.Source (spanStart, unOffset)
 import Pudu.Type (Type (..), narrowestAt, renderType)
-import Pudu.Type.Value (NominalId (..))
+import Pudu.Type.Value (NominalId (..), nominalKey)
 
 {-| Completions from the analysis already held, repairing nothing. A request
     that names no position is answered with every documented name. An import
@@ -325,46 +326,28 @@ importsOf content =
     _ -> []
 
 {-| What may follow a value of the type the checker gave the receiver: the
-    fields of a record this file declares, then its methods. -}
+    fields of its record type, then its methods. -}
 memberCompletions :: Analysis -> Int -> [Json]
 memberCompletions value dotOffset = case analysisTypes value >>= narrowestAt (dotOffset - 1) of
   Nothing -> []
   Just typeValue ->
-    let owner = ownerNameOf typeValue
-     in [simpleItem name 5 fieldType | (name, fieldType) <- recordFields value owner]
-          <> map methodItem (sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) owner)))
+    fieldCompletions value typeValue
+      <> map methodItem (sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) (ownerNameOf typeValue))))
 
-{-| The fields of a record type the file declares, read from its declaration:
-    `type Point = { x: Int, y: Int }` has `x` and `y`. A type declared
-    elsewhere, or one that is not a record, has none here. -}
-recordFields :: Analysis -> Text -> [(Text, Text)]
-recordFields value owner
-  | Text.null owner = []
-  | otherwise = case [docSpan entry | entry <- indexEntries (analysisFileIndex value), docName entry == owner, docKind entry == DocType] of
-      (start, end) : _ ->
-        let declaration = Text.take (end - start) (Text.drop start (analysisText value))
-            afterEquals = Text.drop 1 (Text.dropWhile (/= '=') declaration)
-         in case Text.uncons (Text.stripStart afterEquals) of
-              Just ('{', body) -> concatMap field (topLevelSplit (Text.dropEnd 1 (Text.stripEnd body)))
-              _ -> []
-      [] -> []
- where
-  field piece = case Text.breakOn ":" piece of
-    (name, rest)
-      | not (Text.null rest), Text.all nameScalar (Text.strip name), not (Text.null (Text.strip name)) ->
-          [(Text.strip name, Text.strip (Text.drop 1 rest))]
-    _ -> []
-
-{-| Split at the commas that are not inside brackets. -}
-topLevelSplit :: Text -> [Text]
-topLevelSplit = map Text.pack . go (0 :: Int) [] . Text.unpack
- where
-  go _ current [] = [reverse current | not (all isSpace current)]
-  go depth current (scalar : rest)
-    | scalar == ',' && depth == 0 = reverse current : go depth [] rest
-    | scalar `elem` ("([{<" :: String) = go (depth + 1) (scalar : current) rest
-    | scalar `elem` (")]}>" :: String) = go (max 0 (depth - 1)) (scalar : current) rest
-    | otherwise = go depth (scalar : current) rest
+{-| The fields of the receiver's record type, found by the type's canonical
+    identity — its declaring module and name — so a record another module
+    declares is found and two modules' records of the same name never exchange
+    fields. The type's parameters are replaced by the receiver's arguments:
+    a `Box[Int]`'s `value: T` is offered as `Int`. A `mut` field says so. -}
+fieldCompletions :: Analysis -> Type -> [Json]
+fieldCompletions value typeValue = case throughReferenceType typeValue of
+  NominalType identity arguments
+    | Just shape <- Map.lookup (nominalKey identity) (analysisRecords value) ->
+        let substitutions = Map.fromList (zip (recordTypeParams shape) arguments)
+         in [ simpleItem name 5 ((if mutable then "mut " else "") <> renderTypeSyntax substitutions written)
+            | (name, mutable, written) <- recordFields shape
+            ]
+  _ -> []
 
 implMethodsFor :: DocIndex -> Text -> [Text]
 implMethodsFor index owner

@@ -71,4 +71,4 @@ patternCandidates
 
 ## Referenced by
 
-[[src/Pudu/Lsp/_MOC]] · [[Lsp Context]] · [[Lsp Completion]]
+[[src/Pudu/Lsp/_MOC]] · [[Lsp Context]] · [[Lsp Shapes]] · [[Lsp Completion]]

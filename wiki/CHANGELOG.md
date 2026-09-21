@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Field completion reads the declared record
+
+- `value.` offers the fields of the receiver's record type found by its declaring module and name,
+  so an imported record's fields are offered and a local record of the same name lends none.
+  Generic arguments are substituted (`Box[Int]`'s `value: T` is `Int`, nested ones too), `mut`
+  fields are offered and marked, and references and aliases reach the record they name. Fields are
+  no longer read by slicing the declaration's text (issue #276).
+
 ## 2026-09-21 — Completion offers the bindings in scope
 
 - Names are offered from the frames name resolution opened, kept with their source extents: a

@@ -33,7 +33,10 @@ source root; the catalog is run only when the cursor is at an import site.
 
 ## Governance
 
-- After a dot, completion offers the methods the receiver value carries based on its inferred type and implemented trait blocks.
+- After a dot, completion offers the receiver's fields, then the methods it carries. Fields come
+  from [[Lsp Shapes]] by the receiver type's canonical identity, with its type arguments
+  substituted into each field's declared type; a `mut` field's detail says `mut`. References are
+  unwrapped and aliases arrive expanded by the checker.
 - In a match pattern, completion offers only constructors belonging to the checked subject's sum,
   excluding variants already covered by an unguarded irrefutable sibling arm, plus `_`.
 - In a type position, completion offers lexical type parameters, visible types, usable module
@@ -69,6 +72,7 @@ source root; the catalog is run only when the cursor is at an import site.
 - Do not suggest member methods when the cursor is not following a dot accessor.
 - Do not guess member names when the receiver type is unknown or untyped.
 - Do not select local bindings by declaration offset; visibility is resolution's frames.
+- Do not find a record's fields by the type's basename or by slicing its declaration's text.
 - Do not offer constructors from unrelated sums or suppress a constructor because a guarded or
   refutable pattern mentioned it.
 - Do not offer ordinary value keywords in a proven pattern or type position.

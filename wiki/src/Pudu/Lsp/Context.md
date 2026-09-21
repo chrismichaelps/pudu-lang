@@ -15,8 +15,7 @@ aliases: [Lsp Context]
 
 ## Purpose
 
-Classify a completion position from the compiler's parsed module and retain the closed-sum facts
-needed to turn that classification into legal candidates. This module answers what syntactic kind
+Classify a completion position from the compiler's parsed module and the lexer's tokens. This module answers what syntactic kind
 of thing belongs at a cursor; it does not decide editor protocol shapes or render completion items.
 
 ## Interface
@@ -34,21 +33,8 @@ data ImportSite
   | ImportSelection Text  -- inside the selection braces of this module's import
   | ImportAlias           -- after `as`; nothing is offered
 
-data VariantShape
-  = UnitVariant
-  | TupleVariant [Located TypeSyntax]
-  | RecordVariant [(Text, Located TypeSyntax)]
-
-data SumShape = SumShape
-  { sumModule   :: ModuleName
-  , sumTypeParams :: [Text]
-  , sumVariants :: [(Text, VariantShape)]
-  }
-
 contextAt    :: [Token] -> Maybe Module -> Int -> CompletionContext
 importSiteAt :: [Token] -> Int -> Maybe ImportSite
-sumShapes   :: ModuleName -> [Located Declaration] -> [(Text, SumShape)]
-programSums :: ProgramResult -> Map Text SumShape
 ```
 
 ### Governance
@@ -72,19 +58,15 @@ programSums :: ProgramResult -> Map Text SumShape
 - Value contexts retain the innermost expression when one exists. Calls, their arguments, record
   initializers, and ordinary expressions therefore pass through the same query boundary even when
   candidate ranking has no stronger fact than the names in lexical scope.
-- **Sum facts use canonical identity.** Program sums are keyed by the same module-qualified nominal
-  key used by typing. Their payload arity is completion metadata only; typing remains authoritative.
-- The root syntax supplies private/local sums, while the interface graph supplies exported sums from
-  visible modules. Neither completion nor this query reparses source text.
-- Variant shapes retain positional or named payload type syntax and the sum's declared type
-  parameters so presentation can substitute the checked subject's concrete arguments.
+- The declared shapes of sums and records live in [[Lsp Shapes]]; this module only classifies
+  positions.
 - Guards, wildcards, nested patterns, and alternative patterns do not change the cursor's subject type.
   [[Lsp Pattern Completion]] decides whether an earlier arm fully covers a variant from the retained
   sibling arms.
 
 ### Linkage
 
-- **Requires:** [[Syntax Tree]], [[Compiler Program]], [[Type Interface]].
+- **Requires:** [[Syntax Tree]], [[Token]], [[Source]].
 - **Consumed by:** [[Lsp Completion]], [[Lsp Documents]], [[Lsp Server]].
 
 ## Negative Logic (Prohibited Paths)
@@ -104,10 +86,6 @@ programSums :: ProgramResult -> Map Text SumShape
   **A:** Legal variants depend on the subject's checked nominal type, and useful suggestions depend
   on what unguarded sibling arms already cover. _Rationale:_ the syntax query carries evidence while
   the completion module owns candidate policy. _Rejected:_ recomputing the enclosing match from text.
-- **Q:** Why store sum shapes when the documentation index already lists types? **A:** Documentation
-  entries do not preserve a sum's variants and payload arity. _Rationale:_ completion needs exact
-  constructor facts without widening the public documentation model. _Rejected:_ parsing rendered
-  type documentation or offering every constructor in the program.
 - **Q:** What happens when parsing or typing is incomplete? **A:** The query returns the narrowest
   context it can prove, and completion falls back conservatively when its required facts are absent.
   _Rationale:_ partial editor input is routine and must not produce unrelated confident candidates.

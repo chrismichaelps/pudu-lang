@@ -24,7 +24,7 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Frontend.Token (Token)
-import Pudu.Lsp.Context (SumShape)
+import Pudu.Lsp.Shapes (RecordShape, SumShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
 import Pudu.Semantic.Resolve (Resolution)
@@ -62,6 +62,8 @@ data Analysis = Analysis
   {-| Every sum type the program can see, by its canonical name — the
       declaring module and the type's name — with its variants. -}
   , analysisSums :: !(Map Text SumShape)
+  {-| Every record type the program can see, keyed the same way. -}
+  , analysisRecords :: !(Map Text RecordShape)
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.
