@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-linked-registry]] — issue #270 one published registry frame for linking, bounded
+  module environments, and request-latency evidence.
+
 - [[2026-09-21-product-cache]] — issues #272 and #273 compiled products kept across runs under
   content and interface keys, lazily read stored trees, integrity, bounds, and warm-start evidence.
 

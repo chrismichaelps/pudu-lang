@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Linking reads a registry and environments stay small
+
+- Linking keeps one published frame of every linked module's declarations under their canonical
+  paths, and links each module in an environment of five frames instead of three per module linked
+  before it. An import reads the registry by its path.
+- Median request latency on the benchmark service fell by about a third (`/plain` 1.5ms to 1.0ms)
+  and allocation up to `listening` by 37MB (issue #270).
+
 ## 2026-09-21 — Unchanged modules are not compiled again
 
 - `check`, `run`, `explain`, and `test` keep each module's parsed and checked products across runs.

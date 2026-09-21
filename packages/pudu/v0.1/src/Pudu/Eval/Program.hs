@@ -302,17 +302,36 @@ linkedNames dependencies = do
     pure UnitValue
   readIORef found
 
+{-| Link every dependency, in dependency order, and leave the program's frames
+    as the published names over whatever lay beneath.
+
+    Each module is linked in an environment of its own: its declarations, the
+    names its imports bind, the language's builtins, and the published names of
+    the modules linked before it — every one of them under its canonical path,
+    in one frame that is the registry of what has been linked. A module's
+    functions are scoped to exactly that, so a name looked up inside one walks
+    five frames however large the program is. When every module's frames stayed
+    on the stack, a lookup that missed walked three frames for every module
+    linked before, and a field access misses once on every evaluation, while the
+    longest dotted prefix is tried. Publishing is one insertion per declaration,
+    and an import reads the registry by its path rather than every frame. -}
 linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
 linkDependencies dependencies = do
   pushFrame Map.empty
   installBuiltinConstructors
   builtins <- currentFrame
-  mapM_ (linkOne builtins) dependencies
+  beneath <- drop 1 <$> captureEnvironment
+  published <- foldLinks builtins beneath Map.empty dependencies
+  setFrames (published : beneath)
   pure builtins
  where
-  linkOne builtins (path, dependency) = do
-    pushFrame builtins
-    pushFrame Map.empty
+  foldLinks _ _ published [] = pure published
+  foldLinks builtins beneath published (dependency : rest) = do
+    linked <- linkOne builtins beneath published dependency
+    foldLinks builtins beneath linked rest
+
+  linkOne builtins beneath published (path, dependency) = do
+    setFrames (Map.empty : builtins : published : beneath)
     installImportAliases (moduleImports dependency)
     {-| The module's own declarations get a frame above its imports, so what is
         published under its path is what it declared. Publishing the whole frame
@@ -328,9 +347,9 @@ linkDependencies dependencies = do
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
     replaceFrame scoped
     scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
-    mapM_ (publish path) (Map.toList scoped)
+    pure (Map.union (Map.mapKeysMonotonic ((path <> ".") <>) scoped) published)
 
-  publish path (name, value) = bind (path <> "." <> name) value
+  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = frames})
 
 {-| Give a declared function the environment of the module that declared it.
 

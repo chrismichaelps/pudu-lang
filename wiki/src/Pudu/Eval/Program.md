@@ -45,6 +45,14 @@ evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module 
   shadowed every earlier one for everybody.
 - The root gets a frame of its own, so its declarations shadow a dependency's
   rather than sharing the last one linked.
+- **One published frame is the registry of what has been linked.** Every linked
+  module's declarations are in it under their canonical paths. A module is
+  linked in an environment of its own — its declarations, its import aliases,
+  the builtins, and the published frame as it stood — so a lookup inside it
+  walks five frames however many modules the program has. Leaving every
+  module's frames on the stack made a lookup that missed, which every field
+  access does once, walk three frames per module linked before it; an import
+  read every frame for its path where it now reads one ordered range.
 - What inference settled on for each integer literal is a required argument, not
   a default. A caller that forgot it would get a program whose declared widths
   are not enforced, and nothing would say so.
