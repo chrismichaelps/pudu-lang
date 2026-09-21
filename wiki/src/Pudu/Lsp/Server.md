@@ -65,6 +65,12 @@ serverCapabilities :: Json
 - A document's tokens are always stored, lexed directly when the compile produced no root result,
   so comment, literal, and import contexts are known for text that does not parse. The stored tree
   is the compiler's tooling syntax, which survives type errors.
+- **Open documents stand in for the disk.** Every compile — of an edited document, of a repair —
+  reads the other open documents' text in place of their files. When a document changes, is
+  closed, or a closed file changes on disk (`workspace/didChangeWatchedFiles`), every open document
+  whose program read that file (`analysisDependencies`, transitive) is analysed again and its
+  diagnostics are published again. Closing a document hands its file back to the disk. A save of an
+  open document changes nothing, because its buffer was already what everything read.
 - Import completion reads a module catalog ([[Lsp Module Catalog]]) for the document's source root.
   The loop keeps one catalog per root in a cache of its own, built on the first import completion
   and cleared by `didSave`, `didChangeWatchedFiles`, and the file create/delete/rename

@@ -118,6 +118,8 @@ const oneUri = fixtureFile("lspworkspace/one/src/Main.pudu").href;
 const twoUri = fixtureFile("lspworkspace/two/src/Main.pudu").href;
 const recordUri = fixtureFile("lsprecords/Main.pudu").href;
 const fixtureText = relative => readFileSync(fixtureFile(relative), "utf8");
+const overlayMainUri = fixtureFile("lspoverlay/Main.pudu").href;
+const overlayLibUri = fixtureFile("lspoverlay/Lib.pudu").href;
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -302,6 +304,46 @@ const messages = [
     id: 35,
     method: "textDocument/completion",
     params: { textDocument: { uri: recordUri }, position: { line: 7, character: 4 } },
+  },
+  // An importer reads the open, unsaved text of what it imports, and the disk
+  // again once that module is closed.
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: overlayMainUri,
+        languageId: "pudu",
+        version: 1,
+        text: fixtureText("lspoverlay/Main.pudu"),
+      },
+    },
+  },
+  {
+    id: 36,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: overlayLibUri,
+        languageId: "pudu",
+        version: 1,
+        text: "module Lib\n\nexport fn after() -> Int { 1 }\n",
+      },
+    },
+  },
+  {
+    id: 37,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
+  },
+  { method: "textDocument/didClose", params: { textDocument: { uri: overlayLibUri } } },
+  {
+    id: 38,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
   },
   {
     id: 25,
@@ -711,6 +753,26 @@ assert(labelsOf(34).includes("fromTwo") && !labelsOf(34).includes("fromOne"), `p
 assert(
   labelsOf(35).includes("x") && !labelsOf(35).includes("unrelated"),
   `an imported record's fields were not completed: ${JSON.stringify(labelsOf(35))}`,
+);
+
+// The importer follows its dependency's buffer, and its diagnostics follow too.
+assert(labelsOf(36).includes("before"), `the disk module was not read: ${JSON.stringify(labelsOf(36))}`);
+assert(
+  labelsOf(37).includes("after") && !labelsOf(37).includes("before"),
+  `an unsaved dependency edit was not seen: ${JSON.stringify(labelsOf(37))}`,
+);
+assert(labelsOf(38).includes("before"), `closing the dependency did not restore the disk: ${JSON.stringify(labelsOf(38))}`);
+const positionOf = id => frames.findIndex(frame => frame.id === id);
+const mainPublished = frames
+  .map((frame, index) => ({ frame, index }))
+  .filter(({ frame }) => frame.method === "textDocument/publishDiagnostics" && frame.params.uri === overlayMainUri);
+assert(
+  mainPublished.some(({ frame, index }) => index > positionOf(36) && index < positionOf(37) && frame.params.diagnostics.length > 0),
+  "the importer's diagnostics were not published again when its dependency changed",
+);
+assert(
+  mainPublished.some(({ frame, index }) => index > positionOf(37) && index < positionOf(38) && frame.params.diagnostics.length === 0),
+  "the importer's diagnostics were not published again when its dependency closed",
 );
 
 // An import being written does not parse, and is still offered the library.

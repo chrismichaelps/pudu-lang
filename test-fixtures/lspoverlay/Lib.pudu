@@ -1,0 +1,3 @@
+module Lib
+
+export fn before() -> Int { 1 }

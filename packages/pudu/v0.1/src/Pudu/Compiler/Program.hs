@@ -4,6 +4,7 @@ module Pudu.Compiler.Program
   , compileProgram
   , compileProgramCached
   , compileProgramSource
+  , compileProgramSourceOver
   , programDependencies
   , programFolded
   , programIntegerKinds
@@ -179,7 +180,7 @@ compileProgramCached cache rootPath = do
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
                   [rootSource] (Map.singleton rootName rootSource) [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
-            else discoverFrom cache sourceRoot rootSource rootFrontend rootModule
+            else discoverFrom cache Map.empty sourceRoot rootSource rootFrontend rootModule
 
 {-| Compile a program whose root is already in memory.
 
@@ -192,7 +193,18 @@ compileProgramCached cache rootPath = do
     The source root is given rather than derived, because there is no path to
     derive it from. -}
 compileProgramSource :: FilePath -> Source -> IO ProgramResult
-compileProgramSource sourceRoot rootSource = do
+compileProgramSource = compileProgramSourceOver Map.empty
+
+{-| `compileProgramSource` with some modules' text given rather than read: a
+    path in `overlay` is read from there before the disk, and a path absent
+    from it from the disk as always.
+
+    An editor holds edits the disk has not seen, in the module being written
+    and in the modules it imports. Compiling the importer against the disk
+    would answer with declarations the reader has already changed. Paths are
+    compared after `normalise`, the form module paths are built in. -}
+compileProgramSourceOver :: Map FilePath Text.Text -> FilePath -> Source -> IO ProgramResult
+compileProgramSourceOver overlay sourceRoot rootSource = do
   let rootFrontend = runFrontend rootSource
   case frontendModule rootFrontend of
     Nothing ->
@@ -201,14 +213,14 @@ compileProgramSource sourceRoot rootSource = do
             (frontendDiagnostics rootFrontend)
             (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True)
         )
-    Just rootModule -> discoverFrom disabledCache sourceRoot rootSource rootFrontend rootModule
+    Just rootModule -> discoverFrom disabledCache overlay sourceRoot rootSource rootFrontend rootModule
 
 {-| Walk a root module's imports and compile everything the walk reaches. -}
-discoverFrom :: ProductCache -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
-discoverFrom cache sourceRoot rootSource rootFrontend rootModule = do
+discoverFrom :: ProductCache -> Map FilePath Text.Text -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom cache overlay sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
   resolution <- newResolutionContext sourceRoot
-  discovered <- discover cache resolution
+  discovered <- discover cache overlay resolution
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
     Set.empty
@@ -224,6 +236,7 @@ data Discovery = Discovery
 
 discover
   :: ProductCache
+  -> Map FilePath Text.Text
   -> ResolutionContext
   -> Map ModuleName FrontendResult
   -> Map ModuleName Source
@@ -231,21 +244,21 @@ discover
   -> [Diagnostic]
   -> [(Located Import, ModuleName)]
   -> IO Discovery
-discover cache resolution frontends sources failed diagnostics pending = case pending of
+discover cache overlay resolution frontends sources failed diagnostics pending = case pending of
   [] -> pure (Discovery frontends sources diagnostics)
   (locatedImport, requested) : rest
     | Map.member requested frontends ->
-        discover cache resolution frontends sources failed diagnostics rest
+        discover cache overlay resolution frontends sources failed diagnostics rest
     | Set.member requested failed ->
-        discover cache resolution frontends sources failed
+        discover cache overlay resolution frontends sources failed
           (diagnostics <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport)
           rest
     | otherwise -> do
         let roots = resolutionSearchRoots resolution requested
-        loaded <- readFirst [modulePath root requested | root <- roots]
+        loaded <- readFirstFrom overlay [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
-            discover cache resolution frontends sources (Set.insert requested failed)
+            discover cache overlay resolution frontends sources (Set.insert requested failed)
               ( diagnostics
                   <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport
               )
@@ -254,7 +267,7 @@ discover cache resolution frontends sources failed diagnostics pending = case pe
             frontend <- frontendFor cache source
             case frontendModule frontend of
               Nothing ->
-                discover cache resolution
+                discover cache overlay resolution
                   (Map.insert requested frontend frontends)
                   (Map.insert requested source sources)
                   failed
@@ -262,12 +275,12 @@ discover cache resolution frontends sources failed diagnostics pending = case pe
               Just parsed ->
                 let actual = locatedValue (moduleName parsed)
                  in if actual /= requested
-                      then discover cache resolution
+                      then discover cache overlay resolution
                         (Map.insert requested frontend{frontendModule = Nothing} frontends)
                         (Map.insert requested source sources)
                         failed
                         (diagnostics <> pathMismatch requested (moduleName parsed)) rest
-                      else discover cache resolution
+                      else discover cache overlay resolution
                         (Map.insert requested frontend frontends)
                         (Map.insert requested source sources)
                         failed
@@ -395,6 +408,22 @@ modulePath sourceRoot name =
 
 {-| Read the first path that exists, keeping the last failure so a module that
     is nowhere is reported against the search rather than against one guess. -}
+{-| `readFirst`, taking a path's text from `overlay` when it holds it. The
+    paths are still tried in order, so an overlaid module never shadows one an
+    earlier root holds. -}
+readFirstFrom :: Map FilePath Text.Text -> [FilePath] -> IO (Either IOException Source)
+readFirstFrom overlay paths
+  | Map.null overlay = readFirst paths
+  | otherwise = case paths of
+      [] -> readFirst []
+      path : rest -> case Map.lookup (normalise path) overlay of
+        Just text -> Right <$> newSource (SourceName (Text.pack path)) text
+        Nothing -> do
+          loaded <- readSource path
+          case (loaded, rest) of
+            (Left _, _ : _) -> readFirstFrom overlay rest
+            _ -> pure loaded
+
 readFirst :: [FilePath] -> IO (Either IOException Source)
 readFirst [] = readSource ""
 readFirst [path] = readSource path

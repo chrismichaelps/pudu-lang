@@ -4,7 +4,10 @@ module Pudu.Lsp.ServerSpec (serverProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Lsp.Analysis (documentSourceRoot)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Pudu.Lsp.Analysis (analyseOver, documentSourceRoot)
+import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Completion (completionRepaired)
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
 import Pudu.Lsp.Json (Json (..), lookupField, parse, textOf)
@@ -20,6 +23,7 @@ import Pudu.Lsp.Server
   , serverCapabilities
   )
 import System.Directory (getCurrentDirectory, makeAbsolute)
+import System.FilePath (normalise)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 serverProperties :: [(String, IO Property)]
@@ -49,6 +53,7 @@ serverProperties =
   , ("member completion is on the whole receiver expression", testReceiverExpression)
   , ("completion recovers facts from unfinished text", testRecoveredCompletion)
   , ("each document is rooted by its own path and module", testDocumentSourceRoot)
+  , ("open documents stand in for the disk in every import", testOpenDocumentOverlay)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -781,6 +786,25 @@ testDocumentSourceRoot = do
     , counterexample "an untitled buffer with no folder uses the working directory" (untitledAlone === working)
     , counterexample ("one program reads its own Lib: " <> show one) (property ("fromOne" `elem` one && "fromTwo" `notElem` one))
     , counterexample ("its sibling reads its own: " <> show two) (property ("fromTwo" `elem` two && "fromOne" `notElem` two))
+    ]
+
+testOpenDocumentOverlay :: IO Property
+testOpenDocumentOverlay = do
+  root <- makeAbsolute "test-fixtures/lspoverlay"
+  content <- TextIO.readFile (root <> "/Chain.pudu")
+  let file = "file://" <> Text.pack root <> "/Chain.pudu"
+      deep = normalise (root <> "/Deep.pudu")
+      mid = normalise (root <> "/Mid.pudu")
+  fromDisk <- analyseIn root file content
+  overlaid <- analyseOver (Map.singleton deep "module Deep\nexport fn deep() -> Str { \"changed\" }\n") root file content
+  pure $ conjoin
+    [ counterexample "the disk program is clean" (length (analysisDiagnostics fromDisk) === 0)
+    , counterexample "a transitive open module's unsaved text is what is compiled"
+        (property (not (null (analysisDiagnostics overlaid))))
+    , counterexample "every module file read is a dependency"
+        (property (all (`Set.member` analysisDependencies fromDisk) [mid, deep]))
+    , counterexample "the document itself is not its own dependency"
+        (property (not (Set.member (normalise (root <> "/Chain.pudu")) (analysisDependencies fromDisk))))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

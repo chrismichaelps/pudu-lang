@@ -2,6 +2,7 @@
 module Pudu.Lsp.Analysis
   ( analyse
   , analyseIn
+  , analyseOver
   , documentSourceRoot
   , fileUriPath
   , pathOf
@@ -13,13 +14,14 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Ord (Down (..))
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Compiler (CompileContext (..), CompileResult (..), recoveredSyntax)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
-  , compileProgramSource
+  , compileProgramSourceOver
   , programDocs
   , rootCompileResult
   , sourceRootFor
@@ -28,7 +30,7 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.Context (declaredModule)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Shapes (programRecords, programSums)
-import Pudu.Source (SourceName (..), newSource)
+import Pudu.Source (SourceName (..), newSource, sourceName)
 import Pudu.Type.Value (Scheme, nominalKey)
 import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
 import System.FilePath (addTrailingPathSeparator, normalise, takeDirectory, (</>))
@@ -46,9 +48,14 @@ analyse uri content = do
   analyseIn root uri content
 
 analyseIn :: FilePath -> Text -> Text -> IO Analysis
-analyseIn root uri content = do
+analyseIn = analyseOver Map.empty
+
+{-| `analyseIn` with the text of other open documents, by normalised path,
+    read in place of the disk for any module the program imports. -}
+analyseOver :: Map FilePath Text -> FilePath -> Text -> Text -> IO Analysis
+analyseOver overlay root uri content = do
   source <- newSource (SourceName (pathOf uri)) content
-  program <- compileProgramSource root source
+  program <- compileProgramSourceOver overlay root source
   -- Only a document whose root did not parse needs the recovered tree, and
   -- only then is it built.
   let recovered = recoveredSyntax source
@@ -67,6 +74,12 @@ analyseIn root uri content = do
       , analysisRecords = programRecords program
       , analysisMethods = programMethods program
       , analysisExports = contextExports (programContext program)
+      , analysisDependencies =
+          Set.fromList
+            [ normalise (Text.unpack (unSourceName (sourceName dependency)))
+            | dependency <- Map.elems (programNamedSources program)
+            , sourceName dependency /= sourceName source
+            ]
       }
 
 {-| The methods every module of the program declared, by the canonical key of

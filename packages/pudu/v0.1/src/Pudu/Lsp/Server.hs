@@ -17,6 +17,8 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
+import System.FilePath (normalise)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Version (versionText)
@@ -34,13 +36,14 @@ import Pudu.Diagnostic
   , diagnosticSpan
   )
 import Pudu.Format (FormatResult (..), formatSource)
-import Pudu.Lsp.Analysis (analyse, analyseIn, documentSourceRoot, fileUriPath)
+import Pudu.Lsp.Analysis (analyse, analyseIn, analyseOver, documentSourceRoot, fileUriPath)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
 import Pudu.Lsp.Definition (definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
+  , allDocuments
   , analysisOf
   , documentOf
   , emptyDocuments
@@ -151,7 +154,7 @@ catalogFor catalogs documents parameters = do
 
 prepare :: Catalogs -> Documents -> Message -> IO (Documents, [Text])
 prepare catalogs documents message = do
-  documents' <- refresh documents message
+  (documents', touched) <- refresh documents message
   (documents'', replies) <- case message of
     Request identity "textDocument/completion" parameters -> do
       items <-
@@ -164,8 +167,11 @@ prepare catalogs documents message = do
         Nothing -> pure JsonNull
       pure (documents', [response identity help])
     _ -> pure (answer documents' message)
-  mapM_ (evaluate . Text.length) replies
-  pure (documents'', replies)
+  -- Another open document whose program read the one that changed was
+  -- analysed again, and what it reports may have changed with it.
+  let republished = [publish uri (diagnosticEntries (analysisOf uri documents'')) | uri <- touched]
+  mapM_ (evaluate . Text.length) (replies <> republished)
+  pure (documents'', replies <> republished)
 
 {-| Compile other text as the document a request names, for an answer the text
     as written cannot give. Nothing is stored: the editor's copy stays the one
@@ -173,8 +179,21 @@ prepare catalogs documents message = do
     document's, so a repaired or probe text reaches the same modules. -}
 reanalyse :: Documents -> Json -> Text -> IO Analysis
 reanalyse documents parameters content = do
+  let uri = fromMaybe "" (uriOf parameters)
   root <- rootOf documents parameters
-  analyseIn root (fromMaybe "" (uriOf parameters)) content
+  analyseOver (overlayFor documents uri) root uri content
+
+{-| The text of every open document except `uri`, by the normalised path of
+    its file: what a compile reads in place of the disk, because the editor's
+    copy of an open file is authoritative. -}
+overlayFor :: Documents -> Text -> Map FilePath Text
+overlayFor documents uri =
+  Map.fromList
+    [ (normalise path, analysisText value)
+    | (other, value) <- allDocuments documents
+    , other /= uri
+    , Just path <- [fileUriPath other]
+    ]
 
 {-| The source root of the document a request names, from the text the editor
     holds for it. -}
@@ -197,24 +216,70 @@ excuse message failure = do
     Notification method _ -> method
   detail = Text.strip (Text.pack (displayException failure))
 
-refresh :: Documents -> Message -> IO Documents
+{-| Take in what a message says the files now hold, and analyse again every
+    open document whose program read a file that changed. The documents
+    analysed again beside the one the message named are returned, so their
+    diagnostics can be published too.
+
+    An edit to an open module changes what its importers see; closing it hands
+    authority back to the disk; a file changed on disk while closed — saved by
+    another tool, created, deleted — changes it too. A save of an open file
+    changes nothing: its buffer was already what everything read. -}
+refresh :: Documents -> Message -> IO (Documents, [Text])
 refresh documents message = case message of
   Request _ "initialize" parameters ->
-    pure (setWorkspaceFolders (extractWorkspaceFolders parameters) documents)
+    pure (setWorkspaceFolders (extractWorkspaceFolders parameters) documents, [])
   Notification "textDocument/didOpen" parameters ->
     case (uriOf parameters, openedText parameters) of
       (Just uri, Just content) -> store uri content
-      _ -> pure documents
+      _ -> pure (documents, [])
   Notification "textDocument/didChange" parameters ->
     case (uriOf parameters, changedText parameters) of
       (Just uri, Just content) -> store uri content
-      _ -> pure documents
-  _ -> pure documents
+      _ -> pure (documents, [])
+  Notification "textDocument/didClose" parameters -> case uriOf parameters of
+    Just uri -> dependentsOf (forgetDocument uri documents) [uri]
+    Nothing -> pure (documents, [])
+  Notification "workspace/didChangeWatchedFiles" parameters ->
+    dependentsOf documents
+      [ uri
+      | Just (JsonArray changes) <- [lookupField "changes" parameters]
+      , change <- changes
+      , Just uri <- [lookupField "uri" change >>= textOf]
+      , Nothing <- [analysisOf uri documents]
+      ]
+  _ -> pure (documents, [])
  where
   store uri content = do
-    root <- documentSourceRoot (workspaceFolders documents) uri content
-    analysed <- analyseIn root uri content
-    pure (rememberAnalysis uri analysed documents)
+    analysed <- analyseDocument documents uri content
+    dependentsOf (rememberAnalysis uri analysed documents) [uri]
+
+{-| Analyse again every open document other than `changed` whose program read
+    one of `changed`'s files. -}
+dependentsOf :: Documents -> [Text] -> IO (Documents, [Text])
+dependentsOf documents changed = go documents [] stale
+ where
+  paths = Set.fromList [normalise path | uri <- changed, Just path <- [fileUriPath uri]]
+  stale =
+    [ uri
+    | (uri, value) <- allDocuments documents
+    , uri `notElem` changed
+    , not (Set.disjoint paths (analysisDependencies value))
+    ]
+  go current touched pending = case pending of
+    [] -> pure (current, reverse touched)
+    uri : rest -> case analysisOf uri current of
+      Nothing -> go current touched rest
+      Just value -> do
+        analysed <- analyseDocument current uri (analysisText value)
+        go (rememberAnalysis uri analysed current) (uri : touched) rest
+
+{-| Analyse a document's text under its own source root, reading the other open
+    documents in place of the disk. -}
+analyseDocument :: Documents -> Text -> Text -> IO Analysis
+analyseDocument documents uri content = do
+  root <- documentSourceRoot (workspaceFolders documents) uri content
+  analyseOver (overlayFor documents uri) root uri content
 
 {-| Every folder the editor opened: each workspace folder, and the older
     single `rootUri` or `rootPath` when a client sends only that. -}

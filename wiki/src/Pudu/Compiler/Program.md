@@ -36,10 +36,15 @@ data ProgramResult = ProgramResult
 compileProgram :: FilePath -> IO ProgramResult
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 sourceRootFor :: FilePath -> ModuleName -> (FilePath, Bool)
+compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO ProgramResult
 ```
 
 ### Governance
 
+- `compileProgramSourceOver` reads a module whose normalised path is in the overlay from there
+  instead of the disk. Paths are still tried in search order, so an overlaid module never shadows
+  one an earlier root holds. The command line compiles with an empty overlay; the language server
+  passes its open buffers, whose text the disk has not seen.
 - `sourceRootFor` is the one rule for where a file-backed program's modules are: the entry path
   with its declared module's segments taken off the end, or the file's directory with `True` when
   the path does not end in the name. The command line and the language server both ask it, so an

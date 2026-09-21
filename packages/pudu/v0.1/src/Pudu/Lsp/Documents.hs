@@ -19,6 +19,7 @@ module Pudu.Lsp.Documents
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
@@ -71,6 +72,10 @@ data Analysis = Analysis
   , analysisMethods :: !(Map Text [(Text, Scheme)])
   {-| What each module of the program exports, as imports see it. -}
   , analysisExports :: !ExportIndex
+  {-| Every module file the program read besides this document, transitive
+      imports included, by normalised path: what an edit elsewhere must be
+      checked against to know whether this analysis is stale. -}
+  , analysisDependencies :: !(Set FilePath)
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.

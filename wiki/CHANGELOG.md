@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Imports read the editor's open buffers
+
+- An importing document is compiled against the text of the modules the editor has open, not
+  their files on disk, so a function added to an open, unsaved module is completed in its importers
+  at once — through transitive imports too. When an open module changes or closes, or a closed file
+  changes on disk, every open document whose program read it is analysed again and its diagnostics
+  are published again; closing a module returns its importers to the disk (issue #283).
+
 ## 2026-09-21 — Each document finds its own modules
 
 - The language server roots each document as `pudu check` does — its path with the declared

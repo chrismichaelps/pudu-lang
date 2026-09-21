@@ -23,6 +23,7 @@ module name give it — and gather everything the editor features read from that
 ```haskell
 analyse            :: Text -> Text -> IO Analysis             -- uri, text
 analyseIn          :: FilePath -> Text -> Text -> IO Analysis -- source root, uri, text
+analyseOver        :: Map FilePath Text -> FilePath -> Text -> Text -> IO Analysis  -- open buffers first
 documentSourceRoot :: [FilePath] -> Text -> Text -> IO FilePath  -- workspace folders, uri, text
 fileUriPath        :: Text -> Maybe FilePath
 pathOf             :: Text -> Text
@@ -44,6 +45,8 @@ pathOf             :: Text -> Text
   working directory).
 - `analyseIn` keeps the parser's recovered tree only when the root did not parse, and gathers the
   program's sum and record shapes, declared methods, and export index once per analysis.
+- `analyseOver` compiles with the other open documents' text in place of the disk, and records
+  every module file the program read — transitive imports included — as `analysisDependencies`.
 - A `file:` URI is percent-decoded as UTF-8; any other scheme is not a path.
 
 ### Linkage
