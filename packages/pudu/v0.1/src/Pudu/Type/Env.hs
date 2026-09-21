@@ -23,6 +23,7 @@ module Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , recordDeclaredMethod
   , bindImportedMethod
   , emptyDeclared
   , freshVariable
@@ -211,6 +212,9 @@ data CheckerState = CheckerState
       exclusive references once inference has settled them. -}
   , stateUnwrittenParameters :: ![(Span, Type)]
   , stateDiagnosticsRev :: ![Diagnostic]
+  {-| The methods this module's own declarations provide — its impls, the
+      trait defaults those inherit, and its traits' members — by owner. -}
+  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
   }
 
 type SpanKey = (Int, Int)
@@ -226,6 +230,8 @@ data CheckerProducts = CheckerProducts
   { producedTypes :: ![(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
+  {-| What `recordDeclaredMethod` collected, in declaration order. -}
+  , producedMethods :: ![(NominalId, Text, Scheme)]
   {-| The type inference settled on for each integer literal.
 
       A literal written without a suffix is not a platform `Int` merely because
@@ -273,11 +279,13 @@ runChecker (Checker action) = case action initialState of
     , stateFrames = frames
     , stateDiagnosticsRev = diagnostics
     , stateIntegerKinds = kinds
+    , stateDeclaredMethodsRev = methods
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
+      , producedMethods = reverse methods
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -320,6 +328,7 @@ initialState =
     , stateLentArguments = Set.empty
     , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
+    , stateDeclaredMethodsRev = []
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -361,6 +370,13 @@ installedNames =
     )
 
 {-| Begin from installed names, before anything of the module's own is bound. -}
+{-| Record a method this module's declarations provide for `owner`, so tooling
+    can offer what a value of that type — or a parameter bounded by that trait —
+    can be called with, from the same facts a call is checked against. -}
+recordDeclaredMethod :: NominalId -> Text -> Scheme -> Checker ()
+recordDeclaredMethod owner name scheme =
+  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme) : stateDeclaredMethodsRev state})
+
 installNames :: InstalledNames -> Checker ()
 installNames installed =
   Checker $ \state ->

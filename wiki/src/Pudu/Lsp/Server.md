@@ -30,6 +30,7 @@ data Analysis = Analysis
   , analysisModule       :: !(Maybe Module)
   , analysisSums         :: !(Map Text SumShape)
   , analysisRecords      :: !(Map Text RecordShape)
+  , analysisMethods      :: !(Map Text [(Text, Scheme)])   -- every module's declared methods, by owner
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis

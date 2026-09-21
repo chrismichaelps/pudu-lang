@@ -41,6 +41,8 @@ renderType :: Type -> Text
   and re-deriving it from written syntax would let a tool's answers drift from the compiler's.
 
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
+- `ModuleTypes` carries `moduleMethods`: the methods this module's declarations provide, by owner,
+  with their schemes (see [[Type Env]]).
 - `narrowestSpanAt` answers for a point: the shortest recorded span covering it, the first in key
   order among equal widths. It is one pass over the table keeping the best so far; a hover or a
   completion detail asks it several times per request, and sorting the table for each would repeat

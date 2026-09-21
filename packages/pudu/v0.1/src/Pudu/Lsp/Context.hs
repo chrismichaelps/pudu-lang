@@ -2,7 +2,9 @@
 module Pudu.Lsp.Context
   ( CompletionContext (..)
   , ImportSite (..)
+  , TypeParameter
   , contextAt
+  , contextParameters
   , importSiteAt
   ) where
 
@@ -55,11 +57,25 @@ data CompletionContext
   = PatternContext !(Located Expression) ![Located MatchArm] !(Located MatchArm)
   {-| Where a type is written, with the type parameters in scope there,
       innermost declaration first. -}
-  | TypeContext ![Text]
+  | TypeContext ![TypeParameter]
   | ImportContext !ImportSite
-  | ValueContext !(Maybe (Located Expression))
+  {-| Where a value is written, with the type parameters in scope and the
+      innermost expression holding the cursor. -}
+  | ValueContext ![TypeParameter] !(Maybe (Located Expression))
   | SuppressedContext
   deriving stock (Eq, Show)
+
+{-| A type parameter in scope, with the bounds its declaration and any `where`
+    clause of the same declaration gave it. -}
+type TypeParameter = (Text, [Located TypeSyntax])
+
+{-| The type parameters in scope where a context was found; none at an
+    import, in prose, or where there is no tree. -}
+contextParameters :: CompletionContext -> [TypeParameter]
+contextParameters context = case context of
+  TypeContext parameters -> parameters
+  ValueContext parameters _ -> parameters
+  _ -> []
 
 {-| Where in an import the cursor stands. -}
 data ImportSite
@@ -80,9 +96,9 @@ contextAt tokens parsed offset
   | suppressedAt offset tokens = SuppressedContext
   | Just site <- importSiteAt tokens offset = ImportContext site
   | otherwise = case parsed of
-      Nothing -> ValueContext Nothing
+      Nothing -> ValueContext [] Nothing
       Just tree ->
-        maybe (ValueContext Nothing) id
+        maybe (ValueContext [] Nothing) id
           (listToMaybe [found | Just found <- map (declarationContext offset []) (moduleDeclarations tree)])
 
 {-| The import being written at `offset`, read backwards from the cursor over
@@ -165,7 +181,7 @@ within offset = covers offset . locatedSpan
 firstOf :: [Maybe CompletionContext] -> Maybe CompletionContext
 firstOf candidates = listToMaybe [found | Just found <- candidates]
 
-declarationContext :: Int -> [Text] -> Located Declaration -> Maybe CompletionContext
+declarationContext :: Int -> [TypeParameter] -> Located Declaration -> Maybe CompletionContext
 declarationContext offset parameters located@(Located _ declaration)
   | not (within offset located) = Nothing
   | otherwise = case declaration of
@@ -174,14 +190,14 @@ declarationContext offset parameters located@(Located _ declaration)
       FunctionDeclaration function -> functionContext offset parameters function
       TypeDeclaration value -> typeDeclarationContext offset parameters value
       TraitDeclaration trait ->
-        let inScope = map paramName (traitTypeParams trait) <> parameters
+        let inScope = declared (traitTypeParams trait) (traitConstraints trait) <> parameters
          in firstOf
               ( map (typeParamContext offset inScope) (traitTypeParams trait)
                   <> map (constraintContext offset inScope) (traitConstraints trait)
                   <> [functionContext offset inScope member | Located _ member <- traitMembers trait]
               )
       ImplDeclaration impl ->
-        let inScope = map paramName (implTypeParams impl) <> parameters
+        let inScope = declared (implTypeParams impl) (implConstraints impl) <> parameters
          in firstOf
               ( map (typeParamContext offset inScope) (implTypeParams impl)
                   <> [typeContext offset inScope (implTrait impl), typeContext offset inScope (implTarget impl)]
@@ -190,9 +206,9 @@ declarationContext offset parameters located@(Located _ declaration)
               )
       _ -> Nothing
 
-typeDeclarationContext :: Int -> [Text] -> TypeDeclarationValue -> Maybe CompletionContext
+typeDeclarationContext :: Int -> [TypeParameter] -> TypeDeclarationValue -> Maybe CompletionContext
 typeDeclarationContext offset parameters value =
-  let inScope = map paramName (typeTypeParams value) <> parameters
+  let inScope = declared (typeTypeParams value) [] <> parameters
    in firstOf
         ( map (typeParamContext offset inScope) (typeTypeParams value)
             <> [definitionContext inScope (typeDefinition value)]
@@ -209,20 +225,26 @@ typeDeclarationContext offset parameters value =
     RecordPayload fields -> firstOf (map (fieldContext inScope) fields)
     _ -> Nothing
 
-paramName :: Located TypeParam -> Text
-paramName = locatedValue . typeParamName . locatedValue
+{-| A declaration's type parameters, innermost first, each with its written
+    bounds and those its `where` clause adds. -}
+declared :: [Located TypeParam] -> [Located Constraint] -> [TypeParameter]
+declared params constraints =
+  [ (name, typeParamBounds param <> concat [constraintBounds c | Located _ c <- constraints, locatedValue (constraintSubject c) == name])
+  | Located _ param <- params
+  , let name = locatedValue (typeParamName param)
+  ]
 
-typeParamContext :: Int -> [Text] -> Located TypeParam -> Maybe CompletionContext
+typeParamContext :: Int -> [TypeParameter] -> Located TypeParam -> Maybe CompletionContext
 typeParamContext offset parameters (Located _ param) =
   firstOf (map (typeContext offset parameters) (typeParamBounds param))
 
-constraintContext :: Int -> [Text] -> Located Constraint -> Maybe CompletionContext
+constraintContext :: Int -> [TypeParameter] -> Located Constraint -> Maybe CompletionContext
 constraintContext offset parameters (Located _ constraint) =
   firstOf (map (typeContext offset parameters) (constraintBounds constraint))
 
-functionContext :: Int -> [Text] -> Function -> Maybe CompletionContext
+functionContext :: Int -> [TypeParameter] -> Function -> Maybe CompletionContext
 functionContext offset parameters function =
-  let inScope = map paramName (functionTypeParams function) <> parameters
+  let inScope = declared (functionTypeParams function) (functionConstraints function) <> parameters
    in firstOf
         ( map (typeParamContext offset inScope) (functionTypeParams function)
             <> map (parameterContext inScope) (functionParameters function)
@@ -241,21 +263,23 @@ functionContext offset parameters function =
     ExpressionBody expression -> expressionContext offset inScope expression
 
 {-| A written type contains the cursor: every name inside it is a type. -}
-typeContext :: Int -> [Text] -> Located TypeSyntax -> Maybe CompletionContext
+typeContext :: Int -> [TypeParameter] -> Located TypeSyntax -> Maybe CompletionContext
 typeContext offset parameters located
   | within offset located = Just (TypeContext parameters)
   | otherwise = Nothing
 
-blockContext :: Int -> [Text] -> Located Block -> Maybe CompletionContext
+blockContext :: Int -> [TypeParameter] -> Located Block -> Maybe CompletionContext
 blockContext offset parameters located@(Located _ block)
   | not (within offset located) = Nothing
   | otherwise =
       firstOf
         ( map (statementContext offset parameters) (blockStatements block)
-            <> [blockResult block >>= expressionContext offset parameters]
+            <> [ blockResult block >>= expressionContext offset parameters
+               , Just (ValueContext parameters Nothing)
+               ]
         )
 
-statementContext :: Int -> [Text] -> Located Statement -> Maybe CompletionContext
+statementContext :: Int -> [TypeParameter] -> Located Statement -> Maybe CompletionContext
 statementContext offset parameters located@(Located _ statement)
   | not (within offset located) = Nothing
   | otherwise = case statement of
@@ -269,10 +293,12 @@ statementContext offset parameters located@(Located _ statement)
         firstOf [annotation >>= typeContext offset parameters, expressionContext offset parameters value]
       _ -> Nothing
 
-expressionContext :: Int -> [Text] -> Located Expression -> Maybe CompletionContext
+expressionContext :: Int -> [TypeParameter] -> Located Expression -> Maybe CompletionContext
 expressionContext offset parameters located@(Located _ expression)
   | not (within offset located) = Nothing
-  | otherwise = case expression of
+  | otherwise = firstOf [specific, Just (ValueContext parameters (Just located))]
+ where
+  specific = case expression of
       MatchExpression subject arms ->
         firstOf
           ( expressionContext offset parameters subject
@@ -306,8 +332,7 @@ expressionContext offset parameters located@(Located _ expression)
       WhileLetExpression _ _ value body -> firstOf [inner value, blockContext offset parameters body]
       LoopExpression _ body -> blockContext offset parameters body
       ForExpression _ _ iterable body -> firstOf [inner iterable, blockContext offset parameters body]
-      _ -> Just (ValueContext (Just located))
- where
+      _ -> Nothing
   inner = expressionContext offset parameters
   fieldInit (Located _ field) = fieldInitValue field >>= inner
   armContext subject arms arm@(Located _ value)

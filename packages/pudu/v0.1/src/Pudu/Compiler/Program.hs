@@ -341,6 +341,7 @@ checkedFor cache graph context source frontend = do
         , compileIntegerKinds = checkedIntegerKinds reused
         , compileDocs = Nothing
         , compileDiagnostics = []
+        , compileMethods = []
         , compileFolded = checkedFolded reused
         }
     Nothing -> do

@@ -32,6 +32,7 @@ import Pudu.Semantic
   )
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
+import Pudu.Type.Value (NominalId, Scheme)
 import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
 import Data.Text (Text)
 import Pudu.Source (Source, Span)
@@ -63,6 +64,10 @@ data CompileResult = CompileResult
   , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
+  {-| The methods this module's declarations provide, by owner, as the checker
+      declared them. Only this module's own: a program's are the union of its
+      modules'. -}
+  , compileMethods :: ![(NominalId, Text, Scheme)]
   {-| The constants folding computed that are plain data, which linking binds
       instead of evaluating their initializers again. -}
   , compileFolded :: ~(Map Text Frozen)
@@ -110,6 +115,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileIntegerKinds = Map.empty
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
+            , compileMethods = []
             , compileFolded = Map.empty
             }
         Just original ->
@@ -143,6 +149,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                     , compileDocs =
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
+                    , compileMethods = maybe [] moduleMethods typing
                     , compileFolded = folded
                     }
 

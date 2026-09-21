@@ -73,6 +73,16 @@ const scopeSource = [
   "}",
   "",
 ].join("\n");
+const methodUri = "file:///pudu-fixtures/MethodSession.pudu";
+const methodSource = [
+  "module MethodSession",
+  "trait Sized { fn size(self: &Self) -> Int { 1 } }",
+  "type Box = { value: Int }",
+  "impl Sized for Box {}",
+  "fn direct(box: Box) -> Int { box.size() }",
+  "fn bounded[T: Sized](item: T) -> Int { item.size() }",
+  "",
+].join("\n");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -172,6 +182,22 @@ const messages = [
     id: 26,
     method: "textDocument/completion",
     params: { textDocument: { uri: scopeUri }, position: { line: 8, character: 19 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: methodUri, languageId: "pudu", version: 1, text: methodSource },
+    },
+  },
+  {
+    id: 27,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: methodUri }, position: { line: 4, character: 33 } },
+  },
+  {
+    id: 28,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: methodUri }, position: { line: 5, character: 45 } },
   },
   {
     id: 25,
@@ -526,6 +552,13 @@ const scopeLabels = (Array.isArray(scopeOffered) ? scopeOffered : (scopeOffered?
 assert(scopeLabels.includes("item"), "scope completion omitted the parameter item");
 for (const gone of ["payload", "expired"]) {
   assert(!scopeLabels.includes(gone), `scope completion offered out-of-scope ${gone}`);
+}
+
+// A default method and a bound's member are what the checker would accept.
+for (const [id, what] of [[27, "an inherited default"], [28, "a bound's member"]]) {
+  const offered = replyTo(id)?.result;
+  const labels = (Array.isArray(offered) ? offered : (offered?.items ?? [])).map(entry => entry.label);
+  assert(labels.includes("size"), `method completion omitted ${what}: ${JSON.stringify(labels)}`);
 }
 
 // An import being written does not parse, and is still offered the library.

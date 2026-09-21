@@ -25,6 +25,12 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- `recordDeclaredMethod` collects the methods this module's own declarations provide — each impl
+  method, each trait default an impl inherits, and each member of a trait the module declares —
+  beside the owner the checker binds them under. `runChecker` publishes them as `producedMethods`.
+  Interface methods are installed from the graph and are not recorded here: each module reports its
+  own, and a program's methods are the union of its modules'.
+
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.

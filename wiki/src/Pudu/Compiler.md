@@ -39,6 +39,7 @@ data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
   , compileSyntax :: !(Maybe Module)   -- tooling tree; never linked or evaluated
+  , compileMethods :: ![(NominalId, Text, Scheme)]  -- this module's declared methods, by owner
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   , compileDiagnostics :: ![Diagnostic]
@@ -82,6 +83,8 @@ runCompileWith :: CompileContext -> Source -> CompileResult
   the frontend admitted one, kept even when resolution, typing, or folding reported errors. An editor
   adding a match arm is looking at a non-exhaustive match, and the tree is exactly what it needs.
   `compileModule` alone is the executable product; nothing links or evaluates `compileSyntax`.
+- `compileMethods` is only the module's own methods, which keeps it proportional to the module; a
+  product reused from the cache carries none, so tooling compiles without the cache.
 - Diagnostics are combined and sorted once at the boundary.
 - `runCompile` remains the isolated-source convenience API and delegates through `emptyCompileContext`, whose opaque-import mode preserves isolated tools and interactive buffers without a loaded program. [[Compiler Program]] parses each source once and calls `compileFrontendWith` with authoritative semantic and type interfaces.
 - A compile context contains pure interfaces only. Filesystem discovery and IO errors never enter this module.

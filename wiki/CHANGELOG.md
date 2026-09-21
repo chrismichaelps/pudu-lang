@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Method completion follows the checker
+
+- `value.` offers the methods a call on the receiver would find: a type's own and inherited trait
+  default methods, a `dynamic` trait's members, and for a type parameter the members of the traits
+  its bounds and `where` clauses name, with the checker's signatures as details. A type of the same
+  name in another module no longer lends its methods. The checker publishes each module's declared
+  methods and the editor joins them per program (issue #277).
+
 ## 2026-09-21 — Field completion reads the declared record
 
 - `value.` offers the fields of the receiver's record type found by its declaring module and name,

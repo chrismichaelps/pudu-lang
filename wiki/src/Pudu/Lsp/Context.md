@@ -23,9 +23,9 @@ of thing belongs at a cursor; it does not decide editor protocol shapes or rende
 ```haskell
 data CompletionContext
   = PatternContext (Located Expression) [Located MatchArm] (Located MatchArm)
-  | TypeContext [Text]
+  | TypeContext [TypeParameter]
   | ImportContext ImportSite
-  | ValueContext (Maybe (Located Expression))
+  | ValueContext [TypeParameter] (Maybe (Located Expression))
   | SuppressedContext
 
 data ImportSite
@@ -33,6 +33,8 @@ data ImportSite
   | ImportSelection Text  -- inside the selection braces of this module's import
   | ImportAlias           -- after `as`; nothing is offered
 
+type TypeParameter = (Text, [Located TypeSyntax])   -- name and its bounds
+contextParameters :: CompletionContext -> [TypeParameter]
 contextAt    :: [Token] -> Maybe Module -> Int -> CompletionContext
 importSiteAt :: [Token] -> Int -> Maybe ImportSite
 ```
@@ -55,6 +57,10 @@ importSiteAt :: [Token] -> Int -> Maybe ImportSite
 - Every other context needs the tree. With no tree the position is an ordinary value position.
   The tree is the compiler's tooling syntax (`compileSyntax`), which survives a later-phase error
   such as a non-exhaustive match, so a pattern context is found while an arm is being added.
+- Type and value contexts carry the type parameters in scope, innermost declaration first, each with
+  the bounds its declaration wrote and those a `where` clause of the same declaration adds, so a
+  receiver typed by a parameter reaches its traits. A cursor in a block but on no statement, or on
+  a member name, is a value context that keeps them.
 - Value contexts retain the innermost expression when one exists. Calls, their arguments, record
   initializers, and ordinary expressions therefore pass through the same query boundary even when
   candidate ranking has no stronger fact than the names in lexical scope.

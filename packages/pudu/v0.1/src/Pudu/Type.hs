@@ -25,7 +25,7 @@ import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
 import Pudu.Type.Interface.Graph (ImportTypes)
-import Pudu.Type.Value (Scheme (..), Type (..), renderType)
+import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
@@ -59,16 +59,20 @@ data ModuleTypes = ModuleTypes
       A literal written without a suffix is not a platform `Int` merely because
       it was written plainly, and only the checker knows what it became. -}
   , moduleIntegerKinds :: !(Map.Map Span Text)
+  {-| The methods this module's declarations provide, by owner: its impls'
+      methods and the trait defaults they inherit, and its traits' members. -}
+  , moduleMethods :: ![(NominalId, Text, Scheme)]
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set (Int, Int) -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = TypeInfo (Map.fromList entries)
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
+          , moduleMethods = methods
           }
       , diagnostics
       )

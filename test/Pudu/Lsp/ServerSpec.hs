@@ -41,6 +41,7 @@ serverProperties =
   , ("pattern completion survives a match the checker rejects", testPatternCompletionRejected)
   , ("completion offers only the bindings in scope at the cursor", testLexicalScopeCompletion)
   , ("field completion reads the receiver's canonical record", testRecordFieldCompletion)
+  , ("method completion follows the checker's method rules", testMethodCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -571,6 +572,30 @@ testRecordFieldCompletion = do
         (property (all (`elem` importedLabels) ["x", "label"]))
     , counterexample "a local record of the same name lends no fields"
         (property ("unrelated" `notElem` importedLabels))
+    ]
+
+testMethodCompletion :: IO Property
+testMethodCompletion = do
+  content <- TextIO.readFile "test-fixtures/lspmethods/Main.pudu"
+  analysis <- analyseIn "test-fixtures/lspmethods" uri content
+  builtin <- opened "module Demo\nfn main(text: Str) -> Int { text.length() }\n"
+  let documents = rememberAnalysis uri analysis emptyDocuments
+      at line character = completionLabels (request "textDocument/completion" (atPosition line character) documents)
+      local = at 16 6
+      elsewhere = at 20 6
+      bounded = at 24 7
+      dynamic = at 28 7
+      strings = completionLabels (request "textDocument/completion" (atPosition 1 33) builtin)
+  pure $ conjoin
+    [ counterexample ("an inherited default is offered: " <> show local) (property ("size" `elem` local))
+    , counterexample "an overriding method is offered" (property ("named" `elem` local))
+    , counterexample "another module's same-named type lends no method" (property ("wrongMethod" `notElem` local))
+    , counterexample ("an imported type offers its own methods: " <> show elsewhere) (property ("wrongMethod" `elem` elsewhere))
+    , counterexample "an imported type does not borrow the local type's" (property ("size" `notElem` elsewhere))
+    , counterexample ("a where-bound offers its trait's members: " <> show bounded) (property (all (`elem` bounded) ["size", "named"]))
+    , counterexample ("a dynamic receiver offers its trait's members: " <> show dynamic) (property ("size" `elem` dynamic))
+    , counterexample "a wired-in receiver keeps its runtime methods" (property ("length" `elem` strings))
+    , counterexample "each method is offered once" (length (filter (== "size") local) === 1)
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

@@ -37,6 +37,13 @@ source root; the catalog is run only when the cursor is at an import site.
   from [[Lsp Shapes]] by the receiver type's canonical identity, with its type arguments
   substituted into each field's declared type; a `mut` field's detail says `mut`. References are
   unwrapped and aliases arrive expanded by the checker.
+- Methods come from the methods the program's modules declared (`analysisMethods`), by the owner the
+  checker looks a call up under: a nominal type's methods including inherited trait defaults, a
+  `dynamic` trait's members, an applied type's head, and for a type parameter the members of the
+  traits its bounds and `where` clauses name. A bound's trait is found by how this module can write
+  it: its own trait, a selectively imported one, or through an import's qualifier. A wired-in type
+  also has the methods its runtime provides. Details are the checker's schemes; a method two traits
+  provide is offered once.
 - In a match pattern, completion offers only constructors belonging to the checked subject's sum,
   excluding variants already covered by an unguarded irrefutable sibling arm, plus `_`.
 - In a type position, completion offers lexical type parameters, visible types, usable module

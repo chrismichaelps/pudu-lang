@@ -38,6 +38,11 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ### Governance
 
+- Every method a module's own impl declares, inherited defaults included, and every member its own
+  traits declare is recorded with `recordDeclaredMethod` under the same owner and scheme it is bound
+  with, so tooling offers exactly what `methodScheme` would find. An imported impl's methods are
+  bound with `bindImportedMethod` and recorded by the module that declared them.
+
 - A trait's own type parameters are rigid inside its members, exactly as a function's are inside its body. Without that they were formed as nominal types named after the parameter, so `trait Holds[T]` gave `get` a result of some type literally called `T` that nothing could be, and every use reported `expected Int, found T`.
 
 - Two traits may declare the same member for one type. Declaring both is legal; only an unqualified call has to choose, so the ambiguity is recorded when the second implementation binds and reported at the call that cannot resolve it, naming both qualified forms.

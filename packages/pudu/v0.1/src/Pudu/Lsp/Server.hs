@@ -19,6 +19,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
+import Pudu.Type.Value (Scheme, nominalKey)
 import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -123,7 +124,19 @@ analyseIn root uri content = do
       , analysisModule = rootCompileResult program >>= compileSyntax
       , analysisSums = programSums program
       , analysisRecords = programRecords program
+      , analysisMethods = programMethods program
       }
+
+{-| The methods every module of the program declared, by the canonical key of
+    their owner. Each module's check publishes only its own, so the program's
+    are the union, gathered once per analysis. -}
+programMethods :: ProgramResult -> Map Text [(Text, Scheme)]
+programMethods program =
+  Map.fromListWith (flip (<>))
+    [ (nominalKey owner, [(name, scheme)])
+    | compiled <- Map.elems (programModules program)
+    , (owner, name, scheme) <- compileMethods compiled
+    ]
 
 {-| Determine the project root for compilation.
 

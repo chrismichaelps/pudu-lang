@@ -2,7 +2,8 @@
 module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 
 import Data.Char (isAlphaNum)
-import Data.List (nub, sort)
+import qualified Data.List.NonEmpty as NonEmpty
+import Data.List (sortOn)
 import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -11,14 +12,15 @@ import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (moduleNameSegments, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Expression
   , Import (..)
   , MatchArm
   , Module (..)
+  , TypeSyntax (..)
   )
-import Pudu.Lsp.Context (CompletionContext (..), contextAt)
+import Pudu.Lsp.Context (CompletionContext (..), TypeParameter, contextAt, contextParameters)
 import Pudu.Lsp.ImportCompletion (importCompletions)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
@@ -33,7 +35,7 @@ import Pudu.Semantic.ScopeIndex (visibleAt)
 import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
 import Pudu.Source (spanStart, unOffset)
 import Pudu.Type (Type (..), narrowestAt, renderType)
-import Pudu.Type.Value (NominalId (..), nominalKey)
+import Pudu.Type.Value (NominalId (..), Scheme (..), nominalKey)
 
 {-| Completions from the analysis already held, repairing nothing. A request
     that names no position is answered with every documented name. An import
@@ -63,7 +65,7 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
       members@(_ : _) -> members
       [] -> memberCompletions known dotOffset
     Nothing -> case (context, analysisModule written) of
-      (TypeContext parameters, Just parsed) -> typeCompletions known parsed parameters
+      (TypeContext parameters, Just parsed) -> typeCompletions known parsed (map fst parameters)
       _ -> scopeCompletions written known agrees (wordStart written offset)
  where
   context = syntaxContext written offset
@@ -326,13 +328,58 @@ importsOf content =
     _ -> []
 
 {-| What may follow a value of the type the checker gave the receiver: the
-    fields of its record type, then its methods. -}
+    fields of its record type, then the methods it can be called with. -}
 memberCompletions :: Analysis -> Int -> [Json]
 memberCompletions value dotOffset = case analysisTypes value >>= narrowestAt (dotOffset - 1) of
   Nothing -> []
   Just typeValue ->
     fieldCompletions value typeValue
-      <> map methodItem (sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) (ownerNameOf typeValue))))
+      <> distinctItems (methodCompletions value (contextParameters (syntaxContext value (dotOffset - 1))) typeValue)
+
+{-| The methods a receiver can be called with, from the methods the program's
+    modules declared, by the owner the checker would look them up under: a
+    nominal type's own and inherited default methods, a `dynamic` trait's
+    members, and for a type parameter the members of the traits its bounds
+    name. A wired-in type also has the methods its runtime provides. Sorted by
+    name; a method two traits provide is offered once. -}
+methodCompletions :: Analysis -> [TypeParameter] -> Type -> [Json]
+methodCompletions value parameters receiver =
+  [methodItem name (maybe "method" (renderType . schemeType) scheme) | (name, scheme) <- sortOn fst (methodsOf receiver)]
+ where
+  methodsOf typeValue = case throughReferenceType typeValue of
+    NominalType owner _ ->
+      declaredOn (nominalKey owner)
+        <> [ (name, Nothing)
+           | nominalModule owner == Nothing
+           , name <- builtinMethodNamesFor (nominalName owner)
+           , name `notElem` map fst (declaredOn (nominalKey owner))
+           ]
+    DynamicTypeValue trait -> declaredOn (nominalKey trait)
+    AppliedType head' _ -> methodsOf head'
+    RigidType name -> concat [declaredOn key | bound <- boundsOf name, key <- traitKeys bound]
+    _ -> []
+  declaredOn key = [(name, Just scheme) | (name, scheme) <- Map.findWithDefault [] key (analysisMethods value)]
+  boundsOf name = concat [bounds | (parameter, bounds) <- parameters, parameter == name]
+  traitKeys (Located _ bound) = case bound of
+    NamedType path _ -> filter (`Map.member` analysisMethods value) (ownersOf path)
+    _ -> []
+  -- The canonical keys a written trait name may stand for in this module: a
+  -- qualifier names the module it was imported as; a bare name is this
+  -- module's own, or one a selective import brought in.
+  ownersOf path = case NonEmpty.toList (moduleNameSegments path) of
+    [name] -> [own <> "." <> name | Just own <- [rootName]] <> [imported <> "." <> name | imported <- selecting name]
+    segments -> [qualified (init segments) <> "." <> last segments]
+  rootName = moduleNameText . locatedValue . moduleName <$> analysisModule value
+  imports = maybe [] (map locatedValue . moduleImports) (analysisModule value)
+  selecting name =
+    [moduleNameText (locatedValue (importModule entry)) | entry <- imports, name `elem` map locatedValue (importItems entry)]
+  qualified segments =
+    let written = Text.intercalate "." segments
+     in case [moduleNameText (locatedValue (importModule entry)) | entry <- imports, Just alias <- [importAlias entry], locatedValue alias == written] of
+          target : _ -> target
+          [] -> case [moduleNameText (locatedValue (importModule entry)) | entry <- imports, null (importItems entry), importAlias entry == Nothing, moduleQualifier (locatedValue (importModule entry)) == written] of
+            target : _ -> target
+            [] -> written
 
 {-| The fields of the receiver's record type, found by the type's canonical
     identity — its declaring module and name — so a record another module
@@ -349,21 +396,6 @@ fieldCompletions value typeValue = case throughReferenceType typeValue of
             ]
   _ -> []
 
-implMethodsFor :: DocIndex -> Text -> [Text]
-implMethodsFor index owner
-  | Text.null owner = []
-  | otherwise =
-      [ docName entry
-      | entry <- indexEntries index
-      , DocMethod target <- [docKind entry]
-      , target == owner
-      ]
-
-ownerNameOf :: Type -> Text
-ownerNameOf typeValue = case throughReferenceType typeValue of
-  NominalType identity _ -> nominalName identity
-  _ -> ""
-
 receiverEnd :: Text -> Int -> Maybe Int
 receiverEnd content offset =
   let before = Text.take offset content
@@ -376,18 +408,13 @@ receiverEnd content offset =
  where
   receiverScalar scalar = nameScalar scalar || scalar `elem` (")]}\"" :: String)
 
-methodsOfType :: Type -> [Text]
-methodsOfType typeValue = case throughReferenceType typeValue of
-  NominalType identity _ -> builtinMethodNamesFor (nominalName identity)
-  _ -> []
-
 throughReferenceType :: Type -> Type
 throughReferenceType typeValue = case typeValue of
   ReferenceTypeValue _ target -> throughReferenceType target
   other -> other
 
-methodItem :: Text -> Json
-methodItem name = simpleItem name 2 "method"
+methodItem :: Text -> Text -> Json
+methodItem name detail = simpleItem name 2 detail
 
 located :: Documents -> Json -> Maybe (Analysis, Int)
 located documents parameters = do
