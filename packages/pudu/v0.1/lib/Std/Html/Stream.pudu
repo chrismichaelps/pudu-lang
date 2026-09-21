@@ -1,6 +1,62 @@
 module Std.Html.Stream
 
 import Std.Bytes as ByteSeq
+import Std.Html as Html
+
+/// Stylesheet source the caller has explicitly accepted as markup-adjacent code.
+export type TrustedCss = { written: Str }
+
+/// Reusable bytes for an early document head.
+export type PreparedHead = { bytes: Bytes }
+
+/// Why a suspense boundary identifier was refused.
+export type BoundaryError = { boundaryId: Str }
+
+const BOUNDARY_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+/// Marks reviewed stylesheet source for safe head preparation.
+export fn trustedCss(written: Str) -> TrustedCss { TrustedCss{written: written} }
+
+/// Prepares a reusable head from typed destinations, escaped text, and explicit CSS.
+export fn prepareHead(
+  title: Str,
+  meta: &Array[(Str, Str)],
+  criticalCss: &TrustedCss,
+  preloads: &Array[Html.Destination]
+) -> PreparedHead {
+  var children: Array[Html.Html] = [
+    Html.empty("meta", &[("charset", "utf-8")]),
+    Html.empty("meta", &[
+        ("name", "viewport"),
+        ("content", "width=device-width, initial-scale=1")
+      ]),
+    Html.title(title)
+  ]
+  for pair in meta {
+    children = children.push(Html.empty("meta", &[("name", pair[0]), ("content", pair[1])]))
+  }
+  for preload in preloads {
+    children = children.push(Html.empty("link", &[
+          ("rel", "preload"),
+          ("href", Html.destinationText(&preload)),
+          ("as", "style")
+        ]))
+  }
+  if !criticalCss.written.isEmpty() {
+    children = children.push(Html.element(
+        "style",
+          &[],
+          &[Html.trusted(criticalCss.written)]
+      ))
+  }
+  let head = Html.element("head", &[], &children)
+  PreparedHead {
+    bytes: ("<!DOCTYPE html><html lang=\"en\">" + Html.render(&head) + "<body>").toBytes()
+  }
+}
+
+/// The immutable bytes retained by a prepared head.
+export fn headBytes(prepared: &PreparedHead) -> Bytes { prepared.bytes }
 
 /// Generates the early flush HTML document head strictly bounded for 1-RTT delivery.
 export fn documentHead(
@@ -65,4 +121,52 @@ export fn renderSuspended(
   content: &Bytes
 ) -> (Bytes, Bytes) {
   (suspensePlaceholder(boundaryId, fallback), suspenseReplacement(boundaryId, content))
+}
+
+/// A typed fallback inside a validated suspense boundary.
+export fn placeholder(boundaryId: Str, fallback: &Html.Html) -> Result[Bytes, BoundaryError] {
+  let _checked = checkBoundary(boundaryId) ?
+  let rendered = Html.render(fallback).toBytes()
+  Ok(suspensePlaceholder(boundaryId, &rendered))
+}
+
+/// Typed resolved content for a validated suspense boundary.
+export fn replacement(boundaryId: Str, content: &Html.Html) -> Result[Bytes, BoundaryError] {
+  let _checked = checkBoundary(boundaryId) ?
+  let rendered = Html.render(content).toBytes()
+  Ok(suspenseReplacement(boundaryId, &rendered))
+}
+
+/// A typed error fallback for a validated suspense boundary.
+export fn errorReplacement(
+  boundaryId: Str,
+  fallback: &Html.Html
+) -> Result[Bytes, BoundaryError] {
+  let _checked = checkBoundary(boundaryId) ?
+  let rendered = Html.render(fallback).toBytes()
+  Ok(suspenseError(boundaryId, &rendered))
+}
+
+/// The initial and resolved chunks for one validated typed boundary.
+export fn suspended(
+  boundaryId: Str,
+  fallback: &Html.Html,
+  content: &Html.Html
+) -> Result[(Bytes, Bytes), BoundaryError] {
+  let first = placeholder(boundaryId, fallback) ?
+  let second = replacement(boundaryId, content) ?
+  Ok((first, second))
+}
+
+fn checkBoundary(boundaryId: Str) -> Result[(), BoundaryError] {
+  if boundaryId.isEmpty() { return Err(BoundaryError{boundaryId: boundaryId}) }
+  var index = 0
+  while index < boundaryId.length() {
+    let character = boundaryId.slice(index, index + 1)
+    if !BOUNDARY_CHARACTERS.contains(character) {
+      return Err(BoundaryError{boundaryId: boundaryId})
+    }
+    index = index + 1
+  }
+  Ok(())
 }

@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Streaming HTML has typed safe entry points
+
+- `Std.Html.Stream.prepareHead` retains reusable early-head bytes built from escaped title and
+  metadata text, typed preload destinations, and explicitly trusted CSS. The legacy string helper
+  remains available as an unchecked compatibility path.
+- Typed suspense helpers accept `Html` fallback/content and return a typed refusal unless the
+  boundary identifier is non-empty ASCII alphanumeric. Text therefore cannot become markup or a
+  handler, trusted markup stays explicit, and boundary IDs never require HTML or JavaScript quoting.
+- Eighteen focused exact-output and refusal checks cover quotes, ampersands, closing-tag and handler
+  text, unsafe preload schemes, trusted CSS/markup, prepared-head reuse, every suspense helper,
+  hostile and empty identifiers, documented replacement behavior, and legacy compatibility for
+  issue #265. This safety migration makes no allocation, latency, or complexity improvement claim.
+
 ## 2026-09-20 — Fluent HTML destinations can be checked before rendering
 
 - `Std.Html.Build` adds typed `hrefTo`, `srcFrom`, and `actionTo` setters plus checked string

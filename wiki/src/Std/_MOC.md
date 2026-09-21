@@ -11,7 +11,8 @@ tags: [moc, module, stdlib]
   lengths, and output budgets.
 - [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
   static blocks, typed failures, and explicitly bounded application-output coalescing.
-- [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.
+- [[Std Html Stream]] — prepared safe heads, typed progressive suspense output, and retained
+  unchecked compatibility helpers.
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
 - [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.

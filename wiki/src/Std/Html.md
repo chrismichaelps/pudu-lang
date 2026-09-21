@@ -99,7 +99,7 @@ functions already are, and they compose without a second mechanism to learn.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
 [[2026-09-20-bounded-ssr-slots]] · [[2026-09-20-deferred-html-builders]] ·
-[[2026-09-20-checked-html-destinations]]
+[[2026-09-20-checked-html-destinations]] · [[2026-09-21-safe-html-streaming]]
 
 ## Fragment rendering
 

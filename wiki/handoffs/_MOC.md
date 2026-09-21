@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-safe-html-streaming]] — issue #265 reusable typed heads, checked preload destinations,
+  explicit CSS trust, typed suspense content, and context-free boundary identifiers.
+
 - [[2026-09-20-checked-html-destinations]] — issue #264 typed and checked fluent destination setters,
   generic-attribute bypass closure, trusted escape-hatch visibility, and compatibility.
 
