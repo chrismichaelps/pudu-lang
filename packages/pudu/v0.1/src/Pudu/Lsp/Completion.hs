@@ -9,9 +9,20 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Eval.Operator (builtinMethodNamesFor)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Tree
+  ( Expression
+  , Import (..)
+  , MatchArm
+  , Module (..)
+  )
+import Pudu.Lsp.Context (CompletionContext (..), contextAt)
+import Pudu.Lsp.ImportCompletion (importCompletions)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
 import Pudu.Lsp.Json (Json (..), lookupField)
+import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
 import Pudu.Semantic.Prelude (wiredInTypeNames)
@@ -19,28 +30,90 @@ import Pudu.Semantic.Resolve (Resolution (..))
 import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
 import Pudu.Source (spanStart, unOffset)
 import Pudu.Type (Type (..), narrowestAt, renderType)
-import Pudu.Type.Value (nominalName)
+import Pudu.Type.Value (NominalId (..))
 
 {-| Completions from the analysis already held, repairing nothing. A request
-    that names no position is answered with every documented name. -}
+    that names no position is answered with every documented name. An import
+    being written is offered the modules this program already reached. -}
 completionAt :: Documents -> Json -> Json
 completionAt documents parameters = case located documents parameters of
-  Just (value, offset) -> completionFrom value value offset offset
+  Just (value, offset) -> completionFrom [] value value offset offset
   Nothing -> maybe (JsonArray []) (completionItems . analysisProgramIndex) (documentOf documents parameters)
 
 {-| Completions at `offset` of `written`, the text the editor holds, answered
     from `known`, whose names and types are consulted and which agrees with
-    `written` up to `agrees`.
+    `written` up to `agrees`. `catalog` is every module an import could name.
 
     The two analyses differ only when a repaired copy of the text was compiled.
+    The construct is read from `written`, because that is where the cursor is.
     After a dot the answer is members or nothing: a keyword is never what
     follows `value.`. -}
-completionFrom :: Analysis -> Analysis -> Int -> Int -> Json
-completionFrom written known agrees offset = case receiverEnd (analysisText written) offset of
-  Just dotOffset -> case moduleMembers (analysisText written) known dotOffset of
-    members@(_ : _) -> JsonArray members
-    [] -> JsonArray (memberCompletions known dotOffset)
-  Nothing -> JsonArray (scopeCompletions (analysisText written) known (min agrees (wordStart written offset)))
+completionFrom :: [Text] -> Analysis -> Analysis -> Int -> Int -> Json
+completionFrom catalog written known agrees offset = JsonArray $ case context of
+  PatternContext subject arms arm -> case analysisModule written of
+    Just parsed -> patternCompletions known parsed subject arms arm
+    Nothing -> []
+  ImportContext site -> importCompletions catalog written offset site
+  SuppressedContext -> []
+  _ -> case receiverEnd (analysisText written) offset of
+    Just dotOffset -> case moduleMembers (analysisText written) known dotOffset of
+      members@(_ : _) -> members
+      [] -> memberCompletions known dotOffset
+    Nothing -> case (context, analysisModule written) of
+      (TypeContext parameters, Just parsed) -> typeCompletions known parsed parameters
+      _ -> scopeCompletions (analysisText written) known (min agrees (wordStart written offset))
+ where
+  context = syntaxContext written offset
+
+{-| What construct `offset` stands in, read from the document as written. -}
+syntaxContext :: Analysis -> Int -> CompletionContext
+syntaxContext written = contextAt (analysisTokens written) (analysisModule written)
+
+{-| What may be written as the pattern of an arm: the variants of the subject's
+    sum, spelled the way this module reaches them, and `_`.
+
+    A variant another arm already covers — without a guard, and with a payload
+    every value matches — is left out, because a second arm for it could never
+    be reached. One covered only under a guard or for some payloads is still
+    offered. -}
+patternCompletions :: Analysis -> Module -> Located Expression -> [Located MatchArm] -> Located MatchArm -> [Json]
+patternCompletions known parsed subject arms arm =
+  [ simpleItem label (if label == "_" then 14 else 20) detail
+  | PatternCandidate label detail <-
+      patternCandidates (analysisTypes known) (analysisSums known) parsed subject arms arm
+  ]
+
+{-| What may be written where a type is: the type parameters in scope, innermost
+    first, the types this module declares and imports, the modules whose types
+    it may name through a qualifier, and the language's own types. -}
+typeCompletions :: Analysis -> Module -> [Text] -> [Json]
+typeCompletions known parsed parameters =
+  distinctItems
+    ( [simpleItem name 25 "type parameter" | name <- parameters]
+        <> [ simpleItem (symbolName symbol) 22 (originDetail (symbolOrigin symbol))
+           | symbol <- maybe [] resolutionSymbols (analysisResolution known)
+           , symbolNamespace symbol == TypeSpace
+           , symbolOrigin symbol `elem` [ModuleOrigin, ImportOrigin]
+           ]
+        <> [ simpleItem qualifier 9 ("module " <> moduleNameText (locatedValue (importModule imported)))
+           | Located _ imported <- moduleImports parsed
+           , null (importItems imported)
+           , let qualifier = maybe (moduleQualifier (locatedValue (importModule imported))) locatedValue (importAlias imported)
+           ]
+        <> [simpleItem name 22 "type" | name <- wiredInTypeNames, name `notElem` ["Copy", "Never", "Buckets"]]
+    )
+ where
+  originDetail origin = if origin == ImportOrigin then "imported type" else "type"
+
+distinctItems :: [Json] -> [Json]
+distinctItems = go Set.empty
+ where
+  go _ [] = []
+  go seen (item : rest) = case labelOf item of
+    Just label
+      | Set.member label seen -> go seen rest
+      | otherwise -> item : go (Set.insert label seen) rest
+    Nothing -> go seen rest
 
 {-| Completions answered from a repaired copy of the program when the program as
     written cannot say what the answer is.
@@ -52,32 +125,40 @@ completionFrom written known agrees offset = case receiverEnd (analysisText writ
     and the program without that line still says what is in scope above it.
     `analyse` compiles text as the document; it is asked only when the analysis
     already held cannot answer. -}
-completionRepaired :: (Text -> IO Analysis) -> Documents -> Json -> IO Json
-completionRepaired analyse documents parameters = case located documents parameters of
+completionRepaired :: (Text -> IO Analysis) -> IO [Text] -> Documents -> Json -> IO Json
+completionRepaired analyse modules documents parameters = case located documents parameters of
   Nothing -> pure (completionAt documents parameters)
   Just (value, offset) -> do
     let content = analysisText value
         (lineStart, lineEnd) = lineBounds content offset
+    case syntaxContext value offset of
+      ImportContext site -> do
+        catalog <- modules
+        pure (JsonArray (importCompletions catalog value offset site))
+      _ -> repaired value offset content lineStart lineEnd
+ where
+  completionFrom' = completionFrom []
+  repaired value offset content lineStart lineEnd =
     case receiverEnd content offset of
       Just dotOffset
         | isJust (analysisTypes value >>= narrowestAt (dotOffset - 1)) ->
-            pure (completionFrom value value offset offset)
+            pure (completionFrom' value value offset offset)
         | otherwise -> do
             (known, agrees) <-
               mostComplete analyse value offset
                 [ withoutRange content dotOffset offset
                 , Repair (Text.take dotOffset content <> Text.drop lineEnd content) dotOffset
                 ]
-            pure (completionFrom value known agrees offset)
+            pure (completionFrom' value known agrees offset)
       Nothing
-        | isJust (analysisTypes value) -> pure (completionFrom value value offset offset)
+        | isJust (analysisTypes value) -> pure (completionFrom' value value offset offset)
         | otherwise -> do
             (known, agrees) <-
               mostComplete analyse value offset
                 [ withoutRange content (wordStart value offset) offset
                 , withoutRange content lineStart lineEnd
                 ]
-            pure (completionFrom value known agrees offset)
+            pure (completionFrom' value known agrees offset)
 
 {-| The offset where the name being written at `offset` starts. -}
 wordStart :: Analysis -> Int -> Int
@@ -112,14 +193,14 @@ scopeCompletions content known before =
     maximum (0 : [startOf symbol | symbol <- symbols, symbolOrigin symbol == ModuleOrigin, startOf symbol <= before])
   locals =
     reverse
-      [ simpleItem (symbolName symbol) 6 (typeAt (startOf symbol))
+      [ simpleItem (symbolName symbol) 6 (typeNear (startOf symbol))
       | symbol <- symbols
       , symbolOrigin symbol `elem` [ParameterOrigin, LocalOrigin, PatternOrigin]
       , symbolNamespace symbol == ValueSpace
       , startOf symbol >= enclosing
       , startOf symbol < before
       ]
-  typeAt start = maybe "" renderType (analysisTypes known >>= narrowestAt start)
+  typeNear start = maybe "" renderType (analysisTypes known >>= narrowestAt start)
   fileEntries = [entry | entry <- indexEntries (analysisFileIndex known), not (isMember (docKind entry))]
   declared = Set.fromList (map docName fileEntries)
   declarations =

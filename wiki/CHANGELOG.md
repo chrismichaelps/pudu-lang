@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Completion knows where the cursor is
+
+- A match arm is offered the variants of its subject's type, spelled as this module reaches them,
+  without variants an earlier unguarded arm fully covers, plus `_`. Imported and generic sums keep
+  their owner and show substituted payloads. A type position is offered type parameters in scope
+  and types. Comments and string literals are offered nothing.
+- `import Std.` and `import Std.Co` offer every module the program could import — its own, its
+  manifest dependencies', and the standard library's — as whole paths, while the document does not
+  parse. The catalog is found once per source root and refreshed when files change.
+- The compiler keeps the parsed tree for tooling when typing fails, so pattern completion works
+  while a match is still non-exhaustive (issue #274).
+
 ## 2026-09-21 — Constants are not evaluated twice
 
 - A module's constants whose values are plain data are bound from what folding computed when the

@@ -187,6 +187,10 @@ library
     Pudu.Lsp.WorkspaceSymbols
     Pudu.Lsp.CodeAction
     Pudu.Lsp.Completion
+    Pudu.Lsp.Context
+    Pudu.Lsp.PatternCompletion
+    Pudu.Lsp.ImportCompletion
+    Pudu.Lsp.ModuleCatalog
     Pudu.Lsp.Repair
     Pudu.Eval.Confinement
     Pudu.IntegerLiteral

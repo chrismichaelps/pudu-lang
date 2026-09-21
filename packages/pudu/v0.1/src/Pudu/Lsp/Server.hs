@@ -14,6 +14,8 @@ module Pudu.Lsp.Server
 import Control.Exception (SomeException, displayException, evaluate, try)
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
@@ -34,8 +36,10 @@ import Pudu.Diagnostic
   , diagnosticSpan
   )
 import Pudu.Format (FormatResult (..), formatSource)
+import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
+import Pudu.Lsp.Context (programSums)
 import Pudu.Lsp.Definition (definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
@@ -57,6 +61,7 @@ import Pudu.Lsp.Feature
 import Pudu.Lsp.Highlight (documentHighlightAt)
 import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
+import Pudu.Lsp.ModuleCatalog (moduleCatalog)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
   ( Incoming (..)
@@ -114,6 +119,9 @@ analyseIn root uri content = do
       , analysisProgramIndex = programDocs program
       , analysisResolution = rootCompileResult program >>= compileResolution
       , analysisTypes = rootCompileResult program >>= compileTypes
+      , analysisTokens = maybe (lexTokens (lexSource source)) compileTokens (rootCompileResult program)
+      , analysisModule = rootCompileResult program >>= compileSyntax
+      , analysisSums = programSums program
       }
 
 {-| Determine the project root for compilation.
@@ -178,38 +186,67 @@ runServer = do
   hSetBinaryMode stdout True
   hSetBuffering stdout NoBuffering
   store <- newIORef emptyDocuments
-  loop store
+  catalogs <- newIORef Map.empty
+  loop store catalogs
 
-loop :: IORef Documents -> IO ()
-loop store = do
+{-| The modules each source root offers an import, found once and kept until a
+    file is saved, created, or removed — the only events that change them. -}
+type Catalogs = IORef (Map FilePath [Text])
+
+loop :: IORef Documents -> Catalogs -> IO ()
+loop store catalogs = do
   incoming <- readMessage stdin
   case incoming of
     EndOfStream -> pure ()
-    NotForServer -> loop store
+    NotForServer -> loop store catalogs
     Unreadable reason -> do
       TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
       hFlush stderr
-      loop store
+      loop store catalogs
     Unframed reason -> do
       TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
       hFlush stderr
       exitWith (ExitFailure 1)
     Received message -> do
       documents <- readIORef store
-      outcome <- try (prepare documents message)
+      invalidateCatalogs catalogs message
+      outcome <- try (prepare catalogs documents message)
       case outcome of
         Right (documents', replies) -> do
           writeIORef store documents'
           mapM_ (emit stdout) replies
         Left failure -> mapM_ (emit stdout) =<< excuse message failure
-      unless (isExit message) (loop store)
+      unless (isExit message) (loop store catalogs)
 
-prepare :: Documents -> Message -> IO (Documents, [Text])
-prepare documents message = do
+invalidateCatalogs :: Catalogs -> Message -> IO ()
+invalidateCatalogs catalogs message = case message of
+  Notification method _
+    | method `elem` ["textDocument/didSave", "workspace/didChangeWatchedFiles", "workspace/didCreateFiles", "workspace/didDeleteFiles", "workspace/didRenameFiles"] ->
+        writeIORef catalogs Map.empty
+  _ -> pure ()
+
+{-| The catalog for the source root a document compiles under, built on first
+    use. -}
+catalogFor :: Catalogs -> Documents -> Json -> IO [Text]
+catalogFor catalogs documents parameters = do
+  root <- resolveSourceRoot (workspaceRoot documents) (fromMaybe "" (uriOf parameters))
+  known <- readIORef catalogs
+  case Map.lookup root known of
+    Just found -> pure found
+    Nothing -> do
+      found <- moduleCatalog root
+      _ <- evaluate (length found)
+      writeIORef catalogs (Map.insert root found known)
+      pure found
+
+prepare :: Catalogs -> Documents -> Message -> IO (Documents, [Text])
+prepare catalogs documents message = do
   documents' <- refresh documents message
   (documents'', replies) <- case message of
     Request identity "textDocument/completion" parameters -> do
-      items <- completionRepaired (reanalyse documents' parameters) documents' parameters
+      items <-
+        completionRepaired (reanalyse documents' parameters) (catalogFor catalogs documents' parameters)
+          documents' parameters
       pure (documents', [response identity items])
     Request identity "textDocument/signatureHelp" parameters -> do
       help <- case located documents' parameters of

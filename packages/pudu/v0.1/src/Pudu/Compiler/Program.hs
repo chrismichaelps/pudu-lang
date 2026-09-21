@@ -335,6 +335,7 @@ checkedFor cache graph context source frontend = do
       pure CompileResult
         { compileTokens = frontendTokens frontend
         , compileModule = Just (checkedModule reused)
+        , compileSyntax = Just (checkedModule reused)
         , compileResolution = Nothing
         , compileTypes = Nothing
         , compileIntegerKinds = checkedIntegerKinds reused

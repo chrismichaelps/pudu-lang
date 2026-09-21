@@ -43,6 +43,23 @@ const recentSource = readFileSync(
 const uri = "file:///pudu-fixtures/session.pudu";
 const recentUri = "file:///pudu-fixtures/RecentLanguage.pudu";
 const foreignUri = "file:///pudu-fixtures/ForeignSession.pudu";
+const contextUri = "file:///pudu-fixtures/CompletionContext.pudu";
+const contextSource = [
+  "module CompletionContext",
+  "type State = Ready | Loading | Failed",
+  "type Other = Unrelated | AlsoUnrelated",
+  "fn choose(state: State) -> Int {",
+  "  match state {",
+  "    case Ready => 1",
+  "    case Loading => 2",
+  "    case Failed => 3",
+  "  }",
+  "}",
+  "fn identity[T](value: T) -> T { value }",
+  "",
+].join("\n");
+const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
+const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
   "module ForeignSession",
   'export foreign "c" {',
@@ -82,6 +99,12 @@ const messages = [
   {
     method: "textDocument/didOpen",
     params: {
+      textDocument: { uri: contextUri, languageId: "pudu", version: 1, text: contextSource },
+    },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
       textDocument: { uri: recentUri, languageId: "pudu", version: 1, text: recentSource },
     },
   },
@@ -112,6 +135,27 @@ const messages = [
     id: 22,
     method: "textDocument/hover",
     params: { textDocument: { uri: importingUri }, position: { line: 3, character: 4 } },
+  },
+  {
+    id: 23,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: contextUri }, position: { line: 6, character: 11 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: importUri, languageId: "pudu", version: 1, text: importSource },
+    },
+  },
+  {
+    id: 25,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: importUri }, position: { line: 1, character: 12 } },
+  },
+  {
+    id: 24,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: contextUri }, position: { line: 10, character: 29 } },
   },
   {
     id: 3,
@@ -431,6 +475,33 @@ for (const expected of ["writeLine", "read", "write"]) {
   assert(moduleLabels.includes(expected), `completion after Io. did not offer ${expected}`);
 }
 assert(!moduleLabels.includes("isOk"), "completion after Io. offered another module's declarations");
+
+const patternOffered = replyTo(23)?.result;
+const patternItems = Array.isArray(patternOffered) ? patternOffered : (patternOffered?.items ?? []);
+const patternLabels = patternItems.map(entry => entry.label);
+for (const expected of ["Loading", "Failed", "_"]) {
+  assert(patternLabels.includes(expected), `pattern completion did not offer ${expected}`);
+}
+for (const unrelated of ["Ready", "Unrelated", "AlsoUnrelated", "fn"]) {
+  assert(!patternLabels.includes(unrelated), `pattern completion offered unrelated ${unrelated}`);
+}
+
+const typeOffered = replyTo(24)?.result;
+const typeItems = Array.isArray(typeOffered) ? typeOffered : (typeOffered?.items ?? []);
+const typeLabels = typeItems.map(entry => entry.label);
+assert(typeLabels.includes("T"), "type-position completion omitted the lexical type parameter T");
+assert(!typeLabels.includes("let"), "type-position completion offered a value keyword");
+
+// An import being written does not parse, and is still offered the library.
+const importOffered = replyTo(25)?.result;
+const importItems = Array.isArray(importOffered) ? importOffered : (importOffered?.items ?? []);
+const stdIo = importItems.find(entry => entry.label === "Std.Io");
+assert(stdIo, "an unfinished import was not offered Std.Io");
+assert(
+  stdIo.textEdit?.range?.start?.character === 7 && stdIo.textEdit?.range?.end?.character === 12,
+  `the import edit did not replace the written path: ${JSON.stringify(stdIo.textEdit)}`,
+);
+assert(!importItems.some(entry => entry.label === "fn"), "an import position offered a keyword");
 
 // Text beyond ASCII arrives as it was written.
 const unicodeHover = JSON.stringify(replyTo(22)?.result ?? null);

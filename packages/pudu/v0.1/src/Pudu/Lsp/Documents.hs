@@ -22,6 +22,9 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
+import Pudu.Frontend.Syntax.Tree (Module)
+import Pudu.Frontend.Token (Token)
+import Pudu.Lsp.Context (SumShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
 import Pudu.Semantic.Resolve (Resolution)
@@ -52,6 +55,13 @@ data Analysis = Analysis
       about the function a cursor is inside. A reader hovering a binding is
       asking about the binding. -}
   , analysisTypes :: !(Maybe TypeInfo)
+  , analysisTokens :: ![Token]
+  {-| The document's own tree, when it compiled, for questions about what
+      construct a position is in. -}
+  , analysisModule :: !(Maybe Module)
+  {-| Every sum type the program can see, by its canonical name — the
+      declaring module and the type's name — with its variants. -}
+  , analysisSums :: !(Map Text SumShape)
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.

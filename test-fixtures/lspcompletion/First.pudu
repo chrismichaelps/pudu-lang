@@ -1,0 +1,3 @@
+module First
+
+export type First[T] = Shared(T) | OnlyFirst

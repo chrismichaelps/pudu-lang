@@ -26,6 +26,9 @@ data Analysis = Analysis
   , analysisDiagnostics  :: ![Diagnostic]
   , analysisFileIndex    :: !DocIndex
   , analysisProgramIndex :: !DocIndex
+  , analysisTokens       :: ![Token]
+  , analysisModule       :: !(Maybe Module)
+  , analysisSums         :: !(Map Text SumShape)
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis
@@ -51,6 +54,16 @@ serverCapabilities :: Json
   within one keystroke would otherwise compile the program three times.
 - The stored analysis retains the root module's resolver result. Hover and definition therefore use
   symbol identity from the same compile as diagnostics and types rather than guessing by spelling.
+- The stored analysis also retains the parsed root module and visible sum shapes. Completion can
+  derive syntax context and legal constructors from one coherent compile rather than reparsing an
+  editor buffer or scanning unrelated documentation entries.
+- A document's tokens are always stored, lexed directly when the compile produced no root result,
+  so comment, literal, and import contexts are known for text that does not parse. The stored tree
+  is the compiler's tooling syntax, which survives type errors.
+- Import completion reads a module catalog ([[Lsp Module Catalog]]) for the document's source root.
+  The loop keeps one catalog per root in a cache of its own, built on the first import completion
+  and cleared by `didSave`, `didChangeWatchedFiles`, and the file create/delete/rename
+  notifications — the only events that change which modules exist.
 - **All standard capabilities are implemented and announced.** In addition to hover, definition,
   outline, formatting, and completions, the server provides find references, rename (with prepare),
   document highlight, semantic tokens (full), signature help, inlay hints, workspace symbols,
@@ -82,7 +95,7 @@ serverCapabilities :: Json
 
 - **Requires:** [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Lsp Hover]], [[Lsp Definition]],
   [[Lsp References]], [[Lsp Rename]], [[Lsp Highlight]], [[Lsp Semantic Tokens]], [[Lsp Signature Help]],
-  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Compiler Program]], [[Doc]],
+  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Lsp Context]], [[Lsp Module Catalog]], [[Compiler Program]], [[Doc]],
   [[Format]], [[Diagnostic Model]].
 - **Consumed by:** [[Pudu CLI]] through `pudu lsp`, and the VS Code client under `editors/vscode`.
 
@@ -109,6 +122,10 @@ caught.
 - No disk read for an open document.
 
 ## Grill Log
+
+- **Q:** Why cache the module catalog outside the document store? **A:** It belongs to a source
+  root, not a document, and is filled from IO during a request. _Rationale:_ one walk per root per
+  file-set change, never one per keystroke. _Rejected:_ walking the tree on every import completion.
 
 - **Q:** Why not compute diagnostics incrementally? **A:** Because a whole-program compile is
   already fast enough, and incrementality is where language servers go wrong. _Rationale:_ a stale

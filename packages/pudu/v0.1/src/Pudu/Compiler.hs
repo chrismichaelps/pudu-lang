@@ -49,6 +49,10 @@ data FrontendResult = FrontendResult
 data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
+  {-| The tree tooling reads positions against: the parsed module whenever the
+      parser admitted one, even when a later phase rejected it. It is never
+      linked or evaluated; `compileModule` alone is the executable product. -}
+  , compileSyntax :: !(Maybe Module)
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   {-| What inference settled on for each integer literal this module wrote.
@@ -100,6 +104,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
           pure CompileResult
             { compileTokens = frontendTokens
             , compileModule = Nothing
+            , compileSyntax = Nothing
             , compileResolution = Nothing
             , compileTypes = Nothing
             , compileIntegerKinds = Map.empty
@@ -130,6 +135,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                   CompileResult
                     { compileTokens = frontendTokens
                     , compileModule = if hasErrors diagnostics then Nothing else Just parsed
+                    , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types
                     , compileIntegerKinds =

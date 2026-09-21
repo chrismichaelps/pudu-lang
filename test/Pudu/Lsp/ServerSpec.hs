@@ -4,8 +4,10 @@ module Pudu.Lsp.ServerSpec (serverProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Lsp.Completion (completionRepaired)
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
 import Pudu.Lsp.Json (Json (..), lookupField, parse, textOf)
+import Pudu.Lsp.ModuleCatalog (modulesUnder)
 import Pudu.Lsp.Protocol (Message (..), Position (..), frame)
 import Pudu.Lsp.Server
   ( Documents
@@ -31,6 +33,12 @@ serverProperties =
   , ("inlay hints show inferred types for bindings", testInlayHints)
   , ("the outline lists what the file declares", testSymbols)
   , ("completion offers every documented name", testCompletion)
+  , ("completion follows pattern and type syntax", testSyntaxDirectedCompletion)
+  , ("pattern completion preserves owner payload and coverage", testPatternCompletion)
+  , ("completion distinguishes imports values and prose", testCompletionContexts)
+  , ("an import being written is offered whole module paths", testImportPathCompletion)
+  , ("the module catalog names every module under a root", testModuleCatalog)
+  , ("pattern completion survives a match the checker rejects", testPatternCompletionRejected)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -302,6 +310,187 @@ testCompletion = do
   size value = case value of
     JsonArray members -> length members
     _ -> 0
+
+testSyntaxDirectedCompletion :: IO Property
+testSyntaxDirectedCompletion = do
+  documents <- opened $ Text.unlines
+    [ "module Demo"
+    , "type State = Ready | Loading | Failed"
+    , "type Other = Unrelated | AlsoUnrelated"
+    , "fn main(state: State) -> Int {"
+    , "  match state {"
+    , "    case Ready => 1"
+    , "    case Loading => 2"
+    , "    case Failed => 3"
+    , "  }"
+    , "}"
+    , "fn identity[T](value: T) -> T { value }"
+    ]
+  let patterns = completionLabels (request "textDocument/completion" (atPosition 6 11) documents)
+      types = completionLabels (request "textDocument/completion" (atPosition 10 29) documents)
+  pure $ conjoin
+    [ counterexample "the current sum's uncovered variant is offered" (property ("Loading" `elem` patterns))
+    , counterexample "an earlier irrefutably covered variant is omitted" (property ("Ready" `notElem` patterns))
+    , counterexample "a later variant remains useful at this arm" (property ("Failed" `elem` patterns))
+    , counterexample "another sum's variants are absent" (property (all (`notElem` patterns) ["Unrelated", "AlsoUnrelated"]))
+    , counterexample "declaration keywords are absent from patterns" (property ("fn" `notElem` patterns))
+    , counterexample "the lexical type parameter is offered" (property ("T" `elem` types))
+    , counterexample "value keywords are absent from types" (property ("let" `notElem` types))
+    ]
+
+testPatternCompletion :: IO Property
+testPatternCompletion = do
+  generic <- opened $ Text.unlines
+    [ "module Demo"
+    , "type Payload[T] = Empty | Full(T) | Named{value: T}"
+    , "fn main(value: Payload[Int]) -> Int {"
+    , "  match value {"
+    , "    case Empty => 0"
+    , "    case Full(item) => item"
+    , "    case Named{value} => value"
+    , "  }"
+    , "}"
+    ]
+  collisionContent <- TextIO.readFile "test-fixtures/lspcompletion/Root.pudu"
+  collisionAnalysis <- analyseIn "test-fixtures/lspcompletion" uri collisionContent
+  let collision = rememberAnalysis uri collisionAnalysis emptyDocuments
+  guarded <- opened $ Text.unlines
+    [ "module Demo"
+    , "type State = Ready | Loading | Failed"
+    , "fn main(state: State) -> Int {"
+    , "  match state {"
+    , "    case Ready if false => 0"
+    , "    case Loading => 1"
+    , "    case Ready => 2"
+    , "    case Failed => 3"
+    , "  }"
+    , "}"
+    ]
+  let genericItems = request "textDocument/completion" (atPosition 5 11) generic
+      collisionItems = request "textDocument/completion" (atPosition 7 13) collision
+      collisionLabels = completionLabels collisionItems
+      guardedLabels = completionLabels (request "textDocument/completion" (atPosition 5 11) guarded)
+  pure $ conjoin
+    [ counterexample "a generic payload substitutes the subject argument"
+        (completionDetail "Full" genericItems === Just "Payload.Full(Int)")
+    , counterexample ("same-spelling imported variants stay owner-qualified: " <> show collisionLabels)
+        (property ("F.Shared" `elem` collisionLabels))
+    , counterexample "an imported generic payload retains its concrete argument"
+        (completionDetail "F.Shared" collisionItems === Just "First.Shared(Int)")
+    , counterexample "the other owner never leaks into the list"
+        (property ("OnlySecond" `notElem` collisionLabels))
+    , counterexample "a guarded arm does not cover its constructor"
+        (property ("Ready" `elem` guardedLabels))
+    ]
+
+testCompletionContexts :: IO Property
+testCompletionContexts = do
+  documents <- opened $ Text.unlines
+    [ "module Demo"
+    , "import Std.Io as Io"
+    , "type Box = { value: Int }"
+    , "fn use(value: Int) -> Int { value }"
+    , "fn main() -> Int {"
+    , "  let local = 1"
+    , "  let text = \"inside\""
+    , "  // prose only"
+    , "  let box = Box{value: local}"
+    , "  use(local)"
+    , "}"
+    ]
+  let imports = completionLabels (request "textDocument/completion" (atPosition 1 10) documents)
+      inString = completionLabels (request "textDocument/completion" (atPosition 6 15) documents)
+      inComment = completionLabels (request "textDocument/completion" (atPosition 7 7) documents)
+      recordValue = completionLabels (request "textDocument/completion" (atPosition 8 25) documents)
+      callArgument = completionLabels (request "textDocument/completion" (atPosition 9 7) documents)
+  pure $ conjoin
+    [ counterexample "an import position offers modules" (property ("Std.Io" `elem` imports))
+    , counterexample "an import position omits declaration keywords" (property ("fn" `notElem` imports))
+    , counterexample "strings offer no code candidates" (inString === [])
+    , counterexample "comments offer no code candidates" (inComment === [])
+    , counterexample "record initializer values retain lexical scope" (property ("local" `elem` recordValue))
+    , counterexample "call arguments retain lexical scope" (property ("local" `elem` callArgument))
+    ]
+
+testImportPathCompletion :: IO Property
+testImportPathCompletion = do
+  let catalog = pure ["Demo", "Std.Collections", "Std.Io", "Tools"]
+      at content line character = do
+        documents <- opened content
+        reply <- completionRepaired (analyse uri) catalog documents (atPosition line character)
+        pure (completionLabels (Just reply), reply)
+  (partial, partialReply) <- at "module Demo\nimport Std.Co\nfn main() -> Int { 1 }\n" 1 13
+  (dotted, _) <- at "module Demo\nimport Std.\n" 1 11
+  (bare, _) <- at "module Demo\nimport \n" 1 7
+  (finished, _) <- at "module Demo\nimport Std.Io\n\nfn main() -> Int { 1 }\n" 2 0
+  (alias, _) <- at "module Demo\nimport Std.Io as \n" 1 17
+  (multiline, _) <- at "module Demo\nimport\n  Std.I\n" 2 7
+  pure $ conjoin
+    [ counterexample "a half-written path is offered the catalog" (property ("Std.Collections" `elem` partial))
+    , counterexample "a path ending in a dot is offered the catalog" (property ("Std.Io" `elem` dotted))
+    , counterexample "an empty path is offered the catalog" (property ("Tools" `elem` bare))
+    , counterexample "the document's own module is never offered" (property ("Demo" `notElem` bare))
+    , counterexample "a path spanning lines is still an import path" (property ("Std.Io" `elem` multiline))
+    , counterexample "a finished import leaves import context" (property ("Std.Collections" `notElem` finished))
+    , counterexample "an alias being chosen is offered nothing" (alias === [])
+    , counterexample "the whole written path is replaced"
+        (completionEdit "Std.Collections" partialReply === Just ((1, 7), (1, 13)))
+    ]
+
+testModuleCatalog :: IO Property
+testModuleCatalog = do
+  found <- modulesUnder (const True) "test-fixtures/lspcompletion"
+  standard <- modulesUnder (== "Std") "packages/pudu/v0.1/lib"
+  pure $ conjoin
+    [ counterexample (show found) (found === ["First", "Root", "Second"])
+    , counterexample "standard modules are named by their path" (property ("Std.Io" `elem` standard))
+    , counterexample "nested standard modules are reached" (property (any ("Std.App." `Text.isPrefixOf`) standard))
+    ]
+
+testPatternCompletionRejected :: IO Property
+testPatternCompletionRejected = do
+  documents <- opened $ Text.unlines
+    [ "module Demo"
+    , "type State = Ready | Loading | Failed"
+    , "fn main(state: State) -> Int {"
+    , "  match state {"
+    , "    case Ready => 1"
+    , "    case Loading => 2"
+    , "  }"
+    , "}"
+    ]
+  let labels = completionLabels (request "textDocument/completion" (atPosition 5 9) documents)
+  pure $ conjoin
+    [ counterexample (show labels) (property ("Loading" `elem` labels))
+    , counterexample "the uncovered variant is still offered" (property ("Failed" `elem` labels))
+    ]
+
+completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))
+completionEdit wanted reply = case reply of
+  JsonArray members -> case [edit | member <- members, (lookupField "label" member >>= textOf) == Just wanted, Just edit <- [lookupField "textEdit" member]] of
+    edit : _ -> do
+      range <- lookupField "range" edit
+      (,) <$> (lookupField "start" range >>= point) <*> (lookupField "end" range >>= point)
+    [] -> Nothing
+  _ -> Nothing
+ where
+  point value = do
+    JsonNumber line <- lookupField "line" value
+    JsonNumber character <- lookupField "character" value
+    pure (round line, round character)
+
+completionLabels :: Maybe Json -> [Text]
+completionLabels value = case value of
+  Just (JsonArray members) -> [label | member <- members, Just label <- [lookupField "label" member >>= textOf]]
+  _ -> []
+
+completionDetail :: Text -> Maybe Json -> Maybe Text
+completionDetail wanted value = case value of
+  Just (JsonArray members) ->
+    case [detail | member <- members, (lookupField "label" member >>= textOf) == Just wanted, Just detail <- [lookupField "detail" member >>= textOf]] of
+      detail : _ -> Just detail
+      [] -> Nothing
+  _ -> Nothing
 
 testForeignTooling :: IO Property
 testForeignTooling = do

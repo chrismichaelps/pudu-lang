@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-lsp-completion-context]] — issue #274 syntax-directed pattern, type, import,
+  expression, and suppressed completion contexts with canonical generic sum candidates.
+
 - [[2026-09-21-folded-constants]] — issue #271 plain-data constants bound from their fold at link,
   stored with checked products, and startup evidence.
 

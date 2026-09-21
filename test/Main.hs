@@ -46,6 +46,8 @@ import Pudu.Type.InterfaceSpec (interfaceProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
+import Data.List (isInfixOf)
+import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
@@ -117,12 +119,19 @@ main = do
   ownershipOutcomes <- traverse (uncurry check) ownershipProperties
   resultOutcomes <- traverse (uncurry check) resultProperties
   unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> renderOutcomes <> programOutcomes <> initOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+{-| Runs one property, or skips it when `PUDU_TEST_MATCH` is set and the label
+    does not contain it: a focused run of the few properties a change touches,
+    without building a second suite. -}
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
-  putStrLn ("[test] " <> label)
-  propertyValue <- loadProperty
-  result <- quickCheckResult (withMaxSuccess 200 propertyValue)
-  pure (isSuccess result)
+  wanted <- lookupEnv "PUDU_TEST_MATCH"
+  case wanted of
+    Just fragment | not (fragment `isInfixOf` label) -> pure True
+    _ -> do
+      putStrLn ("[test] " <> label)
+      propertyValue <- loadProperty
+      result <- quickCheckResult (withMaxSuccess 200 propertyValue)
+      pure (isSuccess result)
 testEmptySourcePosition :: IO Property
 testEmptySourcePosition = do
   source <- newSource (SourceName "empty") Text.empty
