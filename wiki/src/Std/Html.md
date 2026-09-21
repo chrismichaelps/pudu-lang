@@ -19,6 +19,9 @@ rendering a whole document with its declaration. Escaping text and an attribute 
 because a program building markup this module does not cover still needs them.
 `escapeScalar`, `isHandler`, and `isVoidElement` expose the core renderer's authoritative
 scalar escaping and syntax/safety predicates to [[Std Html Bounded]].
+`whenBuilt(condition, builder: fn() -> Html)` is the deferred counterpart to eager `when`: false
+returns an empty fragment without invoking the callback, while true invokes it exactly once and
+returns the typed view it built.
 ## Governance and algorithm
 Text is text and markup is markup, and the only way to obtain markup is to build a node. That is
 the whole design. A template language has to solve escaping repeatedly — and gets it wrong at each
@@ -78,9 +81,15 @@ functions already are, and they compose without a second mechanism to learn.
 - **Q:** Validate that an element's children are permitted inside it? **A:** No. _Rationale:_ that
   is a large table which is wrong at the edges and goes stale, and the failure it prevents is a
   page that renders oddly rather than one that is unsafe. _Rejected:_ a content model.
+- **Q:** Change eager `when` to accept a callback? **A:** No; that would break existing callers and
+  change evaluation timing. `whenBuilt` is separately named and additive.
+- **Q:** Invoke a false callback and discard its result? **A:** No; the entire point is to avoid
+  constructing optional work. False returns `Fragment([])` before the callback is called.
+- **Q:** Call a true callback more than once to inspect or copy it? **A:** No; it is invoked exactly
+  once and its typed `Html` result is returned unchanged.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
-[[2026-09-20-bounded-ssr-slots]]
+[[2026-09-20-bounded-ssr-slots]] · [[2026-09-20-deferred-html-builders]]
 
 ## Fragment rendering
 

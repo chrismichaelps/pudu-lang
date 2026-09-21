@@ -17,6 +17,9 @@ Each adding method returns new Content, preserving earlier values and insertion 
 methods produce existing Html values. `document(title, Content)` supplies html/head/title/UTF-8
 metadata/body; the reply layer remains responsible for adding a doctype through Reply.page.
 `documentIn(language, title, Content)` additionally sets the html language attribute.
+`whenBuilt(condition, builder: fn() -> Html)` is the separately named deferred conditional: false
+returns the persistent receiver without invoking the callback; true invokes it once and appends its
+typed result in order. Existing eager `when` is unchanged.
 `documentShell(title, bodySlot)` and `documentShellIn(language, title, bodySlot)` build the same
 typed html/head/metadata/title/body structure as a reusable [[Std Html SSR]] `Shell`, with the named
 slot as the body's complete child fragment. They accept no string templates or dynamic attributes.
@@ -44,6 +47,12 @@ body child changes from supplied `Content` nodes to one typed slot.
   typed `ShellElement` tree with a `ShellSlot` child, and `Std.Html.Ssr` compiles that structure.
 - **Q:** Offer dynamic title, language, or attributes here? **A:** No; issue #260 admits complete
   child-fragment slots only. Callers may choose another prepared shell or construct `Shell` directly.
+- **Q:** Reuse the name `when` with another parameter type? **A:** No; a separately named
+  `whenBuilt` makes evaluation timing visible and avoids overload ambiguity.
+- **Q:** Evaluate a false builder for validation? **A:** No; its type is checked statically, and
+  runtime false means zero calls and zero constructed subtree.
+- **Q:** Change trust behavior? **A:** No; the callback returns ordinary typed `Html`; deliberate
+  `Trusted` values remain explicit at the callback's construction site.
 
 ## Dependencies and consumers
 
@@ -52,4 +61,5 @@ body child changes from supplied `Content` nodes to one typed slot.
 document. Unvalidated at user direction.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-typed-html-shells]]
+[[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-typed-html-shells]] ·
+[[2026-09-20-deferred-html-builders]]

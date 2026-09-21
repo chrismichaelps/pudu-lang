@@ -23,6 +23,9 @@ general attribute, flag, text, trusted-markup, child, conditional-child, and con
 plus named methods for common attributes. Tag constructors cover document structure, text content,
 forms, tables, media, and common semantic elements. `render` emits a fragment; `document` emits the
 builder-specific compact `<!DOCTYPE html>` prefix followed by the root node.
+`whenBuilt(condition, builder: fn() -> Node)` is additive beside eager `when`. False returns the
+same persistent receiver without invoking the callback; true calls the builder once, converts its
+node through `html`, and appends it at that exact child position.
 
 `at`, `href`, `src`, `action`, and the other string setters are convenience setters, not checked
 destination constructors. The renderer still drops event-handler attributes as a final backstop.
@@ -67,7 +70,14 @@ it with typed shell elements and child slots.
 - **Q:** Add slots directly to `Node.children`? **A:** No; changing that array would duplicate the
   shell model and weaken the builder's simple conversion contract. Reusable child slots compose
   through `Std.Html.Ssr.Shell`.
+- **Q:** Replace eager `when`? **A:** No; callers relying on ordinary argument evaluation retain it.
+  `whenBuilt` separately states deferred evaluation.
+- **Q:** Build the child before testing the condition? **A:** No; false returns `*self` immediately.
+  True invokes the callback exactly once and uses the same `holds(child.html())` path as eager input.
+- **Q:** Mutate the earlier builder value? **A:** No; both outcomes return a new or existing
+  persistent `Node`, so aliases to the receiver retain their original children.
 
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Html]] · [[architecture/STDLIB]] · [[2026-09-20-typed-html-shells]]
+· [[2026-09-20-deferred-html-builders]]

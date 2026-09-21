@@ -107,6 +107,11 @@ export fn when(condition: Bool, view: Html) -> Html {
   if condition { view } else { Fragment([]) }
 }
 
+/// Build one view only when its condition holds.
+export fn whenBuilt(condition: Bool, builder: fn() -> Html) -> Html {
+  if condition { builder() } else { Fragment([]) }
+}
+
 /// The class attribute, from the classes rather than from their spelling, so a
 /// caller adding one does not also maintain the separators.
 export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", names.join(" ")) }

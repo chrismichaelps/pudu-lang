@@ -436,7 +436,7 @@ testProtocolEvaluation = do
         opening tag, and text against the escaping that keeps it text. -}
     , counterexample
         "every tag and attribute renders the markup it names"
-        (htmlBuild === Just "97")
+        (htmlBuild === Just "106")
     {-| Every export of the protocol module against the wire form it stands
         for. The header names are checked against the spelling that goes on
         the wire, since a name answering the wrong header asks for something

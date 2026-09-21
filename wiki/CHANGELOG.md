@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Conditional HTML builders can defer false subtrees
+
+- `Std.Html.whenBuilt`, `Std.Html.Build.Building.whenBuilt`, and
+  `Std.Html.Compose.Composition.whenBuilt` accept zero-argument typed builders. False returns empty
+  or the existing persistent receiver without invoking the callback; true invokes it exactly once
+  and places its result through the existing typed append path.
+- Existing eager `when` functions remain unchanged, including ordinary argument evaluation. Deferred
+  builders preserve output order, earlier persistent values, escaping, explicit trusted markup,
+  destination checks, handler blocking, and iterative rendering.
+- Focused callback-count and exact-output checks cover false/true/eager behavior in all three layers,
+  persistent aliases, insertion order, escaped/trusted distinctions, and eager compatibility for
+  issue #262.
+- In a same-machine optimized probe running a false 1,000-node optional subtree 200 times, deferred
+  construction reduced measured heap allocation from 5,287,071,968 to 62,426,608 bytes, process
+  maximum RSS from 85,426,176 to 80,084,992 bytes, and elapsed time from 1.33s to 0.04s. The probe
+  includes compiler/evaluator overhead and is comparative evidence, not a portable service guarantee.
+
 ## 2026-09-20 — SSR budgets stop dynamic rendering at the first overflow
 
 - `Std.Html.Bounded` adds iterative rendering with an exact UTF-8 output budget. It admits raw

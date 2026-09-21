@@ -77,6 +77,9 @@ export trait Building {
   /// Appends a child only when the condition holds.
   fn when(self: &Self, condition: Bool, child: Node) -> Self
 
+  /// Builds and appends a child only when the condition holds.
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Node) -> Self
+
   /// The view this node describes.
   fn html(self: &Self) -> Html.Html
 }
@@ -154,6 +157,10 @@ impl Building for Node {
 
   fn when(self: &Self, condition: Bool, child: Node) -> Self {
     if condition { self.holds(child.html()) } else { *self }
+  }
+
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Node) -> Self {
+    if condition { self.holds(builder().html()) } else { *self }
   }
 
   /// A node with no tag name renders as its children alone, with no element

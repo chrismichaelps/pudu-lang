@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-deferred-html-builders]] — issue #262 zero/one-call deferred conditionals across
+  typed HTML, fluent nodes, and persistent composition with eager compatibility.
+
 - [[2026-09-20-bounded-ssr-slots]] — issue #261 early UTF-8 budget enforcement inside dynamic
   values, preserved error precedence, repeated-slot accounting, and rejection measurements.
 

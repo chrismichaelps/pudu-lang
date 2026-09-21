@@ -17,6 +17,7 @@ export trait Composition {
   fn add(self: &Self, view: Html.Html) -> Self
   fn each[T](self: &Self, items: Array[T], view: fn(T) -> Html.Html) -> Self
   fn when(self: &Self, condition: Bool, view: Html.Html) -> Self
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Html.Html) -> Self
   fn fragment(self: &Self) -> Html.Html
   fn article(self: &Self) -> Html.Html
   fn section(self: &Self) -> Html.Html
@@ -47,6 +48,10 @@ impl Composition for Content {
 
   fn when(self: &Self, condition: Bool, view: Html.Html) -> Self {
     if condition { Content{nodes: self.nodes.push(view)} } else { *self }
+  }
+
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Html.Html) -> Self {
+    if condition { Content{nodes: self.nodes.push(builder())} } else { *self }
   }
 
   fn fragment(self: &Self) -> Html.Html { Html.fragment(&self.nodes) }
