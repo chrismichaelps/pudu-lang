@@ -39,6 +39,7 @@ serverProperties =
   , ("an import being written is offered whole module paths", testImportPathCompletion)
   , ("the module catalog names every module under a root", testModuleCatalog)
   , ("pattern completion survives a match the checker rejects", testPatternCompletionRejected)
+  , ("completion offers only the bindings in scope at the cursor", testLexicalScopeCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -463,6 +464,74 @@ testPatternCompletionRejected = do
   pure $ conjoin
     [ counterexample (show labels) (property ("Loading" `elem` labels))
     , counterexample "the uncovered variant is still offered" (property ("Failed" `elem` labels))
+    ]
+
+testLexicalScopeCompletion :: IO Property
+testLexicalScopeCompletion = do
+  documents <- opened $ Text.unlines
+    [ "module Demo"                                            -- 0
+    , "type Item = SomeItem(Int) | NoItem"                     -- 1
+    , "fn main(item: Item, limit: Int) -> Int {"               -- 2
+    , "  if true {"                                            -- 3
+    , "    let expired = 1"                                    -- 4
+    , "    expired"                                            -- 5
+    , "  }"                                                    -- 6
+    , "  let shadow = 1"                                       -- 7
+    , "  let inner = {"                                        -- 8
+    , "    let shadow = \"text\""                            -- 9
+    , "    shadow.length()"                                    -- 10
+    , "  }"                                                    -- 11
+    , "  let total = match item {"                             -- 12
+    , "    case SomeItem(payload) => payload"                  -- 13
+    , "    case NoItem => 0"                                   -- 14
+    , "  }"                                                    -- 15
+    , "  let add = fn(step: Int) -> Int { step + limit }"      -- 16
+    , "  for index in 0..limit {"                              -- 17
+    , "    let counted = index"                                -- 18
+    , "  }"                                                    -- 19
+    , "  if let SomeItem(found) = item { found } else { 0 }"   -- 20
+    , "  let SomeItem(kept) = item else { return 0 }"          -- 21
+    , "  let fresh = shadow"                                   -- 22
+    , "  fresh + kept + later()"                               -- 23
+    , "}"                                                      -- 24
+    , "fn later() -> Int { 1 }"                                -- 25
+    ]
+  let at line character = completionLabels (request "textDocument/completion" (atPosition line character) documents)
+      detailAt line character name = completionDetail name (request "textDocument/completion" (atPosition line character) documents)
+      afterBlock = at 7 2
+      insideBlock = at 5 4
+      innerShadow = at 10 4
+      noItemArm = at 14 20
+      someItemArm = at 13 30
+      closure = at 16 38
+      loopBody = at 18 18
+      afterLoop = at 20 2
+      ifLetBody = at 20 35
+      ifLetElse = at 20 49
+      initializer = at 22 14
+      tail' = at 23 2
+  pure $ conjoin
+    [ counterexample "a block's binding is visible inside it" (property ("expired" `elem` insideBlock))
+    , counterexample "a block's binding expires with the block" (property ("expired" `notElem` afterBlock))
+    , counterexample "parameters are visible in the body" (property (all (`elem` afterBlock) ["item", "limit"]))
+    , counterexample "an inner shadow is the one offered inside its block"
+        (detailAt 10 4 "shadow" === Just "Str")
+    , counterexample "the outer binding returns after the inner block"
+        (detailAt 22 14 "shadow" === Just "Int")
+    , counterexample "the inner shadow is offered once" (length (filter (== "shadow") innerShadow) === 1)
+    , counterexample "a pattern binding is visible in its own arm" (property ("payload" `elem` someItemArm))
+    , counterexample "a pattern binding is absent from a sibling arm" (property ("payload" `notElem` noItemArm))
+    , counterexample "a closure sees its parameter and the enclosing scope"
+        (property (all (`elem` closure) ["step", "limit"]))
+    , counterexample "a closure's parameter does not leak" (property ("step" `notElem` afterLoop))
+    , counterexample "a loop binder is visible in its body" (property (all (`elem` loopBody) ["index"]))
+    , counterexample "a loop binder and body bindings expire with the loop"
+        (property (all (`notElem` afterLoop) ["index", "counted"]))
+    , counterexample "an if-let binding is visible in its block" (property ("found" `elem` ifLetBody))
+    , counterexample "an if-let binding is absent from its else branch" (property ("found" `notElem` ifLetElse))
+    , counterexample "a let-else binding stays for the rest of the block" (property ("kept" `elem` tail'))
+    , counterexample "a let is not visible in its own initializer" (property ("fresh" `notElem` initializer))
+    , counterexample "a module function declared later is offered" (property ("later" `elem` tail'))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

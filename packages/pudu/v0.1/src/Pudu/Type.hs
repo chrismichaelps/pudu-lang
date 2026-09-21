@@ -101,12 +101,15 @@ narrowestAt offset info = snd <$> narrowestSpanAt offset info
 
 {-| The smallest expression covering this offset, with the span it occupies. -}
 narrowestSpanAt :: Int -> TypeInfo -> Maybe ((Int, Int), Type)
-narrowestSpanAt offset (TypeInfo entries) =
-  case sortOn (\((from, to), _) -> to - from) (filter covers (Map.toList entries)) of
-    found : _ -> Just found
-    [] -> Nothing
+narrowestSpanAt offset (TypeInfo entries) = Map.foldlWithKey' narrower Nothing entries
  where
-  covers ((from, to), _) = from <= offset && offset <= to
+  -- One pass keeping the shortest covering span; the first of equal widths,
+  -- in key order, wins.
+  narrower best key@(from, to) found
+    | from > offset || offset > to = best
+    | otherwise = case best of
+        Just ((bestFrom, bestTo), _) | bestTo - bestFrom <= to - from -> best
+        _ -> Just (key, found)
 
 {-| The type recorded for the expression occupying exactly this span. -}
 typeAt :: TypeInfo -> Span -> Maybe Type

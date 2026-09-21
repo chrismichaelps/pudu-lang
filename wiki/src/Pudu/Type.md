@@ -28,6 +28,8 @@ newtype TypeInfo
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 typeAt :: TypeInfo -> Span -> Maybe Type
+narrowestAt :: Int -> TypeInfo -> Maybe Type
+narrowestSpanAt :: Int -> TypeInfo -> Maybe ((Int, Int), Type)
 widestWithin :: Int -> Int -> TypeInfo -> Maybe Type
 renderType :: Type -> Text
 ```
@@ -39,6 +41,10 @@ renderType :: Type -> Text
   and re-deriving it from written syntax would let a tool's answers drift from the compiler's.
 
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
+- `narrowestSpanAt` answers for a point: the shortest recorded span covering it, the first in key
+  order among equal widths. It is one pass over the table keeping the best so far; a hover or a
+  completion detail asks it several times per request, and sorting the table for each would repeat
+  that work.
 - `widestWithin` answers for a region rather than an exact span, which is what an interactive entry or an editor selection can supply.
 - Checking runs only on a module whose names all resolved. An unresolved name has no type, and reporting one would explain the same defect twice.
 - Type diagnostics use the `E3xxx` family from [[architecture/SEMANTICS]]'s diagnostic contract.

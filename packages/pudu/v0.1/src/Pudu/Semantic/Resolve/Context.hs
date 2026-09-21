@@ -6,6 +6,8 @@ module Pudu.Semantic.Resolve.Context
   , declarePreludeName
   , declareNamed
   , inScope
+  , inScopeOver
+  , visibleAfter
   , insideLoop
   , markAmbiguousVariant
   , outsideLoops
@@ -17,6 +19,7 @@ module Pudu.Semantic.Resolve.Context
   , runResolver
   ) where
 
+import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -38,6 +41,7 @@ import Pudu.Semantic.Scope
   , popScope
   , pushScope
   )
+import Pudu.Semantic.ScopeIndex (Frame (..), ScopeIndex, scopeIndex)
 import Pudu.Semantic.Symbol
   ( Namespace (..)
   , Reference (..)
@@ -46,7 +50,7 @@ import Pudu.Semantic.Symbol
   , SymbolOrigin (..)
   , isShadowWarned
   )
-import Pudu.Source (Span)
+import Pudu.Source (Span, spanStart, unOffset)
 
 {-| @Semantic.Resolve.State — the resolver's private working state -}
 data ResolveState = ResolveState
@@ -57,6 +61,14 @@ data ResolveState = ResolveState
   , stateSymbolsRev :: ![Symbol]
   , stateReferencesRev :: ![Reference]
   , stateDiagnosticsRev :: ![Diagnostic]
+  {-| The frames open now, innermost first, by the identity each was given. -}
+  , stateFrames :: ![Int]
+  , stateFramesRev :: ![(Int, Frame)]
+  {-| Each binding's frame, the offset it is visible after, and its symbol. -}
+  , stateBindingsRev :: ![(Int, Int, SymbolId)]
+  {-| Where the bindings being declared now become visible, when that is later
+      than their names: a `let` is visible after its statement. -}
+  , stateVisibleAfter :: !(Maybe Int)
   }
 
 {-| @Semantic.Resolve.Products — everything one resolution run produced -}
@@ -64,6 +76,7 @@ data ResolverProducts = ResolverProducts
   { producedSymbols :: ![Symbol]
   , producedReferences :: ![Reference]
   , producedDiagnostics :: ![Diagnostic]
+  , producedScopes :: !ScopeIndex
   }
 
 {-| @Semantic.Resolve.Action — threads resolver state explicitly -}
@@ -95,6 +108,7 @@ runResolver (Resolver action) =
         { producedSymbols = reverse (stateSymbolsRev finalState)
         , producedReferences = reverse (stateReferencesRev finalState)
         , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
+        , producedScopes = scopeIndex (stateFramesRev finalState) (stateBindingsRev finalState)
         }
 
 initialState :: ResolveState
@@ -107,6 +121,10 @@ initialState =
     , stateSymbolsRev = []
     , stateReferencesRev = []
     , stateDiagnosticsRev = []
+    , stateFrames = [0]
+    , stateFramesRev = [(0, Frame Nothing Nothing)]
+    , stateBindingsRev = []
+    , stateVisibleAfter = Nothing
     }
 
 {-| Run an action inside one more enclosing loop.
@@ -178,14 +196,33 @@ modifyLoops transform =
 {-| Run an action inside a fresh lexical frame. The frame is discarded on exit,
     so nothing a nested scope declared can leak outward. -}
 inScope :: Resolver a -> Resolver ()
-inScope action = do
-  modifyScopes pushScope
-  _ <- action
-  modifyScopes popScope
+inScope = inScopeOver Nothing
 
-modifyScopes :: (ScopeStack -> ScopeStack) -> Resolver ()
-modifyScopes transform =
-  Resolver $ \state -> ((), state{stateScopes = transform (stateScopes state)})
+{-| `inScope` for a frame that covers the offsets `extent` names, both ends
+    included. The frame is recorded with its extent, so which names are visible
+    at a position can be asked after resolution has left it. -}
+inScopeOver :: Maybe (Int, Int) -> Resolver a -> Resolver ()
+inScopeOver extent action = do
+  Resolver $ \state ->
+    let frame = maybe 0 ((+ 1) . fst) (listToMaybe (stateFramesRev state))
+     in ( ()
+        , state
+            { stateScopes = pushScope (stateScopes state)
+            , stateFrames = frame : stateFrames state
+            , stateFramesRev = (frame, Frame (listToMaybe (stateFrames state)) extent) : stateFramesRev state
+            }
+        )
+  _ <- action
+  Resolver $ \state ->
+    ((), state{stateScopes = popScope (stateScopes state), stateFrames = drop 1 (stateFrames state)})
+
+{-| Declare, inside `action`, bindings that become visible only after `offset`. -}
+visibleAfter :: Int -> Resolver a -> Resolver a
+visibleAfter offset action = do
+  previous <- Resolver $ \state -> (stateVisibleAfter state, state{stateVisibleAfter = Just offset})
+  result <- action
+  Resolver $ \state -> ((), state{stateVisibleAfter = previous})
+  pure result
 
 declareBuiltin :: Namespace -> Text -> Resolver ()
 declareBuiltin namespace name =
@@ -210,6 +247,7 @@ introduce namespace origin visibility mutable name spanValue = do
   shadowed <- lookupCurrent namespace name
   previous <- insertSymbol symbol
   recordSymbol symbol
+  recordBinding origin symbol
   case (previous, spanValue) of
     (Just earlier, Just here) -> duplicateDeclaration name here (symbolSpan earlier)
     _ -> case (shadowed, spanValue) of
@@ -311,6 +349,22 @@ resolveTypeName spanValue name = do
 freshId :: Resolver SymbolId
 freshId = Resolver $ \state ->
   (SymbolId (stateNext state), state{stateNext = stateNext state + 1})
+
+{-| Record where a binding lives and from where it is visible. Names the module
+    level declares are visible throughout, because the walk is two-pass there. -}
+recordBinding :: SymbolOrigin -> Symbol -> Resolver ()
+recordBinding origin symbol =
+  Resolver $ \state ->
+    let visible
+          | origin `elem` [ParameterOrigin, LocalOrigin, PatternOrigin, TypeParamOrigin] =
+              case stateVisibleAfter state of
+                Just offset -> offset
+                Nothing -> maybe (-1) (unOffset . spanStart) (symbolSpan symbol)
+          | otherwise = -1
+        frame = case stateFrames state of
+          innermost : _ -> innermost
+          [] -> 0
+     in ((), state{stateBindingsRev = (frame, visible, symbolId symbol) : stateBindingsRev state})
 
 recordSymbol :: Symbol -> Resolver ()
 recordSymbol symbol =

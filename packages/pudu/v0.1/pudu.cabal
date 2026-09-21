@@ -245,6 +245,7 @@ library
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
     Pudu.Semantic.Scope
+    Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol
     Pudu.Source
     Pudu.Runtime.Word

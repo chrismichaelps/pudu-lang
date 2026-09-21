@@ -5,6 +5,33 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Completion offers the bindings in scope
+
+- Names are offered from the frames name resolution opened, kept with their source extents: a
+  `let` in a block that has ended, a pattern name from another match arm, a closure's parameter
+  outside it, and a loop binder after the loop are no longer offered, and an inner shadow is
+  offered in place of the outer binding. A `let` is not offered inside its own initializer.
+- Bindings are read from the text as written whenever it resolves, so a pattern name is offered in
+  its arm while the name being typed is still unknown.
+- The narrowest type at a point is one pass over the type table instead of a sort (issue #275).
+
+## 2026-09-21 — Completion offers the bindings in scope
+
+- Names are offered from the frames name resolution opened, kept with their source extents: a
+  `let` in a block that has ended, a pattern name from another match arm, a closure's parameter
+  outside it, and a loop binder after the loop are no longer offered, and an inner shadow is
+  offered in place of the outer binding. A `let` is not offered inside its own initializer.
+- Bindings are read from the text as written whenever it resolves, so a pattern name is offered in
+  its arm while the name being typed is still unknown.
+- The narrowest type at a point is one pass over the type table instead of a sort (issue #275).
+
+## 2026-09-21 — A block's bindings end with the block
+
+- The type checker discarded nothing a block declared, so `let shadow = "text"` inside an `if`
+  or a block expression retyped an outer `shadow` for the rest of the function and a valid program
+  was rejected with `E3001`. A block is now a scope for the checker as it already was for name
+  resolution and evaluation.
+
 ## 2026-09-21 — Completion knows where the cursor is
 
 - A match arm is offered the variants of its subject's type, spelled as this module reaches them,

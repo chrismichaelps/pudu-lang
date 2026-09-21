@@ -44,6 +44,12 @@ source root; the catalog is run only when the cursor is at an import site.
 - The context is computed once per request from the written document and dispatched on; an import
   site is answered before any repair is attempted, because no repair makes an import path parse.
 - In other positions without a preceding dot, completion offers documented symbols, language keywords, and built-in primitive types.
+- Bindings in scope come from resolution's [[Scope Index]] at the cursor: a `let` in an ended
+  block, another arm's pattern names, and a closure's parameters outside it are absent, and an inner
+  shadow is offered instead of the outer binding. They are read from the written text whenever it
+  resolved — it does while the name being typed is unknown — and from a repaired copy only when it
+  did not parse. Type details come from the repaired copy only before the offset where the two
+  texts agree.
 - Completion responses are pure functions of the stored compiler analysis.
 
 ## Algorithm
@@ -62,6 +68,7 @@ source root; the catalog is run only when the cursor is at an import site.
 
 - Do not suggest member methods when the cursor is not following a dot accessor.
 - Do not guess member names when the receiver type is unknown or untyped.
+- Do not select local bindings by declaration offset; visibility is resolution's frames.
 - Do not offer constructors from unrelated sums or suppress a constructor because a guarded or
   refutable pattern mentioned it.
 - Do not offer ordinary value keywords in a proven pattern or type position.

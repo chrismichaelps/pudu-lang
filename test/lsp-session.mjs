@@ -58,6 +58,21 @@ const contextSource = [
   "fn identity[T](value: T) -> T { value }",
   "",
 ].join("\n");
+const scopeUri = "file:///pudu-fixtures/ScopeSession.pudu";
+const scopeSource = [
+  "module ScopeSession",
+  "type Item = SomeItem(Int) | NoItem",
+  "fn main(item: Item) -> Int {",
+  "  if true {",
+  "    let expired = 1",
+  "  }",
+  "  match item {",
+  "    case SomeItem(payload) => payload",
+  "    case NoItem => 0",
+  "  }",
+  "}",
+  "",
+].join("\n");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -146,6 +161,17 @@ const messages = [
     params: {
       textDocument: { uri: importUri, languageId: "pudu", version: 1, text: importSource },
     },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: scopeUri, languageId: "pudu", version: 1, text: scopeSource },
+    },
+  },
+  {
+    id: 26,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: scopeUri }, position: { line: 8, character: 19 } },
   },
   {
     id: 25,
@@ -491,6 +517,16 @@ const typeItems = Array.isArray(typeOffered) ? typeOffered : (typeOffered?.items
 const typeLabels = typeItems.map(entry => entry.label);
 assert(typeLabels.includes("T"), "type-position completion omitted the lexical type parameter T");
 assert(!typeLabels.includes("let"), "type-position completion offered a value keyword");
+
+// A sibling arm's pattern name and an ended block's binding are out of scope.
+const scopeOffered = replyTo(26)?.result;
+const scopeLabels = (Array.isArray(scopeOffered) ? scopeOffered : (scopeOffered?.items ?? [])).map(
+  entry => entry.label,
+);
+assert(scopeLabels.includes("item"), "scope completion omitted the parameter item");
+for (const gone of ["payload", "expired"]) {
+  assert(!scopeLabels.includes(gone), `scope completion offered out-of-scope ${gone}`);
+}
 
 // An import being written does not parse, and is still offered the library.
 const importOffered = replyTo(25)?.result;

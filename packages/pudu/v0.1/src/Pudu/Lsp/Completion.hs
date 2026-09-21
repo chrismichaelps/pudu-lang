@@ -4,6 +4,7 @@ module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 import Data.Char (isAlphaNum, isSpace)
 import Data.List (nub, sort)
 import Data.Maybe (isJust)
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -27,6 +28,7 @@ import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
 import Pudu.Semantic.Prelude (wiredInTypeNames)
 import Pudu.Semantic.Resolve (Resolution (..))
+import Pudu.Semantic.ScopeIndex (visibleAt)
 import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
 import Pudu.Source (spanStart, unOffset)
 import Pudu.Type (Type (..), narrowestAt, renderType)
@@ -61,7 +63,7 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
       [] -> memberCompletions known dotOffset
     Nothing -> case (context, analysisModule written) of
       (TypeContext parameters, Just parsed) -> typeCompletions known parsed parameters
-      _ -> scopeCompletions (analysisText written) known (min agrees (wordStart written offset))
+      _ -> scopeCompletions written known agrees (wordStart written offset)
  where
   context = syntaxContext written offset
 
@@ -172,13 +174,18 @@ nameScalar scalar = isAlphaNum scalar || scalar == '_'
     bindings in scope, the file's own declarations, the modules and names it
     imports, the prelude a program always has, and the language's words.
 
-    Bindings are read from name resolution, which answers even when the program
-    does not type-check. A binding counts when it is declared before `before`
-    and after the start of the declaration `before` is in, which is where its
-    scope can begin. -}
-scopeCompletions :: Text -> Analysis -> Int -> [Json]
-scopeCompletions content known before =
-  distinct
+    Bindings are the ones resolution's frames hold at `before`: a `let` in a
+    block that has ended, or a name another match arm bound, is not among them,
+    and an inner binding comes before an outer one of the same name, so the
+    first of each name is the one a use there would resolve to.
+
+    They are read from the text as written whenever it resolved, which it does
+    while the name being typed is still unknown; a repaired copy is consulted
+    for them only when the written text did not parse. Types come from `known`
+    for bindings before `agrees`, where the two texts are the same. -}
+scopeCompletions :: Analysis -> Analysis -> Int -> Int -> [Json]
+scopeCompletions written known agrees before =
+  distinctItems
     ( locals
         <> declarations
         <> imported
@@ -187,20 +194,26 @@ scopeCompletions content known before =
         <> [simpleItem name 22 "type" | name <- wiredInTypeNames, name `notElem` ["Copy", "Never", "Buckets"]]
     )
  where
-  symbols = maybe [] resolutionSymbols (analysisResolution known)
+  content = analysisText written
+  (scoped, position) = case analysisResolution written of
+    Just resolution -> (Just resolution, before)
+    Nothing -> (analysisResolution known, min agrees before)
+  symbols = maybe [] resolutionSymbols scoped
+  byId = Map.fromList [(symbolId symbol, symbol) | symbol <- symbols]
+  visible = maybe [] (\resolution -> visibleAt (resolutionScopes resolution) position) scoped
   startOf symbol = maybe maxBound (unOffset . spanStart) (symbolSpan symbol)
-  enclosing =
-    maximum (0 : [startOf symbol | symbol <- symbols, symbolOrigin symbol == ModuleOrigin, startOf symbol <= before])
   locals =
-    reverse
-      [ simpleItem (symbolName symbol) 6 (typeNear (startOf symbol))
-      | symbol <- symbols
-      , symbolOrigin symbol `elem` [ParameterOrigin, LocalOrigin, PatternOrigin]
-      , symbolNamespace symbol == ValueSpace
-      , startOf symbol >= enclosing
-      , startOf symbol < before
-      ]
-  typeNear start = maybe "" renderType (analysisTypes known >>= narrowestAt start)
+    [ simpleItem (symbolName symbol) 6 (typeNear (startOf symbol))
+    | identity <- visible
+    , Just symbol <- [Map.lookup identity byId]
+    , symbolOrigin symbol `elem` [ParameterOrigin, LocalOrigin, PatternOrigin]
+    , symbolNamespace symbol == ValueSpace
+    ]
+  typeNear start = maybe "" renderType (typesFor start >>= narrowestAt start)
+  typesFor start
+    | isJust (analysisTypes written) = analysisTypes written
+    | start < agrees = analysisTypes known
+    | otherwise = Nothing
   fileEntries = [entry | entry <- indexEntries (analysisFileIndex known), not (isMember (docKind entry))]
   declared = Set.fromList (map docName fileEntries)
   declarations =
@@ -221,14 +234,6 @@ scopeCompletions content known before =
     case [entry | entry <- indexEntries (analysisProgramIndex known), docName entry == name, not (isMember (docKind entry))] of
       entry : _ -> Just entry
       [] -> Nothing
-  distinct items = go Set.empty items
-   where
-    go _ [] = []
-    go seen (item : rest) = case labelOf item of
-      Just label
-        | Set.member label seen -> go seen rest
-        | otherwise -> item : go (Set.insert label seen) rest
-      Nothing -> go seen rest
 
 labelOf :: Json -> Maybe Text
 labelOf item = case lookupField "label" item of
