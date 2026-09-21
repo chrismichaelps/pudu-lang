@@ -92,7 +92,7 @@ evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
 evaluateProgramEntry
   :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry integerKinds dependencies entryName moduleValue =
-  fst <$> evaluateProgramTallied integerKinds dependencies entryName moduleValue
+  runCounted Nothing (programEntry integerKinds dependencies entryName moduleValue)
 
 {-| The same, and what running it cost.
 
@@ -109,41 +109,50 @@ evaluateProgramTallied
   -> IO (EvalOutcome, Map.Map Text Int)
 evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
   counters <- newIORef Map.empty
-  outcome <- runCounted (Just counters) $ do
-    withIntegerKinds integerKinds
-    builtins <- linkDependencies dependencies
-    pushFrame builtins
-    {-| The root gets a frame of its own so its declarations shadow every
-        dependency's rather than sharing a frame with the last one linked. -}
-    pushFrame Map.empty
-    installImportAliases (moduleImports moduleValue)
-    inherited <- currentMethods
-    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
-    {-| The root's own functions are given its environment, exactly as a
-        dependency's are.
-
-        Without this a function the root declared worked when the root called
-        it and failed when anything else did: a declaration carries no captured
-        environment, so it runs in the frame of whoever called it, and a module
-        that was handed one has no reason to hold the root's imports. Passing a
-        named function to `List.map`, to a route table, or to anything else
-        that calls back reported the function's own imports as undefined —
-        at run time, having type-checked. -}
-    scopeRootDeclarations inherited
-    {-| Every frame now on the stack is the program's own. What a call pushes
-        above this line holds only names somebody wrote, which is what lets a
-        function literal capture the ones it mentions instead of all of them. -}
-    markModuleScope
-    found <- lookupName entryName
-    case found of
-      Just (FunctionValue closure) -> do
-        result <- callClosure closure [] Nothing
-        if functionAsync (closureFunction closure)
-          then awaitTask (locatedSpan (functionName (closureFunction closure))) result
-          else pure result
-      _ -> pure UnitValue
+  outcome <- runCounted (Just counters) (programEntry integerKinds dependencies entryName moduleValue)
   collected <- readIORef counters
   pure (outcome, collected)
+
+{-| Link the program and call its entry point.
+
+    One action serves both entries, so an ordinary run and a tallied one cannot
+    drift apart in what they link, in which order, or in how an asynchronous
+    entry is awaited. Only the tallied entry allocates counters; an ordinary
+    run passes none, and every tally site costs it one comparison. -}
+programEntry :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> Evaluator Value
+programEntry integerKinds dependencies entryName moduleValue = do
+  withIntegerKinds integerKinds
+  builtins <- linkDependencies dependencies
+  pushFrame builtins
+  {-| The root gets a frame of its own so its declarations shadow every
+      dependency's rather than sharing a frame with the last one linked. -}
+  pushFrame Map.empty
+  installImportAliases (moduleImports moduleValue)
+  inherited <- currentMethods
+  loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
+  {-| The root's own functions are given its environment, exactly as a
+      dependency's are.
+
+      Without this a function the root declared worked when the root called
+      it and failed when anything else did: a declaration carries no captured
+      environment, so it runs in the frame of whoever called it, and a module
+      that was handed one has no reason to hold the root's imports. Passing a
+      named function to `List.map`, to a route table, or to anything else
+      that calls back reported the function's own imports as undefined —
+      at run time, having type-checked. -}
+  scopeRootDeclarations inherited
+  {-| Every frame now on the stack is the program's own. What a call pushes
+      above this line holds only names somebody wrote, which is what lets a
+      function literal capture the ones it mentions instead of all of them. -}
+  markModuleScope
+  found <- lookupName entryName
+  case found of
+    Just (FunctionValue closure) -> do
+      result <- callClosure closure [] Nothing
+      if functionAsync (closureFunction closure)
+        then awaitTask (locatedSpan (functionName (closureFunction closure))) result
+        else pure result
+    _ -> pure UnitValue
 
 {-| Rebuild declarations below the live local frame without replaying its source.
     Captured values keep their old scopes and literal-kind entries. -}

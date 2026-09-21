@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — An ordinary run keeps no evaluator tally
+
+- `pudu run` links and enters the program through the same action `pudu explain` uses, without
+  counters: no tally map is allocated or updated at name lookups and tally sites. Tallied runs
+  still return every counter (issue #269).
+
 ## 2026-09-21 — Type interfaces are prepared once per program
 
 - A compiled program prepares one interface graph: dependency order, formation names, trait table,

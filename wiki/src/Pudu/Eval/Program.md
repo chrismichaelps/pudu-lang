@@ -24,12 +24,16 @@ Run a program, fold a module's constants, and link what either depends on.
 ```haskell
 evaluateEntryPoint     :: Map Span Text -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry   :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Int)
+evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Map Text Int)
 evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
 evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module -> Located Block -> Evaluator Value
 ```
 
 ### Governance
+
+- **One entry action, two runners.** Linking, scoping the root, and calling (and awaiting) the entry
+  point are one action. An ordinary run executes it with no counters, so no tally site does more
+  than a comparison; only the tallied entry allocates counters and reads them back.
 
 - **This depends on the evaluator rather than the other way round**, so nothing
   here needs a capability record. The recursion the rest of the evaluator

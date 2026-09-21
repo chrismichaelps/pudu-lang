@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-untallied-entry]] — issue #269 one entry action for ordinary and tallied runs, with
+  counters only when asked for.
+
 - [[2026-09-21-interface-graph]] — issue #268 interface facts prepared once per module graph,
   consumer overlays, shared installation, lexer/parser allocation, and scaling evidence.
 
