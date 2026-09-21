@@ -29,6 +29,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindName
   , inTypeScope
+  , inTypeScopeWith
   , LoopFrame (..)
   , loopTarget
   , markLoopBroken
@@ -77,8 +78,10 @@ data StatementNeeds = StatementNeeds
       -> Checker ()
   }
 
+{-| A block is a scope: what its statements declare is gone once it ends, so
+    an outer binding of the same name is the one a later use reads. -}
 checkBlock :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
-checkBlock needs declared rigid (Located _ block) = do
+checkBlock needs declared rigid (Located _ block) = inTypeScopeWith $ do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
     Nothing -> pure (resultlessBlockType block)
@@ -287,12 +290,10 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
     _ -> False
 
 {-| A block checked against an expectation pushes it to the trailing
-    expression, which is the block's value. -}
-
-{-| A block checked against an expectation pushes it to the trailing
-    expression, which is the block's value. -}
+    expression, which is the block's value. It is a scope, as `checkBlock`'s
+    is. -}
 checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Type -> Located Block -> Checker Type
-checkBlockAgainst needs declared rigid expected (Located blockSpan block) = do
+checkBlockAgainst needs declared rigid expected (Located blockSpan block) = inTypeScopeWith $ do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
     Nothing -> do
