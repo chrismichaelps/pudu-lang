@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-bounded-ssr-slots]] — issue #261 early UTF-8 budget enforcement inside dynamic
+  values, preserved error precedence, repeated-slot accounting, and rejection measurements.
+
 - [[2026-09-20-typed-html-shells]] — issue #260 structural nested child slots, iterative shell
   preparation, Compose document helpers, deep coverage, and comparative measurements.
 

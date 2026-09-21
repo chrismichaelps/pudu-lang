@@ -174,5 +174,89 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  let exactBytes = rendered.toBytes().length()
+  match Ssr.renderWithin(&prepared, &filled("body", body), exactBytes) {
+    case Ok(output) => {
+      if output.body == rendered && output.byteLength == exactBytes { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(limit))
+    = Ssr.renderWithin(&prepared, &filled("body", body), exactBytes - 1) {
+    if limit == exactBytes - 1 { held = held + 1 }
+  }
+
+  let emptyPlan = Ssr.prepare(&[Ssr.Slot("body")])
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("")), 0) {
+    case Ok(output) => {
+      if output.body.isEmpty() && output.byteLength == 0 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.InvalidLimit(-1))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("")), 0 - 1) {
+    held = held + 1
+  }
+
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("é")), 2) {
+    case Ok(output) => { if output.body == "é" && output.byteLength == 2 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(1))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("é")), 1) {
+    held = held + 1
+  }
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("<")), 4) {
+    case Ok(output) => {
+      if output.body == "&lt;" && output.byteLength == 4 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(3))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("<")), 3) {
+    held = held + 1
+  }
+
+  let repeatedBudget = Ssr.prepare(&[Ssr.Slot("body"), Ssr.Slot("body")])
+  match Ssr.renderWithin(&repeatedBudget, &filled("body", Html.text("é")), 4) {
+    case Ok(output) => { if output.body == "éé" && output.byteLength == 4 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(3))
+    = Ssr.renderWithin(&repeatedBudget, &filled("body", Html.text("é")), 3) {
+    held = held + 1
+  }
+
+  let missingFirst = Ssr.prepare(&[Ssr.Slot("missing"), Ssr.Fixed(Html.text("x"))])
+  if let Err(Ssr.MissingSlot("missing")) = Ssr.renderWithin(&missingFirst, &mapOf([]), 0) {
+    held = held + 1
+  }
+  let overflowFirst = Ssr.prepare(&[Ssr.Fixed(Html.text("x")), Ssr.Slot("missing")])
+  if let Err(Ssr.TooLarge(0)) = Ssr.renderWithin(&overflowFirst, &mapOf([]), 0) {
+    held = held + 1
+  }
+
+  let huge = Html.fragment(&[
+      Html.text("<".repeat(100000)),
+      Html.element("p", &[], &[Html.text("unreached")])
+    ])
+  if let Err(Ssr.TooLarge(3)) = Ssr.renderWithin(&emptyPlan, &filled("body", huge), 3) {
+    held = held + 1
+  }
+
+  let boundedElement = Html.element("div", &[
+      ("b", "<&\"'"),
+      ("onclick", "run()"),
+      ("a", "é")
+    ], &[Html.trusted("雪")])
+  let boundedExpected = Html.render(&boundedElement)
+  let boundedBytes = boundedExpected.toBytes().length()
+  match Ssr.renderWithin(&emptyPlan, &filled("body", boundedElement), boundedBytes) {
+    case Ok(output) => {
+      if output.body == boundedExpected && output.byteLength == boundedBytes { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
   held
 }

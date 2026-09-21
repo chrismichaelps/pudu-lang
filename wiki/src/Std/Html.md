@@ -17,6 +17,8 @@ page is mostly made of, and a general one for the rest. Attributes, including th
 are lists — classes and inline style — built rather than spelled. Rendering a view to markup, and
 rendering a whole document with its declaration. Escaping text and an attribute value, exported
 because a program building markup this module does not cover still needs them.
+`escapeScalar`, `isHandler`, and `isVoidElement` expose the core renderer's authoritative
+scalar escaping and syntax/safety predicates to [[Std Html Bounded]].
 ## Governance and algorithm
 Text is text and markup is markup, and the only way to obtain markup is to build a node. That is
 the whole design. A template language has to solve escaping repeatedly — and gets it wrong at each
@@ -77,7 +79,8 @@ functions already are, and they compose without a second mechanism to learn.
   is a large table which is wrong at the edges and goes stale, and the failure it prevents is a
   page that renders oddly rather than one that is unsafe. _Rejected:_ a content model.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
+[[2026-09-20-bounded-ssr-slots]]
 
 ## Fragment rendering
 
@@ -102,6 +105,14 @@ eliminating intermediate string loops and replacements. Attribute rendering, esc
 syntax and trusted markup behavior are unchanged. This is buffered rendering, not socket streaming;
 view depth no longer consumes evaluator call frames.
 
+[[Std Html Bounded]] uses the same cursor-frame traversal and serialization rules. It counts UTF-8
+width from each scalar before retaining output and expands text one escaped scalar at a time, so a
+rejected large text or trusted node stops without encoding or escaping its complete output. Element
+names, ordered accepted attributes, attribute values, terminators, and closing tags pass through the
+same incremental budget admission; handler attributes remain omitted. Successful bounded output
+joins to exactly the same bytes as `render`, but its internal fragment grouping is not the public
+`renderChunks` grouping contract.
+
 The pre-change no-optimization baseline used a focused program with depth 1,600, width 1,200, and
 40 attributes. `pudu explain` reported 358,532 evaluator steps; the host RTS reported
 2,336,078,616 allocated bytes, 3,868,920 bytes maximum residency, and 0.855 seconds elapsed. The
@@ -121,3 +132,12 @@ Resolved Grill Log:
 - **Q:** Keep slicing the pending stack because the sequence shares structure? **A:** No. _Rationale:_
   the runtime confirms slicing is logarithmic while `pop` is constant time, and cursor frames also
   bound scheduled sibling work. _Rejected:_ claiming a full-array copy; retaining repeated slices.
+- **Q:** Count a text node after calling `escapeHtml()`? **A:** No for bounded rendering. A single
+  refused node could already have traversed and allocated its full escaped output. The bounded writer
+  admits each scalar or fixed escape expansion before retaining it and stops at the first overflow.
+- **Q:** Convert a complete trusted string to `Bytes` merely to count it? **A:** No; scalar UTF-8
+  width is counted incrementally, so rejection does not allocate a complete encoded copy of caller-
+  supplied trusted markup.
+- **Q:** Change `renderChunks` fragment boundaries to share the bounded implementation? **A:** No;
+  those boundaries are public and consumed by preparation. `Std.Html.Bounded.render` is additive
+  and promises output and exact length, not identical chunk grouping.

@@ -319,6 +319,9 @@ export fn render(view: &Html) -> Str { renderChunks(view).join("") }
 /// Buffered output fragments, in document order, without joining child subtrees.
 export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
 
+/// Whether an element has no closing tag and cannot render children.
+export fn isVoidElement(name: Str) -> Bool { VOID_ELEMENTS.contains(name) }
+
 /// A suspended parent cursor, with an optional closing tag to write on return.
 type Writing
   = Resume(Array[Html], Int)
@@ -390,6 +393,18 @@ export fn document(view: &Html) -> Str { appendRendered(view, ["<!DOCTYPE html>\
 /// themselves.
 ///
 export fn escape(content: Str) -> Str { content.escapeHtml() }
+
+/// Escapes one text scalar using the renderer's exact HTML spellings.
+export fn escapeScalar(value: Char) -> Str {
+  match value {
+    case '&' => "&amp;"
+    case '<' => "&lt;"
+    case '>' => "&gt;"
+    case '"' => "&quot;"
+    case '\'' => "&#39;"
+    case other => other.toText()
+  }
+}
 
 /// The attributes of an element, written.
 ///

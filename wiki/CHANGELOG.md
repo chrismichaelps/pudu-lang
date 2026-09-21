@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — SSR budgets stop dynamic rendering at the first overflow
+
+- `Std.Html.Bounded` adds iterative rendering with an exact UTF-8 output budget. It admits raw
+  Unicode widths and fixed HTML escape expansions scalar by scalar, so a rejected large text,
+  trusted value, attribute, or element stops without constructing or encoding its complete output.
+- `Std.Html.Ssr.renderWithin` now passes only the remaining budget into a dynamic slot's first
+  rendering. Successful slot fragments and exact lengths remain cached per request; repeated
+  occurrences count again without rerendering. Negative-limit, missing-slot, and overflow precedence
+  remains in document order.
+- Focused checks cover exact and one-byte-short boundaries, zero and negative limits, multibyte
+  Unicode, escape expansion, repeated-slot accounting, both missing/overflow precedence orders,
+  successful bounded element parity, and early refusal of a 100,000-character node for issue #261.
+- In a same-machine optimized probe rejecting a 200,000-character escaped node fifty times at a
+  three-byte limit, early bounded rendering reduced measured heap allocation from 2,436,739,600 to
+  179,451,376 bytes and elapsed time from 0.48s to 0.09s. The probe includes compiler/evaluator
+  overhead and is comparative evidence, not a portable service guarantee.
+
 ## 2026-09-20 — Typed SSR shells prepare nested child slots once
 
 - `Std.Html.Ssr.Shell` adds a structural tree of fixed `Html`, named complete-child slots, elements,

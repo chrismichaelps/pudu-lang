@@ -21,6 +21,10 @@ fragments, returning TooLarge(maxBytes) or InvalidLimit(maxBytes). Missing slots
 MissingSlot(name). Slots are rendered lazily when first visited, and repeated names reuse their
 rendered fragments within that call. Unused values are ignored. No global cache exists, and
 per-request values never enter the reusable plan or another request's slot cache.
+When a limit is present, static fragments and cached repeated slots are admitted by exact retained
+byte length. A slot first visited under the budget is rendered through [[Std Html Bounded]]
+with only the remaining bytes; overflow can therefore stop inside one large text, trusted, element,
+or attribute value instead of constructing the complete rejected subtree.
 
 `prepareCompact(Array[Piece])` is the opt-in preparation path. It renders fixed views exactly as
 `prepare` does, but joins each complete adjacent static run into one retained `Markup([block])`
@@ -65,9 +69,10 @@ static run is the compaction boundary: a hole always flushes it, because crossin
 reorder output and prevent incremental delivery. This mode does not claim a fixed maximum block
 size; callers that require bounded transport blocks retain `prepare` or apply a later streaming
 transport policy.
-The output budget limits accepted output bytes, not peak allocation: a dynamic slot is rendered
-before its fragments are counted. No streaming transport, hydration, automatic cache invalidation
-or performance measurement is claimed. Existing Html escaping is reused rather than reimplemented.
+The output budget limits renderer output, not the already caller-built input tree. Bounded dynamic
+rendering stops as soon as output overflow is certain and does not retain a complete rejected slot.
+No streaming transport, hydration, automatic cache invalidation or cross-request cache is claimed.
+Existing Html escaping and safety rules remain authoritative.
 The byte-native path stores static UTF-8 once per reusable plan. Per request it encodes each unique
 used slot once, even when that slot occurs repeatedly, and counts every occurrence from retained byte
 lengths. Segmented delivery performs no final join; contiguous delivery performs one exact-size
@@ -82,7 +87,8 @@ missing slot in document order fails deterministically.
 - **Q:** Substitute strings inside serialized HTML? **A:** No; slots hold typed Html fragments.
 - **Q:** Cache personalized slot output globally? **A:** No; memoization is local to one render.
 - **Q:** Treat byte budgets as a complete memory sandbox? **A:** No; slot construction and
-  rendering can allocate before counting. Negative budgets fail explicitly.
+  the caller-built input tree already exist before rendering. Negative budgets fail explicitly, and
+  bounded rendering limits only output traversal and retention.
 - **Q:** Hide a missing slot? **A:** No; report its name in traversal order.
 - **Q:** Change `prepare` so every caller gets new chunk boundaries? **A:** No; compaction is additive
   and opt-in through `prepareCompact`.
@@ -109,11 +115,22 @@ missing slot in document order fails deterministically.
   its children.
 - **Q:** Compile by recursive descent? **A:** No; an explicit cursor/continuation stack handles deep
   shells without consuming the host call stack.
+- **Q:** Check a dynamic slot only after `Html.renderChunks` finishes? **A:** No; the remaining
+  budget is passed into the iterative HTML writer, which stops at the first scalar or syntax fragment
+  that cannot fit.
+- **Q:** Render a repeated slot again under its later remaining budget? **A:** No; a successful first
+  rendering caches its fragments and exact byte length for that request. Every occurrence counts the
+  cached length, and an occurrence that no longer fits returns `TooLarge` without rerendering.
+- **Q:** Let a later missing slot outrank earlier overflow? **A:** No; parts remain evaluated in
+  document order. An earlier missing slot returns `MissingSlot`; an earlier certain overflow returns
+  `TooLarge`; invalid negative limits are refused before traversal as before.
 
 ## Dependencies and consumers
-[[Std Html]] supplies rendering. [[Std Html Buffer]] supplies compact encoded plans, checked
-segmentation, and contiguous completion. [[Std Http Server Reply]] consumes Rendered responses.
+[[Std Html]] supplies rendering. [[Std Html Bounded]] supplies budget-aware dynamic traversal.
+[[Std Html Buffer]] supplies compact encoded plans, checked segmentation, and contiguous completion.
+[[Std Http Server Reply]] consumes Rendered responses.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
-[[2026-09-20-encoded-ssr-responses]] · [[2026-09-20-typed-html-shells]]
+[[2026-09-20-encoded-ssr-responses]] · [[2026-09-20-typed-html-shells]] ·
+[[2026-09-20-bounded-ssr-slots]]

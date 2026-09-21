@@ -1,0 +1,164 @@
+module Std.Html.Bounded
+
+import Std.Html as Html
+
+/// Why bounded HTML rendering could not produce a complete result.
+export type RenderError = InvalidLimit(Int) | TooLarge(Int)
+
+/// Rendered fragments and their exact combined UTF-8 byte length.
+export type Rendered = { parts: Array[Str], byteLength: Int }
+
+type Writing
+  = Resume(Array[Html.Html], Int)
+  | CloseAndResume(Str, Array[Html.Html], Int)
+
+fn scalarWidth(value: Char) -> Int {
+  let code = value.code()
+  if code <= 127 { 1 } else {
+    if code <= 2047 { 2 } else { if code <= 65535 { 3 } else { 4 } }
+  }
+}
+
+fn appendSized(
+  piece: Str,
+  size: Int,
+  state: Rendered,
+  maximum: Int
+) -> Result[Rendered, RenderError] {
+  if size > maximum - state.byteLength {
+    Err(TooLarge(maximum))
+  } else {
+    let parts = if piece.isEmpty() { state.parts } else { state.parts.push(piece) }
+    Ok(Rendered{parts: parts, byteLength: state.byteLength + size})
+  }
+}
+
+fn appendRaw(text: Str, state: Rendered, maximum: Int) -> Result[Rendered, RenderError] {
+  var rest = text
+  var size = 0
+  while !rest.isEmpty() {
+    let width = scalarWidth(rest.charAt(0))
+    if width > maximum - state.byteLength - size { return Err(TooLarge(maximum)) }
+    size = size + width
+    rest = rest.drop(1)
+  }
+  appendSized(text, size, state, maximum)
+}
+
+fn escaped(value: Char) -> Bool {
+  value == '&' || value == '<' || value == '>' || value == '"' || value == '\''
+}
+
+fn appendEscaped(text: Str, initial: Rendered, maximum: Int) -> Result[Rendered, RenderError] {
+  var state = initial
+  var rest = text
+  var run = text
+  var runCharacters = 0
+  var runBytes = 0
+  while !rest.isEmpty() {
+    let value = rest.charAt(0)
+    if escaped(value) {
+      if runCharacters > 0 {
+        state = appendSized(run.take(runCharacters), runBytes, state, maximum) ?
+      }
+      let written = Html.escapeScalar(value)
+      state = appendSized(written, written.length(), state, maximum) ?
+      rest = rest.drop(1)
+      run = rest
+      runCharacters = 0
+      runBytes = 0
+    } else {
+      let width = scalarWidth(value)
+      if width > maximum - state.byteLength - runBytes { return Err(TooLarge(maximum)) }
+      runCharacters = runCharacters + 1
+      runBytes = runBytes + width
+      rest = rest.drop(1)
+    }
+  }
+  if runCharacters > 0 {
+    state = appendSized(run.take(runCharacters), runBytes, state, maximum) ?
+  }
+  Ok(state)
+}
+
+fn appendElementStart(
+  name: Str,
+  attributes: &Array[(Str, Str)],
+  initial: Rendered,
+  maximum: Int
+) -> Result[Rendered, RenderError] {
+  var state = appendSized("<", 1, initial, maximum) ?
+  state = appendRaw(name, state, maximum) ?
+  for entry in attributes {
+    if !Html.isHandler(entry[0]) {
+      state = appendSized(" ", 1, state, maximum) ?
+      state = appendRaw(entry[0], state, maximum) ?
+      state = appendSized("=\"", 2, state, maximum) ?
+      state = appendEscaped(entry[1], state, maximum) ?
+      state = appendSized("\"", 1, state, maximum) ?
+    }
+  }
+  if Html.isVoidElement(name) {
+    appendSized(" />", 3, state, maximum)
+  } else {
+    appendSized(">", 1, state, maximum)
+  }
+}
+
+/// Render a complete view while refusing the first output byte beyond the limit.
+export fn render(view: &Html.Html, maximum: Int) -> Result[Rendered, RenderError] {
+  if maximum < 0 { return Err(InvalidLimit(maximum)) }
+
+  var state = Rendered{parts: [], byteLength: 0}
+  var current: Array[Html.Html] = [*view]
+  var index = 0
+  var pending: Array[Writing] = []
+  while index < current.length() || pending.length() > 0 {
+    if index >= current.length() {
+      let step = pending[pending.length() - 1]
+      pending = pending.pop()
+      match step {
+        case Resume(parent, next) => {
+          current = parent
+          index = next
+        }
+        case CloseAndResume(name, parent, next) => {
+          state = appendSized("</", 2, state, maximum) ?
+          state = appendRaw(name, state, maximum) ?
+          state = appendSized(">", 1, state, maximum) ?
+          current = parent
+          index = next
+        }
+      }
+    } else {
+      let node = current[index]
+      index = index + 1
+      match node {
+        case Html.Text(content) => { state = appendEscaped(content, state, maximum) ? }
+        case Html.Trusted(markup) => { state = appendRaw(markup, state, maximum) ? }
+        case Html.Fragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(Resume(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case Html.Element(name, attributes, children) => {
+          state = appendElementStart(name, &attributes, state, maximum) ?
+          if !Html.isVoidElement(name) {
+            if children.length() == 0 {
+              state = appendSized("</", 2, state, maximum) ?
+              state = appendRaw(name, state, maximum) ?
+              state = appendSized(">", 1, state, maximum) ?
+            } else {
+              pending = pending.push(CloseAndResume(name, current, index))
+              current = children
+              index = 0
+            }
+          }
+        }
+      }
+    }
+  }
+  Ok(state)
+}
