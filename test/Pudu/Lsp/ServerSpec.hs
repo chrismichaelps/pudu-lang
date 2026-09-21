@@ -6,7 +6,9 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Pudu.Lsp.Analysis (analyseOver, documentSourceRoot)
+import Pudu.Lsp.RepairCache (cachedAnalyse, newRepairCache, repairCapacity)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Completion (completionRepaired)
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
@@ -54,6 +56,7 @@ serverProperties =
   , ("completion recovers facts from unfinished text", testRecoveredCompletion)
   , ("each document is rooted by its own path and module", testDocumentSourceRoot)
   , ("open documents stand in for the disk in every import", testOpenDocumentOverlay)
+  , ("a repair is compiled once while nothing changes", testRepairReuse)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -805,6 +808,39 @@ testOpenDocumentOverlay = do
         (property (all (`Set.member` analysisDependencies fromDisk) [mid, deep]))
     , counterexample "the document itself is not its own dependency"
         (property (not (Set.member (normalise (root <> "/Chain.pudu")) (analysisDependencies fromDisk))))
+    ]
+
+testRepairReuse :: IO Property
+testRepairReuse = do
+  documents <- opened "module Demo\nfn main() -> Int {\n  let text = \"hi\"\n  text.\n"
+  valid <- opened "module Demo\nfn main(text: Str) -> Int { text.length() }\n"
+  cache <- newRepairCache
+  counted <- newIORef (0 :: Int)
+  let counting text = modifyIORef' counted (+ 1) >> analyse uri text
+      ask generation current line character =
+        completionRepaired (cachedAnalyse cache generation uri counting) (pure []) current (atPosition line character)
+      compiles = readIORef counted
+  first <- ask 1 documents 3 7
+  afterFirst <- compiles
+  second <- ask 1 documents 3 7
+  afterSecond <- compiles
+  _ <- ask 2 documents 3 7
+  afterEdit <- compiles
+  _ <- ask 2 valid 1 33
+  afterValid <- compiles
+  let crowded = [Text.pack ("module Demo" <> replicate n ' ') | n <- [1 .. repairCapacity + 1]]
+  mapM_ (cachedAnalyse cache 3 uri counting) crowded
+  beforeEvicted <- compiles
+  -- The first of them, the least recently used, has been evicted.
+  _ <- cachedAnalyse cache 3 uri counting "module Demo "
+  afterEvicted <- compiles
+  pure $ conjoin
+    [ counterexample "the first request repairs" (property (afterFirst > 0))
+    , counterexample "the same request at the same state compiles nothing" (afterSecond === afterFirst)
+    , counterexample "the answer is the same" (second === first)
+    , counterexample "a new state compiles again" (property (afterEdit > afterSecond))
+    , counterexample "a text that answers as written is never repaired" (afterValid === afterEdit)
+    , counterexample "the cache is bounded" (afterEvicted === beforeEvicted + 1)
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

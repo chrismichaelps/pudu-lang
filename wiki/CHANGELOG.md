@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — A repaired completion is compiled once
+
+- Completion and signature help keep the analyses of repaired texts for the current state of the
+  open documents, keyed by that state, the document, and the exact text, and bounded to eight. The
+  same request at an unchanged state compiles nothing: on a 30-module program, repeated completion
+  after an unfinished `text.` answers from the kept analysis instead of compiling the program again
+  each time. Any edit, open, close, or file event starts an empty cache (issue #284).
+
 ## 2026-09-21 — Imports read the editor's open buffers
 
 - An importing document is compiled against the text of the modules the editor has open, not

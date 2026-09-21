@@ -194,6 +194,7 @@ library
     Pudu.Lsp.Shapes
     Pudu.Lsp.Receiver
     Pudu.Lsp.Analysis
+    Pudu.Lsp.RepairCache
     Pudu.Lsp.Repair
     Pudu.Eval.Confinement
     Pudu.IntegerLiteral

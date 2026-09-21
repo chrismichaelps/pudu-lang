@@ -71,6 +71,9 @@ serverCapabilities :: Json
   whose program read that file (`analysisDependencies`, transitive) is analysed again and its
   diagnostics are published again. Closing a document hands its file back to the disk. A save of an
   open document changes nothing, because its buffer was already what everything read.
+- A repaired text is compiled through [[Lsp Repair Cache]], keyed by the documents' generation, so
+  a completion or signature help asked again at the same state compiles nothing. The loop keeps the
+  cache and the module catalogs in one session record beside the documents.
 - Import completion reads a module catalog ([[Lsp Module Catalog]]) for the document's source root.
   The loop keeps one catalog per root in a cache of its own, built on the first import completion
   and cleared by `didSave`, `didChangeWatchedFiles`, and the file create/delete/rename

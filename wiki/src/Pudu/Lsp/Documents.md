@@ -26,6 +26,8 @@ data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, an
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
+documentGeneration  :: Documents -> Int
+nextGeneration      :: Documents -> Documents
 setWorkspaceFolders :: [FilePath] -> Documents -> Documents
 workspaceFolders    :: Documents -> [FilePath]
 analysisOf       :: Text -> Documents -> Maybe Analysis
@@ -37,6 +39,10 @@ uriOf            :: Json -> Maybe Text
 ```
 
 ### Governance
+
+- The store carries a generation, advanced whenever what any compile would read may have changed:
+  a document remembered or forgotten, or a file event. Anything kept from a compile — a repaired
+  analysis — is valid only while it stays the same.
 
 - **The store is a value the loop threads, not a mutable cell.** What a reply says and what the server holds therefore cannot disagree part-way through answering a request.
 - One `Analysis` is everything one compile said about one file — its text, source, diagnostics,

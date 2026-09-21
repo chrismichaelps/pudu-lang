@@ -46,8 +46,10 @@ import Pudu.Lsp.Documents
   , allDocuments
   , analysisOf
   , documentOf
+  , documentGeneration
   , emptyDocuments
   , forgetDocument
+  , nextGeneration
   , rememberAnalysis
   , setWorkspaceFolders
   , uriOf
@@ -62,6 +64,7 @@ import Pudu.Lsp.Highlight (documentHighlightAt)
 import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
 import Pudu.Lsp.ModuleCatalog (moduleCatalog)
+import Pudu.Lsp.RepairCache (RepairCache, cachedAnalyse, newRepairCache)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
   ( Incoming (..)
@@ -100,36 +103,44 @@ runServer = do
   hSetBuffering stdout NoBuffering
   store <- newIORef emptyDocuments
   catalogs <- newIORef Map.empty
-  loop store catalogs
+  repairs <- newRepairCache
+  loop store (Session catalogs repairs)
 
 {-| The modules each source root offers an import, found once and kept until a
     file is saved, created, or removed — the only events that change them. -}
 type Catalogs = IORef (Map FilePath [Text])
 
-loop :: IORef Documents -> Catalogs -> IO ()
-loop store catalogs = do
+{-| What the session keeps beside the documents: work that is expensive to
+    redo and valid until something changes. -}
+data Session = Session
+  { sessionCatalogs :: !Catalogs
+  , sessionRepairs :: !(IORef RepairCache)
+  }
+
+loop :: IORef Documents -> Session -> IO ()
+loop store session = do
   incoming <- readMessage stdin
   case incoming of
     EndOfStream -> pure ()
-    NotForServer -> loop store catalogs
+    NotForServer -> loop store session
     Unreadable reason -> do
       TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
       hFlush stderr
-      loop store catalogs
+      loop store session
     Unframed reason -> do
       TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
       hFlush stderr
       exitWith (ExitFailure 1)
     Received message -> do
       documents <- readIORef store
-      invalidateCatalogs catalogs message
-      outcome <- try (prepare catalogs documents message)
+      invalidateCatalogs (sessionCatalogs session) message
+      outcome <- try (prepare session documents message)
       case outcome of
         Right (documents', replies) -> do
           writeIORef store documents'
           mapM_ (emit stdout) replies
         Left failure -> mapM_ (emit stdout) =<< excuse message failure
-      unless (isExit message) (loop store catalogs)
+      unless (isExit message) (loop store session)
 
 invalidateCatalogs :: Catalogs -> Message -> IO ()
 invalidateCatalogs catalogs message = case message of
@@ -152,18 +163,18 @@ catalogFor catalogs documents parameters = do
       writeIORef catalogs (Map.insert root found known)
       pure found
 
-prepare :: Catalogs -> Documents -> Message -> IO (Documents, [Text])
-prepare catalogs documents message = do
+prepare :: Session -> Documents -> Message -> IO (Documents, [Text])
+prepare session documents message = do
   (documents', touched) <- refresh documents message
   (documents'', replies) <- case message of
     Request identity "textDocument/completion" parameters -> do
       items <-
-        completionRepaired (reanalyse documents' parameters) (catalogFor catalogs documents' parameters)
+        completionRepaired (repaired documents' parameters) (catalogFor (sessionCatalogs session) documents' parameters)
           documents' parameters
       pure (documents', [response identity items])
     Request identity "textDocument/signatureHelp" parameters -> do
       help <- case located documents' parameters of
-        Just (value, offset) -> signatureHelpRepaired (reanalyse documents' parameters) value offset
+        Just (value, offset) -> signatureHelpRepaired (repaired documents' parameters) value offset
         Nothing -> pure JsonNull
       pure (documents', [response identity help])
     _ -> pure (answer documents' message)
@@ -172,6 +183,12 @@ prepare catalogs documents message = do
   let republished = [publish uri (diagnosticEntries (analysisOf uri documents'')) | uri <- touched]
   mapM_ (evaluate . Text.length) (replies <> republished)
   pure (documents'', replies <> republished)
+ where
+  -- A repaired text compiled for this state of the documents is not compiled
+  -- again while the state holds.
+  repaired current parameters =
+    cachedAnalyse (sessionRepairs session) (documentGeneration current) (fromMaybe "" (uriOf parameters))
+      (reanalyse current parameters)
 
 {-| Compile other text as the document a request names, for an answer the text
     as written cannot give. Nothing is stored: the editor's copy stays the one
@@ -241,13 +258,16 @@ refresh documents message = case message of
     Just uri -> dependentsOf (forgetDocument uri documents) [uri]
     Nothing -> pure (documents, [])
   Notification "workspace/didChangeWatchedFiles" parameters ->
-    dependentsOf documents
+    dependentsOf (nextGeneration documents)
       [ uri
       | Just (JsonArray changes) <- [lookupField "changes" parameters]
       , change <- changes
       , Just uri <- [lookupField "uri" change >>= textOf]
       , Nothing <- [analysisOf uri documents]
       ]
+  Notification method _
+    | method `elem` ["workspace/didCreateFiles", "workspace/didDeleteFiles", "workspace/didRenameFiles"] ->
+        pure (nextGeneration documents, [])
   _ -> pure (documents, [])
  where
   store uri content = do
