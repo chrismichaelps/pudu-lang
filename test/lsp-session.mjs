@@ -94,6 +94,13 @@ const qualifierSource = [
 ].join("\n");
 const selectionUri = "file:///pudu-fixtures/SelectionWriting.pudu";
 const selectionSource = "module SelectionWriting\nimport Std.Io { wr\n";
+const receiverUri = "file:///pudu-fixtures/ReceiverSession.pudu";
+const receiverSource = [
+  "module ReceiverSession",
+  'fn produce(n: Int) -> Str { "hi" }',
+  "fn main() -> Int { produce(1 ).length() }",
+  "",
+].join("\n");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -231,6 +238,17 @@ const messages = [
     id: 30,
     method: "textDocument/completion",
     params: { textDocument: { uri: selectionUri }, position: { line: 1, character: 18 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: receiverUri, languageId: "pudu", version: 1, text: receiverSource },
+    },
+  },
+  {
+    id: 31,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: receiverUri }, position: { line: 2, character: 33 } },
   },
   {
     id: 25,
@@ -613,6 +631,13 @@ assert(
   selectionLabels.includes("writeLine"),
   `an unfinished selection was not offered Std.Io's exports: ${JSON.stringify(selectionLabels)}`,
 );
+
+// A call's result is the receiver, not its last argument.
+const receiverOffered = replyTo(31)?.result;
+const receiverLabels = (
+  Array.isArray(receiverOffered) ? receiverOffered : (receiverOffered?.items ?? [])
+).map(entry => entry.label);
+assert(receiverLabels.includes("length"), `a call result offered no Str members: ${JSON.stringify(receiverLabels)}`);
 
 // An import being written does not parse, and is still offered the library.
 const importOffered = replyTo(25)?.result;

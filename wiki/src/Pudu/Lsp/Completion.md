@@ -74,7 +74,9 @@ source root; the catalog is run only when the cursor is at an import site.
 
 1. Locate cursor position and ask the syntax/token context query first. Pattern, import, comment, and
    quoted-literal contexts take precedence over a textual dot inside them.
-2. Otherwise, if after a dot: determine receiver expression end offset, query `analysisTypes` for the receiver's type, and collect built-in and `impl` methods for that nominal type.
+2. Otherwise, if [[Lsp Receiver]] finds a member site: a receiver that is one name an import binds
+   offers that module's exports; any other receiver offers the fields and methods of the type the
+   checker gave the whole receiver expression.
 3. If syntax proves a match-pattern position, use the checked subject type and canonical visible-sum
    facts to produce variants spelled according to the root module's imports.
 4. If syntax proves a type position, produce scoped type parameters and visible type names.
@@ -86,6 +88,7 @@ source root; the catalog is run only when the cursor is at an import site.
 
 - Do not suggest member methods when the cursor is not following a dot accessor.
 - Do not guess member names when the receiver type is unknown or untyped.
+- Do not find the receiver from the character before the dot or type it by a point query.
 - Do not select local bindings by declaration offset; visibility is resolution's frames.
 - Do not find a record's fields by the type's basename or by slicing its declaration's text.
 - Do not read imports from text lines, and do not treat a full module path or a selective import as

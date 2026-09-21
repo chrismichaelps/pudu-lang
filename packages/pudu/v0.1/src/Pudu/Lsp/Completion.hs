@@ -28,6 +28,7 @@ import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
 import Pudu.Lsp.Json (Json (..), lookupField)
 import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
+import Pudu.Lsp.Receiver (MemberSite (..), memberSiteAt, receiverType)
 import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
 import Pudu.Lsp.Shapes (RecordShape (..), renderTypeSyntax)
 import Pudu.Semantic.Prelude (wiredInTypeNames)
@@ -61,10 +62,10 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
     Nothing -> []
   ImportContext site -> importCompletions catalog written known offset site
   SuppressedContext -> []
-  _ -> case receiverEnd (analysisText written) offset of
-    Just dotOffset -> case moduleMembers written known dotOffset of
+  _ -> case memberSiteAt (analysisTokens written) offset of
+    Just site -> case moduleMembers written known site of
       members@(_ : _) -> members
-      [] -> memberCompletions known dotOffset
+      [] -> memberCompletions known site
     Nothing -> case (context, analysisModule written) of
       (TypeContext parameters, Just parsed) -> typeCompletions known parsed (map fst parameters)
       _ -> scopeCompletions written known agrees (wordStart written offset)
@@ -151,9 +152,9 @@ completionRepaired analyse modules documents parameters = case located documents
  where
   completionFrom' = completionFrom []
   repaired value offset content lineStart lineEnd =
-    case receiverEnd content offset of
-      Just dotOffset
-        | isJust (analysisTypes value >>= narrowestAt (dotOffset - 1)) ->
+    case memberSiteAt (analysisTokens value) offset of
+      Just site@(MemberSite dotOffset _)
+        | isJust (analysisTypes value >>= (`receiverType` site)) ->
             pure (completionFrom' value value offset offset)
         | otherwise -> do
             (known, agrees) <-
@@ -308,12 +309,12 @@ keywords =
 
 {-| What may follow a value of the type the checker gave the receiver: the
     fields of its record type, then the methods it can be called with. -}
-memberCompletions :: Analysis -> Int -> [Json]
-memberCompletions value dotOffset = case analysisTypes value >>= narrowestAt (dotOffset - 1) of
+memberCompletions :: Analysis -> MemberSite -> [Json]
+memberCompletions value site@(MemberSite _ (_, receiverEnd')) = case analysisTypes value >>= (`receiverType` site) of
   Nothing -> []
   Just typeValue ->
     fieldCompletions value typeValue
-      <> distinctItems (methodCompletions value (contextParameters (syntaxContext value (dotOffset - 1))) typeValue)
+      <> distinctItems (methodCompletions value (contextParameters (syntaxContext value receiverEnd')) typeValue)
 
 {-| The methods a receiver can be called with, from the methods the program's
     modules declared, by the owner the checker would look them up under: a
@@ -374,18 +375,6 @@ fieldCompletions value typeValue = case throughReferenceType typeValue of
             | (name, mutable, written) <- recordFields shape
             ]
   _ -> []
-
-receiverEnd :: Text -> Int -> Maybe Int
-receiverEnd content offset =
-  let before = Text.take offset content
-      typed = Text.takeWhileEnd nameScalar before
-      atDot = Text.dropEnd (Text.length typed) before
-      receiver = Text.takeEnd 1 (Text.dropEnd 1 atDot)
-   in if Text.isSuffixOf "." atDot && not (Text.isSuffixOf ".." atDot) && Text.any receiverScalar receiver
-        then Just (Text.length atDot - 1)
-        else Nothing
- where
-  receiverScalar scalar = nameScalar scalar || scalar `elem` (")]}\"" :: String)
 
 throughReferenceType :: Type -> Type
 throughReferenceType typeValue = case typeValue of

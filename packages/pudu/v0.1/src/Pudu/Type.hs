@@ -9,12 +9,12 @@ module Pudu.Type
   , checkTypesWith
   , renderType
   , typeAt
+  , typeAtOffsets
   , narrowestAt
   , narrowestSpanAt
   , widestWithin
   ) where
 
-import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -86,14 +86,21 @@ checkTypesWith imported moduleValue =
     source. Tooling uses it to answer "what is this?" for a span it knows only
     approximately, such as one line of an interactive entry. -}
 widestWithin :: Int -> Int -> TypeInfo -> Maybe Type
-widestWithin start end (TypeInfo entries) =
-  case widest of
-    [] -> Nothing
-    (_, found) : _ -> Just found
+widestWithin start end (TypeInfo entries) = snd <$> Map.foldlWithKey' wider Nothing candidates
  where
-  contained ((from, to), _) = from >= start && to <= end
-  widest =
-    sortOn (\((from, to), _) -> from - to) (filter contained (Map.toList entries))
+  -- Keys are ordered by where an expression starts, so only those starting
+  -- inside the region are visited.
+  candidates = Map.takeWhileAntitone ((<= end) . fst) (Map.dropWhileAntitone ((< start) . fst) entries)
+  -- The widest contained span; the first in key order among equal widths.
+  wider best key@(from, to) found
+    | to > end = best
+    | otherwise = case best of
+        Just ((bestFrom, bestTo), _) | bestTo - bestFrom >= to - from -> best
+        _ -> Just (key, found)
+
+{-| The type recorded for the expression occupying exactly these offsets. -}
+typeAtOffsets :: Int -> Int -> TypeInfo -> Maybe Type
+typeAtOffsets start end (TypeInfo entries) = Map.lookup (start, end) entries
 
 {-| The type of the smallest expression covering this offset.
 

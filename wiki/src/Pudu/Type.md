@@ -28,6 +28,7 @@ newtype TypeInfo
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 typeAt :: TypeInfo -> Span -> Maybe Type
+typeAtOffsets :: Int -> Int -> TypeInfo -> Maybe Type
 narrowestAt :: Int -> TypeInfo -> Maybe Type
 narrowestSpanAt :: Int -> TypeInfo -> Maybe ((Int, Int), Type)
 widestWithin :: Int -> Int -> TypeInfo -> Maybe Type
@@ -47,6 +48,9 @@ renderType :: Type -> Text
   order among equal widths. It is one pass over the table keeping the best so far; a hover or a
   completion detail asks it several times per request, and sorting the table for each would repeat
   that work.
+- `widestWithin` visits only the entries starting inside the region — the table is keyed by start
+  offset — and keeps the widest contained one; `typeAtOffsets` is the exact lookup a known span
+  needs.
 - `widestWithin` answers for a region rather than an exact span, which is what an interactive entry or an editor selection can supply.
 - Checking runs only on a module whose names all resolved. An unresolved name has no type, and reporting one would explain the same defect twice.
 - Type diagnostics use the `E3xxx` family from [[architecture/SEMANTICS]]'s diagnostic contract.

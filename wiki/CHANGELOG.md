@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Member completion is on the whole receiver
+
+- `produce(1).` offers the members of `produce`'s result instead of its last argument's, and
+  `produce(1 ).` offers the same. `text .` and a comment before the dot are member positions, as are
+  indexes, chains, nested calls, groups, and literals. The receiver is read from the lexer's tokens
+  and typed by its exact span, or the widest expression inside it. A cursor inside a member name is
+  still a member position (issue #280).
+
 ## 2026-09-21 — Module completion is a module's exports
 
 - `L.` offers exactly what `L`'s module exports, including a sum's variants and foreign

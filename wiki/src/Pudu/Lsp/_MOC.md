@@ -20,6 +20,7 @@ tags: [moc, tooling, lsp]
 - [[Lsp Code Action]] — context-sensitive quick fixes and formatting actions.
 - [[Lsp Completion]] — member method, symbol, keyword, and primitive type completions.
 - [[Lsp Context]] — syntax- and token-directed completion positions.
+- [[Lsp Receiver]] — the member access being completed and its whole receiver's type.
 - [[Lsp Shapes]] — declared sum and record shapes by canonical identity, with generic substitution.
 - [[Lsp Import Completion]] — whole module paths offered while an import is written.
 - [[Lsp Module Catalog]] — every module an import could reach, found once per source root.

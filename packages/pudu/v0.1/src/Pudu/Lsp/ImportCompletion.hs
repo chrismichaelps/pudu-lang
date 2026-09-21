@@ -23,6 +23,7 @@ import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Feature (completionItem, rangeOfOffsets)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (rangeJson)
+import Pudu.Lsp.Receiver (MemberSite (..))
 import Pudu.Lsp.Shapes (SumShape (..))
 import Pudu.Semantic.Interface (ExportedName (..), exportsOf)
 import Pudu.Semantic.Symbol (Namespace (..))
@@ -117,13 +118,12 @@ isMember kind = case kind of
 {-| The declarations of a module named before the dot, as in `Io.` after
     `import Std.Io` or `import Std.Io as Io`: its exports. A qualifier no
     import binds answers nothing, and the value's members get their turn. -}
-moduleMembers :: Analysis -> Analysis -> Int -> [Json]
-moduleMembers written known dotOffset =
-  let before = Text.take dotOffset (analysisText written)
-      qualifier = Text.takeWhileEnd nameScalar before
-      -- `Lib.Tools.` is a path, not a qualifier: only a name standing alone
-      -- reaches a module.
-      standalone = not (Text.isSuffixOf "." (Text.dropEnd (Text.length qualifier) before))
+moduleMembers :: Analysis -> Analysis -> MemberSite -> [Json]
+moduleMembers written known (MemberSite _ (start, end)) =
+  -- Only a receiver that is one name reaches a module: `Lib.Tools.` is a
+  -- path, not a qualifier.
+  let qualifier = Text.take (end - start) (Text.drop start (analysisText written))
+      standalone = not (Text.null qualifier) && Text.all nameScalar qualifier
    in case [owner | standalone, (bound, owner) <- importQualifiers written known, bound == qualifier] of
         owner : _ -> exportCandidates known owner
         [] -> []

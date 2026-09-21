@@ -44,6 +44,7 @@ serverProperties =
   , ("method completion follows the checker's method rules", testMethodCompletion)
   , ("module qualifiers are the ones the imports bind", testImportQualifiers)
   , ("module candidates are exactly a module's exports", testExportCandidates)
+  , ("member completion is on the whole receiver expression", testReceiverExpression)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -655,6 +656,44 @@ testExportCandidates = do
     , counterexample "the description does not depend on import order" (chosenIn reordered 5 === Just "Int")
     , counterexample ("an unfinished selection is offered the module's exports: " <> show selectionLabels)
         (property ("publicFn" `elem` selectionLabels && "privateFn" `notElem` selectionLabels))
+    ]
+
+testReceiverExpression :: IO Property
+testReceiverExpression = do
+  let header =
+        [ "module Demo"
+        , "fn produce(n: Int) -> Str { \"hi\" }"
+        , "fn split(text: Str) -> Array[Str] { [text] }"
+        , "type Inner = { label: Str }"
+        , "type Outer = { inner: Inner }"
+        ]
+      at body character = do
+        documents <- opened (Text.unlines (header <> ["fn main(text: Str, items: Array[Str], outer: Outer) -> Int {", "  " <> body, "}"]))
+        pure (completionLabels (request "textDocument/completion" (atPosition 6 character) documents))
+  exact <- at "produce(1).length()" 13
+  padded <- at "produce(1 ).length()" 14
+  spaced <- at "text .length()" 8
+  commented <- at "text /* note */ .length()" 19
+  indexed <- at "items[0].length()" 11
+  chained <- at "outer.inner.label.length()" 20
+  nested <- at "produce(split(text).length()).length()" 32
+  literal <- at "\"a\".length()" 6
+  unicode <- at "\"🦌\".length() + text.length()" 23
+  arrayResult <- at "split(text).length()" 14
+  midName <- at "text.length()" 9
+  pure $ conjoin
+    [ counterexample ("a call offers its result's members: " <> show exact) (property ("length" `elem` exact))
+    , counterexample "padding inside the call changes nothing" (padded === exact)
+    , counterexample "whitespace before the dot changes nothing" (property ("length" `elem` spaced && "let" `notElem` spaced))
+    , counterexample "a comment before the dot changes nothing" (property ("length" `elem` commented))
+    , counterexample "an index offers the element's members" (property ("length" `elem` indexed))
+    , counterexample "a chain offers its last member's members" (property ("length" `elem` chained))
+    , counterexample "a nested call offers the outer result's members" (property ("charAt" `elem` nested))
+    , counterexample "a literal offers its own members" (property ("charAt" `elem` literal))
+    , counterexample "a scalar beyond the BMP earlier on the line changes nothing" (property ("charAt" `elem` unicode))
+    , counterexample "a cursor inside the member name is still a member position" (property ("length" `elem` midName))
+    , counterexample ("a call's result, not its argument, decides: " <> show arrayResult)
+        (property ("charAt" `notElem` arrayResult && not (null arrayResult)))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

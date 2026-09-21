@@ -192,6 +192,7 @@ library
     Pudu.Lsp.ImportCompletion
     Pudu.Lsp.ModuleCatalog
     Pudu.Lsp.Shapes
+    Pudu.Lsp.Receiver
     Pudu.Lsp.Repair
     Pudu.Eval.Confinement
     Pudu.IntegerLiteral
