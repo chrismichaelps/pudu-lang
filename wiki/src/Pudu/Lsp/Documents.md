@@ -22,7 +22,7 @@ What the server knows about each open document: one compile's answers, kept by t
 ## Interface
 
 ```haskell
-data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, analysisMethods, .. }
+data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, analysisMethods, analysisExports, .. }
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents

@@ -92,6 +92,8 @@ const qualifierSource = [
   "}",
   "",
 ].join("\n");
+const selectionUri = "file:///pudu-fixtures/SelectionWriting.pudu";
+const selectionSource = "module SelectionWriting\nimport Std.Io { wr\n";
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -218,6 +220,17 @@ const messages = [
     id: 29,
     method: "textDocument/completion",
     params: { textDocument: { uri: qualifierUri }, position: { line: 3, character: 5 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: selectionUri, languageId: "pudu", version: 1, text: selectionSource },
+    },
+  },
+  {
+    id: 30,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: selectionUri }, position: { line: 1, character: 18 } },
   },
   {
     id: 25,
@@ -589,6 +602,16 @@ const qualifierLabels = (
 assert(
   qualifierLabels.includes("writeLine"),
   `a bare import's qualifier was not completed: ${JSON.stringify(qualifierLabels)}`,
+);
+
+// A selection being written is offered the module's exports and nothing private.
+const selectionOffered = replyTo(30)?.result;
+const selectionLabels = (
+  Array.isArray(selectionOffered) ? selectionOffered : (selectionOffered?.items ?? [])
+).map(entry => entry.label);
+assert(
+  selectionLabels.includes("writeLine"),
+  `an unfinished selection was not offered Std.Io's exports: ${JSON.stringify(selectionLabels)}`,
 );
 
 // An import being written does not parse, and is still offered the library.

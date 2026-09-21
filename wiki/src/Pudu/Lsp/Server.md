@@ -31,6 +31,7 @@ data Analysis = Analysis
   , analysisSums         :: !(Map Text SumShape)
   , analysisRecords      :: !(Map Text RecordShape)
   , analysisMethods      :: !(Map Text [(Text, Scheme)])   -- every module's declared methods, by owner
+  , analysisExports      :: !ExportIndex                   -- the program's export index
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis

@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Module completion is a module's exports
+
+- `L.` offers exactly what `L`'s module exports, including a sum's variants and foreign
+  declarations, and no longer its private functions. A name a selective import brought in is
+  described by the module it came from, whatever other module shares its name and whatever the
+  import order. `import M { pu` offers `M`'s exports while the import is still unfinished
+  (issue #279).
+
 ## 2026-09-21 — Qualifiers are the ones imports bind
 
 - `Tools.` after `import Lib.Tools` offers `Lib.Tools`'s declarations, as `T.` does after

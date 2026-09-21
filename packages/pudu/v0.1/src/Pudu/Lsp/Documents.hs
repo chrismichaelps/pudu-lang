@@ -27,6 +27,7 @@ import Pudu.Frontend.Token (Token)
 import Pudu.Lsp.Shapes (RecordShape, SumShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
+import Pudu.Semantic.Interface (ExportIndex)
 import Pudu.Semantic.Resolve (Resolution)
 import Pudu.Type (TypeInfo)
 import Pudu.Type.Value (Scheme)
@@ -68,6 +69,8 @@ data Analysis = Analysis
   {-| Every method the program's modules declare, by the canonical key of the
       type or trait that owns it, with the scheme the checker gave it. -}
   , analysisMethods :: !(Map Text [(Text, Scheme)])
+  {-| What each module of the program exports, as imports see it. -}
+  , analysisExports :: !ExportIndex
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.

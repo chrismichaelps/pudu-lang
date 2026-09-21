@@ -66,6 +66,8 @@ source root; the catalog is run only when the cursor is at an import site.
   breaks inside an import are the parser's business. The written text's tree is asked first; while
   it does not parse, the repaired copy's, whose imports are the same. `Lib.Tools.` is a path, never
   a qualifier.
+- A name a selective import brought in is described by the module it was selected from, whatever
+  other module declares the same name and whatever the import order.
 - Completion responses are pure functions of the stored compiler analysis.
 
 ## Algorithm

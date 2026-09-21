@@ -1,0 +1,13 @@
+module Lib
+
+export fn publicFn() -> Int { 1 }
+
+fn privateFn() -> Int { 2 }
+
+export type State = Ready | Loading
+
+export foreign "c" {
+  type Handle
+  fn open(value: Int32) -> owned Handle by close
+  fn close(handle: Handle) -> ()
+}

@@ -21,7 +21,10 @@ written, nothing after `as`.
 ## Interface
 
 ```haskell
-importCompletions :: [Text] -> Analysis -> Int -> ImportSite -> [Json]
+importCompletions :: [Text] -> Analysis -> Analysis -> Int -> ImportSite -> [Json]
+exportCandidates  :: Analysis -> ModuleName -> [Json]
+moduleMembers     :: Analysis -> Analysis -> Int -> [Json]
+importQualifiers  :: Analysis -> Analysis -> [(Text, ModuleName)]
 ```
 
 ## Governance
@@ -33,8 +36,16 @@ importCompletions :: [Text] -> Analysis -> Int -> ImportSite -> [Json]
   ([[Lsp Module Catalog]]) and the modules the program already reached, each once, sorted.
 - The document's own module is never offered. When the document does not parse, its name is read
   from the `module` header tokens.
-- A selection (`import M { … }`) and an alias offer nothing here; names a module exports are
-  answered by the export-aware module candidates, and an alias is a new name.
+- **A module's candidates are its exports.** `exportCandidates` lists exactly what the program's
+  export index says the module exports — functions, constants, types, traits, a sum's variants,
+  foreign types and functions — and nothing private. Each is presented with the documentation of
+  that declaration in that module, joined by module and name together, never by the first entry
+  with a matching basename. A variant is described as its type's (`State.Ready`).
+- The same candidates answer `Q.` for a qualifier an import binds (`moduleMembers`, through
+  `importQualifiers`) and a selection being written (`import M { … }`). While a selection is being
+  written the document does not parse, so [[Lsp Completion]] answers it from a two-line program
+  that imports `M`.
+- An alias offers nothing; it is a new name.
 
 ### Linkage
 
@@ -45,6 +56,8 @@ importCompletions :: [Text] -> Analysis -> Int -> ImportSite -> [Json]
 
 - Do not insert only the last segment; the edit range and the label must agree.
 - Do not offer a module that neither the catalog nor the program knows.
+- Do not list a module's documentation entries as its members; documentation includes private
+  declarations and omits variants.
 
 ## Grill Log
 

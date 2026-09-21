@@ -43,6 +43,7 @@ serverProperties =
   , ("field completion reads the receiver's canonical record", testRecordFieldCompletion)
   , ("method completion follows the checker's method rules", testMethodCompletion)
   , ("module qualifiers are the ones the imports bind", testImportQualifiers)
+  , ("module candidates are exactly a module's exports", testExportCandidates)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -629,6 +630,31 @@ testImportQualifiers = do
     , counterexample "a selective import binds its items" (property ("publicFn" `elem` selective))
     , counterexample "a selective import binds no qualifier"
         (property (all (`notElem` selective) ["Tools", "Lib.Tools"]))
+    ]
+
+testExportCandidates :: IO Property
+testExportCandidates = do
+  let root = "test-fixtures/lspexports"
+      analysed content = rememberAnalysis uri <$> analyseIn root uri content <*> pure emptyDocuments
+      program imports = Text.unlines (["module Main"] <> imports <> ["fn main() -> Int {", "  chosen() + L.publicFn()", "}"])
+      forward = ["import Lib as L", "import A.Wanted { chosen }", "import Z.Other as Z"]
+  written <- analysed (program forward)
+  reordered <- analysed (program (reverse forward))
+  let members = request "textDocument/completion" (atPosition 5 15) written
+      memberLabels = completionLabels members
+      chosenIn documents line = completionDetail "chosen" (request "textDocument/completion" (atPosition line 2) documents)
+  selectionAnalysis <- analyseIn root uri "module Main\nimport Lib { pub\n"
+  selection <- completionRepaired (analyseIn root uri) (pure []) (rememberAnalysis uri selectionAnalysis emptyDocuments) (atPosition 1 15)
+  let selectionLabels = completionLabels (Just selection)
+  pure $ conjoin
+    [ counterexample ("exported names are offered: " <> show memberLabels)
+        (property (all (`elem` memberLabels) ["publicFn", "State", "Ready", "Loading", "Handle", "open", "close"]))
+    , counterexample "a private function is not offered" (property ("privateFn" `notElem` memberLabels))
+    , counterexample "a variant is described as its type's" (completionDetail "Ready" members === Just "State.Ready")
+    , counterexample "a selected name is described by the module it came from" (chosenIn written 5 === Just "Int")
+    , counterexample "the description does not depend on import order" (chosenIn reordered 5 === Just "Int")
+    , counterexample ("an unfinished selection is offered the module's exports: " <> show selectionLabels)
+        (property ("publicFn" `elem` selectionLabels && "privateFn" `notElem` selectionLabels))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

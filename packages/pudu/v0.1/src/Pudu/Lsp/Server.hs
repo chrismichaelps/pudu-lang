@@ -24,7 +24,7 @@ import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler (CompileContext (..), CompileResult (..))
 import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -125,6 +125,7 @@ analyseIn root uri content = do
       , analysisSums = programSums program
       , analysisRecords = programRecords program
       , analysisMethods = programMethods program
+      , analysisExports = contextExports (programContext program)
       }
 
 {-| The methods every module of the program declared, by the canonical key of

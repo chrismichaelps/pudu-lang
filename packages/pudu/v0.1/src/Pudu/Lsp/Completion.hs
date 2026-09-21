@@ -5,7 +5,7 @@ import Control.Applicative ((<|>))
 import Data.Char (isAlphaNum)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.List (sortOn)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -21,8 +21,8 @@ import Pudu.Frontend.Syntax.Tree
   , Module (..)
   , TypeSyntax (..)
   )
-import Pudu.Lsp.Context (CompletionContext (..), TypeParameter, contextAt, contextParameters)
-import Pudu.Lsp.ImportCompletion (importCompletions)
+import Pudu.Lsp.Context (CompletionContext (..), ImportSite (..), TypeParameter, contextAt, contextParameters)
+import Pudu.Lsp.ImportCompletion (importCompletions, importQualifiers, moduleMembers)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
 import Pudu.Lsp.Json (Json (..), lookupField)
@@ -59,7 +59,7 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
   PatternContext subject arms arm -> case analysisModule written of
     Just parsed -> patternCompletions known parsed subject arms arm
     Nothing -> []
-  ImportContext site -> importCompletions catalog written offset site
+  ImportContext site -> importCompletions catalog written known offset site
   SuppressedContext -> []
   _ -> case receiverEnd (analysisText written) offset of
     Just dotOffset -> case moduleMembers written known dotOffset of
@@ -138,9 +138,15 @@ completionRepaired analyse modules documents parameters = case located documents
     let content = analysisText value
         (lineStart, lineEnd) = lineBounds content offset
     case syntaxContext value offset of
+      ImportContext site@(ImportSelection path) -> do
+        -- The document does not parse while a selection is written, so its
+        -- program never reached the module; a two-line program that imports
+        -- it does.
+        probe <- analyse ("module ImportProbe\nimport " <> path <> "\n")
+        pure (JsonArray (importCompletions [] value probe offset site))
       ImportContext site -> do
         catalog <- modules
-        pure (JsonArray (importCompletions catalog value offset site))
+        pure (JsonArray (importCompletions catalog value value offset site))
       _ -> repaired value offset content lineStart lineEnd
  where
   completionFrom' = completionFrom []
@@ -228,16 +234,24 @@ scopeCompletions written known agrees before =
          , not (Set.member (symbolName symbol) declared)
          ]
   imported =
-    [simpleItem alias 9 ("module " <> path) | (alias, path) <- qualifiers]
-      <> [ maybe (simpleItem (symbolName symbol) 3 "") completionItem (importedEntry (symbolName symbol))
+    [simpleItem alias 9 ("module " <> moduleNameText owner) | (alias, owner) <- qualifiers]
+      <> [ maybe (simpleItem (symbolName symbol) 3 "") completionItem (selectedEntry (symbolName symbol))
          | symbol <- symbols
          , symbolOrigin symbol == ImportOrigin
          , symbolName symbol `notElem` map fst qualifiers
          ]
-  importedEntry name =
-    case [entry | entry <- indexEntries (analysisProgramIndex known), docName entry == name, not (isMember (docKind entry))] of
-      entry : _ -> Just entry
-      [] -> Nothing
+  -- A selected name is described by the module the import selected it from,
+  -- whatever other module also declares that name.
+  selectedEntry name = listToMaybe
+    [ entry
+    | Located _ entry' <- maybe [] moduleImports (analysisModule written <|> analysisModule known)
+    , name `elem` map locatedValue (importItems entry')
+    , let owner = moduleNameText (locatedValue (importModule entry'))
+    , entry <- indexEntries (analysisProgramIndex known)
+    , docModule entry == owner
+    , docName entry == name
+    , not (isMember (docKind entry))
+    ]
 
 labelOf :: Json -> Maybe Text
 labelOf item = case lookupField "label" item of
@@ -290,39 +304,6 @@ keywords =
   , "in", "while", "loop", "break", "continue", "return", "type", "enum"
   , "struct", "trait", "impl", "where", "export", "import", "unsafe", "foreign", "dynamic"
   , "true", "false"
-  ]
-
-{-| The declarations of a module named before the dot, as in `Io.` after
-    `import Std.Io` or `import Std.Io as Io`. A qualifier no import binds
-    answers nothing, and the value's members get their turn. -}
-moduleMembers :: Analysis -> Analysis -> Int -> [Json]
-moduleMembers written known dotOffset =
-  let before = Text.take dotOffset (analysisText written)
-      qualifier = Text.takeWhileEnd nameScalar before
-      -- `Lib.Tools.` is a path, not a qualifier: only a name standing alone
-      -- reaches a module.
-      standalone = not (Text.isSuffixOf "." (Text.dropEnd (Text.length qualifier) before))
-   in case lookup qualifier (importQualifiers written known) of
-        Just _ | not standalone -> []
-        Nothing -> []
-        Just moduleName ->
-          [ completionItem entry
-          | entry <- indexEntries (analysisProgramIndex known)
-          , docModule entry == moduleName
-          , not (isMember (docKind entry))
-          ]
-
-{-| The qualifier each import binds, with the module it reaches, read from the
-    parsed imports: `import M` binds the last segment of `M`'s path, `import M
-    as N` binds `N`, and `import M { a, b }` binds no qualifier at all — only
-    the names it selects. The written text's tree is asked first; while it does
-    not parse, the repaired text's, whose imports are the same. -}
-importQualifiers :: Analysis -> Analysis -> [(Text, Text)]
-importQualifiers written known =
-  [ (qualifier, moduleNameText (locatedValue (importModule entry)))
-  | Located _ entry <- maybe [] moduleImports (analysisModule written <|> analysisModule known)
-  , null (importItems entry)
-  , let qualifier = maybe (moduleQualifier (locatedValue (importModule entry))) locatedValue (importAlias entry)
   ]
 
 {-| What may follow a value of the type the checker gave the receiver: the
