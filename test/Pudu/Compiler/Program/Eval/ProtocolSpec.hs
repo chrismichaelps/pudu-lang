@@ -430,7 +430,7 @@ testProtocolEvaluation = do
         of. -}
     , counterexample
         "a page rendered from a prepared plan, its holes, its limit, and its escaping"
-        (htmlServer === Just "41")
+        (htmlServer === Just "48")
     {-| Every export of the markup builder, checked against what it renders:
         each attribute against the attribute it sets, each tag against its own
         opening tag, and text against the escaping that keeps it text. -}

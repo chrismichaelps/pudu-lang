@@ -1,5 +1,7 @@
 module UsesHtmlServer
 
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
 import Std.Html.Compose as Compose
 import Std.Html as Html
 import Std.Html.Ssr as Ssr
@@ -30,6 +32,13 @@ fn plan() -> Ssr.Plan {
 
 fn filled(name: Str, view: Html.Html) -> Map[Str, Html.Html] {
   Map.insert(&mapOf([]), name, view)
+}
+
+fn chunksFit(chunks: &Array[Bytes], maximum: Int) -> Bool {
+  for chunk in chunks {
+    if chunk.length() > maximum { return false }
+  }
+  true
 }
 
 export fn main() -> Int {
@@ -214,6 +223,55 @@ export fn main() -> Int {
   }
   if let Err(Ssr.TooLarge(3))
     = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("<")), 3) {
+    held = held + 1
+  }
+
+  if HtmlBuffer.coalesceBounded(&[], 4) == Ok([]) { held = held + 1 }
+  if let Err(error) = HtmlBuffer.coalesceBounded(&[], 0) {
+    if error.maximum == 0 { held = held + 1 }
+  }
+  if let Err(error) = HtmlBuffer.coalesceBounded(&[], 0 - 2) {
+    if error.maximum == 0 - 2 { held = held + 1 }
+  }
+
+  let exactChunks = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[
+        ByteSeq.empty(), ByteSeq.fromText("abcd"), ByteSeq.empty()
+      ], 4),
+    []
+  )
+  if exactChunks.length() == 1
+    && exactChunks[0].length() == 4
+    && ByteSeq.toText(&exactChunks[0]) == Ok("abcd") {
+    held = held + 1
+  }
+
+  let oversized = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[ByteSeq.fromText("abcdefghij")], 4),
+    []
+  )
+  if oversized.length() == 3
+    && chunksFit(&oversized, 4)
+    && ByteSeq.toText(&ByteSeq.join(&oversized)) == Ok("abcdefghij") {
+    held = held + 1
+  }
+
+  let mixed = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[
+        ByteSeq.fromText("ab"),
+        ByteSeq.fromText("cdefgh"),
+        ByteSeq.empty(),
+        ByteSeq.fromText("ijklmno")
+      ], 5),
+    []
+  )
+  if chunksFit(&mixed, 5)
+    && ByteSeq.toText(&ByteSeq.join(&mixed)) == Ok("abcdefghijklmno") {
+    held = held + 1
+  }
+
+  let legacyOversized = HtmlBuffer.coalesceToMss(&[ByteSeq.fromText("abcdef")], 4)
+  if legacyOversized.length() == 1 && legacyOversized[0].length() == 6 {
     held = held + 1
   }
 

@@ -34,6 +34,9 @@ export type AssembleError
   | CopyFailed(Int, Int)
   | LengthMismatch(Int, Int)
 
+/// Why application-output coalescing could not begin.
+export type CoalesceError = { maximum: Int }
+
 /// Validated byte parts and their exact combined length.
 export type Segments = {
   parts: Array[Bytes],
@@ -374,10 +377,11 @@ export fn frameChunk(chunk: &Bytes) -> Bytes {
   ByteSeq.join(&[header, *chunk, crlf])
 }
 
-/// Batches streaming chunks up to the TCP Maximum Segment Size (MSS) boundary.
+/// Legacy best-effort batching retained for compatibility.
 ///
-/// Prevents small-packet amplification on mobile cellular networks and minimizes
-/// OS socket transmission syscalls.
+/// An input larger than `maxMss` remains larger than that value. Use
+/// `coalesceBounded` when every returned application-output chunk needs a hard
+/// byte limit.
 export fn coalesceToMss(chunks: &Array[Bytes], maxMss: Int) -> Array[Bytes] {
   if maxMss <= 0 { return *chunks }
   var coalesced: Array[Bytes] = []
@@ -403,4 +407,42 @@ export fn coalesceToMss(chunks: &Array[Bytes], maxMss: Int) -> Array[Bytes] {
   }
 
   coalesced
+}
+
+/// Coalesces application-output bytes without returning a chunk over `maxBytes`.
+///
+/// Slices share storage with oversized inputs. Joining a batch copies only when
+/// the batch contains more than one piece. The bound describes the returned
+/// byte arrays, not packets or frames chosen by a transport.
+export fn coalesceBounded(
+  chunks: &Array[Bytes],
+  maxBytes: Int
+) -> Result[Array[Bytes], CoalesceError] {
+  if maxBytes <= 0 { return Err(CoalesceError{maximum: maxBytes}) }
+
+  var output: Array[Bytes] = []
+  var batch: Array[Bytes] = []
+  var batchBytes = 0
+
+  for chunk in chunks {
+    var offset = 0
+    let length = chunk.length()
+    while offset < length {
+      let room = maxBytes - batchBytes
+      let remaining = length - offset
+      let amount = if remaining < room { remaining } else { room }
+      batch = batch.push(ByteSeq.slice(&chunk, offset, offset + amount))
+      batchBytes = batchBytes + amount
+      offset = offset + amount
+
+      if batchBytes == maxBytes {
+        output = output.push(ByteSeq.join(&batch))
+        batch = []
+        batchBytes = 0
+      }
+    }
+  }
+
+  if batchBytes > 0 { output = output.push(ByteSeq.join(&batch)) }
+  Ok(output)
 }

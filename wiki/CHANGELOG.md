@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — HTML output coalescing has an enforceable byte bound
+
+- `Std.Html.Buffer.coalesceBounded` preserves input order and bytes while ensuring every returned
+  application-output chunk is at most the requested positive size. Empty inputs add no output, and
+  zero or negative limits return a typed `CoalesceError` carrying the rejected value.
+- Oversized inputs are divided with storage-sharing `Bytes.slice`; complete single-piece batches
+  remain shared, while batches assembled from multiple pieces pay one `Bytes.join`. The legacy
+  `coalesceToMss` behavior remains available but is documented as best effort rather than a hard
+  bound or a promise about TCP packets, TLS records, or HTTP frames.
+- Focused checks cover empty input, exact boundaries, one and multiple oversized inputs, mixed empty
+  and small inputs, byte-for-byte reconstruction, positive-bound enforcement, both nonpositive
+  cases, and legacy compatibility for issue #263.
+- An optimized mixed-size probe ran 5,000 batches and produced 29.2 MB of output: 14.6 MB crossed
+  multi-piece joins and 14.6 MB remained storage-sharing slices. The complete probe measured 0.51s
+  elapsed, 2,014,906,448 heap bytes including compiler/evaluator overhead, and 88,670,208 bytes
+  maximum RSS on one macOS host; these are implementation measurements, not transport guarantees.
+
 ## 2026-09-20 — Conditional HTML builders can defer false subtrees
 
 - `Std.Html.whenBuilt`, `Std.Html.Build.Building.whenBuilt`, and

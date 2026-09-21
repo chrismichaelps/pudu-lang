@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-bounded-html-output]] — issue #263 hard application-output chunk bounds, shared
+  oversized slices, typed invalid-limit refusal, compatibility, and mixed-size measurements.
+
 - [[2026-09-20-deferred-html-builders]] — issue #262 zero/one-call deferred conditionals across
   typed HTML, fluent nodes, and persistent composition with eager compatibility.
 
