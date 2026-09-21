@@ -164,6 +164,7 @@ library
     Pudu.Frontend.Syntax
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Stored
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
     Pudu.DecimalLiteral

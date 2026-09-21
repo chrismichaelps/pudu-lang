@@ -141,7 +141,7 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 
 ### Governance
 
-- Every node has a stored form ([[Cache Persist]]). A module's declarations and a function's body
+- Every node has a stored form ([[Cache Persist]]), defined in [[Syntax Stored]]. A module's declarations and a function's body
   are stored as blocks of their own and read when first reached, so loading a stored module reads
   its name and imports and leaves the rest until something looks at it.
 

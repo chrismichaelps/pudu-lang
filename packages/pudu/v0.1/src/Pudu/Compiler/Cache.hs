@@ -32,6 +32,7 @@ import qualified Data.Text.Encoding as Encoding
 import Pudu.Cache.Persist (decodeWith, encodeFor)
 import qualified Data.Set as Set
 import Pudu.Eval.Frozen (Frozen)
+import Pudu.Frontend.Syntax.Stored ()
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Semantic.Interface (moduleExportKeys, moduleExports)
 import Pudu.Type.Interface
