@@ -24,7 +24,7 @@ import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileContext (..), CompileResult (..))
+import Pudu.Compiler (CompileContext (..), CompileResult (..), recoveredSyntax)
 import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -37,7 +37,6 @@ import Pudu.Diagnostic
   , diagnosticSpan
   )
 import Pudu.Format (FormatResult (..), formatSource)
-import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
 import Pudu.Lsp.Definition (definitionAt)
@@ -111,6 +110,9 @@ analyseIn :: FilePath -> Text -> Text -> IO Analysis
 analyseIn root uri content = do
   source <- newSource (SourceName (pathOf uri)) content
   program <- compileProgramSource root source
+  -- Only a document whose root did not parse needs the recovered tree, and
+  -- only then is it built.
+  let recovered = recoveredSyntax source
   pure
     Analysis
       { analysisText = content
@@ -120,8 +122,8 @@ analyseIn root uri content = do
       , analysisProgramIndex = programDocs program
       , analysisResolution = rootCompileResult program >>= compileResolution
       , analysisTypes = rootCompileResult program >>= compileTypes
-      , analysisTokens = maybe (lexTokens (lexSource source)) compileTokens (rootCompileResult program)
-      , analysisModule = rootCompileResult program >>= compileSyntax
+      , analysisTokens = maybe (fst recovered) compileTokens (rootCompileResult program)
+      , analysisModule = maybe (snd recovered) compileSyntax (rootCompileResult program)
       , analysisSums = programSums program
       , analysisRecords = programRecords program
       , analysisMethods = programMethods program

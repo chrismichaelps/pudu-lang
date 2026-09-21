@@ -54,7 +54,10 @@ importSiteAt :: [Token] -> Int -> Maybe ImportSite
   `import Std.`, a path continued on the next line) is `ImportPath` with the offset the path starts
   at; a path whose last name ends before the cursor has been left; `as` starts an alias; `{` after
   a path is a selection from that module.
-- Every other context needs the tree. With no tree the position is an ordinary value position.
+- Every other context needs the tree. When the text does not parse, the tree is the parser's
+  recovered one ([[Compiler Pipeline]] `recoveredSyntax`), read only for positions. An arm the parser
+  recovered with no pattern yet (`case ` at the end of what is written) is a pattern position after
+  its keyword. With no tree at all the position is an ordinary value position.
   The tree is the compiler's tooling syntax (`compileSyntax`), which survives a later-phase error
   such as a non-exhaustive match, so a pattern context is found while an arm is being added.
 - Type and value contexts carry the type parameters in scope, innermost declaration first, each with

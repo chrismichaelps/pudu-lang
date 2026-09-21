@@ -33,10 +33,18 @@ patternCandidates
   -> Located Expression
   -> [Located MatchArm]
   -> Located MatchArm
+  -> Int                -- the cursor
   -> [PatternCandidate]
 ```
 
 ### Governance
+
+- The cursor's position in the arm's pattern decides the type whose variants are offered. At the
+  top of the pattern it is the subject's type, and earlier unguarded arms cover variants. Inside a
+  constructor's payload it is that payload's declared type, followed from the subject through each
+  enclosing constructor with the subject's arguments substituted — a same-module sum, `Option`, or
+  `Result`; coverage does not apply there, because arms cover whole values. Inside a tuple, a
+  sequence, a record, or a payload whose type is not a known sum, only `_` is offered.
 
 - The checked subject's canonical nominal identity selects exactly one sum. Same-spelling types and
   variants do not cross that boundary.

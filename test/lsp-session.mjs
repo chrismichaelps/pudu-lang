@@ -101,6 +101,16 @@ const receiverSource = [
   "fn main() -> Int { produce(1 ).length() }",
   "",
 ].join("\n");
+const unclosedUri = "file:///pudu-fixtures/UnclosedSession.pudu";
+const unclosedSource = [
+  "module UnclosedSession",
+  "type State = Ready | Loading | Failed",
+  "fn main(state: State) -> Int {",
+  '  let text = "hi"',
+  "  match state {",
+  "    case ",
+  "",
+].join("\n");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -249,6 +259,17 @@ const messages = [
     id: 31,
     method: "textDocument/completion",
     params: { textDocument: { uri: receiverUri }, position: { line: 2, character: 33 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: unclosedUri, languageId: "pudu", version: 1, text: unclosedSource },
+    },
+  },
+  {
+    id: 32,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: unclosedUri }, position: { line: 5, character: 9 } },
   },
   {
     id: 25,
@@ -638,6 +659,15 @@ const receiverLabels = (
   Array.isArray(receiverOffered) ? receiverOffered : (receiverOffered?.items ?? [])
 ).map(entry => entry.label);
 assert(receiverLabels.includes("length"), `a call result offered no Str members: ${JSON.stringify(receiverLabels)}`);
+
+// An unclosed match still knows its subject's variants.
+const unclosedOffered = replyTo(32)?.result;
+const unclosedLabels = (
+  Array.isArray(unclosedOffered) ? unclosedOffered : (unclosedOffered?.items ?? [])
+).map(entry => entry.label);
+for (const variant of ["Ready", "Loading", "Failed"]) {
+  assert(unclosedLabels.includes(variant), `an unclosed match did not offer ${variant}: ${JSON.stringify(unclosedLabels)}`);
+}
 
 // An import being written does not parse, and is still offered the library.
 const importOffered = replyTo(25)?.result;

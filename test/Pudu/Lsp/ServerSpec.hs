@@ -45,6 +45,7 @@ serverProperties =
   , ("module qualifiers are the ones the imports bind", testImportQualifiers)
   , ("module candidates are exactly a module's exports", testExportCandidates)
   , ("member completion is on the whole receiver expression", testReceiverExpression)
+  , ("completion recovers facts from unfinished text", testRecoveredCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -695,6 +696,50 @@ testReceiverExpression = do
     , counterexample ("a call's result, not its argument, decides: " <> show arrayResult)
         (property ("charAt" `notElem` arrayResult && not (null arrayResult)))
     ]
+
+testRecoveredCompletion :: IO Property
+testRecoveredCompletion = do
+  let at content line character = do
+        documents <- opened content
+        reply <- completionRepaired (analyse uri) (pure []) documents (atPosition line character)
+        pure (completionLabels (Just reply))
+  unclosedMember <- at "module Demo\nfn main() -> Int {\n  let text = \"hi\"\n  text.\n" 3 7
+  partialMember <- at "module Demo\nfn main() -> Int {\n  let text = \"hi\"\n  text.le\n" 3 9
+  unclosedMatch <- at "module Demo\ntype State = Ready | Loading | Failed\nfn main(state: State) -> Int {\n  match state {\n    case \n" 4 9
+  laterArm <- at "module Demo\ntype State = Ready | Loading | Failed\nfn main(state: State) -> Int {\n  match state {\n    case Ready => 1\n    case Lo\n" 5 11
+  payload <- at "module Demo\ntype Color = Red | Green\ntype Item = Holds(Color) | Empty\nfn main(item: Item) -> Int {\n  match item {\n    case Holds(\n" 5 15
+  scalarPayload <- at "module Demo\ntype Item = Holds(Int) | Empty\nfn main(item: Item) -> Int {\n  match item {\n    case Holds(\n" 4 15
+  binding <- at "module Demo\nfn main() -> Int {\n  let text = \"hi\"\n  let size = \n" 3 13
+  nested <- at "module Demo\nfn wrap(s: Str) -> Str { s }\nfn main() -> Int {\n  let text = \"hi\"\n  wrap(wrap(text.\n" 4 17
+  elsewhere <- at "module Demo\nfn broken() -> Int { let = }\nfn main() -> Int {\n  let text = \"hi\"\n  text.length()\n}\n" 4 7
+  unicode <- at "module Demo\nfn main() -> Int {\n  let text = \"🦌 hi\"\n  text.\n" 3 7
+  unknown <- at "module Demo\nfn main() -> Int {\n  missing.\n" 2 10
+  written <- opened "module Demo\nfn main() -> Int {\n  let text = \"hi\"\n  text.\n"
+  _ <- completionRepaired (analyse uri) (pure []) written (atPosition 3 7)
+  let diagnostics = case answer written (Notification "textDocument/didChange" (JsonObject [("textDocument", JsonObject [("uri", JsonText uri)])])) of
+        (_, [published]) -> maybe 0 countDiagnostics (parse published)
+        _ -> 0
+  pure $ conjoin
+    [ counterexample ("an unclosed function keeps its receiver: " <> show unclosedMember) (property ("length" `elem` unclosedMember))
+    , counterexample "a partial member keeps its receiver" (property ("length" `elem` partialMember))
+    , counterexample ("an unclosed match keeps its subject: " <> show unclosedMatch)
+        (property (all (`elem` unclosedMatch) ["Ready", "Loading", "Failed"]))
+    , counterexample "a later unfinished arm still sees earlier coverage"
+        (property ("Loading" `elem` laterArm && "Ready" `notElem` laterArm))
+    , counterexample ("a payload is offered its own type's variants: " <> show payload)
+        (property (all (`elem` payload) ["Red", "Green"] && all (`notElem` payload) ["Holds", "Empty"]))
+    , counterexample "a scalar payload is offered only a wildcard" (scalarPayload === ["_"])
+    , counterexample "an unfinished let keeps what is in scope" (property ("text" `elem` binding && "size" `notElem` binding))
+    , counterexample "nested open calls are closed" (property ("length" `elem` nested))
+    , counterexample "a broken declaration elsewhere is set aside" (property ("length" `elem` elsewhere))
+    , counterexample "a scalar beyond the BMP before the edit keeps offsets" (property ("length" `elem` unicode))
+    , counterexample "an unknown receiver gets no invented members" (unknown === [])
+    , counterexample "diagnostics still describe the written text" (property (diagnostics > 0))
+    ]
+ where
+  countDiagnostics message = case lookupField "params" message >>= lookupField "diagnostics" of
+    Just (JsonArray entries) -> length entries
+    _ -> 0
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))
 completionEdit wanted reply = case reply of

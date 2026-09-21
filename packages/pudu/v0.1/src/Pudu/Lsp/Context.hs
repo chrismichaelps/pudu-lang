@@ -24,6 +24,7 @@ import Pudu.Frontend.Syntax.Tree
   , Impl (..)
   , MatchArm (..)
   , Module (..)
+  , Pattern (InvalidPattern)
   , Parameter (..)
   , Statement (..)
   , Trait (..)
@@ -335,6 +336,12 @@ expressionContext offset parameters located@(Located _ expression)
       _ -> Nothing
   inner = expressionContext offset parameters
   fieldInit (Located _ field) = fieldInitValue field >>= inner
-  armContext subject arms arm@(Located _ value)
+  armContext subject arms arm@(Located armSpan value)
     | within offset (armPattern value) = Just (PatternContext subject arms arm)
+    -- An arm the parser recovered with no pattern yet, `case ` at the end of
+    -- what is written: the cursor after its keyword is where the pattern goes.
+    | InvalidPattern <- locatedValue (armPattern value)
+    , offset > unOffset (spanStart armSpan) + 4
+    , within offset arm =
+        Just (PatternContext subject arms arm)
     | otherwise = firstOf [armGuard value >>= inner, inner (armBody value)]

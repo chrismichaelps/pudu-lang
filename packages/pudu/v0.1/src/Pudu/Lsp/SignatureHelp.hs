@@ -16,7 +16,7 @@ import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Doc.Signature (Signature (..), renderSigType, renderSignature)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Json (Json (..))
-import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
+import Pudu.Lsp.Repair (Repair (..), closedPrefix, lineBounds, mostComplete, withoutRange)
 import Pudu.Type (narrowestAt, renderType)
 import Pudu.Type.Value (Type (..))
 
@@ -44,9 +44,10 @@ signatureHelpRepaired analyse value offset = case findCall content offset of
     | isJust (calleeType value call) -> pure (signatureHelpAt value offset)
     | otherwise -> do
         (known, _) <-
-          mostComplete analyse value offset
+          mostComplete analyse (\known -> isJust (calleeType known call)) value offset
             [ Repair (Text.take offset content <> ")" <> Text.drop offset content) offset
             , withoutRange content lineStart lineEnd
+            , closedPrefix (analysisTokens value) content offset
             ]
         pure (signatureHelpFrom value known offset)
  where

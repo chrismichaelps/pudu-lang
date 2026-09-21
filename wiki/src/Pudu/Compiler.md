@@ -79,6 +79,9 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 - Each phase runs only on what the previous one admitted — resolution on a parsed module, typing on a resolved one — so a syntax error never earns a second explanation from a later phase, matching the earliest-phase rule in [[architecture/SEMANTICS]].
 - Parser still runs after lexical errors when a token stream exists, allowing useful independent diagnostics.
 - The module result becomes `Nothing` when any error-severity diagnostic exists; raw parser result is not exposed as compilable.
+- `recoveredSyntax` returns the lexer's tokens and the parser's recovered tree for text that does
+  not parse. It is a tooling product only: it is never resolved, checked, linked, or evaluated, and
+  a recovery node in it is a hole.
 - `compileSyntax` is the tree tooling reads positions against: the expanded parsed module whenever
   the frontend admitted one, kept even when resolution, typing, or folding reported errors. An editor
   adding a match arm is looking at a non-exhaustive match, and the tree is exactly what it needs.

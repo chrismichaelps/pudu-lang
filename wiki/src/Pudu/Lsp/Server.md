@@ -60,6 +60,8 @@ serverCapabilities :: Json
 - The stored analysis also retains the root module's tooling tree and visible sum and record shapes ([[Lsp Shapes]]). Completion can
   derive syntax context and legal constructors from one coherent compile rather than reparsing an
   editor buffer or scanning unrelated documentation entries.
+- A document whose root did not parse stores the parser's recovered tree beside its tokens, built
+  only in that case, so completion knows the construct at the cursor while the text is unfinished.
 - A document's tokens are always stored, lexed directly when the compile produced no root result,
   so comment, literal, and import contexts are known for text that does not parse. The stored tree
   is the compiler's tooling syntax, which survives type errors.

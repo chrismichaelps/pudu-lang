@@ -5,6 +5,7 @@ module Pudu.Compiler
   , FrontendResult (..)
   , compileFrontendWith
   , emptyCompileContext
+  , recoveredSyntax
   , runCompile
   , runCompileWith
   , runFrontend
@@ -181,6 +182,16 @@ typedResult context resolution parsed =
   let imported = importsFor (contextTypes context) parsed
       (checked, diagnostics) = checkTypesDetailed imported (writableReferences resolution) parsed
    in (Just checked, diagnostics)
+
+{-| The lexer's tokens and the tree the parser recovered, whatever its
+    diagnostics said. Tooling reads a position against this tree when the text
+    does not parse; it is never resolved, checked, linked, or evaluated, and a
+    recovery node in it is a hole, not a construct. -}
+recoveredSyntax :: Source -> ([Token], Maybe Module)
+recoveredSyntax source =
+  let LexResult{lexTokens} = lexSource source
+      ParseResult{parseModuleValue} = parseModule source lexTokens
+   in (lexTokens, parseModuleValue)
 
 runFrontend :: Source -> FrontendResult
 runFrontend source =

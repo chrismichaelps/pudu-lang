@@ -29,14 +29,14 @@ import Pudu.Lsp.Json (Json (..), lookupField)
 import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Receiver (MemberSite (..), memberSiteAt, receiverType)
-import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
+import Pudu.Lsp.Repair (Repair (..), closedPrefix, closedPrefixWith, elsewhereBlanked, lineBounds, mostComplete, withoutRange)
 import Pudu.Lsp.Shapes (RecordShape (..), renderTypeSyntax)
 import Pudu.Semantic.Prelude (wiredInTypeNames)
 import Pudu.Semantic.Resolve (Resolution (..))
 import Pudu.Semantic.ScopeIndex (visibleAt)
 import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
 import Pudu.Source (spanStart, unOffset)
-import Pudu.Type (Type (..), narrowestAt, renderType)
+import Pudu.Type (Type (..), narrowestAt, renderType, typeAt)
 import Pudu.Type.Value (NominalId (..), Scheme (..), nominalKey)
 
 {-| Completions from the analysis already held, repairing nothing. A request
@@ -58,7 +58,7 @@ completionAt documents parameters = case located documents parameters of
 completionFrom :: [Text] -> Analysis -> Analysis -> Int -> Int -> Json
 completionFrom catalog written known agrees offset = JsonArray $ case context of
   PatternContext subject arms arm -> case analysisModule written of
-    Just parsed -> patternCompletions known parsed subject arms arm
+    Just parsed -> patternCompletions known parsed subject arms arm offset
     Nothing -> []
   ImportContext site -> importCompletions catalog written known offset site
   SuppressedContext -> []
@@ -83,11 +83,11 @@ syntaxContext written = contextAt (analysisTokens written) (analysisModule writt
     every value matches — is left out, because a second arm for it could never
     be reached. One covered only under a guard or for some payloads is still
     offered. -}
-patternCompletions :: Analysis -> Module -> Located Expression -> [Located MatchArm] -> Located MatchArm -> [Json]
-patternCompletions known parsed subject arms arm =
+patternCompletions :: Analysis -> Module -> Located Expression -> [Located MatchArm] -> Located MatchArm -> Int -> [Json]
+patternCompletions known parsed subject arms arm offset =
   [ simpleItem label (if label == "_" then 14 else 20) detail
   | PatternCandidate label detail <-
-      patternCandidates (analysisTypes known) (analysisSums known) parsed subject arms arm
+      patternCandidates (analysisTypes known) (analysisSums known) parsed subject arms arm offset
   ]
 
 {-| What may be written where a type is: the type parameters in scope, innermost
@@ -135,43 +135,66 @@ distinctItems = go Set.empty
 completionRepaired :: (Text -> IO Analysis) -> IO [Text] -> Documents -> Json -> IO Json
 completionRepaired analyse modules documents parameters = case located documents parameters of
   Nothing -> pure (completionAt documents parameters)
-  Just (value, offset) -> do
-    let content = analysisText value
-        (lineStart, lineEnd) = lineBounds content offset
-    case syntaxContext value offset of
-      ImportContext site@(ImportSelection path) -> do
-        -- The document does not parse while a selection is written, so its
-        -- program never reached the module; a two-line program that imports
-        -- it does.
-        probe <- analyse ("module ImportProbe\nimport " <> path <> "\n")
-        pure (JsonArray (importCompletions [] value probe offset site))
-      ImportContext site -> do
-        catalog <- modules
-        pure (JsonArray (importCompletions catalog value value offset site))
-      _ -> repaired value offset content lineStart lineEnd
+  Just (value, offset) -> case syntaxContext value offset of
+    ImportContext site@(ImportSelection path) -> do
+      -- The document does not parse while a selection is written, so its
+      -- program never reached the module; a two-line program that imports
+      -- it does.
+      probe <- analyse ("module ImportProbe\nimport " <> path <> "\n")
+      pure (JsonArray (importCompletions [] value probe offset site))
+    ImportContext site -> do
+      catalog <- modules
+      pure (JsonArray (importCompletions catalog value value offset site))
+    context -> repaired value offset context
  where
-  completionFrom' = completionFrom []
-  repaired value offset content lineStart lineEnd =
-    case memberSiteAt (analysisTokens value) offset of
-      Just site@(MemberSite dotOffset _)
-        | isJust (analysisTypes value >>= (`receiverType` site)) ->
-            pure (completionFrom' value value offset offset)
-        | otherwise -> do
-            (known, agrees) <-
-              mostComplete analyse value offset
-                [ withoutRange content dotOffset offset
-                , Repair (Text.take dotOffset content <> Text.drop lineEnd content) dotOffset
-                ]
-            pure (completionFrom' value known agrees offset)
-      Nothing
-        | isJust (analysisTypes value) -> pure (completionFrom' value value offset offset)
-        | otherwise -> do
-            (known, agrees) <-
-              mostComplete analyse value offset
-                [ withoutRange content (wordStart value offset) offset
-                , withoutRange content lineStart lineEnd
-                ]
-            pure (completionFrom' value known agrees offset)
+  complete written (known, agrees) offset = completionFrom [] written known agrees offset
+  repaired value offset context =
+    let content = analysisText value
+        tokens = analysisTokens value
+        (lineStart, lineEnd) = lineBounds content offset
+        start = wordStart value offset
+        attempt answers candidates = complete value <$> mostComplete analyse answers value offset candidates <*> pure offset
+        -- The same text with any other broken declaration blanked, offsets
+        -- kept; `finish` makes what is unfinished at the cursor whole.
+        elsewhere finish = case elsewhereBlanked value offset of
+          Just blanked -> [Repair blanked offset, finish blanked]
+          Nothing -> []
+     in case (memberSiteAt tokens offset, context) of
+          (Just site@(MemberSite dotOffset _), _)
+            | typesReceiver value -> pure (complete value (value, offset) offset)
+            | otherwise ->
+                attempt typesReceiver
+                  ( [ withoutRange content dotOffset offset
+                    , Repair (Text.take dotOffset content <> Text.drop lineEnd content) dotOffset
+                    , closedPrefix tokens content dotOffset
+                    ]
+                      <> elsewhere (\blanked -> closedPrefix tokens blanked dotOffset)
+                  )
+           where
+            typesReceiver known = isJust (analysisTypes known >>= (`receiverType` site))
+          (Nothing, PatternContext subject _ (Located armSpan _))
+            | typesSubject value -> pure (complete value (value, offset) offset)
+            | otherwise ->
+                -- The arm is unfinished. Replacing it with one whose pattern
+                -- and body every match accepts, and closing what is open,
+                -- leaves the match and its subject where they were.
+                let armStart = unOffset (spanStart armSpan)
+                    wholeArm = closedPrefixWith "case _ => panic(\"\")" tokens
+                 in attempt typesSubject
+                      ([wholeArm content armStart, closedPrefix tokens content lineStart] <> elsewhere (`wholeArm` armStart))
+           where
+            typesSubject known = isJust (analysisTypes known >>= (`typeAt` locatedSpan subject))
+          (Nothing, _)
+            | isJust (analysisTypes value) -> pure (complete value (value, offset) offset)
+            | otherwise ->
+                attempt (isJust . analysisTypes)
+                  ( [ withoutRange content start offset
+                    , withoutRange content lineStart lineEnd
+                    , closedPrefix tokens content start
+                    , closedPrefix tokens content lineStart
+                    ]
+                      <> elsewhere (\blanked -> closedPrefix tokens blanked start)
+                  )
 
 {-| The offset where the name being written at `offset` starts. -}
 wordStart :: Analysis -> Int -> Int

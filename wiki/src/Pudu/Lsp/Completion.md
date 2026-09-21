@@ -68,6 +68,12 @@ source root; the catalog is run only when the cursor is at an import site.
   a qualifier.
 - A name a selective import brought in is described by the module it was selected from, whatever
   other module declares the same name and whatever the import order.
+- `completionRepaired` repairs only when the written analysis lacks the fact the position needs:
+  a member site's receiver type, a pattern position's subject type, or any types for a name. It
+  tries, in order, the text without the member or word, without the line, ended at the cursor with
+  its brackets closed, and the same with other broken declarations blanked; a pattern position
+  replaces the unfinished arm with a placeholder arm. [[Lsp Repair]] takes the first candidate that
+  answers.
 - Completion responses are pure functions of the stored compiler analysis.
 
 ## Algorithm

@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Completion keeps working in unfinished text
+
+- `text.` inside a function whose closing brace is not written yet offers `Str`'s members, and
+  `case ` in an unclosed `match` offers the subject's variants. A repair now ends the text at the
+  cursor and closes what is open, replaces an unfinished arm with a placeholder, and blanks other
+  declarations that have syntax errors, all keeping offsets; a repair is taken only when it answers
+  what was asked. The parser's recovered tree is kept for tooling when a document does not parse and
+  is never executed.
+- Inside a constructor's payload, `case Holds(` offers the payload type's variants rather than the
+  subject's, and only `_` where the payload's type is not a known sum. Signature help uses the same
+  closing repair (issue #281).
+
 ## 2026-09-21 — Member completion is on the whole receiver
 
 - `produce(1).` offers the members of `produce`'s result instead of its last argument's, and
