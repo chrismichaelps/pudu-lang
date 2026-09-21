@@ -42,6 +42,7 @@ serverProperties =
   , ("completion offers only the bindings in scope at the cursor", testLexicalScopeCompletion)
   , ("field completion reads the receiver's canonical record", testRecordFieldCompletion)
   , ("method completion follows the checker's method rules", testMethodCompletion)
+  , ("module qualifiers are the ones the imports bind", testImportQualifiers)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -596,6 +597,38 @@ testMethodCompletion = do
     , counterexample ("a dynamic receiver offers its trait's members: " <> show dynamic) (property ("size" `elem` dynamic))
     , counterexample "a wired-in receiver keeps its runtime methods" (property ("length" `elem` strings))
     , counterexample "each method is offered once" (length (filter (== "size") local) === 1)
+    ]
+
+testImportQualifiers :: IO Property
+testImportQualifiers = do
+  let root = "test-fixtures/lspimports"
+      at header body line character = do
+        let content = "module Main\n" <> header <> "\nfn main() -> Int {\n  " <> body <> "\n}\n"
+        analysis <- analyseIn root uri content
+        let documents = rememberAnalysis uri analysis emptyDocuments
+        reply <- completionRepaired (analyseIn root uri) (pure []) documents (atPosition line character)
+        pure (completionLabels (Just reply))
+  bare <- at "import Lib.Tools" "Tools.publicFn()" 3 8
+  aliased <- at "import Lib.Tools as T" "T.publicFn()" 3 4
+  multiline <- at "import Lib.Tools\n  as T" "T.publicFn()" 4 4
+  tabbed <- at "import\tLib.Tools" "Tools.publicFn()" 3 8
+  commented <- at "import Lib.Tools // the tools" "Tools.publicFn()" 3 8
+  unfinished <- at "import Lib.Tools" "Tools." 3 8
+  fullPath <- at "import Lib.Tools" "Lib.Tools." 3 12
+  aliasOnly <- at "import Lib.Tools as T" "Tools." 3 8
+  selective <- at "import Lib.Tools { publicFn }" "publicFn()" 3 2
+  pure $ conjoin
+    [ counterexample ("a bare import binds its last segment: " <> show bare) (property ("publicFn" `elem` bare))
+    , counterexample "an alias binds the module" (property ("publicFn" `elem` aliased))
+    , counterexample "an alias on the next line binds the module" (property ("publicFn" `elem` multiline))
+    , counterexample "a tab after import is whitespace" (property ("publicFn" `elem` tabbed))
+    , counterexample "a trailing comment changes nothing" (property ("publicFn" `elem` commented))
+    , counterexample ("an unfinished member is still answered: " <> show unfinished) (property ("publicFn" `elem` unfinished))
+    , counterexample "a full path is not a qualifier" (fullPath === [])
+    , counterexample "an aliased import does not also bind its last segment" (aliasOnly === [])
+    , counterexample "a selective import binds its items" (property ("publicFn" `elem` selective))
+    , counterexample "a selective import binds no qualifier"
+        (property (all (`notElem` selective) ["Tools", "Lib.Tools"]))
     ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))

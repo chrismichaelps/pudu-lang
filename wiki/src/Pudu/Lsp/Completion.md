@@ -60,6 +60,12 @@ source root; the catalog is run only when the cursor is at an import site.
   resolved — it does while the name being typed is unknown — and from a repaired copy only when it
   did not parse. Type details come from the repaired copy only before the offset where the two
   texts agree.
+- Module qualifiers come from the parsed imports (`importQualifiers`): `import M` binds the last
+  segment of `M` (`moduleQualifier`, the rule resolution and evaluation use), `import M as N` binds
+  only `N`, and `import M { a }` binds no qualifier, only its items. Whitespace, comments, and line
+  breaks inside an import are the parser's business. The written text's tree is asked first; while
+  it does not parse, the repaired copy's, whose imports are the same. `Lib.Tools.` is a path, never
+  a qualifier.
 - Completion responses are pure functions of the stored compiler analysis.
 
 ## Algorithm
@@ -80,6 +86,8 @@ source root; the catalog is run only when the cursor is at an import site.
 - Do not guess member names when the receiver type is unknown or untyped.
 - Do not select local bindings by declaration offset; visibility is resolution's frames.
 - Do not find a record's fields by the type's basename or by slicing its declaration's text.
+- Do not read imports from text lines, and do not treat a full module path or a selective import as
+  a qualifier.
 - Do not offer constructors from unrelated sums or suppress a constructor because a guarded or
   refutable pattern mentioned it.
 - Do not offer ordinary value keywords in a proven pattern or type position.

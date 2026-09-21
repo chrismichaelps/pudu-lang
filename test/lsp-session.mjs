@@ -83,6 +83,15 @@ const methodSource = [
   "fn bounded[T: Sized](item: T) -> Int { item.size() }",
   "",
 ].join("\n");
+const qualifierUri = "file:///pudu-fixtures/QualifierSession.pudu";
+const qualifierSource = [
+  "module QualifierSession",
+  "import\tStd.Io",
+  "fn main() -> Result[(), Str] {",
+  '  Io.writeLine("a")',
+  "}",
+  "",
+].join("\n");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -198,6 +207,17 @@ const messages = [
     id: 28,
     method: "textDocument/completion",
     params: { textDocument: { uri: methodUri }, position: { line: 5, character: 45 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: qualifierUri, languageId: "pudu", version: 1, text: qualifierSource },
+    },
+  },
+  {
+    id: 29,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: qualifierUri }, position: { line: 3, character: 5 } },
   },
   {
     id: 25,
@@ -560,6 +580,16 @@ for (const [id, what] of [[27, "an inherited default"], [28, "a bound's member"]
   const labels = (Array.isArray(offered) ? offered : (offered?.items ?? [])).map(entry => entry.label);
   assert(labels.includes("size"), `method completion omitted ${what}: ${JSON.stringify(labels)}`);
 }
+
+// A bare import, even after a tab, binds the last segment of its path.
+const qualifierOffered = replyTo(29)?.result;
+const qualifierLabels = (
+  Array.isArray(qualifierOffered) ? qualifierOffered : (qualifierOffered?.items ?? [])
+).map(entry => entry.label);
+assert(
+  qualifierLabels.includes("writeLine"),
+  `a bare import's qualifier was not completed: ${JSON.stringify(qualifierLabels)}`,
+);
 
 // An import being written does not parse, and is still offered the library.
 const importOffered = replyTo(25)?.result;

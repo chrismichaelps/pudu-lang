@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Qualifiers are the ones imports bind
+
+- `Tools.` after `import Lib.Tools` offers `Lib.Tools`'s declarations, as `T.` does after
+  `import Lib.Tools as T` — including when the import is split across lines, separated by a tab, or
+  followed by a comment. A selective import no longer offers its module as a qualifier, a full path
+  such as `Lib.Tools.` is not treated as one, and imports are read from the parsed declarations
+  rather than from text lines (issue #278).
+
 ## 2026-09-21 — Method completion follows the checker
 
 - `value.` offers the methods a call on the receiver would find: a type's own and inherited trait

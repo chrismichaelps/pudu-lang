@@ -1,6 +1,7 @@
 {-| @Program.Lsp.Completion — member and identifier completions -}
 module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 
+import Control.Applicative ((<|>))
 import Data.Char (isAlphaNum)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.List (sortOn)
@@ -61,7 +62,7 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
   ImportContext site -> importCompletions catalog written offset site
   SuppressedContext -> []
   _ -> case receiverEnd (analysisText written) offset of
-    Just dotOffset -> case moduleMembers (analysisText written) known dotOffset of
+    Just dotOffset -> case moduleMembers written known dotOffset of
       members@(_ : _) -> members
       [] -> memberCompletions known dotOffset
     Nothing -> case (context, analysisModule written) of
@@ -197,7 +198,7 @@ scopeCompletions written known agrees before =
         <> [simpleItem name 22 "type" | name <- wiredInTypeNames, name `notElem` ["Copy", "Never", "Buckets"]]
     )
  where
-  content = analysisText written
+  qualifiers = importQualifiers written known
   (scoped, position) = case analysisResolution written of
     Just resolution -> (Just resolution, before)
     Nothing -> (analysisResolution known, min agrees before)
@@ -227,11 +228,11 @@ scopeCompletions written known agrees before =
          , not (Set.member (symbolName symbol) declared)
          ]
   imported =
-    [simpleItem alias 9 ("module " <> path) | (alias, path) <- importsOf content]
+    [simpleItem alias 9 ("module " <> path) | (alias, path) <- qualifiers]
       <> [ maybe (simpleItem (symbolName symbol) 3 "") completionItem (importedEntry (symbolName symbol))
          | symbol <- symbols
          , symbolOrigin symbol == ImportOrigin
-         , symbolName symbol `notElem` map fst (importsOf content)
+         , symbolName symbol `notElem` map fst qualifiers
          ]
   importedEntry name =
     case [entry | entry <- indexEntries (analysisProgramIndex known), docName entry == name, not (isMember (docKind entry))] of
@@ -292,16 +293,17 @@ keywords =
   ]
 
 {-| The declarations of a module named before the dot, as in `Io.` after
-    `import Std.Io as Io`, or `Std.Io.` after `import Std.Io`.
-
-    The imports are read from the text rather than from a resolved program,
-    because completion is asked for while a name is half written and the
-    program does not compile. A qualifier no import names answers nothing, and
-    the value's members get their turn. -}
-moduleMembers :: Text -> Analysis -> Int -> [Json]
-moduleMembers content known dotOffset =
-  let qualifier = Text.takeWhileEnd qualifierScalar (Text.take dotOffset content)
-   in case lookup qualifier (importsOf content) of
+    `import Std.Io` or `import Std.Io as Io`. A qualifier no import binds
+    answers nothing, and the value's members get their turn. -}
+moduleMembers :: Analysis -> Analysis -> Int -> [Json]
+moduleMembers written known dotOffset =
+  let before = Text.take dotOffset (analysisText written)
+      qualifier = Text.takeWhileEnd nameScalar before
+      -- `Lib.Tools.` is a path, not a qualifier: only a name standing alone
+      -- reaches a module.
+      standalone = not (Text.isSuffixOf "." (Text.dropEnd (Text.length qualifier) before))
+   in case lookup qualifier (importQualifiers written known) of
+        Just _ | not standalone -> []
         Nothing -> []
         Just moduleName ->
           [ completionItem entry
@@ -309,23 +311,19 @@ moduleMembers content known dotOffset =
           , docModule entry == moduleName
           , not (isMember (docKind entry))
           ]
- where
-  qualifierScalar scalar = nameScalar scalar || scalar == '.'
 
-{-| Every name an import binds, with the module it binds: `import M as N`
-    binds `N`, and `import M` binds the module under its own path. -}
-importsOf :: Text -> [(Text, Text)]
-importsOf content =
-  [ binding
-  | line <- Text.lines content
-  , Just rest <- [Text.stripPrefix "import " (Text.strip line)]
-  , binding <- bound (Text.words (Text.takeWhile (/= '{') rest))
+{-| The qualifier each import binds, with the module it reaches, read from the
+    parsed imports: `import M` binds the last segment of `M`'s path, `import M
+    as N` binds `N`, and `import M { a, b }` binds no qualifier at all — only
+    the names it selects. The written text's tree is asked first; while it does
+    not parse, the repaired text's, whose imports are the same. -}
+importQualifiers :: Analysis -> Analysis -> [(Text, Text)]
+importQualifiers written known =
+  [ (qualifier, moduleNameText (locatedValue (importModule entry)))
+  | Located _ entry <- maybe [] moduleImports (analysisModule written <|> analysisModule known)
+  , null (importItems entry)
+  , let qualifier = maybe (moduleQualifier (locatedValue (importModule entry))) locatedValue (importAlias entry)
   ]
- where
-  bound words' = case words' of
-    [path, "as", alias] -> [(alias, path)]
-    [path] -> [(path, path)]
-    _ -> []
 
 {-| What may follow a value of the type the checker gave the receiver: the
     fields of its record type, then the methods it can be called with. -}
