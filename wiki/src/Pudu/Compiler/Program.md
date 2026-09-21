@@ -58,6 +58,14 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
 - `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
 - Manifest validation verifies project `pudu.toml` constraints via `manifestVersionDiagnostics`. If `package.language` is incompatible with the compiler's version, `E2090` is reported without compiling modules.
+- `discoverFrom` creates one invocation-owned `ResolutionContext` before chasing imports. Every
+  import in that graph sees the same manifest snapshot, ordered project roots, ordered standard
+  library roots, and diagnostic attempted-root descriptions. The context is discarded when the
+  invocation returns, so a later compile observes environment, manifest, executable, and filesystem
+  changes.
+- Successful discoveries remain memoized by module name. Missing-module resolution is memoized
+  separately by requested name: repeated imports do not probe the same candidate files again, but
+  each importing span still receives its own `E2014` diagnostic.
 
 ### Linkage
 
@@ -66,7 +74,12 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 
 ## Algorithm
 
-Parse the root, derive its source root, then chase each import name to its canonical `.pudu` path while memoizing loaded frontends. Build graph nodes from parsed import lists, classify and order them with `stronglyConnComp`, construct export/interface skeletons for all parsed modules, and compile SCCs in dependency order. Aggregate every diagnostic by source/span/code/message and expose the root result separately from the graph map.
+Parse the root, derive its source root, construct one [[Compiler Library]] resolution context, then
+chase each import name to its canonical `.pudu` path while memoizing loaded frontends and failed
+lookups. Build graph nodes from parsed import lists, classify and order them with `stronglyConnComp`,
+construct export/interface skeletons for all parsed modules, and compile SCCs in dependency order.
+Aggregate every diagnostic by source/span/code/message and expose the root result separately from
+the graph map.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -83,6 +96,10 @@ Parse the root, derive its source root, then chase each import name to its canon
 - A missing transitive dependency is reported at the transitive import, not at the root command line.
 - An invalid dependency may produce frontend diagnostics, but it exports no interface and cannot cause follow-on type diagnostics in dependents.
 - An unreadable root has no module identity, but still returns one `E2014` and its requested-path source snapshot; command-line checking therefore cannot report success for an I/O failure.
+- Two modules may import the same missing name. Its candidate paths are probed once, while the
+  diagnostic remains attached to both import spans.
+- A file, manifest, dependency root, or `PUDU_LIB` value changed after an invocation is visible to
+  the next invocation; no resolution state survives a call.
 
 ## Depth
 
@@ -95,6 +112,13 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 - **Q:** Why SCCs rather than rejecting every cycle? **A:** [[architecture/SEMANTICS]] admits cycles for signatures. _Rationale:_ interface skeletons break signature cycles without module-load execution. _Rejected:_ naive DFS order; unconditional cycle error; fixed-point body checking.
 - **Q:** Should dependency ASTs be merged into the root? **A:** No. _Rationale:_ merging destroys module ownership, privacy, nominal identity, and diagnostic provenance. _Rejected:_ synthetic mega-module; textual inclusion.
 - **Q:** Should runtime dependency execution be bundled into issue #29? **A:** No. _Rationale:_ static interface loading closes the reported `E3005`; runtime linking requires a separate value/module environment and conformance gates. _Rejected:_ silently installing dependency bodies into one evaluator frame.
+- **Q:** Should resolution state be process-global so every command shares it? **A:** No. _Rationale:_
+  a compiler command must observe project and installation changes made between invocations, while
+  repeated discovery inside one immutable graph gains nothing from rereading them. _Rejected:_ a
+  global manifest cache; timestamp invalidation; rebuilding roots for each import.
+- **Q:** Should a memoized missing module suppress later diagnostics? **A:** No. _Rationale:_ the
+  expensive fact is that no candidate file resolved; the user-facing fact belongs to every import
+  span that requested it. _Rejected:_ storing the first diagnostic; probing again to recreate it.
 
 ## Variants
 

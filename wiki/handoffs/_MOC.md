@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-resolution-context]] — issue #267 invocation-owned manifest/library roots, failed
+  resolution memoization, freshness, deterministic operation counts, and startup evidence.
+
 - [[2026-09-21-incremental-html-output]] — issue #266 pull-based bounded prepared output, deferred
   producer ordering, backpressure, cancellation, and explicit late failures.
 

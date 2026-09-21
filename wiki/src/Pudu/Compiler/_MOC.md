@@ -9,6 +9,8 @@ aliases: [Program Compiler Module Map]
 - [[Compiler Program]] — dependency discovery, module graph ordering, and cross-module interface
   orchestration.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.
+- [[Compiler Manifest]] — one-read project snapshots, ordered dependency roots, version diagnostics,
+  and setup-operation evidence.
 - [[Standard Library Program Spec]] — loaded-standard-library discovery and qualified-member diagnostic regressions.
 - [[Program Test Common]] — complete-program evaluation and exact diagnostic observations for tests.
 - [[Language Foundation Program Spec]] — function literal, capture, range, slice, and destructuring regressions.

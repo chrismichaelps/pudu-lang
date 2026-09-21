@@ -17,6 +17,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testInterfaceEdges
   , testAliasedReexport
   , testPathDependencies
+  , testResolutionContext
   )
 import Pudu.Compiler.Program.LanguageSpec
   ( testCapturedScope
@@ -25,7 +26,7 @@ import Pudu.Compiler.Program.LanguageSpec
   , testLanguageRefusals
   , testRangesAndSlices
   )
-import Pudu.Compiler.Program.StdlibSpec (testStandardLibrary)
+import Pudu.Compiler.Program.StdlibSpec (testResolutionFreshness, testStandardLibrary)
 import Pudu.Compiler.Program.TypeBoundarySpec
   ( testQualifiedTypeNames
   , testReplLoadContext
@@ -43,9 +44,11 @@ programProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
+  , ("resolution setup is once per fresh invocation", testResolutionContext)
   , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
+  , ("standard-library roots refresh between invocations", testResolutionFreshness)
   , ("a function literal is a value wherever a value goes", testFunctionLiterals)
   , ("a range counts rather than building what it counts", testRangesAndSlices)
   , ("a binding takes a record, a tuple, and a sequence apart", testDestructuringBindings)

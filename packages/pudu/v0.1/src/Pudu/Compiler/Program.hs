@@ -16,6 +16,7 @@ import Data.List.NonEmpty (toList)
 import Data.Maybe (fromMaybe)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler
@@ -25,8 +26,14 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
-import Pudu.Compiler.Manifest (manifestVersionDiagnostics)
-import Pudu.Compiler.Library (isStandardModule, searchRoots, triedRoots)
+import Pudu.Compiler.Library
+  ( ResolutionContext
+  , isStandardModule
+  , newResolutionContext
+  , resolutionDiagnostics
+  , resolutionSearchRoots
+  , resolutionTriedRoots
+  )
 import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -161,11 +168,12 @@ compileProgramSource sourceRoot rootSource = do
 discoverFrom :: FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
 discoverFrom sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
-  manifestProblems <- manifestVersionDiagnostics sourceRoot
-  discovered <- discover sourceRoot
+  resolution <- newResolutionContext sourceRoot
+  discovered <- discover resolution
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
-    manifestProblems
+    Set.empty
+    (resolutionDiagnostics resolution)
     (importsOf rootModule)
   finish rootName discovered
 
@@ -176,42 +184,53 @@ data Discovery = Discovery
   }
 
 discover
-  :: FilePath
+  :: ResolutionContext
   -> Map ModuleName FrontendResult
   -> Map ModuleName Source
+  -> Set.Set ModuleName
   -> [Diagnostic]
   -> [(Located Import, ModuleName)]
   -> IO Discovery
-discover sourceRoot frontends sources diagnostics pending = case pending of
+discover resolution frontends sources failed diagnostics pending = case pending of
   [] -> pure (Discovery frontends sources diagnostics)
   (locatedImport, requested) : rest
-    | Map.member requested frontends -> discover sourceRoot frontends sources diagnostics rest
+    | Map.member requested frontends ->
+        discover resolution frontends sources failed diagnostics rest
+    | Set.member requested failed ->
+        discover resolution frontends sources failed
+          (diagnostics <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport)
+          rest
     | otherwise -> do
-        roots <- searchRoots sourceRoot requested
+        let roots = resolutionSearchRoots resolution requested
         loaded <- readFirst [modulePath root requested | root <- roots]
         case loaded of
-          Left _ -> do
-            tried <- triedRoots sourceRoot requested
-            discover sourceRoot frontends sources
-              (diagnostics <> missingModule requested tried locatedImport) rest
+          Left _ ->
+            discover resolution frontends sources (Set.insert requested failed)
+              ( diagnostics
+                  <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport
+              )
+              rest
           Right source -> do
             let frontend = runFrontend source
             case frontendModule frontend of
               Nothing ->
-                discover sourceRoot
+                discover resolution
                   (Map.insert requested frontend frontends)
                   (Map.insert requested source sources)
+                  failed
                   diagnostics rest
               Just parsed ->
                 let actual = locatedValue (moduleName parsed)
                  in if actual /= requested
-                      then discover sourceRoot
+                      then discover resolution
                         (Map.insert requested frontend{frontendModule = Nothing} frontends)
                         (Map.insert requested source sources)
+                        failed
                         (diagnostics <> pathMismatch requested (moduleName parsed)) rest
-                      else discover sourceRoot
+                      else discover resolution
                         (Map.insert requested frontend frontends)
                         (Map.insert requested source sources)
+                        failed
                         diagnostics (importsOf parsed <> rest)
 
 finish :: ModuleName -> Discovery -> IO ProgramResult

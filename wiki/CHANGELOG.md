@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Module resolution setup is shared per compiler invocation
+
+- Program discovery now reads one coherent manifest snapshot and reuses ordered project and
+  standard-library roots for every module in that invocation. Manifest language diagnostics derive
+  from the same bytes as dependency roots, and candidate roots are deduplicated before probing.
+- Failed requested modules are memoized without suppressing diagnostics: each importing span still
+  receives its own `E2014`. All snapshot state is discarded at return, so later invocations observe
+  manifest, environment, and filesystem changes.
+- On the 63-module full-stack example, manifest ancestor checks fell from 378 to 6,
+  standard-library root probes from 1,176 to 20, and executable ancestor walks from 56 to one.
+  Best-of-five optimized startup to listening improved from 761.0ms to 748.2ms, socket readiness
+  from 761.7ms to 748.9ms, and full-stack check allocation from 1,949,389,304 to 1,918,713,536 bytes
+  on the same local host for issue #267.
+
 ## 2026-09-21 — Prepared HTML can be pulled before deferred slots run
 
 - `Std.Html.Ssr.beginIncremental` creates a request-local encoded cursor without invoking dynamic

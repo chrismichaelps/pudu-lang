@@ -8,14 +8,28 @@ module Pudu.Compiler.Program.GraphSpec
   , testImportedMethods
   , testInterfaceEdges
   , testPathDependencies
+  , testResolutionContext
   ) where
 
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Text.IO as TextIO
+import Pudu.Compiler.Library
+  ( ResolutionMetrics (..)
+  , newResolutionContext
+  , resolutionDiagnostics
+  , resolutionMetrics
+  , resolutionSearchRoots
+  )
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   )
 import Pudu.Compiler.Program.Common (codes, runEntry)
-import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 graphProperties :: [(String, IO Property)]
@@ -26,6 +40,7 @@ graphProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
+  , ("resolution setup is once per fresh invocation", testResolutionContext)
   ]
 
 testImportedMethods :: IO Property
@@ -60,6 +75,58 @@ testPathDependencies = do
     , counterexample "written as a table it resolves the same way" (table === [])
     , counterexample "a dependency that is not there is reported at the import"
         (absent === ["E2014"])
+    ]
+
+{-| One manifest snapshot serves every lookup in an invocation, while the next
+    invocation sees changed project configuration. Duplicate dependency paths
+    are removed before filesystem probing without changing their precedence. -}
+testResolutionContext :: IO Property
+testResolutionContext = withSystemTempDirectory "pudu-resolution" $ \root -> do
+  let project = root </> "project"
+      sourceRoot = project </> "src"
+      firstDependency = root </> "first"
+      secondDependency = root </> "second"
+      manifestPath = project </> "pudu.toml"
+      ordinaryModule = ModuleName ("Ordinary" :| [])
+  mapM_ (createDirectoryIfMissing True) [sourceRoot, firstDependency, secondDependency]
+  TextIO.writeFile manifestPath
+    ( "[package]\nlanguage = \"not-a-constraint\"\n[dependencies]\n"
+        <> "first = \"../first\"\nduplicate = \"../first\"\nmissing = \"../missing\"\n"
+    )
+  first <- newResolutionContext sourceRoot
+  let firstMetrics = resolutionMetrics first
+      firstRoots = resolutionSearchRoots first ordinaryModule
+      firstCodes = map (diagnosticCodeText . diagnosticCode) (resolutionDiagnostics first)
+  TextIO.writeFile manifestPath "[dependencies]\nsecond = \"../second\"\n"
+  second <- newResolutionContext sourceRoot
+  let secondMetrics = resolutionMetrics second
+      secondRoots = resolutionSearchRoots second ordinaryModule
+  TextIO.writeFile (sourceRoot </> "Main.pudu") "module Main\n\nimport A\nimport B\n"
+  TextIO.writeFile (sourceRoot </> "A.pudu") "module A\n\nimport Missing\n"
+  TextIO.writeFile (sourceRoot </> "B.pudu") "module B\n\nimport Missing\n"
+  failed <- compileProgram (sourceRoot </> "Main.pudu")
+  let failedCodes = map (diagnosticCodeText . diagnosticCode) (programDiagnostics failed)
+  pure $ conjoin
+    [ counterexample "one snapshot walks only src and its project directory"
+        (resolutionManifestAncestorChecks firstMetrics === 2)
+    , counterexample "one governing manifest is read once"
+        (resolutionManifestReads firstMetrics === 1)
+    , counterexample "duplicate dependency roots are probed once"
+        (resolutionProjectRootProbes firstMetrics === 2)
+    , counterexample "invalid language diagnostics use the same manifest snapshot"
+        (firstCodes === ["E2090"])
+    , counterexample "only existing first-snapshot dependencies are searched"
+        (firstRoots === [sourceRoot, project </> ".." </> "first"])
+    , counterexample "a later invocation reads the changed manifest"
+        (secondRoots === [sourceRoot, project </> ".." </> "second"])
+    , counterexample "the later snapshot still reads and probes once"
+        ( (resolutionManifestReads secondMetrics, resolutionProjectRootProbes secondMetrics)
+            === (1, 1)
+        )
+    , counterexample "pure lookup does not mutate setup counts"
+        (resolutionMetrics first === firstMetrics)
+    , counterexample "a memoized miss is still diagnosed at every importing span"
+        (failedCodes === ["E2014", "E2014"])
     ]
 
 {-| A type re-exported under the name it already has.

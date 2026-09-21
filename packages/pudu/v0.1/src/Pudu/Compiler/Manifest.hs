@@ -19,7 +19,13 @@
 module Pudu.Compiler.Manifest
   ( Manifest (..)
   , Dependency (..)
+  , ManifestMetrics (..)
+  , ManifestSnapshot
   , readManifest
+  , readManifestSnapshot
+  , manifestSnapshotDiagnostics
+  , manifestSnapshotMetrics
+  , manifestSnapshotSearchRoots
   , manifestVersionDiagnostics
   , findManifestRoot
   , manifestSearchRoots
@@ -29,6 +35,7 @@ module Pudu.Compiler.Manifest
 import Control.Exception (IOException, try)
 import Data.Char (isSpace)
 import Data.Maybe (mapMaybe, maybeToList)
+import qualified Data.Set as Set
 import Pudu.Version (acceptsLanguage, versionText)
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode)
 import Pudu.Source (SourceName (..), emptySpan, newSource)
@@ -52,6 +59,26 @@ data Manifest = Manifest
   , manifestDependencies :: ![Dependency]
   }
   deriving stock (Eq, Show)
+
+{-| Bounded filesystem work performed while taking one manifest snapshot. -}
+data ManifestMetrics = ManifestMetrics
+  { manifestAncestorChecks :: !Int
+  , manifestReadCount :: !Int
+  , manifestDependencyProbes :: !Int
+  }
+  deriving stock (Eq, Show)
+
+{-| One invocation's coherent view of project configuration.
+
+    Diagnostics and dependency roots derive from the same retained manifest
+    bytes. The value is intentionally not stored beyond its compiler call. -}
+data ManifestSnapshot = ManifestSnapshot
+  !(Maybe FilePath)
+  !Manifest
+  !Text
+  ![FilePath]
+  ![Diagnostic]
+  !ManifestMetrics
 
 emptyManifest :: Manifest
 emptyManifest = Manifest Nothing Nothing Nothing []
@@ -82,29 +109,64 @@ readManifest root = do
     stops after a few levels so a file compiled somewhere with no project at
     all does not read one belonging to a directory far above it. -}
 findManifestRoot :: FilePath -> IO (Maybe FilePath)
-findManifestRoot from = go (normalise from) (6 :: Int)
+findManifestRoot from = fst <$> findManifestRootCounted from
+
+findManifestRootCounted :: FilePath -> IO (Maybe FilePath, Int)
+findManifestRootCounted from = go (normalise from) (6 :: Int) 0
  where
-  go _ 0 = pure Nothing
-  go directory remaining = do
+  go _ 0 checks = pure (Nothing, checks)
+  go directory remaining checks = do
     here <- doesFileExist (directory </> "pudu.toml")
     if here
-      then pure (Just directory)
+      then pure (Just directory, checks + 1)
       else do
         let parent = takeDirectory directory
-        if parent == directory then pure Nothing else go parent (remaining - 1)
+        if parent == directory
+          then pure (Nothing, checks + 1)
+          else go parent (remaining - 1) (checks + 1)
+
+{-| Capture the governing manifest once for one compiler invocation. -}
+readManifestSnapshot :: FilePath -> IO ManifestSnapshot
+readManifestSnapshot sourceRoot = do
+  (found, ancestorChecks) <- findManifestRootCounted sourceRoot
+  case found of
+    Nothing ->
+      pure (ManifestSnapshot Nothing emptyManifest Text.empty [] []
+        (ManifestMetrics ancestorChecks 0 0))
+    Just root -> do
+      let path = root </> "pudu.toml"
+      loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
+      case loaded of
+        Left problem -> do
+          diagnostics <- manifestReadFailure path problem
+          pure (ManifestSnapshot (Just root) emptyManifest Text.empty [] diagnostics
+            (ManifestMetrics ancestorChecks 1 0))
+        Right contents -> do
+          let manifest = parseManifest contents
+              candidates = distinct
+                (map (resolveAgainst root . dependencyPath) (manifestDependencies manifest))
+          roots <- existing candidates
+          diagnostics <- versionDiagnostics path contents manifest
+          pure
+            ( ManifestSnapshot (Just root) manifest contents roots diagnostics
+                (ManifestMetrics ancestorChecks 1 (length candidates))
+            )
+
+manifestSnapshotSearchRoots :: ManifestSnapshot -> [FilePath]
+manifestSnapshotSearchRoots (ManifestSnapshot _ _ _ roots _ _) = roots
+
+manifestSnapshotDiagnostics :: ManifestSnapshot -> [Diagnostic]
+manifestSnapshotDiagnostics (ManifestSnapshot _ _ _ _ diagnostics _) = diagnostics
+
+manifestSnapshotMetrics :: ManifestSnapshot -> ManifestMetrics
+manifestSnapshotMetrics (ManifestSnapshot _ _ _ _ _ metrics) = metrics
 
 {-| Every directory a source root's project says its code also lives in.
 
     Answers nothing when there is no project, which is the ordinary case for a
     single file compiled on its own. -}
 projectSearchRoots :: FilePath -> IO [FilePath]
-projectSearchRoots sourceRoot = do
-  found <- findManifestRoot sourceRoot
-  case found of
-    Nothing -> pure []
-    Just root -> do
-      manifest <- readManifest root
-      manifestSearchRoots root manifest
+projectSearchRoots sourceRoot = manifestSnapshotSearchRoots <$> readManifestSnapshot sourceRoot
 
 {-| The directories a dependency contributes, in the order they are written.
 
@@ -117,15 +179,26 @@ projectSearchRoots sourceRoot = do
     a manifest means what the person writing it meant: relative to the file
     they wrote it in. -}
 manifestSearchRoots :: FilePath -> Manifest -> IO [FilePath]
-manifestSearchRoots root manifest = do
-  let candidates = map (resolveAgainst root . dependencyPath) (manifestDependencies manifest)
-  existing candidates
+manifestSearchRoots root manifest =
+  existing
+    ( distinct
+        (map (resolveAgainst root . dependencyPath) (manifestDependencies manifest))
+    )
+
+existing :: [FilePath] -> IO [FilePath]
+existing [] = pure []
+existing (path : rest) = do
+  there <- doesDirectoryExist path
+  remaining <- existing rest
+  pure (if there then path : remaining else remaining)
+
+distinct :: [FilePath] -> [FilePath]
+distinct = go Set.empty
  where
-  existing [] = pure []
-  existing (path : rest) = do
-    there <- doesDirectoryExist path
-    remaining <- existing rest
-    pure (if there then path : remaining else remaining)
+  go _ [] = []
+  go seen (path : rest)
+    | Set.member path seen = go seen rest
+    | otherwise = path : go (Set.insert path seen) rest
 
 resolveAgainst :: FilePath -> FilePath -> FilePath
 resolveAgainst root path
@@ -206,25 +279,25 @@ unquote value = case Text.stripPrefix "\"" value >>= Text.stripSuffix "\"" of
     Nothing -> value
 
 manifestVersionDiagnostics :: FilePath -> IO [Diagnostic]
-manifestVersionDiagnostics sourceRoot = do
-  found <- findManifestRoot sourceRoot
-  case found of
-    Nothing -> pure []
-    Just root -> do
-      let path = root </> "pudu.toml"
-      loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
-      case loaded of
-        Left problem -> report path Text.empty ("cannot read project manifest: " <> Text.pack (show problem))
-        Right contents -> case manifestLanguage (parseManifest contents) of
-          Nothing -> pure []
-          Just constraint -> case acceptsLanguage constraint of
-            Left problem -> report path contents ("invalid package.language: " <> problem)
-            Right True -> pure []
-            Right False -> report path contents
-              ("package.language requires " <> constraint <> "; this compiler is " <> versionText)
- where
-  report path contents message = do
-    source <- newSource (SourceName (Text.pack path)) contents
-    pure (maybeToList $ do
-      code <- mkDiagnosticCode "E2090"
-      diagnostic code Error (emptySpan source) message)
+manifestVersionDiagnostics sourceRoot =
+  manifestSnapshotDiagnostics <$> readManifestSnapshot sourceRoot
+
+manifestReadFailure :: FilePath -> IOException -> IO [Diagnostic]
+manifestReadFailure path problem =
+  reportManifest path Text.empty ("cannot read project manifest: " <> Text.pack (show problem))
+
+versionDiagnostics :: FilePath -> Text -> Manifest -> IO [Diagnostic]
+versionDiagnostics path contents manifest = case manifestLanguage manifest of
+  Nothing -> pure []
+  Just constraint -> case acceptsLanguage constraint of
+    Left problem -> reportManifest path contents ("invalid package.language: " <> problem)
+    Right True -> pure []
+    Right False -> reportManifest path contents
+      ("package.language requires " <> constraint <> "; this compiler is " <> versionText)
+
+reportManifest :: FilePath -> Text -> Text -> IO [Diagnostic]
+reportManifest path contents message = do
+  source <- newSource (SourceName (Text.pack path)) contents
+  pure (maybeToList $ do
+    code <- mkDiagnosticCode "E2090"
+    diagnostic code Error (emptySpan source) message)
