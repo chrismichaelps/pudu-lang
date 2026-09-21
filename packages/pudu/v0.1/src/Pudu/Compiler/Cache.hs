@@ -144,7 +144,7 @@ compilerIdentity = do
   size <- getFileSize executable
   modified <- getModificationTime executable
   pure $ hexDigest $ hash $ Encoding.encodeUtf8 $ Text.intercalate "\0"
-    [ "pudu-cache-1"
+    [ "pudu-cache-2"
     , versionText
     , Text.pack executable
     , Text.pack (show size)

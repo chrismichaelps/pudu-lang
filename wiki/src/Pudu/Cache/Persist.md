@@ -47,7 +47,11 @@ failDecode :: Decode a
   value lazy so a deferred block stays unread; the enclosing entry is verified whole before any
   block is read, so a block that will not read is a fault in the compiler and says to run with
   `PUDU_CACHE=off`.
-- Integers are zig-zag variable-length; numbers a tree holds usually take one or two bytes.
+- Integers are zig-zag variable-length; numbers a tree holds usually take one or two bytes. Both
+  steps work on the 64 unsigned bits: the zig-zag is `(n << 1) xor (n >> 63)`, and the varint writes
+  a `Word64` seven bits at a time in at most ten bytes. Every `Int` therefore round-trips — the
+  bits of a `Float64` constant and `minBound` included — where shifting the signed number overflowed
+  from 2^62 and wrote a value the reader rejected. Below 2^62 the bytes are unchanged.
 
 ## Linkage
 
@@ -59,6 +63,10 @@ failDecode :: Decode a
 - No file access, no hashing, no exceptions on malformed input, no spans from other sources.
 
 ## Grill Log
+
+- **Q:** Why encode on unsigned bits? **A:** A folded `Float64` constant is stored as its IEEE bits
+  in an `Int`, which is routinely beyond 2^62. _Rationale:_ an encoding must be total over its type.
+  _Rejected:_ a separate float encoding, which would leave the same overflow waiting in `Int`.
 
 - **Q:** Use a general serialization library? **A:** No. _Rationale:_ spans must be rebound to the
   reading run's source identity, and deferred blocks need a decoder whose step is lazy in its

@@ -17,7 +17,7 @@ module Pudu.Cache.Persist
   , restoreDeferred
   ) where
 
-import Data.Bits (shiftL, shiftR, (.&.), (.|.))
+import Data.Bits (shiftL, shiftR, xor, (.&.), (.|.))
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
@@ -30,7 +30,7 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Encoding
 import Data.Kind (Type)
-import Data.Word (Word8)
+import Data.Word (Word64, Word8)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, Nat, natVal, type (+))
 import Pudu.Source (Source, Span, mkSpan, offsetFromInt, sourceName, spanEnd, spanSource, spanStart, unOffset)
@@ -107,16 +107,26 @@ byte = Decode $ \_ bytes position ->
 {-# INLINE byte #-}
 
 {-| Seven bits at a time, low first, the high bit saying more follow. Most
-    numbers a tree holds — offsets, lengths, tags — fit in one or two bytes. -}
+    numbers a tree holds — offsets, lengths, tags — fit in one or two bytes.
+    The number is taken as the 64 unsigned bits it occupies, so every value,
+    including one that uses the top bit, is written in at most ten bytes. -}
 putUnsigned :: Int -> Builder
-putUnsigned value
+putUnsigned = putWord . fromIntegral
+
+putWord :: Word64 -> Builder
+putWord value
   | value < 0x80 = Builder.word8 (fromIntegral value)
-  | otherwise = Builder.word8 (fromIntegral (value .&. 0x7f) .|. 0x80) <> putUnsigned (value `shiftR` 7)
+  | otherwise = Builder.word8 (fromIntegral (value .&. 0x7f) .|. 0x80) <> putWord (value `shiftR` 7)
+
+getUnsigned :: Decode Int
+getUnsigned = fromIntegral <$> getWord
+{-# INLINE getUnsigned #-}
 
 {-| Read directly off the buffer: one comparison for the common one-byte
-    number, and no step of the decoder per byte for a longer one. -}
-getUnsigned :: Decode Int
-getUnsigned = Decode $ \_ bytes position -> go bytes (ByteString.length bytes) position 0 0
+    number, and no step of the decoder per byte for a longer one. More than
+    ten bytes cannot be a 64-bit number and is a failure. -}
+getWord :: Decode Word64
+getWord = Decode $ \_ bytes position -> go bytes (ByteString.length bytes) position 0 0
  where
   go bytes size position shift accumulated
     | position >= size || shift > 63 = Failed
@@ -126,15 +136,18 @@ getUnsigned = Decode $ \_ bytes position -> go bytes (ByteString.length bytes) p
          in if next .&. 0x80 == 0
               then Step (position + 1) value
               else go bytes size (position + 1) (shift + 7) value
-{-# INLINE getUnsigned #-}
+{-# INLINE getWord #-}
 
+{-| Zigzag: a number and its negation are written the same size, `0, -1, 1,
+    -2, …` as `0, 1, 2, 3, …`. It is computed on the unsigned bits, so a number
+    of any magnitude — the bits of a `Float64`, `minBound` — survives the round
+    trip; shifting the signed number overflowed from 2^62 on. -}
 instance Persist Int where
-  persist _ value
-    | value >= 0 = putUnsigned (value `shiftL` 1)
-    | otherwise = putUnsigned ((negate value `shiftL` 1) - 1)
+  persist _ value =
+    putWord ((fromIntegral value `shiftL` 1) `xor` fromIntegral (value `shiftR` 63))
   restore = do
-    encoded <- getUnsigned
-    pure $ if encoded .&. 1 == 0 then encoded `shiftR` 1 else negate ((encoded + 1) `shiftR` 1)
+    encoded <- getWord
+    pure (fromIntegral (encoded `shiftR` 1) `xor` negate (fromIntegral (encoded .&. 1)))
 
 instance Persist Bool where
   persist _ value = Builder.word8 (if value then 1 else 0)

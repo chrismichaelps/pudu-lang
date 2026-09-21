@@ -66,7 +66,7 @@ Imports are always absolute — there is no importing relative to the current fi
 
 | Form | Binds | Used as |
 | --- | --- | --- |
-| `import Shapes.Area` | the module under its full name | `Shapes.Area.circle(1.0)` |
+| `import Shapes.Area` | the module under the last segment of its name | `Area.circle(1.0)` |
 | `import Shapes.Area as Area` | the module under a short name | `Area.circle(1.0)` |
 | `import Shapes.Area {circle, PI}` | the named declarations | `circle(1.0)`, `PI` |
 

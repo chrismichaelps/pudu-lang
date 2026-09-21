@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — A stored float constant reads back
+
+- A module with a `Float64` constant failed to run after it had been checked — `pudu: a stored
+  module could not be read` — because the cache's integer encoding overflowed for the constant's
+  bits, which every stored float exceeds. Integers are now encoded on their unsigned bits and
+  round-trip at any magnitude; the cache directory name is new, so nothing written the old way is
+  read. The modules chapter's import table also said `import Shapes.Area` binds the full path; it
+  binds `Area` (issue #288).
+
 ## 2026-09-21 — A repaired completion is compiled once
 
 - Completion and signature help keep the analyses of repaired texts for the current state of the
