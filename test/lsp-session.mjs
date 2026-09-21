@@ -111,6 +111,13 @@ const unclosedSource = [
   "    case ",
   "",
 ].join("\n");
+// Real files: each is rooted by its own path and module name, whatever the
+// session's root, so sibling programs read their own modules.
+const fixtureFile = relative => new URL(`../test-fixtures/${relative}`, import.meta.url);
+const oneUri = fixtureFile("lspworkspace/one/src/Main.pudu").href;
+const twoUri = fixtureFile("lspworkspace/two/src/Main.pudu").href;
+const recordUri = fixtureFile("lsprecords/Main.pudu").href;
+const fixtureText = relative => readFileSync(fixtureFile(relative), "utf8");
 const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
 const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
@@ -270,6 +277,31 @@ const messages = [
     id: 32,
     method: "textDocument/completion",
     params: { textDocument: { uri: unclosedUri }, position: { line: 5, character: 9 } },
+  },
+  ...[
+    [oneUri, "lspworkspace/one/src/Main.pudu"],
+    [twoUri, "lspworkspace/two/src/Main.pudu"],
+    [recordUri, "lsprecords/Main.pudu"],
+  ].map(([fileUri, relative]) => ({
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: fileUri, languageId: "pudu", version: 1, text: fixtureText(relative) },
+    },
+  })),
+  {
+    id: 33,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: oneUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    id: 34,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: twoUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    id: 35,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: recordUri }, position: { line: 7, character: 4 } },
   },
   {
     id: 25,
@@ -668,6 +700,18 @@ const unclosedLabels = (
 for (const variant of ["Ready", "Loading", "Failed"]) {
   assert(unclosedLabels.includes(variant), `an unclosed match did not offer ${variant}: ${JSON.stringify(unclosedLabels)}`);
 }
+
+// Sibling programs each read their own Lib, and an imported record completes.
+const labelsOf = id => {
+  const offered = replyTo(id)?.result;
+  return (Array.isArray(offered) ? offered : (offered?.items ?? [])).map(entry => entry.label);
+};
+assert(labelsOf(33).includes("fromOne") && !labelsOf(33).includes("fromTwo"), `program one read the wrong Lib: ${JSON.stringify(labelsOf(33))}`);
+assert(labelsOf(34).includes("fromTwo") && !labelsOf(34).includes("fromOne"), `program two read the wrong Lib: ${JSON.stringify(labelsOf(34))}`);
+assert(
+  labelsOf(35).includes("x") && !labelsOf(35).includes("unrelated"),
+  `an imported record's fields were not completed: ${JSON.stringify(labelsOf(35))}`,
+);
 
 // An import being written does not parse, and is still offered the library.
 const importOffered = replyTo(25)?.result;

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Each document finds its own modules
+
+- The language server roots each document as `pudu check` does — its path with the declared
+  module's segments taken off — instead of treating the editor's workspace folder as the source
+  root. Opening a repository that holds `src/Main.pudu` and `src/Lib.pudu` no longer reports
+  `E2014` for `import Lib`, sibling programs in one workspace read their own modules, every
+  workspace folder is kept, and percent-encoded paths are decoded. The document analysis moved out
+  of the server loop into its own module (issue #282).
+
 ## 2026-09-21 — Completion keeps working in unfinished text
 
 - `text.` inside a function whose closing brace is not written yet offers `Str`'s members, and

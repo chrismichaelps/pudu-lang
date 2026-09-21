@@ -35,6 +35,7 @@ data ImportSite
 
 type TypeParameter = (Text, [Located TypeSyntax])   -- name and its bounds
 contextParameters :: CompletionContext -> [TypeParameter]
+declaredModule    :: [Token] -> Maybe ModuleName   -- the header's module, from tokens
 contextAt    :: [Token] -> Maybe Module -> Int -> CompletionContext
 importSiteAt :: [Token] -> Int -> Maybe ImportSite
 ```

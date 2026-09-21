@@ -26,8 +26,8 @@ data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, an
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
-setWorkspaceRoot :: FilePath -> Documents -> Documents
-workspaceRoot    :: Documents -> Maybe FilePath
+setWorkspaceFolders :: [FilePath] -> Documents -> Documents
+workspaceFolders    :: Documents -> [FilePath]
 analysisOf       :: Text -> Documents -> Maybe Analysis
 allDocuments     :: Documents -> [(Text, Analysis)]
 rememberAnalysis :: Text -> Analysis -> Documents -> Documents

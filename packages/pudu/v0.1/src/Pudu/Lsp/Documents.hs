@@ -12,9 +12,9 @@ module Pudu.Lsp.Documents
   , emptyDocuments
   , forgetDocument
   , rememberAnalysis
-  , setWorkspaceRoot
+  , setWorkspaceFolders
   , uriOf
-  , workspaceRoot
+  , workspaceFolders
   ) where
 
 import Data.Map.Strict (Map)
@@ -80,18 +80,21 @@ data Analysis = Analysis
     diagnostics against text the reader is not looking at, which is worse than
     reporting none. -}
 data Documents = Documents
-  { docWorkspaceRoot :: !(Maybe FilePath)
+  {-| The folders the editor opened, most specific first. They say which
+      files the session owns; a document's module source root is derived from
+      its own path and module name, as the command line derives it. -}
+  { docWorkspaceFolders :: ![FilePath]
   , docMap           :: !(Map Text Analysis)
   }
 
 emptyDocuments :: Documents
-emptyDocuments = Documents Nothing Map.empty
+emptyDocuments = Documents [] Map.empty
 
-setWorkspaceRoot :: FilePath -> Documents -> Documents
-setWorkspaceRoot root docs = docs { docWorkspaceRoot = Just root }
+setWorkspaceFolders :: [FilePath] -> Documents -> Documents
+setWorkspaceFolders folders docs = docs { docWorkspaceFolders = folders }
 
-workspaceRoot :: Documents -> Maybe FilePath
-workspaceRoot = docWorkspaceRoot
+workspaceFolders :: Documents -> [FilePath]
+workspaceFolders = docWorkspaceFolders
 
 allDocuments :: Documents -> [(Text, Analysis)]
 allDocuments (Documents _ store) = Map.toList store

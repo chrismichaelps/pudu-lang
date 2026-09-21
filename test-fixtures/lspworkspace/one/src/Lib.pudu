@@ -1,0 +1,3 @@
+module Lib
+
+export fn fromOne() -> Int { 1 }

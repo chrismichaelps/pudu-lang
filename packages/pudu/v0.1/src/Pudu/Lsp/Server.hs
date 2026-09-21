@@ -19,13 +19,10 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
-import Pudu.Type.Value (Scheme, nominalKey)
 import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileContext (..), CompileResult (..), recoveredSyntax)
-import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (..)
@@ -37,6 +34,7 @@ import Pudu.Diagnostic
   , diagnosticSpan
   )
 import Pudu.Format (FormatResult (..), formatSource)
+import Pudu.Lsp.Analysis (analyse, analyseIn, documentSourceRoot, fileUriPath)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
 import Pudu.Lsp.Definition (definitionAt)
@@ -48,9 +46,9 @@ import Pudu.Lsp.Documents
   , emptyDocuments
   , forgetDocument
   , rememberAnalysis
-  , setWorkspaceRoot
+  , setWorkspaceFolders
   , uriOf
-  , workspaceRoot
+  , workspaceFolders
   )
 import Pudu.Lsp.Feature
   ( documentSymbols
@@ -61,7 +59,6 @@ import Pudu.Lsp.Highlight (documentHighlightAt)
 import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
 import Pudu.Lsp.ModuleCatalog (moduleCatalog)
-import Pudu.Lsp.Shapes (programRecords, programSums)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
   ( Incoming (..)
@@ -80,10 +77,8 @@ import Pudu.Lsp.Rename (prepareRenameAt, renameAt)
 import Pudu.Lsp.SemanticTokens (semanticTokensFull, semanticTokensLegend)
 import Pudu.Lsp.SignatureHelp (signatureHelpAt, signatureHelpRepaired)
 import Pudu.Lsp.WorkspaceSymbols (workspaceSymbolsAt)
-import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
-import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
+import Pudu.Source (spanEnd, spanStart, unOffset)
 import System.Exit (ExitCode (ExitFailure), exitWith)
-import System.FilePath ((</>), takeDirectory)
 import System.IO
   ( BufferMode (NoBuffering)
   , Handle
@@ -94,108 +89,6 @@ import System.IO
   , stdin
   , stdout
   )
-
-{-| Compile one document's text as the program it is.
-
-    The compile is the ordinary one, so an editor sees exactly what `pudu check`
-    would print — the same codes, spans, and help — and `pudu doc` and the
-    editor agree about every signature. A second implementation for the editor
-    would drift from the first within a release. -}
-analyse :: Text -> Text -> IO Analysis
-analyse uri content = do
-  root <- resolveSourceRoot Nothing uri
-  analyseIn root uri content
-
-analyseIn :: FilePath -> Text -> Text -> IO Analysis
-analyseIn root uri content = do
-  source <- newSource (SourceName (pathOf uri)) content
-  program <- compileProgramSource root source
-  -- Only a document whose root did not parse needs the recovered tree, and
-  -- only then is it built.
-  let recovered = recoveredSyntax source
-  pure
-    Analysis
-      { analysisText = content
-      , analysisSource = source
-      , analysisDiagnostics = programDiagnostics program
-      , analysisFileIndex = fromMaybe mempty (rootCompileResult program >>= compileDocs)
-      , analysisProgramIndex = programDocs program
-      , analysisResolution = rootCompileResult program >>= compileResolution
-      , analysisTypes = rootCompileResult program >>= compileTypes
-      , analysisTokens = maybe (fst recovered) compileTokens (rootCompileResult program)
-      , analysisModule = maybe (snd recovered) compileSyntax (rootCompileResult program)
-      , analysisSums = programSums program
-      , analysisRecords = programRecords program
-      , analysisMethods = programMethods program
-      , analysisExports = contextExports (programContext program)
-      }
-
-{-| The methods every module of the program declared, by the canonical key of
-    their owner. Each module's check publishes only its own, so the program's
-    are the union, gathered once per analysis. -}
-programMethods :: ProgramResult -> Map Text [(Text, Scheme)]
-programMethods program =
-  Map.fromListWith (flip (<>))
-    [ (nominalKey owner, [(name, scheme)])
-    | compiled <- Map.elems (programModules program)
-    , (owner, name, scheme) <- compileMethods compiled
-    ]
-
-{-| Determine the project root for compilation.
-
-    When the client declared a workspace root at initialization, that root is
-    authoritative. Otherwise, walk up looking for repository/project boundary
-    markers (`pudu.cabal`, `.git`, or `lib`), falling back to the file's directory. -}
-resolveSourceRoot :: Maybe FilePath -> Text -> IO FilePath
-resolveSourceRoot (Just root) _ = pure root
-resolveSourceRoot Nothing uri = do
-  working <- getCurrentDirectory
-  case Text.stripPrefix "file://" uri of
-    Nothing -> pure working
-    Just path -> do
-      let docDir = takeDirectory (Text.unpack (decodeUri path))
-      findProjectRoot docDir docDir (8 :: Int)
- where
-  findProjectRoot fallback current depth
-    | depth <= 0 = pure fallback
-    | otherwise = do
-        hasCabal <- doesFileExist (current </> "pudu.cabal")
-        hasGit <- doesDirectoryExist (current </> ".git")
-        hasLib <- doesDirectoryExist (current </> "lib")
-        if hasCabal || hasGit || hasLib
-          then pure current
-          else
-            let parent = takeDirectory current
-             in if parent == current then pure fallback else findProjectRoot fallback parent (depth - 1)
-
-pathOf :: Text -> Text
-pathOf uri = maybe uri decodeUri (Text.stripPrefix "file://" uri)
-
-{-| Turn `%20` and friends back into the scalars they stand for. -}
-decodeUri :: Text -> Text
-decodeUri input = either (const input) id (Encoding.decodeUtf8' (ByteString.pack (go input)))
- where
-  go rest = case Text.uncons rest of
-    Nothing -> []
-    Just ('%', remaining)
-      | Text.length hex == 2, Just value <- hexValue hex ->
-          fromIntegral value : go (Text.drop 2 remaining)
-     where
-      hex = Text.take 2 remaining
-    Just (scalar, remaining) -> ByteString.unpack (Encoding.encodeUtf8 (Text.singleton scalar)) <> go remaining
-
-  hexValue hex = case Text.foldl' step (Just 0) hex of
-    Just value -> Just value
-    Nothing -> Nothing
-  step accumulated scalar = do
-    total <- accumulated
-    digit <- hexDigit scalar
-    pure (total * 16 + digit)
-  hexDigit scalar
-    | scalar >= '0' && scalar <= '9' = Just (fromEnum scalar - fromEnum '0')
-    | scalar >= 'a' && scalar <= 'f' = Just (fromEnum scalar - fromEnum 'a' + 10)
-    | scalar >= 'A' && scalar <= 'F' = Just (fromEnum scalar - fromEnum 'A' + 10)
-    | otherwise = Nothing
 
 runServer :: IO ()
 runServer = do
@@ -246,7 +139,7 @@ invalidateCatalogs catalogs message = case message of
     use. -}
 catalogFor :: Catalogs -> Documents -> Json -> IO [Text]
 catalogFor catalogs documents parameters = do
-  root <- resolveSourceRoot (workspaceRoot documents) (fromMaybe "" (uriOf parameters))
+  root <- rootOf documents parameters
   known <- readIORef catalogs
   case Map.lookup root known of
     Just found -> pure found
@@ -276,12 +169,20 @@ prepare catalogs documents message = do
 
 {-| Compile other text as the document a request names, for an answer the text
     as written cannot give. Nothing is stored: the editor's copy stays the one
-    every other answer is read from. -}
+    every other answer is read from. The source root is the written
+    document's, so a repaired or probe text reaches the same modules. -}
 reanalyse :: Documents -> Json -> Text -> IO Analysis
 reanalyse documents parameters content = do
+  root <- rootOf documents parameters
+  analyseIn root (fromMaybe "" (uriOf parameters)) content
+
+{-| The source root of the document a request names, from the text the editor
+    holds for it. -}
+rootOf :: Documents -> Json -> IO FilePath
+rootOf documents parameters =
   let uri = fromMaybe "" (uriOf parameters)
-  root <- resolveSourceRoot (workspaceRoot documents) uri
-  analyseIn root uri content
+      written = maybe "" analysisText (documentOf documents parameters)
+   in documentSourceRoot (workspaceFolders documents) uri written
 
 excuse :: Message -> SomeException -> IO [Text]
 excuse message failure = do
@@ -299,9 +200,7 @@ excuse message failure = do
 refresh :: Documents -> Message -> IO Documents
 refresh documents message = case message of
   Request _ "initialize" parameters ->
-    pure $ case extractWorkspaceRoot parameters of
-      Just root -> setWorkspaceRoot root documents
-      Nothing -> documents
+    pure (setWorkspaceFolders (extractWorkspaceFolders parameters) documents)
   Notification "textDocument/didOpen" parameters ->
     case (uriOf parameters, openedText parameters) of
       (Just uri, Just content) -> store uri content
@@ -313,24 +212,22 @@ refresh documents message = case message of
   _ -> pure documents
  where
   store uri content = do
-    root <- resolveSourceRoot (workspaceRoot documents) uri
+    root <- documentSourceRoot (workspaceFolders documents) uri content
     analysed <- analyseIn root uri content
     pure (rememberAnalysis uri analysed documents)
 
-extractWorkspaceRoot :: Json -> Maybe FilePath
-extractWorkspaceRoot params =
-  case lookupField "rootUri" params >>= textOf of
-    Just uri | Just path <- Text.stripPrefix "file://" uri ->
-      Just (Text.unpack (decodeUri path))
-    _ -> case lookupField "workspaceFolders" params of
-      Just (JsonArray (folder : _)) ->
-        case lookupField "uri" folder >>= textOf of
-          Just uri | Just path <- Text.stripPrefix "file://" uri ->
-            Just (Text.unpack (decodeUri path))
-          _ -> Nothing
-      _ -> case lookupField "rootPath" params >>= textOf of
-        Just path | not (Text.null path) -> Just (Text.unpack path)
-        _ -> Nothing
+{-| Every folder the editor opened: each workspace folder, and the older
+    single `rootUri` or `rootPath` when a client sends only that. -}
+extractWorkspaceFolders :: Json -> [FilePath]
+extractWorkspaceFolders params =
+  distinct (folders <> rootUri <> rootPath)
+ where
+  folders = case lookupField "workspaceFolders" params of
+    Just (JsonArray entries) -> [path | entry <- entries, Just path <- [lookupField "uri" entry >>= textOf >>= fileUriPath]]
+    _ -> []
+  rootUri = [path | Just path <- [lookupField "rootUri" params >>= textOf >>= fileUriPath]]
+  rootPath = [Text.unpack path | Just path <- [lookupField "rootPath" params >>= textOf], not (Text.null path)]
+  distinct = foldr (\path kept -> if path `elem` kept then kept else path : kept) []
 
 isExit :: Message -> Bool
 isExit message = case message of

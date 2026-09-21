@@ -17,8 +17,7 @@ import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree (Import (..), Module (..))
-import Pudu.Frontend.Token (Keyword (..), SymbolKind (..), Token (..), TokenKind (..))
-import Pudu.Lsp.Context (ImportSite (..))
+import Pudu.Lsp.Context (ImportSite (..), declaredModule)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Feature (completionItem, rangeOfOffsets)
 import Pudu.Lsp.Json (Json (..))
@@ -51,22 +50,7 @@ importCompletions catalog written known offset site = case site of
   reached = [docModule entry | entry <- indexEntries (analysisProgramIndex written)]
   own = case analysisModule written of
     Just parsed -> moduleNameText (locatedValue (moduleName parsed))
-    Nothing -> declaredModule (analysisTokens written)
-
-{-| The module a document declares, read from its header's tokens, for a
-    document that does not parse. -}
-declaredModule :: [Token] -> Text
-declaredModule tokens = case dropWhile ((/= Keyword KwModule) . tokenKind) tokens of
-  _ : rest -> Text.concat (map spelling (takeWhile (pathKind . tokenKind) rest))
-  [] -> ""
- where
-  pathKind kind = case kind of
-    Identifier _ -> True
-    Symbol SymDot -> True
-    _ -> False
-  spelling token = case tokenKind token of
-    Identifier name -> name
-    _ -> "."
+    Nothing -> maybe "" moduleNameText (declaredModule (analysisTokens written))
 
 {-| What an import can take from `owner`: exactly the names it exports —
     functions, constants, types, traits, a sum's variants, foreign declarations

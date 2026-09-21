@@ -35,9 +35,15 @@ data ProgramResult = ProgramResult
 
 compileProgram :: FilePath -> IO ProgramResult
 rootCompileResult :: ProgramResult -> Maybe CompileResult
+sourceRootFor :: FilePath -> ModuleName -> (FilePath, Bool)
 ```
 
 ### Governance
+
+- `sourceRootFor` is the one rule for where a file-backed program's modules are: the entry path
+  with its declared module's segments taken off the end, or the file's directory with `True` when
+  the path does not end in the name. The command line and the language server both ask it, so an
+  import resolves to the same file in both.
 
 - `compileProgramSource` compiles a root that is already in memory, taking its source root rather than deriving one. The interactive session's buffer is not a file, but its imports still have to reach the modules a compiled program's would, and there is no path to derive the root from.
 

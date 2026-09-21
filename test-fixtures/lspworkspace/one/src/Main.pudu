@@ -1,0 +1,7 @@
+module Main
+
+import Lib as L
+
+fn main() -> Int {
+  L.fromOne()
+}

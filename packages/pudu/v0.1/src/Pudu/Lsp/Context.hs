@@ -5,13 +5,16 @@ module Pudu.Lsp.Context
   , TypeParameter
   , contextAt
   , contextParameters
+  , declaredModule
   , importSiteAt
   ) where
 
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Constraint (..)
@@ -101,6 +104,18 @@ contextAt tokens parsed offset
       Just tree ->
         maybe (ValueContext [] Nothing) id
           (listToMaybe [found | Just found <- map (declarationContext offset []) (moduleDeclarations tree)])
+
+{-| The module a document declares, read from its header's tokens, so it is
+    known while the rest of the document does not parse. -}
+declaredModule :: [Token] -> Maybe ModuleName
+declaredModule tokens = case dropWhile ((/= Keyword KwModule) . tokenKind) tokens of
+  _ : rest -> ModuleName <$> NonEmpty.nonEmpty [name | Identifier name <- map tokenKind (takeWhile (pathKind . tokenKind) rest)]
+  [] -> Nothing
+ where
+  pathKind kind = case kind of
+    Identifier _ -> True
+    Symbol SymDot -> True
+    _ -> False
 
 {-| The import being written at `offset`, read backwards from the cursor over
     the tokens before it.

@@ -9,6 +9,7 @@ module Pudu.Compiler.Program
   , programIntegerKinds
   , programDocs
   , rootCompileResult
+  , sourceRootFor
   ) where
 
 import Control.Exception (IOException, try)
@@ -371,12 +372,22 @@ importsOf value =
   ]
 
 deriveSourceRoot :: FilePath -> Module -> (FilePath, Bool)
-deriveSourceRoot rootPath value =
-  let pathParts = splitDirectories (dropExtension (normalise rootPath))
-      nameParts = map Text.unpack (toList (moduleNameSegments (locatedValue (moduleName value))))
+deriveSourceRoot rootPath value = sourceRootFor rootPath (locatedValue (moduleName value))
+
+{-| The source root of a program whose entry file at `path` declares `name`:
+    the path with the module's segments taken off its end, so `src/App/Main.pudu`
+    declaring `App.Main` is rooted at `src`. When the path does not end in the
+    name, the file's own directory, and `True` to say they disagree.
+
+    Every tool that compiles a file-backed program asks this, so an import
+    resolves to the same file in the editor as on the command line. -}
+sourceRootFor :: FilePath -> ModuleName -> (FilePath, Bool)
+sourceRootFor path name =
+  let pathParts = splitDirectories (dropExtension (normalise path))
+      nameParts = map Text.unpack (toList (moduleNameSegments name))
       agrees = nameParts `isSuffixOf` pathParts
       kept = take (length pathParts - length nameParts) pathParts
-   in (if agrees then joinPath kept else takeDirectory rootPath, not agrees)
+   in (if agrees then joinPath kept else takeDirectory path, not agrees)
 
 modulePath :: FilePath -> ModuleName -> FilePath
 modulePath sourceRoot name =

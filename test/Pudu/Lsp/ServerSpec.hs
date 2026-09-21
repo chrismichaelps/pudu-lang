@@ -4,6 +4,7 @@ module Pudu.Lsp.ServerSpec (serverProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Lsp.Analysis (documentSourceRoot)
 import Pudu.Lsp.Completion (completionRepaired)
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
 import Pudu.Lsp.Json (Json (..), lookupField, parse, textOf)
@@ -18,6 +19,7 @@ import Pudu.Lsp.Server
   , rememberAnalysis
   , serverCapabilities
   )
+import System.Directory (getCurrentDirectory, makeAbsolute)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 serverProperties :: [(String, IO Property)]
@@ -46,6 +48,7 @@ serverProperties =
   , ("module candidates are exactly a module's exports", testExportCandidates)
   , ("member completion is on the whole receiver expression", testReceiverExpression)
   , ("completion recovers facts from unfinished text", testRecoveredCompletion)
+  , ("each document is rooted by its own path and module", testDocumentSourceRoot)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
@@ -740,6 +743,45 @@ testRecoveredCompletion = do
   countDiagnostics message = case lookupField "params" message >>= lookupField "diagnostics" of
     Just (JsonArray entries) -> length entries
     _ -> 0
+
+testDocumentSourceRoot :: IO Property
+testDocumentSourceRoot = do
+  working <- getCurrentDirectory
+  declared <- documentSourceRoot ["/w"] "file:///w/src/App/Main.pudu" "module App.Main\nfn main() -> Int { 0 }\n"
+  commented <- documentSourceRoot ["/w"] "file:///w/src/Main.pudu" "// a program\n/// about it\nmodule Main\n"
+  encoded <- documentSourceRoot [] "file:///w/with%20space/src/Main.pudu" "module Main\n"
+  mismatched <- documentSourceRoot ["/w"] "file:///w/src/Other.pudu" "module Main\n"
+  headerless <- documentSourceRoot ["/w", "/w/nested"] "file:///w/nested/src/Main.pudu" "fn main() -> Int { 0 }\n"
+  unfinished <- documentSourceRoot ["/w"] "file:///w/src/Main.pudu" "module \n"
+  untitled <- documentSourceRoot ["/w", "/v"] "untitled:Untitled-1" "module Main\n"
+  untitledAlone <- documentSourceRoot [] "untitled:Untitled-1" "module Main\n"
+  let root = "test-fixtures/lspworkspace"
+      program folder = do
+        content <- TextIO.readFile (root <> "/" <> folder <> "/src/Main.pudu")
+        workspace <- makeAbsolute root
+        let file = "file://" <> Text.pack (workspace <> "/" <> folder <> "/src/Main.pudu")
+            parameters = JsonObject
+              [ ("textDocument", JsonObject [("uri", JsonText file)])
+              , ("position", JsonObject [("line", JsonNumber 5), ("character", JsonNumber 4)])
+              ]
+        sourceRoot <- documentSourceRoot [workspace] file content
+        analysis <- analyseIn sourceRoot file content
+        let documents = rememberAnalysis file analysis emptyDocuments
+        pure (completionLabels (request "textDocument/completion" parameters documents))
+  one <- program "one"
+  two <- program "two"
+  pure $ conjoin
+    [ counterexample "a declared module roots its path" (declared === "/w/src")
+    , counterexample "a header after comments is found" (commented === "/w/src")
+    , counterexample "a percent-encoded path is decoded" (encoded === "/w/with space/src")
+    , counterexample "a module its path does not name is rooted at its directory" (mismatched === "/w/src")
+    , counterexample "a file without a header is rooted at the nearest folder holding it" (headerless === "/w/nested")
+    , counterexample "an unfinished header falls back the same way" (unfinished === "/w")
+    , counterexample "an untitled buffer uses the first folder" (untitled === "/w")
+    , counterexample "an untitled buffer with no folder uses the working directory" (untitledAlone === working)
+    , counterexample ("one program reads its own Lib: " <> show one) (property ("fromOne" `elem` one && "fromTwo" `notElem` one))
+    , counterexample ("its sibling reads its own: " <> show two) (property ("fromTwo" `elem` two && "fromOne" `notElem` two))
+    ]
 
 completionEdit :: Text -> Json -> Maybe ((Int, Int), (Int, Int))
 completionEdit wanted reply = case reply of

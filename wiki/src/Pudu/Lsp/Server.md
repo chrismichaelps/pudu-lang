@@ -82,9 +82,11 @@ serverCapabilities :: Json
 - Formatting replaces the whole document in one edit. The formatter guarantees it only moves
   whitespace, so a full replacement cannot change the program, and a client applies one edit
   atomically.
-- The server records workspace roots from `initialize` (`rootUri`, `workspaceFolders`, or `rootPath`)
-  and walks up project boundary markers (`pudu.cabal`, `pudu.toml`, `.git`, `lib`) so submodules
-  inside subdirectories resolve sibling and library imports accurately.
+- The server records every workspace folder from `initialize` (`workspaceFolders`, and the older
+  `rootUri` or `rootPath`). Each document is compiled under the source root [[Lsp Analysis]] derives
+  from its own path and module name, as the command line derives it; folders only root a file with
+  no header and an untitled buffer. A repaired or probe text is compiled under the written
+  document's root, so it reaches the same modules.
 - Every new language surface joins the real stdio-session fixture. The fixture opens a clean
   compatibility document and requires an empty diagnostic list, so an editor cannot silently keep
   an older parser or checker contract while command-line-only tests advance.
