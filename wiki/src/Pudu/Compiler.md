@@ -58,6 +58,9 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 
 ### Governance
 
+- `compileFolded` holds the constants folding computed that are plain data; linking binds them
+  instead of evaluating their initializers again ([[Eval Frozen]]).
+
 - Compiling runs the evaluator to fold constants, and the evaluator lives in `IO` so that a program
   can reach the world. Folding itself never does: it runs with effects denied. The `IO` in
   `runCompile`'s type is a type, not a permission.

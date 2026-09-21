@@ -31,6 +31,10 @@ evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module 
 
 ### Governance
 
+- **Folding answers with its values.** `foldModule` evaluates a module's constants with effects
+  denied and answers with its diagnostics and every constant that froze ([[Eval Frozen]]).
+  `evaluateProgramEntryFolded` and `evaluateProgramTalliedFolded` link with those values, by module
+  path, bound in place of evaluating the initializers again.
 - **One entry action, two runners.** Linking, scoping the root, and calling (and awaiting) the entry
   point are one action. An ordinary run executes it with no counters, so no tally site does more
   than a comparison; only the tallied entry allocates counters and reads them back.

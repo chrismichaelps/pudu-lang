@@ -5,6 +5,7 @@ module Pudu.Compiler.Program
   , compileProgramCached
   , compileProgramSource
   , programDependencies
+  , programFolded
   , programIntegerKinds
   , programDocs
   , rootCompileResult
@@ -49,6 +50,7 @@ import Pudu.Compiler.Library
   , resolutionTriedRoots
   )
 import Pudu.Doc (DocIndex)
+import Pudu.Eval.Frozen (Frozen)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -127,6 +129,15 @@ programDependencies result =
 programIntegerKinds :: ProgramResult -> Map.Map Span Text.Text
 programIntegerKinds result =
   Map.unions [compileIntegerKinds compiled | compiled <- Map.elems (programModules result)]
+
+{-| The constants folding computed for every module, by module path: what
+    linking binds instead of evaluating the initializers again. -}
+programFolded :: ProgramResult -> Map.Map Text.Text (Map.Map Text.Text Frozen)
+programFolded result =
+  Map.fromList
+    [ (moduleNameText name, compileFolded compiled)
+    | (name, compiled) <- Map.toList (programModules result)
+    ]
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
@@ -329,12 +340,14 @@ checkedFor cache graph context source frontend = do
         , compileIntegerKinds = checkedIntegerKinds reused
         , compileDocs = Nothing
         , compileDiagnostics = []
+        , compileFolded = checkedFolded reused
         }
     Nothing -> do
       compiled <- compileFrontendWith context frontend
       case compileModule compiled of
         Just checked | null (compileDiagnostics compiled) ->
-          storeChecked cache graph source (CheckedProduct checked (compileIntegerKinds compiled))
+          storeChecked cache graph source
+            (CheckedProduct checked (compileIntegerKinds compiled) (compileFolded compiled))
         _ -> pure ()
       pure compiled
 

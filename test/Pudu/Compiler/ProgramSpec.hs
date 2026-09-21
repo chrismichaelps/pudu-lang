@@ -13,6 +13,7 @@ import Pudu.Compiler.Program.CacheSpec
   ( testCacheCorruption
   , testCacheEquivalence
   , testCacheInvalidation
+  , testFoldedConstants
   )
 import Pudu.Compiler.Program.GraphSpec
   ( testDiscoveryFailures
@@ -55,6 +56,7 @@ programProperties =
   , ("stored products compile and run exactly as source does", testCacheEquivalence)
   , ("stored products are never reused for changed input", testCacheInvalidation)
   , ("damaged stored products fall back and are replaced", testCacheCorruption)
+  , ("folded constants are bound at link instead of evaluated again", testFoldedConstants)
   , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)

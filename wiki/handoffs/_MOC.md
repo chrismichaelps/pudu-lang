@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-folded-constants]] — issue #271 plain-data constants bound from their fold at link,
+  stored with checked products, and startup evidence.
+
 - [[2026-09-21-linked-registry]] — issue #270 one published registry frame for linking, bounded
   module environments, and request-latency evidence.
 

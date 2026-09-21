@@ -19,7 +19,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
-import Pudu.Eval.Program (evaluateModule)
+import Pudu.Eval.Frozen (Frozen)
+import Pudu.Eval.Program (foldModule)
 import Pudu.Frontend.Expand (expandModule)
 import Pudu.Semantic
   ( ExportIndex
@@ -58,6 +59,9 @@ data CompileResult = CompileResult
   , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
+  {-| The constants folding computed that are plain data, which linking binds
+      instead of evaluating their initializers again. -}
+  , compileFolded :: ~(Map Text Frozen)
   }
   deriving stock (Eq, Show)
 
@@ -101,6 +105,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileIntegerKinds = Map.empty
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
+            , compileFolded = Map.empty
             }
         Just original ->
           let (parsed, expansionDiagnostics) = expandModule original
@@ -116,9 +121,9 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
-                constantDiagnostics <-
+                (constantDiagnostics, folded) <-
                   if hasErrors typed
-                    then pure []
+                    then pure ([], Map.empty)
                     else foldConstants (maybe Map.empty moduleIntegerKinds typing) parsed
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
@@ -132,6 +137,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                     , compileDocs =
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
+                    , compileFolded = folded
                     }
 
 {-| Evaluate the module's constants at compile time.
@@ -144,11 +150,12 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Map Span Text -> Module -> IO [Diagnostic]
+foldConstants :: Map Span Text -> Module -> IO ([Diagnostic], Map Text Frozen)
 foldConstants integerKinds parsed
-  | any hasInitializer (moduleDeclarations parsed) =
-      outcomeDiagnostics <$> evaluateModule integerKinds parsed
-  | otherwise = pure []
+  | any hasInitializer (moduleDeclarations parsed) = do
+      (outcome, folded) <- foldModule integerKinds parsed
+      pure (outcomeDiagnostics outcome, folded)
+  | otherwise = pure ([], Map.empty)
  where
   hasInitializer (Located _ declaration) = case declaration of
     BindingDeclaration {} -> True

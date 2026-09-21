@@ -31,6 +31,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Cache.Persist (decodeWith, encodeFor)
 import qualified Data.Set as Set
+import Pudu.Eval.Frozen (Frozen)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Semantic.Interface (moduleExportKeys, moduleExports)
 import Pudu.Type.Interface
@@ -96,6 +97,7 @@ disabledCache = ProductCache Nothing Nothing Nothing Nothing
 data CheckedProduct = CheckedProduct
   { checkedModule :: ~Module
   , checkedIntegerKinds :: ~(Map Span Text)
+  , checkedFolded :: ~(Map Text Frozen)
   }
 
 {-| Open the cache the environment asks for.
@@ -243,15 +245,25 @@ lookupChecked cache graph source =
     {-| Read only when used. The entry's digest was checked before this runs,
         so what is read is what was written by this compiler. A check never
         reads the tree it would run; a run reads it as it loads. -}
-    let decoded = case decodeWith source bytes of
+    let decoded :: ((Module, [(Span, Text)]), [(Text, Frozen)])
+        decoded = case decodeWith source bytes of
           Just value -> value
           Nothing -> error "pudu: a stored module could not be read; run with PUDU_CACHE=off"
-     in Just (CheckedProduct (fst decoded) (Map.fromList (snd decoded)))
+     in Just
+          ( CheckedProduct
+              (fst (fst decoded))
+              (Map.fromList (snd (fst decoded)))
+              (Map.fromList (snd decoded))
+          )
 
 storeChecked :: ProductCache -> ByteString -> Source -> CheckedProduct -> IO ()
 storeChecked cache graph source stored =
   writeEntry cache (entryName "checked" [graph, sourceFingerprint source])
-    (encodeFor source (checkedModule stored, Map.toList (checkedIntegerKinds stored)))
+    ( encodeFor source
+        ( (checkedModule stored, Map.toList (checkedIntegerKinds stored))
+        , Map.toList (checkedFolded stored)
+        )
+    )
 
 entryName :: Text -> [ByteString] -> String
 entryName kind parts =

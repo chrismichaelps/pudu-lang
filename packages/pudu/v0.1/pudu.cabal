@@ -101,6 +101,7 @@ library
     Pudu.Eval.Entropy
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Frozen
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Argument
     Pudu.Eval.Foreign.Resource

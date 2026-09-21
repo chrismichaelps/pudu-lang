@@ -13,12 +13,16 @@ module Pudu.Eval.Program
   , evaluateModule
   , evaluateInteractiveBlock
   , evaluateProgramEntry
+  , evaluateProgramEntryFolded
   , evaluateProgramTallied
+  , evaluateProgramTalliedFolded
+  , foldModule
   , linkedNames
   ) where
 
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env
@@ -37,7 +41,13 @@ import Pudu.Eval.Env
   , abortAt
   , lookupName
   )
-import Pudu.Eval.Install (installBuiltinConstructors, loadDeclarations, loadModuleDeclarations)
+import Pudu.Eval.Frozen (Frozen, freeze, thaw)
+import Pudu.Eval.Install
+  ( installBuiltinConstructors
+  , loadDeclarations
+  , loadModuleDeclarations
+  , loadModuleDeclarationsWith
+  )
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
@@ -46,6 +56,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Block
+  , Declaration (..)
   , Import (..)
   , Function (..)
   , Module (..)
@@ -91,8 +102,19 @@ evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
     to pass what it had. -}
 evaluateProgramEntry
   :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramEntry integerKinds dependencies entryName moduleValue =
-  runCounted Nothing (programEntry integerKinds dependencies entryName moduleValue)
+evaluateProgramEntry = evaluateProgramEntryFolded Map.empty
+
+{-| Run a program, binding the constants folding already computed — by module
+    path, then name — rather than evaluating their initializers again. -}
+evaluateProgramEntryFolded
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> IO EvalOutcome
+evaluateProgramEntryFolded folded integerKinds dependencies entryName moduleValue =
+  runCounted Nothing (programEntry folded integerKinds dependencies entryName moduleValue)
 
 {-| The same, and what running it cost.
 
@@ -107,9 +129,18 @@ evaluateProgramTallied
   -> Text
   -> Module
   -> IO (EvalOutcome, Map.Map Text Int)
-evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
+evaluateProgramTallied = evaluateProgramTalliedFolded Map.empty
+
+evaluateProgramTalliedFolded
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> IO (EvalOutcome, Map.Map Text Int)
+evaluateProgramTalliedFolded folded integerKinds dependencies entryName moduleValue = do
   counters <- newIORef Map.empty
-  outcome <- runCounted (Just counters) (programEntry integerKinds dependencies entryName moduleValue)
+  outcome <- runCounted (Just counters) (programEntry folded integerKinds dependencies entryName moduleValue)
   collected <- readIORef counters
   pure (outcome, collected)
 
@@ -119,17 +150,25 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
     drift apart in what they link, in which order, or in how an asynchronous
     entry is awaited. Only the tallied entry allocates counters; an ordinary
     run passes none, and every tally site costs it one comparison. -}
-programEntry :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> Evaluator Value
-programEntry integerKinds dependencies entryName moduleValue = do
+programEntry
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> Evaluator Value
+programEntry folded integerKinds dependencies entryName moduleValue = do
   withIntegerKinds integerKinds
-  builtins <- linkDependencies dependencies
+  builtins <- linkDependenciesFolded folded dependencies
   pushFrame builtins
   {-| The root gets a frame of its own so its declarations shadow every
       dependency's rather than sharing a frame with the last one linked. -}
   pushFrame Map.empty
   installImportAliases (moduleImports moduleValue)
   inherited <- currentMethods
-  loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
+  loadModuleDeclarationsWith evaluate
+    (foldedFor folded (moduleNameText (locatedValue (moduleName moduleValue))))
+    (moduleDeclarations moduleValue)
   {-| The root's own functions are given its environment, exactly as a
       dependency's are.
 
@@ -195,13 +234,36 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     that cannot hold what it computes is a mistake worth naming at compile
     time. -}
 evaluateModule :: Map.Map Span Text -> Module -> IO EvalOutcome
-evaluateModule integerKinds moduleValue =
-  runWithEffects
-    False
-    ( withIntegerKinds integerKinds
-        >> loadDeclarations evaluate (moduleDeclarations moduleValue)
-        >> pure UnitValue
-    )
+evaluateModule integerKinds moduleValue = fst <$> foldModule integerKinds moduleValue
+
+{-| Fold a module's constants: evaluate them with effects denied, and answer
+    with what went wrong and with every constant whose value is plain data.
+
+    Folding runs the module alone, with nothing but the language in scope, so a
+    constant that compiles is one whose value is fixed by its own module; the
+    values answered are what linking would compute, and linking installs them
+    instead of computing them again. -}
+foldModule :: Map.Map Span Text -> Module -> IO (EvalOutcome, Map.Map Text Frozen)
+foldModule integerKinds moduleValue = do
+  found <- newIORef Map.empty
+  outcome <- runWithEffects False $ do
+    withIntegerKinds integerKinds
+    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    frame <- currentFrame
+    Evaluator $ \env -> do
+      writeIORef found (Map.mapMaybe freeze (Map.restrictKeys frame constants))
+      pure (Done () env)
+    pure UnitValue
+  folded <- readIORef found
+  pure (outcome, if null (outcomeDiagnostics outcome) then folded else Map.empty)
+ where
+  constants = Set.fromList
+    [ locatedValue name
+    | Located _ (BindingDeclaration _ _ name _ _) <- moduleDeclarations moduleValue
+    ]
+
+foldedFor :: Map.Map Text (Map.Map Text Frozen) -> Text -> Map.Map Text Value
+foldedFor folded path = maybe Map.empty (Map.map thaw) (Map.lookup path folded)
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -316,7 +378,10 @@ linkedNames dependencies = do
     longest dotted prefix is tried. Publishing is one insertion per declaration,
     and an import reads the registry by its path rather than every frame. -}
 linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
-linkDependencies dependencies = do
+linkDependencies = linkDependenciesFolded Map.empty
+
+linkDependenciesFolded :: Map.Map Text (Map.Map Text Frozen) -> [(Text, Module)] -> Evaluator (Map.Map Text Value)
+linkDependenciesFolded folded dependencies = do
   pushFrame Map.empty
   installBuiltinConstructors
   builtins <- currentFrame
@@ -341,7 +406,7 @@ linkDependencies dependencies = do
         of them before its first request. -}
     pushFrame Map.empty
     inherited <- currentMethods
-    loadModuleDeclarations evaluate (moduleDeclarations dependency)
+    loadModuleDeclarationsWith evaluate (foldedFor folded path) (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded

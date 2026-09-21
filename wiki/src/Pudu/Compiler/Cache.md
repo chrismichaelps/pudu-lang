@@ -40,7 +40,8 @@ pruneProducts :: ProductCache -> IO ()
 ## Governance
 
 - **Two products.** A *frontend* entry — the parsed module and its interface key — is keyed by the
-  source text alone. A *checked* entry — the expanded module and what each integer literal became —
+  source text alone. A *checked* entry — the expanded module, what each integer literal became, and
+  the constants folding froze —
   is keyed by the source text and the graph key: every module's name and interface key.
 - **Interface keys are position-free.** They cover a module's imports, body-free exported
   declarations, private type shells, exported constants' annotations, default availability, and

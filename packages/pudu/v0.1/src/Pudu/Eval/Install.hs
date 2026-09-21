@@ -3,6 +3,7 @@ module Pudu.Eval.Install
   ( Evaluate
   , loadDeclarations
   , loadModuleDeclarations
+  , loadModuleDeclarationsWith
   , installBuiltinConstructors
   , lastSegmentOf
   , targetNameOf
@@ -66,11 +67,17 @@ loadDeclarations evaluateWith declarations = do
   loadModuleDeclarations evaluateWith declarations
 
 loadModuleDeclarations :: Evaluate -> [Located Declaration] -> Evaluator ()
-loadModuleDeclarations evaluateWith declarations = do
+loadModuleDeclarations evaluateWith = loadModuleDeclarationsWith evaluateWith Map.empty
+
+{-| Load a module's declarations, binding each constant folding already
+    computed rather than evaluating its initializer again. A constant without a
+    folded value is evaluated, in declaration order, as it always was. -}
+loadModuleDeclarationsWith :: Evaluate -> Map Text Value -> [Located Declaration] -> Evaluator ()
+loadModuleDeclarationsWith evaluateWith folded declarations = do
   let traits = traitTable declarations
       layouts = recordLayouts declarations
   mapM_ (installDeclaration traits layouts) declarations
-  mapM_ (initializeDeclaration evaluateWith) declarations
+  mapM_ (initializeDeclaration evaluateWith folded) declarations
 
 {-| Trait members by trait name, so an implementation inherits the defaults it
     does not override. -}
@@ -357,11 +364,13 @@ installVariants typeText (Located _ definition) = case definition of
     let name = locatedValue (variantName variant)
      in (name, VariantValue name [])
 
-initializeDeclaration :: Evaluate -> Located Declaration -> Evaluator ()
-initializeDeclaration evaluateWith (Located _ declaration) = case declaration of
-  BindingDeclaration _ _ name _ value -> do
-    evaluated <- evaluateWith value
-    bind (locatedValue name) evaluated
+initializeDeclaration :: Evaluate -> Map Text Value -> Located Declaration -> Evaluator ()
+initializeDeclaration evaluateWith folded (Located _ declaration) = case declaration of
+  BindingDeclaration _ _ name _ value -> case Map.lookup (locatedValue name) folded of
+    Just known -> bind (locatedValue name) known
+    Nothing -> do
+      evaluated <- evaluateWith value
+      bind (locatedValue name) evaluated
   _ -> pure ()
 
 lastSegmentOf :: NonEmpty Text -> Text

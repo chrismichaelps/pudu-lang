@@ -3,6 +3,7 @@ module Pudu.Compiler.Program.CacheSpec
   ( testCacheCorruption
   , testCacheEquivalence
   , testCacheInvalidation
+  , testFoldedConstants
   ) where
 
 import Control.Monad (forM_)
@@ -15,12 +16,19 @@ import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgramCached
   , programDependencies
+  , programFolded
   , programIntegerKinds
   , rootCompileResult
   )
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticMessage)
 import Pudu.Eval (EvalOutcome (..))
-import Pudu.Eval.Program (evaluateProgramEntry)
+import qualified Data.Map.Strict as Map
+import Pudu.Eval.Program
+  ( evaluateProgramEntry
+  , evaluateProgramEntryFolded
+  , evaluateProgramTallied
+  , evaluateProgramTalliedFolded
+  )
 import Pudu.Eval.Render (renderValue)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import System.Directory (createDirectoryIfMissing, getModificationTime, listDirectory, setModificationTime)
@@ -35,7 +43,9 @@ observed program = do
   ran <- case rootCompileResult program >>= compileModule of
     Nothing -> pure Nothing
     Just parsed -> do
-      outcome <- evaluateProgramEntry (programIntegerKinds program) (programDependencies program) "main" parsed
+      outcome <-
+        evaluateProgramEntryFolded (programFolded program)
+          (programIntegerKinds program) (programDependencies program) "main" parsed
       pure (renderValue <$> outcomeValue outcome)
   pure (map described (programDiagnostics program), map moduleNameText (programOrder program), ran)
  where
@@ -57,6 +67,8 @@ testCacheEquivalence = withSystemTempDirectory "pudu-cache" $ \root -> do
     , "test-fixtures/program29/AmbiguousRoot.pudu"
     , "test-fixtures/aliasfield/Main.pudu"
     , "test-fixtures/stdlib/UsesAll.pudu"
+    , "test-fixtures/folded/Main.pudu"
+    , "test-fixtures/comptimehigher/Main.pudu"
     ]
   compareRuns root path = do
     fresh <- observed =<< compileProgramCached disabledCache path
@@ -132,3 +144,37 @@ testCacheCorruption = withSystemTempDirectory "pudu-cache-damage" $ \root -> do
     , counterexample "and are replaced by entries that read" (repaired === fresh)
     , property True
     ]
+
+{-| A constant folding computed is bound from the fold when the program links,
+    not evaluated again, and only when it is plain data.
+
+    `TOTAL` sums two hundred numbers in a compile-time loop, so evaluating it a
+    second time is work a tally can see. `STEP` is a function, which carries
+    the environment it was made in and is always evaluated where it links. -}
+testFoldedConstants :: IO Property
+testFoldedConstants = do
+  let path = "test-fixtures/folded/Main.pudu"
+  program <- compileProgramCached disabledCache path
+  let folded = Map.findWithDefault Map.empty "Main" (programFolded program)
+      plain =
+        [ "TOTAL", "SMALL", "WIDE", "RATIO", "PRICE", "NAME", "LETTER", "ORIGIN", "SHAPE"
+        , "PAIR", "DAYS", "LIMITS"
+        ]
+  case rootCompileResult program >>= compileModule of
+    Nothing -> pure (counterexample "the fixture compiles" False)
+    Just parsed -> do
+      let kinds = programIntegerKinds program
+          dependencies = programDependencies program
+      reused <- evaluateProgramEntryFolded (programFolded program) kinds dependencies "main" parsed
+      evaluated <- evaluateProgramEntry kinds dependencies "main" parsed
+      (_, reusedWork) <- evaluateProgramTalliedFolded (programFolded program) kinds dependencies "main" parsed
+      (_, evaluatedWork) <- evaluateProgramTallied kinds dependencies "main" parsed
+      let answer = fmap renderValue . outcomeValue
+      pure $ conjoin
+        [ counterexample "every plain-data constant is folded" (filter (`Map.notMember` folded) plain === [])
+        , counterexample "a function constant is not" (Map.member "STEP" folded === False)
+        , counterexample "the program runs from folded constants" (answer reused === Just "13")
+        , counterexample "and agrees with evaluating them again" (answer reused === answer evaluated)
+        , counterexample ("linking does less work: " <> show (sum reusedWork, sum evaluatedWork))
+            (sum reusedWork < sum evaluatedWork)
+        ]

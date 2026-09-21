@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Constants are not evaluated twice
+
+- A module's constants whose values are plain data are bound from what folding computed when the
+  program links, instead of their initializers running again; functions and anything carrying an
+  environment are still evaluated at link. Folded values are stored with a module's checked product.
+- The full-stack service reaches `listening` in 58.5ms warm (from 67.6ms) and 337.5ms without the
+  cache (from 363.1ms) (issue #271).
+
 ## 2026-09-21 — Linking reads a registry and environments stay small
 
 - Linking keeps one published frame of every linked module's declarations under their canonical

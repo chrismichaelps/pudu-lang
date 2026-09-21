@@ -47,12 +47,13 @@ import Pudu.Compiler.Program
   , compileProgram
   , compileProgramCached
   , programDependencies
+  , programFolded
   , programIntegerKinds
   , programDocs
   , rootCompileResult
   )
 import Pudu.Eval (EvalOutcome (..))
-import Pudu.Eval.Program (evaluateProgramEntry, evaluateProgramTallied)
+import Pudu.Eval.Program (evaluateProgramEntryFolded, evaluateProgramTalliedFolded)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value (Value (..))
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
@@ -463,7 +464,8 @@ explainProgram style path = do
         exitFailure
       Just parsed -> do
         (outcome, counted) <-
-          evaluateProgramTallied
+          evaluateProgramTalliedFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
@@ -507,7 +509,8 @@ runProgram style path = do
         exitFailure
       Just parsed -> do
         outcome <-
-          evaluateProgramEntry
+          evaluateProgramEntryFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
@@ -882,7 +885,8 @@ runTestFile style path = do
         pure (False, 0)
       Just parsed -> do
         outcome <-
-          evaluateProgramEntry
+          evaluateProgramEntryFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
