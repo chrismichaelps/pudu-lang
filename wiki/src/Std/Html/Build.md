@@ -27,9 +27,13 @@ builder-specific compact `<!DOCTYPE html>` prefix followed by the root node.
 same persistent receiver without invoking the callback; true calls the builder once, converts its
 node through `html`, and appends it at that exact child position.
 
-`at`, `href`, `src`, `action`, and the other string setters are convenience setters, not checked
-destination constructors. The renderer still drops event-handler attributes as a final backstop.
-Callers needing the stronger checked-destination contract use [[Std Html]] constructors directly.
+`at`, `href`, `src`, and `action` remain unchecked compatibility setters; new code migrates to
+`atChecked`, the `hrefChecked`/`srcChecked`/`actionChecked` string conveniences, or the
+`hrefTo`/`srcFrom`/`actionTo` methods that accept a checked `Html.Destination`. The checked generic
+path refuses handler names, controls, and unsafe values for every destination-bearing name. A
+caller intentionally bypassing destination checks must first call `Html.trustedDestination`, so the
+escape hatch remains visible in source. The renderer still drops event-handler attributes as a
+final backstop for values built through unchecked compatibility paths.
 
 ## Algorithm and boundaries
 
@@ -61,6 +65,14 @@ it with typed shell elements and child slots.
   _Rationale:_ that is a public compatibility and safety redesign tracked separately; changing it
   here would mix API semantics with traversal mechanics. _Rejected:_ silently changing setter
   signatures while optimizing rendering.
+- **Q:** Change the existing string setter signatures? **A:** No; keep them for source compatibility
+  and add explicitly checked alternatives. _Rejected:_ silently changing accepted values or return
+  types in an additive migration.
+- **Q:** Let `atChecked("href", value)` bypass destination validation? **A:** No; destination-bearing
+  names use the same `Html.destination` check as named conveniences. _Rejected:_ a checked generic
+  setter that is safe only for callers who remember a separate list of attribute names.
+- **Q:** Accept an unchecked string in the typed setters? **A:** No; they accept `Html.Destination`.
+  An intentional exception is constructed through the visibly named `Html.trustedDestination`.
 - **Q:** Normalize both document prefixes? **A:** No; preserve their existing bytes. _Rationale:_
   output is observable and current callers may compare exact documents. _Rejected:_ adding or
   removing the newline for consistency.
@@ -80,4 +92,4 @@ it with typed shell elements and child slots.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Html]] · [[architecture/STDLIB]] · [[2026-09-20-typed-html-shells]]
-· [[2026-09-20-deferred-html-builders]]
+· [[2026-09-20-deferred-html-builders]] · [[2026-09-20-checked-html-destinations]]

@@ -262,7 +262,16 @@ export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
   if lowered.startsWith("on") {
     Err(Handler(name))
   } else {
-    if hasControl(name) || hasControl(value) { Err(Control(name)) } else { Ok((name, value)) }
+    if hasControl(name) || hasControl(value) {
+      Err(Control(name))
+    } else {
+      if lowered == "href" || lowered == "src" || lowered == "action" {
+        let held = destination(value) ?
+        Ok((name, held.written))
+      } else {
+        Ok((name, value))
+      }
+    }
   }
 }
 

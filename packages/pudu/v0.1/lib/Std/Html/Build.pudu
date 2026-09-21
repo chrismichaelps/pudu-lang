@@ -22,6 +22,9 @@ export trait Building {
   /// Sets an attribute to a value.
   fn at(self: &Self, name: Str, value: Str) -> Self
 
+  /// Sets a checked attribute, or returns why its name or value was refused.
+  fn atChecked(self: &Self, name: Str, value: Str) -> Result[Self, Html.Unsafe]
+
   /// Sets an attribute whose value is its own name, such as `required`.
   fn flag(self: &Self, name: Str) -> Self
 
@@ -34,6 +37,12 @@ export trait Building {
   fn value(self: &Self, value: Str) -> Self
   fn placeholder(self: &Self, value: Str) -> Self
   fn action(self: &Self, value: Str) -> Self
+  fn hrefTo(self: &Self, value: &Html.Destination) -> Self
+  fn srcFrom(self: &Self, value: &Html.Destination) -> Self
+  fn actionTo(self: &Self, value: &Html.Destination) -> Self
+  fn hrefChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe]
+  fn srcChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe]
+  fn actionChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe]
   fn method(self: &Self, value: Str) -> Self
   fn rel(self: &Self, value: Str) -> Self
   fn lang(self: &Self, value: Str) -> Self
@@ -89,6 +98,15 @@ impl Building for Node {
     Node{name: self.name, attributes: self.attributes.push((name, value)), children: self.children}
   }
 
+  fn atChecked(self: &Self, name: Str, value: Str) -> Result[Self, Html.Unsafe] {
+    let attribute = Html.attribute(name, value) ?
+    Ok(Node {
+        name: self.name,
+        attributes: self.attributes.push(attribute),
+        children: self.children
+      })
+  }
+
   fn flag(self: &Self, name: Str) -> Self { self.at(name, name) }
 
   fn class(self: &Self, value: Str) -> Self { self.at("class", value) }
@@ -108,6 +126,33 @@ impl Building for Node {
   fn placeholder(self: &Self, value: Str) -> Self { self.at("placeholder", value) }
 
   fn action(self: &Self, value: Str) -> Self { self.at("action", value) }
+
+  fn hrefTo(self: &Self, value: &Html.Destination) -> Self {
+    self.at("href", Html.destinationText(value))
+  }
+
+  fn srcFrom(self: &Self, value: &Html.Destination) -> Self {
+    self.at("src", Html.destinationText(value))
+  }
+
+  fn actionTo(self: &Self, value: &Html.Destination) -> Self {
+    self.at("action", Html.destinationText(value))
+  }
+
+  fn hrefChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe] {
+    let destination = Html.destination(value) ?
+    Ok(self.hrefTo(&destination))
+  }
+
+  fn srcChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe] {
+    let destination = Html.destination(value) ?
+    Ok(self.srcFrom(&destination))
+  }
+
+  fn actionChecked(self: &Self, value: Str) -> Result[Self, Html.Unsafe] {
+    let destination = Html.destination(value) ?
+    Ok(self.actionTo(&destination))
+  }
 
   fn method(self: &Self, value: Str) -> Self { self.at("method", value) }
 

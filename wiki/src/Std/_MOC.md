@@ -5,8 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
-- [[Std Html Build]] — persistent fluent nodes with eager or deferred conditionals, delegating exact
-  rendering to `Std.Html`.
+- [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
+  conditionals, and exact rendering delegated to `Std.Html`.
 - [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
   lengths, and output budgets.
 - [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact

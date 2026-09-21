@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-20 — Fluent HTML destinations can be checked before rendering
+
+- `Std.Html.Build` adds typed `hrefTo`, `srcFrom`, and `actionTo` setters plus checked string
+  conveniences and a generic `atChecked` path. Existing unchecked setters remain source-compatible;
+  intentional exceptions use the visibly named `Html.trustedDestination` escape hatch.
+- `Html.attribute` now applies destination validation to case-insensitive `href`, `src`, and
+  `action` names as well as refusing controls and handler attributes. Direct raw element pairs remain
+  compatible, with case-insensitive handler dropping retained as a rendering backstop.
+- Focused exact-output checks cover accepted ordinary and prepared rendering, unsafe and mixed-case
+  schemes, controls, named and generic setter bypasses, mixed-case handlers, trusted destinations,
+  ordinary checked attributes, and legacy compatibility for issue #264. No runtime speedup or
+  complexity improvement is claimed by this safety migration.
+
 ## 2026-09-20 — HTML output coalescing has an enforceable byte bound
 
 - `Std.Html.Buffer.coalesceBounded` preserves input order and bytes while ensuring every returned

@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-20-checked-html-destinations]] — issue #264 typed and checked fluent destination setters,
+  generic-attribute bypass closure, trusted escape-hatch visibility, and compatibility.
+
 - [[2026-09-20-bounded-html-output]] — issue #263 hard application-output chunk bounds, shared
   oversized slices, typed invalid-limit refusal, compatibility, and mixed-size measurements.
 

@@ -13,6 +13,7 @@ testServiceEvaluation = do
   addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  checkedDestinations <- runEntry "test-fixtures/stdlib/UsesHtmlDestinationBuild.pudu"
   compactMarkup <- runEntry "test-fixtures/stdlib/UsesHtmlCompact.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
@@ -120,6 +121,9 @@ testServiceEvaluation = do
     , counterexample
         "text placed in a page stays text"
         (markup === Just "66")
+    , counterexample
+        "checked HTML builder destinations reject program-bearing values without compatibility drift"
+        (checkedDestinations === Just "16")
     , counterexample
         "compact HTML plans join static runs without crossing typed slots"
         (compactMarkup === Just "39")
