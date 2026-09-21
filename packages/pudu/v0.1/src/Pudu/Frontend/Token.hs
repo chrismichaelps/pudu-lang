@@ -13,6 +13,8 @@ module Pudu.Frontend.Token
   , symbolText
   ) where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Source (Span)
 
@@ -159,7 +161,7 @@ data Token = Token
   deriving stock (Eq, Show)
 
 keywordFromText :: Text -> Maybe Keyword
-keywordFromText value = lookup value keywordMappings
+keywordFromText value = Map.lookup value keywordMappings
 
 keywordText :: Keyword -> Text
 keywordText keyword =
@@ -205,7 +207,7 @@ keywordText keyword =
     KwDynamic -> "dynamic"
 
 symbolFromText :: Text -> Maybe SymbolKind
-symbolFromText value = lookup value symbolMappings
+symbolFromText value = Map.lookup value symbolMappings
 
 symbolText :: SymbolKind -> Text
 symbolText symbol =
@@ -254,8 +256,10 @@ symbolText symbol =
     SymLogicalAnd -> "&&"
     SymLogicalOr -> "||"
 
-keywordMappings :: [(Text, Keyword)]
-keywordMappings = [(keywordText keyword, keyword) | keyword <- [minBound .. maxBound]]
+{-| Every identifier the lexer reads and every symbol the parser expects is
+    looked up here, so each spelling table is built once and searched by key. -}
+keywordMappings :: Map Text Keyword
+keywordMappings = Map.fromList [(keywordText keyword, keyword) | keyword <- [minBound .. maxBound]]
 
-symbolMappings :: [(Text, SymbolKind)]
-symbolMappings = [(symbolText symbol, symbol) | symbol <- [minBound .. maxBound]]
+symbolMappings :: Map Text SymbolKind
+symbolMappings = Map.fromList [(symbolText symbol, symbol) | symbol <- [minBound .. maxBound]]

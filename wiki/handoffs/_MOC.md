@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-interface-graph]] — issue #268 interface facts prepared once per module graph,
+  consumer overlays, shared installation, lexer/parser allocation, and scaling evidence.
+
 - [[2026-09-21-resolution-context]] — issue #267 invocation-owned manifest/library roots, failed
   resolution memoization, freshness, deterministic operation counts, and startup evidence.
 

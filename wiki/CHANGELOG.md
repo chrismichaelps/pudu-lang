@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Type interfaces are prepared once per program
+
+- A compiled program prepares one interface graph: dependency order, formation names, trait table,
+  defaults, collected declarations, and the constructors, trait members, and foreign functions every
+  module starts from. Each module adds only the values it imported and the implementation methods of
+  traits it can see, from the interfaces that can contribute them.
+- A dependency's formation mistake is reported once instead of once per importer, and records naming
+  each other across an import cycle now receive canonical identities on both sides.
+- Qualifier lookup, trivia and symbol scanning, keyword and symbol spelling tables, parser steps, the
+  lexer's cursor, and a source's line table no longer allocate per question, per token, or per
+  character.
+- The full-stack check fell from 0.745s and 1.92GB allocated to 0.302s and 492MB; time to listening
+  from 745.8ms to 355.1ms. A 200-module sparse program checks in 196ms instead of 2918ms, and
+  allocation now doubles with the module count instead of growing faster (issue #268).
+
 ## 2026-09-21 — Module resolution setup is shared per compiler invocation
 
 - Program discovery now reads one coherent manifest snapshot and reuses ordered project and

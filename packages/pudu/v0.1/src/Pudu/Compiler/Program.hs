@@ -49,6 +49,7 @@ import Pudu.Frontend.Syntax.Tree (Import (..), Module (..))
 import Pudu.Semantic.Interface (exportIndex)
 import Pudu.Source (Source, SourceName (..), Span, emptySpan, newSource)
 import Pudu.Type.Interface (interfaceSkeleton)
+import Pudu.Type.Interface.Graph (emptyInterfaceGraph, prepareInterfaces)
 import System.FilePath
   ( (</>)
   , dropExtension
@@ -121,20 +122,20 @@ compileProgram rootPath = do
     Left _ -> do
       source <- newSource (SourceName (Text.pack rootPath)) Text.empty
       pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
-        (CompileContext (exportIndex Map.empty) Map.empty True))
+        (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
     Right rootSource -> do
       let rootFrontend = runFrontend rootSource
       case frontendModule rootFrontend of
         Nothing ->
           pure
-            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) Map.empty True))
+            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
         Just rootModule -> do
           let rootName = locatedValue (moduleName rootModule)
               (sourceRoot, rootMismatch) = deriveSourceRoot rootPath rootModule
           if rootMismatch
             then do
               let mismatch = rootPathMismatch rootPath (moduleName rootModule)
-                  emptyContext = CompileContext (exportIndex Map.empty) Map.empty True
+                  emptyContext = CompileContext (exportIndex Map.empty) emptyInterfaceGraph True
               compiled <- compileFrontendWith emptyContext rootFrontend
               pure
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
@@ -160,7 +161,7 @@ compileProgramSource sourceRoot rootSource = do
       pure
         ( ProgramResult Nothing Map.empty [rootSource] Map.empty []
             (frontendDiagnostics rootFrontend)
-            (CompileContext (exportIndex Map.empty) Map.empty True)
+            (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True)
         )
     Just rootModule -> discoverFrom sourceRoot rootSource rootFrontend rootModule
 
@@ -236,7 +237,7 @@ discover resolution frontends sources failed diagnostics pending = case pending 
 finish :: ModuleName -> Discovery -> IO ProgramResult
 finish rootName discovered = do
   let validModules = Map.mapMaybe frontendModule (discoveredFrontends discovered)
-      interfaces = Map.map interfaceSkeleton validModules
+      interfaces = prepareInterfaces (Map.map interfaceSkeleton validModules)
       context = CompileContext (exportIndex validModules) interfaces True
       order = dependencyOrder validModules
       pending =

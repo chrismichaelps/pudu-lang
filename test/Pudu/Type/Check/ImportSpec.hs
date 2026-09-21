@@ -9,7 +9,8 @@ import Pudu.Frontend.Syntax.Located (locatedValue)
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Source (SourceName (SourceName), newSource)
 import Pudu.Type (checkTypesWith)
-import Pudu.Type.Interface (importsFor, interfaceSkeleton)
+import Pudu.Type.Interface (interfaceSkeleton)
+import Pudu.Type.Interface.Graph (importsFor, prepareInterfaces)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 importTypeProperties :: [(String, IO Property)]
@@ -107,7 +108,7 @@ checkedDiagnostics dependencySources consumerSource = do
   consumerModule <- parsed consumerSource
   let interfaces = map interfaceSkeleton dependencies
       available = Map.fromList [(locatedValue (moduleName value), interface) | (value, interface) <- zip dependencies interfaces]
-      imported = importsFor available consumerModule
+      imported = importsFor (prepareInterfaces available) consumerModule
       (_, diagnostics) = checkTypesWith imported consumerModule
   pure diagnostics
 

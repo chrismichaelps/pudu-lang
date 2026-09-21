@@ -25,7 +25,7 @@ Own an opaque strict remaining-token cursor, bounded recursion/recovery budget, 
 
 ```haskell
 data ParserState
-newtype Parser a = Parser (ParserState -> (a, ParserState))
+newtype Parser a = Parser (ParserState -> (# a, ParserState #))
 
 instance Functor Parser
 instance Applicative Parser
@@ -58,6 +58,10 @@ synchronizeDeclaration :: Parser ()
 ```
 
 ### Governance
+
+- A step answers with an unboxed pair: the value and the state it leaves return in registers, so no
+  pair and no deferred selection of its halves is built per step. Values stay as lazy as the
+  grammar makes them; the state is threaded strictly.
 
 - `BlockParser` is the capability of reading a brace-delimited block, and it lives here rather than with any one participant. Blocks, expressions, and declarations are mutually recursive, and a shared capability that lived in one of them would put that one in every cycle it exists to break.
 

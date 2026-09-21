@@ -55,6 +55,9 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - Cycles are allowed for declaration signatures. Interface skeletons for an SCC are available before bodies in that SCC are checked; no module-scope runtime initialization is introduced.
 - The graph compiles through [[Semantic Interface]] and [[Type Interface]]. It never concatenates ASTs or pretends dependency declarations belong to the root module.
 - Diagnostics retain their original source identities and are stable-sorted once across the program.
+- `finish` prepares one [[Type Interface Graph]] from every admitted module's interface and every
+  module checks against it, so interface order, collection, and installation happen once per
+  program rather than once per module.
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
 - `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
 - Manifest validation verifies project `pudu.toml` constraints via `manifestVersionDiagnostics`. If `package.language` is incompatible with the compiler's version, `E2090` is reported without compiling modules.
@@ -127,4 +130,4 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 
 ## Referenced by
 
-[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]]
+[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]]

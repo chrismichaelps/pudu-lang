@@ -1,0 +1,5 @@
+module Right
+
+import Lib
+
+export fn right() -> Int { Lib.make() + 1 }

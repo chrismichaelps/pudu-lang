@@ -35,6 +35,8 @@ scanTrivia :: LexerCursor -> Maybe LexerCursor
 - `/**/` is an empty block comment, not an empty doc comment.
 
 - A non-match returns `Nothing`; success consumes and commits at least one scalar.
+- Trivia begins with whitespace or `/`, so every other token is turned away by one peek before any
+  comment spelling is compared; the six prefix comparisons ran for every token in the file.
 - Whitespace follows the locked `base` Unicode `isSpace` classification and is emitted as one maximal `Whitespace` trivia segment.
 - A line comment begins with `//`, excludes CR/LF from its `LineComment` segment, and stops at EOF or before the line terminator so the next call preserves that terminator as whitespace.
 - A block comment begins with `/*`, nests on `/*`, closes on the matching `*/`, and is emitted as one exact `BlockComment` segment including delimiters.

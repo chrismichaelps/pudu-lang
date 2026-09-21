@@ -1,0 +1,5 @@
+module Left
+
+import Lib
+
+export fn left() -> Int { Lib.make() }

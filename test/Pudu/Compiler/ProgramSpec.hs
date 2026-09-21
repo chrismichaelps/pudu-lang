@@ -18,6 +18,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testAliasedReexport
   , testPathDependencies
   , testResolutionContext
+  , testInterfaceGraph
   )
 import Pudu.Compiler.Program.LanguageSpec
   ( testCapturedScope
@@ -45,6 +46,7 @@ programProperties =
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("interface facts are prepared once per module graph", testInterfaceGraph)
   , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)

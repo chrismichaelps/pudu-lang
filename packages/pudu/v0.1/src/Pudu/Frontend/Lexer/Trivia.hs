@@ -10,9 +10,17 @@ import Pudu.Frontend.Lexer.Cursor
   )
 import Pudu.Frontend.Token (TriviaKind (BlockComment, DocComment, LineComment, Whitespace))
 
+{-| Trivia begins with whitespace or a slash, so every other token is turned
+    away by its first character before any comment spelling is compared. -}
 scanTrivia :: LexerCursor -> Maybe LexerCursor
-scanTrivia cursor
-  | maybe False isSpace (peekScalar cursor) = scanWhitespace cursor
+scanTrivia cursor = case peekScalar cursor of
+  Just first
+    | isSpace first -> scanWhitespace cursor
+    | first == '/' -> scanSlash cursor
+  _ -> Nothing
+
+scanSlash :: LexerCursor -> Maybe LexerCursor
+scanSlash cursor
   | cursorStartsWith "////" cursor = scanLineComment cursor
   | cursorStartsWith "///" cursor = scanDocLine cursor
   | cursorStartsWith "//" cursor = scanLineComment cursor

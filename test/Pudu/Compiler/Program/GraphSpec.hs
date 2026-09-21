@@ -7,6 +7,7 @@ module Pudu.Compiler.Program.GraphSpec
   , testImportFailures
   , testImportedMethods
   , testInterfaceEdges
+  , testInterfaceGraph
   , testPathDependencies
   , testResolutionContext
   ) where
@@ -20,6 +21,7 @@ import Pudu.Compiler.Library
   , resolutionMetrics
   , resolutionSearchRoots
   )
+import Pudu.Compiler (CompileContext (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
@@ -27,6 +29,9 @@ import Pudu.Compiler.Program
 import Pudu.Compiler.Program.Common (codes, runEntry)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Type.Interface.Graph (graphInterfaces, graphOrder)
+import qualified Data.List as List
+import qualified Data.Map.Strict as Map
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -41,6 +46,7 @@ graphProperties =
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("interface facts are prepared once per module graph", testInterfaceGraph)
   ]
 
 testImportedMethods :: IO Property
@@ -208,4 +214,40 @@ testInterfaceEdges = do
         (incompleteConsumer === ["E3010", "E3010", "E3005"])
     , counterexample "an unreadable root is a structured loader failure"
         (unreadableRoot === ["E2014"])
+    ]
+
+{-| A module graph's interfaces are prepared once and shared by every module
+    checked against them.
+
+    Each consumer used to form every other interface's declarations for itself,
+    so a mistake in one of them was reported once per module that imported it:
+    three importers of `Lib` printed its one `E3030` three times. Formed once,
+    the mistake is reported once, by the module that wrote it.
+
+    The cycle is the case the shared preparation has to keep exact: `Wrap`
+    imports the module being checked, so it forms its declarations without that
+    module's names, as it did when each consumer prepared its own. -}
+testInterfaceGraph :: IO Property
+testInterfaceGraph = do
+  repeated <- codes "test-fixtures/interfacegraph/Main.pudu"
+  program <- compileProgram "test-fixtures/interfacegraph/Main.pudu"
+  cycleCodes <- codes "test-fixtures/interfacegraph/Cycle.pudu"
+  ran <- runEntry "test-fixtures/interfacegraph/Cycle.pudu"
+  let graph = contextTypes (programContext program)
+      order = map moduleNameText (graphOrder graph)
+      position name = List.elemIndex name order
+  pure $ conjoin
+    [ counterexample "a dependency's mistake is reported once, not once per importer"
+        (repeated === ["E3030"])
+    , counterexample "the graph orders every interface exactly once"
+        (List.sort order === List.sort (map moduleNameText (Map.keys (graphInterfaces graph))))
+    , counterexample "every interface follows the interfaces it imports"
+        ( conjoin
+            [ counterexample (show (dependency, dependent))
+                (((<) <$> position dependency <*> position dependent) === Just True)
+            | (dependency, dependent) <- [("Lib", "Left"), ("Lib", "Right"), ("Left", "Main"), ("Right", "Main")]
+            ]
+        )
+    , counterexample "records naming each other across a cycle check" (cycleCodes === [])
+    , counterexample "and run with the fields each side declared" (ran === Just "23")
     ]

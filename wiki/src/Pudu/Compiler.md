@@ -48,7 +48,7 @@ runCompile :: Source -> CompileResult
 
 data CompileContext = CompileContext
   { contextExports :: !ExportIndex
-  , contextTypes :: !(Map ModuleName TypeInterface)
+  , contextTypes :: !InterfaceGraph   -- prepared once per program; see [[Type Interface Graph]]
   , contextStrictImports :: !Bool
   }
 emptyCompileContext :: CompileContext

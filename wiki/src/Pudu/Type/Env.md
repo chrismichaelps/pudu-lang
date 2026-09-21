@@ -50,6 +50,17 @@ The exported signatures are the module header's export list.
   spelling a call resolves against, so a value bound under two names needs its restrictions recorded
   under both or the second one is unguarded.
 
+- **Installed names are a snapshot a module starts from.** `installedNames` captures the frame,
+  restriction tables, and next variable after [[Type Interface Graph]] installs a graph's shared
+  declarations once; `installNames` begins a module from it. The frame is a persistent map shared
+  by every module, and carrying the variable counter keeps installation variables distinct from the
+  module's own. `evalChecker` runs work whose only product is its value, such as that
+  installation, discarding what it recorded.
+
+- **`qualifiesSomething` finds a qualifier with one ordered lookup.** A frame's keys are sorted, so
+  every name under `Q.` starts at the first key not below it; listing every key of every frame per
+  question was a quarter of all compile allocation.
+
 - **What is known about folding is a map, not a list of the compile-time ones.** The call site asks a
   three-way question and a list can only answer two of them; the map also turns the lookup from a
   scan into a lookup, which matters because it is asked at every call inside a compile-time body.

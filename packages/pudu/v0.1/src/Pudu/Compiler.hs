@@ -15,7 +15,6 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Frontend.Syntax (ModuleName)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
@@ -32,7 +31,7 @@ import Pudu.Semantic
   )
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
-import Pudu.Type.Interface (TypeInterface, importsFor)
+import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
 import Data.Text (Text)
 import Pudu.Source (Source, Span)
 
@@ -64,13 +63,14 @@ data CompileResult = CompileResult
 
 data CompileContext = CompileContext
   { contextExports :: !ExportIndex
-  , contextTypes :: !(Map ModuleName TypeInterface)
+  {-| The program's interfaces, prepared once for every module to check against. -}
+  , contextTypes :: !InterfaceGraph
   , contextStrictImports :: !Bool
   }
   deriving stock (Eq, Show)
 
 emptyCompileContext :: CompileContext
-emptyCompileContext = CompileContext emptyExportIndex Map.empty False
+emptyCompileContext = CompileContext emptyExportIndex emptyInterfaceGraph False
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
 

@@ -1,12 +1,11 @@
 {-| @Type.Interface.Module — projects body-free module type interfaces -}
 module Pudu.Type.Interface
-  ( ImportTypes (..)
-  , TypeInterface
-  , emptyImportTypes
-  , importsFor
+  ( TypeInterface
   , interfaceDeclarations
   , interfaceDefaults
   , interfaceBindings
+  , interfaceExportedIdentities
+  , interfaceExportedValues
   , interfaceImports
   , interfaceIdentities
   , interfaceModule
@@ -14,13 +13,11 @@ module Pudu.Type.Interface
   , interfaceSkeleton
   ) where
 
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
@@ -51,24 +48,6 @@ data TypeInterface = TypeInterface
   , interfaceExportedValues :: ![Text]
   }
   deriving stock (Eq, Show)
-
-data ImportTypes = ImportTypes
-  { importedInterfaces :: ![TypeInterface]
-  , importedNames :: !(Map Text NominalId)
-  , importedValues :: !(Map Text Text)
-  , importedTraits :: !(Set NominalId)
-  {-| The qualifiers whose module was actually found.
-
-      A name this qualifier does not carry is a mistake worth reporting, and a
-      qualifier that is missing from here is a module nothing could be known
-      about — the difference between "that module has no such type" and "that
-      module was not available", which look identical in a table of names. -}
-  , importedQualifiers :: !(Set Text)
-  }
-  deriving stock (Eq, Show)
-
-emptyImportTypes :: ImportTypes
-emptyImportTypes = ImportTypes [] Map.empty Map.empty Set.empty Set.empty
 
 interfaceSkeleton :: Module -> TypeInterface
 interfaceSkeleton value =
@@ -144,79 +123,6 @@ exportedBindings declarations =
   [ (locatedValue name, annotation)
   | Located _ (BindingDeclaration Exported _ name (Just annotation) _) <- declarations
   ]
-
-{-| What a module may see of the program around it.
-
-    Names and values come from what it imported: a name has to be imported to be
-    written, and that is the whole point of an import list.
-
-    **Implementations do not.** An implementation is a fact about a type and a
-    trait, true everywhere in a program once it exists anywhere in it — which is
-    what an orphan rule is for. Scoping them to direct imports made a bounded
-    generic unusable across modules: `Std.List.sum` is bounded by `Add`, whose
-    implementations live in `Std.Num`, and a caller importing only `Std.List`
-    was told `Int does not implement Add` about a program in which it plainly
-    does.
-
-    **The consumer's own module is removed.** Its implementations are declared
-    by the local pass, and declaring them a second time through the interface
-    path made every one of them collide with itself: a module that implemented
-    an imported trait for its own type was told the method was ambiguous, which
-    made `impl Eq for MyType` impossible to write outside the module that
-    declared `Eq`. -}
-importsFor :: Map ModuleName TypeInterface -> Module -> ImportTypes
-importsFor available consumer =
-  (foldMap one (moduleImports consumer))
-    { importedInterfaces = Map.elems (Map.delete (locatedValue (moduleName consumer)) available)
-    }
- where
-  one (Located _ value) =
-    case Map.lookup (locatedValue (importModule value)) available of
-      Nothing -> emptyImportTypes
-      Just found -> importOne value found
-
-instance Semigroup ImportTypes where
-  left <> right =
-    ImportTypes
-      { importedInterfaces = importedInterfaces left <> importedInterfaces right
-      , importedNames = importedNames left <> importedNames right
-      , importedValues = importedValues left <> importedValues right
-      , importedTraits = importedTraits left <> importedTraits right
-      , importedQualifiers = importedQualifiers left <> importedQualifiers right
-      }
-
-instance Monoid ImportTypes where
-  mempty = emptyImportTypes
-
-importOne :: Import -> TypeInterface -> ImportTypes
-importOne value found =
-  ImportTypes
-    { importedInterfaces = [found]
-    , importedNames = Map.fromList (concatMap namesFor exported)
-    , importedValues = Map.fromList (concatMap valuesFor exportedValues)
-    , importedTraits = Set.fromList [identity | (name, identity, True) <- exported, visible name]
-    {-| Only a whole-module import lends its name to what it carries. A
-        selective one brings its names in unqualified, so nothing is written
-        `qualifier.name` and there is no qualifier to judge against. -}
-    , importedQualifiers = if Set.null selected then Set.singleton qualifier else Set.empty
-    }
- where
-  selected = Set.fromList (map locatedValue (importItems value))
-  qualifier = maybe (moduleQualifier (interfaceModule found)) locatedValue (importAlias value)
-  visible name = Set.null selected || Set.member name selected
-  namesFor (name, identity, _)
-    | Set.null selected = [(qualifier <> "." <> name, identity)]
-    | Set.member name selected = [(name, identity)]
-    | otherwise = []
-
-  valuesFor name
-    | Set.null selected = [(qualifier <> "." <> name, canonicalValue name)]
-    | Set.member name selected = [(name, canonicalValue name)]
-    | otherwise = []
-  canonicalValue name = moduleNameText (interfaceModule found) <> "." <> name
-
-  exported = interfaceExportedIdentities found
-  exportedValues = interfaceExportedValues found
 
 exportedIdentity :: ModuleName -> Located Declaration -> [(Text, NominalId, Bool)]
 exportedIdentity owner (Located _ declaration) = case declaration of

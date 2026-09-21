@@ -24,7 +24,7 @@ import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
-import Pudu.Type.Interface (ImportTypes)
+import Pudu.Type.Interface.Graph (ImportTypes)
 import Pudu.Type.Value (Scheme (..), Type (..), renderType)
 import Data.Text (Text)
 

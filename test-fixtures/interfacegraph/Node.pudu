@@ -1,0 +1,12 @@
+module Node
+
+import Wrap {Wrap}
+
+export type Node = { label: Int, parent: Option[Wrap] }
+
+export fn depth(node: Node) -> Int {
+  match node.parent {
+    case Some(wrapped) => 1 + depth(wrapped.node)
+    case None => 0
+  }
+}

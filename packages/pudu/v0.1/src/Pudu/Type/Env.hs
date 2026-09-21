@@ -69,6 +69,10 @@ module Pudu.Type.Env
   , addObligation
   , resolveVariable
   , runChecker
+  , evalChecker
+  , InstalledNames
+  , installedNames
+  , installNames
   , setVariable
   , validateIntegerLiteralsSince
   , withDeclared
@@ -253,6 +257,14 @@ instance Monad Checker where
       (value, next) -> next `seq` case continue value of
         Checker continued -> continued next
 
+{-| The value an action computes, with everything it recorded discarded.
+
+    For work whose only product is its value, such as forming the declarations
+    a whole module graph shares, where a diagnostic belongs to the module that
+    wrote the declaration and is reported when that module is checked. -}
+evalChecker :: Checker a -> a
+evalChecker (Checker action) = fst (action initialState)
+
 runChecker :: Checker a -> CheckerProducts
 runChecker (Checker action) = case action initialState of
   (_, CheckerState
@@ -309,6 +321,59 @@ initialState =
     , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
     }
+
+{-| What installing a graph's interfaces left in the checker: the names it
+    bound, the restrictions those names carry, and the next free variable.
+
+    A consumer starts from this rather than installing every interface again.
+    The frame is a persistent map, so every consumer shares it and pays only for
+    what it adds. The next variable travels with it, so a variable the
+    installation made can never be confused with one the consumer makes. -}
+data InstalledNames = InstalledNames
+  { installedFrame :: !(Map Text Scheme)
+  , installedUnsafe :: !(Map Text [Capability])
+  , installedComptime :: !(Map Text Bool)
+  , installedNext :: !Int
+  }
+
+instance Eq InstalledNames where
+  left == right =
+    installedFrame left == installedFrame right
+      && installedUnsafe left == installedUnsafe right
+      && installedComptime left == installedComptime right
+      && installedNext left == installedNext right
+
+instance Show InstalledNames where
+  show value = "InstalledNames {" <> show (Map.size (installedFrame value)) <> " names}"
+
+installedNames :: Checker InstalledNames
+installedNames =
+  Checker $ \state ->
+    ( InstalledNames
+        { installedFrame = case stateFrames state of
+            current : _ -> current
+            [] -> Map.empty
+        , installedUnsafe = stateUnsafeFunctions state
+        , installedComptime = stateComptimeFunctions state
+        , installedNext = stateNext state
+        }
+    , state
+    )
+
+{-| Begin from installed names, before anything of the module's own is bound. -}
+installNames :: InstalledNames -> Checker ()
+installNames installed =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateFrames = case stateFrames state of
+            current : rest -> (current <> installedFrame installed) : rest
+            [] -> [installedFrame installed]
+        , stateUnsafeFunctions = stateUnsafeFunctions state <> installedUnsafe installed
+        , stateComptimeFunctions = stateComptimeFunctions state <> installedComptime installed
+        , stateNext = max (stateNext state) (installedNext installed)
+        }
+    )
 
 freshVariable :: Checker Type
 freshVariable =
@@ -543,7 +608,11 @@ qualifiesSomething qualifier =
   Checker $ \state -> (any covered (stateFrames state), state)
  where
   prefix = qualifier <> "."
-  covered frame = any (Text.isPrefixOf prefix) (Map.keys frame)
+  {-| A frame's keys are ordered, so every name under the qualifier sits
+      together, starting at the first key not below the prefix. -}
+  covered frame = case Map.lookupGE prefix frame of
+    Just (key, _) -> Text.isPrefixOf prefix key
+    Nothing -> False
 
 {-| Run an action as the body of a closure, remembering how deep the name
     frames were when it began. -}
