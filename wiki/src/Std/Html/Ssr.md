@@ -50,6 +50,16 @@ completion to the checked byte assembler. Both functions return `Std.Html.Buffer
 missing slots, invalid public metadata, overflow, refused copies, and final-length mismatch remain
 typed rather than becoming partial output.
 
+`beginIncremental(plan, producers, maxBytes)` creates a request-local encoded cursor without calling
+any dynamic producer. `flushIncremental` is the pull/backpressure step: it emits at most one positive
+bounded byte chunk and returns the next cursor, or reports completion. It stops and emits accumulated
+static bytes before entering a dynamic part, so a head or placeholder can reach the consumer before
+the body producer runs. Producers return `Result[Html, Str]`, run at most once per used slot, and are
+cached only inside that cursor. Missing producers and producer failures are late typed errors in plan
+order. `cancelIncremental` makes later flush/finish calls return `StreamCancelled` without invoking
+remaining producers. `finishIncremental` explicitly drains the cursor and returns the remaining
+bounded chunks; it does not join them.
+
 `Shell = ShellFixed(Html) | ShellSlot(Str) | ShellElement(Str, Array[(Str, Str)], Array[Shell]) |
 ShellFragment(Array[Shell])` is an additive typed reusable tree. A slot is always a complete child
 fragment; there is no attribute, script, style, text-string, or raw-markup interpolation form.
@@ -81,6 +91,10 @@ results.
 Shell compilation is paid once. Rendering its ordinary `Plan` keeps the established behavior: each
 unique used slot renders once, repeated positions reuse it, unused values are ignored, and the first
 missing slot in document order fails deterministically.
+Incremental delivery retains at most the current bounded batch plus one rendered dynamic value and
+the per-request cache. It is pull-driven application output, not a socket write or network-TTFB
+promise. A consumer controls backpressure by requesting the next flush only when ready. No latency,
+allocation, or asymptotic improvement is claimed without a focused measurement.
 
 ## Grill Log
 
@@ -124,6 +138,15 @@ missing slot in document order fails deterministically.
 - **Q:** Let a later missing slot outrank earlier overflow? **A:** No; parts remain evaluated in
   document order. An earlier missing slot returns `MissingSlot`; an earlier certain overflow returns
   `TooLarge`; invalid negative limits are refused before traversal as before.
+- **Q:** Resolve every producer when the cursor begins? **A:** No; that would reproduce buffering
+  behind a cursor-shaped API. A dynamic producer is first requested only when a flush reaches it.
+- **Q:** Fill a partial static batch from the following producer? **A:** No; the static batch is
+  emitted at the dynamic boundary, preserving the earliest useful output even when below the maximum.
+- **Q:** Treat bytes already emitted as retractable after a late error? **A:** No; the error applies
+  to the next step. Callers have already committed earlier chunks and decide their transport-level
+  recovery policy explicitly.
+- **Q:** Continue after cancellation? **A:** No; flush and finish return `StreamCancelled` and do not
+  call another producer.
 
 ## Dependencies and consumers
 [[Std Html]] supplies rendering. [[Std Html Bounded]] supplies budget-aware dynamic traversal.
@@ -133,4 +156,4 @@ missing slot in document order fails deterministically.
 ## Referenced by
 [[src/Std/_MOC]] · [[2026-09-06-application-stack]] · [[2026-09-20-html-plan-compaction]] ·
 [[2026-09-20-encoded-ssr-responses]] · [[2026-09-20-typed-html-shells]] ·
-[[2026-09-20-bounded-ssr-slots]]
+[[2026-09-20-bounded-ssr-slots]] · [[2026-09-21-incremental-html-output]]

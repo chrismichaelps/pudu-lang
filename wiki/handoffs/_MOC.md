@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-21-incremental-html-output]] — issue #266 pull-based bounded prepared output, deferred
+  producer ordering, backpressure, cancellation, and explicit late failures.
+
 - [[2026-09-21-safe-html-streaming]] — issue #265 reusable typed heads, checked preload destinations,
   explicit CSS trust, typed suspense content, and context-free boundary identifiers.
 

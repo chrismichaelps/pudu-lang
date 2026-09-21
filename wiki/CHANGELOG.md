@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Prepared HTML can be pulled before deferred slots run
+
+- `Std.Html.Ssr.beginIncremental` creates a request-local encoded cursor without invoking dynamic
+  producers. Each `flushIncremental` emits at most one caller-bounded application chunk, stops at a
+  dynamic boundary after accumulated static output, and evaluates only the plan part it reaches.
+- Repeated dynamic slots render once per cursor. Missing producers and producer failures remain late
+  typed errors after any earlier chunks; cancellation prevents every remaining producer, and
+  `finishIncremental` explicitly drains without joining bounded chunks.
+- `Std.Html.Stream.defer` retains a validated typed placeholder immediately and requests its fallible
+  typed content only through `resolveDeferred`. Focused checks cover first-output ordering,
+  backpressure, byte parity with buffered rendering, bounds, repeated-slot reuse, cancellation, late
+  missing/failure paths, invalid public state/metadata, empty completion, and deferred safety for
+  issue #266.
+- In three optimized local probes, a four-byte static head was available in 0ms, 0ms, and 1ms before
+  producing and escaping a 200,000-character body; complete application output took 34ms, 34ms, and
+  37ms and 548 remaining chunks at a 1,460-byte limit. These are application-level timings, not
+  socket writes or network TTFB.
+
 ## 2026-09-21 — Streaming HTML has typed safe entry points
 
 - `Std.Html.Stream.prepareHead` retains reusable early-head bytes built from escaped title and

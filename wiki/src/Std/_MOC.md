@@ -8,11 +8,11 @@ tags: [moc, module, stdlib]
 - [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
   conditionals, and exact rendering delegated to `Std.Html`.
 - [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
-  lengths, and output budgets.
+  lengths, output budgets, and pull-based bounded incremental delivery.
 - [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
   static blocks, typed failures, and explicitly bounded application-output coalescing.
-- [[Std Html Stream]] — prepared safe heads, typed progressive suspense output, and retained
-  unchecked compatibility helpers.
+- [[Std Html Stream]] — prepared safe heads, typed progressive suspense output, deferred producers,
+  and retained unchecked compatibility helpers.
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
 - [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.

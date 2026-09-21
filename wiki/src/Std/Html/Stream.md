@@ -30,6 +30,9 @@ Exports:
 - `placeholder`, `replacement`, `errorReplacement`, and `suspended`: Safe suspense helpers accepting
   typed `Html` fallback/content and returning `Result`; ordinary text therefore renders as text and
   trusted markup remains explicit.
+- `Deferred`, `defer`, `deferredInitial`, and `resolveDeferred`: Retain a validated typed fallback
+  as immediately available bytes and a fallible body producer that is not invoked until resolution
+  is explicitly requested.
 
 The original string/byte helpers remain unchecked compatibility entry points. New code migrates to
 the prepared-head and typed suspense APIs; intentional raw markup remains visible through
@@ -61,6 +64,9 @@ migration.
   compatibility paths.
 - **Q:** Rebuild the same safe head for every request? **A:** No; `prepareHead` retains immutable
   bytes in `PreparedHead`, and `headBytes` returns them for reuse.
+- **Q:** Ask for deferred content merely to obtain its placeholder? **A:** No; `defer` renders and
+  retains only the typed fallback. `deferredInitial` cannot invoke the producer; `resolveDeferred`
+  is the explicit late boundary and preserves a producer failure as `Result`.
 
 ## Dependencies and consumers
 
@@ -71,4 +77,4 @@ migration.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[2026-09-06-application-stack]] ·
-[[2026-09-21-safe-html-streaming]]
+[[2026-09-21-safe-html-streaming]] · [[2026-09-21-incremental-html-output]]

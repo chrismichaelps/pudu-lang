@@ -12,6 +12,13 @@ export type PreparedHead = { bytes: Bytes }
 /// Why a suspense boundary identifier was refused.
 export type BoundaryError = { boundaryId: Str }
 
+/// A validated placeholder and the fallible typed content requested later.
+export type Deferred = {
+  initial: Bytes,
+  boundaryId: Str,
+  producer: fn() -> Result[Html.Html, Str]
+}
+
 const BOUNDARY_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 /// Marks reviewed stylesheet source for safe head preparation.
@@ -156,6 +163,28 @@ export fn suspended(
   let first = placeholder(boundaryId, fallback) ?
   let second = replacement(boundaryId, content) ?
   Ok((first, second))
+}
+
+/// Prepares only a typed fallback; the content producer remains uncalled.
+export fn defer(
+  boundaryId: Str,
+  fallback: &Html.Html,
+  producer: fn() -> Result[Html.Html, Str]
+) -> Result[Deferred, BoundaryError] {
+  let initial = placeholder(boundaryId, fallback) ?
+  Ok(Deferred{initial: initial, boundaryId: boundaryId, producer: producer})
+}
+
+/// The bytes available before deferred content is requested.
+export fn deferredInitial(deferred: &Deferred) -> Bytes { deferred.initial }
+
+/// Requests deferred typed content and produces its replacement chunk.
+export fn resolveDeferred(deferred: &Deferred) -> Result[Bytes, Str] {
+  let content = deferred.producer() ?
+  match replacement(deferred.boundaryId, &content) {
+    case Ok(bytes) => { Ok(bytes) }
+    case Err(_) => { Err("a validated suspense boundary became invalid") }
+  }
 }
 
 fn checkBoundary(boundaryId: Str) -> Result[(), BoundaryError] {

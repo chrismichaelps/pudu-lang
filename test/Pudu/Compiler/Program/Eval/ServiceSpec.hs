@@ -15,6 +15,7 @@ testServiceEvaluation = do
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   checkedDestinations <- runEntry "test-fixtures/stdlib/UsesHtmlDestinationBuild.pudu"
   safeStreaming <- runEntry "test-fixtures/stdlib/UsesHtmlSafeStream.pudu"
+  incrementalHtml <- runEntry "test-fixtures/stdlib/UsesHtmlIncremental.pudu"
   compactMarkup <- runEntry "test-fixtures/stdlib/UsesHtmlCompact.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
@@ -128,6 +129,9 @@ testServiceEvaluation = do
     , counterexample
         "safe HTML streaming keeps text inert and boundary identifiers out of code contexts"
         (safeStreaming === Just "18")
+    , counterexample
+        "prepared HTML output flushes before delayed producers and remains bounded under backpressure"
+        (incrementalHtml === Just "22")
     , counterexample
         "compact HTML plans join static runs without crossing typed slots"
         (compactMarkup === Just "39")

@@ -1,5 +1,6 @@
 module Std.Html.Ssr
 
+import Std.Bytes as ByteSeq
 import Std.Html.Bounded as Bounded
 import Std.Html.Buffer as Buffer
 import Std.Html as Html
@@ -26,6 +27,30 @@ export type EncodedPlan = { bytes: Buffer.CompactBytePlan }
 export type EncodedSegments = { parts: Array[Bytes], byteLength: Int }
 /// One contiguous encoded response and its exact byte length.
 export type EncodedResponse = { body: Bytes, byteLength: Int }
+/// A fallible request-local producer for one complete typed slot value.
+export type Producer = fn() -> Result[Html.Html, Str]
+/// Pull state for bounded incremental encoded output.
+export type IncrementalCursor = {
+  plan: Buffer.CompactBytePlan,
+  producers: Map[Str, Producer],
+  cached: Map[Str, Bytes],
+  partIndex: Int,
+  partOffset: Int,
+  maxBytes: Int,
+  cancelled: Bool
+}
+/// One bounded output chunk or completion of an incremental plan.
+export type IncrementalStep
+  = IncrementalOutput(Bytes, IncrementalCursor)
+  | IncrementalFinished
+/// Why incremental encoded output stopped.
+export type IncrementalError
+  = MissingProducer(Str)
+  | ProducerFailed(Str, Str)
+  | InvalidIncrementalLimit(Int)
+  | InvalidIncrementalStatic(Int, Int)
+  | InvalidIncrementalState(Int, Int)
+  | StreamCancelled
 
 /// Render static sections once; the plan never stores request-specific slots.
 export fn prepare(pieces: &Array[Piece]) -> Plan {
@@ -230,6 +255,153 @@ export fn finishBytes(
   let encoded = encodeValues(plan, values) ?
   let body = Buffer.renderCompactChecked(&plan.bytes, &encoded) ?
   Ok(EncodedResponse{body: body, byteLength: body.length()})
+}
+
+/// Begins bounded pull delivery without invoking a dynamic producer.
+export fn beginIncremental(
+  plan: &EncodedPlan,
+  producers: &Map[Str, Producer],
+  maxBytes: Int
+) -> Result[IncrementalCursor, IncrementalError] {
+  if maxBytes <= 0 { return Err(InvalidIncrementalLimit(maxBytes)) }
+  Ok(IncrementalCursor {
+      plan: plan.bytes,
+      producers: *producers,
+      cached: mapOf([]),
+      partIndex: 0,
+      partOffset: 0,
+      maxBytes: maxBytes,
+      cancelled: false
+    })
+}
+
+/// Emits at most one bounded chunk, stopping before an unrequested producer.
+export fn flushIncremental(
+  cursor: &IncrementalCursor
+) -> Result[IncrementalStep, IncrementalError] {
+  if cursor.cancelled { return Err(StreamCancelled) }
+  if cursor.maxBytes <= 0 { return Err(InvalidIncrementalLimit(cursor.maxBytes)) }
+  if cursor.partIndex < 0 || cursor.partOffset < 0 {
+    return Err(InvalidIncrementalState(cursor.partIndex, cursor.partOffset))
+  }
+
+  var partIndex = cursor.partIndex
+  var partOffset = cursor.partOffset
+  var cached = cursor.cached
+  var pieces: Array[Bytes] = []
+  var outputBytes = 0
+  var filling = true
+
+  while filling && partIndex < cursor.plan.parts.length() {
+    let part = cursor.plan.parts[partIndex]
+    var ready = false
+    var current = ByteSeq.empty()
+    match part {
+      case Buffer.StaticBlock(bytes, declaredLength) => {
+        let actualLength = bytes.length()
+        if declaredLength != actualLength {
+          return Err(InvalidIncrementalStatic(declaredLength, actualLength))
+        }
+        current = bytes
+        ready = true
+      }
+      case Buffer.DynamicBlock(name) => {
+        if partOffset == 0 && outputBytes > 0 {
+          filling = false
+        } else {
+          current = match cached.get(name) {
+            case Some(found) => found
+            case None => {
+              let produce = match cursor.producers.get(name) {
+                case Some(found) => found
+                case None => { return Err(MissingProducer(name)) }
+              }
+              let view = match produce() {
+                case Ok(found) => found
+                case Err(reason) => { return Err(ProducerFailed(name, reason)) }
+              }
+              let rendered = Html.render(&view).toBytes()
+              cached = cached.insert(name, rendered)
+              rendered
+            }
+          }
+          ready = true
+        }
+      }
+    }
+
+    if ready {
+      let length = current.length()
+      if partOffset > length {
+        return Err(InvalidIncrementalState(partIndex, partOffset))
+      }
+      if partOffset == length {
+        partIndex = partIndex + 1
+        partOffset = 0
+      } else {
+        let room = cursor.maxBytes - outputBytes
+        let remaining = length - partOffset
+        let amount = if remaining < room { remaining } else { room }
+        pieces = pieces.push(ByteSeq.slice(&current, partOffset, partOffset + amount))
+        outputBytes = outputBytes + amount
+        partOffset = partOffset + amount
+        if partOffset == length {
+          partIndex = partIndex + 1
+          partOffset = 0
+        }
+        if outputBytes == cursor.maxBytes { filling = false }
+      }
+    }
+  }
+
+  if outputBytes == 0 {
+    Ok(IncrementalFinished)
+  } else {
+    Ok(IncrementalOutput(
+        ByteSeq.join(&pieces),
+        IncrementalCursor {
+          plan: cursor.plan,
+          producers: cursor.producers,
+          cached: cached,
+          partIndex: partIndex,
+          partOffset: partOffset,
+          maxBytes: cursor.maxBytes,
+          cancelled: false
+        }
+      ))
+  }
+}
+
+/// Prevents every later producer and output step.
+export fn cancelIncremental(cursor: &IncrementalCursor) -> IncrementalCursor {
+  IncrementalCursor {
+    plan: cursor.plan,
+    producers: cursor.producers,
+    cached: cursor.cached,
+    partIndex: cursor.partIndex,
+    partOffset: cursor.partOffset,
+    maxBytes: cursor.maxBytes,
+    cancelled: true
+  }
+}
+
+/// Drains the remaining cursor into bounded chunks without joining them.
+export fn finishIncremental(
+  cursor: &IncrementalCursor
+) -> Result[Array[Bytes], IncrementalError] {
+  var state = *cursor
+  var output: Array[Bytes] = []
+  var finished = false
+  while !finished {
+    match flushIncremental(&state) ? {
+      case IncrementalOutput(bytes, next) => {
+        output = output.push(bytes)
+        state = next
+      }
+      case IncrementalFinished => { finished = true }
+    }
+  }
+  Ok(output)
 }
 
 fn completed(body: Str) -> Rendered {
