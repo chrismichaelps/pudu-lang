@@ -13,7 +13,7 @@ aliases: [Pudu CLI Package]
 
 ## Purpose and interface
 
-`pudu install [spec…] [--locked] [--offline]`, `uninstall`, `update [name…]`, `deps`, `tree`. `install` writes each spec into the manifest (a registry package with no version is written `*` and then pinned to `^` of what was chosen), synchronises, and writes the manifest only on success, so a failed install leaves it untouched. The report lists `+`, `-`, `~` changes, the files written, and for each newly installed package a real module to import.
+`pudu install [spec…] [--locked] [--offline] [--quiet|--verbose]`, `uninstall`, `update [name…]`, `deps`, `tree`. `install` writes each spec into the manifest (a registry package with no version is written `*` and then pinned to `^` of what was chosen), synchronises, and writes the manifest only on success, so a failed install leaves it untouched. While working, `Cli.Progress` shows a live line; the report then says how many packages were resolved and from where (fetched, from cache), the `+`/`-`/`~` changes, how many were installed or restored and how many were already up to date, the files written, for each newly installed package a real module to import, and the total time. Commands that change dependencies run on up to eight cores.
 
 See [[architecture/PACKAGES]].
 

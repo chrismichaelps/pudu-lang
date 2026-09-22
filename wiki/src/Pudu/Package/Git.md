@@ -13,12 +13,13 @@ aliases: [Package Git]
 
 ## Purpose and interface
 
-`checkoutGit offline url revision` keeps a bare clone per URL under `$PUDU_HOME/cache/git/` (default `~/.pudu`), fetches heads and tags unless offline, resolves the revision to a commit, and checks each commit out once into `cache/checkouts/<url>/<commit>` through a staging directory renamed into place. `git` runs with prompts disabled, so a repository needing credentials fails with its reason.
+`newGitSession offline progress` opens the state one install shares: one lock per repository and the set already fetched. `checkoutGit session url revision` answers a locked commit whose checkout is cached without starting git; otherwise it keeps a bare clone per URL under `$PUDU_HOME/cache/git/` (default `~/.pudu`), fetches heads and tags unless offline, already fetched this run, or the pinned commit is already in the clone, resolves the revision to a commit, and checks each commit out once into `cache/checkouts/<url>/<commit>` through a staging directory renamed into place, taking its tree digest as it is written. Fetches and checkouts are reported as `Package.Progress` events. `git` runs with prompts disabled, so a repository needing credentials fails with its reason.
 
 See [[architecture/PACKAGES]].
 
 ## Grill Log
 
 - **Q:** Lock a tag? **A:** No, the commit it named. _Rationale:_ tags move. _Rejected:_ tag pins.
+- **Q:** Fetch a repository whose locked commit is cached? **A:** No. _Rationale:_ a lock and a warm cache must make no network request. _Rejected:_ fetching on every install.
 
 Resolved Grill Log: behaviour covered by `test/Pudu/PackageSpec.hs`.

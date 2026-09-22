@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Installing shows its work and does each thing once
+
+- `pudu install`, `uninstall`, and `update` show one live line while they work — a spinner, the
+  phase, what was fetched, taken from the cache, copied, and already up to date, and the elapsed
+  time — then a summary: how many packages were resolved and from where, the `+`/`-`/`~` changes,
+  what was installed or restored, the files written, and the total time. `--verbose` prints each
+  step as a timed line; `--quiet` prints only errors. Colour only for a terminal, never under
+  `NO_COLOR`.
+- A lock whose commits are in the cache installs without starting git or touching the network, as
+  the design always said; a repository is fetched at most once per run; checkout digests are kept
+  beside the checkout; a copy is hashed as it is written; and `deps/` is re-hashed only when a
+  file's size or modification time changed. Fetches and copies run side by side. On 1,200 modules
+  in three git packages at `-O2`: a repeated install 470 → 80 ms, restoring `deps/` 730 → 200 ms,
+  a first install 1.1 → 0.6 s.
+- A cached checkout whose files no longer match `pudu.lock` is refused instead of installed.
+
 ## 2026-09-22 — Dependencies: install, lock, and deps/
 
 - `pudu install` adds a directory or a git repository as a dependency, records the commit and a tree

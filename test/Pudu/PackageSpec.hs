@@ -3,7 +3,9 @@ module Pudu.PackageSpec
   ( packageProperties
   ) where
 
+import Control.Exception (ErrorCall (..), evaluate, throwIO, try)
 import Control.Monad (forM_)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -20,7 +22,10 @@ import Pudu.Package.Identity
   , parsePackageId
   , validRoot
   )
+import Pudu.Package.Concurrent (forConcurrently)
+import Pudu.Package.Git (cacheRoot)
 import Pudu.Package.Install (Options (..), Outcome (..), defaultOptions, synchronise)
+import Pudu.Package.Progress (Event (..), Progress (..))
 import Pudu.Package.Lock (Lock (..), LockEntry (..), emptyLock, parseLock, renderLock)
 import Pudu.Package.ManifestEdit (removeDependency, setDependency)
 import Pudu.Package.Solve
@@ -38,8 +43,16 @@ import Pudu.Package.Version
   , renderVersion
   , satisfies
   )
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
-import System.Environment (setEnv)
+import System.Directory
+  ( createDirectoryIfMissing
+  , doesDirectoryExist
+  , doesFileExist
+  , getModificationTime
+  , listDirectory
+  , removeDirectoryRecursive
+  , setModificationTime
+  )
+import System.Environment (lookupEnv, setEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -62,6 +75,11 @@ packageProperties =
   , ("two packages may not own one module root", testRootConflict)
   , ("a package shipping Std is refused", testStdRefused)
   , ("--locked refuses a lock that would change", testLockedRefusal)
+  , ("a locked, cached repository installs without running git", testNoGitWhenCached)
+  , ("installing reports what it fetches, copies, and leaves alone", testProgressEvents)
+  , ("a touched but unchanged package is not copied again", testTouchedStaysInstalled)
+  , ("a damaged cached checkout is refused", testDamagedCacheRefused)
+  , ("concurrent package work keeps order and raises failures", testConcurrent)
   ]
 
 testVersions :: Property
@@ -354,3 +372,93 @@ testLockedRefusal :: IO Property
 testLockedRefusal = withGitLibrary $ \library project -> do
   outcome <- installWith defaultOptions {optionLocked = True} project (gitManifest library) emptyLock
   pure (counterexample (show (fmap outcomeLockWritten outcome)) (isLeftContaining "--locked was given" outcome))
+
+{-| The second install of a locked git package finds its checkout in the cache
+    and must not start git: with no `git` on the path it still succeeds. -}
+testNoGitWhenCached :: IO Property
+testNoGitWhenCached = withGitLibrary $ \library project -> do
+  first <- installWith defaultOptions project (gitManifest library) emptyLock
+  case first of
+    Left problem -> pure (counterexample (Text.unpack problem) False)
+    Right outcome -> do
+      removeDirectoryRecursive (project </> "deps")
+      path <- lookupEnv "PATH"
+      setEnv "PATH" "/nonexistent"
+      again <- synchronise noRegistry defaultOptions project (gitManifest library) (outcomeLock outcome)
+      setEnv "PATH" (maybe "" id path)
+      restored <- doesFileExist (project </> "deps" </> "shapes-kit" </> "src" </> "ShapesKit" </> "Area.pudu")
+      pure $ conjoin
+        [ counterexample (show (fmap outcomeInstalled again)) (fmap outcomeInstalled again === Right 1)
+        , counterexample "deps/ was restored from the cache alone" restored
+        ]
+
+recording :: IO (Progress, IO [Event])
+recording = do
+  seen <- newIORef []
+  pure (Progress (\event -> atomicModifyIORef' seen (\events -> (event : events, ()))), reverse <$> readIORef seen)
+
+testProgressEvents :: IO Property
+testProgressEvents = withGitLibrary $ \library project -> do
+  (firstProgress, firstEvents) <- recording
+  first <- installWith defaultOptions{optionProgress = firstProgress} project (gitManifest library) emptyLock
+  (secondProgress, secondEvents) <- recording
+  second <- either (pure . Left) (\o -> synchronise noRegistry defaultOptions{optionProgress = secondProgress} project (gitManifest library) (outcomeLock o)) first
+  cold <- firstEvents
+  warm <- secondEvents
+  let fetches events = length [() | FetchStarted _ <- events]
+  pure $ conjoin
+    [ counterexample (show (fmap outcomeInstalled second)) (either (const False) (const True) second)
+    , counterexample (show cold) (fetches cold === 1)
+    , counterexample (show cold) (Resolved 1 `elem` cold)
+    , counterexample (show cold) (length [() | CopyFinished _ <- cold] === 1)
+    , counterexample (show warm) (fetches warm === 0)
+    , counterexample (show warm) (length [() | CacheHit _ <- warm] === 1)
+    , counterexample (show warm) (length [() | UpToDate _ <- warm] === 1)
+    ]
+
+{-| A new modification time with the same content changes the fingerprint but
+    not the digest: the package is kept, and nothing is copied. -}
+testTouchedStaysInstalled :: IO Property
+testTouchedStaysInstalled = withGitLibrary $ \library project -> do
+  first <- installWith defaultOptions project (gitManifest library) emptyLock
+  let installed = project </> "deps" </> "shapes-kit" </> "src" </> "ShapesKit" </> "Area.pudu"
+  case first of
+    Left problem -> pure (counterexample (Text.unpack problem) False)
+    Right outcome -> do
+      before <- getModificationTime installed
+      setModificationTime installed (read "2001-02-03 04:05:06 UTC")
+      again <- synchronise noRegistry defaultOptions project (gitManifest library) (outcomeLock outcome)
+      after <- getModificationTime installed
+      pure $ conjoin
+        [ counterexample (show (fmap outcomeInstalled again)) (fmap outcomeInstalled again === Right 0)
+        , counterexample "the touched file was left in place" (after /= before)
+        ]
+
+testDamagedCacheRefused :: IO Property
+testDamagedCacheRefused = withGitLibrary $ \library project -> do
+  first <- installWith defaultOptions project (gitManifest library) emptyLock
+  case first of
+    Left problem -> pure (counterexample (Text.unpack problem) False)
+    Right outcome -> do
+      cache <- cacheRoot
+      keys <- listDirectory (cache </> "checkouts")
+      forM_ keys $ \key -> do
+        commits <- filter (notElem '.') <$> listDirectory (cache </> "checkouts" </> key)
+        forM_ commits $ \commit ->
+          TextIO.appendFile (cache </> "checkouts" </> key </> commit </> "src" </> "ShapesKit" </> "Area.pudu") "// injected\n"
+      removeDirectoryRecursive (project </> "deps")
+      again <- synchronise noRegistry defaultOptions project (gitManifest library) (outcomeLock outcome)
+      installed <- doesFileExist (project </> "deps" </> "shapes-kit" </> "src" </> "ShapesKit" </> "Area.pudu")
+      pure $ conjoin
+        [ counterexample (show (fmap outcomeInstalled again)) (isLeftContaining "pudu.lock records" again)
+        , counterexample "the damaged files were not left in deps/" (not installed)
+        ]
+
+testConcurrent :: IO Property
+testConcurrent = do
+  ordered <- forConcurrently 3 [1 .. 50 :: Int] (\n -> pure (n * 2))
+  failed <- try (forConcurrently 3 [1 .. 10 :: Int] (\n -> if n == 7 then throwIO (ErrorCall "seven") else evaluate n))
+  pure $ conjoin
+    [ ordered === map (* 2) [1 .. 50]
+    , counterexample "an item's exception reaches the caller" (either (\(ErrorCall m) -> m == "seven") (const False) failed)
+    ]

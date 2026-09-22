@@ -60,12 +60,15 @@ library
   exposed-modules:
     Pudu.Cli.Init
     Pudu.Cli.Package
+    Pudu.Cli.Progress
+    Pudu.Package.Concurrent
     Pudu.Package.Digest
     Pudu.Package.Git
     Pudu.Package.Identity
     Pudu.Package.Install
     Pudu.Package.Lock
     Pudu.Package.ManifestEdit
+    Pudu.Package.Progress
     Pudu.Package.Solve
     Pudu.Package.Version
     Pudu.Cli.Terminate

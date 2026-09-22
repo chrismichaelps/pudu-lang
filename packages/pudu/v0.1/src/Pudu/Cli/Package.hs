@@ -3,19 +3,39 @@
     `install`, `uninstall`, `update`, `deps`, and `tree` read their arguments
     here, change `pudu.toml` when they are asked to, and hand the rest to
     `Package.Install`. When installing fails, the manifest is put back exactly
-    as it was, so a mistyped name leaves nothing behind. -}
+    as it was, so a mistyped name leaves nothing behind.
+
+    While a command works, `Cli.Progress` shows what it is doing; when it is
+    done, the report says what was resolved and where it came from, what
+    changed, what was installed, and how long each part took. -}
 module Pudu.Cli.Package
   ( runPackageCommand
   , packageCommands
   ) where
 
+import Control.Concurrent (getNumCapabilities, setNumCapabilities)
 import Control.Monad (forM_, unless, when)
 import Data.List (sort, sortOn)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler.Manifest (Dependency (..), DependencySource (..), Manifest (..), parseManifest)
-import Pudu.Package.Git (checkoutDirectory, checkoutGit)
+import Data.Time.Clock (getCurrentTime)
+import GHC.Conc (getNumProcessors)
+import Pudu.Cli.Progress
+  ( Display
+  , Paint (..)
+  , Tally (..)
+  , Verbosity (..)
+  , displayProgress
+  , displayStartedAt
+  , elapsed
+  , milliseconds
+  , painter
+  , startDisplay
+  , stopDisplay
+  )
+import Pudu.Package.Git (GitSession, checkoutDirectory, checkoutGit, newGitSession)
 import Pudu.Package.Identity
   ( InstallSpec (..)
   , PackageId (..)
@@ -50,40 +70,72 @@ packageCommands = ["install", "uninstall", "update", "deps", "tree"]
 runPackageCommand :: IO Registry -> String -> [String] -> IO ()
 runPackageCommand connect command arguments = do
   let (flags, rest) = splitFlags arguments
-      options = defaultOptions{optionOffline = "--offline" `elem` flags, optionLocked = "--locked" `elem` flags}
-      unknown = filter (`notElem` ["--offline", "--locked"]) flags
+      offline = "--offline" `elem` flags
+      verbosity
+        | "--quiet" `elem` flags = Quiet
+        | "--verbose" `elem` flags = Verbose
+        | otherwise = Normal
+      unknown = filter (`notElem` ["--offline", "--locked", "--quiet", "--verbose"]) flags
   case unknown of
     flag : _ -> failWith command ("unknown option " <> Text.pack flag)
     [] -> pure ()
   opened <- openProject
   project <- either (failWith command) pure opened
+  let changing = command `elem` ["install", "uninstall", "update"]
+  when changing useProcessors
+  display <- startDisplay (if changing then verbosity else Quiet)
+  session <- newGitSession offline (displayProgress display)
+  let options =
+        defaultOptions
+          { optionOffline = offline
+          , optionLocked = "--locked" `elem` flags
+          , optionProgress = displayProgress display
+          , optionGit = Just session
+          }
+      run = Run command display verbosity session
   case command of
     "install" -> do
       registry <- connect
-      install registry options project (map Text.pack rest)
+      install run registry options project (map Text.pack rest)
     "uninstall" -> do
       registry <- connect
       when (null rest) (failWith command "name the dependencies to remove, such as pudu uninstall @alice/json")
-      uninstall registry options project (map Text.pack rest)
+      uninstall run registry options project (map Text.pack rest)
     "update" -> do
       registry <- connect
       named <- traverse (either (failWith command) pure . parsePackageId . Text.pack) rest
       let refresh package = null named || package `elem` named
-      apply command registry options{optionRefresh = refresh} project (projectManifestText project)
+      apply run registry options{optionRefresh = refresh} project (projectManifestText project)
     "deps" -> showDependencies project
     "tree" -> showTree project
     _ -> failWith command "unknown package command"
+
+{-| One command's run: its name, its live display, and how much it says. -}
+data Run = Run
+  { runCommand :: !String
+  , runDisplay :: !Display
+  , runVerbosity :: !Verbosity
+  , runSession :: !GitSession
+  }
+
+{-| Hashing and copying run on every core the machine has, up to the number
+    of packages worked on at once. -}
+useProcessors :: IO ()
+useProcessors = do
+  current <- getNumCapabilities
+  processors <- getNumProcessors
+  when (current < processors) (setNumCapabilities (min 8 processors))
 
 splitFlags :: [String] -> ([String], [String])
 splitFlags arguments = (filter isFlag arguments, filter (not . isFlag) arguments)
  where
   isFlag argument = take 2 argument == "--"
 
-install :: Registry -> Options -> Project -> [Text] -> IO ()
-install registry options project [] = apply "install" registry options project (projectManifestText project)
-install registry options project specs = do
+install :: Run -> Registry -> Options -> Project -> [Text] -> IO ()
+install run registry options project [] = apply run registry options project (projectManifestText project)
+install run registry options project specs = do
   edited <- foldEdits (projectManifestText project) specs
-  apply "install" registry options project edited
+  apply run registry options project edited
  where
   foldEdits text [] = pure text
   foldEdits text (spec : more) = do
@@ -100,7 +152,7 @@ install registry options project specs = do
           written = if take 1 relative == "/" then absolute else relative
       pure (named, "{ path = " <> quoted (Text.pack written) <> " }")
     SpecGit url revision -> do
-      fetched <- checkoutGit (optionOffline options) url (maybe "HEAD" id revision)
+      fetched <- checkoutGit (runSession run) url (maybe "HEAD" id revision)
       checkout <- either (failWith "install") pure fetched
       named <- nameOfDirectoryOr (checkoutDirectory checkout) (repositoryName url)
       pure (named, "{ git = " <> quoted url <> maybe "" (\r -> ", rev = " <> quoted r) revision <> " }")
@@ -110,17 +162,22 @@ install registry options project specs = do
 
 {-| A registry package asked for with no version gets `*` for the moment it is
     solved, and is then rewritten to be compatible with what was chosen. -}
-apply :: String -> Registry -> Options -> Project -> Text -> IO ()
-apply command registry options project manifestText = do
+apply :: Run -> Registry -> Options -> Project -> Text -> IO ()
+apply run registry options project manifestText = do
   let root = projectRoot project
       manifestPath = root </> "pudu.toml"
+      command = runCommand run
   result <- synchronise registry options root manifestText (projectLock project)
+  tally <- stopDisplay (runDisplay run)
   case result of
     Left problem -> failWith command problem
     Right outcome -> do
       let settled = pinWildcards (outcomeLock outcome) manifestText
       when (settled /= projectManifestText project) (TextIO.writeFile manifestPath settled)
-      report command (projectRoot project) outcome (settled /= projectManifestText project)
+      unless (runVerbosity run == Quiet) $
+        report run tally (projectRoot project) outcome (settled /= projectManifestText project)
+
+
 
 {-| Replace a `*` written by `pudu install @h/n` with `^` of the chosen version. -}
 pinWildcards :: Lock -> Text -> Text
@@ -132,40 +189,68 @@ pinWildcards (Lock entries) text = foldr pin text (manifestDependencies (parseMa
       [] -> current
     _ -> current
 
-uninstall :: Registry -> Options -> Project -> [Text] -> IO ()
-uninstall registry options project names = do
+uninstall :: Run -> Registry -> Options -> Project -> [Text] -> IO ()
+uninstall run registry options project names = do
   let go text [] = pure text
       go text (name : more) = case removeDependency name text of
         Just edited -> go edited more
         Nothing -> failWith "uninstall" (name <> " is not a dependency in pudu.toml")
   edited <- go (projectManifestText project) names
-  apply "uninstall" registry options project edited
+  apply run registry options project edited
 
-report :: String -> FilePath -> Outcome -> Bool -> IO ()
-report command root outcome manifestChanged = do
-  let changes = outcomeChanges outcome
-  if null changes
-    then TextIO.putStrLn (if outcomeInstalled outcome > 0 then "restored deps/ from pudu.lock" else "dependencies are up to date")
-    else forM_ (sortOn changeName changes) (TextIO.putStrLn . ("  " <>) . describe)
+report :: Run -> Tally -> FilePath -> Outcome -> Bool -> IO ()
+report run tally root outcome manifestChanged = do
+  paint <- painter
+  now <- getCurrentTime
+  let added' = paintAdded paint
+      removed' = paintRemoved paint
+      changed' = paintChanged paint
+      dim = paintDim paint
+      describe change = case change of
+        Added p v -> added' "+ " <> renderPackageId p <> " " <> dim v
+        Removed p v -> removed' "- " <> renderPackageId p <> " " <> dim v
+        Moved p old new -> changed' "~ " <> renderPackageId p <> " " <> dim (old <> " → " <> new)
+      changes = outcomeChanges outcome
+      started = displayStartedOf run
+      took from = dim ("in " <> milliseconds (elapsed now from))
+      sources = [Text.pack (show n) <> " " <> label | (n, label) <- [(tallyFetched tally, "fetched"), (tallyCached tally, "from cache")], n > 0]
+      resolvedLine total =
+        "Resolved " <> plural total "package" <> " "
+          <> maybe "" (\at -> dim ("in " <> milliseconds (elapsed at started)) <> " ") (tallyResolvedAt tally)
+          <> (if null sources then "" else dim ("· " <> Text.intercalate ", " sources))
+  forM_ (tallyResolved tally) (TextIO.putStrLn . Text.stripEnd . resolvedLine)
+  unless (null changes) $ do
+    let added = length [() | Added{} <- changes]
+        removed = length [() | Removed{} <- changes]
+        moved = length [() | Moved{} <- changes]
+        counts = [added' ("+" <> Text.pack (show added)) | added > 0] <> [removed' ("-" <> Text.pack (show removed)) | removed > 0] <> [changed' ("~" <> Text.pack (show moved)) | moved > 0]
+    TextIO.putStrLn ("Packages: " <> Text.unwords counts)
+    forM_ (sortOn changeName changes) (TextIO.putStrLn . ("  " <>) . describe)
+  let installed = outcomeInstalled outcome
+      current = tallyUpToDate tally
+  if installed > 0
+    then
+      TextIO.putStrLn
+        ( (if null changes then "Restored " <> plural installed "package" <> " in deps/ from pudu.lock " else "Installed " <> plural installed "package" <> " into deps/ ")
+            <> maybe "" took (tallyResolvedAt tally)
+            <> (if current > 0 then dim (" · " <> Text.pack (show current) <> " up to date") else "")
+        )
+    else when (null changes) (TextIO.putStrLn "Already up to date")
   let written = [f | (f, True) <- [("pudu.toml", manifestChanged), ("pudu.lock", outcomeLockWritten outcome)]]
-  unless (null written) (TextIO.putStrLn ("wrote " <> Text.intercalate ", " written))
-  when (outcomeInstalled outcome > 0) $
-    TextIO.putStrLn ("installed " <> plural (outcomeInstalled outcome) "package" <> " into deps/")
-  when (command == "install") $ do
+  unless (null written) (TextIO.putStrLn ("Wrote " <> Text.intercalate ", " written))
+  when (runCommand run == "install") $ do
     let added = [p | Added p _ <- changes]
         roots = [(p, r) | (p, r) <- outcomeRoots outcome, p `elem` added]
     forM_ roots $ \(package, moduleRoot) -> do
       example <- exampleModule (installDirectory root package) moduleRoot
-      TextIO.putStrLn ("\n" <> renderPackageId package <> " provides the modules under " <> moduleRoot <> ", such as:\n  import " <> example)
+      TextIO.putStrLn ("\n" <> paintStrong paint (renderPackageId package) <> " provides the modules under " <> moduleRoot <> ", such as:\n  import " <> example)
+  TextIO.putStrLn ("\nDone " <> took started)
  where
+  displayStartedOf = displayStartedAt . runDisplay
   changeName change = case change of
     Added p _ -> renderPackageId p
     Removed p _ -> renderPackageId p
     Moved p _ _ -> renderPackageId p
-  describe change = case change of
-    Added p v -> "+ " <> renderPackageId p <> " " <> v
-    Removed p v -> "- " <> renderPackageId p <> " " <> v
-    Moved p old new -> "~ " <> renderPackageId p <> " " <> old <> " → " <> new
 
 showDependencies :: Project -> IO ()
 showDependencies project = do

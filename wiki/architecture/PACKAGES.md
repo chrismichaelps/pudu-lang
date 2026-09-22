@@ -204,16 +204,30 @@ the network and uses only the cache.
 
 ```text
 $ pudu install @alice/json-schema
-resolving @alice/json-schema (latest: 1.4.2)
+Resolved 2 packages in 310ms · 2 fetched
+Packages: +2
   + @alice/json-schema 1.4.2
   + @bob/text 0.6.0          (needed by @alice/json-schema)
-wrote pudu.toml, pudu.lock
-installed 2 packages into deps/
+Installed 2 packages into deps/ in 18ms
+Wrote pudu.toml, pudu.lock
 
-import JsonSchema.Validate
+@alice/json-schema provides the modules under JsonSchema, such as:
+  import JsonSchema.Validate
+
+Done in 334ms
 ```
 
-The last line tells the reader the module to import.
+The import line tells the reader the module to import. While the command works, an interactive
+terminal shows one live line on stderr — a spinner, the phase, counts fetched, from cache, copied,
+and up to date, what is in flight, and the elapsed time — erased when the summary prints.
+`--verbose` prints each step as a timed line; `--quiet` prints only errors. A log that is not a
+terminal gets the summary alone.
+
+Installing does each thing once: a locked commit already in the cache starts no git process, a
+repository is fetched at most once per run, a checkout's tree digest is computed when it is written
+and kept beside it, a copy hashes the bytes it writes, and an installed package is re-hashed only
+when the sizes or modification times of its files changed. Repositories are fetched and packages
+copied side by side, up to eight at a time.
 
 ### Publisher path
 

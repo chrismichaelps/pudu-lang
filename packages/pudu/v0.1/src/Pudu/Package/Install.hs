@@ -7,6 +7,9 @@
     differ only in how they change the manifest first and which locked choices
     they let go of.
 
+    Repositories are fetched and packages copied side by side, and each step
+    is reported to the caller's `Progress` as it starts and ends.
+
     Nothing is written until everything is known to fit. A failure leaves the
     manifest's caller to restore its edit, the lock as it was, and `deps/`
     untouched. -}
@@ -23,6 +26,7 @@ module Pudu.Package.Install
 
 import Control.Exception (IOException, try)
 import Control.Monad (filterM, forM, forM_, unless, when)
+import Data.Maybe (fromMaybe)
 import Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -35,8 +39,9 @@ import Pudu.Compiler.Manifest
   , findManifestRoot
   , parseManifest
   )
-import Pudu.Package.Digest (copyTree, renderTreeProblem, treeDigest)
-import Pudu.Package.Git (GitCheckout (..), checkoutGit)
+import Pudu.Package.Concurrent (concurrentLimit, forConcurrently)
+import Pudu.Package.Digest (cachedTreeDigest, copyTree, renderTreeProblem, treeDigest, treeFingerprint)
+import Pudu.Package.Git (GitCheckout (..), GitSession, checkoutGit, newGitSession)
 import Pudu.Package.Identity
   ( PackageId (..)
   , defaultRoot
@@ -47,6 +52,7 @@ import Pudu.Package.Identity
   , validRoot
   )
 import Pudu.Package.Lock (Lock (..), LockEntry (..), emptyLock, lockFileName, parseLock, renderLock)
+import Pudu.Package.Progress (Event (..), Progress, emit, silentProgress)
 import Pudu.Package.Solve
   ( Node (..)
   , NodeSource (..)
@@ -70,10 +76,13 @@ data Options = Options
   { optionOffline :: !Bool
   , optionLocked :: !Bool
   , optionRefresh :: !(PackageId -> Bool)
+  , optionProgress :: !Progress
+  , optionGit :: !(Maybe GitSession)
+  -- ^ A session already used this run, so a repository the caller fetched is not fetched again.
   }
 
 defaultOptions :: Options
-defaultOptions = Options False False (const False)
+defaultOptions = Options False False (const False) silentProgress Nothing
 
 data Project = Project
   { projectRoot :: !FilePath
@@ -117,8 +126,10 @@ data Outcome = Outcome
 
 {-| Bring the lock and `deps/` into line with a manifest's text. -}
 synchronise :: Registry -> Options -> FilePath -> Text -> Lock -> IO (Either Text Outcome)
-synchronise registry options root manifestText oldLock = do
-  let manifest = parseManifest manifestText
+synchronise registry given root manifestText oldLock = do
+  session <- maybe (newGitSession (optionOffline given) (optionProgress given)) pure (optionGit given)
+  let options = given{optionGit = Just session}
+      manifest = parseManifest manifestText
       preference = Preference (Map.fromList [(entryName e, entryVersion e) | e <- lockEntries oldLock]) (optionRefresh options)
   expanded <- wantsOf options oldLock root root True (manifestDependencies manifest)
   case expanded of
@@ -128,7 +139,8 @@ synchronise registry options root manifestText oldLock = do
       case solved of
         Left problem -> pure (Left problem)
         Right nodes -> do
-          contents <- forM nodes (contentOf registry)
+          emit (optionProgress options) (Resolved (length nodes))
+          contents <- forConcurrently concurrentLimit nodes (contentOf registry)
           case sequence contents of
             Left problem -> pure (Left problem)
             Right located -> do
@@ -136,7 +148,7 @@ synchronise registry options root manifestText oldLock = do
               case checked of
                 Left problem -> pure (Left problem)
                 Right () -> do
-                  entries <- forM [(n, d) | (n, Just d) <- located] (entryFor registry)
+                  entries <- forConcurrently concurrentLimit [(n, d) | (n, Just d) <- located] (entryFor registry)
                   case sequence entries of
                     Left problem -> pure (Left problem)
                     Right lockEntriesNew -> finish options root oldLock (Lock (sortOn (renderPackageId . entryName) lockEntriesNew)) located
@@ -159,7 +171,7 @@ finish options root oldLock newLock located = do
         let path = root </> lockFileName
         TextIO.writeFile (path <> ".partial") (renderLock newLock)
         renameFile (path <> ".partial") path
-      installed <- materialise root newLock (Map.fromList [(nodeId n, d) | (n, Just d) <- located])
+      installed <- materialise (optionProgress options) root newLock (Map.fromList [(nodeId n, d) | (n, Just d) <- located])
       case installed of
         Left problem -> pure (Left problem)
         Right count ->
@@ -200,7 +212,7 @@ difference (Lock old) (Lock new) =
     whoever published it. -}
 wantsOf :: Options -> Lock -> FilePath -> FilePath -> Bool -> [Dependency] -> IO (Either Text [(PackageId, Want)])
 wantsOf options lock projectRoot base top dependencies = do
-  results <- forM dependencies $ \dependency -> do
+  results <- forConcurrently concurrentLimit dependencies $ \dependency -> do
     let key = dependencyName dependency
         at = "pudu.toml:" <> Text.pack (show (dependencyLine dependency)) <> ": "
     case parsePackageId key of
@@ -220,7 +232,8 @@ wantsOf options lock projectRoot base top dependencies = do
           let lockedCommit = do
                 entry <- lookupEntry package lock
                 if optionRefresh options package then Nothing else lockedGitCommit url revision (entrySource entry)
-          fetched <- checkoutGit (optionOffline options) url (maybe (maybe "HEAD" id revision) id lockedCommit)
+          session <- maybe (newGitSession (optionOffline options) (optionProgress options)) pure (optionGit options)
+          fetched <- checkoutGit session url (fromMaybe (fromMaybe "HEAD" revision) lockedCommit)
           case fetched of
             Left problem -> pure (Left (at <> key <> ": " <> problem))
             Right checkout ->
@@ -277,7 +290,7 @@ entryFor _ (node, directory) = do
   (source, checksum) <- case nodeSource node of
     FromRegistry url digest -> pure (Right ("registry+" <> url), Right digest)
     FromGit url commit _ -> do
-      digest <- treeDigest directory
+      digest <- cachedTreeDigest directory
       pure (Right (url <> "#" <> commit), either (Left . renderTreeProblem) Right digest)
     FromPath path -> pure (Left ("a directory is not locked: " <> Text.pack path), Left "")
   pure $ do
@@ -331,43 +344,72 @@ sourceDirectoryOf directory = do
 {-| Make `deps/` hold exactly the locked packages.
 
     A package already installed is left alone when the marker beside it names
-    the locked checksum and its files still have the tree digest recorded when
-    it was installed, so an edited dependency is noticed and restored. Anything
-    in `deps/` the lock does not name is removed: the directory belongs to
-    `pudu`. -}
-materialise :: FilePath -> Lock -> Map.Map PackageId FilePath -> IO (Either Text Int)
-materialise root (Lock entries) contents = do
-  results <- forM entries $ \entry -> do
+    the locked checksum and its files are the ones recorded when it was
+    installed, so an edited dependency is noticed and restored. The marker
+    keeps the tree digest and a fingerprint of sizes and modification times:
+    an unchanged fingerprint is trusted, a changed one is settled by hashing,
+    so the common case reads no file. A git package's copied files must have
+    the digest the lock records, so a damaged cache is refused rather than
+    installed. Anything in `deps/` the lock does not name is removed: the
+    directory belongs to `pudu`. -}
+materialise :: Progress -> FilePath -> Lock -> Map.Map PackageId FilePath -> IO (Either Text Int)
+materialise progress root (Lock entries) contents = do
+  results <- forConcurrently concurrentLimit entries $ \entry -> do
     let destination = installDirectory root (entryName entry)
         marker = destination </> ".installed"
-    current <- readMarker marker
-    fresh <- case current of
-      Just (checksum, digest) | checksum == entryChecksum entry -> do
-        now <- treeDigest destination
-        pure (either (const False) (== digest) now)
-      _ -> pure False
+    fresh <- isFresh destination marker (entryChecksum entry)
     if fresh
-      then pure (Right False)
+      then do
+        emit progress (UpToDate (entryName entry))
+        pure (Right False)
       else case Map.lookup (entryName entry) contents of
         Nothing -> pure (Left (renderPackageId (entryName entry) <> " is locked but its files are not available"))
         Just from -> do
+          emit progress (CopyStarted (entryName entry) (entryVersion entry))
           exists <- doesDirectoryExist destination
           when exists (removeDirectoryRecursive destination)
           createDirectoryIfMissing True (takeDirectory destination)
           copied <- copyTree from destination
           case copied of
             Left problem -> pure (Left (renderTreeProblem problem))
-            Right () -> do
-              digest <- treeDigest destination
-              case digest of
-                Left problem -> pure (Left (renderTreeProblem problem))
-                Right value -> do
-                  TextIO.writeFile marker (entryChecksum entry <> "\n" <> value <> "\n")
+            Right digest
+              | "git+" `Text.isPrefixOf` entrySource entry && digest /= entryChecksum entry -> do
+                  removeDirectoryRecursive destination
+                  pure
+                    ( Left
+                        ( "the files of " <> renderPackageId (entryName entry) <> " have digest " <> digest
+                            <> ", and pudu.lock records " <> entryChecksum entry
+                            <> "; nothing was installed for it"
+                        )
+                    )
+              | otherwise -> do
+                  writeMarker marker (entryChecksum entry) digest destination
+                  emit progress (CopyFinished (entryName entry))
                   pure (Right True)
   pruned <- prune root [installDirectory root (entryName e) | e <- entries]
   pure (length . filter id <$> (sequence results <* pruned))
 
-readMarker :: FilePath -> IO (Maybe (Text, Text))
+isFresh :: FilePath -> FilePath -> Text -> IO Bool
+isFresh destination marker checksum = do
+  current <- readMarker marker
+  case current of
+    Just (recorded, digest, fingerprint) | recorded == checksum -> do
+      now <- treeFingerprint destination
+      if now == Right fingerprint
+        then pure True
+        else do
+          hashed <- treeDigest destination
+          if hashed == Right digest
+            then True <$ writeMarker marker checksum digest destination
+            else pure False
+    _ -> pure False
+
+writeMarker :: FilePath -> Text -> Text -> FilePath -> IO ()
+writeMarker marker checksum digest destination = do
+  fingerprint <- either (const "") id <$> treeFingerprint destination
+  TextIO.writeFile marker (checksum <> "\n" <> digest <> "\n" <> fingerprint <> "\n")
+
+readMarker :: FilePath -> IO (Maybe (Text, Text, Text))
 readMarker path = do
   present <- doesFileExist path
   if not present
@@ -375,7 +417,8 @@ readMarker path = do
     else do
       loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
       pure $ case fmap Text.lines loaded of
-        Right [checksum, digest] -> Just (checksum, digest)
+        Right [checksum, digest, fingerprint] -> Just (checksum, digest, fingerprint)
+        Right [checksum, digest] -> Just (checksum, digest, "")
         _ -> Nothing
 
 prune :: FilePath -> [FilePath] -> IO (Either Text ())

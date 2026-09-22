@@ -11,16 +11,31 @@ pudu install ../geometry
 pudu install https://github.com/carol/parser.git#v0.4.0
 ```
 
-`pudu install` adds the dependency to `pudu.toml`, installs it, and tells you what to import:
+While it works, one line at the bottom of the terminal shows what it is doing — fetching a repository, copying a package — and how long it has taken. When it is done, `pudu install` says where each package came from, what changed, and what to import:
 
 ```text
+Resolved 1 package in 612ms · 1 fetched
+Packages: +1
   + parser 0.4.0
-wrote pudu.toml, pudu.lock
-installed 1 package into deps/
+Installed 1 package into deps/ in 21ms
+Wrote pudu.toml, pudu.lock
 
 parser provides the modules under Parser, such as:
   import Parser.Json
+
+Done in 640ms
 ```
+
+Run it again and nothing is fetched: the lock names a commit the machine already has.
+
+```text
+Resolved 1 package in 1ms · 1 from cache
+Already up to date
+
+Done in 9ms
+```
+
+`--verbose` prints every step as its own timed line, which is what to read when something is slow; `--quiet` prints nothing unless there is an error.
 
 A dependency's modules are imported by their names, exactly like the project's own:
 
@@ -56,7 +71,7 @@ parser = { git = "https://github.com/carol/parser.git", rev = "v0.4.0" }
 | `pudu deps` | lists the direct dependencies and what is locked for each |
 | `pudu tree` | shows every package the project uses, and what uses it |
 
-Downloads are kept in `~/.pudu/cache` (or `$PUDU_HOME/cache`) and shared by every project on the machine, so a second project using the same commit copies files and downloads nothing. With a lock present, `pudu check`, `run`, and `test` never touch the network.
+Downloads are kept in `~/.pudu/cache` (or `$PUDU_HOME/cache`) and shared by every project on the machine, so a second project using the same commit copies files and downloads nothing. With a lock present and the cache holding what it names, `pudu install` makes no network request and runs no git command, and `pudu check`, `run`, and `test` never touch the network. Repositories are fetched and packages copied side by side, and a package is copied again only if its files in `deps/` changed; a cached copy whose files no longer match `pudu.lock` is refused rather than installed.
 
 ## Module roots
 
