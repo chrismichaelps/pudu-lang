@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Tar paths past 100 bytes, and types it does not know
+
+- `Std.Archive.Tar` writes a path longer than 100 bytes through the USTAR prefix field and reads it back
+  whole; it truncated such paths before. A header whose type is not a file, directory, or symbolic
+  link — a hard link, a device, a pax header — fails with `UnsupportedType` instead of reading as a
+  file.
+
 ## 2026-09-22 — SHA-256 of text at native speed
 
 - `Std.Crypto.sha256` and `sha256Hex` answer from the runtime's digest instead of the rounds written in

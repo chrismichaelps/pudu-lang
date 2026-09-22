@@ -125,5 +125,15 @@ fn main() -> Int {
     case Err(_) => { held = held + 1 }
   }
 
+  // 14. A path longer than the name field travels in the USTAR prefix
+  let deep = "src/" + "a".repeat(60) + "/" + "b".repeat(60) + "/Module.pudu"
+  let deepBack = match Tar.readArchive(&Tar.writeArchive([Tar.entry(deep, "m".toBytes())])) {
+    case Ok(entries) => entries
+    case Err(_) => []
+  }
+  if deepBack.length() == 1 && deepBack[0].path == deep {
+    held = held + 1
+  }
+
   held
 }

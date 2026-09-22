@@ -110,6 +110,50 @@ fn parseOctal(source: &Bytes, offset: Int, length: Int) -> Option[Int] {
   Some(result)
 }
 
+/// The NUL-terminated text in a header field, or nothing when it is not UTF-8.
+fn headerText(header: &Array[UInt8], start: Int, width: Int) -> Option[Str] {
+  var collected: Array[UInt8] = []
+  var index = 0
+  while index < width {
+    let b = header.get(start + index)
+    if b == 0u8 { break }
+    collected = collected.push(b)
+    index = index + 1
+  }
+  match ByteSeq.toText(&ByteSeq.fromArray(&collected)) {
+    case Ok(txt) => Some(txt)
+    case Err(_) => None
+  }
+}
+
+/// Whether a header carries the USTAR magic, which gives the prefix field its meaning.
+fn isUstar(header: &Array[UInt8]) -> Bool {
+  let magic = "ustar".toBytes().toArray()
+  var index = 0
+  while index < 5 {
+    if header.get(257 + index) != magic.get(index) { return false }
+    index = index + 1
+  }
+  true
+}
+
+/// A path as the USTAR `prefix` and `name` fields: unchanged when it fits in
+/// 100 bytes, otherwise split at the last `/` that leaves a name of at most
+/// 100 bytes and a prefix of at most 155.
+fn splitPath(path: Str) -> (Str, Str) {
+  let bytes = path.toBytes()
+  if bytes.length() <= 100 { return ("", path) }
+  let parts = path.split("/")
+  var index = parts.length() - 1
+  while index > 0 {
+    let prefix = parts.slice(0, index).join("/")
+    let name = parts.slice(index, parts.length()).join("/")
+    if name.toBytes().length() <= 100 && prefix.toBytes().length() <= 155 { return (prefix, name) }
+    index = index - 1
+  }
+  ("", path)
+}
+
 /// Calculates the unsigned byte sum of a 512-byte header with checksum bytes treated as spaces (32).
 fn computeHeaderChecksum(block: &Array[UInt8]) -> Int {
   var sum = 0
@@ -140,11 +184,18 @@ fn buildHeader(item: &TarEntry) -> Array[UInt8] {
     i = i + 1
   }
 
-  let pathBytes = item.path.toBytes().toArray()
+  let split = splitPath(item.path)
+  let pathBytes = split[1].toBytes().toArray()
   var p = 0
   while p < pathBytes.length() && p < 100 {
     block = withByteAt(block, p, pathBytes.get(p))
     p = p + 1
+  }
+  let prefixBytes = split[0].toBytes().toArray()
+  var q = 0
+  while q < prefixBytes.length() && q < 155 {
+    block = withByteAt(block, 345 + q, prefixBytes.get(q))
+    q = q + 1
   }
 
   let modeOct = formatOctal(item.mode, 8)
@@ -301,10 +352,15 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
       p = p + 1
     }
     let pathBlock = ByteSeq.fromArray(&pathBytes)
-    let entryPath = match ByteSeq.toText(&pathBlock) {
+    let namePart = match ByteSeq.toText(&pathBlock) {
       case Ok(txt) => txt
       case Err(_) => { return Err(CorruptHeader) }
     }
+    let prefixPart = match headerText(&rawHeader, 345, 155) {
+      case Some(txt) => if isUstar(&rawHeader) { txt } else { "" }
+      case None => { return Err(CorruptHeader) }
+    }
+    let entryPath = if prefixPart.isEmpty() { namePart } else { prefixPart + "/" + namePart }
 
     let modeVal = match parseOctal(archive, offset + 100, 8) {
       case Some(m) => m
@@ -326,8 +382,10 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
       Directory
     } else if typeCode == 50 {
       Symlink
-    } else {
+    } else if typeCode == 48 || typeCode == 0 {
       File
+    } else {
+      return Err(UnsupportedType)
     }
 
     var linkBytes: Array[UInt8] = []

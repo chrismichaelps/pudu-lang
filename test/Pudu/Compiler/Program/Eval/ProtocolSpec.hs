@@ -262,7 +262,7 @@ testProtocolEvaluation = do
         padding that a body shorter or longer than a block must get. -}
     , counterexample
         "a USTAR archive round-trips entries, sizes, directories, and padding"
-        (tarArchive === Just "13")
+        (tarArchive === Just "14")
     {-| Each piece of pattern syntax against a subject that distinguishes it
         from the piece next to it: greedy against lazy on the same subject, a
         group that took part against one that did not, a bound that is met
