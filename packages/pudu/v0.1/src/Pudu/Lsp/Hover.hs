@@ -3,6 +3,7 @@ module Pudu.Lsp.Hover (hoverAt) where
 
 import Control.Applicative ((<|>))
 import Data.Char (isAlphaNum)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Lsp.Documents (Analysis (..))
@@ -13,6 +14,7 @@ import Pudu.Lsp.Feature
   , symbolAt
   , wordSpanAt
   )
+import Pudu.Lsp.ImportedName (importedEntry, importedNameAt)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (rangeJson)
 import Pudu.Semantic.Resolve (Resolution (..))
@@ -29,13 +31,14 @@ import Pudu.Type (Type, narrowestSpanAt, renderType, widestWithin)
 hoverAt :: Analysis -> Int -> Json
 hoverAt value offset = case wordSpanAt (analysisText value) offset of
   Nothing -> JsonNull
-  Just (word, (start, end)) -> case foreignNameAt value word offset of
-    Just entry -> hoverEntry Nothing value entry
-    Nothing -> case declaredAt value word offset of
-      Just entry -> hoverEntry (Just (docSpan entry)) value entry
-      Nothing -> case wordType value offset start end of
-        Just typeValue -> typedHover word typeValue
-        Nothing -> maybe JsonNull (hoverEntry Nothing value) (resolvedEntry value word offset)
+  Just (word, (start, end)) ->
+    fromMaybe JsonNull $
+      (hoverEntry Nothing value <$> foreignNameAt value word offset)
+        <|> ((\entry -> hoverEntry (Just (docSpan entry)) value entry) <$> declaredAt value word offset)
+        -- A name another module exports is described as that module wrote it.
+        <|> (hoverEntry Nothing value <$> (importedNameAt value offset >>= importedEntry value))
+        <|> (typedHover word <$> wordType value offset start end)
+        <|> (hoverEntry Nothing value <$> resolvedEntry value word offset)
 
 foreignNameAt :: Analysis -> Text.Text -> Int -> Maybe DocEntry
 foreignNameAt value word offset = do

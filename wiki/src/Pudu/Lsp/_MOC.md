@@ -12,7 +12,8 @@ tags: [moc, tooling, lsp]
 - [[Lsp Protocol]] — byte framing and the shapes the wire carries.
 - [[Lsp Feature]] — the index turned into hovers, definitions, outlines, and completions.
 - [[Lsp Hover]] — cursor policy that preserves inferred types and foreign trust provenance.
-- [[Lsp Definition]] — indexed declaration navigation for the name under the cursor.
+- [[Lsp Definition]] — the declaration a name names, in this document or the module exporting it.
+- [[Lsp Imported Name]] — the export a name at a cursor reaches through an import.
 - [[Lsp References]] — find all usages of a declaration across the document.
 - [[Lsp Rename]] — prepare and execute rename edits across declaration and uses.
 - [[Lsp Highlight]] — semantic highlighting for occurrences of the active symbol.

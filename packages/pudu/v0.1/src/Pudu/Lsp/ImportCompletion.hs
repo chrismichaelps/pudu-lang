@@ -39,14 +39,31 @@ import Pudu.Semantic.Symbol (Namespace (..))
 importCompletions :: [Text] -> Analysis -> Analysis -> Int -> ImportSite -> [Json]
 importCompletions catalog written known offset site = case site of
   ImportPath start ->
-    [ moduleItem name (rangeJson (rangeOfOffsets (analysisText written) start offset))
-    | name <- Set.toAscList (Set.delete own (Set.fromList (catalog <> reached)))
-    ]
-  ImportSelection path -> case NonEmpty.nonEmpty (Text.splitOn "." path) of
-    Just segments -> exportCandidates known (ModuleName segments)
+    let typed = Text.take (offset - start) (Text.drop start (analysisText written))
+        range = rangeJson (rangeOfOffsets (analysisText written) start offset)
+     in [ moduleItem name (rank typed name) range
+        | name <- Set.toAscList (Set.delete own (Set.fromList (catalog <> reached)))
+        ]
+  ImportSelection path chosen -> case NonEmpty.nonEmpty (Text.splitOn "." path) of
+    Just segments -> [candidate | candidate <- exportCandidates known (ModuleName segments), labelOf candidate `notElem` map Just chosen]
     Nothing -> []
+  ImportPathEnd -> [item "as" 14 "name the module differently"]
   ImportAlias -> []
  where
+  labelOf candidate = case candidate of
+    JsonObject fields -> case lookup "label" fields of
+      Just (JsonText label) -> Just label
+      _ -> Nothing
+    _ -> Nothing
+  -- A module the typed path begins comes first, then one with a segment the
+  -- last typed segment begins, as `Cur` begins `Std.Bytes.Cursor`'s last,
+  -- then the rest; an editor filters them further as it likes.
+  rank typed name
+    | Text.null typed || typed `Text.isPrefixOf` name = "0"
+    | any (lastTyped `Text.isPrefixOf`) (Text.splitOn "." name), not (Text.null lastTyped) = "1"
+    | otherwise = "2"
+   where
+    lastTyped = last (Text.splitOn "." typed)
   reached = [docModule entry | entry <- indexEntries (analysisProgramIndex written)]
   own = case analysisModule written of
     Just parsed -> moduleNameText (locatedValue (moduleName parsed))
@@ -134,12 +151,13 @@ item label kind detail =
         <> [("detail", JsonText detail) | not (Text.null detail)]
     )
 
-moduleItem :: Text -> Json -> Json
-moduleItem name range =
+moduleItem :: Text -> Text -> Json -> Json
+moduleItem name rank range =
   JsonObject
     [ ("label", JsonText name)
     , ("kind", JsonNumber 9)
     , ("detail", JsonText "module")
+    , ("sortText", JsonText (rank <> name))
     , ("filterText", JsonText name)
     , ("textEdit", JsonObject [("range", range), ("newText", JsonText name)])
     ]

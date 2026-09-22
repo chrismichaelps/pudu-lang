@@ -25,13 +25,15 @@ data CompletionContext
   = PatternContext (Located Expression) [Located MatchArm] (Located MatchArm)
   | TypeContext [TypeParameter]
   | ImportContext ImportSite
+  | RecordFieldContext ModuleName [Text]   -- a field name in a literal of this type; names set elsewhere
   | ValueContext [TypeParameter] (Maybe (Located Expression))
   | SuppressedContext
 
 data ImportSite
   = ImportPath Int        -- the path being written starts at this offset
-  | ImportSelection Text  -- inside the selection braces of this module's import
-  | ImportAlias           -- after `as`; nothing is offered
+  | ImportSelection Text [Text]  -- inside this module's selection braces; names already chosen
+  | ImportPathEnd                -- after a finished path, on its line
+  | ImportAlias                  -- after `as`; nothing is offered
 
 type TypeParameter = (Text, [Located TypeSyntax])   -- name and its bounds
 contextParameters :: CompletionContext -> [TypeParameter]
@@ -53,8 +55,13 @@ importSiteAt :: [Token] -> Int -> Maybe ImportSite
   comment spans suppress code candidates entirely. An import site is read backwards from the cursor
   over path tokens to the `import` keyword: a path still being written (`import Std.Co`,
   `import Std.`, a path continued on the next line) is `ImportPath` with the offset the path starts
-  at; a path whose last name ends before the cursor has been left; `as` starts an alias; `{` after
-  a path is a selection from that module.
+  at; a path whose last name ends before the cursor has been left, and the rest of its line is
+  `ImportPathEnd`, where only `as` or a selection may follow — a following line is not part of the
+  import; `as` starts an alias; `{` after a path is a selection from that module, carrying the names
+  the selection holds before the one being written.
+- Inside a record literal's braces, past its path and in no field's value, is `RecordFieldContext`
+  with the literal's path and the field names it sets elsewhere. A field's value is an ordinary
+  value position.
 - Every other context needs the tree. When the text does not parse, the tree is the parser's
   recovered one ([[Compiler Pipeline]] `recoveredSyntax`), read only for positions. An arm the parser
   recovered with no pattern yet (`case ` at the end of what is written) is a pattern position after

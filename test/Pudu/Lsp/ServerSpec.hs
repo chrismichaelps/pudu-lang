@@ -1,6 +1,8 @@
 {-| @Test.Lsp.Server — what an editor is told about a program -}
 module Pudu.Lsp.ServerSpec (serverProperties) where
 
+import Data.List (sortOn)
+import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -9,8 +11,9 @@ import qualified Data.Set as Set
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Pudu.Lsp.Analysis (analyseOver, documentSourceRoot)
 import Pudu.Lsp.RepairCache (cachedAnalyse, newRepairCache, repairCapacity)
-import Pudu.Lsp.Documents (Analysis (..))
+import Pudu.Lsp.Documents (Analysis (..), analysisOf)
 import Pudu.Lsp.Completion (completionRepaired)
+import Pudu.Lsp.Definition (definitionAcross, fileUri)
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
 import Pudu.Lsp.Json (Json (..), lookupField, parse, textOf)
 import Pudu.Lsp.ModuleCatalog (modulesUnder)
@@ -25,7 +28,7 @@ import Pudu.Lsp.Server
   , serverCapabilities
   )
 import System.Directory (getCurrentDirectory, makeAbsolute)
-import System.FilePath (normalise)
+import System.FilePath (normalise, (</>))
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 serverProperties :: [(String, IO Property)]
@@ -43,6 +46,10 @@ serverProperties =
   , ("completion offers every documented name", testCompletion)
   , ("completion follows pattern and type syntax", testSyntaxDirectedCompletion)
   , ("pattern completion preserves owner payload and coverage", testPatternCompletion)
+  , ("a served match arm offers its subject's variants only", testServedPatternCompletion)
+  , ("a record literal offers the fields it has not set", testRecordLiteralCompletion)
+  , ("an import ranks paths, skips chosen names, and offers as after a path", testImportRefinements)
+  , ("an imported name is defined and described where its module declares it", testImportedDeclarations)
   , ("completion distinguishes imports values and prose", testCompletionContexts)
   , ("an import being written is offered whole module paths", testImportPathCompletion)
   , ("the module catalog names every module under a root", testModuleCatalog)
@@ -399,6 +406,125 @@ testPatternCompletion = do
         (property ("OnlySecond" `notElem` collisionLabels))
     , counterexample "a guarded arm does not cover its constructor"
         (property ("Ready" `elem` guardedLabels))
+    ]
+
+{-| Pattern completion as the server asks for it, through the repairing path,
+    for an arm written whole, one half written, and one not begun. -}
+testServedPatternCompletion :: IO Property
+testServedPatternCompletion = do
+  let header =
+        [ "module Demo"
+        , "type State = Ready | Loading | Failed"
+        , "fn main(state: State) -> Int {"
+        , "  match state {"
+        , "    case Ready => 1"
+        ]
+      at arm line character = do
+        documents <- opened (Text.unlines (header <> [arm, "  }", "}"]))
+        reply <- completionRepaired (analyse uri) (pure []) documents (atPosition line character)
+        pure (completionLabels (Just reply))
+  whole <- at "    case Loading => 2" 5 11
+  half <- at "    case Lo" 5 11
+  begun <- at "    case " 5 9
+  let variantsOnly labels = counterexample (show labels) (labels === ["Loading", "Failed", "_"])
+  pure $ conjoin
+    [ counterexample "a whole arm" (variantsOnly whole)
+    , counterexample "a half-written arm" (variantsOnly half)
+    , counterexample "an arm not yet begun" (variantsOnly begun)
+    ]
+
+testRecordLiteralCompletion :: IO Property
+testRecordLiteralCompletion = do
+  let at body line character = do
+        documents <- opened (Text.unlines ["module Demo", "type Point = { x: Int, mut y: Int }", "fn make(n: Int) -> Point {", body, "}"])
+        reply <- completionRepaired (analyse uri) (pure []) documents (atPosition line character)
+        pure (Just reply)
+  empty <- at "  Point{}" 3 8
+  afterOne <- at "  Point{x: 1, }" 3 14
+  unclosed <- at "  Point{x: 1, " 3 14
+  inValue <- at "  Point{x: n, y: 2}" 3 12
+  pure $ conjoin
+    [ counterexample "every field of an empty literal" (completionLabels empty === ["x", "y"])
+    , counterexample "a field's declared type and mutability" (completionDetail "y" empty === Just "mut Int")
+    , counterexample "an editor that sorts keeps the declared order" (sortTextOf "x" empty < sortTextOf "y" empty)
+    , counterexample "a field already set is left out" (completionLabels afterOne === ["y"])
+    , counterexample "an unclosed literal still knows its fields" (completionLabels unclosed === ["y"])
+    , counterexample "a field's value is an ordinary value position" (property ("n" `elem` completionLabels inValue))
+    ]
+
+sortTextOf :: Text -> Maybe Json -> Maybe Text
+sortTextOf wanted value = case value of
+  Just (JsonArray members) ->
+    listToMaybe [rank | member <- members, (lookupField "label" member >>= textOf) == Just wanted, Just rank <- [lookupField "sortText" member >>= textOf]]
+  _ -> Nothing
+
+testImportedDeclarations :: IO Property
+testImportedDeclarations = do
+  root <- getCurrentDirectory
+  let source =
+        Text.unlines
+          [ "module Demo"
+          , "import Std.List as List"
+          , "import Std.List { length }"
+          , "fn main() -> Int {"
+          , "  List.length([1]) + length([2])"
+          , "}"
+          ]
+      readText path = Just <$> TextIO.readFile path
+  documents <- opened source
+  qualified <- definitionAcross readText uri (analysed documents) (offsetIn source 4 9)
+  selected <- definitionAcross readText uri (analysed documents) (offsetIn source 4 24)
+  path <- definitionAcross readText uri (analysed documents) (offsetIn source 1 12)
+  let described = request "textDocument/hover" (atPosition 4 9) documents
+      target reply = lookupField "uri" reply >>= textOf
+      listFile = fileUri (normalise (root </> "packages/pudu/v0.1/lib/Std/List.pudu"))
+      contents = described >>= lookupField "contents" >>= lookupField "value" >>= textOf
+  pure $ conjoin
+    [ counterexample (show qualified) (target qualified === Just listFile)
+    , counterexample "a selected name is defined where it is exported, not at the import" (target selected === Just listFile)
+    , counterexample "an import's path opens its module" (target path === Just listFile)
+    , counterexample (show contents) (property (maybe False ("Std.List" `Text.isInfixOf`) contents))
+    ]
+ where
+  analysed documents = case analysisOf uri documents of
+    Just value -> value
+    Nothing -> error "the document was not stored"
+  offsetIn source line character = offsetAt source (Position line character)
+
+testImportRefinements :: IO Property
+testImportRefinements = do
+  let catalog = pure ["Std.Bytes.Cursor", "Std.Io", "Std.List", "Tools"]
+      at content line character = do
+        documents <- opened content
+        reply <- completionRepaired (analyse uri) catalog documents (atPosition line character)
+        pure (Just reply)
+  ranked <- at "module Demo\nimport Cur\n" 1 10
+  chosen <- at "module Demo\nimport Std.List { length, \n" 1 25
+  afterPath <- at "module Demo\nimport Std.List \nfn main() -> Int { 1 }\n" 1 16
+  nextLine <- at "module Demo\nimport Std.List\n\nfn main() -> Int { 1 }\n" 2 0
+  let triggered content line character typed = do
+        documents <- opened content
+        let parameters = case atPosition line character of
+              JsonObject fields -> JsonObject (fields <> [("context", JsonObject [("triggerKind", JsonNumber 2), ("triggerCharacter", JsonText typed)])])
+              other -> other
+        reply <- completionRepaired (analyse uri) catalog documents parameters
+        pure (Just reply)
+  blockBrace <- triggered "module Demo\nfn main() -> Int {}\n" 1 18 "{"
+  selectionBrace <- triggered "module Demo\nimport Std.List {}\n" 1 17 "{"
+  argumentComma <- triggered "module Demo\nfn add(a: Int, b: Int) -> Int { a }\nfn main() -> Int { add(1,) }\n" 2 25 ","
+  let sortTexts = case ranked of
+        Just (JsonArray members) -> [(label, sortText) | member <- members, Just label <- [lookupField "label" member >>= textOf], Just sortText <- [lookupField "sortText" member >>= textOf]]
+        _ -> []
+      firstRanked = fmap fst (listToMaybe (sortOn snd sortTexts))
+  pure $ conjoin
+    [ counterexample ("a segment the typed name begins ranks first: " <> show sortTexts) (firstRanked === Just "Std.Bytes.Cursor")
+    , counterexample "a name the selection holds is not offered again" (property ("length" `notElem` completionLabels chosen))
+    , counterexample "the rest of the module's exports are" (property ("take" `elem` completionLabels chosen))
+    , counterexample "after a finished path only as is offered" (completionLabels afterPath === ["as"])
+    , counterexample "a brace opening a block offers nothing" (completionLabels blockBrace === [])
+    , counterexample "a brace opening a selection offers the module's names" (property ("take" `elem` completionLabels selectionBrace))
+    , counterexample "a comma between arguments offers nothing" (completionLabels argumentComma === [])
+    , counterexample "a line after the import is not part of it" (property ("as" `notElem` completionLabels nextLine || "main" `elem` completionLabels nextLine))
     ]
 
 testCompletionContexts :: IO Property

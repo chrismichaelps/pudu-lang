@@ -13,7 +13,7 @@ import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameSegments, moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameSegments, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Expression
   , Import (..)
@@ -25,7 +25,7 @@ import Pudu.Lsp.Context (CompletionContext (..), ImportSite (..), TypeParameter,
 import Pudu.Lsp.ImportCompletion (importCompletions, importQualifiers, moduleMembers)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
-import Pudu.Lsp.Json (Json (..), lookupField)
+import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Receiver (MemberSite (..), memberSiteAt, receiverType)
@@ -56,11 +56,14 @@ completionAt documents parameters = case located documents parameters of
     After a dot the answer is members or nothing: a keyword is never what
     follows `value.`. -}
 completionFrom :: [Text] -> Analysis -> Analysis -> Int -> Int -> Json
-completionFrom catalog written known agrees offset = JsonArray $ case context of
+completionFrom catalog written known agrees offset = JsonArray $ inOrder $ case context of
   PatternContext subject arms arm -> case analysisModule written of
     Just parsed -> patternCompletions known parsed subject arms arm offset
     Nothing -> []
   ImportContext site -> importCompletions catalog written known offset site
+  RecordFieldContext path named -> case analysisModule written of
+    Just parsed -> recordFieldCompletions known parsed path named
+    Nothing -> []
   SuppressedContext -> []
   _ -> case memberSiteAt (analysisTokens written) offset of
     Just site -> case moduleMembers written known site of
@@ -71,6 +74,18 @@ completionFrom catalog written known agrees offset = JsonArray $ case context of
       _ -> scopeCompletions written known agrees (wordStart written offset)
  where
   context = syntaxContext written offset
+
+{-| Candidates keep the order they were found in — nearest binding first, a
+    sum's variants as declared, `_` last — when an editor sorts: an item with
+    no rank of its own is ranked by its position. -}
+inOrder :: [Json] -> [Json]
+inOrder items = zipWith ranked [0 :: Int ..] items
+ where
+  ranked position item = case item of
+    JsonObject fields
+      | Nothing <- lookup "sortText" fields ->
+          JsonObject (fields <> [("sortText", JsonText (Text.justifyRight 4 '0' (Text.pack (show position))))])
+    _ -> item
 
 {-| What construct `offset` stands in, read from the document as written. -}
 syntaxContext :: Analysis -> Int -> CompletionContext
@@ -89,6 +104,35 @@ patternCompletions known parsed subject arms arm offset =
   | PatternCandidate label detail <-
       patternCandidates (analysisTypes known) (analysisSums known) parsed subject arms arm offset
   ]
+
+{-| The fields a record literal of the type `path` names may still set: its
+    declared fields, less those the literal already names, each with its type
+    as declared. The type is found by canonical identity, through the imports
+    the way a use of `path` resolves, so two modules' records of one name
+    never exchange fields. -}
+recordFieldCompletions :: Analysis -> Module -> ModuleName -> [Text] -> [Json]
+recordFieldCompletions known parsed path named =
+  case [shape | key <- recordKeys, Just shape <- [Map.lookup key (analysisRecords known)]] of
+    shape : _ ->
+      [ simpleItem name 5 ((if mutable then "mut " else "") <> renderTypeSyntax Map.empty written)
+      | (name, mutable, written) <- recordFields shape
+      , name `notElem` named
+      ]
+    [] -> []
+ where
+  own = moduleNameText (locatedValue (moduleName parsed))
+  imports = map locatedValue (moduleImports parsed)
+  recordKeys = case NonEmpty.toList (moduleNameSegments path) of
+    [name] ->
+      (own <> "." <> name)
+        : [moduleNameText (locatedValue (importModule entry)) <> "." <> name | entry <- imports, name `elem` map locatedValue (importItems entry)]
+    segments ->
+      let qualifier = Text.intercalate "." (init segments)
+       in [ moduleNameText (locatedValue (importModule entry)) <> "." <> last segments
+          | entry <- imports
+          , null (importItems entry)
+          , maybe (moduleQualifier (locatedValue (importModule entry))) locatedValue (importAlias entry) == qualifier
+          ]
 
 {-| What may be written where a type is: the type parameters in scope, innermost
     first, the types this module declares and imports, the modules whose types
@@ -135,8 +179,15 @@ distinctItems = go Set.empty
 completionRepaired :: (Text -> IO Analysis) -> IO [Text] -> Documents -> Json -> IO Json
 completionRepaired analyse modules documents parameters = case located documents parameters of
   Nothing -> pure (completionAt documents parameters)
+  Just (value, offset)
+    | Just typed <- triggeredBy parameters
+    , typed `elem` ["{", ","]
+    , not (listsNames (syntaxContext value offset)) ->
+        -- A brace opens a block and a comma separates arguments far more often
+        -- than either starts a selection or a record's fields.
+        pure (JsonArray [])
   Just (value, offset) -> case syntaxContext value offset of
-    ImportContext site@(ImportSelection path) -> do
+    ImportContext site@(ImportSelection path _) -> do
       -- The document does not parse while a selection is written, so its
       -- program never reached the module; a two-line program that imports
       -- it does.
@@ -195,6 +246,18 @@ completionRepaired analyse modules documents parameters = case located documents
                     ]
                       <> elsewhere (\blanked -> closedPrefix tokens blanked start)
                   )
+
+{-| The character whose typing asked for completion, when one did. -}
+triggeredBy :: Json -> Maybe Text
+triggeredBy parameters = lookupField "context" parameters >>= lookupField "triggerCharacter" >>= textOf
+
+{-| Whether a brace or comma typed here starts a list of names to choose from:
+    an import's selection or a record literal's fields. -}
+listsNames :: CompletionContext -> Bool
+listsNames context = case context of
+  ImportContext (ImportSelection _ _) -> True
+  RecordFieldContext _ _ -> True
+  _ -> False
 
 {-| The offset where the name being written at `offset` starts. -}
 wordStart :: Analysis -> Int -> Int

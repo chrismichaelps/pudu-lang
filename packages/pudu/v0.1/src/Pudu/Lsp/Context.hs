@@ -14,7 +14,7 @@ import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Constraint (..)
@@ -63,6 +63,9 @@ data CompletionContext
       innermost declaration first. -}
   | TypeContext ![TypeParameter]
   | ImportContext !ImportSite
+  {-| Where a field's name is written in a record literal of the type this
+      path names, with the fields the literal already names elsewhere. -}
+  | RecordFieldContext !ModuleName ![Text]
   {-| Where a value is written, with the type parameters in scope and the
       innermost expression holding the cursor. -}
   | ValueContext ![TypeParameter] !(Maybe (Located Expression))
@@ -85,8 +88,12 @@ contextParameters context = case context of
 data ImportSite
   {-| Writing the module path, which starts at this offset. -}
   = ImportPath !Int
-  {-| Inside the selection braces of an import of this module. -}
-  | ImportSelection !Text
+  {-| Inside the selection braces of an import of this module, with the names
+      the selection already holds before the one being written. -}
+  | ImportSelection !Text ![Text]
+  {-| After a finished path on its own line, where `as` or a selection may
+      follow. -}
+  | ImportPathEnd
   {-| After `as`, where a new name is chosen and nothing is offered. -}
   | ImportAlias
   deriving stock (Eq, Show)
@@ -128,7 +135,7 @@ importSiteAt tokens offset = case before of
   [] -> Nothing
   latest : _ -> case path before of
     (start, Keyword KwImport : _)
-      | finishedName latest -> Nothing
+      | finishedName latest -> if sameLine then Just ImportPathEnd else Nothing
       | otherwise -> Just (ImportPath start)
     (_, Keyword KwAs : rest) | importsBack rest -> Just ImportAlias
     _ -> selection before
@@ -140,6 +147,14 @@ importSiteAt tokens offset = case before of
       , tokenKind token /= EndOfFile
       , unOffset (spanStart (tokenSpan token)) < offset
       ]
+  -- Whether the cursor is on the line the tokens before it end on: no
+  -- newline in the whitespace between them and the cursor.
+  sameLine = case [token | token <- tokens, unOffset (spanStart (tokenSpan token)) >= offset] of
+    next : _ -> not (any newlineBefore (tokenLeadingTrivia next))
+    [] -> True
+  newlineBefore trivia =
+    let start = unOffset (spanStart (triviaSpan trivia))
+     in start < offset && Text.any (== '\n') (Text.take (offset - start) (triviaText trivia))
   -- A name that ends before the cursor has been left: a space follows it.
   finishedName token = case tokenKind token of
     Identifier _ -> unOffset (spanEnd (tokenSpan token)) < offset
@@ -159,7 +174,15 @@ importSiteAt tokens offset = case before of
     brace : more
       | tokenKind brace == Symbol SymLeftBrace
       , (_, Keyword KwImport : _) <- path more ->
-          Just (ImportSelection (Text.concat [spelling token | token <- reverse (takeWhile pathToken more)]))
+          Just
+            ( ImportSelection
+                (Text.concat [spelling token | token <- reverse (takeWhile pathToken more)])
+                [ name
+                | token <- takeWhile selected remaining
+                , Identifier name <- [tokenKind token]
+                , unOffset (spanEnd (tokenSpan token)) < offset
+                ]
+            )
     _ -> Nothing
   selected token = case tokenKind token of
     Identifier _ -> True
@@ -337,8 +360,8 @@ expressionContext offset parameters located@(Located _ expression)
       LambdaExpression function -> functionContext offset parameters function
       TypeApplication callee arguments ->
         firstOf (inner callee : map (typeContext offset parameters) arguments)
-      RecordExpression _ fields -> firstOf (map fieldInit fields)
-      RecordUpdateExpression _ base fields -> firstOf (inner base : map fieldInit fields)
+      RecordExpression path fields -> firstOf (map fieldInit fields <> [fieldName path fields])
+      RecordUpdateExpression path base fields -> firstOf (inner base : map fieldInit fields <> [fieldName path fields])
       BlockExpression block -> blockContext offset parameters block
       IfExpression condition consequent alternative ->
         firstOf [inner condition, blockContext offset parameters consequent, alternative >>= inner]
@@ -351,6 +374,12 @@ expressionContext offset parameters located@(Located _ expression)
       _ -> Nothing
   inner = expressionContext offset parameters
   fieldInit (Located _ field) = fieldInitValue field >>= inner
+  -- Anywhere else inside the braces a field's name is written: the cursor is
+  -- past the path and in no field's value.
+  fieldName path fields
+    | offset > pathEnd path, offset < unOffset (spanEnd (locatedSpan located)) = Just (RecordFieldContext path [locatedValue (fieldInitName field) | Located _ field <- fields, not (within offset (fieldInitName field))])
+    | otherwise = Nothing
+  pathEnd path = unOffset (spanStart (locatedSpan located)) + Text.length (moduleNameText path)
   armContext subject arms arm@(Located armSpan value)
     | within offset (armPattern value) = Just (PatternContext subject arms arm)
     -- An arm the parser recovered with no pattern yet, `case ` at the end of

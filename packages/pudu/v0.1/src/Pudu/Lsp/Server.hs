@@ -12,7 +12,7 @@ module Pudu.Lsp.Server
   ) where
 
 import Control.Concurrent.MVar (newMVar, withMVar)
-import Control.Exception (evaluate)
+import Control.Exception (IOException, evaluate, try)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -39,7 +39,7 @@ import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Analysis (analyse, analyseIn, analyseOver, documentSourceRoot, fileUriPath)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
-import Pudu.Lsp.Definition (definitionAt)
+import Pudu.Lsp.Definition (definitionAcross, definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
@@ -158,6 +158,11 @@ prepare session documents message = do
         completionRepaired (repaired documents' parameters) (catalogFor (sessionCatalogs session) documents' parameters)
           documents' parameters
       pure (documents', [response identity items])
+    Request identity "textDocument/definition" parameters -> do
+      found <- case (uriOf parameters, located documents' parameters) of
+        (Just uri, Just (value, offset)) -> definitionAcross (textOfFile documents') uri value offset
+        _ -> pure JsonNull
+      pure (documents', [response identity found])
     Request identity "textDocument/signatureHelp" parameters -> do
       help <- case located documents' parameters of
         Just (value, offset) -> signatureHelpRepaired (repaired documents' parameters) value offset
@@ -185,6 +190,17 @@ reanalyse documents parameters content = do
   let uri = fromMaybe "" (uriOf parameters)
   root <- rootOf documents parameters
   analyseOver (overlayFor documents uri) root uri content
+
+{-| The text of the file at `path`: the editor's copy when it is open, since it
+    holds edits the disk has not seen, and otherwise the disk's, read as UTF-8.
+    Nothing when neither can be read. -}
+textOfFile :: Documents -> FilePath -> IO (Maybe Text)
+textOfFile documents path =
+  case [analysisText value | (uri, value) <- allDocuments documents, fmap normalise (fileUriPath uri) == Just (normalise path)] of
+    open : _ -> pure (Just open)
+    [] -> do
+      read' <- try (ByteString.readFile path) :: IO (Either IOException ByteString.ByteString)
+      pure (either (const Nothing) (either (const Nothing) Just . Encoding.decodeUtf8') read')
 
 {-| The text of every open document except `uri`, by the normalised path of
     its file: what a compile reads in place of the disk, because the editor's
@@ -373,7 +389,7 @@ serverCapabilities =
           , ("documentFormattingProvider", JsonBool True)
           , ("codeActionProvider", JsonBool True)
           , ( "completionProvider"
-            , JsonObject [("triggerCharacters", JsonArray [JsonText "."])]
+            , JsonObject [("triggerCharacters", JsonArray [JsonText ".", JsonText "{", JsonText ","])]
             )
           ]
       )
@@ -421,6 +437,9 @@ hover documents parameters = case located documents parameters of
   Nothing -> JsonNull
   Just (value, offset) -> hoverAt value offset
 
+{-| The declaration in this document a name resolves to. The server answers
+    definition through `definitionAcross`, which also reaches other modules'
+    files; this is the answer from the document alone. -}
 definition :: Documents -> Json -> Json
 definition documents parameters = case (uriOf parameters, located documents parameters) of
   (Just uri, Just (value, offset)) -> definitionAt uri value offset

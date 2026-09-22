@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Imported names, record literals, and import selections in the editor
+
+- Go to definition on a name another module exports — `List.length`, a name an import selects, a
+  qualified type — opens the declaration in that module's file, and on an import's path opens the
+  module; a selected name is no longer defined at the import line. Hover on such a name shows its
+  documentation as its module wrote it, not only the inferred type.
+- A record literal `Point{…}` completes the fields it has not set yet, with their types, including
+  while the literal is unclosed.
+- Import completion ranks the modules the typed path or its last segment begins first, stops
+  offering names a selection already holds, and offers only `as` after a finished path.
+- Completion opens by itself after `{` and `,` in an import's selection or a record literal, and
+  nowhere else a brace or comma is typed. Items keep the server's order when an editor sorts, so
+  the nearest binding is listed before the prelude.
+
 ## 2026-09-21 — Newer edits and cancellations are seen while analysis runs
 
 - The language server reads messages on a thread of its own. `$/cancelRequest` answers a queued

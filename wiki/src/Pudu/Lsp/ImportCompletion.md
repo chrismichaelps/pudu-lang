@@ -31,7 +31,10 @@ importQualifiers  :: Analysis -> Analysis -> [(Text, ModuleName)]
 
 - A path is offered whole (`Std.Collections`) with a `textEdit` replacing everything from the start
   of the written path to the cursor, so choosing it after `import Std.Co` never doubles the prefix.
-  `filterText` is the path, so a client filters on the dotted text the reader typed.
+  `filterText` is the path, so a client filters on the dotted text the reader typed. `sortText`
+  ranks a path the typed text begins first, then one with a segment the last typed segment begins
+  (`Cur` for `Std.Bytes.Cursor`), then the rest, so a client that only sorts still shows the likely
+  module first.
 - Candidates are the catalog the server found for the document's source root
   ([[Lsp Module Catalog]]) and the modules the program already reached, each once, sorted.
 - The document's own module is never offered. When the document does not parse, its name is read
@@ -44,7 +47,8 @@ importQualifiers  :: Analysis -> Analysis -> [(Text, ModuleName)]
 - The same candidates answer `Q.` for a qualifier an import binds (`moduleMembers`, through
   `importQualifiers`) and a selection being written (`import M { … }`). While a selection is being
   written the document does not parse, so [[Lsp Completion]] answers it from a two-line program
-  that imports `M`.
+  that imports `M`. A name the selection already holds is not offered again.
+- After a finished path on its line only `as` is offered; nothing else can follow there.
 - An alias offers nothing; it is a new name.
 
 ### Linkage

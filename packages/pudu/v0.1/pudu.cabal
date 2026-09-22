@@ -196,6 +196,7 @@ library
     Pudu.Lsp.Analysis
     Pudu.Lsp.RepairCache
     Pudu.Lsp.Scheduler
+    Pudu.Lsp.ImportedName
     Pudu.Lsp.Repair
     Pudu.Eval.Confinement
     Pudu.IntegerLiteral

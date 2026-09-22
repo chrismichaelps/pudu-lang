@@ -46,11 +46,20 @@ source root; the catalog is run only when the cursor is at an import site.
   provide is offered once.
 - In a match pattern, completion offers only constructors belonging to the checked subject's sum,
   excluding variants already covered by an unguarded irrefutable sibling arm, plus `_`.
+- In a record literal, where a field's name is written, completion offers the fields of the type
+  the literal's path names — found through the imports the way a use of the path resolves, by
+  canonical identity — less those the literal already sets, each with its declared type and `mut`.
 - In a type position, completion offers lexical type parameters, visible types, usable module
   qualifiers, and built-in primitive types.
 - In an import position, completion offers whole module paths from [[Lsp Import Completion]]: the
   server's on-disk catalog plus the modules the program already reached. Inside comments and quoted
   literals, completion returns no unrelated code candidates.
+- Items keep the order they were found in when an editor sorts: an item with no rank of its own is
+  given its position as `sortText`, so the nearest binding comes before the prelude and a sum's
+  variants come as declared, `_` last. Import paths carry their own rank.
+- Completion is triggered by `.`, `{`, and `,`. A request triggered by `{` or `,` is answered only
+  in an import's selection or a record literal's fields, where a list of names starts; anywhere
+  else a brace opens a block and a comma separates arguments, and it is answered with nothing.
 - The context is computed once per request from the written document and dispatched on; an import
   site is answered before any repair is attempted, because no repair makes an import path parse.
 - In other positions without a preceding dot, completion offers documented symbols, language keywords, and built-in primitive types.
