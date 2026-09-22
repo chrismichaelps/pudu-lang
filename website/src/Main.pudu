@@ -5,6 +5,7 @@ import Std.Io as Io
 import Config as Config
 import Error as SiteError
 import Site as Site
+import Web.LiveReload as LiveReload
 import Web.Routes as Web
 
 fn main() -> Int {
@@ -27,7 +28,15 @@ fn serve(settings: &Config.Config, site: &Site.Site) -> Int {
       if site.playground.enabled {
         let _playground = Io.writeLine("Playground runs programs with runner " + settings.playground.runner)
       }
-      let served = Server.server(&Web.routes(site)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536)
+      let routed = Server.server(&Web.routes(site)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536)
+      // Run under `pudu run --watch`, every page follows the files it was made from.
+      let served = match LiveReload.fromEnvironment() {
+        case Some(watch) => {
+          let _following = Io.writeLine("Pages reload when a watched file changes (start " + watch.start + ")")
+          routed.using(LiveReload.middleware(&watch))
+        }
+        case None => routed
+      }
       let result = Server.run(&served, &live, settings.connections)
       let _stopped = Server.stop(&live)
       match result {

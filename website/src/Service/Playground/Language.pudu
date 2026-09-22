@@ -18,6 +18,11 @@ const QUESTION_ID: Int = 2
 /// The request identifier the goodbye is asked under.
 const SHUTDOWN_ID: Int = 3
 
+/// The protocol's kinds of completion request: asked for, and set off by typing
+/// a trigger character.
+const INVOKED: Int = 1
+const TRIGGERED: Int = 2
+
 /// The notification the server reports a program's problems in.
 const DIAGNOSTICS_METHOD: Str = "textDocument/publishDiagnostics"
 
@@ -50,7 +55,8 @@ export fn conversation(root: Str, uri: Str, source: Str, question: &Play.Questio
             ("position", Json.object(&[
                   ("line", Json.Number(question.line)),
                   ("character", Json.Number(question.character))
-                ]))
+                ])),
+            ("context", context(question))
           ])))
   }
   messages = messages.push(request(SHUTDOWN_ID, "shutdown", Json.Null))
@@ -97,6 +103,15 @@ export fn answerIn(transcript: Str, question: &Play.Question) -> Play.Answer {
   match result {
     case Some(found) => Play.Answered{result: found, diagnostics: diagnostics}
     case None => Play.NotAnswered("The language server did not answer in time.")
+  }
+}
+
+/// How a question was asked: typing `trigger`, or on request.
+fn context(question: &Play.Question) -> Json.Json {
+  if question.trigger.isEmpty() {
+    Json.object(&[("triggerKind", Json.Number(INVOKED))])
+  } else {
+    Json.object(&[("triggerKind", Json.Number(TRIGGERED)), ("triggerCharacter", Json.Text(question.trigger))])
   }
 }
 

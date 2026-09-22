@@ -8,12 +8,24 @@ Live production URL: **https://website-ivory-one-hyy8j9ljag.vercel.app/**
 ## Local development
 
 ```bash
+website/scripts/dev.sh
+```
+
+Open `http://localhost:8080`. Saving any Pudu source, documentation page, stylesheet, script, data
+file, or playground example starts the site again, and every open page follows: it reloads, or takes
+new styles in place when only a stylesheet changed, keeping its scroll position. There is nothing to
+configure — the script runs the site under `pudu run --watch`, which tells the site it is watched
+(`website/src/Web/LiveReload.pudu`); a site not run that way serves exactly what it deploys.
+`PUDU` names another compiler and `PUDU_SITE_PORT` another port.
+
+Regenerating the data the site reads, and the checks continuous integration runs:
+
+```bash
 website/scripts/generate-catalog.sh pudu
 node website/scripts/generate-releases.mjs
 pudu check website/src/Main.pudu website/src/Render.pudu
 pudu fmt --check website/src/Main.pudu website/src/Render.pudu
 pudu test website/src/Test/Website.pudu
-pudu run website/src/Main.pudu
 ```
 
 `generate-releases.mjs` writes `website/data/releases.json` from the published releases, which is
@@ -21,7 +33,7 @@ what `/download` offers. The archives are read at build time rather than per req
 the CDN waits for no API and a rate limit at the forge cannot take the download page down; the cost
 is that a new release reaches the page on the next deployment. Run it again after publishing one.
 
-Open `http://127.0.0.1:8080`. Set `PUDU_SITE_URL` to the public HTTPS origin before a production
+Set `PUDU_SITE_URL` to the public HTTPS origin before a production
 build so canonical URLs, Open Graph URLs, `robots.txt`, and `sitemap.xml` agree.
 
 `Main.pudu` owns the local HTTP listener. `Function.pudu` serves a platform that invokes the program

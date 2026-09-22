@@ -44,7 +44,8 @@ export fn question(source: Str, asked: &Play.Question) -> Str {
         ("source", Json.Text(source)),
         ("method", Json.Text(asked.method)),
         ("line", Json.Number(asked.line)),
-        ("character", Json.Number(asked.character))
+        ("character", Json.Number(asked.character)),
+        ("trigger", Json.Text(asked.trigger))
       ]))
 }
 
@@ -59,7 +60,8 @@ export fn questionOf(body: Str) -> Option[(Str, Play.Question)] {
   let method = text(&document, "method") ?
   let line = Option.unwrapOr(whole(&document, "line"), 0)
   let character = Option.unwrapOr(whole(&document, "character"), 0)
-  Some((source, Play.Question{method: method, line: line, character: character}))
+  let trigger = Option.unwrapOr(text(&document, "trigger"), "")
+  Some((source, Play.Question{method: method, line: line, character: character, trigger: trigger}))
 }
 
 /// An answer as the JSON value it is sent as. The server's own JSON is carried

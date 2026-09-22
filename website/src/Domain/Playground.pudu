@@ -300,7 +300,10 @@ fn atLeastOne(value: Int) -> Int { if value < 1 { 1 } else { value } }
 /// completion, hover, signature help — or `diagnostics`, which asks only for
 /// the problems the server reports on opening the program. `line` and
 /// `character` are the cursor, counted as the language server counts them.
-export type Question = { method: Str, line: Int, character: Int }
+/// `trigger` is the character whose typing asked, or empty when the reader asked
+/// or kept typing a name: the server answers some characters only where they
+/// start a list of names.
+export type Question = { method: Str, line: Int, character: Int, trigger: Str }
 
 /// The questions the playground passes to the language server, by the name the
 /// page asks them with and the method the server answers.

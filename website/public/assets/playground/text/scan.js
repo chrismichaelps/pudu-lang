@@ -11,7 +11,16 @@ const NUMBER_BEFORE_DOT = /\d\.[A-Za-z0-9_]*$/;
 const CALLEE_BEFORE = /[A-Za-z0-9_]\s*$/;
 // A name written after one of these words is a new name, so there is nothing
 // to complete.
-const NAMING = /(?:^|[^A-Za-z0-9_])(?:let|var|const|fn|type|trait|module|import|as|for|case)\s+(?:mut\s+)?[A-Za-z0-9_]*$/;
+const NAMING = /(?:^|[^A-Za-z0-9_])(?:let|var|const|fn|type|trait|module|as|for)\s+(?:mut\s+)?[A-Za-z0-9_]*$/;
+// After these words a name is chosen from what the server knows: a module's
+// path after `import`, a variant after `case`.
+const CHOOSING = /(?:^|[^A-Za-z0-9_])(?:import|case)\s+[A-Za-z0-9_.]*$/;
+// What stands before a brace that opens a list of names: an import's path, or
+// a record literal's type written directly before it.
+const SELECTION_OPENER = /(?:^|[^A-Za-z0-9_])import\s+[A-Za-z0-9_.]+\s*$/;
+const RECORD_OPENER = /(?:^|[^A-Za-z0-9_.])[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*$/;
+// How far back an enclosing brace is looked for.
+const BRACE_REACH = 4000;
 
 export function wordBefore(text, caret) {
   return WORD_BEFORE.exec(text.slice(0, caret))[0];
@@ -48,14 +57,46 @@ export function inCommentOrString(text, offset) {
   return quoted;
 }
 
-// Whether completion is worth asking for at the caret.
-export function wantsCompletion(text, caret, explicit) {
+// Whether completion is worth asking for at the caret, typing `trigger` when
+// a character other than a name's set it off.
+export function wantsCompletion(text, caret, explicit, trigger = "") {
   if (inCommentOrString(text, caret)) return false;
   const before = text.slice(0, caret);
   if (MEMBER_BEING_WRITTEN.test(before)) return !NUMBER_BEFORE_DOT.test(before);
-  if (explicit) return true;
+  if (explicit || CHOOSING.test(before)) return true;
+  if (trigger === "{" || trigger === ",") return opensNameList(text, caret);
   const word = wordBefore(text, caret);
   return Boolean(word) && !/^\d/.test(word) && !NAMING.test(before);
+}
+
+// Whether the caret is inside the braces of an import's selection or a record
+// literal, where a brace or comma starts the next name.
+export function opensNameList(text, caret) {
+  const brace = enclosingBrace(text, caret);
+  if (brace < 0) return false;
+  const before = text.slice(0, brace);
+  return SELECTION_OPENER.test(before) || RECORD_OPENER.test(before);
+}
+
+// Whether the caret is inside an import's selection braces, where a function
+// is named, not called.
+export function inImportSelection(text, caret) {
+  const brace = enclosingBrace(text, caret);
+  return brace >= 0 && SELECTION_OPENER.test(text.slice(0, brace));
+}
+
+// Where the brace the caret is inside opens, or -1.
+function enclosingBrace(text, caret) {
+  let depth = 0;
+  for (let index = caret - 1; index >= Math.max(0, caret - BRACE_REACH); index -= 1) {
+    const character = text[index];
+    if (character === "}") depth += 1;
+    else if (character === "{") {
+      if (depth === 0) return index;
+      depth -= 1;
+    }
+  }
+  return -1;
 }
 
 // Where the call the caret is inside opens, on the caret's line, or -1.

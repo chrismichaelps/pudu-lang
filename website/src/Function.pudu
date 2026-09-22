@@ -12,6 +12,7 @@ import Error as SiteError
 import Service.Catalog as Catalog
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
+import Service.Search as Search
 import Web.Dynamic as Web
 
 const SEARCH_INDEX_PATH: Str = "website/data/search-index.pudu-data"
@@ -59,6 +60,7 @@ fn main() -> Int {
       let edge = Web.Dynamic {
         siteUrl: settings.siteUrl,
         catalog: catalog,
+        search: Search.index(&catalog.entries),
         playground: Playground.configured(&playground, &examples),
         gates: Playground.gatesFor(&playground)
       }

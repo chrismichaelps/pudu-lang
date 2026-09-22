@@ -186,6 +186,7 @@ done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.ht
     '    { "src": "/playground", "methods": ["POST"], "dest": "/dynamic" },' \
     '    { "src": "/api/playground/(run|assist)", "dest": "/dynamic" },' \
     '    { "src": "/assets/playground/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
+    '    { "src": "/assets/docs/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
     '    { "src": "/playground/shared", "dest": "/dynamic" },' \
     '    { "handle": "filesystem" },'
   printf '%s' "$page_routes"

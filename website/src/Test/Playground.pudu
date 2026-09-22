@@ -110,7 +110,7 @@ fn requestedSource(body: Str) -> Str {
 }
 
 fn questionAbout(method: Str, line: Int) -> Str {
-  Wire.question("module Main", &Play.Question{method: method, line: line, character: 3})
+  Wire.question("module Main", &Play.Question{method: method, line: line, character: 3, trigger: ""})
 }
 
 /// One message as a language server frames it.
@@ -249,13 +249,15 @@ export fn main() -> Int {
   let askedOff = answer(&off, assistPost(questionAbout("hover", 0)))
 
   // One conversation with the language server.
-  let hover = Play.Question{method: "hover", line: 2, character: 4}
+  let hover = Play.Question{method: "hover", line: 2, character: 4, trigger: ""}
   let conversation = Language.conversation("file:///work", "file:///work/Main.pudu", "module Main", &hover)
+  let braced = Language.conversation("file:///work", "file:///work/Main.pudu", "module Main", &Play.Question{method: "completion", line: 1, character: 17, trigger: "\{"})
+  let roundTrip = Wire.questionOf(Wire.question("module Main", &Play.Question{method: "completion", line: 0, character: 0, trigger: ","}))
   let published = framed("\{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":\{\"uri\":\"file:///work/Main.pudu\",\"diagnostics\":[\{\"message\":\"unused\"\}]\}\}")
   let replied = framed("\{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\{\"contents\":\"Int — a number\"\}\}")
   let heard = answeredWith(&Language.answerIn(published + replied, &hover))
   let unheard = Language.answerIn(published, &hover)
-  let problemsOnly = answeredWith(&Language.answerIn(published, &Play.Question{method: "diagnostics", line: 0, character: 0}))
+  let problemsOnly = answeredWith(&Language.answerIn(published, &Play.Question{method: "diagnostics", line: 0, character: 0, trigger: ""}))
 
   // What a runner's answer means to the site.
   let busy = Remote.read(&Http.Response{status: Http.status(503), headers: [], body: "", binaryBody: None})
@@ -367,6 +369,12 @@ export fn main() -> Int {
       Test.that("a playground that runs nothing answers no questions", askedOff.status.code == 503),
       Test.that("a conversation opens the program and asks one question", conversation.contains("textDocument/didOpen") && conversation.contains("textDocument/hover") && conversation.contains("\"line\":2")),
       Test.that("a conversation ends by saying goodbye", conversation.contains("\"shutdown\"") && conversation.endsWith("\"exit\",\"params\":null\}")),
+      Test.that("a typed trigger reaches the server as the request's context", braced.contains("\"triggerCharacter\":\"\{\"") && braced.contains("\"triggerKind\":2")),
+      Test.that("a question asked on request says so", conversation.contains("\"triggerKind\":1") && !conversation.contains("triggerCharacter")),
+      Test.that("a trigger survives the wire", match roundTrip {
+          case Some((_, asked)) => asked.trigger == ","
+          case None => false
+        }),
       Test.that("every message of a conversation is framed", conversation.split("Content-Length: ").length() == 7),
       Test.that("the server's answer is read from its transcript", heard[0].contains("a number") && heard[1].contains("unused")),
       Test.that("a transcript without the answer is no answer", !isAnswered(&unheard)),

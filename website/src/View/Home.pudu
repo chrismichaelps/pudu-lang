@@ -6,6 +6,7 @@ import Std.Url as Url
 import Seo as Seo
 import Service.Catalog as Catalog
 import Service.Releases as Releases
+import Service.Search as Search
 import View.Dynamic as Dynamic
 import View.Layout as Layout
 
@@ -85,8 +86,8 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
       ]).html())
 }
 
-export fn results(siteUrl: Str, catalog: &Catalog.Catalog, query: Str) -> Html.Html {
-  Dynamic.results(siteUrl, &catalog.entries, query)
+export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html {
+  Dynamic.results(siteUrl, search, query)
 }
 
 fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {

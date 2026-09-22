@@ -1,0 +1,100 @@
+module Web.LiveReload
+
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.Json as Json
+import Std.List as List
+import Web.Routes as Routes
+
+/// A page that shows the site as it is on disk, for as long as someone is
+/// editing it.
+///
+/// `pudu run --watch` starts the site again whenever a source, a page, a
+/// stylesheet, or a script changes, and tells it which start this is and what
+/// changed before it. That is everything a browser needs: each page asks the
+/// site which start is serving it, and reloads when the answer moves — or, when
+/// only stylesheets changed, swaps them in place so the scroll position and
+/// anything typed stay where they were. A site run any other way is not being
+/// watched and gets none of this, so the published pages never carry it.
+
+/// Where a watched page asks which start is serving it.
+const STATE_PATH: Str = "/__pudu/reload"
+
+/// Where the script a watched page runs is served from, and read from. It is
+/// not under `website/public`, which is what a deployment copies.
+const SCRIPT_PREFIX: Str = "/__pudu/live/"
+const SCRIPT_DIRECTORY: Str = "website/dev/live-reload"
+const SCRIPT_ENTRY: Str = "main.js"
+
+/// Which start of the watched site this is, and the files that changed before it.
+export type Watch = { start: Str, changed: Array[Str] }
+
+/// The watch the site is running under, when it is running under one.
+export fn fromEnvironment() -> Option[Watch] {
+  let start = Env.variable("PUDU_WATCH") ?
+  var changed: Array[Str] = []
+  for line in Env.variableOr("PUDU_WATCH_CHANGED", "").split("\n") {
+    if !line.trim().isEmpty() { changed = changed.push(line.trim()) }
+  }
+  Some(Watch{start: start, changed: changed})
+}
+
+/// Serve the watch's state and script, and make every other answer one a
+/// browser shows fresh: a page carries the script, and nothing is kept.
+export fn middleware(watch: &Watch) -> Route.Middleware {
+  let held = *watch
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    if request.path == STATE_PATH { return fresh(&Reply.jsonValue(200, stateOf(&held))) }
+    if request.path.startsWith(SCRIPT_PREFIX) { return fresh(&script(request.path.drop(SCRIPT_PREFIX.length()))) }
+    let answered = next(request)
+    if isPage(&answered) { fresh(&withScript(&answered, &held)) } else { fresh(&answered) }
+  }
+}
+
+/// What a page asks: which start is serving, and what changed before it.
+export fn stateOf(watch: &Watch) -> Json.Json {
+  var changed: Array[Json.Json] = []
+  for path in watch.changed { changed = changed.push(Json.Text(path)) }
+  Json.object(&[("start", Json.Text(watch.start)), ("changed", Json.List(changed))])
+}
+
+/// A page with the script that follows the watch, placed last in its body so
+/// it runs after everything the page itself runs.
+export fn withScript(page: &Http.Response, watch: &Watch) -> Http.Response {
+  let tag = "<script type=\"module\" src=\"" + SCRIPT_PREFIX + SCRIPT_ENTRY + "\" data-start=\"" + watch.start + "\"></script>"
+  let pieces = page.body.split("</body>")
+  let body = if pieces.length() < 2 {
+    page.body + tag
+  } else {
+    List.take(&pieces, pieces.length() - 1).join("</body>") + tag + "</body>" + pieces[pieces.length() - 1]
+  }
+  Http.Response{..*page, body: body}
+}
+
+fn isPage(answered: &Http.Response) -> Bool {
+  for header in answered.headers {
+    if header[0].toLower() == "content-type" && header[1].startsWith("text/html") { return true }
+  }
+  false
+}
+
+/// An answer the browser uses once: a page, style, or script kept for an hour
+/// would hide the edit that was just saved.
+fn fresh(answered: &Http.Response) -> Http.Response {
+  var headers: Array[(Str, Str)] = []
+  for header in answered.headers {
+    if header[0].toLower() != "cache-control" { headers = headers.push(header) }
+  }
+  Http.Response{..*answered, headers: headers.push(("cache-control", "no-store"))}
+}
+
+fn script(name: Str) -> Http.Response {
+  if !Routes.isModulePath(name) { return Reply.text(404, "asset not found") }
+  match Io.read(SCRIPT_DIRECTORY + "/" + name) {
+    case Ok(content) => Http.Response{..Reply.text(200, content), headers: [("content-type", "text/javascript; charset=utf-8")]}
+    case Err(_) => Reply.text(404, "asset not found")
+  }
+}

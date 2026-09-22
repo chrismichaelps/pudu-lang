@@ -102,6 +102,11 @@ fn pageLinks(docs: &Docs.Docs, current: Str) -> Array[H.Node] {
   links
 }
 
+/// The script that marks, in a page's contents, the section being read, and the
+/// version it is addressed with so a deployment that changes it is fetched anew.
+const CONTENTS_SCRIPT_PATH: Str = "/assets/docs/contents.js"
+const CONTENTS_SCRIPT_VERSION: Str = "2"
+
 /// The sections of the page being read.
 fn contents(headings: &Array[Markdown.Heading]) -> H.Node {
   var links: Array[H.Node] = []
@@ -114,9 +119,11 @@ fn contents(headings: &Array[Markdown.Heading]) -> H.Node {
       )
     }
   }
+  // The contents work as plain links; the script marks the section being read.
   H.aside().class("docs-toc").label("On this page").holding([
       H.p().class("docs-toc-title").says("On this page"),
-      H.ul().holding(links)
+      H.ul().holding(links),
+      H.script().kind("module").src(CONTENTS_SCRIPT_PATH + "?v=" + CONTENTS_SCRIPT_VERSION)
     ])
 }
 

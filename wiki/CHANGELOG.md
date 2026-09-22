@@ -5,6 +5,25 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — A watched program follows more than its source; the site follows it
+
+- `pudu run --watch --also <path>` starts the program again when anything under a path changes, not
+  only its `.pudu` sources, and tells the program `PUDU_WATCH` (which start this is) and
+  `PUDU_WATCH_CHANGED` (what changed before it). Watched paths are reported absolutely, and editor
+  swap files and tool output directories are ignored.
+- `website/scripts/dev.sh` runs the site that way. Every open page reloads when a source, page,
+  data file, script, or example changes, and swaps in a changed stylesheet without reloading, so the
+  scroll position and anything typed stay. A site that is not watched carries none of it.
+- The site's search ranks a catalogue index prepared once instead of lowering every entry per
+  query: a query with no hits takes 63 ms instead of 113 on the local server and a broad one 176 ms
+  instead of 574, with every ranking unchanged.
+- A documentation page marks, in its contents, the section being read, without reading the layout
+  while the page scrolls.
+- The playground's editor asks the language server after `import `, `case `, and a `{` or `,` that
+  opens an import's selection or a record literal; accepts a module path over the whole typed path;
+  and keeps the server's order. The API catalogue carries the new `Std.Html.Ssr`, `Stream`,
+  `Buffer`, and `Bounded` declarations.
+
 ## 2026-09-21 — Imported names, record literals, and import selections in the editor
 
 - Go to definition on a name another module exports — `List.length`, a name an import selects, a

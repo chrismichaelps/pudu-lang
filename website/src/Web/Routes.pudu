@@ -31,6 +31,7 @@ import Web.Playground as PlaygroundWeb
 export fn routes(site: &Site.Site) -> Route.Router {
   let siteUrl = site.siteUrl
   let catalog = &site.catalog
+  let search = &site.search
   let docs = &site.docs
   let release = &site.release
   let documents = &site.documents
@@ -46,7 +47,7 @@ export fn routes(site: &Site.Site) -> Route.Router {
               Reply.page(200, Home.home(siteUrl, catalog, release))
             }),
           Route.get("/search", fn(asked: Route.Request) -> Http.Response {
-              Reply.page(200, Home.results(siteUrl, catalog, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+              Reply.page(200, Home.results(siteUrl, search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
             }),
           Route.get("/modules", fn(_request: Route.Request) -> Http.Response {
               Reply.page(200, Documentation.modules(siteUrl, catalog))
@@ -126,7 +127,10 @@ export fn routes(site: &Site.Site) -> Route.Router {
               asset(Constants.STYLESHEET_PATH, "text/css; charset=utf-8")
             }),
           Route.get("/assets/playground/*module", fn(asked: Route.Request) -> Http.Response {
-              playgroundModule(Option.unwrapOr(Route.param(&asked, "module"), ""))
+              scriptModule(Constants.PLAYGROUND_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/docs/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.DOCS_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
             }),
           Route.get("/assets/pudu-lang-full-logo.png", fn(_request: Route.Request) -> Http.Response {
               binary("website/public/assets/pudu-lang-full-logo.png", "image/png")
@@ -188,16 +192,16 @@ fn binary(path: Str, mediaType: Str) -> Http.Response {
   }
 }
 
-/// One of the playground's script modules, by its path below their folder.
+/// One of the script modules in `directory`, by its path below it.
 ///
 /// Only lower-case names of letters and dashes, in folders named the same way
 /// and ending in `.js`, are served: nothing else in the folder and nothing
 /// outside it. The modules import one another by relative address, which
 /// carries no version, so each is checked again on every load rather than kept
 /// for an hour, and a deployment that changes one is seen at once.
-fn playgroundModule(path: Str) -> Http.Response {
+fn scriptModule(directory: Str, path: Str) -> Http.Response {
   if !isModulePath(path) { return Reply.text(404, "asset not found") }
-  match Io.read(Constants.PLAYGROUND_SCRIPTS_DIRECTORY + "/" + path) {
+  match Io.read(directory + "/" + path) {
     case Ok(content) => {
       Http.Response {
         ..Reply.text(200, content),

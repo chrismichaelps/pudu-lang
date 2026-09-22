@@ -7,6 +7,7 @@ import Std.Option as Option
 import Service.Catalog as Catalog
 import Service.Playground.Admission as Admission
 import Service.Playground as Playground
+import Service.Search as Search
 import View.Dynamic as DynamicView
 import Web.Playground as PlaygroundWeb
 
@@ -15,6 +16,8 @@ import Web.Playground as PlaygroundWeb
 export type Dynamic = {
   siteUrl: Str,
   catalog: Catalog.Catalog,
+  /// The catalogue as search reads it, prepared once per cold start.
+  search: Search.Index,
   playground: Playground.Playground,
   gates: Playground.Gates
 }
@@ -34,7 +37,7 @@ export fn routes(edge: &Dynamic) -> Route.Router {
     missing: fn(path: Str) -> Http.Response { missing(held.siteUrl, path) }
   }
   let search = Route.get("/search", fn(asked: Route.Request) -> Http.Response {
-      Reply.page(200, DynamicView.results(held.siteUrl, &held.catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+      Reply.page(200, DynamicView.results(held.siteUrl, &held.search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
     })
   Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).push(search)), fn(asked: Route.Request) -> Http.Response {
       missing(held.siteUrl, asked.path)

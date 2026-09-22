@@ -32,7 +32,8 @@ export function createSession({ endpoint, enabled, onNote, signal }) {
     pending.clear();
   }, { once: true });
 
-  async function ask(method, text, position) {
+  // `trigger` is the character whose typing asked, when the server should know.
+  async function ask(method, text, position, trigger = "") {
     if (!available || signal.aborted || Date.now() < pausedUntil) return null;
     pending.get(method)?.abort();
     const cancel = new AbortController();
@@ -40,7 +41,7 @@ export function createSession({ endpoint, enabled, onNote, signal }) {
     try {
       const { status, headers, answer } = await postJson(
         endpoint,
-        { source: text, method, line: position.line, character: position.character },
+        { source: text, method, line: position.line, character: position.character, trigger },
         { timeoutMs: ASSIST_TIMEOUT_MS, cancel: cancel.signal },
       );
       if (status === HTTP_TOO_MANY) {

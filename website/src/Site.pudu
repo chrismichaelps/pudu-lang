@@ -8,6 +8,7 @@ import Service.Documents as Documents
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
 import Service.Releases as Releases
+import Service.Search as Search
 
 /// Everything the complete site serves, loaded once before the first request.
 ///
@@ -16,6 +17,8 @@ import Service.Releases as Releases
 export type Site = {
   siteUrl: Str,
   catalog: Catalog.Catalog,
+  /// The catalogue as search reads it, prepared with the catalogue.
+  search: Search.Index,
   docs: Docs.Docs,
   release: Releases.Release,
   documents: Documents.Documents,
@@ -33,6 +36,7 @@ export fn load(settings: &Config.Config) -> Result[Site, SiteError.SiteError] {
   Ok(Site {
       siteUrl: settings.siteUrl,
       catalog: catalog,
+      search: Search.index(&catalog.entries),
       docs: docs,
       release: release,
       documents: documents,

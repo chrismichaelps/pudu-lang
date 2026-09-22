@@ -22,7 +22,7 @@ export const SCRIPT_PATH: Str = "/assets/playground/main.js"
 
 /// The version the script is addressed with, so a deployment that changes it
 /// is fetched fresh past every cache.
-const ASSET_VERSION: Str = "10"
+const ASSET_VERSION: Str = "11"
 
 /// The island the editor script mounts on.
 ///

@@ -26,6 +26,14 @@ export const DEFAULT_SHARE_LIMIT = 8000;
 export const DEFAULT_RUN_MILLIS = 10000;
 
 export const MAX_COMPLETIONS_SHOWN = 100;
+// Characters other than a name's that ask for completion when typed. The space
+// asks only after `import` and `case`; the server answers a brace or comma only
+// where it starts a list of names.
+export const COMPLETION_TRIGGERS = new Set(["{", ",", " "]);
+export const SERVER_TRIGGERS = new Set(["{", ","]);
+// What a module path being written is made of, so an answer that replaces the
+// whole path keeps applying while it is typed.
+export const PATH_TEXT = /^[A-Za-z0-9_.]*$/;
 export const COMPLETION_PAGE_ROWS = 8;
 
 export const SPLIT = Object.freeze({ storageKey: "pudu-playground-split", min: 25, max: 80, fallback: 50, step: 5 });

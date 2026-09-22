@@ -2,6 +2,7 @@ module Test.Website
 
 import Std.Html.Build as H
 import Std.Http as Http
+import Std.Http.Server.Route as Route
 import Std.Io as Io
 import Std.Json as Json
 import Std.Result as Result
@@ -20,6 +21,7 @@ import Service.Search as Search
 import Site as Site
 import View.Markdown as Markdown
 import Web.Dynamic as DynamicWeb
+import Web.LiveReload as LiveReload
 import Web.Routes as Web
 
 /// The path a function would dispatch on, for an event written as text.
@@ -172,6 +174,7 @@ export fn main() -> Int {
   let site = Site.Site {
     siteUrl: origin,
     catalog: catalog,
+    search: Search.index(&catalog.entries),
     docs: docs,
     release: release,
     documents: documents,
@@ -235,10 +238,20 @@ export fn main() -> Int {
   let edge = DynamicWeb.Dynamic {
     siteUrl: origin,
     catalog: searchCatalog,
+    search: Search.index(&searchCatalog.entries),
     playground: site.playground,
     gates: Playground.openGates()
   }
   let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
+  // A site run under `pudu run --watch` follows the files it was made from.
+  let watch = LiveReload.Watch{start: "3", changed: ["/work/website/public/site.css"]}
+  let following = LiveReload.middleware(&watch)
+  let rendering = fn(request: Route.Request) -> Http.Response { Web.render(&site, request.message.target) }
+  let watchedPage = following(requestFor("/docs/errors"), rendering)
+  let watchedState = following(requestFor("/__pudu/reload"), rendering)
+  let watchedStyle = following(requestFor("/assets/site.css"), rendering)
+  let contentsScript = Web.render(&site, "/assets/docs/contents.js")
+  let outsideScripts = Web.render(&site, "/assets/docs/../site.css")
   let dynamicMissing = DynamicWeb.render(&edge, "/not-a-page")
   let dynamicPlayground = DynamicWeb.render(&edge, "/playground/shared?code=module%20Main")
   let playgroundPage = Web.render(&site, "/playground")
@@ -303,6 +316,13 @@ export fn main() -> Int {
       Test.that("every ordinary term must match", multiTerm.length() > 0 && Domain.qualifiedName(&multiTerm[0].entry) == "Std.Adler32.checksum"),
       Test.that("dynamic search uses the shared result view", dynamicSearch.status.code == 200 && dynamicSearch.body.contains("Std.Adler32.checksum")),
       Test.that("dynamic fallback is a no-index 404", dynamicMissing.status.code == 404 && hasHeader(&dynamicMissing, "X-Robots-Tag", "noindex") && dynamicMissing.body.contains("noindex,follow")),
+      Test.that("a watched page runs the reload script last in its body", watchedPage.body.contains("src=\"/__pudu/live/main.js\" data-start=\"3\"></script></body>")),
+      Test.that("a watched site says which start serves it and what changed", watchedState.body.contains("\"start\":\"3\"") && watchedState.body.contains("site.css")),
+      Test.that("nothing a watched site answers is kept", hasHeader(&watchedStyle, "cache-control", "no-store") && hasHeader(&watchedPage, "cache-control", "no-store")),
+      Test.that("a site nobody watches carries no reload script", !docsPage.body.contains("/__pudu/")),
+      Test.that("a documentation page marks the section being read", docsPage.body.contains("/assets/docs/contents.js")),
+      Test.that("the contents script is served", contentsScript.status.code == 200 && contentsScript.body.contains("aria-current")),
+      Test.that("only script modules are served from the documentation folder", outsideScripts.status.code == 404),
       Test.that("home renders", home.status.code == 200),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
       Test.that("home has structured data", home.body.contains("application/ld+json")),
@@ -406,4 +426,14 @@ export fn main() -> Int {
       Test.that("a page that was not found answers as not found", Function.answered(&missing).contains("\"statusCode\":404"))
     ])
   Test.report(&Test.run(&suite))
+}
+
+fn requestFor(target: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "test"
+  }
 }
