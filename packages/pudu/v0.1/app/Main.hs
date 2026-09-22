@@ -10,6 +10,8 @@ import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
 import Pudu.Cli.Init (createProject, renderInitError)
+import Pudu.Cli.Package (packageCommands, runPackageCommand)
+import Pudu.Package.Solve (noRegistry)
 import Pudu.Cli.Terminate (interruptOnTerminate)
 import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
 import Data.Text (Text)
@@ -67,7 +69,7 @@ import Pudu.Semantic (Resolution (..), Symbol (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
-import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
+import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticMessage, diagnosticSpan, hasErrors)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
   , defaultRenderConfig
@@ -75,7 +77,7 @@ import Pudu.Diagnostic.Render
   , renderSummary
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
-import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
+import Pudu.Source (Source, SourceName (..), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
 import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
 import System.Process
@@ -422,6 +424,7 @@ runCommand = do
         exitFailure
       Right (path, target, runtime) -> buildProgram style path target runtime
     ("test" : paths) -> testPaths style paths
+    (command : rest) | command `elem` packageCommands -> runPackageCommand (pure noRegistry) command rest
     ["init", path] -> initProject (Just path)
     ["init"] -> initProject Nothing
     ("init" : _) -> hPutStrLn stderr "usage: pudu init [directory]" >> exitFailure
@@ -1033,7 +1036,12 @@ renderProgramDiagnostics style program =
  where
   sources = programSources program
   renderOne value = case sourceFor value sources of
-    Nothing -> "error: diagnostic source is unavailable"
+    Nothing ->
+      -- A diagnostic about the project rather than a module — its manifest or
+      -- its lock — names a file the program never read as source. It is still
+      -- a sentence the reader needs, so it is written without the excerpt.
+      "error[" <> diagnosticCodeText (diagnosticCode value) <> "]: " <> diagnosticMessage value
+        <> "\n  --> " <> unSourceName (spanSource (diagnosticSpan value))
     Just source -> renderDiagnosticsWith (defaultRenderConfig style) source [value]
 
 sourceFor :: Diagnostic -> [Source] -> Maybe Source

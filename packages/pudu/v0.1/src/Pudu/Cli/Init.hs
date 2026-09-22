@@ -338,6 +338,7 @@ readmeTemplate name = Text.unlines
 gitignoreTemplate :: Text
 gitignoreTemplate = Text.unlines
   [ ".pudu/"
+  , "deps/"
   , "*.o"
   , ""
   , ".DS_Store"

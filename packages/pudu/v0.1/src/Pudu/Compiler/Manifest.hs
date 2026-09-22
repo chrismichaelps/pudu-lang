@@ -19,6 +19,10 @@
 module Pudu.Compiler.Manifest
   ( Manifest (..)
   , Dependency (..)
+  , DependencySource (..)
+  , parseManifest
+  , manifestSnapshotPackageRoots
+  , manifestSnapshotRoot
   , ManifestMetrics (..)
   , ManifestSnapshot
   , readManifest
@@ -37,6 +41,8 @@ import Data.Char (isSpace)
 import Data.Maybe (mapMaybe, maybeToList)
 import qualified Data.Set as Set
 import Pudu.Version (acceptsLanguage, versionText)
+import Pudu.Package.Identity (installDirectory, parsePackageId, renderPackageId)
+import Pudu.Package.Lock (Lock (..), LockEntry (..), lockFileName, parseLock)
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode)
 import Pudu.Source (SourceName (..), emptySpan, newSource)
 import Data.Text (Text)
@@ -45,10 +51,25 @@ import qualified Data.Text.IO as TextIO
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.FilePath (isAbsolute, normalise, takeDirectory, (</>))
 
-{-| One directory whose modules this project may import. -}
+{-| Where a dependency's code comes from.
+
+    A path is used where it is. A repository is checked out at a revision and
+    installed into `deps/`. A registry release is named by a requirement and
+    installed into `deps/` too. A value that is none of these is kept with the
+    reason, so `pudu install` can point at the line. -}
+data DependencySource
+  = PathSource !FilePath
+  | GitSource !Text !(Maybe Text)
+  | RegistrySource !Text
+  | UnreadableSource !Text
+  deriving stock (Eq, Show)
+
+{-| One dependency, under the name the manifest gives it, with the line it is
+    written on. -}
 data Dependency = Dependency
   { dependencyName :: !Text
-  , dependencyPath :: !FilePath
+  , dependencySource :: !DependencySource
+  , dependencyLine :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -57,8 +78,18 @@ data Manifest = Manifest
   , manifestLanguage :: !(Maybe Text)
   , manifestSource :: !(Maybe FilePath)
   , manifestDependencies :: ![Dependency]
+  , manifestVersion :: !(Maybe Text)
+  , manifestRoot :: !(Maybe Text)
+  , manifestDescription :: !(Maybe Text)
+  , manifestLicense :: !(Maybe Text)
+  , manifestKeywords :: ![Text]
   }
   deriving stock (Eq, Show)
+
+dependencyPath :: Dependency -> Maybe FilePath
+dependencyPath dependency = case dependencySource dependency of
+  PathSource path -> Just path
+  _ -> Nothing
 
 {-| Bounded filesystem work performed while taking one manifest snapshot. -}
 data ManifestMetrics = ManifestMetrics
@@ -79,9 +110,10 @@ data ManifestSnapshot = ManifestSnapshot
   ![FilePath]
   ![Diagnostic]
   !ManifestMetrics
+  ![FilePath]
 
 emptyManifest :: Manifest
-emptyManifest = Manifest Nothing Nothing Nothing []
+emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing []
 
 {-| Read `pudu.toml` from a project root, answering an empty manifest when
     there is none.
@@ -132,7 +164,7 @@ readManifestSnapshot sourceRoot = do
   case found of
     Nothing ->
       pure (ManifestSnapshot Nothing emptyManifest Text.empty [] []
-        (ManifestMetrics ancestorChecks 0 0))
+        (ManifestMetrics ancestorChecks 0 0) [])
     Just root -> do
       let path = root </> "pudu.toml"
       loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
@@ -140,26 +172,81 @@ readManifestSnapshot sourceRoot = do
         Left problem -> do
           diagnostics <- manifestReadFailure path problem
           pure (ManifestSnapshot (Just root) emptyManifest Text.empty [] diagnostics
-            (ManifestMetrics ancestorChecks 1 0))
+            (ManifestMetrics ancestorChecks 1 0) [])
         Right contents -> do
           let manifest = parseManifest contents
               candidates = distinct
-                (map (resolveAgainst root . dependencyPath) (manifestDependencies manifest))
+                (map (resolveAgainst root) (mapMaybe dependencyPath (manifestDependencies manifest)))
           roots <- existing candidates
           diagnostics <- versionDiagnostics path contents manifest
+          (packages, packageProblems) <- installedPackageRoots root
           pure
-            ( ManifestSnapshot (Just root) manifest contents roots diagnostics
-                (ManifestMetrics ancestorChecks 1 (length candidates))
+            ( ManifestSnapshot (Just root) manifest contents roots (diagnostics <> packageProblems)
+                (ManifestMetrics ancestorChecks 1 (length candidates)) packages
             )
 
 manifestSnapshotSearchRoots :: ManifestSnapshot -> [FilePath]
-manifestSnapshotSearchRoots (ManifestSnapshot _ _ _ roots _ _) = roots
+manifestSnapshotSearchRoots (ManifestSnapshot _ _ _ roots _ _ _) = roots
+
+{-| The source directories of the packages `pudu.lock` names, as installed in
+    `deps/`. Kept apart from the project's own roots, because a package may
+    never provide a standard module and the project may. -}
+manifestSnapshotPackageRoots :: ManifestSnapshot -> [FilePath]
+manifestSnapshotPackageRoots (ManifestSnapshot _ _ _ _ _ _ packages) = packages
+
+manifestSnapshotRoot :: ManifestSnapshot -> Maybe FilePath
+manifestSnapshotRoot (ManifestSnapshot root _ _ _ _ _ _) = root
 
 manifestSnapshotDiagnostics :: ManifestSnapshot -> [Diagnostic]
-manifestSnapshotDiagnostics (ManifestSnapshot _ _ _ _ diagnostics _) = diagnostics
+manifestSnapshotDiagnostics (ManifestSnapshot _ _ _ _ diagnostics _ _) = diagnostics
 
 manifestSnapshotMetrics :: ManifestSnapshot -> ManifestMetrics
-manifestSnapshotMetrics (ManifestSnapshot _ _ _ _ _ metrics) = metrics
+manifestSnapshotMetrics (ManifestSnapshot _ _ _ _ _ metrics _) = metrics
+
+{-| Where each locked package's modules are, and what is wrong when one is not
+    where the lock says.
+
+    Nothing is fetched and nothing is digested here: this runs before every
+    compile, and a missing directory is a sentence telling the reader which
+    command installs it, not a missing module three files later. -}
+installedPackageRoots :: FilePath -> IO ([FilePath], [Diagnostic])
+installedPackageRoots root = do
+  let path = root </> lockFileName
+  present <- doesFileExist path
+  if not present
+    then pure ([], [])
+    else do
+      loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
+      case loaded of
+        Left problem -> (,) [] <$> reportCoded "E7201" path Text.empty ("cannot read pudu.lock: " <> Text.pack (show problem))
+        Right contents -> case parseLock contents of
+          Left problem -> (,) [] <$> reportCoded "E7201" path contents problem
+          Right (Lock entries) -> do
+            found <- traverse (packageRoot root) entries
+            let roots = [r | Right r <- found]
+                missing = [renderPackageId (entryName e) | Left e <- found]
+            problems <-
+              if null missing
+                then pure []
+                else
+                  reportCoded "E7202" path contents
+                    ( "pudu.lock names " <> Text.intercalate ", " missing
+                        <> " but deps/ does not hold " <> (if length missing == 1 then "it" else "them")
+                        <> "; run pudu install"
+                    )
+            pure (roots, problems)
+
+packageRoot :: FilePath -> LockEntry -> IO (Either LockEntry FilePath)
+packageRoot root entry = do
+  let directory = installDirectory root (entryName entry)
+  there <- doesDirectoryExist directory
+  if not there
+    then pure (Left entry)
+    else do
+      own <- readManifest directory
+      let source = maybe "src" id (manifestSource own)
+      hasSource <- doesDirectoryExist (directory </> source)
+      pure (Right (if hasSource then normalise (directory </> source) else directory))
 
 {-| Every directory a source root's project says its code also lives in.
 
@@ -182,7 +269,7 @@ manifestSearchRoots :: FilePath -> Manifest -> IO [FilePath]
 manifestSearchRoots root manifest =
   existing
     ( distinct
-        (map (resolveAgainst root . dependencyPath) (manifestDependencies manifest))
+        (map (resolveAgainst root) (mapMaybe dependencyPath (manifestDependencies manifest)))
     )
 
 existing :: [FilePath] -> IO [FilePath]
@@ -205,17 +292,17 @@ resolveAgainst root path
   | isAbsolute path = normalise path
   | otherwise = normalise (root </> path)
 
-{-| Read the parts of the manifest the compiler acts on.
+{-| Read the parts of the manifest the compiler and `pudu install` act on.
 
     Deliberately not the whole of TOML: this runs before anything is compiled,
     including `Std.Toml`, and a manifest is a handful of keys under two
     headings. A key this does not recognise is passed over rather than
     refused, so a manifest may carry whatever else a project needs. -}
 parseManifest :: Text -> Manifest
-parseManifest contents = go (Text.lines contents) "" emptyManifest
+parseManifest contents = go (zip [1 ..] (Text.lines contents)) "" emptyManifest
  where
   go [] _ manifest = manifest{manifestDependencies = reverse (manifestDependencies manifest)}
-  go (line : rest) section manifest =
+  go ((number, line) : rest) section manifest =
     let trimmed = Text.strip (dropComment line)
      in if Text.null trimmed
           then go rest section manifest
@@ -223,39 +310,60 @@ parseManifest contents = go (Text.lines contents) "" emptyManifest
             Just heading -> go rest (Text.strip heading) manifest
             Nothing -> case splitAssignment trimmed of
               Nothing -> go rest section manifest
-              Just (key, value)
-                | section == "package" && key == "name" ->
-                    go rest section manifest{manifestName = Just (unquote value)}
-                | section == "package" && key == "language" ->
-                    go rest section manifest{manifestLanguage = Just (unquote value)}
-                | section == "package" && key == "source" ->
-                    go rest section manifest{manifestSource = Just (Text.unpack (unquote value))}
+              Just (rawKey, value)
+                | section == "package" -> go rest section (packageField (unquote rawKey) value manifest)
                 | section == "dependencies" ->
-                    case dependencyPathOf value of
-                      Nothing -> go rest section manifest
-                      Just path ->
-                        go rest section
+                    let key = unquote rawKey
+                     in go rest section
                           manifest
                             { manifestDependencies =
-                                Dependency key (Text.unpack path)
+                                Dependency key (dependencySourceOf key value) number
                                   : manifestDependencies manifest
                             }
                 | otherwise -> go rest section manifest
+  packageField key value manifest = case key of
+    "name" -> manifest{manifestName = Just (unquote value)}
+    "language" -> manifest{manifestLanguage = Just (unquote value)}
+    "source" -> manifest{manifestSource = Just (Text.unpack (unquote value))}
+    "version" -> manifest{manifestVersion = Just (unquote value)}
+    "root" -> manifest{manifestRoot = Just (unquote value)}
+    "description" -> manifest{manifestDescription = Just (unquote value)}
+    "license" -> manifest{manifestLicense = Just (unquote value)}
+    "keywords" -> manifest{manifestKeywords = stringList value}
+    _ -> manifest
 
-{-| The two ways a dependency is written: a bare path, and a table naming one.
+stringList :: Text -> [Text]
+stringList value = case Text.stripPrefix "[" (Text.strip value) >>= Text.stripSuffix "]" of
+  Just inner -> filter (not . Text.null) (map (unquote . Text.strip) (Text.splitOn "," inner))
+  Nothing -> []
 
-    Both, because `name = "../other"` is what a person writes first and
-    `name = { path = "../other" }` is what the same line has to become when a
-    dependency needs to say anything else about itself. -}
-dependencyPathOf :: Text -> Maybe Text
-dependencyPathOf value
+{-| The ways a dependency is written.
+
+    A key naming a registry package, `"@alice/json" = "^1.4"`, takes a
+    requirement. Any other key takes a path, written bare as it always has
+    been, or a table: `{ path = "../other" }`, `{ git = "…", rev = "v1.2" }`
+    (or `tag`, or `branch`), or `{ version = "^1.4" }` under a registry key. -}
+dependencySourceOf :: Text -> Text -> DependencySource
+dependencySourceOf key value
   | Text.isPrefixOf "{" trimmed =
       let inner = Text.dropEnd 1 (Text.drop 1 trimmed)
-          fields = mapMaybe splitAssignment (map Text.strip (Text.splitOn "," inner))
-       in unquote <$> lookup "path" fields
-  | otherwise = Just (unquote trimmed)
+          fields = map (\(k, v) -> (k, unquote v)) (mapMaybe splitAssignment (map Text.strip (Text.splitOn "," inner)))
+          revision = firstOf ["rev", "tag", "branch"] fields
+       in case (lookup "path" fields, lookup "git" fields, lookup "version" fields) of
+            (Just path, _, _) -> PathSource (Text.unpack path)
+            (_, Just url, _) -> GitSource url revision
+            (_, _, Just requirement) | registered -> RegistrySource requirement
+            _ -> UnreadableSource "a dependency table needs path, git, or (for @handle/name) version"
+  | registered = RegistrySource (unquote trimmed)
+  | otherwise = PathSource (Text.unpack (unquote trimmed))
  where
   trimmed = Text.strip value
+  registered = case parsePackageId key of
+    Right package -> "@" `Text.isPrefixOf` renderPackageId package
+    Left _ -> False
+  firstOf names fields = case mapMaybe (`lookup` fields) names of
+    found : _ -> Just found
+    [] -> Nothing
 
 splitAssignment :: Text -> Maybe (Text, Text)
 splitAssignment line = case Text.breakOn "=" line of
@@ -296,8 +404,11 @@ versionDiagnostics path contents manifest = case manifestLanguage manifest of
       ("package.language requires " <> constraint <> "; this compiler is " <> versionText)
 
 reportManifest :: FilePath -> Text -> Text -> IO [Diagnostic]
-reportManifest path contents message = do
+reportManifest = reportCoded "E2090"
+
+reportCoded :: Text -> FilePath -> Text -> Text -> IO [Diagnostic]
+reportCoded code path contents message = do
   source <- newSource (SourceName (Text.pack path)) contents
   pure (maybeToList $ do
-    code <- mkDiagnosticCode "E2090"
-    diagnostic code Error (emptySpan source) message)
+    known <- mkDiagnosticCode code
+    diagnostic known Error (emptySpan source) message)

@@ -18,6 +18,10 @@ Everything is one command: `pudu`. It checks, runs, tests, formats, and document
 | `pudu search <query> <file>...` | finds a name, or a type shape such as `Array[a] -> a` |
 | `pudu build <file>` | writes one file that runs anywhere the compiler runs |
 | `pudu init [path]` | creates a project with a `pudu.toml` manifest |
+| `pudu install [what]...` | adds dependencies, or installs what `pudu.lock` names — see [Dependencies](/docs/dependencies) |
+| `pudu uninstall <name>...` | removes dependencies |
+| `pudu update [name]...` | moves dependencies to the newest versions the manifest allows |
+| `pudu deps`, `pudu tree` | show the dependencies and the whole graph |
 | `pudu explain <file>` | runs a program and reports what running it cost |
 | `pudu repl [file]` | starts the interactive session |
 | `pudu lsp` | speaks the language server protocol over standard input and output |

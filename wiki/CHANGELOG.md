@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Dependencies: install, lock, and deps/
+
+- `pudu install` adds a directory or a git repository as a dependency, records the commit and a tree
+  digest of its files in `pudu.lock`, and installs it into `deps/`, where `pudu check`, `run`, `test`,
+  and the language server find its modules. `pudu install` alone installs what the lock names,
+  restoring any edited file; `--locked` refuses to change the lock and `--offline` refuses the
+  network. `pudu uninstall`, `update`, `deps`, and `tree` complete the set.
+- One version of each package per program, chosen by a solver that prefers the lock, then the newest
+  release, and names every requirement it cannot meet. Two packages may not own one module root, and
+  no package may ship modules under `Std` or `Core`; installed packages are never searched for a
+  standard module. Nothing a package contains is executed while installing.
+- A diagnostic about the project rather than a module — the manifest, the lock — prints its code,
+  message, and file instead of a placeholder.
+- A new documentation chapter, Dependencies; `pudu init` ignores `deps/`.
+
 ## 2026-09-22 — The site's bytes and its layout shift
 
 - The masthead logo is a 6 KiB WebP drawn at its size instead of a 579 KiB PNG four times too wide,

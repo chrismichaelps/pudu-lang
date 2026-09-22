@@ -63,7 +63,7 @@ The chapters are written to be read in order, each building on the ones before i
 
 1. **Starting out** — [getting started](/docs/getting-started), [basics](/docs/basics), [functions](/docs/functions), [types](/docs/types), and [numbers](/docs/numbers).
 2. **Working with data** — [text](/docs/text), [collections](/docs/collections), [control flow](/docs/control-flow), and [errors](/docs/errors).
-3. **Structuring programs** — [ownership](/docs/ownership), [modules and packages](/docs/modules), [traits](/docs/traits), [generics](/docs/generics), and [compile time and macros](/docs/compile-time).
+3. **Structuring programs** — [ownership](/docs/ownership), [modules and packages](/docs/modules), [dependencies](/docs/dependencies), [traits](/docs/traits), [generics](/docs/generics), and [compile time and macros](/docs/compile-time).
 4. **Building real software** — [testing](/docs/testing), [files and the system](/docs/files), [data formats](/docs/data-formats), [HTTP](/docs/http), [concurrency](/docs/concurrency), and [unsafe and foreign code](/docs/foreign-code).
 5. **Reference** — the [standard library](/docs/standard-library) map and [tooling](/docs/tooling).
 

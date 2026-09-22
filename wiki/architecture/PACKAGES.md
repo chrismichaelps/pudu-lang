@@ -129,7 +129,7 @@ version = "1.4.2"
 source = "registry+https://packages.pudu-lang.org"
 checksum = "sha256:9f2c…"
 root = "JsonSchema"
-dependencies = ["@bob/text@0.6.0"]
+dependencies = ["@bob/text"]
 
 [[package]]
 name = "parser"
@@ -140,7 +140,8 @@ root = "Parser"
 dependencies = []
 ```
 
-Entries are sorted by name, fields are in a fixed order, and nothing in it depends on time or on the
+A package's dependencies are listed by name; the version of each is in its own entry, since a
+program holds one version of each package. Entries are sorted by name, fields are in a fixed order, and nothing in it depends on time or on the
 machine, so the same graph writes the same bytes and a change to it reads as a change in review.
 
 - A registry release's checksum is the SHA-256 of its archive, as published. A downloaded archive
@@ -160,10 +161,13 @@ anything already in the cache. `pudu check`, `run`, `test`, and the language ser
 
 The program graph searches, in order:
 
-1. the compiler's `Std.*` and `Core.*`, which nothing replaces;
-2. the project's own source directory;
-3. each path dependency, as today;
-4. each installed package's source directory, `deps/<name>/<source>`.
+1. the project's own source directory;
+2. each path dependency, as today;
+3. each installed package's source directory, `deps/<name>/<source>`;
+4. for a `Std.*` module, the compiler's standard library.
+
+Installed packages are never searched for a `Std.*` module. The project itself may still shadow one
+deliberately, in its own tree where a reader sees it, as it always could; a dependency may not.
 
 A package whose root is claimed by the project itself or by another package is a conflict, reported
 at `pudu install` with both owners named. A module file under `Std/` or `Core/` inside a package is
@@ -356,17 +360,28 @@ chains disagree.
 
 ## Security
 
-- Nothing a dependency contains is executed by `pudu install`: no scripts, no hooks.
-- Archives are verified against the lock's digest before they are unpacked, and unpacking refuses
-  absolute paths, `..`, links, device files, duplicate paths, and archives above size and file-count
-  limits.
-- With a lock present, builds make no network request, and `--offline` makes that a guarantee.
-- Registry transport is HTTPS with the system trust store; the digest, not the connection, is what
-  proves the content.
-- Tokens are stored per registry with owner-only permissions and are sent only to the registry they
-  were issued by.
-- A git dependency is locked to a commit and checked by tree digest, so a moved tag changes nothing
-  until `pudu update` is run and reviewed.
+Package ecosystems are attacked through the tool, the registry, the lock, and the people who
+publish. Each attack below has happened to a large ecosystem; each has a defense here that does not
+depend on a reader noticing in time.
+
+| Attack | How it worked elsewhere | Defense |
+| --- | --- | --- |
+| Code run at install | Worms spread through install hooks that read tokens from the machine and republished every package the victim owned | `pudu install` never executes anything a package contains: no hooks, no build scripts, no compile. Installing is copying verified files. |
+| A malicious release installed within hours | A phished maintainer's account published poisoned versions of widely used packages; most were pulled within hours, after thousands of installs | A new resolution skips releases younger than the minimum release age (72 hours by default, `min-release-age` in `[install]`); a locked version is unaffected. `pudu install @h/n@1.2.3` names a fresh release deliberately and says how old it is. |
+| Account takeover and stolen tokens | Phishing for second-factor resets; tokens harvested from CI | Publishing needs a token scoped to publishing, separate from reading; a release is confirmed with a second factor on the account; tokens are stored hashed on the registry and with owner-only permissions on disk; a release records the handle that published it. |
+| Dependency confusion | A public package with a private package's name and a higher version was chosen | A package is `@handle/name` on one registry; the lock records the registry each release came from, and a registry package is never looked for anywhere else. |
+| Manifest confusion | The metadata a registry showed differed from the manifest inside the archive | The registry derives a release's version, dependencies, and root from the `pudu.toml` inside the archive; the client compares the unpacked manifest with the release document and refuses a difference. |
+| Lock injection | A lock edited in a change pointed a dependency at another URL, unreviewed | The manifest says where each package comes from; the lock only records what was chosen there. A lock entry whose source does not match the manifest's is not used, and a registry release whose digest differs from the lock's is refused. |
+| Typosquatting and invented names | Look-alike names, and names an assistant made up and someone then registered | Names are scoped by handle; installing a name that does not exist fails with the closest real names; the install report shows the publisher, the release's age, and whether the project is new; the registry refuses a new project whose name is one edit from an established one owned by another handle. |
+| Maintainer handoff | A tired maintainer gave a package to a stranger, who added a malicious dependency | Every release records its publisher; `pudu update` and `pudu upgrade` say when a package's publisher changed and when a release adds a dependency. |
+| Unpublishing | A deleted package broke every build that used it | Releases are immutable and cannot be deleted, only yanked; a yanked release still installs from an existing lock. |
+| Moved tags and branches | A tag was moved to different code | A git dependency is locked to a commit and checked by tree digest. |
+| Malicious archives | Path traversal and decompression bombs | Unpacking refuses absolute paths, `..`, links, device files, duplicate paths, and archives over size and file-count limits, and the digest is checked before unpacking. |
+| Interception | A download replaced in transit | Registry traffic is HTTPS only (plain HTTP only for `localhost`); the lock's digest, not the connection, is what proves the content. |
+
+Beyond these: with a lock present, builds make no network request, and `--offline` guarantees it; a
+package may not own `Std` or `Core`; and a program can be run with `pudu run --confined`, which
+refuses files, network, and foreign calls to code that should not need them.
 
 ## Migration
 

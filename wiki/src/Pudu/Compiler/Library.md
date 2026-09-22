@@ -133,3 +133,7 @@ DEPTH 0.30 (SHALLOW by intent). It answers one question about paths.
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Compiler Manifest]] · [[architecture/STDLIB]]
+
+Installed packages (`contextPackageRoots`) are searched after the project's own roots for an ordinary
+module and never for a `Std.*` module: the project may shadow a standard module in its own tree, and
+a dependency may not.

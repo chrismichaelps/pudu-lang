@@ -135,9 +135,10 @@ geometry = "../geometry"
 | `version` | the package's own version |
 | `language` | the Pudu versions it works with |
 | `source` | the directory its modules live under |
-| `[dependencies]` | other directories whose modules this package imports, each under a name |
+| `root` | the module root the package owns; its name in PascalCase when left out |
+| `[dependencies]` | the code this package uses: directories, repositories, and published packages, each under a name |
 
-A dependency is a local directory for now. Its modules are imported by their own names, exactly like the package's own.
+A dependency's modules are imported by their own names, exactly like the package's own. [Dependencies](/docs/dependencies) covers adding them with `pudu install`, the lock file, and `deps/`.
 
 ## Organising a project
 

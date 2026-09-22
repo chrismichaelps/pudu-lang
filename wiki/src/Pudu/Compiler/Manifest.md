@@ -102,3 +102,15 @@ diagnostics, ordered dependency-root resolution, and deterministic measurement o
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Library]] · [[Compiler Program]]
+
+## Dependency sources and installed packages
+
+A dependency is a `DependencySource`: a path (bare string or `{ path = … }`), a repository
+(`{ git = …, rev|tag|branch = … }`), a registry requirement under a `@handle/name` key, or an
+unreadable value kept with its reason and line so `pudu install` can point at it. The package section
+also yields `version`, `root`, `description`, `license`, and `keywords`.
+
+The snapshot reads `pudu.lock` beside the manifest and adds each locked package's source directory in
+`deps/` as a package root, kept apart from the project's own roots. It fetches nothing and digests
+nothing; a lock it cannot read is `E7201`, and a locked package missing from `deps/` is `E7202` telling
+the reader to run `pudu install`. See [[architecture/PACKAGES]].

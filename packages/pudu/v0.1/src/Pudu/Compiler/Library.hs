@@ -26,6 +26,7 @@ import Pudu.Compiler.Manifest
   ( ManifestMetrics (..)
   , manifestSnapshotDiagnostics
   , manifestSnapshotMetrics
+  , manifestSnapshotPackageRoots
   , manifestSnapshotSearchRoots
   , readManifestSnapshot
   )
@@ -60,6 +61,7 @@ data ResolutionMetrics = ResolutionMetrics
 data ResolutionContext = ResolutionContext
   { contextSourceRoot :: !FilePath
   , contextProjectRoots :: ![FilePath]
+  , contextPackageRoots :: ![FilePath]
   , contextLibraryRoots :: ![FilePath]
   , contextAttemptedLibraryRoots :: ![Text]
   , contextDiagnostics :: ![Diagnostic]
@@ -77,6 +79,7 @@ newResolutionContext sourceRoot = do
     ResolutionContext
       { contextSourceRoot = sourceRoot
       , contextProjectRoots = manifestSnapshotSearchRoots manifest
+      , contextPackageRoots = manifestSnapshotPackageRoots manifest
       , contextLibraryRoots = foundLibraryRoots
       , contextAttemptedLibraryRoots = discoveryAttempted library
       , contextDiagnostics = manifestSnapshotDiagnostics manifest
@@ -96,18 +99,22 @@ resolutionDiagnostics = contextDiagnostics
 resolutionMetrics :: ResolutionContext -> ResolutionMetrics
 resolutionMetrics = contextMetrics
 
-{-| Ordered roots for a requested module, with no filesystem work. -}
+{-| Ordered roots for a requested module, with no filesystem work.
+
+    Installed packages come after the project's own roots, and are never
+    searched for a standard module: the project may shadow one deliberately, in
+    its own tree, and a dependency may not. -}
 resolutionSearchRoots :: ResolutionContext -> ModuleName -> [FilePath]
 resolutionSearchRoots context name
   | isStandardModule name = projectRoots <> contextLibraryRoots context
-  | otherwise = projectRoots
+  | otherwise = projectRoots <> contextPackageRoots context
  where
   projectRoots = contextSourceRoot context : contextProjectRoots context
 
 {-| Human-readable roots for a failed lookup, with no filesystem work. -}
 resolutionTriedRoots :: ResolutionContext -> ModuleName -> [Text]
 resolutionTriedRoots context name
-  | not (isStandardModule name) = own
+  | not (isStandardModule name) = own <> map shown (contextPackageRoots context)
   | not (null (contextLibraryRoots context)) = own <> map shown (contextLibraryRoots context)
   | otherwise = own <> contextAttemptedLibraryRoots context
  where

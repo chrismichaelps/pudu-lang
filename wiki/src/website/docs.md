@@ -12,7 +12,7 @@ The language documentation is Markdown in `website/docs/`, rendered on the serve
 
 1. **Starting out** — introduction, getting started, basics, functions, types, numbers.
 2. **Working with data** — text, collections, control flow, errors.
-3. **Structuring programs** — ownership and references, modules and packages, traits and methods,
+3. **Structuring programs** — ownership and references, modules and packages, dependencies, traits and methods,
    generics, compile time and macros.
 4. **Building real software** — testing, files and the system, data formats, HTTP servers and
    clients, concurrency, unsafe and foreign code.
