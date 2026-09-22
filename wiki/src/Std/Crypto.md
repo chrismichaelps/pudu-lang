@@ -13,8 +13,10 @@ aliases: [Std Crypto]
 ## Purpose and interface
 
 Digests, keyed digests, constant-time comparison, password-derived keys, and authenticated encryption.
-SHA-256 and SHA-1 are written in Pudu as readable references (`sha256`, `sha1`) with `digestsMatch` and
-`secretsMatch` for their digests and text secrets. The runtime-backed calls are `sha512`, `sha3_256`,
+SHA-256 and SHA-1 are written in Pudu as readable references (`sha256Bytes`, `sha1`) with `digestsMatch`
+and `secretsMatch` for their digests and text secrets. `sha256` and `sha256Hex` over text answer from the
+runtime's digest, because the HTTP server takes one per response for its ETag. The runtime-backed calls
+are `sha256`, `sha512`, `sha3_256`,
 `sha3_512`, `blake2b256`, `blake2b512`, `hmacSha256`, `hmacSha512`, `bytesMatch`, `derive`, `seal`, and
 `open`; `keyLength`, `nonceLength`, `newKey`, and `newNonce` state and produce the key material sealing
 needs.
@@ -47,6 +49,10 @@ which change got closer.
 - **Q:** Ship BLAKE3 now? **A:** Not yet. _Rationale:_ the runtime's audited library does not provide it,
   and a Pudu implementation cannot be released without checking it against the reference implementation's
   published vectors. _Rejected:_ an unverified implementation. BLAKE2b covers the fast-hash use today.
+- **Q:** Keep `sha256` over text on the interpreted rounds? **A:** No. _Rationale:_ every ETag is one,
+  and the rounds took 4.5 s for a 104 KB body at `-O2` against under a millisecond natively.
+  `sha256Bytes` stays the reference, and `UsesCryptoAll` checks the two agree. _Rejected:_ removing the
+  reference, which would leave the parity check comparing the runtime with itself.
 - **Q:** Offer a generic digest taking an algorithm name? **A:** No. _Rationale:_ a string selecting the
   algorithm moves a protocol choice out of the type a reader sees. _Rejected:_ `digest("sha3-256", …)`.
 - **Q:** Let `newNonce` count instead of draw? **A:** No. _Rationale:_ a counter must be persisted and

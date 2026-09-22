@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — SHA-256 of text at native speed
+
+- `Std.Crypto.sha256` and `sha256Hex` answer from the runtime's digest instead of the rounds written in
+  Pudu: 104 KB hashed in 4.5 s now takes under a millisecond at `-O2`. Every ETag the HTTP server sends
+  is one of these, as is every token digest the package registry keeps. `sha256Bytes` remains the
+  readable reference, and the fixtures check that both give the same digests.
+
 ## 2026-09-22 — Installing shows its work and does each thing once
 
 - `pudu install`, `uninstall`, and `update` show one live line while they work — a spinner, the
