@@ -5,10 +5,11 @@ The documentation promises that each example is a complete program that runs as
 written, so each fenced `pudu` block in `website/docs/` is written to a file
 named for its module and put through the compiler, then run. Each program in
 `website/playground/examples/` is a whole example of its own and is held to the
-same promise: it is what a reader runs first. Every example is
-expected to finish on its own: the one that can listen for requests asks for a
-flag before it does, so nothing here is excused from running and an example that
-begins to hang is a failure rather than an exception someone has to maintain.
+same promise, run confined as the playground runs it: it is what a reader
+runs first. Every example is expected to finish on its own: the one that can
+listen for requests asks for a flag before it does, so nothing here is excused
+from running and an example that begins to hang is a failure rather than an
+exception someone has to maintain.
 
 Usage: docs-examples.py [--pudu <executable>] [--run] [--jobs N]
 """
@@ -80,12 +81,18 @@ def verify(pudu, chapter, index, module, source, run, chaptermates):
       return where, False, "check failed\n" + (checked.stderr or checked.stdout).strip()
     if not run:
       return where, True, "checked"
-    # A suite reports through Std.Test and answers the runner, not a reader, so
-    # it is driven by the command that reads that report.
-    command = "test" if TEST_IMPORT.search(source) else "run"
+    # A playground example runs exactly as the playground runs it: confined,
+    # with its exit status shown to the reader, so one that reaches for a file
+    # or the network fails here rather than in front of a reader. A suite in
+    # the documentation reports through Std.Test and answers the runner, not a
+    # reader, so it is driven by the command that reads that report.
+    if chapter.startswith("playground/"):
+      command, flags = "run", ["--confined"]
+    else:
+      command, flags = ("test" if TEST_IMPORT.search(source) else "run"), []
     try:
       ran = subprocess.run(
-        [pudu, command, str(program)],
+        [pudu, command, *flags, str(program)],
         capture_output=True,
         text=True,
         timeout=60,

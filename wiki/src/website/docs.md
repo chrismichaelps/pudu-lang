@@ -26,7 +26,8 @@ as it is planned. Every fenced `pudu` block is a complete program named by its `
 checked and run with the current compiler, each `main` answers 0, each test module passes under
 `pudu test`, and the two-file example in modules and packages was run as a project. Examples that
 reach the network or listen on a port do so only behind a flag, so running them as written finishes.
-All 107 documentation and playground examples, across 23 chapters, ran on 2026-09-22. A foreign
+All 120 documentation and playground examples, across 23 chapters and 19 playground programs, ran
+on 2026-09-22. A foreign
 block's owned handle is shown as a `text` block, because no library the example gate can rely on
 hands one back.
 

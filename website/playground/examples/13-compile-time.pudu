@@ -1,0 +1,60 @@
+// Compile time and macros
+// A comptime fn computes a constant while compiling; a macro writes code where it is called.
+module Main
+
+import Std.Io as Io
+
+comptime fn powerOfTwo(exponent: Int) -> Int {
+  var value = 1
+  for _ in 0..exponent {
+    value = value * 2
+  }
+  value
+}
+
+comptime fn squares(count: Int) -> Array[Int] {
+  var found: Array[Int] = []
+  for n in 0..count {
+    found = found.push(n * n)
+  }
+  found
+}
+
+// Computed by the compiler; the running program starts with the answers.
+const BUFFER_SIZE: Int = powerOfTwo(12)
+const SQUARES: Array[Int] = squares(8)
+
+macro twice(value: expr) = value + value
+
+macro squared(value: expr) = {
+  let held = value
+  held * held
+}
+
+macro swap(left: ident, right: ident) = {
+  let held = left
+  left = right
+  right = held
+}
+
+macro announced(body: block) = {
+  let _started = Io.writeLine("-- starting")
+  body
+}
+
+fn main() -> Int {
+  let _buffer = Io.writeLine("buffer size {BUFFER_SIZE}")
+  let _squares = Io.writeLine("squares {SQUARES}")
+
+  // An expr argument is one expression: squared!(1 + 2) is 9, not 1 + 2 * 1 + 2.
+  let _twice = Io.writeLine("twice!(21) = {twice!(21)}, squared!(1 + 2) = {squared!(1 + 2)}")
+
+  // Names a macro introduces are its own: this held is untouched by swap! and squared!.
+  let held = "mine"
+  var first = 3
+  var second = 4
+  swap!(first, second)
+  let sum = announced!({ first + second })
+  let _swapped = Io.writeLine("after swap! first={first} second={second}, sum {sum}, held is still {held}")
+  0
+}

@@ -22,6 +22,7 @@ formatProperties =
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
   , ("a Set literal keeps its sigil and braces tight", testSetLiteral)
+  , ("a macro call keeps its name, bang, and arguments tight", testMacroCalls)
   , ("imports sort with the standard library first", testImportOrder)
   , ("input that does not lex is returned untouched", testUnlexable)
   , ("blank-line runs collapse to one", testBlankLines)
@@ -337,6 +338,32 @@ testSetLiteral = do
               , "fn values() -> Set[Int] { #{3, 1, 2, } }"
               , "fn empty() -> Set[Int] { #{} }"
               , "fn contains() -> Bool { 2 in #{1, 2} }"
+              ]
+        )
+    )
+
+testMacroCalls :: IO Property
+testMacroCalls = do
+  formatted <- formatOf
+    (Text.unlines
+      [ "module M"
+      , "macro twice(value: expr) = value + value"
+      , "fn run() -> Int {"
+      , "  swap ! (first,second)"
+      , "  let total = timed!( { first + second })"
+      , "  twice!(total) + twice !(1)"
+      , "}"
+      ])
+  pure
+    ( counterexample (Text.unpack formatted)
+        ( Text.lines formatted
+          === [ "module M"
+              , "macro twice(value: expr) = value + value"
+              , "fn run() -> Int {"
+              , "  swap!(first, second)"
+              , "  let total = timed!({ first + second })"
+              , "  twice!(total) + twice!(1)"
+              , "}"
               ]
         )
     )

@@ -1,0 +1,51 @@
+// Concurrency
+// Async functions joined by a structured scope, workers mapping in parallel, and a bounded channel.
+module Main
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Io as Io
+
+async fn scoreFor(name: Str) -> Result[Int, Str] {
+  if name.isEmpty() { Err("a name is needed") } else { Ok(name.length() * 10) }
+}
+
+fn slowSquare(n: Int) -> Int {
+  var total = 0
+  for _ in 0..n {
+    total = total + n
+  }
+  total
+}
+
+export async fn main() -> Result[Int, Str] {
+  // Tasks started in a scope cannot outlive it; awaiting gives the Ok value,
+  // and an Err leaves main through its own Result.
+  let total = async with scope {
+    let first = scoreFor("ada")
+    let second = scoreFor("grace")
+    first.await + second.await
+  }
+  let _scores = Io.writeLine("async total {total}")
+
+  // Four workers share the work; the answers come back in the input's order.
+  let squares = match Concurrent.mapBounded(&[1000, 2000, 3000, 4000, 5000], 4, slowSquare) {
+    case Ok(found) => found
+    case Err(_) => { return Err("a worker failed") }
+  }
+  let _squares = Io.writeLine("worker squares {squares}")
+
+  // A channel holds at most its capacity; drain reads what was sent, in order.
+  let messages: Channel.Channel[Str] = Channel.channel(8)
+  for word in ["pudu", "huemul", "guanaco"] {
+    let _sent = Channel.send(&messages, word)
+  }
+  let _closed = Channel.close(&messages)
+  match Channel.drain(&messages) {
+    case Ok(words) => { let _words = Io.writeLine("received {words}") }
+    case Err(_) => { return Err("the channel failed") }
+  }
+
+  // Try scoreFor("") above: the Err leaves main, and the run reports it.
+  Ok(0)
+}

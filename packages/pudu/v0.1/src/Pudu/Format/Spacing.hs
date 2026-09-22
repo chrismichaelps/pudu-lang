@@ -358,7 +358,13 @@ wantsSpace leftShape shape before after = case (before, after) of
     | shapePrefix leftShape = False
     | isSymbol right SymColon = False
     | isSymbol left SymColon = True
+    {-| A name followed by `!` is a macro call, `twice!(20)`: `!` is never an
+        operator after an operand, so the name and its bang are one thing. -}
+    | isIdentifier left && isSymbol right SymBang = False
     | isSymbol left SymBang && closesGroup right = False
+    {-| A block handed to a call opens against the parenthesis, as a macro's
+        `block` argument is written: `timed!({ work() })`. -}
+    | isSymbol left SymLeftParen && isSymbol right SymLeftBrace = False
     | isSymbol right SymRightBrace =
         paddedBrace (shapeBrace shape) && not (isSymbol left SymLeftBrace)
     | isSymbol left SymLeftBrace =
@@ -371,6 +377,10 @@ wantsSpace leftShape shape before after = case (before, after) of
     | otherwise = True
 
   closesGroup kind = any (isSymbol kind) closers
+
+  isIdentifier kind = case kind of
+    Identifier _ -> True
+    _ -> False
 
   isRange kind = isSymbol kind SymRangeExclusive || isSymbol kind SymRangeInclusive
 

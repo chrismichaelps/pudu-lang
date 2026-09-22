@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — A playground example for every chapter; the formatter keeps macro calls
+
+- The playground's menu grows from six programs to nineteen: functions, numbers, text, ranges and
+  sets, control flow, generics, compile time and macros, testing, JSON and CSV, HTML, HTTP routes,
+  concurrency, and time and randomness join the originals, so every chapter that a confined run can
+  execute has a program to run and change.
+- `test/docs-examples.py` runs playground examples with `pudu run --confined`, as the sandbox does,
+  so an example that reaches for a file or the network fails the gate rather than a reader.
+- `pudu fmt` writes a macro call tight — `twice!(20)`, `timed!({ work() })` — where it used to
+  write `twice !(20)` and `timed !( { work() })`.
+
 ## 2026-09-22 — Documentation for numbers, compile time, macros, and foreign code
 
 - Three documentation chapters: **Numbers** (widths and literal suffixes; checked, wrapping, and

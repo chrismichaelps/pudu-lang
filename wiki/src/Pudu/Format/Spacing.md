@@ -52,6 +52,11 @@ spaced         :: [Piece] -> Text
 
 ## Governance
 
+- A macro call is written **tight**: `twice!(20)`, `timed!({ work() })`. `!` is never an operator
+  after an operand, so a name followed by `!` is always a call's name and bang; and a block handed
+  to a call opens against its parenthesis. Without these two rules the formatter spelled every call
+  `twice !(20)` and `timed !( { ... })`.
+
 - A range is written **tight**, both ends and either end absent: `0..n`, `0..=n`, `items[2..]`,
   `items[..2]`. It reads as one value that way, which is what it is.
 

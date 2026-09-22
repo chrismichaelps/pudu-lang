@@ -1,0 +1,41 @@
+// Functions
+// Expression bodies, default values, recursion, closures, and the short |x| form.
+module Main
+
+import Std.Io as Io
+
+fn square(n: Int) -> Int = n * n
+
+fn greet(name: Str, greeting: Str = "Hello") -> Str {
+  "{greeting}, {name}!"
+}
+
+fn fibonacci(n: Int) -> Int {
+  if n < 2 { return n }
+  fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+fn applyTwice(value: Int, step: fn(Int) -> Int) -> Int {
+  step(step(value))
+}
+
+fn adder(amount: Int) -> fn(Int) -> Int {
+  fn(n: Int) => n + amount
+}
+
+fn main() -> Int {
+  let _plain = Io.writeLine(greet("Pudu"))
+  let _warm = Io.writeLine(greet("Pudu", "Welcome"))
+  let _squared = Io.writeLine("square(7) = {square(7)}")
+  let _fib = Io.writeLine("fibonacci(20) = {fibonacci(20)}")
+
+  let addTen = adder(10)
+  let _twice = Io.writeLine("applyTwice(1, addTen) = {applyTwice(1, addTen)}")
+  let _named = Io.writeLine("applyTwice(3, square) = {applyTwice(3, square)}")
+
+  let numbers = [1, 2, 3, 4, 5, 6]
+  let evens = numbers.filter(|n| n % 2 == 0)
+  let total = numbers.reduce(|carried, n| carried + n, 0)
+  let _short = Io.writeLine("evens {evens}, total {total}")
+  0
+}

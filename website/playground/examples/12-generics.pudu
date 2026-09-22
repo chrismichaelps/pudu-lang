@@ -1,0 +1,83 @@
+// Generics
+// Type parameters, trait bounds, where clauses, type aliases, and a parameter that stands for a container.
+module Main
+
+import Std.Io as Io
+import Std.List as List
+import Std.Order {Ord}
+
+type Pair[A, B] = { first: A, second: B }
+
+type Scores = Map[Str, Int]
+
+trait Scored {
+  fn score(self: &Self) -> Int
+}
+
+type Player = { name: Str, points: Int }
+
+impl Scored for Player {
+  fn score(self: &Self) -> Int { self.points }
+}
+
+fn swap[A, B](pair: Pair[A, B]) -> Pair[B, A] {
+  Pair{first: pair.second, second: pair.first}
+}
+
+fn best[T: Scored](items: &Array[T]) -> Option[T] {
+  var found: Option[T] = None
+  for item in *items {
+    found = match found {
+      case Some(held) => if item.score() > held.score() { Some(item) } else { Some(held) }
+      case None => Some(item)
+    }
+  }
+  found
+}
+
+fn middle[T](items: &Array[T]) -> Option[T] where T: Ord {
+  let ordered = List.sorted(items)
+  if ordered.isEmpty() { None } else { Some(ordered[ordered.length() / 2]) }
+}
+
+trait Container[F[_]] {
+  fn transformed[A, B](self: &F[A], change: fn(A) -> B) -> F[B]
+}
+
+type Both[T] = { left: T, right: T }
+
+impl Container[Both] for Both {
+  fn transformed[A, B](self: &Both[A], change: fn(A) -> B) -> Both[B] {
+    Both{left: change(self.left), right: change(self.right)}
+  }
+}
+
+impl Container[Array] for Array {
+  fn transformed[A, B](self: &Array[A], change: fn(A) -> B) -> Array[B] { self.map(change) }
+}
+
+fn lengths[F[_]](texts: &F[Str]) -> F[Int] where F: Container {
+  texts.transformed(|text: Str| text.length())
+}
+
+fn main() -> Int {
+  let swapped = swap(Pair{first: 1, second: "one"})
+  let _swapped = Io.writeLine("swapped: {swapped.first} {swapped.second}")
+
+  let players = [Player{name: "ada", points: 36}, Player{name: "grace", points: 45}]
+  match best(&players) {
+    case Some(player) => { let _best = Io.writeLine("best: {player.name}") }
+    case None => { let _none = Io.writeLine("nobody played") }
+  }
+
+  let _numbers = Io.writeLine("middle number: {middle(&[9, 1, 5])}")
+  let _words = Io.writeLine("middle word: {middle(&["b", "c", "a"])}")
+
+  let scores: Scores = mapOf([("ada", 3), ("grace", 4)])
+  let _scores = Io.writeLine("scores: {scores}")
+
+  let sized = lengths(&Both{left: "pudu", right: "forest"})
+  let _both = Io.writeLine("lengths of a Both: {sized.left} and {sized.right}")
+  let _array = Io.writeLine("lengths of an Array: {lengths(&["a", "bb", "ccc"])}")
+  0
+}

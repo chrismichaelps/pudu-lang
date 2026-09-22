@@ -1,0 +1,43 @@
+// Numbers
+// Fixed widths, wrapping and saturating arithmetic, exact decimals, and whole numbers of any size.
+module Main
+
+import Std.Decimal as D
+import Std.Io as Io
+import Std.Num {Integer}
+
+fn factorial(n: BigInt) -> BigInt {
+  var product: BigInt = 1
+  var step: BigInt = 2
+  while step <= n {
+    product = product * step
+    step = step + 1
+  }
+  product
+}
+
+fn main() -> Int {
+  // A UInt8 holds 0 through 255. Plain + would stop the program here;
+  // &+ wraps around and +| stops at the limit, because the program asked.
+  let level: UInt8 = 250u8
+  let _wrap = Io.writeLine("250 &+ 10 = {level &+ 10u8}")
+  let _clip = Io.writeLine("250 +| 10 = {level +| 10u8}")
+
+  // Narrowing answers an Option: 300 does not fit in a byte.
+  let wide = 300.toBigInt()
+  let _byte = Io.writeLine("300 as UInt8: {0u8.fromBigInt(wide)}")
+  let _short = Io.writeLine("300 as Int16: {0i16.fromBigInt(wide)}")
+
+  // Decimals keep the digits that were written.
+  let _float = Io.writeLine("0.1 + 0.2 as Float64: {0.1 + 0.2}")
+  let _exact = Io.writeLine("0.1 + 0.2 as Decimal: {D.toText(0.1d + 0.2d)}")
+  let subtotal = D.sum([19.99d, 5.01d, 0.10d])
+  let tax = D.round(subtotal * 0.0825d, 2, D.HalfEven)
+  let _bill = Io.writeLine("subtotal {D.toText(subtotal)}, tax {D.toText(tax)}, total {D.toText(subtotal + tax)}")
+
+  // BigInt grows as it needs to.
+  let _big = Io.writeLine("40! = {factorial(40)}")
+
+  // Try replacing &+ with + above to see checked arithmetic stop the program.
+  0
+}
