@@ -36,7 +36,10 @@ export type Project = {
   head: Option[Head],
   releases: Array[Release],
   unlisted: Bool,
-  repository: Str
+  repository: Str,
+  stars: Int,
+  forks: Int,
+  openIssues: Int
 }
 
 export fn isPublic(project: &Project) -> Bool { project.visibility == "public" }
@@ -101,6 +104,9 @@ export fn toJson(project: &Project) -> Json.Json {
       ("head", head),
       ("unlisted", Json.Boolean(project.unlisted)),
       ("repository", Json.Text(project.repository)),
+      ("stars", Json.Number(project.stars)),
+      ("forks", Json.Number(project.forks)),
+      ("openIssues", Json.Number(project.openIssues)),
       ("releases", Json.list(&project.releases.map(|release: Release| releaseJson(&release))))
     ])
 }
@@ -117,7 +123,8 @@ export fn summaryJson(project: &Project) -> Json.Json {
       ("keywords", texts(&project.keywords)),
       ("latest", latestVersion),
       ("visibility", Json.Text(project.visibility)),
-      ("repository", Json.Text(project.repository))
+      ("repository", Json.Text(project.repository)),
+      ("stars", Json.Number(project.stars))
     ])
 }
 
@@ -192,6 +199,9 @@ export fn fromJson(value: &Json.Json) -> Result[Project, Str] {
       head: head,
       releases: releases.map(|release: Json.Json| releaseFrom(&release)),
       unlisted: boolOf(value, "unlisted"),
-      repository: textOf(value, "repository")
+      repository: textOf(value, "repository"),
+      stars: intOf(value, "stars"),
+      forks: intOf(value, "forks"),
+      openIssues: intOf(value, "openIssues")
     })
 }

@@ -44,6 +44,8 @@ Decoding terminates when encountering two consecutive 512-byte blocks of zeroes 
 
 ## Grill Log
 
+- **Q:** Build and read headers byte by byte? **A:** No; headers are sliced, cut at NUL, and joined natively, and the writer sums only the bytes it wrote for the checksum. _Rationale:_ packing 289 files took 70.5 s at `-O0` and now takes 2.9 s; reading 352 entries went from 6.3 s to 2.9 s.
+
 - **Q:** Read an unknown type flag as a file? **A:** No, `UnsupportedType`. _Rationale:_ a hard link or
   device read as an empty file is a different archive from the one written, and package archives must
   be refused when they carry either. _Rejected:_ defaulting to `File`.

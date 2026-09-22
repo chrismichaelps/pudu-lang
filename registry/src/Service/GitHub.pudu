@@ -17,7 +17,10 @@ export type Repository = {
   defaultBranch: Str,
   description: Str,
   topics: Array[Str],
-  htmlUrl: Str
+  htmlUrl: Str,
+  stars: Int,
+  forks: Int,
+  openIssues: Int
 }
 
 /// What the registry asks of GitHub. Each takes the token of the request, or
@@ -37,6 +40,10 @@ export const ARCHIVE_LIMIT: Int = 16777216
 
 fn text(value: &Json.Json, key: Str) -> Str {
   Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+fn count(value: &Json.Json, key: Str) -> Int {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asInt(&held)), 0)
 }
 
 fn flag(value: &Json.Json, key: Str) -> Bool {
@@ -68,7 +75,10 @@ fn repositoryFrom(value: &Json.Json) -> Repository {
     defaultBranch: text(value, "default_branch"),
     description: text(value, "description"),
     topics: topics,
-    htmlUrl: text(value, "html_url")
+    htmlUrl: text(value, "html_url"),
+    stars: count(value, "stargazers_count"),
+    forks: count(value, "forks_count"),
+    openIssues: count(value, "open_issues_count")
   }
 }
 

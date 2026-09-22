@@ -134,7 +134,7 @@ class GitHub(http.server.BaseHTTPRequestHandler):
             return self.answer(404, {"message": "Not Found"})
         if len(parts) == 3:
             permissions = {"pull": True, "push": login == owner, "admin": login == owner} if login else {}
-            return self.answer(200, {"name": name, "owner": {"login": owner}, "private": repository["private"], "default_branch": "main", "description": "From GitHub", "topics": ["pudu"], "html_url": f"https://github.com/{owner}/{name}", "permissions": permissions})
+            return self.answer(200, {"name": name, "owner": {"login": owner}, "private": repository["private"], "default_branch": "main", "description": "From GitHub", "topics": ["pudu"], "html_url": f"https://github.com/{owner}/{name}", "permissions": permissions, "stargazers_count": 7, "forks_count": 1, "open_issues_count": 2})
         reference = "/".join(parts[4:])
         if name == "evil-kit":
             if parts[3] == "commits":

@@ -13,6 +13,8 @@ See [[architecture/PACKAGES]] · [[src/registry/_MOC]].
 
 ## Grill Log
 
+- **Q:** Count stars and issues? **A:** Copy `stargazers_count`, `forks_count`, and `open_issues_count` into the project at push and release. _Rationale:_ package pages link to GitHub for issues, pull requests, and stars, and show counts without asking GitHub per page. Verified against the live API (`octocat/hello-world`, `jqlang/jq` at `jq-1.7.1`, through the archive redirect).
+
 - **Q:** Call GitHub directly from the services? **A:** Through a record of functions. _Rationale:_ the suite runs without a network, and the end-to-end script points `live` at a stand-in. _Rejected:_ a module of direct calls.
 
 Resolved Grill Log: behaviour covered by `registry/src/Test/Registry.pudu` and `test/package-registry.py`.

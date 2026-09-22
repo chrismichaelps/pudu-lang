@@ -65,7 +65,10 @@ fn fakeGitHub() -> GitHub.GitHub {
             defaultBranch: "main",
             description: "From GitHub",
             topics: ["github-topic"],
-            htmlUrl: "https://github.com/" + owner + "/" + name
+            htmlUrl: "https://github.com/" + owner + "/" + name,
+            stars: 42,
+            forks: 3,
+            openIssues: 5
           }))
     },
     commit: fn(_token: Str, _owner: Str, name: Str, reference: Str) -> Result[Str, Str] {
@@ -182,7 +185,7 @@ fn storeChecks(root: Str) -> Array[Test.Check] {
     case Err(_) => false
   }
   let described = match project {
-    case Some(held) => held.description == "Parsing JSON" && held.repository == "https://github.com/alice/json-kit"
+    case Some(held) => held.description == "Parsing JSON" && held.repository == "https://github.com/alice/json-kit" && held.stars == 42 && held.openIssues == 5
     case None => false
   }
   let stored = Result.unwrapOr(Projects.load(&store, &kit), None)

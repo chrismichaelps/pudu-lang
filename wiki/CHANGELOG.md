@@ -23,6 +23,16 @@ tags: [changelog]
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
 
 
+## 2026-09-22 — Tar and HTTP at the size of a real release
+
+- `Std.Http.Client` decides when a response is complete from its head, parsed once, instead of joining
+  and re-reading everything received after every piece: a 1.3 MB archive from GitHub took 20 s and now
+  takes the time the network does. `Std.Http.Message` exports `Framing` and `framingOf`.
+- `Std.Archive.Tar` builds and reads headers from native slices: writing 289 files went from 70.5 s to
+  2.9 s at `-O0`, and reading 352 entries from 6.3 s to 2.9 s.
+- The registry copies each repository's star, fork, and open-issue counts at push and release. Its
+  GitHub client was checked against the live API, including tag resolution and the archive redirect.
+
 ## 2026-09-22 — Packages live on GitHub
 
 - A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and handles are GitHub

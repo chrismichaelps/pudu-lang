@@ -13,6 +13,8 @@ See [[architecture/PACKAGES]] · [[src/registry/_MOC]].
 
 ## Grill Log
 
+- **Q:** Keep repository counts? **A:** `stars`, `forks`, and `openIssues`, as of the last push or release. _Rationale:_ read by the website snapshot; refreshed whenever the owner publishes.
+
 - **Q:** Record where a release came from? **A:** Its tag and commit. _Rationale:_ a reader can compare the release with the repository at that commit.
 
 Resolved Grill Log: behaviour covered by `registry/src/Test/Registry.pudu` and `test/package-registry.py`.
