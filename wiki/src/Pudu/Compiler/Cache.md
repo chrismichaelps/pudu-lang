@@ -51,7 +51,8 @@ pruneProducts :: ProductCache -> IO ()
   diagnostic is produced fresh by the compiler reporting it.
 - **Integrity.** Every entry ends with a BLAKE2b digest of its payload, is written to a temporary
   file and renamed into place, and is a miss when it does not verify. A failed write removes its
-  temporary file. A cache that cannot be opened or written is no cache; compiling never depends on it.
+  temporary file, and so does a write interrupted part way, as the language server interrupts an
+  analysis nobody needs any more. A cache that cannot be opened or written is no cache; compiling never depends on it.
 - **Isolation.** Entries live under a directory named by the compiler's version and executable
   identity; a different compiler reads none of them and removes directories it cannot read.
 - **Bounded.** A compile that stored something prunes the directory to half of 4096 entries,

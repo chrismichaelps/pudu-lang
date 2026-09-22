@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-21 — Newer edits and cancellations are seen while analysis runs
+
+- The language server reads messages on a thread of its own. `$/cancelRequest` answers a queued
+  request at once as cancelled (`-32800`) and interrupts one being worked on; a newer full text for a
+  document drops the older changes still waiting behind it and interrupts the analysis of an older
+  one, unless a request waits between them. A burst of edits followed by a completion compiles the
+  latest text only, and every request is still answered exactly once. A cache write interrupted part
+  way removes its partial file (issue #285).
+
 ## 2026-09-21 — A stored float constant reads back
 
 - A module with a `Float64` constant failed to run after it had been checked — `pudu: a stored

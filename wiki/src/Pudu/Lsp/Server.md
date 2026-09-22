@@ -111,18 +111,20 @@ serverCapabilities :: Json
 
 - **Requires:** [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Lsp Hover]], [[Lsp Definition]],
   [[Lsp References]], [[Lsp Rename]], [[Lsp Highlight]], [[Lsp Semantic Tokens]], [[Lsp Signature Help]],
-  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Lsp Context]], [[Lsp Module Catalog]], [[Compiler Program]], [[Doc]],
+  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Lsp Context]], [[Lsp Module Catalog]], [[Lsp Scheduler]], [[Compiler Program]], [[Doc]],
   [[Format]], [[Diagnostic Model]].
 - **Consumed by:** [[Pudu CLI]] through `pudu lsp`, and the VS Code client under `editors/vscode`.
 
 ## Algorithm
 
-Read a message; if it carried text, compile and store the analysis; answer purely from what is
-stored; write the replies. The loop ends when the stream closes, when `exit` arrives, or when a
-framing fault leaves the reader with no way to find the next message.
+Each message is one step of [[Lsp Scheduler]]: if it carried text, compile and store the analysis;
+answer purely from what is stored; return the replies. The scheduler reads on its own thread, so a
+cancellation or a newer text for the same document is seen while a step runs, and it ends when the
+stream closes, when `exit` arrives, or when a framing fault leaves the reader with no way to find the
+next message. Replies are written under one lock, a frame at a time.
 
 Everything a message costs is guarded. A failure while compiling or answering is caught, reported,
-and answered with an error to the request that caused it; the loop then carries on and the document
+and answered with an error to the request that caused it; the server then carries on and the document
 store keeps whatever it last held, since what the failed analysis would have stored is unknown. The
 replies are forced inside that guard, because `answer` is pure and builds them lazily, so a failure
 inside one would otherwise surface where it is written to the handle rather than where it can be

@@ -195,6 +195,7 @@ library
     Pudu.Lsp.Receiver
     Pudu.Lsp.Analysis
     Pudu.Lsp.RepairCache
+    Pudu.Lsp.Scheduler
     Pudu.Lsp.Repair
     Pudu.Eval.Confinement
     Pudu.IntegerLiteral

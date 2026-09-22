@@ -11,8 +11,8 @@ module Pudu.Lsp.Server
   , serverCapabilities
   ) where
 
-import Control.Exception (SomeException, displayException, evaluate, try)
-import Control.Monad (unless)
+import Control.Concurrent.MVar (newMVar, withMVar)
+import Control.Exception (evaluate)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -65,10 +65,10 @@ import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
 import Pudu.Lsp.ModuleCatalog (moduleCatalog)
 import Pudu.Lsp.RepairCache (RepairCache, cachedAnalyse, newRepairCache)
+import Pudu.Lsp.Scheduler (schedule)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
-  ( Incoming (..)
-  , Message (..)
+  ( Message (..)
   , errorResponse
   , frame
   , notification
@@ -101,10 +101,21 @@ runServer = do
   hSetBinaryMode stdin True
   hSetBinaryMode stdout True
   hSetBuffering stdout NoBuffering
-  store <- newIORef emptyDocuments
   catalogs <- newIORef Map.empty
   repairs <- newRepairCache
-  loop store (Session catalogs repairs)
+  writing <- newMVar ()
+  let session = Session catalogs repairs
+      -- Replies and cancellations are written from two threads; each frame
+      -- is written whole.
+      write body = withMVar writing (const (emit stdout body))
+      logLine line = TextIO.hPutStrLn stderr ("pudu lsp: " <> line) >> hFlush stderr
+      step documents message = do
+        invalidateCatalogs catalogs message
+        prepare session documents message
+  ended <- schedule (readMessage stdin) write logLine step emptyDocuments
+  case ended of
+    Right () -> pure ()
+    Left _ -> exitWith (ExitFailure 1)
 
 {-| The modules each source root offers an import, found once and kept until a
     file is saved, created, or removed — the only events that change them. -}
@@ -116,31 +127,6 @@ data Session = Session
   { sessionCatalogs :: !Catalogs
   , sessionRepairs :: !(IORef RepairCache)
   }
-
-loop :: IORef Documents -> Session -> IO ()
-loop store session = do
-  incoming <- readMessage stdin
-  case incoming of
-    EndOfStream -> pure ()
-    NotForServer -> loop store session
-    Unreadable reason -> do
-      TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
-      hFlush stderr
-      loop store session
-    Unframed reason -> do
-      TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
-      hFlush stderr
-      exitWith (ExitFailure 1)
-    Received message -> do
-      documents <- readIORef store
-      invalidateCatalogs (sessionCatalogs session) message
-      outcome <- try (prepare session documents message)
-      case outcome of
-        Right (documents', replies) -> do
-          writeIORef store documents'
-          mapM_ (emit stdout) replies
-        Left failure -> mapM_ (emit stdout) =<< excuse message failure
-      unless (isExit message) (loop store session)
 
 invalidateCatalogs :: Catalogs -> Message -> IO ()
 invalidateCatalogs catalogs message = case message of
@@ -219,19 +205,6 @@ rootOf documents parameters =
   let uri = fromMaybe "" (uriOf parameters)
       written = maybe "" analysisText (documentOf documents parameters)
    in documentSourceRoot (workspaceFolders documents) uri written
-
-excuse :: Message -> SomeException -> IO [Text]
-excuse message failure = do
-  TextIO.hPutStrLn stderr ("pudu lsp: " <> subject <> " failed; " <> detail)
-  hFlush stderr
-  pure $ case message of
-    Request identity _ _ -> [errorResponse identity internalError detail]
-    Notification _ _ -> []
- where
-  subject = case message of
-    Request _ method _ -> method
-    Notification method _ -> method
-  detail = Text.strip (Text.pack (displayException failure))
 
 {-| Take in what a message says the files now hold, and analyse again every
     open document whose program read a file that changed. The documents
@@ -314,11 +287,6 @@ extractWorkspaceFolders params =
   rootPath = [Text.unpack path | Just path <- [lookupField "rootPath" params >>= textOf], not (Text.null path)]
   distinct = foldr (\path kept -> if path `elem` kept then kept else path : kept) []
 
-isExit :: Message -> Bool
-isExit message = case message of
-  Notification "exit" _ -> True
-  _ -> False
-
 {-| Write one framed message as UTF-8.
 
     The handle is in binary mode, where writing text keeps only the low byte of
@@ -375,9 +343,6 @@ handler method = case method of
 
 methodNotFound :: Int
 methodNotFound = -32601
-
-internalError :: Int
-internalError = -32603
 
 serverCapabilities :: Json
 serverCapabilities =

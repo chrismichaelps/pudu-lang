@@ -8,6 +8,7 @@ tags: [moc, tooling, lsp]
 - [[Language Server]] — answers an editor's questions from the ordinary compile.
 - [[Lsp Analysis]] — one document compiled under the source root its path and module give it.
 - [[Lsp Repair Cache]] — repaired analyses reused while the documents' state holds.
+- [[Lsp Scheduler]] — reading apart from working, so cancellations and newer edits are seen at once.
 - [[Lsp Protocol]] — byte framing and the shapes the wire carries.
 - [[Lsp Feature]] — the index turned into hovers, definitions, outlines, and completions.
 - [[Lsp Hover]] — cursor policy that preserves inferred types and foreign trust provenance.

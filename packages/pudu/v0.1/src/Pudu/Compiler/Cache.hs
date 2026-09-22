@@ -16,7 +16,7 @@ module Pudu.Compiler.Cache
   , storeFrontend
   ) where
 
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, mask, onException, try)
 import Control.Monad (forM_, when)
 import Crypto.Hash (Blake2b_256, Context, Digest, hash, hashFinalize, hashInit, hashUpdate)
 import qualified Data.ByteArray as ByteArray
@@ -295,26 +295,29 @@ withEntry cache name decode = case cacheDirectory cache of
     _ -> Nothing
 
 {-| Written beside its final name and renamed into place, so a reader sees a
-    whole entry or none, however many compilers write at once. -}
+    whole entry or none, however many compilers write at once. Work
+    interrupted part way, as the language server interrupts an analysis no
+    longer needed, removes the partial file before the interruption goes on. -}
 writeEntry :: ProductCache -> String -> ByteString -> IO ()
 writeEntry cache name payload = case cacheDirectory cache of
   Nothing -> pure ()
-  Just directory -> do
+  Just directory -> mask $ \restore -> do
     opened <- try (openBinaryTempFile directory (name <> ".tmp"))
     case opened :: Either IOException (FilePath, Handle) of
       Left _ -> pure ()
       Right (temporary, handle) -> do
-        written <- try $ do
+        let discard = do
+              _ <- try (hClose handle) :: IO (Either IOException ())
+              _ <- try (removeFile temporary) :: IO (Either IOException ())
+              pure ()
+        written <- try $ restore (do
           ByteString.hPut handle payload
           ByteString.hPut handle (checksum payload)
           hClose handle
-          renameFile temporary (directory </> name)
+          renameFile temporary (directory </> name)) `onException` discard
         case written :: Either IOException () of
           Right () -> mapM_ (`writeIORef` True) (cacheStored cache)
-          Left _ -> do
-            _ <- try (hClose handle) :: IO (Either IOException ())
-            _ <- try (removeFile temporary) :: IO (Either IOException ())
-            pure ()
+          Left _ -> pure ()
 
 {-| Keep the cache to a bounded number of entries, removing the least recently
     used first.
