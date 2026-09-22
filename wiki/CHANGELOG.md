@@ -23,6 +23,21 @@ tags: [changelog]
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
 
 
+## 2026-09-22 — GitHub is the package index
+
+- Pudu runs no package service and keeps no database. A package is a GitHub repository with a
+  `pudu.toml` and the topic `pudu-package`; its releases are its version tags. `pudu install
+  @owner/repo` reads the tags and each tag's `pudu.toml` from the machine's bare clone with git (one
+  `for-each-ref`, one `cat-file --batch`), bounded to live tags by `git ls-remote`, and chooses only tags
+  whose manifest names the package and the tag's version. The lock pins the commit and the tree digest,
+  so a moved or deleted tag changes no locked build; a locked, cached package installs without git
+  touching the network.
+- `pudu release` tags and pushes, then with a token creates the GitHub release and adds the topic.
+  `pudu login` takes `--token`, GitHub's device flow when `PUDU_GITHUB_CLIENT_ID` names an application,
+  or the GitHub CLI's token. `pudu search` lists packages from GitHub search. `pudu push` is gone.
+- The website's package pages are built from the GitHub API at deploy time.
+- The `registry/` service, its HTTP client, and its archive format are removed.
+
 ## 2026-09-22 — One banner for the home page and the packages
 
 - The home page opens with the banner the package catalogue uses, holding the release, the headline,

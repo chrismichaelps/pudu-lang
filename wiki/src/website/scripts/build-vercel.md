@@ -17,7 +17,7 @@ index for the function. The complete JSON catalogue remains the source for stati
 not parsed during a serverless cold start. The prerender is given `PUDU_DOCS_PATH` beside
 `PUDU_CATALOG_PATH`, both absolute, so the Markdown documentation pages are found wherever the script
 is run from and become static pages; the function never reads them.
-When `PUDU_PACKAGES_REGISTRY` names a hosted registry, the builder snapshots its public projects, prerenders their pages, copies avatars into static output, and sends only `packages.json` to the function for package search. Without that setting no package pages are published. Nested project and source paths rewrite to their static files.
+Unless `PUDU_PACKAGES_FROM_GITHUB=0`, the builder snapshots the packages GitHub lists (with `GITHUB_TOKEN` for its rate limit), prerenders their pages, copies avatars into static output, and sends only `packages.json` to the function for package search. A failed snapshot fails the build. Nested project and source paths rewrite to their static files.
 
 Resolved Grill Log: dynamic search reaches the same Pudu ranking and result view as local requests
 and tests through a bounded dynamic router, while canonical pages resolve directly from Vercel's static edge output. The builder refuses

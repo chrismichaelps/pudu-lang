@@ -19,6 +19,8 @@ See [[architecture/PACKAGES]].
 
 ## Grill Log
 
+- **Q:** How is a GitHub package locked? **A:** `github+<repository url>#<commit>` with the checkout's tree digest, checked on every copy like a git dependency. _Rationale:_ the tag may move; the commit and the files may not.
+
 - **Q:** Write the lock before copying? **A:** After every package is staged and verified. _Rationale:_ a failed install must leave the project as it was. _Rejected:_ writing the lock first and repairing on the next run.
 
 - **Q:** Execute anything a dependency contains? **A:** Never. _Rationale:_ install-time code is how worms spread through package ecosystems. _Rejected:_ hooks and build scripts.

@@ -185,7 +185,7 @@ export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
       })
   }
   Ok(Packages {
-      registry: text(&document, "registry"),
+      registry: text(&document, "source"),
       directory: directory,
       projects: List.sortBy(&projects, fn(left: Project, right: Project) -> Bool { left.name < right.name }),
       handles: handles

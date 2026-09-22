@@ -57,9 +57,7 @@ run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
-run 'the package registry checks, formats, and passes its suite' \
-  bash -c '"$PUDU" check $(find registry/src -name "*.pudu") >/dev/null && "$PUDU" fmt --check registry/src && "$PUDU" test registry/src/Test/Registry.pudu'
-run 'pudu installs, publishes, and refuses what it must against a local registry' \
+run 'pudu installs and publishes packages through git and a stand-in GitHub' \
   bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
 run 'a generated project works outside the repository' \
   bash -c 'node test/scaffold.mjs "$PUDU"'

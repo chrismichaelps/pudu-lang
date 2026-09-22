@@ -59,9 +59,7 @@ import Pudu.Package.Install
   )
 import Pudu.Package.Lock (Lock (..), LockEntry (..))
 import Pudu.Package.ManifestEdit (removeDependency, setDependency)
-import Pudu.Package.Credentials (Credential (..), loadCredential)
-import Pudu.Package.Progress (Progress)
-import Pudu.Package.Remote (Remote (..), minimumAgeFor, registryUrlFor, remoteRegistry)
+import Pudu.Package.GitHubIndex (Index (..), githubBase, githubRegistry, lockedCommit, minimumAgeFor, repositoryUrl)
 import Pudu.Package.Solve (Registry (..), ReleaseInfo (..))
 import Pudu.Package.Version (Version (..), isPrerelease, parseVersion, renderVersion)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, makeAbsolute)
@@ -99,10 +97,11 @@ runPackageCommand command arguments = do
           , optionGit = Just session
           }
       run = Run command display verbosity session
-      connect = connectRemote offline (displayProgress display) project (const False)
+      connect = connectRemote session offline project (const False)
   case command of
     "install" -> do
-      registry <- connect
+      let asked = [package | spec <- rest, Right (SpecRegistry package _) <- [parseInstallSpec (Text.pack spec)]]
+      registry <- connectRemote session offline project (`elem` asked)
       install run registry options project (map Text.pack rest)
     "uninstall" -> do
       registry <- connect
@@ -111,33 +110,32 @@ runPackageCommand command arguments = do
     "update" -> do
       named <- traverse (either (failWith command) pure . parsePackageId . Text.pack) rest
       let refresh package = null named || package `elem` named
-      registry <- connectRemote offline (displayProgress display) project refresh
+      registry <- connectRemote session offline project refresh
       apply run registry options{optionRefresh = refresh} project (projectManifestText project)
     "upgrade" -> do
       named <- traverse (either (failWith command) pure . parsePackageId . Text.pack) rest
-      registry <- connectRemote offline (displayProgress display) project (\package -> null named || package `elem` named)
+      registry <- connectRemote session offline project (\package -> null named || package `elem` named)
       upgrade run registry options project named
     "deps" -> showDependencies project
     "tree" -> showTree project
     _ -> failWith command "unknown package command"
 
-{-| The registry the project's manifest names, answered through the cache.
-    A package `refresh` selects is always asked of the registry. -}
-connectRemote :: Bool -> Progress -> Project -> (PackageId -> Bool) -> IO Registry
-connectRemote offline progress project refresh = do
+{-| Registry packages answered by their GitHub repositories, through the
+    machine's git cache. A package `refresh` selects is always fetched. -}
+connectRemote :: GitSession -> Bool -> Project -> (PackageId -> Bool) -> IO Registry
+connectRemote session offline project refresh = do
   let manifest = projectManifest project
       Lock entries = projectLock project
-  url <- registryUrlFor manifest
-  credential <- loadCredential url
+  base <- githubBase
   age <- minimumAgeFor manifest
-  remoteRegistry
-    Remote
-      { remoteUrl = url
-      , remoteToken = credentialToken <$> credential
-      , remoteOffline = offline
-      , remoteMinimumAgeHours = age
-      , remoteLocked = Map.fromList [(entryName e, entryVersion e) | e <- entries, not (refresh (entryName e))]
-      , remoteProgress = progress
+  githubRegistry
+    Index
+      { indexBase = base
+      , indexSession = session
+      , indexOffline = offline
+      , indexMinimumAgeHours = age
+      , indexLocked = Map.fromList [(entryName e, (entryVersion e, commit)) | e <- entries, Just commit <- [lockedCommit (entrySource e)]]
+      , indexRefresh = refresh
       }
 
 {-| Raise each registry requirement, or those named, to `^` of the newest
@@ -173,9 +171,9 @@ upgrade run registry options project named = do
         , majorOf old /= majorOf new
         ]
   apply run registry options{optionRefresh = \p -> any (\(_, _, q) -> q == p) raised} project edited
-  url <- registryUrlFor manifest
+  base <- githubBase
   forM_ crossed $ \(package, old, new) ->
-    TextIO.putStrLn (renderPackageId package <> " moved from " <> old <> " to " <> new <> ", a new major version; read " <> url <> "/" <> renderPackageId package <> "/releases")
+    TextIO.putStrLn (renderPackageId package <> " moved from " <> old <> " to " <> new <> ", a new major version; read " <> repositoryUrl base package <> "/releases")
 
 {-| State for one package command: its name, display, verbosity, and git session. -}
 data Run = Run

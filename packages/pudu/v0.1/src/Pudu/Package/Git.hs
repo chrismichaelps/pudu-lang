@@ -19,6 +19,9 @@ module Pudu.Package.Git
   , GitSession
   , newGitSession
   , checkoutGit
+  , bareRepository
+  , gitIn
+  , gitWith
   , cacheRoot
   ) where
 
@@ -148,6 +151,49 @@ checkoutGit session url revision = do
             renameDirectory staging checkout
             _ <- cachedTreeDigest checkout
             pure (Right (GitCheckout commit checkout))
+
+{-| The cached bare clone of a repository, cloned or fetched as needed. With
+    `reuse`, a clone already in the cache is used without fetching; offline,
+    only the cache is used; otherwise a repository is fetched once per session. -}
+bareRepository :: GitSession -> Text -> Bool -> IO (Either Text FilePath)
+bareRepository session url reuse = do
+  cache <- cacheRoot
+  let key = Text.unpack (Text.take 24 (sha256Hex (Char8.pack (Text.unpack url))))
+      bare = cache </> "git" </> key
+      progress = sessionProgress session
+  withRepository session url $ do
+    present <- doesDirectoryExist bare
+    fetched <- Set.member url <$> readIORef (sessionFetched session)
+    if present && (reuse || sessionOffline session || fetched)
+      then Right bare <$ emit progress (CacheHit url)
+      else
+        if sessionOffline session
+          then pure (Left (url <> " is not in the cache and --offline was given"))
+          else do
+            emit progress (FetchStarted url)
+            createDirectoryIfMissing True (cache </> "git")
+            ran <-
+              if present
+                then git Nothing ["--git-dir", bare, "fetch", "--quiet", "--tags", "--force", "origin", "+refs/heads/*:refs/heads/*"]
+                else git Nothing ["clone", "--bare", "--quiet", Text.unpack url, bare]
+            emit progress (FetchFinished url)
+            atomicModifyIORef' (sessionFetched session) (\set -> (Set.insert url set, ()))
+            pure (either (\problem -> Left ("cannot fetch " <> url <> ": " <> problem)) (const (Right bare)) ran)
+
+{-| Run git with prompts disabled, giving it `input` on standard input. -}
+gitWith :: [String] -> String -> IO (Either Text Text)
+gitWith arguments input = do
+  environment <- getEnvironment
+  let quiet = ("GIT_TERMINAL_PROMPT", "0") : ("GIT_ASKPASS", "echo") : filter ((`notElem` ["GIT_DIR", "GIT_WORK_TREE"]) . fst) environment
+  ran <- try (readCreateProcessWithExitCode (proc "git" arguments){env = Just quiet} input) :: IO (Either IOException (ExitCode, String, String))
+  pure $ case ran of
+    Left problem -> Left ("git could not be run: " <> Text.pack (show problem))
+    Right (ExitSuccess, out, _) -> Right (Text.pack out)
+    Right (ExitFailure _, _, err) -> Left (Text.strip (Text.pack err))
+
+{-| Run git against a bare clone. -}
+gitIn :: FilePath -> [String] -> IO (Either Text Text)
+gitIn bare arguments = git Nothing (["--git-dir", bare] <> arguments)
 
 {-| Run an action holding the session's lock for one repository. -}
 withRepository :: GitSession -> Text -> IO a -> IO a

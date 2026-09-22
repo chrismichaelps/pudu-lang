@@ -21,8 +21,8 @@ Everything is one command: `pudu`. It checks, runs, tests, formats, and document
 | `pudu install [what]...` | adds dependencies, or installs what `pudu.lock` names — see [Dependencies](/docs/dependencies) |
 | `pudu uninstall <name>...` | removes dependencies |
 | `pudu update [name]...`, `pudu upgrade [name]...` | moves to newer releases within, or past, the requirements |
-| `pudu login`, `pudu logout`, `pudu whoami` | signs this machine in to the package registry |
-| `pudu push`, `pudu release <version>` | publishes the project's snapshot, or an immutable release |
+| `pudu login`, `pudu logout`, `pudu whoami` | stores, forgets, or names the GitHub token used to publish |
+| `pudu release <version>`, `pudu search [words]` | tags and publishes a release on GitHub, or lists packages |
 | `pudu update [name]...` | moves dependencies to the newest versions the manifest allows |
 | `pudu deps`, `pudu tree` | show the dependencies and the whole graph |
 | `pudu explain <file>` | runs a program and reports what running it cost |

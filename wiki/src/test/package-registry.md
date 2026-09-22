@@ -2,15 +2,21 @@
 type: script
 path: "@root/test/package-registry.py"
 fidelity: Active
-tags: [registry, packages, e2e]
-aliases: [Package registry end-to-end suite]
+tags: [packages, github, e2e]
+aliases: [Package end-to-end suite]
 ---
-# Package Registry End-to-End Suite
+# Package End-to-End Suite
 
-Starts a local registry and a stand-in GitHub backed by real bare git repositories. It drives login, registration, releases, immutable installs, private access, archive refusals, and build-time website snapshot generation through the CLI and HTTP API. A checkout-built CLI is pointed at that checkout's standard library, and registry startup has a bounded wait with a diagnostic log.
+Real bare git repositories reached through `PUDU_GITHUB_URL=file://…`, and a stand-in for the GitHub
+REST API (`PUDU_GITHUB_API`): the account behind a token, topics, releases, search by topic, tags,
+contents, commits, and archives. It drives release without and with a login (tag, push, GitHub
+release, topic), search, install under the minimum release age, a tag whose manifest gives another
+version, the locked commit and tree digest, warm and offline installs with the repository unreachable,
+a force-moved tag, update and upgrade, a deleted tag with and without a lock, a missing repository, a
+damaged cached checkout, the website's snapshot from the API, and logout.
 
-See [[architecture/PACKAGES]] · [[registry Test Registry]].
+See [[architecture/PACKAGES]] · [[Package GitHubIndex]].
 
 ## Grill Log
 
-Resolved Grill Log: real local HTTP and git processes exercise the complete boundary; a failed server startup reports its stderr instead of presenting every later request as a network failure.
+Resolved Grill Log: git runs for real; only GitHub's HTTP API is stood in, so resolution and integrity are tested as shipped.

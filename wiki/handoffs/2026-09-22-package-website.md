@@ -52,8 +52,8 @@ is created.
 
 ## Exact next action
 
-Connect a hosted registry containing the public `@alice/json-kit` test project to the website build
-through `PUDU_PACKAGES_REGISTRY`, then verify its deployed pages before closing #297.
+Publish a real package repository with the `pudu-package` topic (for example with `pudu release`), set
+`GITHUB_TOKEN` in the website build, deploy, and verify its pages before closing #297 and #299.
 
 ## Referenced by
 

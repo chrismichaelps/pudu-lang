@@ -1,21 +1,27 @@
-{-| @Pudu.Cli.Publish — the commands that act on a registry as a GitHub account
+{-| @Pudu.Cli.Publish — the commands that publish through GitHub
 
-    `login` runs GitHub's OAuth device flow with the client id the registry
-    names at `/api/v1/config` and stores the GitHub token, or stores a token
-    given with `--token` after the registry accepts it; `--private` asks for
-    the `repo` scope, which private repositories need. `logout` forgets the
-    token. `push` registers the project, or refreshes it, from its repository's
-    default branch. `release <version>` checks the project, runs its tests,
-    tags the commit `v<version>`, pushes the tag, and asks the registry to
-    publish it. Each takes `--registry URL`; otherwise the registry is the one
-    `Remote.registryUrlFor` names. -}
+    A package is a GitHub repository with the topic `pudu-package`; there is no
+    other registry. `login` stores a GitHub token: from `--token`, from GitHub's
+    OAuth device flow when `PUDU_GITHUB_CLIENT_ID` names an application, or from
+    the GitHub CLI (`gh auth token`). `--private` asks the device flow for the
+    `repo` scope. `logout` forgets it; `whoami` names its account.
+
+    `release <version>` requires the manifest's version and a clean working
+    tree, checks the project, runs its tests, creates the annotated tag
+    `v<version>`, and pushes it to `origin`. With a token it then creates the
+    GitHub release with the notes and adds the `pudu-package` topic, which is
+    what makes the package findable. `search <words>` lists packages from
+    GitHub search. The API is `PUDU_GITHUB_API`, or `https://api.github.com`. -}
 module Pudu.Cli.Publish
   ( publishCommands
   , runPublishCommand
   , formBody
+  , githubApi
+  , packageTopic
   ) where
 
 import Control.Concurrent (threadDelay)
+import Control.Exception (IOException, try)
 import Control.Monad (unless, when)
 import qualified Data.ByteString as ByteString
 import Data.Maybe (fromMaybe)
@@ -28,19 +34,29 @@ import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import qualified Pudu.Lsp.Json as Json
 import Pudu.Package.Credentials (Credential (..), loadCredential, removeCredential, saveCredential)
 import Pudu.Package.Digest (treeFiles)
+import Pudu.Package.GitHubIndex (githubBase)
 import Pudu.Package.Http (Request (..), Response (..), send)
 import Pudu.Package.Identity (PackageId (..), parsePackageId, renderPackageId)
-import Pudu.Package.Remote (registryUrlFor)
 import Pudu.Package.Version (parseVersion)
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
-import System.Environment (getExecutablePath)
+import System.Environment (getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (..), exitFailure)
 import System.FilePath (takeExtension, (</>))
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import System.Process (CreateProcess (..), proc, readCreateProcessWithExitCode)
 
 publishCommands :: [String]
-publishCommands = ["login", "logout", "whoami", "push", "release"]
+publishCommands = ["login", "logout", "whoami", "release", "search"]
+
+{-| The topic that marks a repository as a Pudu package. -}
+packageTopic :: Text
+packageTopic = "pudu-package"
+
+{-| `PUDU_GITHUB_API`, or `https://api.github.com`. -}
+githubApi :: IO Text
+githubApi = do
+  configured <- lookupEnv "PUDU_GITHUB_API"
+  pure (Text.dropWhileEnd (== '/') (maybe "https://api.github.com" Text.pack (configured >>= \v -> if null v then Nothing else Just v)))
 
 runPublishCommand :: String -> [String] -> IO ()
 runPublishCommand command arguments = do
@@ -48,20 +64,18 @@ runPublishCommand command arguments = do
   here <- getCurrentDirectory
   root <- findManifestRoot here
   manifest <- maybe (pure Nothing) (fmap Just . readManifest) root
-  url <- case lookup "--registry" options of
-    Just given -> pure (Text.dropWhileEnd (== '/') (Text.pack given))
-    Nothing -> registryUrlFor (fromMaybe emptyManifest manifest)
+  base <- githubBase
+  api <- githubApi
   case command of
-    "login" -> login url (Text.pack <$> lookup "--token" options) (("--private", "") `elem` options)
-    "logout" -> logout url
-    "whoami" -> whoami url
-    "push" -> withProject command root manifest (\_ m -> push url m)
-    "release" -> case positional of
-      [version] -> withProject command root manifest $ \r m -> release url r m (Text.pack version) (lookup "--notes" options)
+    "login" -> login base api (Text.pack <$> lookup "--token" options) (("--private", "") `elem` options)
+    "logout" -> logout base
+    "whoami" -> whoami base api
+    "search" -> search api (Text.unwords (map Text.pack positional))
+    "release" -> case (positional, root, manifest) of
+      ([version], Just r, Just m) -> release base api r m (Text.pack version) (lookup "--notes" options)
+      ([_], _, _) -> failWith command "there is no pudu.toml here or above; run pudu init to start a project"
       _ -> failWith command "name the version, such as pudu release 1.4.3"
     _ -> failWith command "unknown command"
- where
-  emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] []
 
 {-| `--name value` pairs, `--flag` with an empty value, and the rest. -}
 split :: [String] -> ([(String, String)], [String])
@@ -69,28 +83,25 @@ split = go [] []
  where
   go options rest [] = (reverse options, reverse rest)
   go options rest (flag : more)
-    | flag `elem` ["--registry", "--token", "--notes"] = case more of
+    | flag `elem` ["--token", "--notes"] = case more of
         value : after -> go ((flag, value) : options) rest after
         [] -> go ((flag, "") : options) rest []
     | take 2 flag == "--" = go ((flag, "") : options) rest more
     | otherwise = go options (flag : rest) more
 
-withProject :: String -> Maybe FilePath -> Maybe Manifest -> (FilePath -> Manifest -> IO ()) -> IO ()
-withProject command root manifest action = case (root, manifest) of
-  (Just r, Just m) -> action r m
-  _ -> failWith command "there is no pudu.toml here or above; run pudu init to start a project"
-
-authorised :: Text -> [(ByteString.ByteString, ByteString.ByteString)]
-authorised token = [("Authorization", "Bearer " <> TextEncoding.encodeUtf8 token)]
+headersFor :: Maybe Text -> [(ByteString.ByteString, ByteString.ByteString)]
+headersFor token =
+  [("Accept", "application/vnd.github+json"), ("X-GitHub-Api-Version", "2022-11-28")]
+    <> [("Authorization", "Bearer " <> TextEncoding.encodeUtf8 t) | Just t <- [token]]
 
 jsonOf :: Response -> Maybe Json
 jsonOf = Json.parse . TextEncoding.decodeUtf8With (\_ _ -> Just '?') . responseBody
 
-errorOf :: Response -> Text
-errorOf response = fromMaybe ("the registry answered " <> Text.pack (show (responseStatus response))) (jsonOf response >>= lookupField "error" >>= textOf)
-
 field :: Text -> Response -> Text
 field key response = fromMaybe "" (jsonOf response >>= lookupField key >>= textOf)
+
+messageOf :: Response -> Text
+messageOf response = fromMaybe ("GitHub answered " <> Text.pack (show (responseStatus response))) (jsonOf response >>= lookupField "message" >>= textOf)
 
 call :: String -> Request -> IO Response
 call command given = do
@@ -99,11 +110,9 @@ call command given = do
     Left problem -> failWith command ("cannot reach " <> requestUrl given <> ": " <> problem)
     Right response -> pure response
 
-get :: Text -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
-get url headers = Request "GET" url (("Accept", "application/json") : headers) ByteString.empty
-
-postJson :: Text -> Json -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
-postJson url body headers = Request "POST" url (("Content-Type", "application/json") : ("Accept", "application/json") : headers) (TextEncoding.encodeUtf8 (Json.encode body))
+apiRequest :: ByteString.ByteString -> Text -> Maybe Text -> Maybe Json -> Request
+apiRequest method url token body =
+  Request method url (headersFor token <> [("Content-Type", "application/json") | Just _ <- [body]]) (maybe ByteString.empty (TextEncoding.encodeUtf8 . Json.encode) body)
 
 {-| An `application/x-www-form-urlencoded` body. -}
 formBody :: [(Text, Text)] -> ByteString.ByteString
@@ -119,90 +128,94 @@ formBody pairs = TextEncoding.encodeUtf8 (Text.intercalate "&" [escape k <> "=" 
 postForm :: Text -> [(Text, Text)] -> Request
 postForm url pairs = Request "POST" url [("Content-Type", "application/x-www-form-urlencoded"), ("Accept", "application/json")] (formBody pairs)
 
-{-| The GitHub account the registry sees behind a token, or why it refused. -}
+{-| The account a token belongs to, or why GitHub refused it. -}
 accountOf :: Text -> Text -> IO (Either Text Text)
-accountOf url token = do
-  response <- call "login" (get (url <> "/api/v1/whoami") (authorised token))
-  pure (if responseStatus response == 200 then Right (field "handle" response) else Left (errorOf response))
+accountOf api token = do
+  response <- call "login" (apiRequest "GET" (api <> "/user") (Just token) Nothing)
+  pure (if responseStatus response == 200 then Right ("@" <> Text.toLower (field "login" response)) else Left (messageOf response))
 
-login :: Text -> Maybe Text -> Bool -> IO ()
-login url (Just token) _ = do
-  account <- accountOf url token
-  handle <- either (failWith "login" . ("the registry refused the token: " <>)) pure account
-  saveCredential url (Credential handle token)
-  TextIO.putStrLn ("signed in as " <> handle <> " on " <> url)
-login url Nothing private = do
-  settings <- call "login" (get (url <> "/api/v1/config") [])
-  let clientId = field "githubClientId" settings
-      github = Text.dropWhileEnd (== '/') (field "githubUrl" settings)
-  when (Text.null clientId) (failWith "login" (url <> " has no GitHub application configured; sign in with pudu login --token <GitHub token>"))
-  begun <- call "login" (postForm (github <> "/login/device/code") [("client_id", clientId), ("scope", if private then "repo" else "")])
-  unless (responseStatus begun == 200) (failWith "login" ("GitHub refused to start signing in: " <> Text.pack (show (responseStatus begun))))
+store :: Text -> Text -> Text -> IO ()
+store base api token = do
+  account <- accountOf api token
+  handle <- either (failWith "login" . ("GitHub refused the token: " <>)) pure account
+  saveCredential base (Credential handle token)
+  TextIO.putStrLn ("signed in to GitHub as " <> handle)
+
+login :: Text -> Text -> Maybe Text -> Bool -> IO ()
+login base api (Just token) _ = store base api token
+login base api Nothing private = do
+  clientId <- maybe "" Text.pack <$> lookupEnv "PUDU_GITHUB_CLIENT_ID"
+  if not (Text.null clientId)
+    then deviceFlow base api clientId private
+    else do
+      ran <- try (readCreateProcessWithExitCode (proc "gh" ["auth", "token"]) "") :: IO (Either IOException (ExitCode, String, String))
+      case ran of
+        Right (ExitSuccess, out, _) | not (Text.null (Text.strip (Text.pack out))) -> store base api (Text.strip (Text.pack out))
+        _ -> failWith "login" "sign in with pudu login --token <GitHub token>, or sign in to the GitHub CLI (gh auth login) and run pudu login again"
+
+deviceFlow :: Text -> Text -> Text -> Bool -> IO ()
+deviceFlow base api clientId private = do
+  begun <- call "login" (postForm (base <> "/login/device/code") [("client_id", clientId), ("scope", if private then "repo" else "public_repo")])
+  unless (responseStatus begun == 200) (failWith "login" ("GitHub refused to start signing in: " <> messageOf begun))
   let deviceCode = field "device_code" begun
-      userCode = field "user_code" begun
-      page = field "verification_uri" begun
       interval = maybe 5 (max 1) (jsonOf begun >>= lookupField "interval" >>= Json.integerOf)
-  TextIO.putStrLn ("open " <> page <> " and enter the code " <> userCode)
+  TextIO.putStrLn ("open " <> field "verification_uri" begun <> " and enter the code " <> field "user_code" begun)
   TextIO.putStr "waiting for GitHub…"
   hFlush stdout
   let poll wait = do
         threadDelay (wait * 1000000)
-        answered <- call "login" (postForm (github <> "/login/oauth/access_token") [("client_id", clientId), ("device_code", deviceCode), ("grant_type", "urn:ietf:params:oauth:grant-type:device_code")])
+        answered <- call "login" (postForm (base <> "/login/oauth/access_token") [("client_id", clientId), ("device_code", deviceCode), ("grant_type", "urn:ietf:params:oauth:grant-type:device_code")])
         case (field "access_token" answered, field "error" answered) of
-          (token, _) | not (Text.null token) -> do
-            TextIO.putStrLn ""
-            account <- accountOf url token
-            handle <- either (failWith "login" . ("the registry refused the token: " <>)) pure account
-            saveCredential url (Credential handle token)
-            TextIO.putStrLn ("signed in as " <> handle <> " on " <> url)
+          (token, _) | not (Text.null token) -> TextIO.putStrLn "" >> store base api token
           (_, "authorization_pending") -> poll wait
           (_, "slow_down") -> poll (wait + 5)
           (_, reason) -> TextIO.putStrLn "" >> failWith "login" ("GitHub did not sign you in (" <> reason <> "); run pudu login again")
   poll interval
 
 logout :: Text -> IO ()
-logout url = do
-  removed <- removeCredential url
+logout base = do
+  removed <- removeCredential base
   TextIO.putStrLn $
     if removed
-      then "signed out of " <> url <> "; the token itself is revoked at https://github.com/settings/applications"
-      else "not signed in to " <> url
+      then "signed out; the token itself is revoked at https://github.com/settings/applications"
+      else "not signed in"
 
-whoami :: Text -> IO ()
-whoami url = do
-  token <- tokenFor "whoami" url
-  response <- call "whoami" (get (url <> "/api/v1/whoami") (authorised token))
-  unless (responseStatus response == 200) (failWith "whoami" (errorOf response))
-  TextIO.putStrLn (field "handle" response <> " on " <> url)
+whoami :: Text -> Text -> IO ()
+whoami base api = do
+  stored <- loadCredential base
+  credential <- maybe (failWith "whoami" "not signed in; run pudu login") pure stored
+  account <- accountOf api (credentialToken credential)
+  either (failWith "whoami") TextIO.putStrLn account
 
-tokenFor :: String -> Text -> IO Text
-tokenFor command url = do
-  stored <- loadCredential url
-  maybe (failWith command ("not signed in to " <> url <> "; run pudu login")) (pure . credentialToken) stored
+search :: Text -> Text -> IO ()
+search api words' = do
+  let query = Text.intercalate "+" (("topic:" <> packageTopic) : filter (not . Text.null) (Text.words words'))
+  response <- call "search" (apiRequest "GET" (api <> "/search/repositories?q=" <> query <> "&sort=stars&per_page=30") Nothing Nothing)
+  unless (responseStatus response == 200) (failWith "search" (messageOf response))
+  case jsonOf response >>= lookupField "items" of
+    Just (JsonArray []) -> TextIO.putStrLn "no package matches"
+    Just (JsonArray items) -> mapM_ (TextIO.putStrLn . describe) items
+    _ -> failWith "search" "GitHub answered a search that is not a list of repositories"
+ where
+  describe item =
+    let name = fromMaybe "" (lookupField "full_name" item >>= textOf)
+        description = fromMaybe "" (lookupField "description" item >>= textOf)
+        stars = maybe "0" (Text.pack . show) (lookupField "stargazers_count" item >>= Json.integerOf)
+     in "@" <> Text.toLower name <> "  ★ " <> stars <> (if Text.null description then "" else "  " <> description)
 
-packageOf :: String -> Manifest -> IO PackageId
-packageOf command manifest = case manifestName manifest >>= either (const Nothing) Just . parsePackageId of
+packageOf :: Manifest -> IO PackageId
+packageOf manifest = case manifestName manifest >>= either (const Nothing) Just . parsePackageId of
   Just package@(Registered _ _) -> pure package
-  _ -> failWith command "pudu.toml must name the package as @owner/repo, its GitHub repository, to publish it"
-
-push :: Text -> Manifest -> IO ()
-push url manifest = do
-  package <- packageOf "push" manifest
-  token <- tokenFor "push" url
-  response <- call "push" (Request "PUT" (url <> "/api/v1/packages/" <> renderPackageId package <> "/head") (("Accept", "application/json") : authorised token) ByteString.empty)
-  unless (responseStatus response == 200) (failWith "push" (errorOf response))
-  let repository = field "repository" response
-  TextIO.putStrLn ("registered " <> renderPackageId package <> " from " <> repository <> " — " <> url <> "/" <> renderPackageId package)
+  _ -> failWith "release" "pudu.toml must name the package @owner/repo, after its GitHub repository"
 
 git :: FilePath -> [String] -> IO (Either Text Text)
 git root arguments = do
   (code, out, err) <- readCreateProcessWithExitCode (proc "git" arguments){cwd = Just root} ""
   pure (if code == ExitSuccess then Right (Text.strip (Text.pack out)) else Left (Text.strip (Text.pack err)))
 
-release :: Text -> FilePath -> Manifest -> Text -> Maybe FilePath -> IO ()
-release url root manifest version notesFile = do
-  package <- packageOf "release" manifest
-  token <- tokenFor "release" url
+release :: Text -> Text -> FilePath -> Manifest -> Text -> Maybe FilePath -> IO ()
+release base api root manifest version notesFile = do
+  package <- packageOf manifest
   either (failWith "release" . (("\"" <> version <> "\" is not a release version: ") <>)) (const (pure ())) (parseVersion version)
   when (manifestVersion manifest /= Just version) $
     failWith "release" ("pudu.toml gives version " <> fromMaybe "none" (manifestVersion manifest) <> "; set it to " <> version <> " and commit it before releasing")
@@ -224,14 +237,35 @@ release url root manifest version notesFile = do
   pushed <- git root ["push", "origin", Text.unpack tag]
   either (failWith "release" . (("cannot push " <> tag <> " to origin: ") <>)) (const (pure ())) pushed
   TextIO.putStrLn ("tagged " <> tag <> " at " <> Text.take 7 commit <> " and pushed it to origin")
-  response <-
-    call "release" $
-      postJson
-        (url <> "/api/v1/packages/" <> renderPackageId package <> "/releases")
-        (Json.object [("version", JsonText version), ("tag", JsonText tag), ("notes", JsonText notes)])
-        (authorised token)
-  unless (responseStatus response == 201) (failWith "release" (errorOf response))
-  TextIO.putStrLn ("released " <> renderPackageId package <> " " <> version <> " (" <> field "checksum" response <> ") — install with: pudu install " <> renderPackageId package <> "@" <> version)
+  stored <- loadCredential base
+  case (stored, package) of
+    (Just credential, Registered owner name) -> announce api (credentialToken credential) owner name tag version notes
+    _ -> TextIO.putStrLn ("sign in with pudu login so releases also add the " <> packageTopic <> " topic that lists the package")
+  TextIO.putStrLn ("released " <> renderPackageId package <> " " <> version <> " — install with: pudu install " <> renderPackageId package <> "@" <> version)
+
+{-| Create the GitHub release for a tag and make sure the repository carries
+    the package topic. Either step failing is reported, not fatal: the tag is
+    already the release. -}
+announce :: Text -> Text -> Text -> Text -> Text -> Text -> Text -> IO ()
+announce api token owner name tag version notes = do
+  let repository = api <> "/repos/" <> owner <> "/" <> name
+  created <- send (apiRequest "POST" (repository <> "/releases") (Just token) (Just (Json.object [("tag_name", JsonText tag), ("name", JsonText version), ("body", JsonText notes)])))
+  case created of
+    Right response | responseStatus response `elem` [200, 201] -> TextIO.putStrLn ("created the GitHub release " <> tag)
+    Right response | responseStatus response == 422 -> pure ()
+    Right response -> hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack (messageOf response))
+    Left problem -> hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack problem)
+  current <- send (apiRequest "GET" (repository <> "/topics") (Just token) Nothing)
+  let topics = case current of
+        Right response | responseStatus response == 200 -> case jsonOf response >>= lookupField "names" of
+          Just (JsonArray names) -> [t | JsonText t <- names]
+          _ -> []
+        _ -> []
+  unless (packageTopic `elem` topics) $ do
+    replaced <- send (apiRequest "PUT" (repository <> "/topics") (Just token) (Just (Json.object [("names", JsonArray (map JsonText (topics <> [packageTopic])))])))
+    case replaced of
+      Right response | responseStatus response == 200 -> TextIO.putStrLn ("added the " <> packageTopic <> " topic, which lists the package")
+      _ -> hPutStrLn stderr ("pudu release: add the topic " <> Text.unpack packageTopic <> " to the repository on GitHub so the package is listed")
 
 {-| Run `pudu check` over the project's modules and `pudu test` over its test directory, stopping at a failure. -}
 verify :: FilePath -> Manifest -> IO ()

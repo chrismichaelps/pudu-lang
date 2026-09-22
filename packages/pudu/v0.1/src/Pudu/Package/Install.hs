@@ -42,6 +42,7 @@ import Pudu.Compiler.Manifest
 import Pudu.Package.Concurrent (concurrentLimit, forConcurrently)
 import Pudu.Package.Digest (cachedTreeDigest, copyTree, renderTreeProblem, treeDigest, treeFingerprint)
 import Pudu.Package.Git (GitCheckout (..), GitSession, checkoutGit, newGitSession)
+import Pudu.Package.GitHubIndex (repositoryUrl)
 import Pudu.Package.Identity
   ( PackageId (..)
   , defaultRoot
@@ -289,7 +290,9 @@ contentOf registry node = case nodeSource node of
 entryFor :: Registry -> (Node, FilePath) -> IO (Either Text LockEntry)
 entryFor _ (node, directory) = do
   (source, checksum) <- case nodeSource node of
-    FromRegistry url digest -> pure (Right ("registry+" <> url), Right digest)
+    FromRegistry base commit -> do
+      digest <- cachedTreeDigest directory
+      pure (Right ("github+" <> repositoryUrl base (nodeId node) <> "#" <> commit), either (Left . renderTreeProblem) Right digest)
     FromGit url commit _ -> do
       digest <- cachedTreeDigest directory
       pure (Right (url <> "#" <> commit), either (Left . renderTreeProblem) Right digest)
@@ -376,7 +379,7 @@ materialise progress root (Lock entries) contents commit = do
           case copied of
             Left problem -> pure (Left (renderTreeProblem problem))
             Right digest
-              | "git+" `Text.isPrefixOf` entrySource entry && digest /= entryChecksum entry ->
+              | any (`Text.isPrefixOf` entrySource entry) ["git+", "github+"] && digest /= entryChecksum entry ->
                   pure
                     ( Left
                         ( "the files of " <> renderPackageId (entryName entry) <> " have digest " <> digest

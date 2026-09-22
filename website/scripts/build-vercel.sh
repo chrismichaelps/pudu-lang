@@ -71,8 +71,8 @@ done
 
 rm -rf "$output"
 mkdir -p "$function_dir/website/data" "$examples_dir" "$output/static/assets" "$output/static/fonts"
-if [[ -n "${PUDU_PACKAGES_REGISTRY:-}" ]]; then
-  node "$root/website/scripts/generate-packages.mjs" --registry "$PUDU_PACKAGES_REGISTRY" --out "$packages_data" --pudu "$compiler"
+if [[ "${PUDU_PACKAGES_FROM_GITHUB:-1}" != "0" ]]; then
+  node "$root/website/scripts/generate-packages.mjs" --out "$packages_data" --pudu "$compiler"
   if [[ -f "$packages_data/packages.json" ]]; then
     packages_path="$packages_data"
     mkdir -p "$function_dir/website/data/packages"

@@ -62,18 +62,17 @@ library
     Pudu.Cli.Package
     Pudu.Cli.Progress
     Pudu.Cli.Publish
-    Pudu.Package.Archive
     Pudu.Package.Concurrent
     Pudu.Package.Credentials
     Pudu.Package.Digest
     Pudu.Package.Git
+    Pudu.Package.GitHubIndex
     Pudu.Package.Http
     Pudu.Package.Identity
     Pudu.Package.Install
     Pudu.Package.Lock
     Pudu.Package.ManifestEdit
     Pudu.Package.Progress
-    Pudu.Package.Remote
     Pudu.Package.Solve
     Pudu.Package.Version
     Pudu.Cli.Terminate

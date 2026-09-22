@@ -5,12 +5,19 @@ fidelity: Active
 tags: [website, packages, build]
 aliases: [Package snapshot generator]
 ---
-# Package Snapshot Generator
+# Website Package Snapshot Generator
 
-Pages through the public registry catalogue and copies project documents, handle profiles and avatars, latest-release files, and a normalized API catalogue into `website/data/packages/`. The generated snapshot is the only package input to the website build. Names and file paths are checked before use; file requests run with bounded concurrency and deadlines. An invalid package's API source omits only that package's reference, leaving its other pages available. An empty public catalog removes a prior snapshot.
+Builds the package pages' data from the GitHub API: repositories found by `topic:pudu-package`
+(public, not archived, with lowercase-safe names), their version tags whose `pudu.toml` names the
+package and the tag's version, each release's dependencies from that manifest, notes, author, and time
+from the tag's GitHub release (or the tagged commit's time), the latest release's files from its archive
+without dot paths or `deps/`, its API catalogue from `pudu doc --json` and `pudu api --json`, and each
+owner's profile and avatar. `GITHUB_TOKEN` raises the rate limit; `--api` points at a stand-in.
 
 See [[architecture/PACKAGES]] · [[website Service Packages]].
 
 ## Grill Log
 
-Resolved Grill Log: the public list selects projects, and a missing or invalid selected project fails the build; no private token is passed to the generator.
+- **Q:** Read a registry's documents? **A:** GitHub's API. _Rationale:_ GitHub is the index; there is no registry.
+
+Resolved Grill Log: covered by `test/package-registry.py`.

@@ -1,7 +1,7 @@
 ---
 type: architecture
 status: ACTIVE
-tags: [architecture, packages, tooling, registry, website]
+tags: [architecture, packages, tooling, github, website]
 aliases: [Package System]
 ---
 
@@ -12,7 +12,7 @@ aliases: [Package System]
 Let a Pudu program use another person's code with one command, reproducibly, without a second tool.
 A project names what it depends on in `pudu.toml`; `pudu.lock` records exactly what was chosen and
 the digest of its content; `deps/` holds the chosen code where the compiler, the language server, and
-a reader can all see it. A public registry hosts projects under `@handle/name`, and the website lets a
+a reader can all see it. GitHub hosts every package as the repository `@owner/repo` names, and the website lets a
 reader find one, read it, and copy the command that installs it.
 
 Everything is in the `pudu` executable. Nothing a dependency contains runs during installation, and
@@ -45,7 +45,7 @@ imports are absolute, and a public type is identified by the module that declare
 | `@alice/json-schema@^1.4` | the newest release compatible with 1.4 |
 
 A handle is a GitHub user or organization and a project is one of its repositories: packages live
-where their code already lives, and the registry keeps no accounts of its own. Handles and project
+where their code already lives, and Pudu runs no service and keeps no accounts of its own. Handles and project
 names are the GitHub names in lowercase, and must be lowercase ASCII letters, digits, and single
 hyphens, 1 to 39 characters, not starting or ending with a hyphen; a repository whose name does not
 fit cannot be published. `std`, `core`, `pudu`, and `admin` are reserved handles. A release version is Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`, optional pre-release).
@@ -94,7 +94,7 @@ source = "src"                   # where its modules are
 root = "Report"                  # the module root it owns; default from the name
 
 [dependencies]
-"@alice/json-schema" = "^1.4"                            # a registry release
+"@alice/json-schema" = "^1.4"                            # a package: github.com/alice/json-schema
 "@bob/decimal-format" = "=2.0.1"
 geometry = { path = "../geometry" }                       # a directory on this machine
 parser = { git = "https://github.com/carol/parser", rev = "v0.4.0" }
@@ -128,7 +128,7 @@ version = 1
 [[package]]
 name = "@alice/json-schema"
 version = "1.4.2"
-source = "registry+https://packages.pudu-lang.org"
+source = "github+https://github.com/alice/json-schema#9d0e4b1…"
 checksum = "sha256:9f2c…"
 root = "JsonSchema"
 dependencies = ["@bob/text"]
@@ -146,8 +146,9 @@ A package's dependencies are listed by name; the version of each is in its own e
 program holds one version of each package. Entries are sorted by name, fields are in a fixed order, and nothing in it depends on time or on the
 machine, so the same graph writes the same bytes and a change to it reads as a change in review.
 
-- A registry release's checksum is the SHA-256 of its archive, as published. A downloaded archive
-  whose digest differs is refused before it is unpacked.
+- A package release is locked to the commit its tag named when it was chosen, from the repository the
+  name denotes; its checksum is the tree digest of the files it contributes. A tag moved later changes
+  nothing that is locked, and copied files whose digest differs from the lock are refused.
 - A git dependency is locked to a commit, never a branch or tag; its checksum is the tree digest of
   the files it contributes.
 - A path dependency is not locked: it is the code on this machine, used as it is.
@@ -193,11 +194,11 @@ All in `pudu`:
 | `pudu upgrade [name…]` | raise requirements to the latest releases, naming every major version crossed |
 | `pudu deps` | the direct dependencies, their requirements, and what is locked |
 | `pudu tree` | the whole resolved graph |
-| `pudu login [--token T] [--registry URL]` | sign this machine in with GitHub |
+| `pudu login [--token T] [--private]` | store a GitHub token on this machine |
 | `pudu logout` | forget the stored token |
 | `pudu whoami` | the GitHub account the stored token belongs to |
-| `pudu push` | register the project, or refresh it from its repository's default branch |
-| `pudu release <version> [--notes FILE]` | tag the commit on GitHub and publish it as an immutable release |
+| `pudu search [words…]` | packages on GitHub: repositories with the `pudu-package` topic |
+| `pudu release <version> [--notes FILE]` | check, test, tag `v<version>`, push it, and publish the GitHub release |
 
 A `<spec>` is `@h/n`, `@h/n@<version or requirement>`, a path (`./x`, `../x`, `/x`), or a git URL
 with an optional `#rev`. `--locked` refuses any change to `pudu.lock` (for CI); `--offline` refuses
@@ -236,23 +237,21 @@ copied side by side, up to eight at a time.
 
 ```text
 $ pudu login
-open https://github.com/login/device and enter the code WXYZ-2345
-signed in as @alice
-
-$ pudu push
-registered @alice/json-schema from github.com/alice/json-schema — https://pudu-lang.org/@alice/json-schema
+signed in to GitHub as @alice
 
 $ pudu release 1.4.3 --notes CHANGES.md
-checked 12 modules, 40 tests passed
+checked 12 modules
 tagged v1.4.3 at 3b1e07c and pushed it to origin
+created the GitHub release v1.4.3
+added the pudu-package topic, which lists the package
 released @alice/json-schema 1.4.3 — install with: pudu install @alice/json-schema@1.4.3
 ```
 
-`pudu release` refuses if the manifest's `version` is not the version given, if the working tree has
-changes not committed, or if the commit is not on the repository's remote. It checks the project,
-runs its tests, creates the annotated tag `v<version>` with the notes, pushes it, and asks the
-registry to publish it. The registry refuses if the token cannot push to the repository, if that
-version exists, or if it is not greater than the latest release on the same major line.
+`pudu release` refuses if the manifest's `version` is not the version given or the working tree has
+changes not committed. It checks the project, runs its tests, creates the annotated tag `v<version>`
+(reusing one already on this commit, refusing one on another), and pushes it: from that moment the
+release exists, because a release is a tag. With a token it also creates the GitHub release with the
+notes and adds the `pudu-package` topic; either failing is reported and leaves the release standing.
 
 ### Errors worth their own words
 
@@ -273,95 +272,49 @@ Every failure names the manifest line or the requirement chain that caused it:
 
 Diagnostics use the `E7xxx` range with the manifest or lock line as their span when there is one.
 
-## Registry
+## GitHub is the index
 
-The registry is a Pudu program (`registry/`) that keeps its data in a directory, answers the API
-below, and stores each release's archive once, by digest. Its read side is plain files by design: a
-project document and the archives are immutable per release, so any static host or CDN can serve
-them.
+Pudu runs no package service and keeps no database. Every question a package manager asks is
+answered by git or by GitHub:
 
-GitHub is where a package's code and its owner live; the registry is where a release is kept once it
-is published. To publish, the registry resolves the tag to its commit, downloads that commit's archive
-from GitHub, applies the same refusals as for any archive, reads the `pudu.toml` inside it, and repacks
-the package's files into its own canonical `.tar.gz` (sorted, time 0, mode 0644). The digest of that
-archive is the release's checksum. Installs download the registry's copy, so a tag that is moved, or a
-repository that is deleted or made private, changes no existing build.
-
-### API
-
-| Method and path | Answers |
+| Question | Answered by |
 | --- | --- |
-| `GET /api/v1/packages?q=&page=` | projects matching a query, by name, handle, description, keywords |
-| `GET /api/v1/packages/@h/n` | the project document: metadata, README, visibility, releases |
-| `GET /api/v1/packages/@h/n/releases/<v>/archive` | the release archive, `application/gzip` |
-| `GET /api/v1/packages/@h/n/releases/<v>/files/<path>` | one file of a release, for the source view |
-| `GET /api/v1/handles/@h` | a handle's profile and public projects |
-| `PUT /api/v1/packages/@h/n/head` | push: register the project and refresh it from the default branch (authenticated) |
-| `POST /api/v1/packages/@h/n/releases` | release a tag as an immutable version: `{version, tag, notes}` (authenticated) |
-| `PATCH /api/v1/packages/@h/n` | owner settings: description, visibility (authenticated) |
-| `DELETE /api/v1/packages/@h/n` | delete a project with no releases, or unlist one that has them |
-| `GET /api/v1/config` | what `pudu login` needs: the GitHub OAuth client id and GitHub's addresses |
-| `GET /api/v1/whoami` | the GitHub account a token belongs to |
+| Which packages exist? | GitHub search: repositories with the topic `pudu-package` |
+| Where is `@owner/repo`? | `https://github.com/owner/repo` (`PUDU_GITHUB_URL` for another host) |
+| Which releases does it have? | its tags that read as versions, `v1.4.2` or `1.4.2`, as `git ls-remote` lists them |
+| What does a release need? | the `pudu.toml` at the tag, read from the machine's bare clone |
+| When was it released? | the tag's time, for the minimum release age |
+| What are its notes? | the GitHub release of the tag, when there is one |
+| Who may publish? | whoever can push a tag to the repository |
+| Who can install a private package? | whoever git can authenticate to the repository |
 
-A project document:
+A tag is a release of `@owner/repo` only when the `pudu.toml` at it names `@owner/repo` and gives the
+tag's version, so a stray tag or a fork's manifest is never chosen. The solver asks for releases once
+per package per run; the tag list, peeled commits, and times come from one `git for-each-ref`, and the
+manifests at every tag from one `git cat-file --batch`. `git ls-remote` bounds the list to tags that
+still exist, so a deleted tag stops being chosen; its commit stays in the bare clone, where a lock that
+names it still installs. A locked version keeps its locked commit even when its tag has moved.
 
-```json
-{
-  "name": "@alice/json-schema",
-  "description": "Validate JSON against a schema",
-  "keywords": ["json", "schema"],
-  "license": "MIT",
-  "visibility": "public",
-  "root": "JsonSchema",
-  "readme": "# JSON Schema\n…",
-  "latest": "1.4.2",
-  "releases": [
-    {
-      "version": "1.4.2",
-      "publishedAt": "2026-09-22T14:03:11Z",
-      "checksum": "sha256:9f2c…",
-      "size": 38112,
-      "language": ">=0.1.0 <0.2.0",
-      "dependencies": { "@bob/text": "^0.6" },
-      "modules": ["JsonSchema", "JsonSchema.Validate"],
-      "notes": "Faster validation of large arrays."
-    }
-  ]
-}
-```
+Without the network (`--offline`) or when a package's locked version is already in the bare clone,
+nothing is fetched. `git` runs with prompts disabled, so a repository needing credentials fails with
+git's reason rather than waiting on a terminal; private repositories use the machine's git
+credentials, as `git clone` would.
 
-A release is immutable: its archive, digest, dependencies, and notes never change. A release can be
-yanked, which keeps it installable from an existing lock and stops new resolutions choosing it.
+### Tokens
 
-### Accounts and tokens
-
-The registry has no accounts, passwords, or token secrets. A request is authenticated by a GitHub
-token in `Authorization: Bearer`; the registry asks GitHub whose it is (`GET /user`) and caches the
-answer by the token's digest for five minutes. Publishing `@owner/repo`, or changing its settings,
-requires that the token can push to `github.com/owner/repo`, which covers users and organizations
-alike. A handle's profile — display name, avatar, and GitHub address — is copied from GitHub when one
-of its projects is registered or released.
-
-`pudu login` runs GitHub's OAuth device flow with the client id the registry names at
-`/api/v1/config`: it prints `https://github.com/login/device` and a code, polls GitHub until the person
-approves, and stores the token in `$PUDU_HOME/credentials.toml` with owner-only permissions, per
-registry, and never in a manifest or lock. The flow needs no client secret. `pudu login --token`
-stores a token made elsewhere, and `PUDU_TOKEN` overrides the file, so CI can use the token its
-workflow already has.
-
-### Private projects
-
-A project from a private repository is private. Its document, files, and archives are answered only
-to a token that can read the repository; to anyone else it does not exist (404). Installing one
-requires `pudu login` on that machine. The lock records the same checksum as for a public release, so
-a private package is exactly as reproducible.
+A GitHub token is only needed to publish the GitHub release and add the topic, and to raise the API's
+rate limit for `pudu search`. `pudu login` stores one in `$PUDU_HOME/credentials.toml` with owner-only
+permissions: from `--token`; from GitHub's OAuth device flow when `PUDU_GITHUB_CLIENT_ID` names an
+OAuth application; otherwise from the GitHub CLI (`gh auth token`). `PUDU_TOKEN` overrides the file,
+so CI can use its own. The API is `PUDU_GITHUB_API`, or `https://api.github.com`.
 
 ## Website
 
 The package pages are part of the existing site: same masthead, typography, and code surfaces, with
-an original Pudu banner and compact package list. They read the registry's documents at build time, the way `/download` reads the release
-list, so a page answers from the CDN and never waits on the registry; a new release appears on the
-next deployment, and the install command a page shows is always one the registry answers.
+an original Pudu banner and compact package list. They are built from the GitHub API at deploy time
+(`website/scripts/generate-packages.mjs`: search by topic, tags, releases, `pudu.toml` at each tag, the
+latest release's archive), the way `/download` reads the release list, so a page answers from the CDN
+and never waits on GitHub; a new release appears on the next deployment.
 
 | Address | Shows |
 | --- | --- |
@@ -375,8 +328,8 @@ next deployment, and the install command a page shows is always one the registry
 The install disclosure starts with `pudu install @h/n@<latest>` so the selected release is available
 even during the 72-hour minimum release age. The version picker rewrites that command; a separate
 unversioned command follows the configured release-age policy. Copy buttons and a root-module import
-line are provided. Projects with no non-yanked release have no install control. Owner settings remain
-registry API operations paired with `pudu login`.
+line are provided. Projects with no release have no install control. A project's issues, pull
+requests, and stars are its repository's on GitHub.
 
 Project search on `/packages/search?q=` ranks exact names, then handles, then words in descriptions and
 keywords. Declarations across public packages join the site's existing API search once packages
@@ -398,7 +351,7 @@ chains disagree.
 
 ## Security
 
-Package ecosystems are attacked through the tool, the registry, the lock, and the people who
+Package ecosystems are attacked through the tool, the index, the lock, and the people who
 publish. Each attack below has happened to a large ecosystem; each has a defense here that does not
 depend on a reader noticing in time.
 
@@ -406,16 +359,16 @@ depend on a reader noticing in time.
 | --- | --- | --- |
 | Code run at install | Worms spread through install hooks that read tokens from the machine and republished every package the victim owned | `pudu install` never executes anything a package contains: no hooks, no build scripts, no compile. Installing is copying verified files. |
 | A malicious release installed within hours | A phished maintainer's account published poisoned versions of widely used packages; most were pulled within hours, after thousands of installs | A new resolution skips releases younger than the minimum release age (72 hours by default, `min-release-age` in `[install]`); a locked version is unaffected. `pudu install @h/n@1.2.3` names a fresh release deliberately and says how old it is. |
-| Account takeover and stolen tokens | Phishing for second-factor resets; tokens harvested from CI | Accounts are GitHub accounts, so their second factor and token scopes are GitHub's; the registry stores no secret at all; tokens are kept with owner-only permissions on disk; a release records the account that published it and the commit it came from. |
-| Dependency confusion | A public package with a private package's name and a higher version was chosen | A package is `@handle/name` on one registry; the lock records the registry each release came from, and a registry package is never looked for anywhere else. |
-| Manifest confusion | The metadata a registry showed differed from the manifest inside the archive | The registry derives a release's version, dependencies, and root from the `pudu.toml` inside the archive; the client compares the unpacked manifest with the release document and refuses a difference. |
-| Lock injection | A lock edited in a change pointed a dependency at another URL, unreviewed | The manifest says where each package comes from; the lock only records what was chosen there. A lock entry whose source does not match the manifest's is not used, and a registry release whose digest differs from the lock's is refused. |
-| Typosquatting and invented names | Look-alike names, and names an assistant made up and someone then registered | Names are scoped by handle; installing a name that does not exist fails with the closest real names; the install report shows the publisher, the release's age, and whether the project is new; the registry refuses a new project whose name is one edit from an established one owned by another handle. |
+| Account takeover and stolen tokens | Phishing for second-factor resets; tokens harvested from CI | Accounts are GitHub accounts, so their second factor and token scopes are GitHub's; Pudu stores no secret anywhere but the owner-only credentials file; a lock records the commit each package came from. |
+| Dependency confusion | A public package with a private package's name and a higher version was chosen | `@owner/repo` names exactly one repository; there is no second place to look it up. |
+| Manifest confusion | The metadata shown differed from the manifest inside the archive | A release's version, dependencies, and root are read from the `pudu.toml` at its tag, which must name the package and the tag's version. |
+| Lock injection | A lock edited in a change pointed a dependency at another URL, unreviewed | The manifest says where each package comes from; the lock only records what was chosen there. A lock entry whose source does not match the manifest's is not used, and files whose digest differs from the lock's are refused. |
+| Typosquatting and invented names | Look-alike names, and names an assistant made up and someone then registered | Names are GitHub's `owner/repo`; installing one that does not exist fails naming the repository it looked for; the install report shows the release's age, and new releases wait out the minimum release age. |
 | Maintainer handoff | A tired maintainer gave a package to a stranger, who added a malicious dependency | Every release records its publisher; `pudu update` and `pudu upgrade` say when a package's publisher changed and when a release adds a dependency. |
 | Unpublishing | A deleted package broke every build that used it | Releases are immutable and cannot be deleted, only yanked; a yanked release still installs from an existing lock. |
 | Moved tags and branches | A tag was moved to different code | A git dependency is locked to a commit and checked by tree digest. |
 | Malicious archives | Path traversal and decompression bombs | Unpacking refuses absolute paths, `..`, links, device files, duplicate paths, and archives over size and file-count limits, and the digest is checked before unpacking. |
-| Interception | A download replaced in transit | Registry traffic is HTTPS only (plain HTTP only for `localhost`); the lock's digest, not the connection, is what proves the content. |
+| Interception | A download replaced in transit | git and the API speak HTTPS; the lock's commit and tree digest, not the connection, prove the content. |
 
 Beyond these: with a lock present, builds make no network request, and `--offline` guarantees it; a
 package may not own `Std` or `Core`; and a program can be run with `pudu run --confined`, which
@@ -425,40 +378,43 @@ refuses files, network, and foreign calls to code that should not need them.
 
 A project with no manifest keeps compiling as a single file or a directory of modules. A manifest
 with path dependencies keeps its meaning. `pudu install` on such a project writes a lock with no
-entries and changes nothing else. Moving a local directory to the registry is `pudu push` and
-`pudu release` in the dependency, then `pudu install @h/n` in the dependent, which replaces the path
-entry.
+entries and changes nothing else. Moving a local directory to a package is pushing it to GitHub and running `pudu release` in it, then
+`pudu install @owner/repo` in the dependent, which replaces the path entry.
 
 ## Phases
 
-1. **Local:** manifest with registry, path, and git dependencies; `pudu.lock`; `deps/`; tree digests;
+1. **Local:** manifest with package, path, and git dependencies; `pudu.lock`; `deps/`; tree digests;
    resolution into the program graph; `init`, `install`, `uninstall`, `update`, `deps`, `tree` over
    path and git sources; root and `Std` protection; `--locked` and `--offline`.
-2. **Registry:** the registry program and its API; `install @h/n` with the requirement solver and the
+2. **GitHub index:** releases as tags, `install @owner/repo` with the requirement solver and the
    cache; `login`, `push`, `release`, `upgrade`; private projects.
 3. **Hardening:** archive limits and traversal tests, integrity failures, atomic lock and `deps/`
-   updates, deterministic lock snapshots, a local registry conformance suite, repeated
+   updates, deterministic lock snapshots, an end-to-end suite against git and a stand-in GitHub, repeated
    clean/locked/offline builds producing the same program.
 4. **Website:** catalog, handle, project, source, docs, releases, the install dialog, and project
-   search, built from registry documents — shipped when 1–3 hold against a hosted registry.
+   search, built from the GitHub API at deploy time.
 
 ## Open decisions
 
-- **Hosting the registry.** The website runs on a platform with no disk. The registry needs one
-  persistent volume (or an object store and a small database). Where it runs, and its domain, is an
-  operator's decision; nothing in the design depends on the choice.
-- **Root ownership across the registry.** Roots are unique per program, not per registry. Reserving a
-  root registry-wide on first release would prevent most conflicts before they reach a program, at
+- **Root ownership across packages.** Roots are unique per program, not across GitHub. Reserving a
+  root on first release would prevent most conflicts before they reach a program, at
   the cost of first-come names.
 - **Favourites, tickets, contributions.** Resolved: a project links its repository's GitHub Issues,
   Pull requests, and Stars, with open-issue and star counts copied at publish time.
 
 ## Grill Log
 
-- **Q:** Registry accounts, or GitHub's? **A:** GitHub's, for identity and for source. _Rationale:_ the
-  code already lives there, a handle means the same owner in both places, and the registry then holds
-  no passwords or token secrets. _Rejected:_ registry passwords and its own device pairing.
-- **Q:** Install straight from GitHub tags? **A:** No; from the registry's copy of the tagged commit.
+- **Q:** Pudu accounts, or GitHub's? **A:** GitHub's, for identity and for source. _Rationale:_ the
+  code already lives there and a handle means the same owner in both places. _Rejected:_ Pudu
+  passwords and its own device pairing.
+- **Q:** Run a registry service beside GitHub? **A:** No; GitHub is the index. _Rationale:_ search by
+  topic lists packages, tags are releases, and git reads manifests and files, so there is no service to
+  host, secure, or keep alive and no database to lose. A lock pinning commit and tree digest gives the
+  reproducibility a stored copy gave. _Rejected:_ a Pudu-hosted API and store; an index repository
+  of hand-merged entries.
+- **Q:** Keep a copy of each release off GitHub? **A:** No. _Rationale:_ locks pin commits, the machine
+  cache keeps what was installed, and a deleted repository is its owner's decision. _Rejected:_ the
+  earlier design, which kept a service's copy of every tagged commit.
   _Rationale:_ a tag can be moved and a repository deleted, and neither may change or break a locked
   build. _Rejected:_ an index that only records checksums.
 
@@ -481,8 +437,9 @@ entry.
   the compiler. _Rejected:_ dependency precedence over distribution modules.
 - **Q:** Lock a git dependency to a tag? **A:** No, to a commit. _Rationale:_ a tag can be moved.
   _Rejected:_ branch and tag pins.
-- **Q:** Render package pages per request from the registry? **A:** No, at build time. _Rationale:_ the
-  site is static and answers from a CDN; a registry outage must not take package pages down.
+- **Q:** Render package pages per request from GitHub? **A:** No, at build time. _Rationale:_ the
+  site is static and answers from a CDN; GitHub's rate limits and outages must not take package pages
+  down.
   _Rejected:_ a live proxy in the site's function.
 
 ## Referenced by

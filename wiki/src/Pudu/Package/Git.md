@@ -17,6 +17,8 @@ aliases: [Package Git]
 
 See [[architecture/PACKAGES]].
 
+`bareRepository session url reuse` answers the cached bare clone, fetching once per session unless `reuse` (a locked version is known) or offline; `gitIn` runs git against a bare clone and `gitWith` runs git with prompts disabled and standard input.
+
 ## Grill Log
 
 - **Q:** Lock a tag? **A:** No, the commit it named. _Rationale:_ tags move. _Rejected:_ tag pins.

@@ -4,7 +4,7 @@ A project uses code other people wrote by naming it in `pudu.toml` and running `
 
 ## Installing a dependency
 
-Name what you want to install: a package from the registry, a directory on your machine, or a git repository at a tag, branch, or commit:
+Name what you want to install: a package from GitHub, a directory on your machine, or a git repository at a tag, branch, or commit:
 
 ```sh
 pudu install @alice/json-schema
@@ -13,7 +13,7 @@ pudu install ../geometry
 pudu install https://github.com/carol/parser.git#v0.4.0
 ```
 
-A registry package is `@handle/name`. Without a version, `pudu install` takes the newest release and writes a requirement compatible with it (`^1.4.2`); with `@1.4.2` it takes exactly that release.
+A package is `@owner/repo`, the GitHub repository `github.com/owner/repo`, and its releases are its version tags (`v1.4.2`). Without a version, `pudu install` takes the newest release and writes a requirement compatible with it (`^1.4.2`); with `@1.4.2` it takes exactly that release.
 
 While it works, one line at the bottom of the terminal shows what it is doing — fetching a repository, copying a package — and how long it has taken. When it is done, `pudu install` says where each package came from, what changed, and what to import:
 
@@ -79,23 +79,24 @@ Downloads are kept in `~/.pudu/cache` (or `$PUDU_HOME/cache`) and shared by ever
 
 ## Publishing a package
 
-A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and you publish it with the GitHub account that can push to it. Sign in once on each machine:
+A package is a GitHub repository with a `pudu.toml` naming it `@owner/repo`. There is no separate registry to sign up for: a release is a version tag, and the package is listed once the repository carries the topic `pudu-package`.
+
+Commit and push the project to GitHub, then:
 
 ```sh
 pudu login
+pudu release 1.2.0 --notes CHANGES.md
 ```
 
-`pudu login` prints `https://github.com/login/device` and a code; open the page, enter the code, and approve. Add `--private` to publish from private repositories. On a machine without a browser, such as CI, run `pudu login --token <GitHub token>` or set `PUDU_TOKEN`.
-
-Name the package `@owner/repo` in `pudu.toml`, commit, and push to GitHub, then:
+`pudu login` stores a GitHub token. It takes the one the GitHub CLI already has (`gh auth login`), or one given with `pudu login --token <token>`; CI can set `PUDU_TOKEN` instead. `pudu release` checks the project, runs its tests, tags the commit `v1.2.0`, and pushes the tag — the release exists from that moment. With a token it also creates the GitHub release with your notes and adds the `pudu-package` topic, which is what lists the package in `pudu search` and on the website.
 
 | Command | Does |
 | --- | --- |
-| `pudu push` | registers the project on the registry, or refreshes it, from the repository's default branch |
-| `pudu release 1.2.0 --notes CHANGES.md` | checks the project, runs its tests, tags the commit `v1.2.0`, pushes the tag, and publishes it |
+| `pudu release 1.2.0 --notes CHANGES.md` | checks, tests, tags `v1.2.0`, pushes it, and publishes the GitHub release |
+| `pudu search json` | lists packages on GitHub |
 | `pudu logout` | forgets the token on this machine |
 
-`pudu release` refuses a version that is not the one in `pudu.toml`, a working tree with changes not committed, a version already released, and one lower than a release on the same major line. The registry downloads the tagged commit from GitHub and keeps its own copy, so moving or deleting the tag later changes no one's build. A project from a private repository is private: only accounts that can read the repository see or install it.
+`pudu release` refuses a version that is not the one in `pudu.toml` and a working tree with changes not committed. Installing locks the commit the tag named and a digest of its files, so moving or deleting the tag later changes no locked build. A private repository's packages install for anyone git can authenticate to it.
 
 ## Choosing new versions
 
@@ -106,7 +107,6 @@ A new resolution does not choose a release published in the last 72 hours: most 
 ```toml
 [install]
 min-release-age = 24
-registry = "https://packages.pudu-lang.org"
 ```
 
 ## Module roots

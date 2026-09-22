@@ -5,7 +5,7 @@ fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
 grammar: "[[grammar/haskell]]"
-tags: [module, cli, packages, registry, github]
+tags: [module, cli, packages, github]
 aliases: [Pudu CLI Publish]
 ---
 
@@ -13,13 +13,14 @@ aliases: [Pudu CLI Publish]
 
 ## Purpose and interface
 
-`pudu login [--private] [--token T] [--registry URL]` runs GitHub's OAuth device flow with the client id from the registry's `/api/v1/config` (scope `repo` with `--private`, none otherwise), prints GitHub's page and code, polls GitHub (slowing down when asked), confirms the token with the registry's `whoami`, and stores it; `--token` stores a GitHub token directly. `logout` forgets it, `whoami` names the account, `push` registers or refreshes the project from its repository, and `release <version> [--notes FILE]` requires the manifest version to match and a clean working tree, runs `pudu check` and `pudu test`, creates the annotated tag `v<version>` (reusing one already on this commit, refusing one on another), pushes it to `origin`, and asks the registry to publish it. `formBody` encodes form fields.
+`pudu login [--token T] [--private]` stores a GitHub token, verified with `GET /user`: from `--token`, from GitHub's OAuth device flow when `PUDU_GITHUB_CLIENT_ID` names an application (`public_repo`, or `repo` with `--private`), or from `gh auth token`. `logout` forgets it; `whoami` names the account. `release <version> [--notes FILE]` requires the manifest version and a clean working tree, runs `pudu check` and `pudu test`, creates the annotated tag `v<version>` (reusing one on this commit, refusing one on another), and pushes it to `origin`; with a token it then creates the GitHub release (an existing one is left alone) and adds the `pudu-package` topic (`packageTopic`), reporting either failure without undoing the tag. `search [words]` lists repositories from GitHub search with the topic. `githubApi` is `PUDU_GITHUB_API` or `https://api.github.com`; `formBody` encodes form fields.
 
-See [[architecture/PACKAGES]].
+See [[architecture/PACKAGES]] · [[Package GitHubIndex]].
 
 ## Grill Log
 
-- **Q:** Release a working tree with changes? **A:** No. _Rationale:_ the release must be exactly the tagged commit on GitHub. _Rejected:_ packing the working tree.
-- **Q:** Ask for the `repo` scope by default? **A:** Only with `--private`. _Rationale:_ it grants write access to every repository; public packages need none.
+- **Q:** Publish to a registry? **A:** No; the tag is the release and the topic lists it. _Rationale:_ GitHub is the index.
+- **Q:** Require a login to release? **A:** No; only to announce. _Rationale:_ pushing a tag needs git credentials alone; the release and topic are conveniences for readers.
+- **Q:** Where does a token come from without an OAuth application? **A:** The GitHub CLI's, when it is signed in. _Rationale:_ one sign-in for both tools. _Rejected:_ asking for a password.
 
-Resolved Grill Log: behaviour covered by `test/Pudu/PackageSpec.hs` and `test/package-registry.py`.
+Resolved Grill Log: behaviour covered by `test/package-registry.py`.

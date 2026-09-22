@@ -23,11 +23,7 @@ import Pudu.Package.Identity
   , validRoot
   )
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
 import Pudu.Cli.Publish (formBody)
-import Pudu.Eval.Compress (compressGzip)
-import Pudu.Eval.Io (IoOutcome (..))
-import Pudu.Package.Archive (archiveEntries, packDirectory, unpackArchive)
 import Pudu.Package.Concurrent (forConcurrently)
 import Pudu.Package.Credentials (Credential (..), credentialsPath, loadCredential, removeCredential, saveCredential)
 import Pudu.Package.Http (Request (..), Url (..), parseUrl, send)
@@ -90,8 +86,6 @@ packageProperties =
   , ("a touched but unchanged package is not copied again", testTouchedStaysInstalled)
   , ("a damaged cached checkout is refused", testDamagedCacheRefused)
   , ("concurrent package work keeps order and raises failures", testConcurrent)
-  , ("a package archive is reproducible and reads back its files", testArchiveRoundTrip)
-  , ("an archive with a link, a parent path, or a duplicate is refused", testArchiveRefusals)
   , ("registry addresses are read, and plain HTTP only reaches this machine", testRegistryUrls)
   , ("a stored token reads back and is private to its owner", testCredentials)
   , ("a recent release is chosen only when locked or named exactly", testRecentReleases)
@@ -478,63 +472,6 @@ testConcurrent = do
     , counterexample "an item's exception reaches the caller" (either (\(ErrorCall m) -> m == "seven") (const False) failed)
     ]
 
-testArchiveRoundTrip :: IO Property
-testArchiveRoundTrip = withSystemTempDirectory "pudu-archive" $ \root -> do
-  let package = root </> "kit"
-      deep = "src" </> replicate 70 'a' </> replicate 60 'b' </> "Module.pudu"
-  createDirectoryIfMissing True (package </> "src" </> replicate 70 'a' </> replicate 60 'b')
-  TextIO.writeFile (package </> "pudu.toml") "[package]\nname = \"@a/kit\"\n"
-  TextIO.writeFile (package </> deep) "module X\n"
-  TextIO.writeFile (package </> ".hidden") "not packaged"
-  first <- packDirectory package
-  second <- packDirectory package
-  case first of
-    Left problem -> pure (counterexample (Text.unpack problem) False)
-    Right archive -> do
-      entries <- archiveEntries archive
-      unpacked <- unpackArchive archive (root </> "out")
-      back <- TextIO.readFile (root </> "out" </> deep)
-      pure $ conjoin
-        [ counterexample "the same files give the same bytes" (first == second)
-        , fmap (map fst) entries === Right ["pudu.toml", Text.pack (replace deep)]
-        , unpacked === Right ()
-        , back === "module X\n"
-        ]
- where
-  replace = map (\c -> if c == '\\' then '/' else c)
-
-tarWith :: Char -> String -> ByteString.ByteString
-tarWith kind name =
-  let field width value = ByteString.take width (value <> ByteString.replicate width 0)
-      unsummed = ByteString.concat [field 100 (Char8.pack name), "0000644\0", "0000000\0", "0000000\0", "00000000000\0", "00000000000\0", "        ", Char8.singleton kind, field 100 "target", "ustar\0", "00", ByteString.replicate 247 0]
-      checksum = sum (map fromIntegral (ByteString.unpack unsummed)) :: Int
-      octal = let digits = showOctalDigits checksum in Char8.pack (replicate (6 - length digits) '0' <> digits) <> "\0 "
-   in ByteString.take 148 unsummed <> octal <> ByteString.drop 156 unsummed <> ByteString.replicate 1024 0
- where
-  showOctalDigits 0 = "0"
-  showOctalDigits n = reverse (go n)
-  go 0 = ""
-  go n = toEnum (fromEnum '0' + n `mod` 8) : go (n `div` 8)
-
-gzipped :: ByteString.ByteString -> IO ByteString.ByteString
-gzipped bytes = do
-  compressed <- compressGzip bytes 6 65535
-  pure $ case compressed of
-    IoDone out -> out
-    IoFailed _ -> ByteString.empty
-
-testArchiveRefusals :: IO Property
-testArchiveRefusals = do
-  hard <- gzipped (tarWith '1' "copy")
-  symbolic <- gzipped (tarWith '2' "link")
-  parent <- gzipped (tarWith '0' "src/../../escape")
-  absolute <- gzipped (tarWith '0' "/etc/cron.d/x")
-  twice <- gzipped (ByteString.take 512 (tarWith '0' "a") <> tarWith '0' "a")
-  refusals <- traverse archiveEntries [hard, symbolic, parent, absolute, twice]
-  let said = [either id (const "accepted") r | r <- refusals]
-  pure $ conjoin
-    [ counterexample (show said) (and (zipWith Text.isInfixOf ["hard link", "symbolic link", "plain relative", "absolute", "twice"] said))
-    ]
 
 testRegistryUrls :: IO Property
 testRegistryUrls = do

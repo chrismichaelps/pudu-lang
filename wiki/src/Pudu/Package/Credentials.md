@@ -13,7 +13,7 @@ aliases: [Package Credentials]
 
 ## Purpose and interface
 
-Tokens per registry URL in `$PUDU_HOME/credentials.toml` (`puduHome` defaults to `~/.pudu`), written through a staging file set to mode 0600 before the token is written. `PUDU_TOKEN` takes precedence for every registry. `loadCredential`, `saveCredential`, `removeCredential`.
+GitHub tokens per host in `$PUDU_HOME/credentials.toml` (`puduHome` defaults to `~/.pudu`), written through a staging file set to mode 0600 before the token is written. `PUDU_TOKEN` takes precedence for every registry. `loadCredential`, `saveCredential`, `removeCredential`.
 
 See [[architecture/PACKAGES]].
 
