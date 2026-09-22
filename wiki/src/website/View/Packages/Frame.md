@@ -8,7 +8,8 @@ aliases: [website View Packages Frame]
 # Website Package Frame
 
 Shared project banner, avatar, navigation tabs, and install disclosure. The banner identifies the package, includes its description and release, and places the install control near the title. The install panel shows an exact command for the newest available release, version choices, the unversioned command and its 72-hour minimum-age behavior, an import line, and copy controls. It is absent when no installable release exists. Its script enhances native HTML controls. Child source pages may supply their own canonical address.
-On a short viewport, the disclosure summary moves above the scrollable panel and names its closing action.
+On a short viewport, the disclosure summary moves above the scrollable panel and shows Close; its
+accessible name describes the toggle in either state.
 
 See [[architecture/PACKAGES]] · [[website Service Packages]].
 

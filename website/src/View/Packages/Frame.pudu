@@ -81,7 +81,7 @@ fn installPanel(project: &Packages.Project) -> H.Node {
   let last = moduleName.split(".")
   let alias = last[last.length() - 1]
   H.details().class("install").id("install").holding([
-      H.summary().class("install-open").holding([H.span().class("install-open-label").says("Install"), H.span().class("install-close-label").says("Close")]),
+      H.summary().class("install-open").at("aria-label", "Toggle install instructions").holding([H.span().class("install-open-label").says("Install"), H.span().class("install-close-label").says("Close")]),
       H.div().class("install-panel").at("role", "dialog").at("aria-label", "Use " + project.name).holding([
           H.h2().says("Use " + project.name),
           H.h3().says("Install this release"),
