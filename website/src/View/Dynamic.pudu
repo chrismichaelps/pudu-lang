@@ -6,6 +6,7 @@ import Domain.Entry as Domain
 import Seo as Seo
 import Service.Search as Search
 import View.Layout as Layout
+import View.MarkdownInline as Inline
 
 /// Ranked search results shared by local and serverless routes.
 export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html {
@@ -40,7 +41,7 @@ fn resultRow(hit: &Domain.Hit) -> H.Node {
   H.li().class("result").holding([
       H.a().class("result-name").href(symbolPath(&entry)).says(Domain.qualifiedName(&entry)),
       H.code().class("signature").says(entry.signature),
-      H.p().class("summary").says(Domain.summary(&entry)),
+      H.p().class("summary").holding(Inline.render(Domain.summary(&entry))),
       H.div().class("meta").says(entry.kind + " · " + entry.moduleName)
     ])
 }

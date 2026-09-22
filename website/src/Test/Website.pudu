@@ -375,6 +375,7 @@ export fn main() -> Int {
       Test.that("module page renders", modulePage.status.code == 200),
       Test.that("symbol page renders", symbol.status.code == 200),
       Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
+      Test.that("symbol documentation renders its code spans", symbol.body.contains("checksum of <code>bytes</code>.</p>") && symbol.body.contains("content=\"Computes the RFC 1950 Adler-32 checksum of bytes.\"")),
       Test.that("symbol explains its signature notation", symbol.body.contains("Read the signature") && symbol.body.contains("Read arrows from left to right") && symbol.body.contains("borrows a value")),
       Test.that("missing page is 404", missing.status.code == 404),
       Test.that("missing page is not indexed", missing.body.contains("noindex,follow")),

@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Website polish at every width
+
+- The home hero's release pill and action buttons no longer sit flush against the heading and the
+  paragraph: a more specific `.intro p{margin:0}` had been overriding their spacing.
+- A code block's language label no longer covers a long first line.
+- API summaries and declaration text render their code spans as code, in the symbol page, the module
+  pages, the library map, and search results, and a symbol page's description drops the backticks.
+- A long unbroken word in a document no longer widens the page on a phone, and the footer's bottom
+  links wrap at 320 pixels. The footer no longer adds its own margin to the page's bottom padding.
+- The playground toolbar lines up with the masthead, keeps one row from 761 pixels up — its
+  diagnostics status gives way with an ellipsis instead of pushing a control onto another row — and
+  two rows on a phone, where it had three.
+
 ## 2026-09-22 — A playground example for every chapter; the formatter keeps macro calls
 
 - The playground's menu grows from six programs to nineteen: functions, numbers, text, ranges and

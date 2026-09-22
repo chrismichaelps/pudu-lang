@@ -23,8 +23,24 @@ contents below 1100 pixels and stacks below 760, where the sidebar is replaced b
 Code blocks use the `--code` surface (`#f2f5ff`) with dark ink, a hairline border, and a language label
 in the corner, and scroll horizontally inside themselves; a table cell holding only code does not wrap
 it on a wide screen, and on a phone may wrap so the prose column beside it keeps its width. Documentation metadata is a two-column definition list that stacks on a phone. The library index
-uses rounded section links and one table per section with child modules separated by middle dots. Measured at 1280 and 375 pixels: no page overflows horizontally and no module link
-overflows its cell.
+uses rounded section links and one table per section with child modules separated by middle dots.
+
+A code block with a language label starts its first line below the label, so a long first line is
+never covered by it. Prose in a document or a chapter wraps an unbroken word, such as a path joined
+with slashes, instead of widening the page. Inline code in API summaries and declaration text takes
+the documentation's inline-code style. The home hero's pill and action row carry selectors specific
+enough to outrank `.intro p{margin:0}`, which had set both flush against their neighbours. The
+footer relies on the page shell's bottom padding rather than adding a margin of its own, and its
+bottom links wrap on a 320-pixel screen.
+
+The playground toolbar shares the masthead's side padding (20 pixels, 16 on a phone), so the Run
+button lines up with the logo. The diagnostics status is the row's flexible space: it takes what the
+controls leave, right-aligned, and shortens with an ellipsis rather than pushing a control onto a
+new row. Below 1024 pixels the keyboard hint on Run is left to the Help panel and the button's title,
+and the example menu narrows to 170 pixels; on a phone the toolbar is two rows.
+
+Measured at 320, 375, 768, 1024, and 1440 pixels on every page: no page overflows horizontally, and
+the playground toolbar is one row from 761 pixels up.
 
 Resolved Grill Log: the mobile menu is CSS plus native HTML disclosure, not a hidden checkbox or
 script-only control. Desktop and mobile navigation are mutually hidden from both layout and the

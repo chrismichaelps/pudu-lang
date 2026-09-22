@@ -17,3 +17,5 @@ The result bound keeps every declaration in the largest current standard module 
 placing a hard ceiling on response size.
 The page states the closed filter vocabulary and the `name :: type` form beside the results so the
 query language is discoverable without separate instructions.
+A result's summary renders through [[website View MarkdownInline]], as the symbol page does, so a
+code span in a doc comment reads as code in search results too.

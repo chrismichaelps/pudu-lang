@@ -10,6 +10,8 @@ import Seo as Seo
 import Service.Catalog as Catalog
 import View.Dynamic as Dynamic
 import View.Layout as Layout
+import View.Markdown as Markdown
+import View.MarkdownInline as Inline
 
 /// The standard library as a map: its sections, each module in a section with
 /// the sentence that says what it is for, and the modules beneath it.
@@ -61,7 +63,7 @@ fn moduleRow(catalog: &Catalog.Catalog, name: Str, children: Array[Str]) -> H.No
     case Some(text) => text
     case None => ""
   }
-  var described: Array[H.Node] = [H.span().says(summary)]
+  var described: Array[H.Node] = [H.span().holding(Inline.render(summary))]
   if children.length() > 0 {
     var links: Array[H.Node] = []
     for child in children {
@@ -86,7 +88,7 @@ export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -
       rows = rows.push(H.li().class("result").holding([
             H.a().class("result-name").href(symbolPath(&entry)).says(entry.name),
             H.code().class("signature").says(entry.signature),
-            H.p().class("summary").says(Domain.summary(&entry)),
+            H.p().class("summary").holding(Inline.render(Domain.summary(&entry))),
             H.div().class("meta").says(entry.kind)
           ]))
     }
@@ -112,13 +114,13 @@ export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
       H.h3().says("What it does")
     ]
     for line in entry.documentation {
-      if !line.isEmpty() { content = content.push(H.p().says(line)) }
+      if !line.isEmpty() { content = content.push(H.p().holding(Inline.render(line))) }
     }
     content = content.push(H.h3().says("Read the signature"))
     content = content.push(H.ul().class("signature-guide").holding(signatureGuide(entry.signature)))
     declarations = declarations.push(H.section().class("declaration").holding(content))
   }
-  Layout.page(siteUrl, Domain.qualifiedName(&primary), Domain.summary(&primary), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
+  Layout.page(siteUrl, Domain.qualifiedName(&primary), Markdown.plainText(Domain.summary(&primary)), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
         H.h1().says(Domain.qualifiedName(&primary)),
         H.p().class("meta").says(if entries.length() == 1 { "1 declaration" } else { show(entries.length()) + " declarations with this name" }),
         H.div().holding(declarations),
