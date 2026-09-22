@@ -95,6 +95,8 @@ packageProperties =
   , ("registry addresses are read, and plain HTTP only reaches this machine", testRegistryUrls)
   , ("a stored token reads back and is private to its owner", testCredentials)
   , ("a recent release is chosen only when locked or named exactly", testRecentReleases)
+  , ("a failed install changes neither the lock nor deps/", testFailedInstallChangesNothing)
+  , ("clean, locked, and offline installs give the same lock and files", testRepeatableInstalls)
   ]
 
 testVersions :: Property
@@ -590,3 +592,61 @@ testRecentReleases = do
     , versionOf locked === Right ["1.1.0"]
     ]
 
+testFailedInstallChangesNothing :: IO Property
+testFailedInstallChangesNothing = withGitLibrary $ \library project -> do
+  first <- installWith defaultOptions project (gitManifest library) emptyLock
+  case first of
+    Left problem -> pure (counterexample (Text.unpack problem) False)
+    Right outcome -> do
+      let installed = project </> "deps" </> "shapes-kit" </> "src" </> "ShapesKit" </> "Area.pudu"
+      lockBefore <- TextIO.readFile (project </> "pudu.lock")
+      TextIO.appendFile installed "// edited\n"
+      edited <- TextIO.readFile installed
+      cache <- cacheRoot
+      keys <- listDirectory (cache </> "checkouts")
+      forM_ keys $ \key -> do
+        commits <- filter (notElem '.') <$> listDirectory (cache </> "checkouts" </> key)
+        forM_ commits $ \commit ->
+          TextIO.appendFile (cache </> "checkouts" </> key </> commit </> "src" </> "ShapesKit" </> "Area.pudu") "// injected\n"
+      other <- pure (project </> ".." </> "extra")
+      createDirectoryIfMissing True (other </> "src")
+      TextIO.writeFile (other </> "src" </> "Extra.pudu") "module Extra\n"
+      again <- installWith defaultOptions project (gitManifest library <> "extra = { path = \"../extra\" }\n") (outcomeLock outcome)
+      lockAfter <- TextIO.readFile (project </> "pudu.lock")
+      kept <- TextIO.readFile installed
+      staged <- doesDirectoryExist (project </> "deps" </> "shapes-kit.partial")
+      pure $ conjoin
+        [ counterexample (show (fmap outcomeInstalled again)) (isLeftContaining "pudu.lock records" again)
+        , counterexample "pudu.lock is unchanged" (lockAfter == lockBefore)
+        , counterexample "deps/ is unchanged" (kept == edited)
+        , counterexample "no staged copy is left behind" (not staged)
+        ]
+
+testRepeatableInstalls :: IO Property
+testRepeatableInstalls = withGitLibrary $ \library project -> do
+  first <- installWith defaultOptions project (gitManifest library) emptyLock
+  case first of
+    Left problem -> pure (counterexample (Text.unpack problem) False)
+    Right outcome -> do
+      let deps = project </> "deps"
+          lock = outcomeLock outcome
+      lockText <- TextIO.readFile (project </> "pudu.lock")
+      clean <- treeDigest deps
+      removeDirectoryRecursive deps
+      locked <- synchronise noRegistry defaultOptions{optionLocked = True} project (gitManifest library) lock
+      lockedDigest <- treeDigest deps
+      removeDirectoryRecursive deps
+      offline <- synchronise noRegistry defaultOptions{optionOffline = True, optionLocked = True} project (gitManifest library) lock
+      offlineDigest <- treeDigest deps
+      elsewhere <- pure (project </> ".." </> "copy")
+      createDirectoryIfMissing True (elsewhere </> "src")
+      second <- installWith defaultOptions elsewhere (gitManifest library) emptyLock
+      secondLock <- TextIO.readFile (elsewhere </> "pudu.lock")
+      pure $ conjoin
+        [ counterexample (show (fmap outcomeInstalled locked, fmap outcomeInstalled offline)) (isRight locked && isRight offline && isRight second)
+        , counterexample "a locked reinstall gives the same files" (lockedDigest == clean)
+        , counterexample "an offline reinstall gives the same files" (offlineDigest == clean)
+        , counterexample "the same graph writes the same lock" (secondLock == lockText)
+        ]
+ where
+  isRight = either (const False) (const True)

@@ -68,6 +68,7 @@ import System.Directory
   , getCurrentDirectory
   , listDirectory
   , removeDirectoryRecursive
+  , renameDirectory
   , renameFile
   )
 import System.FilePath (isAbsolute, normalise, takeDirectory, (</>))
@@ -167,11 +168,11 @@ finish options root oldLock newLock located = do
             )
         )
     else do
-      when changed $ do
-        let path = root </> lockFileName
-        TextIO.writeFile (path <> ".partial") (renderLock newLock)
-        renameFile (path <> ".partial") path
-      installed <- materialise (optionProgress options) root newLock (Map.fromList [(nodeId n, d) | (n, Just d) <- located])
+      let writeLock = when changed $ do
+            let path = root </> lockFileName
+            TextIO.writeFile (path <> ".partial") (renderLock newLock)
+            renameFile (path <> ".partial") path
+      installed <- materialise (optionProgress options) root newLock (Map.fromList [(nodeId n, d) | (n, Just d) <- located]) writeLock
       case installed of
         Left problem -> pure (Left problem)
         Right count ->
@@ -341,51 +342,78 @@ sourceDirectoryOf directory = do
   exists <- doesDirectoryExist candidate
   pure (if exists then candidate else directory)
 
-{-| Make `deps/` hold exactly the locked packages.
+{-| Make `deps/` hold exactly the locked packages, and run `commit` (which
+    writes the lock) once every package is known to install.
 
     Each installed package has a `.installed` marker holding the locked
     checksum, the tree digest, and the fingerprint. A package is kept when the
     checksum matches and either the fingerprint matches or the recomputed tree
-    digest matches; otherwise it is copied again. For a git package the digest
-    of the copied files must equal the locked checksum, or the copy is removed
-    and an error returned. Entries in `deps/` that the lock does not name are
-    removed. -}
-materialise :: Progress -> FilePath -> Lock -> Map.Map PackageId FilePath -> IO (Either Text Int)
-materialise progress root (Lock entries) contents = do
-  results <- forConcurrently concurrentLimit entries $ \entry -> do
+    digest matches. Every other package is first copied into
+    `<destination>.partial`; for a git package the digest of the copied files
+    must equal the locked checksum. If any copy fails, every staged copy is
+    removed and nothing else changes. Otherwise `commit` runs, each staged
+    copy replaces its destination by rename, and entries in `deps/` the lock
+    does not name are removed. -}
+materialise :: Progress -> FilePath -> Lock -> Map.Map PackageId FilePath -> IO () -> IO (Either Text Int)
+materialise progress root (Lock entries) contents commit = do
+  staged <- forConcurrently concurrentLimit entries $ \entry -> do
     let destination = installDirectory root (entryName entry)
         marker = destination </> ".installed"
     fresh <- isFresh destination marker (entryChecksum entry)
     if fresh
       then do
         emit progress (UpToDate (entryName entry))
-        pure (Right False)
+        pure (Right Nothing)
       else case Map.lookup (entryName entry) contents of
         Nothing -> pure (Left (renderPackageId (entryName entry) <> " is locked but its files are not available"))
         Just from -> do
           emit progress (CopyStarted (entryName entry) (entryVersion entry))
-          exists <- doesDirectoryExist destination
-          when exists (removeDirectoryRecursive destination)
+          let staging = destination <> ".partial"
+          leftover <- doesDirectoryExist staging
+          when leftover (removeDirectoryRecursive staging)
           createDirectoryIfMissing True (takeDirectory destination)
-          copied <- copyTree from destination
+          copied <- copyTree from staging
           case copied of
             Left problem -> pure (Left (renderTreeProblem problem))
             Right digest
-              | "git+" `Text.isPrefixOf` entrySource entry && digest /= entryChecksum entry -> do
-                  removeDirectoryRecursive destination
+              | "git+" `Text.isPrefixOf` entrySource entry && digest /= entryChecksum entry ->
                   pure
                     ( Left
                         ( "the files of " <> renderPackageId (entryName entry) <> " have digest " <> digest
                             <> ", and pudu.lock records " <> entryChecksum entry
-                            <> "; nothing was installed for it"
+                            <> "; nothing was installed"
                         )
                     )
               | otherwise -> do
-                  writeMarker marker (entryChecksum entry) digest destination
-                  emit progress (CopyFinished (entryName entry))
-                  pure (Right True)
-  pruned <- prune root [installDirectory root (entryName e) | e <- entries]
-  pure (length . filter id <$> (sequence results <* pruned))
+                  writeMarker (staging </> ".installed") (entryChecksum entry) digest staging
+                  pure (Right (Just (entryName entry, staging, destination)))
+  case sequence staged of
+    Left problem -> do
+      forM_ entries $ \entry -> do
+        let staging = installDirectory root (entryName entry) <> ".partial"
+        leftover <- doesDirectoryExist staging
+        when leftover (removeDirectoryRecursive staging)
+      pure (Left problem)
+    Right results -> do
+      commit
+      let swaps = [swap | Just swap <- results]
+      forM_ swaps $ \(package, staging, destination) -> do
+        replaceDirectory staging destination
+        emit progress (CopyFinished package)
+      pruned <- prune root [installDirectory root (entryName e) | e <- entries]
+      pure (length swaps <$ pruned)
+
+{-| Move a directory into place, replacing what was there: the old one is
+    renamed aside first and removed after the new one has its name. -}
+replaceDirectory :: FilePath -> FilePath -> IO ()
+replaceDirectory staging destination = do
+  exists <- doesDirectoryExist destination
+  let aside = destination <> ".replaced"
+  leftover <- doesDirectoryExist aside
+  when leftover (removeDirectoryRecursive aside)
+  when exists (renameDirectory destination aside)
+  renameDirectory staging destination
+  when exists (removeDirectoryRecursive aside)
 
 isFresh :: FilePath -> FilePath -> Text -> IO Bool
 isFresh destination marker checksum = do

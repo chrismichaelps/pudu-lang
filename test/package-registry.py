@@ -11,14 +11,20 @@ first failed check.
 """
 
 import argparse
+import gzip
+import hashlib
+import io
+import json
 import os
 import pathlib
 import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -48,6 +54,67 @@ def library(root, version, handle="alice", name="json-kit"):
     write(root / "pudu.toml", f'[package]\nname = "@{handle}/{name}"\nversion = "{version}"\ndescription = "JSON helpers"\nkeywords = ["json"]\n')
     write(root / "src" / "JsonKit" / "Parse.pudu", "module JsonKit.Parse\n\nexport fn one() -> Int {\n  1\n}\n")
     write(root / "README.md", "# Json Kit\n")
+
+
+def http(method, url, body=None, headers=None):
+    request = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as answered:
+            return answered.status, answered.read()
+    except urllib.error.HTTPError as refused:
+        return refused.code, refused.read()
+
+
+def upload(url, token, fields, archive):
+    boundary = "conformance-boundary"
+    parts = b"".join(
+        f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode() for name, value in fields.items()
+    )
+    parts += f'--{boundary}\r\nContent-Disposition: form-data; name="archive"; filename="a.tar.gz"\r\n\r\n'.encode() + archive + f"\r\n--{boundary}--\r\n".encode()
+    return http("POST", url, parts, {"Authorization": "Bearer " + token, "Content-Type": "multipart/form-data; boundary=" + boundary})
+
+
+def crafted(entries):
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        for name, kind, data in entries:
+            info = tarfile.TarInfo(name)
+            info.type = kind
+            if kind == tarfile.REGTYPE:
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+            else:
+                info.linkname = "/etc/passwd"
+                archive.addfile(info)
+    return gzip.compress(buffer.getvalue())
+
+
+def conformance(url, token):
+    manifest = b'[package]\nname = "@alice/evil-kit"\nversion = "1.0.0"\n'
+    releases = url + "/api/v1/packages/@alice/evil-kit/releases"
+    cases = [
+        ("a symbolic link", [("pudu.toml", tarfile.REGTYPE, manifest), ("src/link", tarfile.SYMTYPE, b"")]),
+        ("a hard link", [("pudu.toml", tarfile.REGTYPE, manifest), ("src/copy", tarfile.LNKTYPE, b"")]),
+        ("a parent path", [("pudu.toml", tarfile.REGTYPE, manifest), ("src/../../escape", tarfile.REGTYPE, b"x")]),
+        ("an absolute path", [("pudu.toml", tarfile.REGTYPE, manifest), ("/etc/cron.d/x", tarfile.REGTYPE, b"x")]),
+        ("a duplicate path", [("pudu.toml", tarfile.REGTYPE, manifest), ("pudu.toml", tarfile.REGTYPE, manifest)]),
+        ("a Std root", [("pudu.toml", tarfile.REGTYPE, manifest + b'root = "Std"\n')]),
+        ("another package's manifest", [("pudu.toml", tarfile.REGTYPE, b'[package]\nname = "@bob/other"\nversion = "1.0.0"\n')]),
+    ]
+    for label, entries in cases:
+        status, body = upload(releases, token, {"version": "1.0.0"}, crafted(entries))
+        check(f"the registry refuses an archive with {label}", status in (409, 422), f"{status} {body[:200]!r}")
+    status, _ = upload(releases, token, {"version": "1.0.0"}, gzip.compress(b"\0" * 64 * 1024 * 1024 + b"x"))
+    check("the registry refuses an archive that unpacks past its limit", status in (400, 413, 422), str(status))
+    status, _ = http("GET", url + "/api/v1/packages/@alice/json-kit/releases/1.0.0/files/../../../../etc/passwd")
+    check("a file outside a release is not served", status == 404, str(status))
+    status, body = http("GET", url + "/api/v1/packages/@alice/json-kit")
+    document = json.loads(body)
+    for release in document["releases"]:
+        status, archive = http("GET", url + f"/api/v1/packages/@alice/json-kit/releases/{release['version']}/archive")
+        check(f"release {release['version']}'s archive has the digest its document records", status == 200 and "sha256:" + hashlib.sha256(archive).hexdigest() == release["checksum"])
+    status, _ = upload(url + "/api/v1/packages/@alice/json-kit/releases", "pudu_" + "0" * 64, {"version": "9.0.0"}, gzip.compress(b""))
+    check("an unknown token may not publish", status == 403, str(status))
 
 
 def main():
@@ -153,6 +220,8 @@ def main():
         shutil.rmtree(app / "deps")
         code, out = run(["install"], app)
         check("a damaged cached archive is downloaded again", code == 0 and (app / "deps" / "@alice" / "json-kit").exists(), out)
+
+        conformance(url, token)
 
         code, out = run(["logout"], lib)
         check("logout forgets the token", code == 0 and "signed out" in out, out)

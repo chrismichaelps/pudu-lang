@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Installs that fail change nothing
+
+- `pudu install`, `update`, `upgrade`, and `uninstall` stage every package they copy beside its
+  destination and verify it before writing `pudu.lock`; if any package fails, the staged copies are
+  removed and the lock and `deps/` stay as they were. Each staged package then replaces its
+  destination by rename.
+- The suite checks that clean, `--locked`, and `--offline` reinstalls give the same files and that the
+  same graph writes the same lock bytes. `test/package-registry.py` adds registry conformance checks:
+  links, hard links, parent and absolute paths, duplicates, a `Std` root, another package's manifest,
+  an archive past the unpacked limit, file paths outside a release, archive digests against their
+  documents, and unknown tokens. It runs in CI and in `test/gates.sh`.
+
 ## 2026-09-22 — Registry packages: install, login, push, release, upgrade
 
 - `pudu install @handle/name[@version]` resolves registry releases with the solver, downloads each
