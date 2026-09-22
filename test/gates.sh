@@ -65,6 +65,8 @@ run 'the language server answers a real session' \
   bash -c 'node test/lsp-session.mjs "$PUDU"'
 run 'the language server survives what an editor sends it' \
   bash -c 'node test/lsp-robustness.mjs "$PUDU"'
+run 'a watched program starts again for its sources and its --also paths' \
+  bash -c 'node test/watch.mjs "$PUDU"'
 run 'the documentation site keeps its contract' \
   bash -c 'cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
 

@@ -59,6 +59,7 @@ library
   other-modules:     Paths_pudu
   exposed-modules:
     Pudu.Cli.Init
+    Pudu.Cli.Terminate
     Pudu.Cli.Lint
     Pudu.Lint
     Pudu.Lint.Config

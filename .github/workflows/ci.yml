@@ -112,6 +112,8 @@ jobs:
         run: node test/lsp-session.mjs "$PUDU"
       - name: Verify the language server survives what an editor sends it
         run: node test/lsp-robustness.mjs "$PUDU"
+      - name: Verify a watched program starts again for its sources and its --also paths
+        run: node test/watch.mjs "$PUDU"
       # A running process is the only place this can be checked: the request
       # arrives from outside, and what is under test is what a program already
       # running does with it.

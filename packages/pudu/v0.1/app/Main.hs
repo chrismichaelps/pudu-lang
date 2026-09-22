@@ -1,15 +1,16 @@
 {-| @Program.Cli.Module — the pudu command line entry point -}
 module Main (main) where
 
-import Control.Monad (unless, when)
+import Control.Monad (filterM, unless, when)
 import Control.Exception (IOException, bracket, try)
 import System.IO.Temp (withSystemTempDirectory)
-import Data.List (sort, sortOn)
+import Data.List (isSuffixOf, sort, sortOn)
 import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
 import Pudu.Cli.Init (createProject, renderInitError)
+import Pudu.Cli.Terminate (interruptOnTerminate)
 import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -22,6 +23,8 @@ import System.Directory
   , getModificationTime
   , doesDirectoryExist
   , doesFileExist
+  , doesPathExist
+  , makeAbsolute
   , listDirectory
   )
 import System.FilePath
@@ -74,11 +77,13 @@ import Pudu.Diagnostic.Render
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
-import System.Environment (getArgs, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
+import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
 import System.Process
-  ( ProcessHandle
+  ( CreateProcess (env)
+  , ProcessHandle
+  , createProcess
   , getProcessExitCode
-  , spawnProcess
+  , proc
   , terminateProcess
   , waitForProcess
   )
@@ -169,12 +174,33 @@ useEveryCore = do
     A program that stops on its own is not restarted, and the watch continues.
     That is what makes the loop usable while a program is still crashing at
     start-up: the failure is on screen, the fix is a save away, and nothing had
-    to be typed in between. -}
-watchProgram :: RenderStyle -> FilePath -> [String] -> IO ()
-watchProgram _style path carried = do
+    to be typed in between.
+
+    A program reads more than its source — a site its pages, its data, its
+    styles — and a change to any of those is one its author expects to see as
+    well. Each `--also` path is watched whole, every file in it whatever its
+    kind, so the program starts again for those too.
+
+    The program is told it is being watched, and what the watch saw: `PUDU_WATCH`
+    counts its starts from 1, and `PUDU_WATCH_CHANGED` names the files that
+    changed before this start, one per line. A service can answer a browser
+    with that — reload when the count moves, or swap in only a stylesheet when
+    a stylesheet is all that changed — with nothing to configure. -}
+watchProgram :: RenderStyle -> [FilePath] -> FilePath -> [String] -> IO ()
+watchProgram style given path carried = mapM makeAbsolute given >>= \also -> watchAbsolute style also path carried
+
+watchAbsolute :: RenderStyle -> [FilePath] -> FilePath -> [String] -> IO ()
+watchAbsolute _style also path carried = do
+  -- Stopped by a supervisor rather than by Ctrl-C, the program it started
+  -- must stop too, or it keeps the port the next start needs.
+  interruptOnTerminate
   present <- doesFileExist path
   unless present $ do
     hPutStrLn stderr ("pudu run: cannot read " <> path)
+    exitFailure
+  missing <- filterM (fmap not . doesPathExist) also
+  unless (null missing) $ do
+    hPutStrLn stderr ("pudu run: cannot watch " <> unwords missing <> "; there is nothing there")
     exitFailure
   self <- getExecutablePath
   root <- watchedRoot path
@@ -182,20 +208,20 @@ watchProgram _style path carried = do
   -- short lines between a save and a restart, and held in a buffer they
   -- arrive after the thing they were meant to announce.
   hSetBuffering stdout LineBuffering
-  TextIO.putStrLn (Text.pack ("watching " <> root))
-  stamps <- sourceStamps root
-  follow self root stamps
+  TextIO.putStrLn (Text.pack ("watching " <> unwords (root : also)))
+  stamps <- watchedStamps root also
+  follow self root (1 :: Int) [] stamps
  where
-  follow self root stamps = do
+  follow self root generation changed stamps = do
     settled <- bracket
-      (startWatched self path carried)
+      (startWatched self path carried generation changed)
       stopWatched
       (\_ -> awaitChange root stamps)
-    follow self root settled
+    follow self root (generation + 1) (changedNames stamps settled) settled
 
   awaitChange root stamps = do
     threadDelay pollMicroseconds
-    fresh <- sourceStamps root
+    fresh <- watchedStamps root also
     if fresh == stamps
       then awaitChange root stamps
       else do
@@ -205,6 +231,27 @@ watchProgram _style path carried = do
           else do
             TextIO.putStrLn (Text.pack (changedLine (changedNames stamps settled)))
             pure settled
+
+  settle root previous = do
+    threadDelay 100000
+    current <- watchedStamps root also
+    if current == previous then pure current else settle root current
+
+{-| The `--also` paths before the program's path, the path, and what follows
+    it, which is the program's. -}
+watchOptions :: [FilePath] -> [String] -> Either String ([FilePath], FilePath, [String])
+watchOptions also arguments = case arguments of
+  "--also" : watched : rest -> watchOptions (also <> [watched]) rest
+  ["--also"] -> Left "--also needs a path to watch"
+  path : carried -> Right (also, path, carried)
+  [] -> Left "--watch needs the program to run"
+
+{-| The sources under `root` and every file under each `--also` path. -}
+watchedStamps :: FilePath -> [FilePath] -> IO [(FilePath, (UTCTime, Integer))]
+watchedStamps root also = do
+  sources <- sourceStamps root
+  others <- mapM (fileStamps (const True)) also
+  pure (Map.toAscList (Map.fromList (sources <> concat others)))
 
 stopWatched :: ProcessHandle -> IO ()
 stopWatched running = do
@@ -216,12 +263,6 @@ stopWatched running = do
       _ <- waitForProcess running
       pure ()
 
-settle :: FilePath -> [(FilePath, (UTCTime, Integer))] -> IO [(FilePath, (UTCTime, Integer))]
-settle root previous = do
-  threadDelay 100000
-  current <- sourceStamps root
-  if current == previous then pure current else settle root current
-
 {-| How long to wait between looks.
 
     Short enough that a save feels answered and long enough that the loop is
@@ -230,9 +271,15 @@ settle root previous = do
 pollMicroseconds :: Int
 pollMicroseconds = 250000
 
-{-| Start the program, as this same executable running it without watching. -}
-startWatched :: FilePath -> FilePath -> [String] -> IO ProcessHandle
-startWatched self path carried = spawnProcess self (["run", path] <> carried)
+{-| Start the program, as this same executable running it without watching,
+    told which start this is and what changed before it. -}
+startWatched :: FilePath -> FilePath -> [String] -> Int -> [FilePath] -> IO ProcessHandle
+startWatched self path carried generation changed = do
+  inherited <- getEnvironment
+  let told = [("PUDU_WATCH", show generation), ("PUDU_WATCH_CHANGED", unlines changed)]
+      environment = told <> [binding | binding@(name, _) <- inherited, name `notElem` map fst told]
+  (_, _, _, handle) <- createProcess (proc self (["run", path] <> carried)) {env = Just environment}
+  pure handle
 
 {-| What was changed, said by name.
 
@@ -282,7 +329,14 @@ nearestManifest directory = do
     `.pudu` files a build produced would restart the program in response to its
     own output. -}
 sourceStamps :: FilePath -> IO [(FilePath, (UTCTime, Integer))]
-sourceStamps root = sort <$> walk Set.empty root
+sourceStamps = fileStamps (\full -> takeExtension full == ".pudu" || takeFileName full == "pudu.toml")
+
+{-| Every file under a path that `wanted` admits, with when it was last written
+    and its size; a path that is a file is that file alone. -}
+fileStamps :: (FilePath -> Bool) -> FilePath -> IO [(FilePath, (UTCTime, Integer))]
+fileStamps wanted top = do
+  isFile <- doesFileExist top
+  if isFile then stampOf top else sort <$> walk Set.empty top
  where
   walk ancestors directory = do
     resolved <- try (canonicalizePath directory) :: IO (Either IOException FilePath)
@@ -302,14 +356,17 @@ sourceStamps root = sort <$> walk Set.empty root
         isDirectory <- doesDirectoryExist full
         if isDirectory
           then walk ancestors full
-          else
-            if takeExtension full == ".pudu" || name == "pudu.toml"
-              then do
-                stamp <- try ((,) <$> getModificationTime full <*> getFileSize full)
-                  :: IO (Either IOException (UTCTime, Integer))
-                pure (either (const []) (\at -> [(full, at)]) stamp)
-              else pure []
-  ignored name = name `elem` [".git", ".pudu", "dist-newstyle", "node_modules", "target"]
+          else if wanted full then stampOf full else pure []
+  stampOf full = do
+    stamp <- try ((,) <$> getModificationTime full <*> getFileSize full)
+      :: IO (Either IOException (UTCTime, Integer))
+    pure (either (const []) (\at -> [(full, at)]) stamp)
+  -- Directories whose contents tools write, and an editor's own files: a
+  -- restart in answer to the program's output, or to a swap file, is noise.
+  ignored name =
+    name `elem` [".git", ".pudu", "dist-newstyle", "node_modules", "target", ".vercel", ".DS_Store"]
+      || "~" `isSuffixOf` name
+      || ".swp" `isSuffixOf` name
 
 {-| Run the program attached to this executable.
 
@@ -341,8 +398,10 @@ runCommand = do
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
     ("lint" : rest) -> runLint style rest
-    ("run" : "--watch" : path : carried) -> watchProgram style path carried
-    ("run" : path : "--watch" : carried) -> watchProgram style path carried
+    ("run" : "--watch" : rest) -> case watchOptions [] rest of
+      Right (also, path, carried) -> watchProgram style also path carried
+      Left problem -> hPutStrLn stderr ("pudu run: " <> problem) >> exitFailure
+    ("run" : path : "--watch" : carried) -> watchProgram style [] path carried
     {-| What follows the program's path belongs to the program.
 
         A bundle is the program, so its arguments are its own and nothing
@@ -1011,6 +1070,9 @@ usage =
     , "                       network, or foreign code"
   , "  pudu run --watch <file>  the same, run again whenever a source file"
   , "                       under it changes"
+  , "  pudu run --watch --also <path>... <file>  also run again when anything"
+  , "                       under a path changes; the program reads PUDU_WATCH"
+  , "                       and PUDU_WATCH_CHANGED"
     , "  pudu build <file> [-o name]  write one file that runs anywhere the"
     , "                       compiler runs, with every module it needs inside it"
     , "  pudu build <file> --runtime <path>  the same, attached to that runtime"
