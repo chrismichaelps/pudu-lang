@@ -4,7 +4,9 @@
     registry releases, a repository at a revision, or a directory. The solver
     picks one release per package that every requirement on it accepts,
     preferring what the lock already chose and otherwise the newest, and tries
-    older candidates when a newer one's own requirements cannot be met.
+    older candidates when a newer one's own requirements cannot be met. A
+    yanked release is chosen only when the lock already holds it; a recent
+    release only when the lock holds it or a requirement names it exactly.
 
     What a registry holds is asked through `Registry`, so the solver neither
     knows nor cares whether the answer came over the network or from the
@@ -28,7 +30,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Package.Identity (PackageId, parsePackageId, renderPackageId)
 import Pudu.Package.Version
-  ( Version
+  ( Bound (..)
+  , Requirement (..)
+  , Version
   , parseRequirement
   , parseVersion
   , renderRequirement
@@ -43,6 +47,8 @@ data ReleaseInfo = ReleaseInfo
   , releaseDependencies :: ![(Text, Text)]
   , releaseRoot :: !Text
   , releaseYanked :: !Bool
+  , releaseRecent :: !Bool
+  -- ^ Published more recently than the minimum release age.
   }
   deriving stock (Eq, Show)
 
@@ -141,14 +147,18 @@ solve registry preference roots = do
                   Left problem -> pure (Left problem)
                   Right releases -> do
                     let locked = if refreshed preference package then Nothing else Map.lookup package (preferredVersions preference)
+                        isLocked r = Just (renderVersion (releaseVersion r)) == locked
+                        named r = any (\(_, req) -> Exactly (releaseVersion r) `elem` requirementBounds req) everyone
                         acceptable r =
                           all (\(_, req) -> satisfies req (releaseVersion r)) everyone
-                            && (not (releaseYanked r) || Just (renderVersion (releaseVersion r)) == locked)
+                            && (not (releaseYanked r) || isLocked r)
+                            && (not (releaseRecent r) || isLocked r || named r)
                         ordered =
                           sortBy (comparing (\r -> (Just (renderVersion (releaseVersion r)) /= locked, Down (releaseVersion r))))
                             (filter acceptable releases)
+                        held = [r | r <- releases, all (\(_, req) -> satisfies req (releaseVersion r)) everyone, not (releaseYanked r), releaseRecent r]
                     if null ordered
-                      then pure (Left (conflict package everyone <> available releases))
+                      then pure (Left (conflict package everyone <> available releases <> tooRecent package held))
                       else attempt package ordered chosen asked' rest
       attempt _ [] _ _ _ = pure (Left "no release satisfies every requirement")
       attempt package (release : others) chosen asked rest = do
@@ -179,6 +189,13 @@ solve registry preference roots = do
   conflict package everyone =
     "no release of " <> renderPackageId package <> " satisfies every requirement on it:\n"
       <> Text.unlines [ "  " <> renderRequirement req <> " asked by " <> who | (who, req) <- reverse everyone ]
+  tooRecent package held = case held of
+    [] -> ""
+    _ ->
+      "\n  " <> Text.intercalate ", " (map (renderVersion . releaseVersion) held)
+        <> " was published within the minimum release age; install one by its exact version, such as "
+        <> renderPackageId package <> "@" <> renderVersion (releaseVersion (last held))
+        <> ", or lower min-release-age under [install] in pudu.toml"
   available releases =
     if null releases
       then "  it has no releases"

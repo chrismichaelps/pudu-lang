@@ -6,7 +6,8 @@
     failing quietly, and each value renders back to the spelling it came from. -}
 module Pudu.Package.Version
   ( Version (..)
-  , Requirement
+  , Requirement (..)
+  , Bound (..)
   , parseVersion
   , renderVersion
   , parseRequirement

@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Registry packages: install, login, push, release, upgrade
+
+- `pudu install @handle/name[@version]` resolves registry releases with the solver, downloads each
+  archive once into the machine's cache, checks its SHA-256 against the registry and the lock before
+  unpacking, and refuses an archive whose `pudu.toml` names another package or version. A cached
+  archive that no longer matches is downloaded again. With a lock and a warm cache, installing makes
+  no request.
+- `pudu login` pairs the machine by device code, or stores `--token`; tokens are kept per registry in
+  `$PUDU_HOME/credentials.toml` with mode 0600, and `PUDU_TOKEN` overrides them. `pudu logout`,
+  `pudu whoami`, `pudu push [--private]`, and `pudu release <version> [--notes FILE] [--private]`,
+  which checks the project and runs its tests before uploading.
+- `pudu upgrade` raises requirements to the newest releases and names every major version crossed.
+  A new resolution skips releases younger than `[install] min-release-age` (72 hours by default)
+  unless the lock already holds one or it is named exactly. A misspelled package name suggests the
+  closest real ones. `[install] registry` or `PUDU_REGISTRY` chooses the registry.
+- `test/package-registry.py` drives all of it against a local registry in CI.
+
 ## 2026-09-22 — The package registry
 
 - `registry/` is the package registry, a Pudu program serving the `/api/v1` API from a data

@@ -19,6 +19,8 @@ See [[architecture/PACKAGES]].
 
 ## Grill Log
 
+- **Q:** Choose a release published within the minimum release age? **A:** Only when the lock holds it or a requirement names it exactly (`=1.2.3`). _Rationale:_ a poisoned release is usually pulled within hours. _Rejected:_ ignoring age, and refusing exact requests.
+
 - **Q:** Allow two versions of one package? **A:** No. _Rationale:_ module and type identity carry no package qualifier. _Rejected:_ nested copies.
 
 Resolved Grill Log: behaviour covered by `test/Pudu/PackageSpec.hs`.

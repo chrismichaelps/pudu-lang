@@ -11,7 +11,7 @@ import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
 import Pudu.Cli.Init (createProject, renderInitError)
 import Pudu.Cli.Package (packageCommands, runPackageCommand)
-import Pudu.Package.Solve (noRegistry)
+import Pudu.Cli.Publish (publishCommands, runPublishCommand)
 import Pudu.Cli.Terminate (interruptOnTerminate)
 import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
 import Data.Text (Text)
@@ -424,7 +424,8 @@ runCommand = do
         exitFailure
       Right (path, target, runtime) -> buildProgram style path target runtime
     ("test" : paths) -> testPaths style paths
-    (command : rest) | command `elem` packageCommands -> runPackageCommand (pure noRegistry) command rest
+    (command : rest) | command `elem` packageCommands -> runPackageCommand command rest
+    (command : rest) | command `elem` publishCommands -> runPublishCommand command rest
     ["init", path] -> initProject (Just path)
     ["init"] -> initProject Nothing
     ("init" : _) -> hPutStrLn stderr "usage: pudu init [directory]" >> exitFailure

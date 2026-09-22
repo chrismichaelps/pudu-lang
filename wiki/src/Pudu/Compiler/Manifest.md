@@ -89,6 +89,8 @@ diagnostics, ordered dependency-root resolution, and deterministic measurement o
 
 ## Grill Log
 
+- **Q:** Where do install settings live? **A:** `[install]`, read as `manifestInstall` key/value pairs (`registry`, `min-release-age`). _Rationale:_ they belong to the project. _Rejected:_ environment only.
+
 - **Q:** Should version validation call `readManifest` after dependency discovery? **A:** No.
   _Rationale:_ two reads can observe different files and double startup IO. One snapshot makes the
   diagnostic and search graph coherent. _Rejected:_ independent convenience calls in the graph walk.

@@ -13,7 +13,7 @@ export const PAGE_SIZE: Int = 20
 export type Results = { projects: Array[Project.Project], total: Int }
 
 /// Rank of a project for a query: 0 an exact name, 1 the handle, 2 a name
-/// containing the query, 3 every word found in the description or keywords,
+/// containing the query or one edit from it, 3 every word found in the description or keywords,
 /// and -1 no match. An empty query ranks everything 3.
 fn rank(project: &Project.Project, query: Str) -> Int {
   let wanted = query.trim().toLower()
@@ -21,7 +21,7 @@ fn rank(project: &Project.Project, query: Str) -> Int {
   let full = Name.render(&project.name)
   if wanted == full || wanted == project.name.name { return 0 }
   if wanted == "@" + project.name.handle || wanted == project.name.handle { return 1 }
-  if project.name.name.contains(wanted) { return 2 }
+  if project.name.name.contains(wanted) || Name.closeTo(project.name.name, wanted) { return 2 }
   let text = (project.description + " " + project.keywords.join(" ")).toLower()
   for word in wanted.split(" ") {
     if !word.isEmpty() && !text.contains(word) { return -1 }

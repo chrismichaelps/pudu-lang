@@ -4,12 +4,16 @@ A project uses code other people wrote by naming it in `pudu.toml` and running `
 
 ## Installing a dependency
 
-Name what you want to install. A directory on your machine, or a git repository at a tag, branch, or commit:
+Name what you want to install: a package from the registry, a directory on your machine, or a git repository at a tag, branch, or commit:
 
 ```sh
+pudu install @alice/json-schema
+pudu install @alice/json-schema@1.4.2
 pudu install ../geometry
 pudu install https://github.com/carol/parser.git#v0.4.0
 ```
+
+A registry package is `@handle/name`. Without a version, `pudu install` takes the newest release and writes a requirement compatible with it (`^1.4.2`); with `@1.4.2` it takes exactly that release.
 
 While it works, one line at the bottom of the terminal shows what it is doing — fetching a repository, copying a package — and how long it has taken. When it is done, `pudu install` says where each package came from, what changed, and what to import:
 
@@ -72,6 +76,39 @@ parser = { git = "https://github.com/carol/parser.git", rev = "v0.4.0" }
 | `pudu tree` | shows every package the project uses, and what uses it |
 
 Downloads are kept in `~/.pudu/cache` (or `$PUDU_HOME/cache`) and shared by every project on the machine, so a second project using the same commit copies files and downloads nothing. With a lock present and the cache holding what it names, `pudu install` makes no network request and runs no git command, and `pudu check`, `run`, and `test` never touch the network. Repositories are fetched and packages copied side by side, and a package is copied again only if its files in `deps/` changed; a cached copy whose files no longer match `pudu.lock` is refused rather than installed.
+
+## Publishing a package
+
+A package is published under your handle. Sign in once on each machine:
+
+```sh
+pudu login
+```
+
+`pudu login` prints an address and a short code; open the address, sign in, and enter the code. On a machine without a browser, such as CI, create a token on the registry and run `pudu login --token <token>`, or set `PUDU_TOKEN`.
+
+Name the package `@handle/name` in `pudu.toml`, then:
+
+| Command | Does |
+| --- | --- |
+| `pudu push` | uploads the project as its latest snapshot, for reading on the registry; nothing installs a snapshot |
+| `pudu release 1.2.0 --notes CHANGES.md` | checks the project, runs its tests, and publishes release 1.2.0, which never changes |
+| `pudu push --private`, `pudu release … --private` | creates the project as private: only your account can see or install it |
+| `pudu logout` | revokes the token and forgets it |
+
+`pudu release` refuses a version that is not the one in `pudu.toml`, one that is already released, and one lower than a release on the same major line.
+
+## Choosing new versions
+
+`pudu update` moves to the newest releases the requirements in `pudu.toml` accept, so it never crosses a major version. `pudu upgrade` rewrites each requirement to the newest release and names every package whose major version changed, with the address of its release notes.
+
+A new resolution does not choose a release published in the last 72 hours: most poisoned releases are found and pulled within that time. A version already in `pudu.lock`, or one named exactly (`pudu install @alice/json-schema@1.4.3`), is always allowed. The age is set under `[install]`:
+
+```toml
+[install]
+min-release-age = 24
+registry = "https://packages.pudu-lang.org"
+```
 
 ## Module roots
 

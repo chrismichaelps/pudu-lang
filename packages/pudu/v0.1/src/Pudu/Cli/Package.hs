@@ -14,7 +14,9 @@ module Pudu.Cli.Package
   ) where
 
 import Control.Concurrent (getNumCapabilities, setNumCapabilities)
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM, forM_, unless, when)
+import qualified Data.Map.Strict as Map
+import Data.Ord (Down (..))
 import Data.List (sort, sortOn)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -57,18 +59,22 @@ import Pudu.Package.Install
   )
 import Pudu.Package.Lock (Lock (..), LockEntry (..))
 import Pudu.Package.ManifestEdit (removeDependency, setDependency)
-import Pudu.Package.Solve (Registry)
+import Pudu.Package.Credentials (Credential (..), loadCredential)
+import Pudu.Package.Progress (Progress)
+import Pudu.Package.Remote (Remote (..), minimumAgeFor, registryUrlFor, remoteRegistry)
+import Pudu.Package.Solve (Registry (..), ReleaseInfo (..))
+import Pudu.Package.Version (Version (..), isPrerelease, parseVersion, renderVersion)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory, makeAbsolute)
 import System.Exit (exitFailure)
 import System.FilePath (dropExtension, makeRelative, takeExtension, takeFileName, (</>))
 import System.IO (hPutStrLn, stderr)
 
 packageCommands :: [String]
-packageCommands = ["install", "uninstall", "update", "deps", "tree"]
+packageCommands = ["install", "uninstall", "update", "upgrade", "deps", "tree"]
 
-{-| Run one package command, given how to reach a registry. -}
-runPackageCommand :: IO Registry -> String -> [String] -> IO ()
-runPackageCommand connect command arguments = do
+{-| Run one package command against the project's registry. -}
+runPackageCommand :: String -> [String] -> IO ()
+runPackageCommand command arguments = do
   let (flags, rest) = splitFlags arguments
       offline = "--offline" `elem` flags
       verbosity
@@ -81,7 +87,7 @@ runPackageCommand connect command arguments = do
     [] -> pure ()
   opened <- openProject
   project <- either (failWith command) pure opened
-  let changing = command `elem` ["install", "uninstall", "update"]
+  let changing = command `elem` ["install", "uninstall", "update", "upgrade"]
   when changing useProcessors
   display <- startDisplay (if changing then verbosity else Quiet)
   session <- newGitSession offline (displayProgress display)
@@ -93,6 +99,7 @@ runPackageCommand connect command arguments = do
           , optionGit = Just session
           }
       run = Run command display verbosity session
+      connect = connectRemote offline (displayProgress display) project (const False)
   case command of
     "install" -> do
       registry <- connect
@@ -102,13 +109,73 @@ runPackageCommand connect command arguments = do
       when (null rest) (failWith command "name the dependencies to remove, such as pudu uninstall @alice/json")
       uninstall run registry options project (map Text.pack rest)
     "update" -> do
-      registry <- connect
       named <- traverse (either (failWith command) pure . parsePackageId . Text.pack) rest
       let refresh package = null named || package `elem` named
+      registry <- connectRemote offline (displayProgress display) project refresh
       apply run registry options{optionRefresh = refresh} project (projectManifestText project)
+    "upgrade" -> do
+      named <- traverse (either (failWith command) pure . parsePackageId . Text.pack) rest
+      registry <- connectRemote offline (displayProgress display) project (\package -> null named || package `elem` named)
+      upgrade run registry options project named
     "deps" -> showDependencies project
     "tree" -> showTree project
     _ -> failWith command "unknown package command"
+
+{-| The registry the project's manifest names, answered through the cache.
+    A package `refresh` selects is always asked of the registry. -}
+connectRemote :: Bool -> Progress -> Project -> (PackageId -> Bool) -> IO Registry
+connectRemote offline progress project refresh = do
+  let manifest = projectManifest project
+      Lock entries = projectLock project
+  url <- registryUrlFor manifest
+  credential <- loadCredential url
+  age <- minimumAgeFor manifest
+  remoteRegistry
+    Remote
+      { remoteUrl = url
+      , remoteToken = credentialToken <$> credential
+      , remoteOffline = offline
+      , remoteMinimumAgeHours = age
+      , remoteLocked = Map.fromList [(entryName e, entryVersion e) | e <- entries, not (refresh (entryName e))]
+      , remoteProgress = progress
+      }
+
+{-| Raise each registry requirement, or those named, to `^` of the newest
+    release the solver may choose, then install. Each package whose major
+    version changes is listed with its release notes' address. -}
+upgrade :: Run -> Registry -> Options -> Project -> [PackageId] -> IO ()
+upgrade run registry options project named = do
+  let manifest = projectManifest project
+      Lock entries = projectLock project
+      chosen package = null named || package `elem` named
+      registryDependencies =
+        [ (package, dependencyName d)
+        | d <- manifestDependencies manifest
+        , RegistrySource _ <- [dependencySource d]
+        , Right package <- [parsePackageId (dependencyName d)]
+        , chosen package
+        ]
+  when (null registryDependencies) (failWith "upgrade" "no registry dependency to upgrade")
+  raised <- forM registryDependencies $ \(package, key) -> do
+    listed <- registryReleases registry package
+    releases <- either (failWith "upgrade") pure listed
+    let candidates = [r | r <- releases, not (releaseYanked r), not (releaseRecent r), not (isPrerelease (releaseVersion r))]
+    pure $ case sortOn (Down . releaseVersion) candidates of
+      [] -> (key, Nothing, package)
+      newest : _ -> (key, Just (renderVersion (releaseVersion newest)), package)
+  let edited = foldr (\(key, latest, _) text -> maybe text (\v -> setDependency key (quoted ("^" <> v)) text) latest) (projectManifestText project) raised
+      majorOf text = either (const Nothing) (Just . versionMajor) (parseVersion text)
+      locked package = [entryVersion e | e <- entries, entryName e == package]
+      crossed =
+        [ (package, old, new)
+        | (_, Just new, package) <- raised
+        , old : _ <- [locked package]
+        , majorOf old /= majorOf new
+        ]
+  apply run registry options{optionRefresh = \p -> any (\(_, _, q) -> q == p) raised} project edited
+  url <- registryUrlFor manifest
+  forM_ crossed $ \(package, old, new) ->
+    TextIO.putStrLn (renderPackageId package <> " moved from " <> old <> " to " <> new <> ", a new major version; read " <> url <> "/" <> renderPackageId package <> "/releases")
 
 {-| State for one package command: its name, display, verbosity, and git session. -}
 data Run = Run

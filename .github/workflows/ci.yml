@@ -87,6 +87,7 @@ jobs:
           "$PUDU" check $(find registry/src -name '*.pudu')
           "$PUDU" fmt --check registry/src
           "$PUDU" test registry/src/Test/Registry.pudu
+          python3 test/package-registry.py --pudu "$PUDU"
       # The sandbox fails closed: asked to isolate a program on a host where it
       # cannot, it runs nothing and says so with its own status.
       - name: Verify the playground sandbox refuses to run unisolated
