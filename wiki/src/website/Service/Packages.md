@@ -13,6 +13,8 @@ See [[architecture/PACKAGES]] · [[website Site]] · [[src/website/_MOC]].
 
 ## Grill Log
 
+- **Q:** Where do star and issue counts come from? **A:** The snapshot's project documents (`stars`, `forks`, `openIssues`), copied from GitHub at push and release. _Rationale:_ no page asks GitHub.
+
 - **Q:** Fetch registry data per request? **A:** No; load a generated snapshot once. _Rationale:_ package pages remain available during a registry outage.
 
 Resolved Grill Log: only public registry documents enter the snapshot; the service admits files by its generated listing and serves no unlisted path.

@@ -448,7 +448,8 @@ entry.
 - **Root ownership across the registry.** Roots are unique per program, not per registry. Reserving a
   root registry-wide on first release would prevent most conflicts before they reach a program, at
   the cost of first-come names.
-- **Favourites, tickets, contributions.** Not in the first release of the website pages.
+- **Favourites, tickets, contributions.** Resolved: a project links its repository's GitHub Issues,
+  Pull requests, and Stars, with open-issue and star counts copied at publish time.
 
 ## Grill Log
 

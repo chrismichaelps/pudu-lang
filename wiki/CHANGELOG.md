@@ -23,6 +23,17 @@ tags: [changelog]
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
 
 
+## 2026-09-22 — A code view for package source, and GitHub beside every project
+
+- A package's Source tab is a code view: a file sidebar with the release, a filter, and the tree with
+  folder icons and badges by file type; a breadcrumb; and a file card naming the language, lines, and
+  size, with Copy path and GitHub actions. Pudu files are highlighted on the server, Markdown files are
+  rendered, and each module is shown beside its declarations, which link into the Docs tab.
+- Every project links its repository's Issues, Pull requests, and Stars on GitHub, with open-issue and
+  star counts.
+- The package page script is split into small modules for copying, the version picker, and the file
+  filter.
+
 ## 2026-09-22 — Tar and HTTP at the size of a real release
 
 - `Std.Http.Client` decides when a response is complete from its head, parsed once, instead of joining

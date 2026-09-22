@@ -8,7 +8,7 @@ import Service.Packages as Packages
 import View.Layout as Layout
 
 /// The address of the script that adds the version picker and copy buttons.
-export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=1"
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=2"
 
 /// The address of a project, and of one of its tabs.
 export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }
@@ -101,6 +101,32 @@ fn installPanel(project: &Packages.Project) -> H.Node {
     ])
 }
 
+/// A count as a reader scans it: `1.2k` from a thousand on.
+export fn shortCount(value: Int) -> Str {
+  if value < 1000 { return show(value) }
+  let tenths = value / 100
+  show(tenths / 10) + (if tenths % 10 == 0 { "" } else { "." + show(tenths % 10) }) + "k"
+}
+
+/// A link to one of the repository's own pages on GitHub.
+fn github(project: &Packages.Project, section: Str, label: Str, count: Option[Int]) -> H.Node {
+  let shown = match count {
+    case Some(value) => [H.span().says(label), H.span().class("package-count-badge").says(shortCount(value))]
+    case None => [H.span().says(label)]
+  }
+  H.a().class("package-github-link").href(project.repository + "/" + section).at("rel", "external noopener noreferrer").holding(shown.concat([H.span().class("package-external").at("aria-hidden", "true").says("↗")]))
+}
+
+/// Issues, pull requests, and stars live on GitHub, where the repository is.
+fn githubLinks(project: &Packages.Project) -> H.Node {
+  if project.repository.isEmpty() { return H.nothing() }
+  H.div().class("package-github").at("aria-label", "On GitHub").holding([
+      github(project, "issues", "Issues", Some(project.openIssues)),
+      github(project, "pulls", "Pull requests", None),
+      github(project, "stargazers", "Stars", Some(project.stars))
+    ])
+}
+
 fn tab(project: &Packages.Project, name: Str, label: Str, current: Str) -> H.Node {
   let linked = H.a().href(tabPath(project, name)).says(label)
   if name == current { linked.at("aria-current", "page") } else { linked }
@@ -132,11 +158,14 @@ export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.
             ]),
           H.p().class("package-hero-release").says("Latest release  ·  " + Option.unwrapOr(project.latest, "not yet published"))
         ]),
-      H.nav().class("package-tabs").label("Project").holding([
-          tab(project, "overview", "Overview", current),
-          tab(project, "source", "Source", current),
-          tab(project, "docs", "Docs", current),
-          tab(project, "releases", "Releases", current)
+      H.div().class("package-tabs").holding([
+          H.nav().class("package-tab-links").label("Project").holding([
+              tab(project, "overview", "Overview", current),
+              tab(project, "source", "Source", current),
+              tab(project, "docs", "Docs", current),
+              tab(project, "releases", "Releases", current)
+            ]),
+          githubLinks(project)
         ])
     ])
   let article = H.article().class("package-page").holding([bar].concat(content).concat([H.script().kind("module").src(SCRIPT_PATH)]))

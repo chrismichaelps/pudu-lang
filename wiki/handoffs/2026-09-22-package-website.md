@@ -29,7 +29,8 @@ releases, and install control from the registry snapshot under [[architecture/PA
 5. **Website Engineer:** after local browser inspection of the `@alice` fixture, revised the catalog
    and project header as original Pudu designs, simplified the package list, and corrected the
    mobile search button and install panel placement.
-6. **Forensic Guardian:** reconciles source, module mirrors, MOCs, architecture, changelog, and
+6. **Website Engineer:** replaced the Source tab with a code view (file sidebar and filter, breadcrumb, file card, server-side Pudu highlighting, rendered Markdown, declarations outline) and added GitHub Issues, Pull requests, and Stars links with counts; checked in the browser at desktop and phone widths.
+7. **Forensic Guardian:** reconciles source, module mirrors, MOCs, architecture, changelog, and
    this handoff before recording the commit.
 
 ## Delivery exception
@@ -41,7 +42,7 @@ is created.
 ## Evidence
 
 - `registry/src/Test/Registry.pudu`: 40 assertions pass, including an unreadable release tree.
-- `website/src/Test/Website.pudu`: 157 assertions pass against the `@alice/json-kit` snapshot.
+- `website/src/Test/Website.pudu`: 163 assertions pass against the `@alice/json-kit` snapshot.
 - `test/package-registry.py`: local fake GitHub and registry flow passes, including snapshot and
   generated API catalogue.
 - Static prerender with the fixture writes 3,714 canonical pages, including binary and encoded
