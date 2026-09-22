@@ -35,3 +35,4 @@ dist/
 scripts/__pycache__/
 # Private commercial manuscript and publication artifacts.
 book/
+editors/vscode/*.vsix
