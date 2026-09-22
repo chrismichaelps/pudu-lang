@@ -79,24 +79,23 @@ Downloads are kept in `~/.pudu/cache` (or `$PUDU_HOME/cache`) and shared by ever
 
 ## Publishing a package
 
-A package is published under your handle. Sign in once on each machine:
+A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and you publish it with the GitHub account that can push to it. Sign in once on each machine:
 
 ```sh
 pudu login
 ```
 
-`pudu login` prints an address and a short code; open the address, sign in, and enter the code. On a machine without a browser, such as CI, create a token on the registry and run `pudu login --token <token>`, or set `PUDU_TOKEN`.
+`pudu login` prints `https://github.com/login/device` and a code; open the page, enter the code, and approve. Add `--private` to publish from private repositories. On a machine without a browser, such as CI, run `pudu login --token <GitHub token>` or set `PUDU_TOKEN`.
 
-Name the package `@handle/name` in `pudu.toml`, then:
+Name the package `@owner/repo` in `pudu.toml`, commit, and push to GitHub, then:
 
 | Command | Does |
 | --- | --- |
-| `pudu push` | uploads the project as its latest snapshot, for reading on the registry; nothing installs a snapshot |
-| `pudu release 1.2.0 --notes CHANGES.md` | checks the project, runs its tests, and publishes release 1.2.0, which never changes |
-| `pudu push --private`, `pudu release … --private` | creates the project as private: only your account can see or install it |
-| `pudu logout` | revokes the token and forgets it |
+| `pudu push` | registers the project on the registry, or refreshes it, from the repository's default branch |
+| `pudu release 1.2.0 --notes CHANGES.md` | checks the project, runs its tests, tags the commit `v1.2.0`, pushes the tag, and publishes it |
+| `pudu logout` | forgets the token on this machine |
 
-`pudu release` refuses a version that is not the one in `pudu.toml`, one that is already released, and one lower than a release on the same major line.
+`pudu release` refuses a version that is not the one in `pudu.toml`, a working tree with changes not committed, a version already released, and one lower than a release on the same major line. The registry downloads the tagged commit from GitHub and keeps its own copy, so moving or deleting the tag later changes no one's build. A project from a private repository is private: only accounts that can read the repository see or install it.
 
 ## Choosing new versions
 

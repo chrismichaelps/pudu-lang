@@ -7,12 +7,12 @@ aliases: [registry Main]
 ---
 # Registry Main
 
-`serve` (`--data`, `--host`, `--port`, `--url`), `account --handle --password` (creates an account and prints a publish token), and `token --handle [--scope]`. Uploads up to `Api.UPLOAD_LIMIT` (16 MiB) are accepted; `/health` answers `ok`.
+`serve` with `--data`, `--host`, `--port`, `--url`, `--github-client-id` (or `REGISTRY_GITHUB_CLIENT_ID`), `--github-url`, and `--github-api`; a GitHub address on this machine is permitted by the outbound checks. `/health` answers `ok`.
 
 See [[architecture/PACKAGES]] · [[src/registry/_MOC]].
 
 ## Grill Log
 
-- **Q:** Create accounts from the command line? **A:** Yes, for operators and CI. _Rationale:_ a fresh registry needs a first account without a browser. _Rejected:_ web-only sign-up.
+- **Q:** Keep a command that creates accounts? **A:** No; accounts are GitHub's.
 
-Resolved Grill Log: behaviour covered by `registry/src/Test/Registry.pudu`.
+Resolved Grill Log: behaviour covered by `registry/src/Test/Registry.pudu` and `test/package-registry.py`.

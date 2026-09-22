@@ -40,13 +40,15 @@ imports are absolute, and a public type is identified by the module that declare
 
 | Written | Means |
 | --- | --- |
-| `@alice/json-schema` | the project `json-schema` owned by the handle `alice` |
+| `@alice/json-schema` | the project `json-schema` owned by the handle `alice`: the GitHub repository `github.com/alice/json-schema` |
 | `@alice/json-schema@1.4.0` | exactly release 1.4.0 |
 | `@alice/json-schema@^1.4` | the newest release compatible with 1.4 |
 
-Handles and project names use lowercase ASCII letters, digits, and single hyphens, 1 to 39
-characters, and may not start or end with a hyphen. `std`, `core`, `pudu`, and `admin` are reserved
-handles. A release version is Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`, optional pre-release).
+A handle is a GitHub user or organization and a project is one of its repositories: packages live
+where their code already lives, and the registry keeps no accounts of its own. Handles and project
+names are the GitHub names in lowercase, and must be lowercase ASCII letters, digits, and single
+hyphens, 1 to 39 characters, not starting or ending with a hyphen; a repository whose name does not
+fit cannot be published. `std`, `core`, `pudu`, and `admin` are reserved handles. A release version is Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`, optional pre-release).
 
 The module root a package owns is the manifest's `root`, or the PascalCase of the project name:
 `json-schema` → `JsonSchema`. The root must be a valid module segment and must not be `Std` or
@@ -191,10 +193,11 @@ All in `pudu`:
 | `pudu upgrade [name…]` | raise requirements to the latest releases, naming every major version crossed |
 | `pudu deps` | the direct dependencies, their requirements, and what is locked |
 | `pudu tree` | the whole resolved graph |
-| `pudu login [--registry URL]` | pair this machine with a registry account |
+| `pudu login [--token T] [--registry URL]` | sign this machine in with GitHub |
 | `pudu logout` | forget the stored token |
-| `pudu push` | upload the project's current code as its latest unreleased snapshot |
-| `pudu release <version> [--notes FILE]` | publish an immutable release |
+| `pudu whoami` | the GitHub account the stored token belongs to |
+| `pudu push` | register the project, or refresh it from its repository's default branch |
+| `pudu release <version> [--notes FILE]` | tag the commit on GitHub and publish it as an immutable release |
 
 A `<spec>` is `@h/n`, `@h/n@<version or requirement>`, a path (`./x`, `../x`, `/x`), or a git URL
 with an optional `#rev`. `--locked` refuses any change to `pudu.lock` (for CI); `--offline` refuses
@@ -233,20 +236,23 @@ copied side by side, up to eight at a time.
 
 ```text
 $ pudu login
-open https://pudu-lang.org/login/device and enter the code WXYZ-2345
+open https://github.com/login/device and enter the code WXYZ-2345
 signed in as @alice
 
 $ pudu push
-pushed @alice/json-schema (12 modules, 38 KB) — https://pudu-lang.org/@alice/json-schema
+registered @alice/json-schema from github.com/alice/json-schema — https://pudu-lang.org/@alice/json-schema
 
 $ pudu release 1.4.3 --notes CHANGES.md
 checked 12 modules, 40 tests passed
+tagged v1.4.3 at 3b1e07c and pushed it to origin
 released @alice/json-schema 1.4.3 — install with: pudu install @alice/json-schema@1.4.3
 ```
 
-`pudu release` checks the project and runs its tests before uploading, and refuses if the manifest's
-`version` is not the version given, if that version exists, or if it is not greater than the latest
-release on the same major line.
+`pudu release` refuses if the manifest's `version` is not the version given, if the working tree has
+changes not committed, or if the commit is not on the repository's remote. It checks the project,
+runs its tests, creates the annotated tag `v<version>` with the notes, pushes it, and asks the
+registry to publish it. The registry refuses if the token cannot push to the repository, if that
+version exists, or if it is not greater than the latest release on the same major line.
 
 ### Errors worth their own words
 
@@ -274,6 +280,13 @@ below, and stores each release's archive once, by digest. Its read side is plain
 project document and the archives are immutable per release, so any static host or CDN can serve
 them.
 
+GitHub is where a package's code and its owner live; the registry is where a release is kept once it
+is published. To publish, the registry resolves the tag to its commit, downloads that commit's archive
+from GitHub, applies the same refusals as for any archive, reads the `pudu.toml` inside it, and repacks
+the package's files into its own canonical `.tar.gz` (sorted, time 0, mode 0644). The digest of that
+archive is the release's checksum. Installs download the registry's copy, so a tag that is moved, or a
+repository that is deleted or made private, changes no existing build.
+
 ### API
 
 | Method and path | Answers |
@@ -283,13 +296,12 @@ them.
 | `GET /api/v1/packages/@h/n/releases/<v>/archive` | the release archive, `application/gzip` |
 | `GET /api/v1/packages/@h/n/releases/<v>/files/<path>` | one file of a release, for the source view |
 | `GET /api/v1/handles/@h` | a handle's profile and public projects |
-| `PUT /api/v1/packages/@h/n/head` | push: the project's latest snapshot (authenticated) |
-| `POST /api/v1/packages/@h/n/releases` | release: an immutable version (authenticated) |
+| `PUT /api/v1/packages/@h/n/head` | push: register the project and refresh it from the default branch (authenticated) |
+| `POST /api/v1/packages/@h/n/releases` | release a tag as an immutable version: `{version, tag, notes}` (authenticated) |
 | `PATCH /api/v1/packages/@h/n` | owner settings: description, visibility (authenticated) |
 | `DELETE /api/v1/packages/@h/n` | delete a project with no releases, or unlist one that has them |
-| `POST /api/v1/login/device` | begin pairing: a user code and a device code |
-| `POST /api/v1/login/device/token` | the CLI polls with the device code until approved |
-| `GET /api/v1/whoami` | the handle a token belongs to |
+| `GET /api/v1/config` | what `pudu login` needs: the GitHub OAuth client id and GitHub's addresses |
+| `GET /api/v1/whoami` | the GitHub account a token belongs to |
 
 A project document:
 
@@ -323,17 +335,26 @@ yanked, which keeps it installable from an existing lock and stops new resolutio
 
 ### Accounts and tokens
 
-`pudu login` starts device pairing: the CLI receives a short user code and a URL, the person signs in
-on the website and approves the code, and the CLI receives a token. The token is stored in
-`$PUDU_HOME/credentials.toml` with owner-only permissions, per registry, and never in a manifest or
-lock. The registry stores only a digest of each token. `pudu login --token` accepts a token made on
-the website for machines without a browser, such as CI.
+The registry has no accounts, passwords, or token secrets. A request is authenticated by a GitHub
+token in `Authorization: Bearer`; the registry asks GitHub whose it is (`GET /user`) and caches the
+answer by the token's digest for five minutes. Publishing `@owner/repo`, or changing its settings,
+requires that the token can push to `github.com/owner/repo`, which covers users and organizations
+alike. A handle's profile — display name, avatar, and GitHub address — is copied from GitHub when one
+of its projects is registered or released.
+
+`pudu login` runs GitHub's OAuth device flow with the client id the registry names at
+`/api/v1/config`: it prints `https://github.com/login/device` and a code, polls GitHub until the person
+approves, and stores the token in `$PUDU_HOME/credentials.toml` with owner-only permissions, per
+registry, and never in a manifest or lock. The flow needs no client secret. `pudu login --token`
+stores a token made elsewhere, and `PUDU_TOKEN` overrides the file, so CI can use the token its
+workflow already has.
 
 ### Private projects
 
-A private project's document, files, and archives are answered only to its owner's token; to anyone
-else it does not exist (404). Installing one requires `pudu login` on that machine. The lock records
-the same checksum as for a public release, so a private package is exactly as reproducible.
+A project from a private repository is private. Its document, files, and archives are answered only
+to a token that can read the repository; to anyone else it does not exist (404). Installing one
+requires `pudu login` on that machine. The lock records the same checksum as for a public release, so
+a private package is exactly as reproducible.
 
 ## Website
 
@@ -382,7 +403,7 @@ depend on a reader noticing in time.
 | --- | --- | --- |
 | Code run at install | Worms spread through install hooks that read tokens from the machine and republished every package the victim owned | `pudu install` never executes anything a package contains: no hooks, no build scripts, no compile. Installing is copying verified files. |
 | A malicious release installed within hours | A phished maintainer's account published poisoned versions of widely used packages; most were pulled within hours, after thousands of installs | A new resolution skips releases younger than the minimum release age (72 hours by default, `min-release-age` in `[install]`); a locked version is unaffected. `pudu install @h/n@1.2.3` names a fresh release deliberately and says how old it is. |
-| Account takeover and stolen tokens | Phishing for second-factor resets; tokens harvested from CI | Publishing needs a token scoped to publishing, separate from reading; a release is confirmed with a second factor on the account; tokens are stored hashed on the registry and with owner-only permissions on disk; a release records the handle that published it. |
+| Account takeover and stolen tokens | Phishing for second-factor resets; tokens harvested from CI | Accounts are GitHub accounts, so their second factor and token scopes are GitHub's; the registry stores no secret at all; tokens are kept with owner-only permissions on disk; a release records the account that published it and the commit it came from. |
 | Dependency confusion | A public package with a private package's name and a higher version was chosen | A package is `@handle/name` on one registry; the lock records the registry each release came from, and a registry package is never looked for anywhere else. |
 | Manifest confusion | The metadata a registry showed differed from the manifest inside the archive | The registry derives a release's version, dependencies, and root from the `pudu.toml` inside the archive; the client compares the unpacked manifest with the release document and refuses a difference. |
 | Lock injection | A lock edited in a change pointed a dependency at another URL, unreviewed | The manifest says where each package comes from; the lock only records what was chosen there. A lock entry whose source does not match the manifest's is not used, and a registry release whose digest differs from the lock's is refused. |
@@ -423,15 +444,19 @@ entry.
 - **Hosting the registry.** The website runs on a platform with no disk. The registry needs one
   persistent volume (or an object store and a small database). Where it runs, and its domain, is an
   operator's decision; nothing in the design depends on the choice.
-- **Sign-in on the website.** Device pairing needs the site to know who a person is. An account
-  with a password on the registry works with no third party; signing in with a code host's account
-  is friendlier and needs an OAuth application.
 - **Root ownership across the registry.** Roots are unique per program, not per registry. Reserving a
   root registry-wide on first release would prevent most conflicts before they reach a program, at
   the cost of first-come names.
 - **Favourites, tickets, contributions.** Not in the first release of the website pages.
 
 ## Grill Log
+
+- **Q:** Registry accounts, or GitHub's? **A:** GitHub's, for identity and for source. _Rationale:_ the
+  code already lives there, a handle means the same owner in both places, and the registry then holds
+  no passwords or token secrets. _Rejected:_ registry passwords and its own device pairing.
+- **Q:** Install straight from GitHub tags? **A:** No; from the registry's copy of the tagged commit.
+  _Rationale:_ a tag can be moved and a repository deleted, and neither may change or break a locked
+  build. _Rejected:_ an index that only records checksums.
 
 - **Q:** Allow arbitrary install or build scripts? **A:** No. _Rationale:_ they execute dependency code
   before the project is built and turn resolution into remote code execution. _Rejected:_ lifecycle

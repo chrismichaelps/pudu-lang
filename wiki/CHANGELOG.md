@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Packages live on GitHub
+
+- A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and handles are GitHub
+  users and organizations. `pudu login` runs GitHub's OAuth device flow (`--private` asks for the
+  `repo` scope, `--token` and `PUDU_TOKEN` take a GitHub token). The registry keeps no accounts,
+  passwords, or token secrets; it asks GitHub whose a token is and remembers the answer by digest for
+  five minutes. Profiles (name, avatar) are copied from GitHub.
+- `pudu release <version>` refuses a working tree with changes, checks and tests the project, tags the
+  commit `v<version>`, pushes the tag, and asks the registry to publish it. The registry needs push
+  permission on the repository, fetches the tagged commit's archive from GitHub, applies every archive
+  refusal, and repacks the files into its own canonical archive, recording the tag and commit. Installs
+  use that copy, so a moved or deleted tag changes no locked build. `pudu push` registers a project from
+  its default branch. A private repository's project exists only to tokens that can read it.
+- `Std.Archive.Tar` reads pax extended headers (their `path`) and skips pax global headers, as found in
+  every archive `git archive` and GitHub produce.
+- `test/package-registry.py` runs against a stand-in GitHub backed by real git repositories.
+
 ## 2026-09-22 — Installs that fail change nothing
 
 - `pudu install`, `update`, `upgrade`, and `uninstall` stage every package they copy beside its

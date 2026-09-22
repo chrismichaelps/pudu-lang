@@ -2,15 +2,16 @@ module Service.Publish
 
 import Std.Bytes as ByteSeq
 import Std.List as List
-import Std.Option as Option
 import Domain.Archive as Archive
 import Domain.Manifest as Manifest
 import Domain.Name as Name
 import Domain.Project as Project
 import Domain.Version as Version
+import Service.Auth as Auth
 import Service.Clock as Clock
-import Service.Tokens as Tokens
+import Service.GitHub as GitHub
 import Store.Files as Files
+import Store.Profiles as Profiles
 import Store.Projects as Projects
 
 /// Why a publishing request was refused, with the HTTP status it answers.
@@ -32,6 +33,13 @@ fn invalid[T](result: Result[T, Str]) -> Result[T, Refusal] {
   }
 }
 
+fn upstream[T](result: Result[T, Str]) -> Result[T, Refusal] {
+  match result {
+    case Ok(value) => Ok(value)
+    case Err(problem) => Err(refuse(502, problem))
+  }
+}
+
 /// `sha256:` and the hexadecimal SHA-256 of an archive's bytes.
 export fn checksumOf(archive: &Bytes) -> Str { "sha256:" + ByteSeq.encodeHex(&sha256Of(*archive)) }
 
@@ -47,60 +55,73 @@ fn readmeOf(files: &Array[Archive.File]) -> Str {
   ""
 }
 
-/// The files and manifest of an uploaded archive, for the package in the route.
-fn opened(package: &Name.PackageName, archive: &Bytes, forRelease: Bool) -> Result[(Array[Archive.File], Manifest.Manifest), Refusal] {
-  let files = invalid(Archive.unpack(archive)) ?
-  let Some(manifestBytes) = Archive.fileAt(&files, "pudu.toml") else { return Err(refuse(422, "the archive has no pudu.toml at its root")) }
+/// The repository behind a package, when the viewer's token may push to it.
+fn pushable(github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName) -> Result[GitHub.Repository, Refusal] {
+  if Auth.tokenFor(viewer).isEmpty() { return Err(refuse(401, "sign in with pudu login to publish")) }
+  match upstream(Auth.repositoryFor(github, viewer, package)) ? {
+    case None => Err(refuse(404, "github.com/" + package.handle + "/" + package.name + " is not a repository this token can see"))
+    case Some(repository) => {
+      if !repository.canPush { return Err(refuse(403, "this GitHub account cannot push to github.com/" + package.handle + "/" + package.name)) }
+      Ok(repository)
+    }
+  }
+}
+
+/// The package files of a commit, and the manifest among them, for the routed package.
+fn filesAt(github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName, commit: Str, forRelease: Bool) -> Result[(Array[Archive.File], Manifest.Manifest), Refusal] {
+  let archive = upstream(github.archive(Auth.tokenFor(viewer), package.handle, package.name, commit)) ?
+  let files = invalid(Archive.fromCommitArchive(&archive)) ?
+  let Some(manifestBytes) = Archive.fileAt(&files, "pudu.toml") else { return Err(refuse(422, "the repository has no pudu.toml at its root at " + commit.take(12))) }
   let manifestText = match ByteSeq.toText(&manifestBytes) {
     case Ok(text) => text
     case Err(_) => { return Err(refuse(422, "pudu.toml is not UTF-8 text")) }
   }
   let manifest = invalid(Manifest.read(manifestText, forRelease)) ?
   if Name.render(&manifest.name) != Name.render(package) {
-    return Err(refuse(422, "pudu.toml names " + Name.render(&manifest.name) + ", and this upload is for " + Name.render(package)))
+    return Err(refuse(422, "pudu.toml names " + Name.render(&manifest.name) + ", and the repository is " + Name.render(package)))
   }
   Ok((files, manifest))
 }
 
-/// A project another handle established with a release, one edit away from this name.
-fn lookalike(store: &Files.Store, package: &Name.PackageName) -> Option[Str] {
-  for other in Projects.all(store) {
-    if other.name.handle != package.handle && other.releases.length() > 0 && Name.closeTo(other.name.name, package.name) {
-      return Some(Name.render(&other.name))
-    }
+/// Copy the owner's GitHub profile beside the project.
+fn remember(github: &GitHub.GitHub, store: &Files.Store, handle: Str) -> Result[(), Refusal] {
+  match upstream(github.profile(handle)) ? {
+    case Some(profile) => stored(Profiles.save(store, &profile))
+    case None => Ok(())
   }
-  None
 }
 
-/// The project in the store, or a new one described by the manifest.
-fn projectFor(store: &Files.Store, package: &Name.PackageName, manifest: &Manifest.Manifest, readme: Str, visibility: Str) -> Result[Project.Project, Refusal] {
+/// The project in the store brought up to date with a manifest and its
+/// repository, or a new one.
+fn described(store: &Files.Store, package: &Name.PackageName, manifest: &Manifest.Manifest, repository: &GitHub.Repository, readme: Str) -> Result[Project.Project, Refusal] {
+  let description = if manifest.description.isEmpty() { repository.description } else { manifest.description }
+  let keywords = if manifest.keywords.isEmpty() { repository.topics } else { manifest.keywords }
+  let visibility = if repository.private { "private" } else { "public" }
   match stored(Projects.load(store, package)) ? {
     case Some(existing) => Ok(Project.Project {
         ..existing,
-        description: manifest.description,
-        keywords: manifest.keywords,
+        description: description,
+        keywords: keywords,
         license: manifest.license,
+        visibility: visibility,
         root: manifest.root,
-        readme: readme
+        readme: readme,
+        repository: repository.htmlUrl
       })
-    case None => {
-      if let Some(similar) = lookalike(store, package) {
-        return Err(refuse(409, Name.render(package) + " is one edit from " + similar + ", which another handle publishes; choose a more distinct name"))
-      }
-      Ok(Project.Project {
-          name: *package,
-          description: manifest.description,
-          keywords: manifest.keywords,
-          license: manifest.license,
-          visibility: if visibility == "private" { "private" } else { "public" },
-          root: manifest.root,
-          readme: readme,
-          createdAt: Clock.stamp(),
-          head: None,
-          releases: [],
-          unlisted: false
-        })
-    }
+    case None => Ok(Project.Project {
+        name: *package,
+        description: description,
+        keywords: keywords,
+        license: manifest.license,
+        visibility: visibility,
+        root: manifest.root,
+        readme: readme,
+        createdAt: Clock.stamp(),
+        head: None,
+        releases: [],
+        unlisted: false,
+        repository: repository.htmlUrl
+      })
   }
 }
 
@@ -110,16 +131,20 @@ fn writeFiles(directory: Str, files: &Array[Archive.File]) -> Result[(), Str] {
   Ok(())
 }
 
-/// Store an archive as a project's latest snapshot. A snapshot is browsable and never installable.
-export fn push(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Name.PackageName, archive: &Bytes, visibility: Str) -> Result[Project.Project, Refusal] {
-  if !Tokens.mayPublish(viewer, package) { return Err(refuse(403, "this token may not publish " + Name.render(package))) }
-  let (files, manifest) = opened(package, archive, false) ?
-  let project = projectFor(store, package, &manifest, readmeOf(&files), visibility) ?
-  stored(Files.writeBytes(Files.headArchive(store, package), archive)) ?
+/// Register a project, or refresh it, from its repository's default branch.
+/// The snapshot is browsable and never installable.
+export fn push(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName) -> Result[Project.Project, Refusal] {
+  let repository = pushable(github, viewer, package) ?
+  let commit = upstream(github.commit(Auth.tokenFor(viewer), package.handle, package.name, repository.defaultBranch)) ?
+  let (files, manifest) = filesAt(github, viewer, package, commit, false) ?
+  let project = described(store, package, &manifest, &repository, readmeOf(&files)) ?
+  let archive = Archive.pack(&files)
+  stored(Files.writeBytes(Files.headArchive(store, package), &archive)) ?
   stored(writeFiles(Files.headFiles(store, package), &files)) ?
-  let head = Project.Head{uploadedAt: Clock.stamp(), checksum: checksumOf(archive), size: archive.length(), modules: Archive.modulesUnder(&files, manifest.source)}
+  let head = Project.Head{uploadedAt: Clock.stamp(), checksum: checksumOf(&archive), size: archive.length(), modules: Archive.modulesUnder(&files, manifest.source)}
   let updated = Project.Project{..project, head: Some(head), unlisted: false}
   stored(Projects.save(store, &updated)) ?
+  remember(github, store, package.handle) ?
   Ok(updated)
 }
 
@@ -130,17 +155,20 @@ fn versionBefore(left: &Project.Release, right: &Project.Release) -> Bool {
   }
 }
 
-/// Publish an immutable release. Refused when the version is not the
-/// manifest's, already exists, or is not greater than every release on the
-/// same major line.
-export fn release(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Name.PackageName, version: Str, notes: Str, archive: &Bytes, visibility: Str) -> Result[Project.Release, Refusal] {
-  if !Tokens.mayPublish(viewer, package) { return Err(refuse(403, "this token may not publish " + Name.render(package))) }
+/// Publish the commit a tag names as an immutable release. Refused when the
+/// token cannot push to the repository, the manifest's version is not the one
+/// asked for, the version exists, or it is not greater than every release on
+/// the same major line.
+export fn release(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName, version: Str, tag: Str, notes: Str) -> Result[Project.Release, Refusal] {
   let wanted = invalid(Version.parse(version)) ?
-  let (files, manifest) = opened(package, archive, true) ?
+  let repository = pushable(github, viewer, package) ?
+  let reference = if tag.isEmpty() { "v" + version } else { tag }
+  let commit = upstream(github.commit(Auth.tokenFor(viewer), package.handle, package.name, reference)) ?
+  let (files, manifest) = filesAt(github, viewer, package, commit, true) ?
   if manifest.version != version {
-    return Err(refuse(422, "pudu.toml gives version " + manifest.version + ", and the release asked for is " + version))
+    return Err(refuse(422, "pudu.toml at " + reference + " gives version " + manifest.version + ", and the release asked for is " + version))
   }
-  let project = projectFor(store, package, &manifest, readmeOf(&files), visibility) ?
+  let project = described(store, package, &manifest, &repository, readmeOf(&files)) ?
   for existing in project.releases {
     if existing.version == version { return Err(refuse(409, Name.render(package) + " " + version + " is already released; a release never changes")) }
     match Version.parse(existing.version) {
@@ -150,33 +178,44 @@ export fn release(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: 
       case Err(_) => {}
     }
   }
+  let archive = Archive.pack(&files)
   let publisher = match *viewer {
-    case Some(held) => held.handle
+    case Some(held) => held.login
     case None => ""
   }
   let published = Project.Release {
     version: version,
     publishedAt: Clock.stamp(),
     publisher: publisher,
-    checksum: checksumOf(archive),
+    checksum: checksumOf(&archive),
     size: archive.length(),
     language: manifest.language,
     dependencies: manifest.dependencies,
     modules: Archive.modulesUnder(&files, manifest.source),
     notes: notes,
-    yanked: false
+    yanked: false,
+    tag: reference,
+    commit: commit
   }
-  stored(Files.writeBytes(Files.releaseArchive(store, package, version), archive)) ?
+  stored(Files.writeBytes(Files.releaseArchive(store, package, version), &archive)) ?
   stored(writeFiles(Files.releaseFiles(store, package, version), &files)) ?
   let releases = List.sortBy(&project.releases.push(published), fn(left: Project.Release, right: Project.Release) -> Bool { versionBefore(&left, &right) })
   stored(Projects.save(store, &Project.Project{..project, releases: releases, unlisted: false})) ?
+  remember(github, store, package.handle) ?
   Ok(published)
 }
 
+fn owned(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName) -> Result[Project.Project, Refusal] {
+  let _repository = pushable(github, viewer, package) ?
+  match stored(Projects.load(store, package)) ? {
+    case Some(project) => Ok(project)
+    case None => Err(refuse(404, Name.render(package) + " is not a project on this registry"))
+  }
+}
+
 /// Mark a release yanked, or clear the mark. A yanked release still installs from a lock.
-export fn yank(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Name.PackageName, version: Str, yanked: Bool) -> Result[Project.Project, Refusal] {
-  if !Tokens.mayPublish(viewer, package) { return Err(refuse(403, "this token may not change " + Name.render(package))) }
-  let Some(project) = stored(Projects.load(store, package)) ? else { return Err(refuse(404, Name.render(package) + " is not a project")) }
+export fn yank(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName, version: Str, yanked: Bool) -> Result[Project.Project, Refusal] {
+  let project = owned(store, github, viewer, package) ?
   var found = false
   var releases: Array[Project.Release] = []
   for held in project.releases {
@@ -193,27 +232,19 @@ export fn yank(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Na
   Ok(updated)
 }
 
-/// Change a project's description or visibility. An empty value leaves it as it is.
-export fn configure(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Name.PackageName, description: Str, visibility: Str) -> Result[Project.Project, Refusal] {
-  if !Tokens.mayPublish(viewer, package) { return Err(refuse(403, "this token may not change " + Name.render(package))) }
-  let Some(project) = stored(Projects.load(store, package)) ? else { return Err(refuse(404, Name.render(package) + " is not a project")) }
-  if !visibility.isEmpty() && visibility != "public" && visibility != "private" {
-    return Err(refuse(422, "visibility is public or private"))
-  }
-  let updated = Project.Project {
-    ..project,
-    description: if description.isEmpty() { project.description } else { description },
-    visibility: if visibility.isEmpty() { project.visibility } else { visibility }
-  }
+/// Change a project's description. An empty value leaves it as it is.
+/// Visibility follows the repository.
+export fn configure(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName, description: Str) -> Result[Project.Project, Refusal] {
+  let project = owned(store, github, viewer, package) ?
+  let updated = Project.Project{..project, description: if description.isEmpty() { project.description } else { description }}
   stored(Projects.save(store, &updated)) ?
   Ok(updated)
 }
 
 /// Delete a project that has no releases, or unlist one that has them.
 /// Answers whether the project was deleted rather than unlisted.
-export fn remove(store: &Files.Store, viewer: &Option[Tokens.Viewer], package: &Name.PackageName) -> Result[Bool, Refusal] {
-  if !Tokens.mayPublish(viewer, package) { return Err(refuse(403, "this token may not change " + Name.render(package))) }
-  let Some(project) = stored(Projects.load(store, package)) ? else { return Err(refuse(404, Name.render(package) + " is not a project")) }
+export fn remove(store: &Files.Store, github: &GitHub.GitHub, viewer: &Option[Auth.Viewer], package: &Name.PackageName) -> Result[Bool, Refusal] {
+  let project = owned(store, github, viewer, package) ?
   if project.releases.isEmpty() {
     stored(Files.removeTree(Files.projectDirectory(store, package))) ?
     return Ok(true)

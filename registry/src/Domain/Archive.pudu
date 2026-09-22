@@ -63,6 +63,64 @@ export fn unpack(archive: &Bytes) -> Result[Array[File], Str] {
   Ok(List.sortBy(&files, fn(left: File, right: File) -> Bool { left.path < right.path }))
 }
 
+/// Whether a path is part of a package: no segment starts with `.`, and it is
+/// not under a top-level `deps/`.
+fn packaged(path: Str) -> Bool {
+  if path.startsWith("deps/") { return false }
+  for segment in path.split("/") {
+    if segment.startsWith(".") { return false }
+  }
+  true
+}
+
+/// The package files of a commit archive as GitHub serves it: every path under
+/// one top-level directory, which is removed. The same refusals as `unpack`
+/// apply, and files outside the package (`packaged`) are left out.
+export fn fromCommitArchive(archive: &Bytes) -> Result[Array[File], Str] {
+  let tarred = match Gzip.decompressWithin(archive, UNPACKED_LIMIT) {
+    case Ok(held) => held
+    case Err(_) => { return Err("the commit archive is not gzip data or unpacks to more than " + show(UNPACKED_LIMIT) + " bytes") }
+  }
+  let entries = match Tar.readArchive(&tarred) {
+    case Ok(held) => held
+    case Err(Tar.UnsupportedType) => { return Err("the commit holds an entry that is neither a file nor a directory") }
+    case Err(_) => { return Err("the commit archive is not a complete tar stream") }
+  }
+  var files: Array[File] = []
+  var seen: Set[Str] = setOf([])
+  for item in entries {
+    let slash = item.path.indexOf("/")
+    let inner = if slash < 0 { "" } else { item.path.drop(slash + 1) }
+    match item.typeFlag {
+      case Tar.Symlink => {
+        if packaged(inner) { return Err(inner + " is a symbolic link; a package holds only files and directories") }
+      }
+      case Tar.Directory => {}
+      case Tar.File => {
+        if let Some(problem) = pathProblem(inner) { return Err(problem) }
+        if packaged(inner) {
+          if seen.contains(inner) { return Err(inner + " appears twice in the archive") }
+          seen = seen.insert(inner)
+          files = files.push(File{path: inner, content: item.data})
+          if files.length() > FILE_LIMIT { return Err("the package holds more than " + show(FILE_LIMIT) + " files") }
+        }
+      }
+    }
+  }
+  Ok(List.sortBy(&files, fn(left: File, right: File) -> Bool { left.path < right.path }))
+}
+
+/// The canonical `.tar.gz` of package files: sorted by path, each a regular
+/// file with mode 0644 and the writer's fixed time, so the same files always
+/// give the same bytes.
+export fn pack(files: &Array[File]) -> Bytes {
+  var entries: Array[Tar.TarEntry] = []
+  for held in List.sortBy(files, fn(left: File, right: File) -> Bool { left.path < right.path }) {
+    entries = entries.push(Tar.entry(held.path, held.content))
+  }
+  Gzip.compress(&Tar.writeArchive(entries), &Gzip.config())
+}
+
 /// The content of one file, when the archive holds it.
 export fn fileAt(files: &Array[File], path: Str) -> Option[Bytes] {
   for held in *files {

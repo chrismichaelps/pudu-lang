@@ -24,7 +24,7 @@ import Pudu.Package.Identity
   )
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
-import Pudu.Cli.Publish (multipart)
+import Pudu.Cli.Publish (formBody)
 import Pudu.Eval.Compress (compressGzip)
 import Pudu.Eval.Io (IoOutcome (..))
 import Pudu.Package.Archive (archiveEntries, packDirectory, unpackArchive)
@@ -539,13 +539,12 @@ testArchiveRefusals = do
 testRegistryUrls :: IO Property
 testRegistryUrls = do
   refused <- send (Request "GET" "http://registry.example/api/v1/whoami" [] ByteString.empty)
-  let (body, contentType) = multipart [("version", "1.0.0")] ("archive", "\31\139\0\255")
   pure $ conjoin
     [ parseUrl "https://packages.pudu-lang.org/api/v1" === Right (Url True "packages.pudu-lang.org" 443 "/api/v1")
     , parseUrl "http://127.0.0.1:8790" === Right (Url False "127.0.0.1" 8790 "/")
     , counterexample "ftp is not an address" (either (const True) (const False) (parseUrl "ftp://x"))
     , counterexample "plain HTTP to another machine is refused" (isLeftContaining "HTTPS" (fmap (const ()) refused))
-    , counterexample "a multipart body carries its boundary and bytes" ("multipart/form-data; boundary=pudu-" `ByteString.isPrefixOf` contentType && "\31\139\0\255" `ByteString.isInfixOf` body)
+    , formBody [("grant_type", "urn:ietf:params:oauth:grant-type:device_code"), ("scope", "")] === "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&scope="
     ]
 
 testCredentials :: IO Property

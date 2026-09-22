@@ -1,0 +1,143 @@
+module Service.GitHub
+
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Json as Json
+import Std.Option as Option
+
+/// A GitHub account, user or organization, as the registry shows it.
+export type Profile = { login: Str, name: Str, avatarUrl: Str, htmlUrl: Str, kind: Str }
+
+/// A repository, and what the token that asked may do with it.
+export type Repository = {
+  owner: Str,
+  name: Str,
+  private: Bool,
+  canPush: Bool,
+  defaultBranch: Str,
+  description: Str,
+  topics: Array[Str],
+  htmlUrl: Str
+}
+
+/// What the registry asks of GitHub. Each takes the token of the request, or
+/// the empty text for none. `repository` answers `None` for a repository the
+/// token cannot see; `commit` resolves a tag, branch, or commit to its full
+/// commit id; `archive` answers the `.tar.gz` of a commit.
+export type GitHub = {
+  user: fn(Str) -> Result[Profile, Str],
+  repository: fn(Str, Str, Str) -> Result[Option[Repository], Str],
+  commit: fn(Str, Str, Str, Str) -> Result[Str, Str],
+  archive: fn(Str, Str, Str, Str) -> Result[Bytes, Str],
+  profile: fn(Str) -> Result[Option[Profile], Str]
+}
+
+/// Largest archive fetched from GitHub, in bytes.
+export const ARCHIVE_LIMIT: Int = 16777216
+
+fn text(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+fn flag(value: &Json.Json, key: Str) -> Bool {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asBool(&held)), false)
+}
+
+fn profileFrom(value: &Json.Json) -> Profile {
+  Profile {
+    login: text(value, "login").toLower(),
+    name: text(value, "name"),
+    avatarUrl: text(value, "avatar_url"),
+    htmlUrl: text(value, "html_url"),
+    kind: if text(value, "type") == "Organization" { "organization" } else { "user" }
+  }
+}
+
+fn repositoryFrom(value: &Json.Json) -> Repository {
+  let permissions = Option.unwrapOr(Json.field(value, "permissions"), Json.object(&[]))
+  var topics: Array[Str] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(value, "topics"), |held: Json.Json| Json.asList(&held)), []) {
+    if let Some(topic) = Json.asText(&item) { topics = topics.push(topic) }
+  }
+  let owner = Option.unwrapOr(Json.field(value, "owner"), Json.object(&[]))
+  Repository {
+    owner: text(&owner, "login").toLower(),
+    name: text(value, "name").toLower(),
+    private: flag(value, "private"),
+    canPush: flag(&permissions, "push") || flag(&permissions, "admin"),
+    defaultBranch: text(value, "default_branch"),
+    description: text(value, "description"),
+    topics: topics,
+    htmlUrl: text(value, "html_url")
+  }
+}
+
+fn request(target: Str, token: Str, accept: Str) -> Http.Request {
+  let base = [("accept", accept), ("user-agent", "pudu-registry"), ("x-github-api-version", "2022-11-28")]
+  let headers = if token.isEmpty() { base } else { base.push(("authorization", "Bearer " + token)) }
+  Http.Request{method: Http.Get, target: target, headers: headers, body: "", binaryBody: None}
+}
+
+fn limitsFor(permitted: &Array[Str], bytes: Int) -> Client.Limits {
+  Client.limits().reading(bytes).within(60000).reaching(permitted)
+}
+
+/// A JSON document from the API, `None` for 404, or why it could not be had.
+fn document(api: Str, permitted: &Array[Str], path: Str, token: Str) -> Result[Option[Json.Json], Str] {
+  match Client.send(&request(api + path, token, "application/vnd.github+json"), &limitsFor(permitted, 4194304)) {
+    case Err(problem) => Err("GitHub could not be reached: " + Client.explain(&problem))
+    case Ok(answered) => {
+      if answered.status.code == 404 { return Ok(None) }
+      if answered.status.code == 401 { return Err("GitHub did not accept the token") }
+      if answered.status.code != 200 { return Err("GitHub answered " + show(answered.status.code) + " for " + path) }
+      match Json.decode(answered.body) {
+        case Ok(value) => Ok(Some(value))
+        case Err(_) => Err("GitHub answered " + path + " with a document that is not JSON")
+      }
+    }
+  }
+}
+
+/// GitHub itself, at `api` (such as `https://api.github.com`). `permitted`
+/// names hosts the outbound checks would otherwise refuse, for a local stand-in.
+export fn live(api: Str, permitted: Array[Str]) -> GitHub {
+  GitHub {
+    user: fn(token: Str) -> Result[Profile, Str] {
+      match document(api, &permitted, "/user", token) ? {
+        case Some(value) => Ok(profileFrom(&value))
+        case None => Err("GitHub did not accept the token")
+      }
+    },
+    repository: fn(token: Str, owner: Str, name: Str) -> Result[Option[Repository], Str] {
+      match document(api, &permitted, "/repos/" + owner + "/" + name, token) ? {
+        case Some(value) => Ok(Some(repositoryFrom(&value)))
+        case None => Ok(None)
+      }
+    },
+    commit: fn(token: Str, owner: Str, name: Str, reference: Str) -> Result[Str, Str] {
+      match document(api, &permitted, "/repos/" + owner + "/" + name + "/commits/" + reference, token) ? {
+        case Some(value) => {
+          let sha = text(&value, "sha")
+          if sha.isEmpty() { Err(reference + " is not a commit of " + owner + "/" + name) } else { Ok(sha) }
+        }
+        case None => Err(owner + "/" + name + " has no tag, branch, or commit " + reference)
+      }
+    },
+    archive: fn(token: Str, owner: Str, name: Str, commit: Str) -> Result[Bytes, Str] {
+      let target = api + "/repos/" + owner + "/" + name + "/tarball/" + commit
+      match Client.send(&request(target, token, "application/vnd.github+json"), &limitsFor(&permitted, ARCHIVE_LIMIT)) {
+        case Err(problem) => Err("the archive of " + owner + "/" + name + " could not be fetched: " + Client.explain(&problem))
+        case Ok(answered) => {
+          if answered.status.code != 200 { return Err("GitHub answered " + show(answered.status.code) + " for the archive of " + owner + "/" + name) }
+          Ok(Http.responseBytes(&answered))
+        }
+      }
+    },
+    profile: fn(login: Str) -> Result[Option[Profile], Str] {
+      match document(api, &permitted, "/users/" + login, "") ? {
+        case Some(value) => Ok(Some(profileFrom(&value)))
+        case None => Ok(None)
+      }
+    }
+  }
+}

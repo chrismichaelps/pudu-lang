@@ -2,7 +2,6 @@ module Web.Api
 
 import Std.Fs as Fs
 import Std.Http as Http
-import Std.Http.Multipart as Multipart
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Io as Io
@@ -12,19 +11,24 @@ import Std.Text as Text
 import Domain.Archive as Archive
 import Domain.Name as Name
 import Domain.Project as Project
-import Service.Device as Device
+import Service.Auth as Auth
+import Service.GitHub as GitHub
 import Service.Publish as Publish
 import Service.Search as Search
-import Service.Tokens as Tokens
-import Store.Accounts as Accounts
 import Store.Files as Files
+import Store.Profiles as Profiles
 import Store.Projects as Projects
 
-/// Largest upload a push or release may carry, in bytes.
-export const UPLOAD_LIMIT: Int = 16777216
+/// Largest request body the API reads, in bytes.
+export const BODY_LIMIT: Int = 1048576
 
-/// What the routes need: the store and the address the registry is served at.
-export type Context = { store: Files.Store, siteUrl: Str }
+/// What `pudu login` is told: the OAuth client id of the registry's GitHub
+/// application and the addresses of GitHub's site and API.
+export type Login = { clientId: Str, githubUrl: Str, githubApi: Str }
+
+/// What the routes need: the store, the address the registry is served at,
+/// GitHub, and the login settings.
+export type Context = { store: Files.Store, siteUrl: Str, github: GitHub.GitHub, login: Login }
 
 fn failure(status: Int, reason: Str) -> Http.Response {
   Reply.jsonValue(status, Json.object(&[("error", Json.Text(reason))]))
@@ -32,20 +36,26 @@ fn failure(status: Int, reason: Str) -> Http.Response {
 
 fn refused(refusal: &Publish.Refusal) -> Http.Response { failure(refusal.status, refusal.reason) }
 
-fn viewerOf(context: &Context, request: &Route.Request) -> Option[Tokens.Viewer] {
-  Tokens.viewerOf(&context.store, Route.header(request, "authorization"))
+fn viewerOf(context: &Context, request: &Route.Request) -> Option[Auth.Viewer] {
+  Auth.viewerOf(&context.store, &context.github, Route.header(request, "authorization"))
 }
 
 fn packageOf(request: &Route.Request) -> Result[Name.PackageName, Str] {
   Name.fromRoute(Option.unwrapOr(Route.param(request, "handle"), ""), Option.unwrapOr(Route.param(request, "name"), ""))
 }
 
-/// A project the viewer may see: public, or private and their own. Anything
-/// else answers as absent.
+/// A project the viewer may see: public, or private and in a repository the
+/// viewer's token can read. Anything else answers as absent.
 fn visible(context: &Context, request: &Route.Request, package: &Name.PackageName) -> Option[Project.Project] {
   match Projects.load(&context.store, package) {
     case Ok(Some(project)) => {
-      if Project.isPublic(&project) || Tokens.mayRead(&viewerOf(context, request), package) { Some(project) } else { None }
+      if Project.isPublic(&project) { return Some(project) }
+      let viewer = viewerOf(context, request)
+      if Option.isNone(&viewer) { return None }
+      match Auth.repositoryFor(&context.github, &viewer, package) {
+        case Ok(Some(_)) => Some(project)
+        case _ => None
+      }
     }
     case _ => None
   }
@@ -60,21 +70,6 @@ fn releaseOf(project: &Project.Project, version: Str) -> Option[Project.Release]
     if held.version == version { return Some(held) }
   }
   None
-}
-
-fn partsOf(request: &Route.Request) -> Result[Array[Multipart.Part], Str] {
-  let contentType = Option.unwrapOr(Route.header(request, "content-type"), "")
-  match Multipart.read(&Route.bodyBytes(request), contentType, &Multipart.accepting(8, UPLOAD_LIMIT, UPLOAD_LIMIT + 65536)) {
-    case Ok(parts) => Ok(parts)
-    case Err(_) => Err("the body is not multipart/form-data within " + show(UPLOAD_LIMIT) + " bytes")
-  }
-}
-
-fn textPart(parts: &Array[Multipart.Part], name: Str) -> Str {
-  match Multipart.field(parts, name) {
-    case Some(part) => Option.unwrapOr(Multipart.textOf(&part), "")
-    case None => ""
-  }
 }
 
 fn jsonBody(request: &Route.Request) -> Json.Json {
@@ -155,58 +150,45 @@ fn file(context: &Context, request: &Route.Request) -> Http.Response {
 
 fn handle(context: &Context, request: &Route.Request) -> Http.Response {
   let written = Option.unwrapOr(Route.param(request, "handle"), "")
-  let bare = if written.startsWith("@") { written.drop(1) } else { written }
-  match Accounts.load(&context.store, bare) {
-    case Ok(Some(account)) => {
+  let bare = (if written.startsWith("@") { written.drop(1) } else { written }).toLower()
+  match Profiles.load(&context.store, bare) {
+    case Ok(Some(profile)) => {
       var listed: Array[Json.Json] = []
       for project in Projects.ofHandle(&context.store, bare) {
         if Project.isPublic(&project) && !project.unlisted { listed = listed.push(Project.summaryJson(&project)) }
       }
-      Reply.jsonValue(200, Json.object(&[
-            ("handle", Json.Text("@" + account.handle)),
-            ("displayName", Json.Text(account.displayName)),
-            ("projects", Json.list(&listed))
-          ]))
+      Reply.jsonValue(200, Json.withField(&Profiles.toJson(&profile), "projects", Json.list(&listed)))
     }
-    case _ => failure(404, "@" + bare + " is not a handle on this registry")
+    case _ => failure(404, "@" + bare + " has no projects on this registry")
   }
 }
 
 fn push(context: &Context, request: &Route.Request) -> Http.Response {
   match packageOf(request) {
     case Err(problem) => failure(400, problem)
-    case Ok(package) => match partsOf(request) {
-      case Err(problem) => failure(400, problem)
-      case Ok(parts) => {
-        let Some(upload) = Multipart.field(&parts, "archive") else { return failure(400, "the upload has no archive part") }
-        match Publish.push(&context.store, &viewerOf(context, request), &package, &upload.content, textPart(&parts, "visibility")) {
-          case Ok(project) => Reply.jsonValue(200, Project.toJson(&project))
-          case Err(refusal) => refused(&refusal)
-        }
-      }
+    case Ok(package) => match Publish.push(&context.store, &context.github, &viewerOf(context, request), &package) {
+      case Ok(project) => Reply.jsonValue(200, Project.toJson(&project))
+      case Err(refusal) => refused(&refusal)
     }
   }
 }
 
 fn release(context: &Context, request: &Route.Request) -> Http.Response {
+  let body = jsonBody(request)
   match packageOf(request) {
     case Err(problem) => failure(400, problem)
-    case Ok(package) => match partsOf(request) {
-      case Err(problem) => failure(400, problem)
-      case Ok(parts) => {
-        let Some(upload) = Multipart.field(&parts, "archive") else { return failure(400, "the upload has no archive part") }
-        let version = textPart(&parts, "version")
-        let outcome = Publish.release(&context.store, &viewerOf(context, request), &package, version, textPart(&parts, "notes"), &upload.content, textPart(&parts, "visibility"))
-        match outcome {
-          case Ok(published) => Reply.jsonValue(201, Json.object(&[
-                ("name", Json.Text(Name.render(&package))),
-                ("version", Json.Text(published.version)),
-                ("checksum", Json.Text(published.checksum)),
-                ("size", Json.Number(published.size)),
-                ("url", Json.Text(context.siteUrl + "/" + Name.render(&package)))
-              ]))
-          case Err(refusal) => refused(&refusal)
-        }
+    case Ok(package) => {
+      let outcome = Publish.release(&context.store, &context.github, &viewerOf(context, request), &package, jsonText(&body, "version"), jsonText(&body, "tag"), jsonText(&body, "notes"))
+      match outcome {
+        case Ok(published) => Reply.jsonValue(201, Json.object(&[
+              ("name", Json.Text(Name.render(&package))),
+              ("version", Json.Text(published.version)),
+              ("checksum", Json.Text(published.checksum)),
+              ("commit", Json.Text(published.commit)),
+              ("size", Json.Number(published.size)),
+              ("url", Json.Text(context.siteUrl + "/" + Name.render(&package)))
+            ]))
+        case Err(refusal) => refused(&refusal)
       }
     }
   }
@@ -217,7 +199,7 @@ fn yank(context: &Context, request: &Route.Request) -> Http.Response {
   let yanked = Option.unwrapOr(Option.andThen(Json.field(&jsonBody(request), "yanked"), |held: Json.Json| Json.asBool(&held)), true)
   match packageOf(request) {
     case Err(problem) => failure(400, problem)
-    case Ok(package) => match Publish.yank(&context.store, &viewerOf(context, request), &package, version, yanked) {
+    case Ok(package) => match Publish.yank(&context.store, &context.github, &viewerOf(context, request), &package, version, yanked) {
       case Ok(project) => Reply.jsonValue(200, Project.toJson(&project))
       case Err(refusal) => refused(&refusal)
     }
@@ -228,7 +210,7 @@ fn configure(context: &Context, request: &Route.Request) -> Http.Response {
   let body = jsonBody(request)
   match packageOf(request) {
     case Err(problem) => failure(400, problem)
-    case Ok(package) => match Publish.configure(&context.store, &viewerOf(context, request), &package, jsonText(&body, "description"), jsonText(&body, "visibility")) {
+    case Ok(package) => match Publish.configure(&context.store, &context.github, &viewerOf(context, request), &package, jsonText(&body, "description")) {
       case Ok(project) => Reply.jsonValue(200, Project.toJson(&project))
       case Err(refusal) => refused(&refusal)
     }
@@ -238,49 +220,25 @@ fn configure(context: &Context, request: &Route.Request) -> Http.Response {
 fn remove(context: &Context, request: &Route.Request) -> Http.Response {
   match packageOf(request) {
     case Err(problem) => failure(400, problem)
-    case Ok(package) => match Publish.remove(&context.store, &viewerOf(context, request), &package) {
+    case Ok(package) => match Publish.remove(&context.store, &context.github, &viewerOf(context, request), &package) {
       case Ok(deleted) => Reply.jsonValue(200, Json.object(&[("deleted", Json.Boolean(deleted)), ("unlisted", Json.Boolean(!deleted))]))
       case Err(refusal) => refused(&refusal)
     }
   }
 }
 
-fn beginPairing(context: &Context) -> Http.Response {
-  match Device.begin(&context.store) {
-    case Ok(pairing) => Reply.jsonValue(200, Json.object(&[
-          ("deviceCode", Json.Text(pairing.deviceCode)),
-          ("userCode", Json.Text(pairing.userCode)),
-          ("verificationUrl", Json.Text(context.siteUrl + "/login/device")),
-          ("interval", Json.Number(Device.POLL_SECONDS)),
-          ("expiresIn", Json.Number(pairing.expiresIn))
-        ]))
-    case Err(problem) => failure(500, problem)
-  }
-}
-
-fn pollPairing(context: &Context, request: &Route.Request) -> Http.Response {
-  match Device.poll(&context.store, jsonText(&jsonBody(request), "deviceCode")) {
-    case Ok(Device.Approved(owner, secret)) => Reply.jsonValue(200, Json.object(&[("handle", Json.Text("@" + owner)), ("token", Json.Text(secret))]))
-    case Ok(Device.Waiting) => failure(428, "authorization_pending")
-    case Ok(Device.Expired) => failure(410, "expired_token")
-    case Ok(Device.Unknown) => failure(404, "unknown device code")
-    case Err(problem) => failure(500, problem)
-  }
+fn configuration(context: &Context) -> Http.Response {
+  Reply.jsonValue(200, Json.object(&[
+        ("githubClientId", Json.Text(context.login.clientId)),
+        ("githubUrl", Json.Text(context.login.githubUrl)),
+        ("githubApi", Json.Text(context.login.githubApi))
+      ]))
 }
 
 fn whoami(context: &Context, request: &Route.Request) -> Http.Response {
   match viewerOf(context, request) {
-    case Some(viewer) => Reply.jsonValue(200, Json.object(&[("handle", Json.Text("@" + viewer.handle)), ("scope", Json.Text(viewer.access))]))
-    case None => failure(401, "no valid token was given")
-  }
-}
-
-fn logout(context: &Context, request: &Route.Request) -> Http.Response {
-  let header = Option.unwrapOr(Route.header(request, "authorization"), "")
-  if !header.startsWith("Bearer ") { return failure(401, "no valid token was given") }
-  match Tokens.revoke(&context.store, header.drop(7).trim()) {
-    case Ok(_) => Reply.empty(204)
-    case Err(problem) => failure(500, problem)
+    case Some(viewer) => Reply.jsonValue(200, Json.object(&[("handle", Json.Text("@" + viewer.login))]))
+    case None => failure(401, "GitHub did not accept the token")
   }
 }
 
@@ -298,9 +256,7 @@ export fn routes(context: &Context) -> Array[Route.Route] {
     Route.get("/api/v1/packages/:handle/:name/releases/:version/files/*path", fn(request: Route.Request) -> Http.Response { file(&held, &request) }),
     Route.post("/api/v1/packages/:handle/:name/releases/:version/yank", fn(request: Route.Request) -> Http.Response { yank(&held, &request) }),
     Route.get("/api/v1/handles/:handle", fn(request: Route.Request) -> Http.Response { handle(&held, &request) }),
-    Route.post("/api/v1/login/device", fn(_request: Route.Request) -> Http.Response { beginPairing(&held) }),
-    Route.post("/api/v1/login/device/token", fn(request: Route.Request) -> Http.Response { pollPairing(&held, &request) }),
-    Route.get("/api/v1/whoami", fn(request: Route.Request) -> Http.Response { whoami(&held, &request) }),
-    Route.delete("/api/v1/tokens/current", fn(request: Route.Request) -> Http.Response { logout(&held, &request) })
+    Route.get("/api/v1/config", fn(_request: Route.Request) -> Http.Response { configuration(&held) }),
+    Route.get("/api/v1/whoami", fn(request: Route.Request) -> Http.Response { whoami(&held, &request) })
   ]
 }

@@ -37,8 +37,9 @@ Octal numbers are formatted with leading zeros and null/space terminators, and d
 Payloads are zero-padded to 512-byte alignment.
 A path longer than 100 bytes is written as the USTAR `prefix` (up to 155 bytes) and `name`, split at a
 `/`; the reader joins `prefix` and `name` when the header carries the `ustar` magic.
-Type flags `0` and NUL read as `File`, `5` as `Directory`, and `2` as `Symlink`; any other flag (hard
-link, device, FIFO, pax or GNU extension header) fails with `UnsupportedType`.
+Type flags `0` and NUL read as `File`, `5` as `Directory`, and `2` as `Symlink`. A pax extended header
+(`x`) supplies the `path` of the entry after it and a pax global header (`g`) is skipped; neither is an
+entry. Any other flag (hard link, device, FIFO, GNU extension) fails with `UnsupportedType`.
 Decoding terminates when encountering two consecutive 512-byte blocks of zeroes or the end of the byte stream.
 
 ## Grill Log

@@ -1,21 +1,23 @@
-{-| @Pudu.Cli.Publish — the commands that talk to a registry as an account
+{-| @Pudu.Cli.Publish — the commands that act on a registry as a GitHub account
 
-    `login` pairs this machine with an account by device code, or stores a
-    token given with `--token` after `whoami` accepts it. `logout` revokes the
-    token and forgets it. `push` uploads the project's files as its latest
-    snapshot. `release <version>` checks the project, runs its tests, and
-    uploads an immutable release. Each takes `--registry URL`; otherwise the
-    registry is the one `Remote.registryUrlFor` names. -}
+    `login` runs GitHub's OAuth device flow with the client id the registry
+    names at `/api/v1/config` and stores the GitHub token, or stores a token
+    given with `--token` after the registry accepts it; `--private` asks for
+    the `repo` scope, which private repositories need. `logout` forgets the
+    token. `push` registers the project, or refreshes it, from its repository's
+    default branch. `release <version>` checks the project, runs its tests,
+    tags the commit `v<version>`, pushes the tag, and asks the registry to
+    publish it. Each takes `--registry URL`; otherwise the registry is the one
+    `Remote.registryUrlFor` names. -}
 module Pudu.Cli.Publish
   ( publishCommands
   , runPublishCommand
-  , multipart
+  , formBody
   ) where
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless, when)
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -24,9 +26,8 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Compiler.Manifest (Manifest (..), findManifestRoot, readManifest)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import qualified Pudu.Lsp.Json as Json
-import Pudu.Package.Archive (packDirectory)
 import Pudu.Package.Credentials (Credential (..), loadCredential, removeCredential, saveCredential)
-import Pudu.Package.Digest (sha256Hex, treeFiles)
+import Pudu.Package.Digest (treeFiles)
 import Pudu.Package.Http (Request (..), Response (..), send)
 import Pudu.Package.Identity (PackageId (..), parsePackageId, renderPackageId)
 import Pudu.Package.Remote (registryUrlFor)
@@ -36,7 +37,7 @@ import System.Environment (getExecutablePath)
 import System.Exit (ExitCode (..), exitFailure)
 import System.FilePath (takeExtension, (</>))
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
-import System.Process (proc, readCreateProcessWithExitCode)
+import System.Process (CreateProcess (..), proc, readCreateProcessWithExitCode)
 
 publishCommands :: [String]
 publishCommands = ["login", "logout", "whoami", "push", "release"]
@@ -49,19 +50,18 @@ runPublishCommand command arguments = do
   manifest <- maybe (pure Nothing) (fmap Just . readManifest) root
   url <- case lookup "--registry" options of
     Just given -> pure (Text.dropWhileEnd (== '/') (Text.pack given))
-    Nothing -> registryUrlFor (fromMaybe (emptyOf manifest) manifest)
+    Nothing -> registryUrlFor (fromMaybe emptyManifest manifest)
   case command of
-    "login" -> login url (Text.pack <$> lookup "--token" options)
+    "login" -> login url (Text.pack <$> lookup "--token" options) (("--private", "") `elem` options)
     "logout" -> logout url
     "whoami" -> whoami url
-    "push" -> withProject command root manifest $ \r m -> push url r m (visibilityOf options)
+    "push" -> withProject command root manifest (\_ m -> push url m)
     "release" -> case positional of
-      [version] -> withProject command root manifest $ \r m -> release url r m (Text.pack version) (lookup "--notes" options) (visibilityOf options)
+      [version] -> withProject command root manifest $ \r m -> release url r m (Text.pack version) (lookup "--notes" options)
       _ -> failWith command "name the version, such as pudu release 1.4.3"
     _ -> failWith command "unknown command"
  where
-  emptyOf = const (Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] [])
-  visibilityOf options = if ("--private", "") `elem` options then "private" else ""
+  emptyManifest = Manifest Nothing Nothing Nothing [] Nothing Nothing Nothing Nothing [] []
 
 {-| `--name value` pairs, `--flag` with an empty value, and the rest. -}
 split :: [String] -> ([(String, String)], [String])
@@ -99,54 +99,79 @@ call command given = do
     Left problem -> failWith command ("cannot reach " <> requestUrl given <> ": " <> problem)
     Right response -> pure response
 
-get :: Text -> Text -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
-get url path headers = Request "GET" (url <> path) headers ByteString.empty
+get :: Text -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
+get url headers = Request "GET" url (("Accept", "application/json") : headers) ByteString.empty
 
-post :: Text -> Text -> ByteString.ByteString -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
-post url path body headers = Request "POST" (url <> path) (("Content-Type", "application/json") : headers) body
+postJson :: Text -> Json -> [(ByteString.ByteString, ByteString.ByteString)] -> Request
+postJson url body headers = Request "POST" url (("Content-Type", "application/json") : ("Accept", "application/json") : headers) (TextEncoding.encodeUtf8 (Json.encode body))
 
-login :: Text -> Maybe Text -> IO ()
-login url (Just token) = do
-  response <- call "login" (get url "/api/v1/whoami" (authorised token))
-  unless (responseStatus response == 200) (failWith "login" ("the registry refused the token: " <> errorOf response))
-  saveCredential url (Credential (field "handle" response) token)
-  TextIO.putStrLn ("signed in as " <> field "handle" response <> " on " <> url)
-login url Nothing = do
-  begun <- call "login" (post url "/api/v1/login/device" "{}" [])
-  unless (responseStatus begun == 200) (failWith "login" (errorOf begun))
-  let deviceCode = field "deviceCode" begun
-      userCode = field "userCode" begun
-      page = field "verificationUrl" begun
-      interval = maybe 2 (max 1) (jsonOf begun >>= lookupField "interval" >>= Json.integerOf)
-  TextIO.putStrLn ("open " <> page <> "?code=" <> userCode <> " and enter the code " <> userCode)
-  TextIO.putStr "waiting for approval…"
+{-| An `application/x-www-form-urlencoded` body. -}
+formBody :: [(Text, Text)] -> ByteString.ByteString
+formBody pairs = TextEncoding.encodeUtf8 (Text.intercalate "&" [escape k <> "=" <> escape v | (k, v) <- pairs])
+ where
+  escape = Text.concatMap one
+  one c
+    | c `elem` (['A' .. 'Z'] <> ['a' .. 'z'] <> ['0' .. '9'] <> "-._~") = Text.singleton c
+    | otherwise = Text.concat ["%" <> hex b | b <- ByteString.unpack (TextEncoding.encodeUtf8 (Text.singleton c))]
+  hex b = Text.pack [digits !! fromIntegral (b `div` 16), digits !! fromIntegral (b `mod` 16)]
+  digits = "0123456789ABCDEF"
+
+postForm :: Text -> [(Text, Text)] -> Request
+postForm url pairs = Request "POST" url [("Content-Type", "application/x-www-form-urlencoded"), ("Accept", "application/json")] (formBody pairs)
+
+{-| The GitHub account the registry sees behind a token, or why it refused. -}
+accountOf :: Text -> Text -> IO (Either Text Text)
+accountOf url token = do
+  response <- call "login" (get (url <> "/api/v1/whoami") (authorised token))
+  pure (if responseStatus response == 200 then Right (field "handle" response) else Left (errorOf response))
+
+login :: Text -> Maybe Text -> Bool -> IO ()
+login url (Just token) _ = do
+  account <- accountOf url token
+  handle <- either (failWith "login" . ("the registry refused the token: " <>)) pure account
+  saveCredential url (Credential handle token)
+  TextIO.putStrLn ("signed in as " <> handle <> " on " <> url)
+login url Nothing private = do
+  settings <- call "login" (get (url <> "/api/v1/config") [])
+  let clientId = field "githubClientId" settings
+      github = Text.dropWhileEnd (== '/') (field "githubUrl" settings)
+  when (Text.null clientId) (failWith "login" (url <> " has no GitHub application configured; sign in with pudu login --token <GitHub token>"))
+  begun <- call "login" (postForm (github <> "/login/device/code") [("client_id", clientId), ("scope", if private then "repo" else "")])
+  unless (responseStatus begun == 200) (failWith "login" ("GitHub refused to start signing in: " <> Text.pack (show (responseStatus begun))))
+  let deviceCode = field "device_code" begun
+      userCode = field "user_code" begun
+      page = field "verification_uri" begun
+      interval = maybe 5 (max 1) (jsonOf begun >>= lookupField "interval" >>= Json.integerOf)
+  TextIO.putStrLn ("open " <> page <> " and enter the code " <> userCode)
+  TextIO.putStr "waiting for GitHub…"
   hFlush stdout
-  let poll = do
-        threadDelay (interval * 1000000)
-        answered <- call "login" (post url "/api/v1/login/device/token" (TextEncoding.encodeUtf8 (Json.encode (Json.object [("deviceCode", JsonText deviceCode)]))) [])
-        case responseStatus answered of
-          200 -> do
+  let poll wait = do
+        threadDelay (wait * 1000000)
+        answered <- call "login" (postForm (github <> "/login/oauth/access_token") [("client_id", clientId), ("device_code", deviceCode), ("grant_type", "urn:ietf:params:oauth:grant-type:device_code")])
+        case (field "access_token" answered, field "error" answered) of
+          (token, _) | not (Text.null token) -> do
             TextIO.putStrLn ""
-            saveCredential url (Credential (field "handle" answered) (field "token" answered))
-            TextIO.putStrLn ("signed in as " <> field "handle" answered <> " on " <> url)
-          428 -> poll
-          _ -> TextIO.putStrLn "" >> failWith "login" (errorOf answered <> "; run pudu login again")
-  poll
+            account <- accountOf url token
+            handle <- either (failWith "login" . ("the registry refused the token: " <>)) pure account
+            saveCredential url (Credential handle token)
+            TextIO.putStrLn ("signed in as " <> handle <> " on " <> url)
+          (_, "authorization_pending") -> poll wait
+          (_, "slow_down") -> poll (wait + 5)
+          (_, reason) -> TextIO.putStrLn "" >> failWith "login" ("GitHub did not sign you in (" <> reason <> "); run pudu login again")
+  poll interval
 
 logout :: Text -> IO ()
 logout url = do
-  stored <- loadCredential url
-  case stored of
-    Nothing -> TextIO.putStrLn ("not signed in to " <> url)
-    Just credential -> do
-      _ <- send (Request "DELETE" (url <> "/api/v1/tokens/current") (authorised (credentialToken credential)) ByteString.empty)
-      removed <- removeCredential url
-      TextIO.putStrLn (if removed then "signed out of " <> url else "the token comes from PUDU_TOKEN; unset it to sign out")
+  removed <- removeCredential url
+  TextIO.putStrLn $
+    if removed
+      then "signed out of " <> url <> "; the token itself is revoked at https://github.com/settings/applications"
+      else "not signed in to " <> url
 
 whoami :: Text -> IO ()
 whoami url = do
   token <- tokenFor "whoami" url
-  response <- call "whoami" (get url "/api/v1/whoami" (authorised token))
+  response <- call "whoami" (get (url <> "/api/v1/whoami") (authorised token))
   unless (responseStatus response == 200) (failWith "whoami" (errorOf response))
   TextIO.putStrLn (field "handle" response <> " on " <> url)
 
@@ -158,58 +183,55 @@ tokenFor command url = do
 packageOf :: String -> Manifest -> IO PackageId
 packageOf command manifest = case manifestName manifest >>= either (const Nothing) Just . parsePackageId of
   Just package@(Registered _ _) -> pure package
-  _ -> failWith command "pudu.toml must name the package as @handle/name to publish it"
+  _ -> failWith command "pudu.toml must name the package as @owner/repo, its GitHub repository, to publish it"
 
-{-| A `multipart/form-data` body of text fields and one file, with its content type. -}
-multipart :: [(Text, Text)] -> (Text, ByteString.ByteString) -> (ByteString.ByteString, ByteString.ByteString)
-multipart fields (fileField, content) =
-  let boundary = "pudu-" <> Char8.pack (Text.unpack (Text.take 32 (sha256Hex content)))
-      part name extra payload = "--" <> boundary <> "\r\nContent-Disposition: form-data; name=\"" <> TextEncoding.encodeUtf8 name <> "\"" <> extra <> "\r\n\r\n" <> payload <> "\r\n"
-      body =
-        ByteString.concat [part name "" (TextEncoding.encodeUtf8 value) | (name, value) <- fields]
-          <> part fileField "; filename=\"package.tar.gz\"\r\nContent-Type: application/gzip" content
-          <> "--" <> boundary <> "--\r\n"
-   in (body, "multipart/form-data; boundary=" <> boundary)
-
-upload :: String -> ByteString.ByteString -> Text -> Text -> [(Text, Text)] -> ByteString.ByteString -> IO Response
-upload command method url path fields archive = do
-  token <- tokenFor command url
-  let (body, contentType) = multipart fields ("archive", archive)
-  call command (Request method (url <> path) (("Content-Type", contentType) : authorised token) body)
-
-packProject :: String -> FilePath -> IO (ByteString.ByteString, Int)
-packProject command root = do
-  packed <- packDirectory root
-  archive <- either (failWith command) pure packed
-  files <- either (const []) id <$> treeFiles root
-  pure (archive, length (filter ((== ".pudu") . takeExtension) files))
-
-push :: Text -> FilePath -> Manifest -> Text -> IO ()
-push url root manifest visibility = do
+push :: Text -> Manifest -> IO ()
+push url manifest = do
   package <- packageOf "push" manifest
-  (archive, modules) <- packProject "push" root
-  response <- upload "push" "PUT" url ("/api/v1/packages/" <> renderPackageId package <> "/head") [("visibility", visibility)] archive
+  token <- tokenFor "push" url
+  response <- call "push" (Request "PUT" (url <> "/api/v1/packages/" <> renderPackageId package <> "/head") (("Accept", "application/json") : authorised token) ByteString.empty)
   unless (responseStatus response == 200) (failWith "push" (errorOf response))
-  TextIO.putStrLn
-    ( "pushed " <> renderPackageId package <> " (" <> Text.pack (show modules) <> " modules, " <> kilobytes (ByteString.length archive)
-        <> ") — " <> url <> "/" <> renderPackageId package
-    )
+  let repository = field "repository" response
+  TextIO.putStrLn ("registered " <> renderPackageId package <> " from " <> repository <> " — " <> url <> "/" <> renderPackageId package)
 
-release :: Text -> FilePath -> Manifest -> Text -> Maybe FilePath -> Text -> IO ()
-release url root manifest version notesFile visibility = do
+git :: FilePath -> [String] -> IO (Either Text Text)
+git root arguments = do
+  (code, out, err) <- readCreateProcessWithExitCode (proc "git" arguments){cwd = Just root} ""
+  pure (if code == ExitSuccess then Right (Text.strip (Text.pack out)) else Left (Text.strip (Text.pack err)))
+
+release :: Text -> FilePath -> Manifest -> Text -> Maybe FilePath -> IO ()
+release url root manifest version notesFile = do
   package <- packageOf "release" manifest
+  token <- tokenFor "release" url
   either (failWith "release" . (("\"" <> version <> "\" is not a release version: ") <>)) (const (pure ())) (parseVersion version)
   when (manifestVersion manifest /= Just version) $
-    failWith "release" ("pudu.toml gives version " <> fromMaybe "none" (manifestVersion manifest) <> "; set it to " <> version <> " before releasing")
+    failWith "release" ("pudu.toml gives version " <> fromMaybe "none" (manifestVersion manifest) <> "; set it to " <> version <> " and commit it before releasing")
+  changes <- git root ["status", "--porcelain"]
+  case changes of
+    Left problem -> failWith "release" ("the project is not a git repository: " <> problem)
+    Right pending -> unless (Text.null pending) (failWith "release" "the working tree has changes not committed; commit them so the release is exactly what is on GitHub")
   notes <- maybe (pure "") (fmap Text.strip . TextIO.readFile) notesFile
   verify root manifest
-  (archive, _) <- packProject "release" root
-  response <- upload "release" "POST" url ("/api/v1/packages/" <> renderPackageId package <> "/releases") [("version", version), ("notes", notes), ("visibility", visibility)] archive
+  let tag = "v" <> version
+  commit <- either (failWith "release") pure =<< git root ["rev-parse", "HEAD"]
+  existing <- git root ["rev-parse", "--verify", "--quiet", Text.unpack tag <> "^{commit}"]
+  case existing of
+    Right tagged | tagged /= commit -> failWith "release" (tag <> " already names another commit, " <> Text.take 12 tagged)
+    Right _ -> pure ()
+    Left _ -> do
+      created <- git root ["tag", "-a", Text.unpack tag, "-m", Text.unpack (if Text.null notes then renderPackageId package <> " " <> version else notes)]
+      either (failWith "release" . ("cannot tag the commit: " <>)) (const (pure ())) created
+  pushed <- git root ["push", "origin", Text.unpack tag]
+  either (failWith "release" . (("cannot push " <> tag <> " to origin: ") <>)) (const (pure ())) pushed
+  TextIO.putStrLn ("tagged " <> tag <> " at " <> Text.take 7 commit <> " and pushed it to origin")
+  response <-
+    call "release" $
+      postJson
+        (url <> "/api/v1/packages/" <> renderPackageId package <> "/releases")
+        (Json.object [("version", JsonText version), ("tag", JsonText tag), ("notes", JsonText notes)])
+        (authorised token)
   unless (responseStatus response == 201) (failWith "release" (errorOf response))
-  TextIO.putStrLn
-    ( "released " <> renderPackageId package <> " " <> version <> " (" <> kilobytes (ByteString.length archive) <> ", " <> field "checksum" response
-        <> ") — install with: pudu install " <> renderPackageId package <> "@" <> version
-    )
+  TextIO.putStrLn ("released " <> renderPackageId package <> " " <> version <> " (" <> field "checksum" response <> ") — install with: pudu install " <> renderPackageId package <> "@" <> version)
 
 {-| Run `pudu check` over the project's modules and `pudu test` over its test directory, stopping at a failure. -}
 verify :: FilePath -> Manifest -> IO ()
@@ -230,11 +252,6 @@ verify root manifest = do
  where
   filterDirectories paths = fmap concat (mapM (\p -> (\e -> [p | e]) <$> doesDirectoryExist p) paths)
   last' = foldl (\_ x -> x) ""
-
-kilobytes :: Int -> Text
-kilobytes size
-  | size < 1024 = Text.pack (show size) <> " B"
-  | otherwise = Text.pack (show ((size + 1023) `div` 1024)) <> " KB"
 
 failWith :: String -> Text -> IO a
 failWith command message = do

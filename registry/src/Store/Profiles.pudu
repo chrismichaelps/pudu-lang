@@ -1,0 +1,40 @@
+module Store.Profiles
+
+import Std.Json as Json
+import Std.Option as Option
+import Service.GitHub as GitHub
+import Store.Files as Files
+
+fn path(store: &Files.Store, login: Str) -> Str { store.root + "/profiles/" + login + ".json" }
+
+fn text(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+export fn toJson(profile: &GitHub.Profile) -> Json.Json {
+  Json.object(&[
+      ("handle", Json.Text("@" + profile.login)),
+      ("name", Json.Text(profile.name)),
+      ("avatarUrl", Json.Text(profile.avatarUrl)),
+      ("githubUrl", Json.Text(profile.htmlUrl)),
+      ("kind", Json.Text(profile.kind))
+    ])
+}
+
+/// The profile copied from GitHub for a handle, when one of its projects was registered.
+export fn load(store: &Files.Store, login: Str) -> Result[Option[GitHub.Profile], Str] {
+  match Files.readJson(path(store, login)) ? {
+    case Some(value) => Ok(Some(GitHub.Profile {
+          login: text(&value, "handle").drop(1),
+          name: text(&value, "name"),
+          avatarUrl: text(&value, "avatarUrl"),
+          htmlUrl: text(&value, "githubUrl"),
+          kind: text(&value, "kind")
+        }))
+    case None => Ok(None)
+  }
+}
+
+export fn save(store: &Files.Store, profile: &GitHub.Profile) -> Result[(), Str] {
+  Files.writeJson(path(store, profile.login), &toJson(profile))
+}

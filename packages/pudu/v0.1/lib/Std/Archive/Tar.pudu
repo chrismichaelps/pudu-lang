@@ -126,6 +126,24 @@ fn headerText(header: &Array[UInt8], start: Int, width: Int) -> Option[Str] {
   }
 }
 
+/// The value of one record of a pax extended header, whose records are
+/// `<length> <key>=<value>` lines.
+fn paxRecord(payload: &Bytes, key: Str) -> Option[Str] {
+  let text = match ByteSeq.toText(payload) {
+    case Ok(held) => held
+    case Err(_) => { return None }
+  }
+  var found: Option[Str] = None
+  for line in text.split("\n") {
+    let space = line.indexOf(" ")
+    if space > 0 {
+      let record = line.drop(space + 1)
+      if record.startsWith(key + "=") { found = Some(record.drop(key.length() + 1)) }
+    }
+  }
+  found
+}
+
 /// Whether a header carries the USTAR magic, which gives the prefix field its meaning.
 fn isUstar(header: &Array[UInt8]) -> Bool {
   let magic = "ustar".toBytes().toArray()
@@ -316,6 +334,7 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
   var entries: Array[TarEntry] = []
   var offset = 0
   var reachedEnd = false
+  var pendingPath: Option[Str] = None
   let totalLen = archive.length()
 
   while offset + 512 <= totalLen {
@@ -378,11 +397,13 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
     }
 
     let typeCode = byteValue(rawHeader.get(156))
+    let extended = typeCode == 120
+    let global = typeCode == 103
     let entryType = if typeCode == 53 {
       Directory
     } else if typeCode == 50 {
       Symlink
-    } else if typeCode == 48 || typeCode == 0 {
+    } else if typeCode == 48 || typeCode == 0 || extended || global {
       File
     } else {
       return Err(UnsupportedType)
@@ -408,15 +429,20 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
     }
     let payload = archive.slice(dataStart, dataStart + sizeVal)
 
-    entries = entries.push(TarEntry {
-        path: entryPath,
-        mode: modeVal,
-        size: sizeVal,
-        mtime: mtimeVal,
-        typeFlag: entryType,
-        linkName: linkStr,
-        data: payload
-      })
+    if extended {
+      pendingPath = paxRecord(&payload, "path")
+    } else if !global {
+      entries = entries.push(TarEntry {
+          path: Option.unwrapOr(pendingPath, entryPath),
+          mode: modeVal,
+          size: sizeVal,
+          mtime: mtimeVal,
+          typeFlag: entryType,
+          linkName: linkStr,
+          data: payload
+        })
+      pendingPath = None
+    }
 
     let padBytes = if sizeVal % 512 != 0 {
       512 - (sizeVal % 512)

@@ -16,7 +16,9 @@ export type Release = {
   dependencies: Array[(Str, Str)],
   modules: Array[Str],
   notes: Str,
-  yanked: Bool
+  yanked: Bool,
+  tag: Str,
+  commit: Str
 }
 
 /// The latest pushed snapshot, which is browsable and never installable.
@@ -33,7 +35,8 @@ export type Project = {
   createdAt: Str,
   head: Option[Head],
   releases: Array[Release],
-  unlisted: Bool
+  unlisted: Bool,
+  repository: Str
 }
 
 export fn isPublic(project: &Project) -> Bool { project.visibility == "public" }
@@ -60,7 +63,9 @@ fn releaseJson(release: &Release) -> Json.Json {
       ("dependencies", Json.object(&release.dependencies.map(|pair: (Str, Str)| (pair[0], Json.Text(pair[1]))))),
       ("modules", texts(&release.modules)),
       ("notes", Json.Text(release.notes)),
-      ("yanked", Json.Boolean(release.yanked))
+      ("yanked", Json.Boolean(release.yanked)),
+      ("tag", Json.Text(release.tag)),
+      ("commit", Json.Text(release.commit))
     ])
 }
 
@@ -95,6 +100,7 @@ export fn toJson(project: &Project) -> Json.Json {
       ("latest", latestVersion),
       ("head", head),
       ("unlisted", Json.Boolean(project.unlisted)),
+      ("repository", Json.Text(project.repository)),
       ("releases", Json.list(&project.releases.map(|release: Release| releaseJson(&release))))
     ])
 }
@@ -110,7 +116,8 @@ export fn summaryJson(project: &Project) -> Json.Json {
       ("description", Json.Text(project.description)),
       ("keywords", texts(&project.keywords)),
       ("latest", latestVersion),
-      ("visibility", Json.Text(project.visibility))
+      ("visibility", Json.Text(project.visibility)),
+      ("repository", Json.Text(project.repository))
     ])
 }
 
@@ -156,7 +163,9 @@ fn releaseFrom(value: &Json.Json) -> Release {
     dependencies: pairsOf(value, "dependencies"),
     modules: textsOf(value, "modules"),
     notes: textOf(value, "notes"),
-    yanked: boolOf(value, "yanked")
+    yanked: boolOf(value, "yanked"),
+    tag: textOf(value, "tag"),
+    commit: textOf(value, "commit")
   }
 }
 
@@ -182,6 +191,7 @@ export fn fromJson(value: &Json.Json) -> Result[Project, Str] {
       createdAt: textOf(value, "createdAt"),
       head: head,
       releases: releases.map(|release: Json.Json| releaseFrom(&release)),
-      unlisted: boolOf(value, "unlisted")
+      unlisted: boolOf(value, "unlisted"),
+      repository: textOf(value, "repository")
     })
 }
