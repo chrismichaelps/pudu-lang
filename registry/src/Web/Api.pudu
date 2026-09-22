@@ -148,6 +148,26 @@ fn file(context: &Context, request: &Route.Request) -> Http.Response {
   }
 }
 
+fn fileList(context: &Context, request: &Route.Request) -> Http.Response {
+  let version = Option.unwrapOr(Route.param(request, "version"), "")
+  match packageOf(request) {
+    case Err(problem) => failure(400, problem)
+    case Ok(package) => match visible(context, request, &package) {
+      case None => missing(&package)
+      case Some(project) => {
+        if version != "head" && Option.isNone(&releaseOf(&project, version)) {
+          return failure(404, Name.render(&package) + " has no release " + version)
+        }
+        let base = if version == "head" { Files.headFiles(&context.store, &package) } else { Files.releaseFiles(&context.store, &package, version) }
+        match Files.filesUnder(base) {
+          case Ok(paths) => Reply.jsonValue(200, Json.object(&[("files", Json.list(&paths.map(|path: Str| Json.Text(path))))]))
+          case Err(_) => failure(500, "release files are unavailable")
+        }
+      }
+    }
+  }
+}
+
 fn handle(context: &Context, request: &Route.Request) -> Http.Response {
   let written = Option.unwrapOr(Route.param(request, "handle"), "")
   let bare = (if written.startsWith("@") { written.drop(1) } else { written }).toLower()
@@ -253,6 +273,7 @@ export fn routes(context: &Context) -> Array[Route.Route] {
     Route.put("/api/v1/packages/:handle/:name/head", fn(request: Route.Request) -> Http.Response { push(&held, &request) }),
     Route.post("/api/v1/packages/:handle/:name/releases", fn(request: Route.Request) -> Http.Response { release(&held, &request) }),
     Route.get("/api/v1/packages/:handle/:name/releases/:version/archive", fn(request: Route.Request) -> Http.Response { archive(&held, &request) }),
+    Route.get("/api/v1/packages/:handle/:name/releases/:version/files", fn(request: Route.Request) -> Http.Response { fileList(&held, &request) }),
     Route.get("/api/v1/packages/:handle/:name/releases/:version/files/*path", fn(request: Route.Request) -> Http.Response { file(&held, &request) }),
     Route.post("/api/v1/packages/:handle/:name/releases/:version/yank", fn(request: Route.Request) -> Http.Response { yank(&held, &request) }),
     Route.get("/api/v1/handles/:handle", fn(request: Route.Request) -> Http.Response { handle(&held, &request) }),

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "registry": "http://127.0.0.1:51419",
+  "generatedAt": "2026-09-22T18:24:12.401Z",
+  "projects": [
+    {
+      "name": "@alice/json-kit",
+      "description": "JSON helpers",
+      "keywords": [
+        "json"
+      ],
+      "license": "",
+      "visibility": "public",
+      "root": "JsonKit",
+      "readme": "# Json Kit\n\nParse and build JSON values.\n\n```pudu\nimport JsonKit.Parse as Parse\n```\n",
+      "createdAt": "2026-09-22T18:24:05Z",
+      "latest": "2.0.0",
+      "head": {
+        "uploadedAt": "2026-09-22T18:24:05Z",
+        "checksum": "sha256:e99c36bb84474e9a435a4b27500621645c30caa5a33591bd00d539338aed4268",
+        "size": 491,
+        "modules": [
+          "JsonKit.Parse",
+          "JsonKit.Value"
+        ]
+      },
+      "unlisted": false,
+      "repository": "https://github.com/alice/json-kit",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "publishedAt": "2026-09-22T18:24:06Z",
+          "publisher": "alice",
+          "checksum": "sha256:e99c36bb84474e9a435a4b27500621645c30caa5a33591bd00d539338aed4268",
+          "size": 491,
+          "language": "",
+          "dependencies": {},
+          "modules": [
+            "JsonKit.Parse",
+            "JsonKit.Value"
+          ],
+          "notes": "",
+          "yanked": false,
+          "tag": "v1.0.0",
+          "commit": "26135e478c46fc898d3879a9456d183deee13d1d"
+        },
+        {
+          "version": "1.1.0",
+          "publishedAt": "2026-09-22T18:24:08Z",
+          "publisher": "alice",
+          "checksum": "sha256:a07d2e518bc54896cce23030e62392eb3f44e1dbd104bc2165e05c8432afd0fb",
+          "size": 492,
+          "language": "",
+          "dependencies": {},
+          "modules": [
+            "JsonKit.Parse",
+            "JsonKit.Value"
+          ],
+          "notes": "",
+          "yanked": false,
+          "tag": "v1.1.0",
+          "commit": "370515b04d0acdd5757f1375123a289c6353cfa1"
+        },
+        {
+          "version": "2.0.0",
+          "publishedAt": "2026-09-22T18:24:08Z",
+          "publisher": "alice",
+          "checksum": "sha256:a817f1ab7ead9c0935569f306f4196b090151d853fe7b46c26c07953f9b0fa7c",
+          "size": 491,
+          "language": "",
+          "dependencies": {},
+          "modules": [
+            "JsonKit.Parse",
+            "JsonKit.Value"
+          ],
+          "notes": "",
+          "yanked": false,
+          "tag": "v2.0.0",
+          "commit": "df14b267bcd333dac23e53ab68d015ad1b447d4c"
+        }
+      ]
+    }
+  ],
+  "handles": [
+    {
+      "handle": "@alice",
+      "name": "Alice",
+      "avatarUrl": "https://avatars.example/alice",
+      "githubUrl": "https://github.com/alice",
+      "kind": "user"
+    }
+  ]
+}

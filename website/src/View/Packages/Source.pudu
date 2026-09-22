@@ -1,0 +1,112 @@
+module View.Packages.Source
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Std.Url as Url
+import Service.Packages as Packages
+import View.Packages.Frame as Frame
+
+/// The file a source page opens on: the README, the manifest, or the first file.
+export fn defaultFile(project: &Packages.Project) -> Str {
+  for wanted in ["README.md", "pudu.toml"] {
+    if project.files.contains(wanted) { return wanted }
+  }
+  if project.files.isEmpty() { "" } else { project.files[0] }
+}
+
+/// The directories and files directly under a directory, directories first.
+fn entriesUnder(files: &Array[Str], directory: Str) -> (Array[Str], Array[Str]) {
+  let prefix = if directory.isEmpty() { "" } else { directory + "/" }
+  var directories: Array[Str] = []
+  var leaves: Array[Str] = []
+  for file in *files {
+    if file.startsWith(prefix) {
+      let rest = file.drop(prefix.length())
+      let slash = rest.indexOf("/")
+      if slash < 0 { leaves = leaves.push(file) } else {
+        let child = prefix + rest.take(slash)
+        if !directories.contains(child) { directories = directories.push(child) }
+      }
+    }
+  }
+  (directories, leaves)
+}
+
+fn nameOf(path: Str) -> Str {
+  let parts = path.split("/")
+  parts[parts.length() - 1]
+}
+
+fn tree(project: &Packages.Project, directory: Str, selected: Str) -> H.Node {
+  let (directories, leaves) = entriesUnder(&project.files, directory)
+  var items: Array[H.Node] = []
+  for child in directories {
+    let open = selected.startsWith(child + "/")
+    let folder = H.details().holding([H.summary().says(nameOf(child) + "/"), tree(project, child, selected)])
+    items = items.push(H.li().class("source-folder").holding([if open { folder.at("open", "") } else { folder }]))
+  }
+  for file in leaves {
+    let link = H.a().href(Frame.sourcePath(project, file)).says(nameOf(file))
+    items = items.push(H.li().class("source-file").holding([if file == selected { link.at("aria-current", "page") } else { link }]))
+  }
+  H.ul().class("source-tree").holding(items)
+}
+
+fn listing(text: Str) -> H.Node {
+  var rows: Array[H.Node] = []
+  var number = 1
+  for line in text.split("\n") {
+    let id = "L" + show(number)
+    rows = rows.push(H.span().class("source-line").id(id).holding([
+          H.a().class("source-number").href("#" + id).at("aria-hidden", "true").says(show(number)),
+          H.span().class("source-text").says(line)
+        ]))
+    number = number + 1
+  }
+  H.pre().class("source-code").holding([H.code().holding(rows)])
+}
+
+/// One file of the latest release beside the tree of every file. `None` when
+/// the release has no such file.
+export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, file: Str) -> Option[Html.Html] {
+  let chosen = if file.isEmpty() { defaultFile(project) } else { file }
+  let version = Option.unwrapOr(project.latest, "")
+  if chosen.isEmpty() {
+    return Some(Frame.page(siteUrl, packages, project, "source", project.name + " source", "The source of " + project.name + ".", [
+          H.section().class("package-body").holding([H.p().says("No release has been published yet, so there is no source to show.")])
+        ]))
+  }
+  let preview = match Packages.fileText(packages, project, chosen) {
+    case Some(text) => listing(text)
+    case None => {
+      let _bytes = Packages.fileBytes(packages, project, chosen) ?
+      H.p().class("package-muted").says("This release includes a binary file. There is no text preview.")
+    }
+  }
+  let revision = match Packages.latestRelease(project) {
+    case Some(release) => if release.commit.isEmpty() { release.tag } else { release.commit }
+    case None => ""
+  }
+  var encoded: Array[Str] = []
+  for segment in chosen.split("/") { encoded = encoded.push(Url.encodeComponent(segment)) }
+  let header = H.div().class("source-header").holding([
+      H.h1().class("source-path").says(chosen),
+      H.p().class("package-muted").holding([
+          H.span().says("Release " + version + " · "),
+          H.a().href(project.repository + "/blob/" + revision + "/" + encoded.join("/")).at("rel", "external noopener noreferrer").says("On GitHub")
+        ])
+    ])
+  let canonical = if file.isEmpty() { Frame.tabPath(project, "source") } else { Frame.sourcePath(project, chosen) }
+  Some(Frame.pageAt(siteUrl, packages, project, "source", canonical, chosen + " · " + project.name, "The source of " + chosen + " in " + project.name + " " + version + ".", [
+        H.div().class("source-columns").holding([
+            H.nav().class("source-side").label("Files").holding([H.p().class("package-label").says("Files"), tree(project, "", chosen)]),
+            H.section().class("source-main").holding([header, preview])
+          ])
+      ]))
+}
+
+/// Every address the source tab answers for a project.
+export fn paths(project: &Packages.Project) -> Array[Str] {
+  [Frame.tabPath(project, "source")].concat(project.files.map(|file: Str| Frame.sourcePath(project, file)))
+}

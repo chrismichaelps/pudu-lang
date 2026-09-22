@@ -7,7 +7,7 @@ aliases: [website Error]
 ---
 # Website Error
 
-Defines startup, catalogue, and documentation failures and turns them into concise operator-facing
+Defines startup, catalogue, package snapshot, and documentation failures and turns them into concise operator-facing
 text without exposing catalogue contents or environment values. `DocsUnreadable(path)` names the
 documentation directory or page that could not be read.
 

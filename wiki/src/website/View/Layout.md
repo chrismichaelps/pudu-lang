@@ -13,6 +13,8 @@ documentation, API, about page, and donation page; the repository remains in the
 header. Mobile pages use a native disclosure immediately followed by the same navigation links, while
 desktop pages show the direct link row. The footer names the copyright holder on every page. Static style
 references carry a revision so browser and CDN caches change with this visual system.
+Revision `30` includes the original package banners, compact catalog list, project reading layout,
+and mobile install panel placement.
 
 Documentation pages and API symbols share the `/docs/` prefix, so the current-page mark is decided by
 depth: `/docs`, `/guide`, and a path one segment below `/docs/` are the documentation; three segments

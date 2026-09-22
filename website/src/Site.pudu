@@ -5,6 +5,7 @@ import Error as SiteError
 import Service.Catalog as Catalog
 import Service.Docs as Docs
 import Service.Documents as Documents
+import Service.Packages as Packages
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
 import Service.Releases as Releases
@@ -17,6 +18,7 @@ import Service.Search as Search
 export type Site = {
   siteUrl: Str,
   catalog: Catalog.Catalog,
+  packages: Packages.Packages,
   /// The catalogue as search reads it, prepared with the catalogue.
   search: Search.Index,
   docs: Docs.Docs,
@@ -29,6 +31,7 @@ export type Site = {
 /// The site the settings describe, or the first thing that stopped it loading.
 export fn load(settings: &Config.Config) -> Result[Site, SiteError.SiteError] {
   let catalog = Catalog.load(settings.cataloguePath) ?
+  let packages = Packages.load(settings.packagesPath) ?
   let docs = Docs.load(settings.docsPath) ?
   let release = Releases.load(settings.releasesPath, settings.releaseNotesPath) ?
   let documents = Documents.load(settings.documentsPath) ?
@@ -36,6 +39,7 @@ export fn load(settings: &Config.Config) -> Result[Site, SiteError.SiteError] {
   Ok(Site {
       siteUrl: settings.siteUrl,
       catalog: catalog,
+      packages: packages,
       search: Search.index(&catalog.entries),
       docs: docs,
       release: release,

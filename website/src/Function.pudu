@@ -10,6 +10,7 @@ import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
+import Service.Packages as Packages
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
 import Service.Search as Search
@@ -45,6 +46,10 @@ fn main() -> Int {
         case Ok(loaded) => loaded
         case Err(problem) => { return couldNotStart(&problem) }
       }
+      let packages = match Packages.load(settings.packagesPath) {
+        case Ok(loaded) => loaded
+        case Err(problem) => { return couldNotStart(&problem) }
+      }
       // A function holds the platform's credentials in its environment and
       // files. It runs a program itself only confined: the program is given an
       // emptied environment, and the runtime refuses it files, programs,
@@ -61,6 +66,7 @@ fn main() -> Int {
         siteUrl: settings.siteUrl,
         catalog: catalog,
         search: Search.index(&catalog.entries),
+        packages: packages,
         playground: Playground.configured(&playground, &examples),
         gates: Playground.gatesFor(&playground)
       }

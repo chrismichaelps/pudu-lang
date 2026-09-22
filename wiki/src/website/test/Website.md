@@ -24,6 +24,8 @@ and leave no module unplaced; home must link a new reader to the introduction. T
 title stays out of the body, a script in prose is escaped, a `javascript:` target is not a link,
 repeated headings get distinct anchors, and tables render.
 
+The `@alice/json-kit` snapshot exercises catalog, search, profile, overview, install command, source, docs, releases, sitemap, missing routes, binary file preview, encoded filename, and immutable GitHub source link.
+
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.
 Search checks assert rank position and exclusion for module intent, explicit scope, exact names,

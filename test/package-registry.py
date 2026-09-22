@@ -165,6 +165,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pudu", required=True)
     parser.add_argument("--keep", action="store_true", help="keep the working directory")
+    parser.add_argument("--snapshot", help="also write the website's package data here")
     arguments = parser.parse_args()
     pudu = os.path.abspath(arguments.pudu)
     work = pathlib.Path(tempfile.mkdtemp(prefix="pudu-registry-e2e-"))
@@ -172,7 +173,7 @@ def main():
     github = f"http://127.0.0.1:{github_port}"
     url = f"http://127.0.0.1:{port}"
     data = work / "data"
-    environment = dict(os.environ, PUDU_HOME=str(work / "home"), PUDU_REGISTRY=url, NO_COLOR="1", GIT_AUTHOR_NAME="a", GIT_AUTHOR_EMAIL="a@b", GIT_COMMITTER_NAME="a", GIT_COMMITTER_EMAIL="a@b")
+    environment = dict(os.environ, PUDU_HOME=str(work / "home"), PUDU_LIB=str(ROOT / "packages" / "pudu" / "v0.1" / "lib"), PUDU_REGISTRY=url, NO_COLOR="1", GIT_AUTHOR_NAME="a", GIT_AUTHOR_EMAIL="a@b", GIT_COMMITTER_NAME="a", GIT_COMMITTER_EMAIL="a@b")
     for name in ["PUDU_TOKEN", "PUDU_MIN_RELEASE_AGE"]:
         environment.pop(name, None)
 
@@ -200,8 +201,9 @@ def main():
 
     def library(root, version, name="@alice/json-kit"):
         write(root / "pudu.toml", f'[package]\nname = "{name}"\nversion = "{version}"\ndescription = "JSON helpers"\nkeywords = ["json"]\n')
-        write(root / "src" / "JsonKit" / "Parse.pudu", "module JsonKit.Parse\n\nexport fn one() -> Int {\n  1\n}\n")
-        write(root / "README.md", "# Json Kit\n")
+        write(root / "src" / "JsonKit" / "Parse.pudu", "module JsonKit.Parse\n\n/// The number one, parsed.\nexport fn one() -> Int {\n  1\n}\n")
+        write(root / "src" / "JsonKit" / "Value.pudu", "module JsonKit.Value\n\n/// A JSON value.\nexport type Value = Text(Str) | Number(Int)\n\n/// The text of a value, or the empty text.\nexport fn textOf(value: Value) -> Str {\n  match value {\n    case Text(held) => held\n    case Number(_) => \"\"\n  }\n}\n")
+        write(root / "README.md", "# Json Kit\n\nParse and build JSON values.\n\n```pudu\nimport JsonKit.Parse as Parse\n```\n")
         git(root, "add", "-A")
         git(root, "commit", "-qm", f"version {version}")
         git(root, "push", "-q", "origin", "main")
@@ -209,17 +211,24 @@ def main():
     registry = ["run", str(ROOT / "registry" / "src" / "Main.pudu"), "serve", "--data", str(data), "--port", str(port), "--github-client-id", "test-client", "--github-url", github, "--github-api", github]
 
     def start():
-        started = subprocess.Popen([pudu] + registry, cwd=work, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(150):
+        output = open(work / "registry.log", "w")
+        started = subprocess.Popen([pudu] + registry, cwd=work, env=environment, stdout=output, stderr=output)
+        output.close()
+        for _ in range(300):
             try:
                 urllib.request.urlopen(url + "/health", timeout=1)
-                break
+                return started, True
             except OSError:
+                if started.poll() is not None:
+                    break
                 time.sleep(0.2)
-        return started
+        return started, False
 
-    server = start()
+    server, ready = start()
     try:
+        check("the registry starts", ready, (work / "registry.log").read_text())
+        if not ready:
+            sys.exit(1)
         lib = repository("alice", "json-kit")
         library(lib, "1.0.0")
         code, out = run(["login"], lib)
@@ -231,7 +240,7 @@ def main():
         code, out = run(["push"], lib)
         check("push registers the project from its repository", code == 0 and "registered @alice/json-kit from https://github.com/alice/json-kit" in out, out)
         code, out = run(["release", "1.0.0"], lib)
-        check("release checks the project, tags it, pushes the tag, and publishes", code == 0 and "checked 1 modules" in out and "tagged v1.0.0" in out and "released @alice/json-kit 1.0.0" in out, out)
+        check("release checks the project, tags it, pushes the tag, and publishes", code == 0 and "checked 2 modules" in out and "tagged v1.0.0" in out and "released @alice/json-kit 1.0.0" in out, out)
         tags = subprocess.run(["git", "--git-dir", GitHub.repositories[("alice", "json-kit")]["bare"], "tag"], capture_output=True, text=True).stdout
         check("the tag is on GitHub", "v1.0.0" in tags, tags)
         code, out = run(["release", "1.0.0"], lib)
@@ -259,7 +268,10 @@ def main():
         server.wait(timeout=10)
         code, out = run(["install", "--verbose"], app)
         check("a lock and a warm cache install while the registry is down", code == 0 and "Already up to date" in out and "fetching" not in out, out)
-        server = start()
+        server, ready = start()
+        check("the registry restarts", ready, (work / "registry.log").read_text())
+        if not ready:
+            sys.exit(1)
         shutil.rmtree(app / "deps")
         code, out = run(["install", "--offline"], app)
         check("--offline restores deps/ from the cache", code == 0 and (app / "deps" / "@alice" / "json-kit" / "pudu.toml").exists(), out)
@@ -324,6 +336,13 @@ def main():
         check("a handle's profile comes from GitHub", status == 200 and b"https://avatars.example/alice" in body, body[:200])
         status, _ = call("POST", url + "/api/v1/packages/@alice/json-kit/releases", json.dumps({"version": "9.0.0"}).encode(), {"Authorization": "Bearer gho_forged", "Content-Type": "application/json"})
         check("a token GitHub refuses may not publish", status == 401, str(status))
+
+        snapshot = pathlib.Path(arguments.snapshot).resolve() if arguments.snapshot else work / "snapshot"
+        done = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--registry", url, "--out", str(snapshot), "--pudu", pudu], env=environment, capture_output=True, text=True, timeout=300)
+        catalogue = snapshot / "docs" / "@alice" / "json-kit.json"
+        written = json.loads((snapshot / "packages.json").read_text()) if (snapshot / "packages.json").exists() else {}
+        check("the website's package data is written from the registry", done.returncode == 0 and [p["name"] for p in written.get("projects", [])] == ["@alice/json-kit"], done.stdout + done.stderr)
+        check("it carries the latest release's files and API catalogue", (snapshot / "files" / "@alice" / "json-kit" / "2.0.0" / "src" / "JsonKit" / "Value.pudu").exists() and catalogue.exists() and "textOf" in catalogue.read_text(), done.stderr)
 
         code, out = run(["logout"], lib)
         check("logout forgets the token", code == 0 and "signed out" in out, out)

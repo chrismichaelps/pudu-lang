@@ -5,10 +5,12 @@ import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Option as Option
 import Service.Catalog as Catalog
+import Service.Packages as Packages
 import Service.Playground.Admission as Admission
 import Service.Playground as Playground
 import Service.Search as Search
 import View.Dynamic as DynamicView
+import View.Packages.Catalog as PackageCatalog
 import Web.Playground as PlaygroundWeb
 
 /// What the serverless function serves: the requests that are not static
@@ -18,6 +20,7 @@ export type Dynamic = {
   catalog: Catalog.Catalog,
   /// The catalogue as search reads it, prepared once per cold start.
   search: Search.Index,
+  packages: Packages.Packages,
   playground: Playground.Playground,
   gates: Playground.Gates
 }
@@ -39,7 +42,11 @@ export fn routes(edge: &Dynamic) -> Route.Router {
   let search = Route.get("/search", fn(asked: Route.Request) -> Http.Response {
       Reply.page(200, DynamicView.results(held.siteUrl, &held.search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
     })
-  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).push(search)), fn(asked: Route.Request) -> Http.Response {
+  let packageSearch = Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
+      if !Packages.present(&held.packages) { return missing(held.siteUrl, asked.path) }
+      Reply.page(200, PackageCatalog.page(held.siteUrl, &held.packages, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+    })
+  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch])), fn(asked: Route.Request) -> Http.Response {
       missing(held.siteUrl, asked.path)
     })
 }

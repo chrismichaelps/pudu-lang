@@ -358,26 +358,27 @@ a private package is exactly as reproducible.
 
 ## Website
 
-The package pages are part of the existing site: same masthead, typography, cards, and code
-surfaces. They read the registry's documents at build time, the way `/download` reads the release
+The package pages are part of the existing site: same masthead, typography, and code surfaces, with
+an original Pudu banner and compact package list. They read the registry's documents at build time, the way `/download` reads the release
 list, so a page answers from the CDN and never waits on the registry; a new release appears on the
 next deployment, and the install command a page shows is always one the registry answers.
 
 | Address | Shows |
 | --- | --- |
-| `/packages` | search and the catalog: featured projects and projects by keyword, each a card with `@handle / name`, description, latest version, and an Install button |
+| `/packages` | a catalog of public projects, with `@handle / name`, description, and latest version; keyword links filter the catalog, and its search form submits to `/packages/search?q=` |
 | `/@h` | a handle's profile and its public projects |
-| `/@h/n` | the project: README as the landing content; a sidebar with description, keywords, dependencies, and latest release; **Install** opening the install dialog |
-| `/@h/n/source` | the latest release's modules as a tree beside the selected file, each declaration linkable |
-| `/@h/n/docs` | the API reference for the release, rendered by the same views as the standard library's |
+| `/@h/n` | the project: a banner with identity, description, release, and **Install** disclosure; README as the landing content beside a sidebar with keywords, dependencies, and latest release |
+| `/@h/n/source` | the latest release's files as a tree beside the selected file, with linkable source lines |
+| `/@h/n/docs` | the API reference for the release, rendered from its generated catalogue in a package-specific reference view |
 | `/@h/n/releases` | the latest release first with its notes and install command, then earlier releases |
 
-The install dialog shows `pudu install @h/n` for the latest release, a version picker that rewrites
-the command, a copy button, and the import line for the package's root module. Owners' settings
-(visibility, description, deletion) live on the registry's account pages, which pair with
-`pudu login`.
+The install disclosure starts with `pudu install @h/n@<latest>` so the selected release is available
+even during the 72-hour minimum release age. The version picker rewrites that command; a separate
+unversioned command follows the configured release-age policy. Copy buttons and a root-module import
+line are provided. Projects with no non-yanked release have no install control. Owner settings remain
+registry API operations paired with `pudu login`.
 
-Project search on `/packages` ranks exact names, then handles, then words in descriptions and
+Project search on `/packages/search?q=` ranks exact names, then handles, then words in descriptions and
 keywords. Declarations across public packages join the site's existing API search once packages
 carry the same documentation catalogue `pudu doc --json` produces for the standard library.
 

@@ -1,0 +1,95 @@
+module View.Packages.Catalog
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Std.Url as Url
+import Service.Packages as Packages
+import View.Layout as Layout
+import View.Packages.Frame as Frame
+
+export const PATH: Str = "/packages"
+
+fn card(packages: &Packages.Packages, project: &Packages.Project) -> H.Node {
+  let owner = Packages.profile(packages, project.handle)
+  H.li().class("package-card").holding([
+      Frame.avatar(&owner, project.handle, "40"),
+      H.div().class("package-card-body").holding([
+          H.a().class("package-card-name").href(Frame.projectPath(project)).holding([
+              H.span().class("package-owner").says(project.handle),
+              H.span().class("package-slash").says(" / "),
+              H.strong().says(project.project)
+            ]),
+          H.p().class("package-muted").says(project.description)
+        ]),
+      H.span().class("package-card-version").says(Option.unwrapOr(project.latest, "unreleased"))
+    ])
+}
+
+fn cards(packages: &Packages.Packages, projects: &Array[Packages.Project]) -> H.Node {
+  H.ul().class("package-cards").holding(projects.map(|project: Packages.Project| card(packages, &project)))
+}
+
+fn searchForm(query: Str) -> H.Node {
+  H.form().class("search package-search").action(PATH + "/search").method("get").holding([
+      H.labelFor().at("for", "package-q").class("skip").says("Search packages"),
+      H.input().id("package-q").name("q").kind("search").value(query).placeholder("Search packages, such as @alice or json").required(),
+      H.button().submit().says("Search")
+    ])
+}
+
+/// The catalogue: search, every project, and projects by keyword. With a
+/// query, the projects that match it instead.
+export fn page(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Html.Html {
+  var content: Array[H.Node] = [
+    H.section().class("package-hero").holding([
+        H.span().class("package-hero-label").says("Pudu packages"),
+        H.h1().says("Build with what the community shares."),
+        H.p().says("Explore published Pudu packages. Read their source and documentation, then add a release to your project."),
+        searchForm(query)
+      ])
+  ]
+  if !query.trim().isEmpty() {
+    let found = Packages.search(packages, query)
+    content = content.push(H.div().class("package-list-heading").holding([H.h2().says(if found.isEmpty() { "No package matches “" + query + "”" } else { show(found.length()) + " for “" + query + "”" })]))
+    if !found.isEmpty() { content = content.push(cards(packages, &found)) }
+  } else {
+    content = content.push(H.div().class("package-list-heading").holding([
+          H.h2().says("Explore packages"),
+          H.span().class("package-count").says(show(packages.projects.length()) + " available")
+        ]))
+    let words = Packages.keywords(packages)
+    if !words.isEmpty() {
+      content = content.push(H.nav().class("package-topics").label("Browse by topic").holding([
+            H.span().says("Topics"),
+            H.ul().holding(words.map(|word: Str| H.li().holding([H.a().href(PATH + "/search?q=" + Url.encodeComponent(word)).says(word)])))
+          ]))
+    }
+    content = content.push(cards(packages, &packages.projects))
+  }
+  let path = if query.trim().isEmpty() { PATH } else { PATH + "/search" }
+  Layout.page(siteUrl, "Pudu packages", "Find, read, and install Pudu packages published from GitHub.", path, query.trim().isEmpty(), None, H.article().class("doc package-catalog").holding(content).html())
+}
+
+/// A handle's profile and its public projects.
+export fn profile(siteUrl: Str, packages: &Packages.Packages, owner: Str) -> Option[Html.Html] {
+  let projects = Packages.ofHandle(packages, owner)
+  if projects.isEmpty() { return None }
+  let found = Packages.profile(packages, owner)
+  let shown = match found {
+    case Some(held) => if held.name.isEmpty() { owner } else { held.name }
+    case None => owner
+  }
+  let github = match found {
+    case Some(held) => if held.githubUrl.isEmpty() { H.nothing() } else { H.a().href(held.githubUrl).at("rel", "external noopener noreferrer").says("On GitHub") }
+    case None => H.nothing()
+  }
+  Some(Layout.page(siteUrl, owner, "Pudu packages published by " + owner + ".", "/" + owner, true, None, H.article().class("doc package-catalog").holding([
+          H.div().class("package-profile").holding([
+              Frame.avatar(&found, owner, "72"),
+              H.div().holding([H.h1().says(shown), H.p().class("package-muted").holding([H.span().says(owner + " · "), github])])
+            ]),
+          H.h2().says("Projects"),
+          cards(packages, &projects)
+        ]).html()))
+}

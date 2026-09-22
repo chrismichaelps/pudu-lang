@@ -7,7 +7,7 @@ aliases: [registry Store Files]
 ---
 # Registry Store Files
 
-The layout under one data directory — projects (documents, release archives and files, head snapshots), `profiles/`, and `cache/viewers/` — and its primitives: `ensureDirectory`, `writeJson`, `writeBytes` (atomic rename), `readJson`, `removeTree`, `children`.
+The layout under one data directory — projects (documents, release archives and files, head snapshots), `profiles/`, and `cache/viewers/` — and its primitives: `ensureDirectory`, `writeJson`, `writeBytes` (atomic rename), `readJson`, `removeTree`, `children`. Recursive file listing returns an error when a release directory or child cannot be read.
 
 See [[architecture/PACKAGES]] · [[src/registry/_MOC]].
 

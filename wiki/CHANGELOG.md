@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Package pages from public registry snapshots
+
+- The website can snapshot public projects from a hosted registry and prerender `/packages`,
+  `/@handle`, project overview/source/docs/releases, and one page per latest-release file. The
+  `@alice/json-kit` fixture exercises the complete browsing flow, including encoded filenames,
+  binary files, install commands, missing routes, and canonical sitemap paths.
+- Package search reads the same snapshot in the dynamic function. The install disclosure offers an
+  exact release command, version picker, copy controls, and the unversioned command with its
+  72-hour release-age behavior. The build publishes no package pages until a hosted registry is
+  configured with `PUDU_PACKAGES_REGISTRY`.
+- A listed release whose file tree is unavailable now answers a registry error instead of an empty
+  list. Snapshot generation validates names and paths, fetches files with bounded concurrency, and
+  keeps other package pages available when one project's API documentation cannot be generated.
+- The package catalog now uses an original Pudu search banner and a compact, nonduplicated project
+  list. Project pages place identity, release, and install in a distinct header; the README and
+  metadata have separate reading surfaces. The mobile install panel stays within the viewport.
+
+
 ## 2026-09-22 — Packages live on GitHub
 
 - A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and handles are GitHub

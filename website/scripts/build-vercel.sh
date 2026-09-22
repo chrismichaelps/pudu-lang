@@ -11,6 +11,8 @@ output="$root/website/.vercel/output"
 function_dir="$output/functions/dynamic.func"
 search_index="$function_dir/website/data/search-index.pudu-data"
 examples_dir="$function_dir/website/playground/examples"
+packages_data="$root/website/data/packages"
+packages_path="$output/.no-packages"
 
 if [[ -z "${PUDU_SITE_URL:-}" ]]; then
   echo "set PUDU_SITE_URL to the canonical HTTPS origin" >&2
@@ -69,6 +71,18 @@ done
 
 rm -rf "$output"
 mkdir -p "$function_dir/website/data" "$examples_dir" "$output/static/assets" "$output/static/fonts"
+if [[ -n "${PUDU_PACKAGES_REGISTRY:-}" ]]; then
+  node "$root/website/scripts/generate-packages.mjs" --registry "$PUDU_PACKAGES_REGISTRY" --out "$packages_data" --pudu "$compiler"
+  if [[ -f "$packages_data/packages.json" ]]; then
+    packages_path="$packages_data"
+    mkdir -p "$function_dir/website/data/packages"
+    cp "$packages_data/packages.json" "$function_dir/website/data/packages/packages.json"
+    if [[ -d "$packages_data/avatars" ]]; then
+      mkdir -p "$output/static/packages"
+      cp -R "$packages_data/avatars" "$output/static/packages/avatars"
+    fi
+  fi
+fi
 cp "$musl_loader" "$function_dir/ld-musl-x86_64.so.1"
 for dependency in "${musl_libraries[@]}"; do
   cp "$musl_library_dir/$dependency" "$function_dir/$dependency"
@@ -117,6 +131,7 @@ fi
 # requests to itself. What is rendered is `Seo.paths`, the list the sitemap is
 # built from, so the two cannot disagree about which pages exist.
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
+  PUDU_PACKAGES_PATH="$packages_path" \
   PUDU_DOCS_PATH="$root/website/docs" \
   PUDU_RELEASES_PATH="$root/website/data/releases.json" \
   PUDU_DOCUMENTS_PATH="$root" \
@@ -138,6 +153,7 @@ printf '%s\n' \
   '  "environment": {' \
   "    \"PUDU_SITE_URL\": \"$site_url_json\"," \
   "    \"PUDU_PLAYGROUND_RUNNER\": \"$runner_json\"," \
+  '    "PUDU_PACKAGES_PATH": "website/data/packages",' \
   '    "PUDU_PLAYGROUND_ISOLATION": "confined",' \
   '    "PUDU_PLAYGROUND_COMPILER": "/var/task/pudu",' \
   '    "PUDU_PLAYGROUND_LIBRARY": "/var/task/lib",' \
@@ -187,6 +203,7 @@ done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.ht
     '    { "src": "/api/playground/(run|assist)", "dest": "/dynamic" },' \
     '    { "src": "/assets/playground/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
     '    { "src": "/assets/docs/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
+    '    { "src": "/packages/search", "dest": "/dynamic" },' \
     '    { "src": "/playground/shared", "dest": "/dynamic" },' \
     '    { "handle": "filesystem" },'
   printf '%s' "$page_routes"
@@ -196,6 +213,10 @@ done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.ht
     '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
     '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
     '    { "src": "/docs/([^/]+)", "dest": "/docs/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/source/.+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(source|docs|releases))", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+)", "dest": "/$1/index.html" },' \
     '    { "src": "/guide", "status": 308, "headers": { "Location": "/docs" } },' \
     '    { "src": "/search", "dest": "/dynamic" },' \
     '    { "src": "/.*", "dest": "/dynamic" }' \

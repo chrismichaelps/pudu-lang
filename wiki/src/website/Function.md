@@ -7,7 +7,7 @@ aliases: [website Function]
 ---
 # Website Function
 
-Loads the compact generated search catalogue once and serves `Web.Dynamic` through
+Loads the compact generated search catalogue and public package search document once and serves `Web.Dynamic` through
 `Std.Http.Server.Lambda`. It translates supported invocation event shapes into one request target
 and returns status, headers, and body in the platform response envelope.
 Vercel's provided runtime wraps its HTTP request as JSON text in the outer invocation's `body` field;

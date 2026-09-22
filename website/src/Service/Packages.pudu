@@ -1,0 +1,286 @@
+module Service.Packages
+
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Json as Json
+import Std.List as List
+import Std.Option as Option
+import Error as SiteError
+import Service.Catalog as Catalog
+
+/// A handle's profile, copied from GitHub. `avatar` is the site's own address
+/// for the image, or the empty text when the snapshot holds none.
+export type Profile = { handle: Str, name: Str, avatar: Str, githubUrl: Str, kind: Str }
+
+/// One immutable release.
+export type Release = {
+  version: Str,
+  publishedAt: Str,
+  publisher: Str,
+  checksum: Str,
+  size: Int,
+  dependencies: Array[(Str, Str)],
+  modules: Array[Str],
+  notes: Str,
+  yanked: Bool,
+  tag: Str,
+  commit: Str
+}
+
+/// A project: `name` is `@owner/repo`. `releases` is newest first. `files`
+/// lists the latest release's files, and `catalog` is its API, when the
+/// snapshot holds them.
+export type Project = {
+  name: Str,
+  handle: Str,
+  project: Str,
+  description: Str,
+  keywords: Array[Str],
+  license: Str,
+  root: Str,
+  readme: Str,
+  repository: Str,
+  latest: Option[Str],
+  releases: Array[Release],
+  files: Array[Str],
+  catalog: Option[Catalog.Catalog]
+}
+
+/// Everything the package pages show, read once before the first request.
+/// `directory` is where the snapshot's files and avatars are.
+export type Packages = { registry: Str, directory: Str, projects: Array[Project], handles: Array[Profile] }
+
+export fn empty() -> Packages { Packages{registry: "", directory: "", projects: [], handles: []} }
+
+/// Whether there is anything to show. Without a snapshot the site has no package pages.
+export fn present(packages: &Packages) -> Bool { !packages.projects.isEmpty() }
+
+fn text(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+fn whole(value: &Json.Json, key: Str) -> Int {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asInt(&held)), 0)
+}
+
+fn texts(value: &Json.Json, key: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asList(&held)), []) {
+    if let Some(held) = Json.asText(&item) { found = found.push(held) }
+  }
+  found
+}
+
+fn releaseFrom(value: &Json.Json) -> Release {
+  var dependencies: Array[(Str, Str)] = []
+  for field in Option.unwrapOr(Option.andThen(Json.field(value, "dependencies"), |held: Json.Json| Json.asObject(&held)), []) {
+    if let Some(requirement) = Json.asText(&field[1]) { dependencies = dependencies.push((field[0], requirement)) }
+  }
+  Release {
+    version: text(value, "version"),
+    publishedAt: text(value, "publishedAt"),
+    publisher: text(value, "publisher"),
+    checksum: text(value, "checksum"),
+    size: whole(value, "size"),
+    dependencies: dependencies,
+    modules: texts(value, "modules"),
+    notes: text(value, "notes"),
+    yanked: Option.unwrapOr(Option.andThen(Json.field(value, "yanked"), |held: Json.Json| Json.asBool(&held)), false),
+    tag: text(value, "tag"),
+    commit: text(value, "commit")
+  }
+}
+
+/// Every file under a directory, by its path relative to it, sorted.
+fn filesUnder(directory: Str) -> Result[Array[Str], SiteError.SiteError] {
+  var found: Array[Str] = []
+  var pending: Array[Str] = [""]
+  while !pending.isEmpty() {
+    let relative = pending[pending.length() - 1]
+    pending = pending.pop()
+    let absolute = if relative.isEmpty() { directory } else { directory + "/" + relative }
+    let names = match Io.list(absolute) {
+      case Ok(held) => held
+      case Err(_) => { return Err(SiteError.PackagesInvalid(directory)) }
+    }
+    for name in names {
+      let path = if relative.isEmpty() { name } else { relative + "/" + name }
+      let isDirectory = match Fs.metadata(directory + "/" + path) {
+        case Ok(held) => held.isDirectory
+        case Err(_) => { return Err(SiteError.PackagesInvalid(directory)) }
+      }
+      if isDirectory { pending = pending.push(path) } else { found = found.push(path) }
+    }
+  }
+  if found.isEmpty() { Err(SiteError.PackagesInvalid(directory)) } else { Ok(List.sorted(&found)) }
+}
+
+fn projectFrom(directory: Str, value: &Json.Json) -> Result[Project, SiteError.SiteError] {
+  let name = text(value, "name")
+  let slash = name.indexOf("/")
+  if !name.startsWith("@") || slash < 2 || name.drop(slash + 1).isEmpty() || name.drop(slash + 1).contains("/") || name.contains("..") {
+    return Err(SiteError.PackagesInvalid(directory + "/packages.json"))
+  }
+  let latest = Option.andThen(Json.field(value, "latest"), |held: Json.Json| Json.asText(&held))
+  var releases: Array[Release] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(value, "releases"), |held: Json.Json| Json.asList(&held)), []) {
+    releases = [releaseFrom(&item)].concat(releases)
+  }
+  let files = match latest {
+    case Some(version) => filesUnder(directory + "/files/" + name + "/" + version) ?
+    case None => []
+  }
+  let catalog = match Catalog.load(directory + "/docs/" + name + ".json") {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+  Ok(Project {
+      name: name,
+      handle: if slash > 0 { name.take(slash) } else { name },
+      project: if slash > 0 { name.drop(slash + 1) } else { "" },
+      description: text(value, "description"),
+      keywords: texts(value, "keywords"),
+      license: text(value, "license"),
+      root: text(value, "root"),
+      readme: text(value, "readme"),
+      repository: text(value, "repository"),
+      latest: latest,
+      releases: releases,
+      files: files,
+      catalog: catalog
+    })
+}
+
+/// The snapshot `generate-packages.mjs` wrote, or no packages when the
+/// directory holds none.
+export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
+  let path = directory + "/packages.json"
+  if !Io.exists(path) { return Ok(empty()) }
+  let document = match Io.read(path) {
+    case Ok(source) => match Json.decode(source) {
+      case Ok(value) => value
+      case Err(_) => { return Err(SiteError.PackagesInvalid(path)) }
+    }
+    case Err(_) => { return Err(SiteError.PackagesInvalid(path)) }
+  }
+  if whole(&document, "schemaVersion") != 1 { return Err(SiteError.PackagesInvalid(path)) }
+  var projects: Array[Project] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(&document, "projects"), |held: Json.Json| Json.asList(&held)), []) {
+    projects = projects.push(projectFrom(directory, &item) ?)
+  }
+  var handles: Array[Profile] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(&document, "handles"), |held: Json.Json| Json.asList(&held)), []) {
+    handles = handles.push(Profile {
+        handle: text(&item, "handle"),
+        name: text(&item, "name"),
+        avatar: text(&item, "avatar"),
+        githubUrl: text(&item, "githubUrl"),
+        kind: text(&item, "kind")
+      })
+  }
+  Ok(Packages {
+      registry: text(&document, "registry"),
+      directory: directory,
+      projects: List.sortBy(&projects, fn(left: Project, right: Project) -> Bool { left.name < right.name }),
+      handles: handles
+    })
+}
+
+export fn find(packages: &Packages, handle: Str, project: Str) -> Option[Project] {
+  for held in packages.projects {
+    if held.handle == handle && held.project == project { return Some(held) }
+  }
+  None
+}
+
+export fn profile(packages: &Packages, handle: Str) -> Option[Profile] {
+  for held in packages.handles {
+    if held.handle == handle { return Some(held) }
+  }
+  None
+}
+
+export fn ofHandle(packages: &Packages, handle: Str) -> Array[Project] {
+  packages.projects.filter(|held: Project| held.handle == handle)
+}
+
+/// The release a project names latest.
+export fn latestRelease(project: &Project) -> Option[Release] {
+  let Some(version) = project.latest else { return None }
+  for held in project.releases {
+    if held.version == version { return Some(held) }
+  }
+  None
+}
+
+/// Every keyword any project carries, sorted.
+export fn keywords(packages: &Packages) -> Array[Str] {
+  var seen: Set[Str] = setOf([])
+  for held in packages.projects {
+    for word in held.keywords { seen = seen.insert(word) }
+  }
+  List.sorted(&seen.toArray())
+}
+
+/// Rank of a project for a query: 0 an exact name, 1 the handle, 2 a name
+/// containing the query, 3 every word found in the description or keywords,
+/// and -1 no match.
+fn rank(project: &Project, query: Str) -> Int {
+  let wanted = query.trim().toLower()
+  if wanted.isEmpty() { return 3 }
+  if wanted == project.name || wanted == project.project { return 0 }
+  if wanted == project.handle || "@" + wanted == project.handle { return 1 }
+  if project.project.contains(wanted) { return 2 }
+  let words = (project.description + " " + project.keywords.join(" ")).toLower()
+  for word in wanted.split(" ") {
+    if !word.isEmpty() && !words.contains(word) { return -1 }
+  }
+  3
+}
+
+/// Projects matching a query, best first, then by name.
+export fn search(packages: &Packages, query: Str) -> Array[Project] {
+  var ranked: Array[(Int, Project)] = []
+  for held in packages.projects {
+    let score = rank(&held, query)
+    if score >= 0 { ranked = ranked.push((score, held)) }
+  }
+  let ordered = List.sortBy(&ranked, fn(left: (Int, Project), right: (Int, Project)) -> Bool {
+      if left[0] != right[0] { left[0] < right[0] } else { left[1].name < right[1].name }
+    })
+  ordered.map(|pair: (Int, Project)| pair[1])
+}
+
+/// The text of one file of a project's latest release, when it is one of its files.
+export fn fileText(packages: &Packages, project: &Project, path: Str) -> Option[Str] {
+  let Some(version) = project.latest else { return None }
+  if !project.files.contains(path) { return None }
+  match Io.read(packages.directory + "/files/" + project.name + "/" + version + "/" + path) {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+}
+
+/// The raw file, for recognizing a published binary file that has no text preview.
+export fn fileBytes(packages: &Packages, project: &Project, path: Str) -> Option[Bytes] {
+  let Some(version) = project.latest else { return None }
+  if !project.files.contains(path) { return None }
+  match Io.readAllBytes(packages.directory + "/files/" + project.name + "/" + version + "/" + path) {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+}
+
+/// The bytes of a handle's avatar, when the snapshot holds it.
+export fn avatarBytes(packages: &Packages, file: Str) -> Option[Bytes] {
+  if file.contains("/") || file.contains("..") || file.isEmpty() { return None }
+  var listed = false
+  for held in packages.handles {
+    if held.avatar == "/packages/avatars/" + file { listed = true }
+  }
+  if !listed { return None }
+  match Io.readAllBytes(packages.directory + "/avatars/" + file) {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+}

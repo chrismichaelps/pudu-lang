@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-22-package-website]] — issue #297 public package snapshot, catalog, project pages,
+  source/docs/releases, install control, and hosted-registry activation handoff.
+
 - [[2026-09-21-lsp-completion-context]] — issue #274 syntax-directed pattern, type, import,
   expression, and suppressed completion contexts with canonical generic sum candidates.
 

@@ -1,0 +1,6 @@
+module JsonKit.Parse
+
+/// The number one, parsed.
+export fn one() -> Int {
+  1
+}

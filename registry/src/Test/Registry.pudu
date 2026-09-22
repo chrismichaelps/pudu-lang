@@ -207,6 +207,9 @@ fn storeChecks(root: Str) -> Array[Test.Check] {
   let profile = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/handles/@alice", ""))
   let config = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/config", ""))
   let whoami = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/whoami", "alice-token"))
+  let listing = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/packages/@alice/json-kit/releases/1.0.0/files", ""))
+  let removedFiles = Files.removeTree(Files.releaseFiles(&store, &kit, "1.0.0"))
+  let missingFiles = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/packages/@alice/json-kit/releases/1.0.0/files", ""))
   let searched = Search.search(&store, "json", 1)
   [
     Test.that("a GitHub token names its account", Option.map(alice, |v: Auth.Viewer| v.login) == Some("alice")),
@@ -232,6 +235,8 @@ fn storeChecks(root: Str) -> Array[Test.Check] {
     Test.that("a handle's profile comes from GitHub", profile.status.code == 200 && profile.body.contains("https://avatars.example/alice")),
     Test.that("the login settings name the GitHub client", config.body.contains("\"githubClientId\":\"client\"")),
     Test.that("whoami names the GitHub account", whoami.body.contains("@alice")),
+    Test.that("a release lists its files", listing.body == "\{\"files\":[\"README.md\",\"pudu.toml\",\"src/JsonKit/Parse.pudu\"]\}"),
+    Test.that("missing release files are a server error", isOk(&removedFiles) && missingFiles.status.code == 500),
     Test.that("search finds public projects only", searched.total == 1 && searched.projects.map(|p: Project.Project| Name.render(&p.name)) == ["@alice/json-kit"]),
     Test.that("a profile is copied beside the project", isOk(&Profiles.load(&store, "alice")))
   ]

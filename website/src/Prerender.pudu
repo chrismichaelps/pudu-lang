@@ -45,7 +45,7 @@ fn main() -> Int {
   // The pages, and the two files that are not pages: a crawler asks for both
   // before it asks for anything else, and neither belongs in the sitemap that
   // one of them points at.
-  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples)
+  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples, &site.packages)
   routes = routes.push("/robots.txt")
   routes = routes.push("/sitemap.xml")
 

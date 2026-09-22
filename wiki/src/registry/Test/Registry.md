@@ -7,7 +7,7 @@ aliases: [registry Test Registry]
 ---
 # Registry Test Registry
 
-The registry suite against a fake GitHub: manifest rules, commit archives (top directory, dot paths, `deps/`, links, traversal), canonical packing, tokens and their cache, release rules (tag, commit, publisher, immutability, major-line order, version match, push permission, missing token, invisible repository), yanking, private visibility through the routes, profiles, `config`, `whoami`, and search.
+The registry suite against a fake GitHub: manifest rules, commit archives (top directory, dot paths, `deps/`, links, traversal), canonical packing, tokens and their cache, release rules (tag, commit, publisher, immutability, major-line order, version match, push permission, missing token, invisible repository), yanking, private visibility through the routes, profiles, `config`, `whoami`, file listing and a missing release file tree, and search.
 
 See [[architecture/PACKAGES]] · [[src/registry/_MOC]].
 

@@ -9,6 +9,7 @@ import Constants as Constants
 import Domain.Entry as Domain
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Packages as Packages
 import Service.Playground.Examples as Examples
 
 export fn head(
@@ -108,7 +109,7 @@ export fn robots(siteUrl: Str) -> Str {
 /// A symbol can be reached by more than one declaration sharing a name, so the
 /// paths are deduplicated here: rendering one twice is work done twice, and
 /// listing it twice is a sitemap a crawler reports as containing duplicates.
-export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples) -> Array[Str] {
+export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples, packages: &Packages.Packages) -> Array[Str] {
   var found = ["/", "/docs", "/playground", "/download", "/releases", "/about", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand", "/donate", "/modules"]
   for page in docs.pages {
     found = found.push("/docs/" + Url.encodeComponent(page.slug))
@@ -131,12 +132,29 @@ export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples
       found = found.push(path)
     }
   }
+  if Packages.present(packages) {
+    found = found.push("/packages")
+    var handles: Map[Str, Bool] = mapOf([])
+    for project in packages.projects {
+      if !Map.containsKey(&handles, project.handle) {
+        handles = handles.insert(project.handle, true)
+        found = found.push("/" + project.handle)
+      }
+      let base = "/" + project.name
+      found = found.concat([base, base + "/source", base + "/docs", base + "/releases"])
+      for file in project.files {
+        var segments: Array[Str] = []
+        for segment in file.split("/") { segments = segments.push(Url.encodeComponent(segment)) }
+        found = found.push(base + "/source/" + segments.join("/"))
+      }
+    }
+  }
   found
 }
 
-export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples) -> Str {
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples, packages: &Packages.Packages) -> Str {
   var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
-  for path in paths(catalog, docs, examples) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
+  for path in paths(catalog, docs, examples, packages) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
   body + "</urlset>\n"
 }
 

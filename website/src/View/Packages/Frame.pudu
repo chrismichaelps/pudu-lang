@@ -1,0 +1,144 @@
+module View.Packages.Frame
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Std.Url as Url
+import Service.Packages as Packages
+import View.Layout as Layout
+
+/// The address of the script that adds the version picker and copy buttons.
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=1"
+
+/// The address of a project, and of one of its tabs.
+export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }
+
+export fn tabPath(project: &Packages.Project, which: Str) -> Str {
+  if which == "overview" { projectPath(project) } else { projectPath(project) + "/" + which }
+}
+
+/// The address of a file in the source tab.
+export fn sourcePath(project: &Packages.Project, file: Str) -> Str {
+  var encoded: Array[Str] = []
+  for segment in file.split("/") { encoded = encoded.push(Url.encodeComponent(segment)) }
+  tabPath(project, "source") + "/" + encoded.join("/")
+}
+
+/// A handle's avatar, or its first letter when the snapshot holds no image.
+export fn avatar(profile: &Option[Packages.Profile], handle: Str, size: Str) -> H.Node {
+  match *profile {
+    case Some(held) => if held.avatar.isEmpty() { initial(handle, size) } else {
+      H.img().class("package-avatar").src(held.avatar).alt("").at("width", size).at("height", size).at("loading", "lazy")
+    }
+    case None => initial(handle, size)
+  }
+}
+
+fn initial(handle: Str, size: Str) -> H.Node {
+  H.span().class("package-avatar package-initial").at("aria-hidden", "true").at("style", "width:" + size + "px;height:" + size + "px").says(handle.drop(1).take(1).toUpper())
+}
+
+/// `pudu install @owner/repo`, or with an exact version.
+export fn installCommand(project: &Packages.Project, version: Str) -> Str {
+  if version.isEmpty() { "pudu install " + project.name } else { "pudu install " + project.name + "@" + version }
+}
+
+/// The module a reader imports first: the root module when the release has
+/// it, otherwise the first one under the root.
+export fn firstModule(project: &Packages.Project) -> Str {
+  match Packages.latestRelease(project) {
+    case Some(release) => {
+      if release.modules.contains(project.root) { return project.root }
+      for held in release.modules {
+        if held.startsWith(project.root + ".") { return held }
+      }
+      if release.modules.isEmpty() { project.root } else { release.modules[0] }
+    }
+    case None => project.root
+  }
+}
+
+fn copyable(command: Str, label: Str) -> H.Node {
+  H.div().class("install-command").holding([
+      H.code().class("install-text").says(command),
+      H.button().class("install-copy").kind("button").at("data-copy", command).at("aria-label", "Copy " + label).says("Copy")
+    ])
+}
+
+/// The install panel: the command for the latest release, a version picker
+/// that rewrites it, the import line, and how to contribute. It opens without
+/// script; the script adds the picker's effect and the copy buttons.
+fn installPanel(project: &Packages.Project) -> H.Node {
+  let available = project.releases.filter(|release: Packages.Release| !release.yanked)
+  if available.isEmpty() { return H.nothing() }
+  var options: Array[H.Node] = []
+  let latest = available[0].version
+  for release in available {
+    let label = if release.version == latest { release.version + " (latest)" } else { release.version }
+    options = options.push(H.option().value(release.version).says(label))
+  }
+  let moduleName = firstModule(project)
+  let last = moduleName.split(".")
+  let alias = last[last.length() - 1]
+  H.details().class("install").id("install").holding([
+      H.summary().class("install-open").holding([H.span().class("install-open-label").says("Install"), H.span().class("install-close-label").says("Close")]),
+      H.div().class("install-panel").at("role", "dialog").at("aria-label", "Use " + project.name).holding([
+          H.h2().says("Use " + project.name),
+          H.h3().says("Install this release"),
+          H.p().says("From your project, run:"),
+          H.div().class("install-picked").at("data-package", project.name).holding([copyable(installCommand(project, latest), "the install command")]),
+          H.labelFor().class("install-version").holding([
+              H.span().says("Version"),
+              H.select().class("install-select").at("data-package", project.name).holding(options)
+            ]),
+          H.p().class("install-note").says("An exact version can install a new release immediately. Without a version, pudu follows the 72-hour minimum release age for new resolutions."),
+          copyable(installCommand(project, ""), "the unversioned install command"),
+          H.h3().says("Then import it"),
+          copyable("import " + moduleName + " as " + alias, "the import line"),
+          H.h3().says("To contribute"),
+          copyable("git clone " + project.repository, "the clone command")
+        ])
+    ])
+}
+
+fn tab(project: &Packages.Project, name: Str, label: Str, current: Str) -> H.Node {
+  let linked = H.a().href(tabPath(project, name)).says(label)
+  if name == current { linked.at("aria-current", "page") } else { linked }
+}
+
+/// A project page: the bar with the project's name, its tabs, and the install
+/// panel, above what the tab shows.
+export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, current: Str, title: Str, description: Str, content: Array[H.Node]) -> Html.Html {
+  pageAt(siteUrl, packages, project, current, tabPath(project, current), title, description, content)
+}
+
+/// A project tab whose selected child has its own canonical address.
+export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, current: Str, path: Str, title: Str, description: Str, content: Array[H.Node]) -> Html.Html {
+  let profile = Packages.profile(packages, project.handle)
+  let bar = H.div().class("package-bar").holding([
+      H.section().class("package-project-hero").holding([
+          H.span().class("package-hero-label").says("Community package"),
+          H.div().class("package-heading").holding([
+              avatar(&profile, project.handle, "52"),
+              H.div().class("package-identity").holding([
+                  H.p().class("package-name").holding([
+                      H.a().class("package-owner").href("/" + project.handle).says(project.handle),
+                      H.span().class("package-slash").says(" / "),
+                      H.strong().says(project.project)
+                    ]),
+                  H.p().class("package-hero-description").says(project.description)
+                ]),
+              installPanel(project)
+            ]),
+          H.p().class("package-hero-release").says("Latest release  ·  " + Option.unwrapOr(project.latest, "not yet published"))
+        ]),
+      H.nav().class("package-tabs").label("Project").holding([
+          tab(project, "overview", "Overview", current),
+          tab(project, "source", "Source", current),
+          tab(project, "docs", "Docs", current),
+          tab(project, "releases", "Releases", current)
+        ])
+    ])
+  let article = H.article().class("package-page").holding([bar].concat(content).concat([H.script().kind("module").src(SCRIPT_PATH)]))
+  Layout.page(siteUrl, title, description, path, true, None, article.html())
+}

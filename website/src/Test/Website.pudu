@@ -13,6 +13,7 @@ import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
 import Service.Documents as Documents
+import Service.Packages as Packages
 import Service.Playground.Admission as Admission
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
@@ -170,10 +171,16 @@ export fn main() -> Int {
     case Err(_) => { return 1 }
   }
   let origin = "https://pudu.example"
+  let packages = match Packages.load("website/test/fixtures/packages") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let brokenPackages = Packages.load("website/test/fixtures/packages-broken")
   let runsNothing = Playground.disabled("not in this suite")
   let site = Site.Site {
     siteUrl: origin,
     catalog: catalog,
+    packages: packages,
     search: Search.index(&catalog.entries),
     docs: docs,
     release: release,
@@ -222,6 +229,17 @@ export fn main() -> Int {
   let community = Web.render(&site, "/community")
   let privacy = Web.render(&site, "/privacy")
   let brand = Web.render(&site, "/brand")
+  let packageCatalog = Web.render(&site, "/packages")
+  let packageSearch = Web.render(&site, "/packages/search?q=json")
+  let packageMissing = Web.render(&site, "/@alice/missing")
+  let packageProfile = Web.render(&site, "/@alice")
+  let packageOverview = Web.render(&site, "/@alice/json-kit")
+  let packageSource = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Parse.pudu")
+  let packageBinary = Web.render(&site, "/@alice/json-kit/source/assets/icon.bin")
+  let packageEncoded = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Extra%20Test.pudu")
+  let packageSourceMissing = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Missing.pudu")
+  let packageDocs = Web.render(&site, "/@alice/json-kit/docs")
+  let packageReleases = Web.render(&site, "/@alice/json-kit/releases")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -237,6 +255,7 @@ export fn main() -> Int {
   let invalidFilter = Search.find(&catalog.entries, "kind:not-a-kind", 20)
   let multiTerm = Search.find(&catalog.entries, "adler checksum", 10)
   let edge = DynamicWeb.Dynamic {
+    packages: packages,
     siteUrl: origin,
     catalog: searchCatalog,
     search: Search.index(&searchCatalog.entries),
@@ -284,6 +303,19 @@ export fn main() -> Int {
       Test.that("a platform post decodes its base64 body", posted.message.body == "\{\"source\":\"\"\}"),
       Test.that("download page answers", download.status.code == 200),
       Test.that("release notes answer", releases.status.code == 200),
+      Test.that("the package catalog lists public projects", packageCatalog.status.code == 200 && packageCatalog.body.contains("@alice") && packageCatalog.body.contains("json-kit")),
+      Test.that("a missing snapshot file tree fails startup", Result.isErr(&brokenPackages)),
+      Test.that("package search finds a project", packageSearch.status.code == 200 && packageSearch.body.contains("json-kit")),
+      Test.that("a handle shows its public projects", packageProfile.status.code == 200 && packageProfile.body.contains("Alice")),
+      Test.that("a project overview shows its README and install command", packageOverview.status.code == 200 && packageOverview.body.contains("Parse and build JSON") && packageOverview.body.contains("pudu install @alice/json-kit")),
+      Test.that("a source file has linkable lines", packageSource.status.code == 200 && packageSource.body.contains("id=\"L1\"")),
+      Test.that("a binary release file has a source page", packageBinary.status.code == 200 && packageBinary.body.contains("no text preview")),
+      Test.that("an encoded filename resolves and keeps its canonical path", packageEncoded.status.code == 200 && packageEncoded.body.contains("Extra Test.pudu") && packageEncoded.body.contains("/source/src/JsonKit/Extra%20Test.pudu")),
+      Test.that("source links pin the published commit", packageSource.body.contains("/blob/df14b267bcd333dac23e53ab68d015ad1b447d4c/")),
+      Test.that("missing project source is refused", packageSourceMissing.status.code == 404),
+      Test.that("missing package is refused", packageMissing.status.code == 404),
+      Test.that("package docs and releases answer", packageDocs.status.code == 200 && packageReleases.status.code == 200 && packageReleases.body.contains("2.0.0")),
+      Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases"])),
       Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),
       Test.that("code of conduct answers", conduct.status.code == 200),
       Test.that("code of conduct names how to report", conduct.body.contains("chrisperezsantiago1@gmail.com")),
@@ -430,7 +462,9 @@ export fn main() -> Int {
       Test.that("an answer says its body is not encoded", Function.answered(&home).contains("\"isBase64Encoded\":false")),
       Test.that("a page that was not found answers as not found", Function.answered(&missing).contains("\"statusCode\":404"))
     ])
-  Test.report(&Test.run(&suite))
+  let report = Test.run(&suite)
+  for failure in report.failures { let _shown = Io.writeErrorLine(failure) }
+  Test.report(&report)
 }
 
 fn requestFor(target: Str) -> Route.Request {

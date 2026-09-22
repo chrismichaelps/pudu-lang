@@ -3,6 +3,7 @@ module Store.Files
 import Std.Fs as Fs
 import Std.Io as Io
 import Std.Json as Json
+import Std.List as List
 import Domain.Name as Name
 
 /// Where the registry keeps what it knows, under one directory:
@@ -88,6 +89,34 @@ export fn readJson(path: Str) -> Result[Option[Json.Json], Str] {
     case Ok(value) => Ok(Some(value))
     case Err(problem) => Err(path + ": " + Json.explain(&problem))
   }
+}
+
+/// Every file under a directory, by its path relative to it, sorted.
+export fn filesUnder(directory: Str) -> Result[Array[Str], Str] {
+  var found: Array[Str] = []
+  var pending: Array[Str] = [""]
+  while !pending.isEmpty() {
+    let relative = pending[pending.length() - 1]
+    pending = pending.pop()
+    let absolute = if relative.isEmpty() { directory } else { directory + "/" + relative }
+    let names = match Io.list(absolute) {
+      case Ok(held) => held
+      case Err(_) => { return Err("cannot list " + absolute) }
+    }
+    for name in names {
+      let path = if relative.isEmpty() { name } else { relative + "/" + name }
+      let isDirectory = match Fs.metadata(directory + "/" + path) {
+        case Ok(held) => held.isDirectory
+        case Err(_) => { return Err("cannot inspect " + directory + "/" + path) }
+      }
+      if !isDirectory {
+        found = found.push(path)
+      } else {
+        pending = pending.push(path)
+      }
+    }
+  }
+  Ok(List.sorted(&found))
 }
 
 /// The directory names directly inside a directory, or none when it is absent.

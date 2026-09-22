@@ -50,6 +50,7 @@ tags: [moc, module]
 - [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge, private desktop target adapter,
   and test-only C++ conformance surface.
 - [[src/registry/_MOC|Registry modules]] — the package registry: GitHub-backed identity, releases fetched from tags, and its API.
+- [[Package registry end-to-end suite]] — local GitHub, registry, CLI, and website snapshot integration flow.
 - [[src/website/_MOC|Website modules]] — Pudu SSR, generated API search, views, SEO, tests, and Pudu-native deployment entries.
 - [[Website Linux Artifact Workflow]] — short-lived x86-64 Pudu website build for preview deployment.
 - [[Musl Runtime Workflow]] — portable x86-64 runtime proof across Alpine and Amazon Linux 2023.

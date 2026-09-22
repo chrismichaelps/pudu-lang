@@ -5,6 +5,7 @@ export type SiteError
   | CatalogueUnreadable(Str)
   | CatalogueInvalid
   | CatalogueEmpty
+  | PackagesInvalid(Str)
   | DocsUnreadable(Str)
   | DocumentUnreadable(Str)
   | ReleasesUnreadable(Str)
@@ -21,6 +22,7 @@ export fn explain(problem: &SiteError) -> Str {
     case CatalogueUnreadable(path) => "the API catalogue could not be read at " + path
     case CatalogueInvalid => "the API catalogue is not valid generated documentation"
     case CatalogueEmpty => "the API catalogue contains no public declarations"
+    case PackagesInvalid(path) => "the package pages' data at " + path + " is not a valid package snapshot"
     case DocsUnreadable(path) => "the documentation pages could not be read at " + path
     case DocumentUnreadable(path) => "a published document could not be read at " + path
     case ReleasesUnreadable(path) => "the published releases could not be read at " + path
