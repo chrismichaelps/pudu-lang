@@ -210,6 +210,9 @@ export fn main() -> Int {
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
   let home = Web.render(&site, "/")
+  let bare = Site.Site{..site, packages: Packages.empty()}
+  let emptyCatalog = Web.render(&bare, "/packages")
+  let bareHome = Web.render(&bare, "/")
   let search = Web.render(&site, "/search?q=checksum")
   let hostile = Web.render(&site, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
   let modulePage = Web.render(&site, "/module/Std.Adler32")
@@ -363,6 +366,11 @@ export fn main() -> Int {
       Test.that("the contents script is served", contentsScript.status.code == 200 && contentsScript.body.contains("aria-current")),
       Test.that("only script modules are served from the documentation folder", outsideScripts.status.code == 404),
       Test.that("home renders", home.status.code == 200),
+      Test.that("home opens with the shared banner and API search", home.body.contains("class=\"hero-banner home-hero\"") && home.body.contains("banner-search")),
+      Test.that("home features published packages", home.body.contains("home-packages") && home.body.contains("href=\"/@alice/json-kit\"")),
+      Test.that("home features no packages when none are published", !bareHome.body.contains("home-packages")),
+      Test.that("the masthead links the packages", home.body.contains("href=\"/packages\">Packages")),
+      Test.that("the packages page explains publishing before any package exists", emptyCatalog.status.code == 200 && emptyCatalog.body.contains("pudu release 0.1.0") && !emptyCatalog.body.contains("package-cards")),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
       Test.that("home has structured data", home.body.contains("application/ld+json")),
       Test.that("home draws the logo at its size, sized before it arrives", home.body.contains("src=\"/assets/pudu-lang-logo.webp\" alt=\"Pudu programming language\" width=\"168\" height=\"56\"")),

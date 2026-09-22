@@ -59,7 +59,7 @@ fn document(
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").at("sizes", "64x64").href(Constants.ICON_PATH),
           H.link().rel("apple-touch-icon").href(Constants.TOUCH_ICON_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=31")
+          H.link().rel("stylesheet").href("/assets/site.css?v=32")
         ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       body.holding(parts)
     ]).html()
@@ -122,6 +122,7 @@ fn navigation(path: Str, classes: Str) -> H.Node {
       navigationLink("/docs", "Docs", isDocumentation(path)),
       navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || isSymbol(path)),
       navigationLink("/playground", "Playground", path == "/playground" || path.startsWith("/playground/")),
+      navigationLink("/packages", "Packages", path == "/packages" || path.startsWith("/packages/") || path.startsWith("/@")),
       navigationLink("/download", "Download", path == "/download"),
       navigationLink("/about", "About", path == "/about"),
       navigationLink("/donate", "Donate", path == "/donate")

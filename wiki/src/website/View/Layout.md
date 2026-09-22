@@ -20,6 +20,8 @@ Documentation pages and API symbols share the `/docs/` prefix, so the current-pa
 depth: `/docs`, `/guide`, and a path one segment below `/docs/` are the documentation; three segments
 below it are a symbol and mark the API link.
 
+- **Q:** Link the packages from the masthead? **A:** Always, as Packages. _Rationale:_ `/packages` always answers, with an empty state before any package is published.
+
 Resolved Grill Log: use supplied logos and a white reading surface; keep all request text escaped;
 keep external destinations visible, fixed, and outside request-controlled data.
 Keep one search form in the page body, preserve logical keyboard order, announce the current page, and

@@ -143,7 +143,7 @@ export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.
   let profile = Packages.profile(packages, project.handle)
   let bar = H.div().class("package-bar").holding([
       H.section().class("package-project-hero").holding([
-          H.span().class("package-hero-label").says("Community package"),
+          H.span().class("hero-banner-label").says("Community package"),
           H.div().class("package-heading").holding([
               avatar(&profile, project.handle, "52"),
               H.div().class("package-identity").holding([

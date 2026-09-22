@@ -51,7 +51,7 @@ export fn routes(site: &Site.Site) -> Route.Router {
   let packages = &site.packages
   Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([
           Route.get("/", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, Home.home(siteUrl, catalog, release))
+              Reply.page(200, Home.home(siteUrl, catalog, release, packages))
             }),
           Route.get("/search", fn(asked: Route.Request) -> Http.Response {
               Reply.page(200, Home.results(siteUrl, search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
@@ -251,7 +251,6 @@ export fn routes(site: &Site.Site) -> Route.Router {
 }
 
 fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Http.Response {
-  if !Packages.present(packages) { return Reply.page(404, Documentation.missing(siteUrl, "/packages")) }
   Reply.page(200, PackageCatalog.page(siteUrl, packages, query))
 }
 

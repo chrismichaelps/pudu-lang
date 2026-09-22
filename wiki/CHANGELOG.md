@@ -23,6 +23,14 @@ tags: [changelog]
   metadata have separate reading surfaces. The mobile install panel stays within the viewport.
 
 
+## 2026-09-22 — One banner for the home page and the packages
+
+- The home page opens with the banner the package catalogue uses, holding the release, the headline,
+  Start learning and Download, and API search with example queries. Published packages appear on the
+  home page as cards.
+- The masthead links Packages. `/packages` always answers: before any package is published it shows the
+  three commands that publish one.
+
 ## 2026-09-22 — A code view for package source, and GitHub beside every project
 
 - A package's Source tab is a code view: a file sidebar with the release, a filter, and the tree with

@@ -2,36 +2,37 @@ module View.Home
 
 import Std.Html.Build as H
 import Std.Html as Html
+import Std.Option as Option
 import Std.Url as Url
 import Seo as Seo
 import Service.Catalog as Catalog
+import Service.Packages as Packages
 import Service.Releases as Releases
 import Service.Search as Search
 import View.Dynamic as Dynamic
 import View.Layout as Layout
 
-export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Release) -> Html.Html {
-  let intro = H.section().class("intro").holding([
-      H.p().class("hero-release").holding([
-          H.a().href("/releases").holding([
-              H.span().class("release-pill").says(if release.prerelease { "Pre-release" } else { "Latest" }),
-              H.span().says("Pudu " + release.version + " is out")
-            ])
+/// The home page: the banner with the release, the language's promise, and
+/// API search; then how Pudu reads, its packages when there are any, and its
+/// library.
+export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Release, packages: &Packages.Packages) -> Html.Html {
+  let intro = H.section().class("hero-banner home-hero").holding([
+      H.a().class("hero-banner-release").href("/releases").holding([
+          H.span().class("release-pill").says(if release.prerelease { "Pre-release" } else { "Latest" }),
+          H.span().says("Pudu " + release.version + " is out")
         ]),
       H.h1().says("Programs that say what they do."),
       H.p().says("Pudu is a statically typed language where a signature tells you what a function takes, what it gives back, whether it can fail, and whether it changes what it was given."),
       H.p().class("hero-actions").holding([
-          H.a().class("button").href("/docs/introduction").says("Start learning"),
-          H.a().class("button button-quiet").href("/download").says("Download " + release.version)
+          H.a().class("button button-light").href("/docs/introduction").says("Start learning"),
+          H.a().class("button button-ghost").href("/download").says("Download " + release.version)
         ]),
-      H.h2().class("hero-search-title").says("Search the API"),
-      H.p().says("Find any public function, type, trait, constructor, or constant by name or by type."),
+      Layout.searchForm("", "banner-search"),
       exampleQueries()
     ])
   let modules = modulePanel(&catalog.modules, catalog.languageVersion)
   Layout.page(siteUrl, "Pudu language and API search", "Search every public Pudu language and standard-library declaration by name or type.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
         intro,
-        Layout.searchForm("", "home-search"),
         // The shape example sits beside its explanation, and the modules have a
         // row of their own below. Side by side, a two-line example next to a
         // tall list of modules left the example's column mostly empty, and a
@@ -46,6 +47,7 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
               ])
           ]),
         modules,
+        featured(packages),
         H.section().class("home-section start-section").holding([
             H.div().holding([
                 H.span().class("kind").says("Start here"),
@@ -107,6 +109,29 @@ fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
         ]),
       H.ul().class("module-list").holding(links),
       H.p().holding([H.a().href("/modules").says("View all modules")])
+    ])
+}
+
+/// Up to six packages from the snapshot, or nothing when there is none.
+fn featured(packages: &Packages.Packages) -> H.Node {
+  if !Packages.present(packages) { return H.nothing() }
+  var cards: Array[H.Node] = []
+  for project in packages.projects.slice(0, 6) {
+    cards = cards.push(H.a().class("home-package").href("/" + project.name).holding([
+          H.span().class("home-package-name").holding([H.span().class("package-owner").says(project.handle), H.span().class("package-slash").says(" / "), H.strong().says(project.project)]),
+          H.span().class("home-package-description").says(project.description),
+          H.span().class("home-package-meta").says(Option.unwrapOr(project.latest, "unreleased") + " · ★ " + show(project.stars))
+        ]))
+  }
+  H.section().class("home-section").holding([
+      H.span().class("kind").says("Packages"),
+      H.h2().says("Build with what the community shares"),
+      H.p().class("section-lead").says("Packages are published from GitHub and installed with one command. Every release is kept exactly as it was tagged."),
+      H.div().class("home-packages").holding(cards),
+      H.p().class("home-actions").holding([
+          H.a().href("/packages").says(if packages.projects.length() == 1 { "Explore the package" } else { "Explore all " + show(packages.projects.length()) + " packages" }),
+          H.a().href("/docs/dependencies").says("Learn how dependencies work")
+        ])
     ])
 }
 

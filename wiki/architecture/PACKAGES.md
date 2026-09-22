@@ -382,8 +382,10 @@ Project search on `/packages/search?q=` ranks exact names, then handles, then wo
 keywords. Declarations across public packages join the site's existing API search once packages
 carry the same documentation catalogue `pudu doc --json` produces for the standard library.
 
-The full package UI ships when install, resolve, lock, push, release, and a hosted public registry
-are production-ready. Until then the site shows no package pages.
+`/packages` always answers and the masthead links it. Before a snapshot holds any project, it shows
+how to publish the first one; project, handle, source, docs, and release pages exist for each project
+the snapshot holds. The home page opens with the same banner as the catalogue and features up to six
+packages when there are any.
 
 ## Upgrades
 

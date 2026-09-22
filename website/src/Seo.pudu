@@ -132,8 +132,8 @@ export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples
       found = found.push(path)
     }
   }
+  found = found.push("/packages")
   if Packages.present(packages) {
-    found = found.push("/packages")
     var handles: Map[Str, Bool] = mapOf([])
     for project in packages.projects {
       if !Map.containsKey(&handles, project.handle) {

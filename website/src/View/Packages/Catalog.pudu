@@ -31,10 +31,34 @@ fn cards(packages: &Packages.Packages, projects: &Array[Packages.Project]) -> H.
 }
 
 fn searchForm(query: Str) -> H.Node {
-  H.form().class("search package-search").action(PATH + "/search").method("get").holding([
+  H.form().class("search banner-search").action(PATH + "/search").method("get").holding([
       H.labelFor().at("for", "package-q").class("skip").says("Search packages"),
       H.input().id("package-q").name("q").kind("search").value(query).placeholder("Search packages, such as @alice or json").required(),
       H.button().submit().says("Search")
+    ])
+}
+
+fn step(number: Str, title: Str, command: Str) -> H.Node {
+  H.li().class("package-step").holding([
+      H.span().class("package-step-number").says(number),
+      H.div().holding([H.h3().says(title), H.code().class("install-text").says(command)])
+    ])
+}
+
+/// What the catalogue shows before any package has been published.
+fn emptyState() -> H.Node {
+  H.section().class("package-empty").holding([
+      H.h2().says("The first packages are on their way"),
+      H.p().class("section-lead").says("A Pudu package is a GitHub repository with a pudu.toml. Publishing one takes three commands from its directory."),
+      H.ol().class("package-steps").holding([
+          step("1", "Name it after its repository", "name = \"@owner/repo\""),
+          step("2", "Sign in with GitHub", "pudu login"),
+          step("3", "Tag and publish a release", "pudu release 0.1.0")
+        ]),
+      H.p().class("home-actions").holding([
+          H.a().href("/docs/dependencies").says("Read how packages work"),
+          H.a().href("/docs/dependencies#publishing-a-package").says("Publishing a package")
+        ])
     ])
 }
 
@@ -42,14 +66,16 @@ fn searchForm(query: Str) -> H.Node {
 /// query, the projects that match it instead.
 export fn page(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Html.Html {
   var content: Array[H.Node] = [
-    H.section().class("package-hero").holding([
-        H.span().class("package-hero-label").says("Pudu packages"),
+    H.section().class("hero-banner").holding([
+        H.span().class("hero-banner-label").says("Pudu packages"),
         H.h1().says("Build with what the community shares."),
         H.p().says("Explore published Pudu packages. Read their source and documentation, then add a release to your project."),
-        searchForm(query)
+        if Packages.present(packages) { searchForm(query) } else { H.nothing() }
       ])
   ]
-  if !query.trim().isEmpty() {
+  if !Packages.present(packages) {
+    content = content.push(emptyState())
+  } else if !query.trim().isEmpty() {
     let found = Packages.search(packages, query)
     content = content.push(H.div().class("package-list-heading").holding([H.h2().says(if found.isEmpty() { "No package matches “" + query + "”" } else { show(found.length()) + " for “" + query + "”" })]))
     if !found.isEmpty() { content = content.push(cards(packages, &found)) }
