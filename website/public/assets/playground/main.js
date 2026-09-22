@@ -165,7 +165,12 @@ function typedCharacter(event, intent) {
 }
 
 function showShortcut(button, keys) {
-  if (!button || button.querySelector(".tool-key")) return;
+  if (!button) return;
+  const drawn = button.querySelector(".tool-key");
+  if (drawn) {
+    drawn.textContent = keys;
+    return;
+  }
   const hint = document.createElement("span");
   hint.className = "tool-key";
   hint.setAttribute("aria-hidden", "true");

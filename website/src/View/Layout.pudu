@@ -57,11 +57,23 @@ fn document(
       H.head().holding([
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
-          H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=25")
-        ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
+          H.link().rel("icon").at("type", "image/png").at("sizes", "64x64").href(Constants.ICON_PATH),
+          H.link().rel("apple-touch-icon").href(Constants.TOUCH_ICON_PATH),
+          H.link().rel("stylesheet").href("/assets/site.css?v=26")
+        ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       body.holding(parts)
     ]).html()
+}
+
+/// A preload for each face the page's text is set in. The stylesheet names the
+/// fonts only once it is parsed; asked for here, they arrive with it, and the
+/// fallback's matched metrics cover whatever is left of the wait.
+fn fontPreloads() -> Array[H.Node] {
+  var links: Array[H.Node] = []
+  for font in Constants.PRELOADED_FONTS {
+    links = links.push(H.link().rel("preload").href(font).at("as", "font").at("type", "font/woff2").at("crossorigin", "anonymous"))
+  }
+  links
 }
 
 /// One search form, identified by the class that says which one it is.
@@ -91,7 +103,7 @@ fn masthead(path: Str) -> H.Node {
   H.header().class("masthead").holding([
       H.div().class("masthead-inner").holding([
           H.a().class("brand").href("/").holding([
-              H.img().src(Constants.FULL_LOGO_PATH).alt("Pudu programming language")
+              H.img().src(Constants.LOGO_PATH).alt("Pudu programming language").at("width", "168").at("height", "56")
             ]),
           navigation(path, "top-nav desktop-nav"),
           H.tag("details").class("mobile-nav").holding([
@@ -136,7 +148,7 @@ fn footer() -> H.Node {
       H.div().class("footer-inner").holding([
           H.div().class("footer-brand-column").holding([
               H.span().class("footer-brand").holding([
-                  H.img().src(Constants.SHORT_LOGO_PATH).alt(""),
+                  H.img().src(Constants.MARK_PATH).alt("").at("width", "34").at("height", "33"),
                   H.span().says("Pudu")
                 ]),
               H.p().class("footer-blurb").says("A statically typed language where a signature says what a function takes, what it gives back, and whether it changes what it was given.")

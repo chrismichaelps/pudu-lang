@@ -30,11 +30,14 @@ export fn head(
     property("og:title", title + " | " + Constants.SITE_NAME),
     property("og:description", description),
     property("og:url", canonical),
-    property("og:image", siteUrl + Constants.FULL_LOGO_PATH),
-    H.meta().name("twitter:card").at("content", "summary"),
+    property("og:image", siteUrl + Constants.SOCIAL_IMAGE_PATH),
+    property("og:image:width", "1200"),
+    property("og:image:height", "630"),
+    property("og:image:alt", "The Pudu logo"),
+    H.meta().name("twitter:card").at("content", "summary_large_image"),
     H.meta().name("twitter:title").at("content", title + " | " + Constants.SITE_NAME),
     H.meta().name("twitter:description").at("content", description),
-    H.meta().name("twitter:image").at("content", siteUrl + Constants.FULL_LOGO_PATH)
+    H.meta().name("twitter:image").at("content", siteUrl + Constants.SOCIAL_IMAGE_PATH)
   ]
   if let Some(value) = structured {
     let safe = Json.encode(&value).replace("</", "<\\/")

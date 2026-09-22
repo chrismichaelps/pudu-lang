@@ -4,6 +4,8 @@ import Std.Bytes as ByteSeq
 import Std.Env as Env
 import Std.Http as Http
 import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.List as List
 import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
@@ -17,9 +19,32 @@ import Service.Playground as Playground
 import Service.Playground.Remote as Remote
 import Service.Playground.Sandbox as Sandbox
 import Service.Playground.Wire as Wire
+import View.Playground as PlaygroundView
 import Web.Playground as PlaygroundWeb
 
 const ORIGIN: Str = "https://pudu.example"
+
+/// Every script module beneath the playground's folder other than its entry,
+/// named as `folder/file.js`, in order.
+fn scriptModulesOnDisk(root: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  let folders = match Io.list(root) {
+    case Ok(names) => names
+    case Err(_) => []
+  }
+  for folder in folders {
+    if !folder.endsWith(".js") {
+      let files = match Io.list(root + "/" + folder) {
+        case Ok(names) => names
+        case Err(_) => []
+      }
+      for file in files {
+        if file.endsWith(".js") { found = found.push(folder + "/" + file) }
+      }
+    }
+  }
+  List.sortBy(&found, |left: Str, right: Str| left < right)
+}
 
 const HELLO: Str = "module Main\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  let _said = Io.writeLine(\"hello from the sandbox\")\n  0\n\}\n"
 
@@ -326,6 +351,8 @@ export fn main() -> Int {
       Test.that("a gate counts each reader apart", otherReader == 0),
       Test.that("a forgotten reader starts a fresh window", evictedAgain == 0),
       Test.that("the playground opens with the first example", opening.status.code == 200 && opening.body.contains("Hello, Pudu")),
+      Test.that("the page preloads every module the script imports", List.sortBy(&PlaygroundView.SCRIPT_MODULES, |left: Str, right: Str| left < right) == scriptModulesOnDisk("website/public/assets/playground") && opening.body.contains("<link rel=\"modulepreload\" href=\"/assets/playground/lsp/assist.js\" />")),
+      Test.that("the page lays out the splitter and the shortcut before the script arrives", opening.body.contains("<div class=\"playground-splitter\"></div>") && opening.body.contains("<span class=\"tool-key\" aria-hidden=\"true\">Ctrl ↵</span>")),
       Test.that("the opening example is canonical at the playground", opening.body.contains("rel=\"canonical\" href=\"https://pudu.example/playground\"")),
       Test.that("an example has its own indexed page", shapes.status.code == 200 && shapes.body.contains("href=\"https://pudu.example/playground/shapes\"") && shapes.body.contains("index,follow")),
       Test.that("the menu marks the example shown", shapes.body.contains("<option value=\"shapes\"") && shapes.body.contains("selected=\"selected\">Shapes</option>")),

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — The site's bytes and its layout shift
+
+- The masthead logo is a 6 KiB WebP drawn at its size instead of a 579 KiB PNG four times too wide,
+  the footer mark and the icon are small images of their own instead of a 512 KiB PNG, and every
+  image states its size. Link previews use a 1200×630 card.
+- Fonts are WOFF2 (44 KiB a face instead of 130), preloaded, with a fallback face scaled to Nunito's
+  metrics so text does not move when the font arrives.
+- The playground no longer shifts when its script mounts (Lighthouse measured 0.80): the page draws
+  the splitter column and the Run shortcut itself, and the script adopts them. Its thirty modules are
+  preloaded together rather than discovered three imports deep.
+
 ## 2026-09-22 — Website polish at every width
 
 - The home hero's release pill and action buttons no longer sit flush against the heading and the

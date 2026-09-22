@@ -22,7 +22,45 @@ export const SCRIPT_PATH: Str = "/assets/playground/main.js"
 
 /// The version the script is addressed with, so a deployment that changes it
 /// is fetched fresh past every cache.
-const ASSET_VERSION: Str = "11"
+const ASSET_VERSION: Str = "12"
+
+/// Every module the editor script imports, below `SCRIPT_PATH`'s folder.
+///
+/// A module graph is found one level at a time: the browser learns of an
+/// import only once the module naming it has arrived. Named on the page, every
+/// module is fetched at once, in parallel with the script, instead of three
+/// round trips deep. The website suite checks this list against the folder.
+export const SCRIPT_MODULES: Array[Str] = [
+  "config/constants.js",
+  "config/messages.js",
+  "dom/floating.js",
+  "dom/markdown.js",
+  "dom/nodes.js",
+  "editor/editing.js",
+  "editor/geometry.js",
+  "editor/keys.js",
+  "editor/view.js",
+  "features/examples.js",
+  "features/output.js",
+  "features/run.js",
+  "features/share.js",
+  "features/splitter.js",
+  "features/status.js",
+  "lsp/assist.js",
+  "lsp/completion-list.js",
+  "lsp/completion-rank.js",
+  "lsp/completion.js",
+  "lsp/diagnostics.js",
+  "lsp/hover.js",
+  "lsp/session.js",
+  "lsp/signature.js",
+  "model/problems.js",
+  "net/errors.js",
+  "net/request.js",
+  "text/positions.js",
+  "text/scan.js",
+  "text/syntax.js"
+]
 
 /// The island the editor script mounts on.
 ///
@@ -91,6 +129,10 @@ export fn page(siteUrl: Str, playground: &Playground.Playground, screen: &Screen
       toolbar(playground, screen),
       H.div().class("playground-panes").holding([
           editor(playground, screen),
+          // The column between the panes is laid out with the page; the script
+          // makes it a handle rather than adding it, which would move the
+          // output after it had been drawn.
+          H.div().class("playground-splitter"),
           output(playground, screen)
         ])
     ])
@@ -101,10 +143,19 @@ export fn page(siteUrl: Str, playground: &Playground.Playground, screen: &Screen
       H.form().id("playground-open").action(OPEN_PATH).method("get"),
       sharePanel(siteUrl, screen),
       shareDialog(),
-      H.nothing().holds(Island.microRuntime("")),
-      H.script().kind("module").src(SCRIPT_PATH + "?v=" + ASSET_VERSION)
-    ])
+      H.nothing().holds(Island.microRuntime(""))
+    ].concat(modulePreloads()).concat([H.script().kind("module").src(SCRIPT_PATH + "?v=" + ASSET_VERSION)]))
   Layout.workspace(siteUrl, title, description, path, indexable, Some(schema(siteUrl)), body.html())
+}
+
+/// A `modulepreload` for each of the script's modules.
+fn modulePreloads() -> Array[H.Node] {
+  let folder = SCRIPT_PATH.take(SCRIPT_PATH.length() - "main.js".length())
+  var links: Array[H.Node] = []
+  for name in SCRIPT_MODULES {
+    links = links.push(H.link().rel("modulepreload").href(folder + name))
+  }
+  links
 }
 
 /// What the editor island is told: where to ask, and what it may do.
@@ -146,7 +197,12 @@ fn notice(playground: &Playground.Playground) -> H.Node {
 fn toolbar(playground: &Playground.Playground, screen: &Screen) -> H.Node {
   H.div().class("playground-toolbar").role("toolbar").label("Playground").holding([
       H.button().submit().class("tool tool-primary").id("playground-run").name("action").value("run")
-        .title("Run the program (Ctrl + Enter)").says("Run"),
+        .title("Run the program (Ctrl + Enter)").holding([
+          H.span().says("Run"),
+          // The shortcut is drawn with the page, so the button is already its
+          // final width when the script arrives and only corrects the keys.
+          H.span().class("tool-key").at("aria-hidden", "true").says("Ctrl ↵")
+        ]),
       H.button().submit().class("tool").id("playground-format").name("action").value("format")
         .title("Format the program (Shift + Alt + F)").says("Format"),
       H.a().class("tool").id("playground-reset").href(resetPath(screen))

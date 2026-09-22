@@ -6,14 +6,15 @@ import { MESSAGES } from "../config/messages.js";
 import { element, readStored, writeStored } from "../dom/nodes.js";
 
 export function bindSplitter({ panes, before, onResize }) {
-  const handle = element("div", "playground-splitter");
+  const drawn = before.nextElementSibling;
+  const handle = drawn?.classList.contains("playground-splitter") ? drawn : element("div", "playground-splitter");
   handle.setAttribute("role", "separator");
   handle.setAttribute("aria-orientation", "vertical");
   handle.setAttribute("aria-label", MESSAGES.resizePanes);
   handle.setAttribute("aria-valuemin", String(SPLIT.min));
   handle.setAttribute("aria-valuemax", String(SPLIT.max));
   handle.tabIndex = 0;
-  before.after(handle);
+  if (handle !== drawn) before.after(handle);
 
   function current() {
     return parseFloat(panes.style.getPropertyValue("--split")) || SPLIT.fallback;
