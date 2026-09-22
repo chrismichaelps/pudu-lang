@@ -7,11 +7,10 @@
     never from times or permissions, so the same files give the same digest on
     every machine.
 
-    Hashing reads every byte, so it is done once per content: a copy computes
-    the digest of what it writes, an immutable checkout keeps its digest beside
-    it, and an installed package is first compared by its fingerprint — each
-    file's path, size, and modification time — and hashed only when that
-    differs. -}
+    `copyTree` returns the digest of the bytes it writes, `cachedTreeDigest`
+    stores the digest of an immutable directory beside it, and
+    `treeFingerprint` summarises paths, sizes, and modification times without
+    reading file contents. -}
 module Pudu.Package.Digest
   ( sha256Hex
   , treeDigest
@@ -99,10 +98,8 @@ listingLine relative content =
 digestOf :: [ByteString.ByteString] -> Text
 digestOf lines' = "sha256:" <> sha256Hex (ByteString.concat lines')
 
-{-| What a directory's files look like from outside, without reading them: a
-    digest of each file's path, size, and modification time. It stays equal
-    while nothing is written, and it is what makes a second install of an
-    unchanged `deps/` cost a directory walk instead of reading every file. -}
+{-| SHA-256 of the sorted listing `<path> NUL <size> NUL <mtime> LF`, as
+    `sha256:<hex>`. File contents are not read. -}
 treeFingerprint :: FilePath -> IO (Either TreeProblem Text)
 treeFingerprint root = do
   listed <- treeFiles root
@@ -118,9 +115,8 @@ treeFingerprint root = do
           )
       pure (Right (digestOf lines'))
 
-{-| The tree digest of a directory that is never written after it is made,
-    such as a git checkout in the cache, kept in `<directory>.digest` so it is
-    computed once per machine. -}
+{-| The tree digest of a directory that is not modified after creation,
+    read from `<directory>.digest` when present and written there otherwise. -}
 cachedTreeDigest :: FilePath -> IO (Either TreeProblem Text)
 cachedTreeDigest directory = do
   let sidecar = directory <> ".digest"
@@ -141,8 +137,8 @@ cachedTreeDigest directory = do
 slashed :: FilePath -> String
 slashed path = foldr1 (\a b -> a <> "/" <> b) (splitDirectories path)
 
-{-| Copy a package's files into a destination, the same files `treeFiles`
-    names, and answer the tree digest of the bytes written. -}
+{-| Copy the files `treeFiles` lists from one directory to another and
+    return the tree digest of the copied bytes. -}
 copyTree :: FilePath -> FilePath -> IO (Either TreeProblem Text)
 copyTree from to = do
   listed <- treeFiles from

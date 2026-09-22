@@ -1,15 +1,10 @@
-{-| @Pudu.Cli.Progress — the install log a person watches
+{-| @Pudu.Cli.Progress — terminal rendering of install progress
 
-    An interactive terminal gets one live line on stderr, redrawn in place: a
-    spinner, the phase, the counts so far, and the repository or package being
-    worked on, so a slow fetch is visibly a fetch and not a hang. When it
-    finishes the line is erased and only the lasting summary remains on
-    stdout. A log that is not a terminal gets no live line, since redrawing
-    would fill it with carriage returns; `--verbose` prints every event as a
-    timed line in either case, and `--quiet` prints nothing but errors.
-
-    Colour follows the rest of `pudu`: only for a terminal, never under
-    `NO_COLOR`. -}
+    At `Normal` verbosity with a terminal stderr, a ticker redraws one status
+    line every 80 ms: spinner, phase, counts, items in flight, and elapsed
+    time. `stopDisplay` clears it. `Verbose` writes each event to stderr as a
+    timestamped line; `Quiet` writes nothing. `painter` enables ANSI colour
+    when stdout is a terminal and `NO_COLOR` is unset or empty. -}
 module Pudu.Cli.Progress
   ( Verbosity (..)
   , Display
@@ -40,7 +35,7 @@ import System.IO (Handle, hFlush, hIsTerminalDevice, stderr, stdout)
 data Verbosity = Quiet | Normal | Verbose
   deriving stock (Eq, Show)
 
-{-| What happened, counted as the events arrive. -}
+{-| Event counts accumulated by a `Display`. -}
 data Tally = Tally
   { tallyFetched :: !Int
   , tallyCached :: !Int
@@ -62,8 +57,8 @@ data Display = Display
   , displayLive :: !Bool
   }
 
-{-| Start showing progress. The live line is drawn only for an interactive
-    stderr at normal verbosity. -}
+{-| Create a display. The status line is drawn only at `Normal` verbosity
+    with a terminal stderr. -}
 startDisplay :: Verbosity -> IO Display
 startDisplay verbosity = do
   started <- getCurrentTime
@@ -87,7 +82,7 @@ startDisplay verbosity = do
             TextIO.hPutStrLn stderr ("[" <> seconds now started <> "] " <> describe event)
   pure (Display (Progress record) state started ticker live)
 
-{-| Stop the live line, erase it, and answer what was counted. -}
+{-| Stop the ticker, clear the status line, and return the counts. -}
 stopDisplay :: Display -> IO Tally
 stopDisplay display = do
   mapM_ killThread (displayTicker display)
@@ -138,8 +133,8 @@ drawLive handle glyph tally now started = do
     [] -> ""
     shown -> " · " <> Text.intercalate ", " shown
 
-{-| A repository as the live line names it: without its scheme or `.git`,
-    and only its last part when the rest would not fit. -}
+{-| A URL without its scheme and `.git` suffix, truncated to its last 40
+    characters. -}
 shortUrl :: Text -> Text
 shortUrl url =
   let bare = snd (Text.breakOnEnd "://" url)
@@ -155,13 +150,13 @@ elapsed now started = realToFrac (diffUTCTime now started)
 seconds :: UTCTime -> UTCTime -> Text
 seconds now started = milliseconds (elapsed now started)
 
-{-| A duration as a person reads it: milliseconds under a second, then seconds. -}
+{-| A duration in seconds rendered as `412ms` below one second and `1.3s` above. -}
 milliseconds :: Double -> Text
 milliseconds value
   | value < 1 = Text.pack (show (round (value * 1000) :: Int)) <> "ms"
   | otherwise = Text.pack (show (fromIntegral (round (value * 10) :: Int) / 10 :: Double)) <> "s"
 
-{-| How lasting output is coloured: added, removed, changed, and quiet text. -}
+{-| Colour functions for the summary: added, removed, changed, dim, and bold. -}
 data Paint = Paint
   { paintAdded :: Text -> Text
   , paintRemoved :: Text -> Text

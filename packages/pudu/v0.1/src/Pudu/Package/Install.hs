@@ -7,8 +7,8 @@
     differ only in how they change the manifest first and which locked choices
     they let go of.
 
-    Repositories are fetched and packages copied side by side, and each step
-    is reported to the caller's `Progress` as it starts and ends.
+    Dependencies are expanded, fetched, and copied concurrently, and each
+    step is reported to `optionProgress`.
 
     Nothing is written until everything is known to fit. A failure leaves the
     manifest's caller to restore its edit, the lock as it was, and `deps/`
@@ -78,7 +78,7 @@ data Options = Options
   , optionRefresh :: !(PackageId -> Bool)
   , optionProgress :: !Progress
   , optionGit :: !(Maybe GitSession)
-  -- ^ A session already used this run, so a repository the caller fetched is not fetched again.
+  -- ^ Git session shared with the caller; a new one is opened when absent.
   }
 
 defaultOptions :: Options
@@ -343,15 +343,13 @@ sourceDirectoryOf directory = do
 
 {-| Make `deps/` hold exactly the locked packages.
 
-    A package already installed is left alone when the marker beside it names
-    the locked checksum and its files are the ones recorded when it was
-    installed, so an edited dependency is noticed and restored. The marker
-    keeps the tree digest and a fingerprint of sizes and modification times:
-    an unchanged fingerprint is trusted, a changed one is settled by hashing,
-    so the common case reads no file. A git package's copied files must have
-    the digest the lock records, so a damaged cache is refused rather than
-    installed. Anything in `deps/` the lock does not name is removed: the
-    directory belongs to `pudu`. -}
+    Each installed package has a `.installed` marker holding the locked
+    checksum, the tree digest, and the fingerprint. A package is kept when the
+    checksum matches and either the fingerprint matches or the recomputed tree
+    digest matches; otherwise it is copied again. For a git package the digest
+    of the copied files must equal the locked checksum, or the copy is removed
+    and an error returned. Entries in `deps/` that the lock does not name are
+    removed. -}
 materialise :: Progress -> FilePath -> Lock -> Map.Map PackageId FilePath -> IO (Either Text Int)
 materialise progress root (Lock entries) contents = do
   results <- forConcurrently concurrentLimit entries $ \entry -> do

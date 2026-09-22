@@ -5,9 +5,9 @@
     `Package.Install`. When installing fails, the manifest is put back exactly
     as it was, so a mistyped name leaves nothing behind.
 
-    While a command works, `Cli.Progress` shows what it is doing; when it is
-    done, the report says what was resolved and where it came from, what
-    changed, what was installed, and how long each part took. -}
+    `install`, `uninstall`, and `update` render progress with `Cli.Progress`
+    and finish with a summary of resolution, changes, installation, written
+    files, and elapsed time. -}
 module Pudu.Cli.Package
   ( runPackageCommand
   , packageCommands
@@ -110,7 +110,7 @@ runPackageCommand connect command arguments = do
     "tree" -> showTree project
     _ -> failWith command "unknown package command"
 
-{-| One command's run: its name, its live display, and how much it says. -}
+{-| State for one package command: its name, display, verbosity, and git session. -}
 data Run = Run
   { runCommand :: !String
   , runDisplay :: !Display
@@ -118,8 +118,7 @@ data Run = Run
   , runSession :: !GitSession
   }
 
-{-| Hashing and copying run on every core the machine has, up to the number
-    of packages worked on at once. -}
+{-| Raise the capability count to the processor count, at most 8. -}
 useProcessors :: IO ()
 useProcessors = do
   current <- getNumCapabilities

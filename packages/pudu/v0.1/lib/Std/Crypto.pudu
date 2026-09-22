@@ -5,13 +5,10 @@ module Std.Crypto
 /// numbers, and only rendering turns them into hexadecimal.
 export type Digest = { words: Array[UInt32] }
 
-/// The SHA-256 digest of text, taken over its UTF-8 bytes.
+/// The SHA-256 digest of text, taken over its UTF-8 bytes, computed by the
+/// runtime's implementation.
 ///
-/// This reaches the compiler's own implementation, as `hmacSha256` does. The
-/// server computes an ETag this way for every response it sends, and the
-/// rounds below took 4.5 s for a 104 KB body at `-O2`; the native digest takes
-/// under a millisecond. `sha256Bytes` keeps the rounds as the readable
-/// reference, and the fixtures check that both give every digest alike.
+/// 104 KB at `-O2`: under 1 ms here, 4.5 s with the rounds in `sha256Bytes`.
 export fn sha256(message: Str) -> Digest { wordsOf(&sha256Of(message.toBytes())) }
 
 /// The thirty-two bytes of a digest as the eight big-endian words `Digest` holds.
@@ -38,7 +35,7 @@ fn widen(octet: UInt8) -> UInt32 {
 }
 
 /// The SHA-256 digest of bytes, given one to a word, computed by the rounds
-/// written out below: the readable reference.
+/// below. Reference implementation checked against `sha256` by the fixtures.
 export fn sha256Bytes(message: &Array[UInt32]) -> Digest {
   let padded = pad(message)
   var state = initialState()

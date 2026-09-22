@@ -373,8 +373,7 @@ testLockedRefusal = withGitLibrary $ \library project -> do
   outcome <- installWith defaultOptions {optionLocked = True} project (gitManifest library) emptyLock
   pure (counterexample (show (fmap outcomeLockWritten outcome)) (isLeftContaining "--locked was given" outcome))
 
-{-| The second install of a locked git package finds its checkout in the cache
-    and must not start git: with no `git` on the path it still succeeds. -}
+{-| A reinstall from a lock whose checkout is cached succeeds with no `git` on the path. -}
 testNoGitWhenCached :: IO Property
 testNoGitWhenCached = withGitLibrary $ \library project -> do
   first <- installWith defaultOptions project (gitManifest library) emptyLock
@@ -416,8 +415,7 @@ testProgressEvents = withGitLibrary $ \library project -> do
     , counterexample (show warm) (length [() | UpToDate _ <- warm] === 1)
     ]
 
-{-| A new modification time with the same content changes the fingerprint but
-    not the digest: the package is kept, and nothing is copied. -}
+{-| A changed modification time with unchanged content keeps the installed package. -}
 testTouchedStaysInstalled :: IO Property
 testTouchedStaysInstalled = withGitLibrary $ \library project -> do
   first <- installWith defaultOptions project (gitManifest library) emptyLock

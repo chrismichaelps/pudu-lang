@@ -5,12 +5,11 @@
     a project uses is checked out once into its own directory beside it, so a
     second project on the same commit copies files and runs nothing.
 
-    A locked commit whose checkout is already in the cache is answered without
-    starting git at all, and a repository is fetched at most once per install:
-    a `GitSession` remembers what it fetched and holds one lock per
-    repository, so packages fetched side by side never write the same clone.
-    A new checkout's tree digest is taken as it is written, on the thread
-    that fetched it, and kept beside it.
+    A full commit whose checkout exists in the cache is returned without
+    running git. A `GitSession` records the repositories fetched during one
+    install, so each is fetched at most once, and serialises work on each
+    repository with a per-URL lock. A new checkout's tree digest is written
+    beside it with `cachedTreeDigest`.
 
     `git` is run as a program with prompts disabled: a repository that needs a
     password fails with the reason rather than waiting on a terminal nobody is
@@ -51,8 +50,8 @@ data GitCheckout = GitCheckout
   }
   deriving stock (Eq, Show)
 
-{-| What one install knows about the repositories it has touched. With
-    `offline`, only what the cache already holds is used. -}
+{-| Per-install git state: the offline flag, the progress sink, one lock per
+    repository URL, and the set of URLs already fetched. -}
 data GitSession = GitSession
   { sessionOffline :: !Bool
   , sessionProgress :: !Progress
@@ -160,8 +159,8 @@ withRepository session url action = do
       pure (Map.insert url fresh locks, fresh)
   withMVar lock (const action)
 
-{-| A full object name, which is what a lock records: 40 hexadecimal digits,
-    or 64 for a repository that names objects by SHA-256. -}
+{-| Whether a revision is a full object name: 40 lowercase hexadecimal
+    digits, or 64 for SHA-256 repositories. -}
 isCommit :: Text -> Bool
 isCommit revision = Text.length revision `elem` [40, 64] && Text.all (`elem` ("0123456789abcdef" :: String)) revision
 
