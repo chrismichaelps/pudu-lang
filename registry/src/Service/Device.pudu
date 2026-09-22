@@ -1,0 +1,101 @@
+module Service.Device
+
+import Std.Bytes as ByteSeq
+import Std.Crypto as Crypto
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+import Std.Random as Random
+import Service.Clock as Clock
+import Service.Tokens as Tokens
+import Store.Files as Files
+
+/// How long a pairing may wait for approval, in milliseconds.
+export const LIFETIME_MILLIS: Int = 600000
+
+/// Seconds the command line waits between polls.
+export const POLL_SECONDS: Int = 2
+
+/// Letters used in user codes: no vowels, and none that read alike.
+const USER_ALPHABET: Str = "BCDFGHJKLMNPQRSTVWXZ23456789"
+
+/// A pairing as `begin` answers it.
+export type Pairing = { deviceCode: Str, userCode: Str, expiresIn: Int }
+
+/// What polling a device code answers.
+export type Poll
+  = Waiting
+  | Approved(Str, Str)
+  | Expired
+  | Unknown
+
+fn recordPath(store: &Files.Store, deviceCode: Str) -> Str { Files.devicePath(store, Crypto.sha256Hex(deviceCode)) }
+
+fn userPath(store: &Files.Store, userCode: Str) -> Str { store.root + "/device/user-" + userCode + ".json" }
+
+fn field(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+fn expiresAt(value: &Json.Json) -> Int {
+  Option.unwrapOr(Option.andThen(Json.field(value, "expiresAt"), |held: Json.Json| Json.asInt(&held)), 0)
+}
+
+fn userCodeFrom(bytes: &Bytes) -> Str {
+  var code = ""
+  var index = 0
+  for octet in bytes.toArray() {
+    let position = match convertInteger[Int](octet) {
+      case Some(value) => value % USER_ALPHABET.length()
+      case None => 0
+    }
+    if index == 4 { code = code + "-" }
+    code = code + USER_ALPHABET.slice(position, position + 1)
+    index = index + 1
+  }
+  code
+}
+
+/// Start a pairing. The device code stays with the command line; the user
+/// code is typed by a person who is signed in.
+export fn begin(store: &Files.Store) -> Result[Pairing, Str] {
+  let device = ByteSeq.encodeHex(&Random.secureBytes(32) ?)
+  let user = userCodeFrom(&Random.secureBytes(8) ?)
+  let record = Json.object(&[
+      ("userCode", Json.Text(user)),
+      ("status", Json.Text("waiting")),
+      ("handle", Json.Text("")),
+      ("expiresAt", Json.Number(Clock.millis() + LIFETIME_MILLIS))
+    ])
+  Files.writeJson(recordPath(store, device), &record) ?
+  Files.writeJson(userPath(store, user), &Json.object(&[("device", Json.Text(Crypto.sha256Hex(device)))])) ?
+  Ok(Pairing{deviceCode: device, userCode: user, expiresIn: LIFETIME_MILLIS / 1000})
+}
+
+/// Approve the pairing a person typed the user code of, for their handle.
+export fn approve(store: &Files.Store, userCode: Str, handle: Str) -> Result[(), Str] {
+  let normal = userCode.trim().toUpper()
+  let Some(pointer) = Files.readJson(userPath(store, normal)) ? else { return Err("no pairing has the code " + normal) }
+  let path = Files.devicePath(store, field(&pointer, "device"))
+  let Some(record) = Files.readJson(path) ? else { return Err("no pairing has the code " + normal) }
+  if expiresAt(&record) < Clock.millis() { return Err("the code " + normal + " has expired; run pudu login again") }
+  Files.writeJson(path, &Json.withField(&Json.withField(&record, "status", Json.Text("approved")), "handle", Json.Text(handle))) ?
+  Io.removeIfPresent(userPath(store, normal)) ?
+  Ok(())
+}
+
+/// What a device code's pairing has come to. An approved pairing issues its
+/// token once and is then forgotten.
+export fn poll(store: &Files.Store, deviceCode: Str) -> Result[Poll, Str] {
+  let path = recordPath(store, deviceCode)
+  let Some(record) = Files.readJson(path) ? else { return Ok(Unknown) }
+  if expiresAt(&record) < Clock.millis() {
+    Io.removeIfPresent(path) ?
+    return Ok(Expired)
+  }
+  if field(&record, "status") != "approved" { return Ok(Waiting) }
+  let handle = field(&record, "handle")
+  let secret = Tokens.issue(store, handle, Tokens.PUBLISH, "pudu login") ?
+  Io.removeIfPresent(path) ?
+  Ok(Approved(handle, secret))
+}

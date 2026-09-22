@@ -1,0 +1,99 @@
+module Store.Files
+
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Json as Json
+import Domain.Name as Name
+
+/// Where the registry keeps what it knows, under one directory:
+///
+/// - `accounts/<handle>.json` — an account, its password digest, its token digests
+/// - `projects/<handle>/<name>/project.json` — a project document
+/// - `projects/<handle>/<name>/releases/<version>.tar.gz` — a release's archive, as published
+/// - `projects/<handle>/<name>/releases/<version>/files/…` — its files, for reading one at a time
+/// - `projects/<handle>/<name>/head.tar.gz` and `head/files/…` — the latest pushed snapshot
+/// - `tokens/<digest>.json` — the handle and scope of a token, by the SHA-256 of its secret
+/// - `device/<code>.json` — a device pairing, by the SHA-256 of its device code
+///
+/// Every document is replaced by writing a new file and renaming it over the
+/// old one, so a reader never sees half of one.
+export type Store = { root: Str }
+
+export fn at(root: Str) -> Store { Store{root: root} }
+
+export fn accountPath(store: &Store, handle: Str) -> Str { store.root + "/accounts/" + handle + ".json" }
+
+export fn projectDirectory(store: &Store, package: &Name.PackageName) -> Str {
+  store.root + "/projects/" + package.handle + "/" + package.name
+}
+
+export fn projectPath(store: &Store, package: &Name.PackageName) -> Str { projectDirectory(store, package) + "/project.json" }
+
+export fn releaseArchive(store: &Store, package: &Name.PackageName, version: Str) -> Str {
+  projectDirectory(store, package) + "/releases/" + version + ".tar.gz"
+}
+
+export fn releaseFiles(store: &Store, package: &Name.PackageName, version: Str) -> Str {
+  projectDirectory(store, package) + "/releases/" + version + "/files"
+}
+
+export fn headArchive(store: &Store, package: &Name.PackageName) -> Str { projectDirectory(store, package) + "/head.tar.gz" }
+
+export fn headFiles(store: &Store, package: &Name.PackageName) -> Str { projectDirectory(store, package) + "/head/files" }
+
+export fn tokenPath(store: &Store, digest: Str) -> Str { store.root + "/tokens/" + digest + ".json" }
+
+export fn devicePath(store: &Store, code: Str) -> Str { store.root + "/device/" + code + ".json" }
+
+/// Make a directory and every directory above it.
+export fn ensureDirectory(path: Str) -> Result[(), Str] {
+  if Io.exists(path) { return Ok(()) }
+  let parent = Io.directoryOf(path)
+  if parent != path && !parent.isEmpty() { ensureDirectory(parent) ? }
+  match Io.makeDirectory(path) {
+    case Ok(_) => Ok(())
+    case Err(problem) => if Io.exists(path) { Ok(()) } else { Err(problem) }
+  }
+}
+
+export fn writeJson(path: Str, value: &Json.Json) -> Result[(), Str] {
+  ensureDirectory(Io.directoryOf(path)) ?
+  match Fs.writeTextAtomically(path, Json.encodePretty(value)) {
+    case Ok(_) => Ok(())
+    case Err(_) => Err("cannot write " + path)
+  }
+}
+
+export fn writeBytes(path: Str, contents: &Bytes) -> Result[(), Str] {
+  ensureDirectory(Io.directoryOf(path)) ?
+  match Fs.writeAtomically(path, contents) {
+    case Ok(_) => Ok(())
+    case Err(_) => Err("cannot write " + path)
+  }
+}
+
+/// Remove a directory and everything in it, when it exists.
+export fn removeTree(path: Str) -> Result[(), Str] {
+  if !Io.exists(path) { return Ok(()) }
+  match Fs.removeTree(path) {
+    case Ok(_) => Ok(())
+    case Err(_) => Err("cannot remove " + path)
+  }
+}
+
+export fn readJson(path: Str) -> Result[Option[Json.Json], Str] {
+  if !Io.exists(path) { return Ok(None) }
+  let text = Io.read(path) ?
+  match Json.decode(text) {
+    case Ok(value) => Ok(Some(value))
+    case Err(problem) => Err(path + ": " + Json.explain(&problem))
+  }
+}
+
+/// The directory names directly inside a directory, or none when it is absent.
+export fn children(path: Str) -> Array[Str] {
+  match Io.list(path) {
+    case Ok(names) => names
+    case Err(_) => []
+  }
+}

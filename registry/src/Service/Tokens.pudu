@@ -1,0 +1,81 @@
+module Service.Tokens
+
+import Std.Bytes as ByteSeq
+import Std.Crypto as Crypto
+import Std.Random as Random
+import Domain.Name as Name
+import Service.Clock as Clock
+import Store.Accounts as Accounts
+import Store.Files as Files
+
+/// A token that may publish, push, and change settings for its account.
+export const PUBLISH: Str = "publish"
+
+/// A token that may only read the account's private projects.
+export const READ: Str = "read"
+
+/// The account a request acts for, and what its token allows.
+export type Viewer = { handle: Str, access: Str }
+
+/// A new token secret: `pudu_` and 64 hexadecimal digits from the secure source.
+export fn newSecret() -> Result[Str, Str] {
+  let bytes = Random.secureBytes(32) ?
+  Ok("pudu_" + ByteSeq.encodeHex(&bytes))
+}
+
+/// The digest under which a secret is stored.
+export fn digestOf(secret: Str) -> Str { Crypto.sha256Hex(secret) }
+
+/// Issue a token for an account and return its secret. Only the digest is stored.
+export fn issue(store: &Files.Store, handle: Str, access: Str, label: Str) -> Result[Str, Str] {
+  let Some(account) = Accounts.load(store, handle) ? else { return Err("@" + handle + " has no account") }
+  let secret = newSecret() ?
+  let digest = digestOf(secret)
+  let token = Accounts.Token{digest: digest, access: access, label: label, createdAt: Clock.stamp()}
+  Accounts.save(store, &Accounts.Account{..account, tokens: account.tokens.push(token)}) ?
+  Accounts.indexToken(store, digest, handle, access) ?
+  Ok(secret)
+}
+
+/// Remove the token with this secret from its account.
+export fn revoke(store: &Files.Store, secret: Str) -> Result[(), Str] {
+  let digest = digestOf(secret)
+  let Some(owner) = Accounts.tokenOwner(store, digest) ? else { return Ok(()) }
+  if let Some(account) = Accounts.load(store, owner[0]) ? {
+    var kept: Array[Accounts.Token] = []
+    for token in account.tokens {
+      if token.digest != digest { kept = kept.push(token) }
+    }
+    Accounts.save(store, &Accounts.Account{..account, tokens: kept}) ?
+  }
+  Accounts.unindexToken(store, digest)
+}
+
+/// The viewer named by an `Authorization: Bearer <secret>` header value, if its token is known.
+export fn viewerOf(store: &Files.Store, authorization: Option[Str]) -> Option[Viewer] {
+  let Some(header) = authorization else { return None }
+  let trimmed = header.trim()
+  if !trimmed.startsWith("Bearer ") { return None }
+  let secret = trimmed.drop(7).trim()
+  if !secret.startsWith("pudu_") { return None }
+  match Accounts.tokenOwner(store, digestOf(secret)) {
+    case Ok(Some(owner)) => Some(Viewer{handle: owner[0], access: owner[1]})
+    case _ => None
+  }
+}
+
+/// Whether a viewer may publish as the handle that owns a package.
+export fn mayPublish(viewer: &Option[Viewer], package: &Name.PackageName) -> Bool {
+  match *viewer {
+    case Some(held) => held.handle == package.handle && held.access == PUBLISH
+    case None => false
+  }
+}
+
+/// Whether a viewer may read a package's private documents and files.
+export fn mayRead(viewer: &Option[Viewer], package: &Name.PackageName) -> Bool {
+  match *viewer {
+    case Some(held) => held.handle == package.handle
+    case None => false
+  }
+}

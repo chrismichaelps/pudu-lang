@@ -1,0 +1,91 @@
+module Main
+
+import Std.Args as Args
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Io as Io
+import Std.Json as Json
+import Service.Accounts as AccountService
+import Service.Tokens as Tokens
+import Store.Files as Files
+import Web.Api as Api
+import Web.Pages as Pages
+
+fn specification() -> Args.Spec {
+  let base = Args.spec("registry", "Serve a Pudu package registry from a directory")
+  let withData = Args.value(&base, "data", "d", "directory holding the registry's data (default ./registry-data)")
+  let withHost = Args.value(&withData, "host", "", "address to listen on (default 127.0.0.1)")
+  let withPort = Args.value(&withHost, "port", "p", "port to listen on (default 8790)")
+  let withUrl = Args.value(&withPort, "url", "", "address readers reach the registry at (default http://host:port)")
+  let withHandle = Args.value(&withUrl, "handle", "", "account: the handle to create")
+  let withPassword = Args.value(&withHandle, "password", "", "account: its password")
+  Args.value(&withPassword, "scope", "", "token: publish or read (default publish)")
+}
+
+fn fail(message: Str) -> Int {
+  let _written = Io.writeErrorLine("registry: " + message)
+  1
+}
+
+/// `registry account --handle H --password P` creates an account and prints a publish token.
+fn createAccount(store: &Files.Store, found: &Args.Args) -> Int {
+  let handle = Args.valueOr(found, "handle", "")
+  match AccountService.signUp(store, handle, Args.valueOr(found, "password", ""), "") {
+    case Err(problem) => fail(problem)
+    case Ok(_) => issueToken(store, found)
+  }
+}
+
+/// `registry token --handle H` prints a new token for an existing account.
+fn issueToken(store: &Files.Store, found: &Args.Args) -> Int {
+  match Tokens.issue(store, Args.valueOr(found, "handle", ""), Args.valueOr(found, "scope", Tokens.PUBLISH), "registry token") {
+    case Err(problem) => fail(problem)
+    case Ok(secret) => {
+      let _written = Io.writeLine(secret)
+      0
+    }
+  }
+}
+
+fn serve(store: &Files.Store, found: &Args.Args) -> Int {
+  let host = Args.valueOr(found, "host", "127.0.0.1")
+  let port = match Args.numberOf(found, "port") {
+    case Some(number) => number
+    case None => 8790
+  }
+  match Server.start(host, port) {
+    case Err(_) => fail("cannot listen on " + host + ":" + show(port))
+    case Ok(live) => {
+      let bound = Server.portOf(&live)
+      let siteUrl = Args.valueOr(found, "url", "http://" + host + ":" + show(bound))
+      let context = Api.Context{store: *store, siteUrl: siteUrl}
+      let routes = Api.routes(&context).concat(Pages.routes(store)).push(Route.get("/health", fn(_request: Route.Request) -> Http.Response {
+            Reply.jsonValue(200, Json.object(&[("status", Json.Text("ok"))]))
+          }))
+      let routed = Server.server(&Route.routing(&routes)).withLimits(65536, Api.UPLOAD_LIMIT + 65536)
+      let _announced = Io.writeLine("registry listening on " + siteUrl + " with data in " + store.root)
+      let result = Server.run(&routed, &live, 64)
+      let _stopped = Server.stop(&live)
+      match result {
+        case Ok(_) => 0
+        case Err(_) => 1
+      }
+    }
+  }
+}
+
+export fn main() -> Int {
+  let found = match Args.fromCommandLine(&specification()) {
+    case Ok(held) => held
+    case Err(problem) => { return fail(Args.explain(&problem)) }
+  }
+  let store = Files.at(Args.valueOr(&found, "data", "registry-data"))
+  let rest = Args.rest(&found)
+  let command = if rest.isEmpty() { "serve" } else { rest[0] }
+  if command == "serve" { serve(&store, &found) }
+    else if command == "account" { createAccount(&store, &found) }
+    else if command == "token" { issueToken(&store, &found) }
+    else { fail("unknown command " + command + "; use serve, account, or token") }
+}

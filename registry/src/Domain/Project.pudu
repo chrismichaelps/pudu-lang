@@ -1,0 +1,187 @@
+module Domain.Project
+
+import Std.Json as Json
+import Std.Option as Option
+import Domain.Name as Name
+
+/// One immutable release. Its version, dependencies, and root are read from
+/// the `pudu.toml` inside its archive, never from what the uploader said.
+export type Release = {
+  version: Str,
+  publishedAt: Str,
+  publisher: Str,
+  checksum: Str,
+  size: Int,
+  language: Str,
+  dependencies: Array[(Str, Str)],
+  modules: Array[Str],
+  notes: Str,
+  yanked: Bool
+}
+
+/// The latest pushed snapshot, which is browsable and never installable.
+export type Head = { uploadedAt: Str, checksum: Str, size: Int, modules: Array[Str] }
+
+export type Project = {
+  name: Name.PackageName,
+  description: Str,
+  keywords: Array[Str],
+  license: Str,
+  visibility: Str,
+  root: Str,
+  readme: Str,
+  createdAt: Str,
+  head: Option[Head],
+  releases: Array[Release],
+  unlisted: Bool
+}
+
+export fn isPublic(project: &Project) -> Bool { project.visibility == "public" }
+
+/// The newest release that is not yanked, when there is one.
+export fn latest(project: &Project) -> Option[Release] {
+  var found: Option[Release] = None
+  for release in project.releases {
+    if !release.yanked { found = Some(release) }
+  }
+  found
+}
+
+fn texts(values: &Array[Str]) -> Json.Json { Json.list(&values.map(|value: Str| Json.Text(value))) }
+
+fn releaseJson(release: &Release) -> Json.Json {
+  Json.object(&[
+      ("version", Json.Text(release.version)),
+      ("publishedAt", Json.Text(release.publishedAt)),
+      ("publisher", Json.Text(release.publisher)),
+      ("checksum", Json.Text(release.checksum)),
+      ("size", Json.Number(release.size)),
+      ("language", Json.Text(release.language)),
+      ("dependencies", Json.object(&release.dependencies.map(|pair: (Str, Str)| (pair[0], Json.Text(pair[1]))))),
+      ("modules", texts(&release.modules)),
+      ("notes", Json.Text(release.notes)),
+      ("yanked", Json.Boolean(release.yanked))
+    ])
+}
+
+fn headJson(head: &Head) -> Json.Json {
+  Json.object(&[
+      ("uploadedAt", Json.Text(head.uploadedAt)),
+      ("checksum", Json.Text(head.checksum)),
+      ("size", Json.Number(head.size)),
+      ("modules", texts(&head.modules))
+    ])
+}
+
+/// The project document the API answers and the store keeps.
+export fn toJson(project: &Project) -> Json.Json {
+  let latestVersion = match latest(project) {
+    case Some(release) => Json.Text(release.version)
+    case None => Json.Null
+  }
+  let head = match project.head {
+    case Some(held) => headJson(&held)
+    case None => Json.Null
+  }
+  Json.object(&[
+      ("name", Json.Text(Name.render(&project.name))),
+      ("description", Json.Text(project.description)),
+      ("keywords", texts(&project.keywords)),
+      ("license", Json.Text(project.license)),
+      ("visibility", Json.Text(project.visibility)),
+      ("root", Json.Text(project.root)),
+      ("readme", Json.Text(project.readme)),
+      ("createdAt", Json.Text(project.createdAt)),
+      ("latest", latestVersion),
+      ("head", head),
+      ("unlisted", Json.Boolean(project.unlisted)),
+      ("releases", Json.list(&project.releases.map(|release: Release| releaseJson(&release))))
+    ])
+}
+
+/// A short form for search results and handle pages.
+export fn summaryJson(project: &Project) -> Json.Json {
+  let latestVersion = match latest(project) {
+    case Some(release) => Json.Text(release.version)
+    case None => Json.Null
+  }
+  Json.object(&[
+      ("name", Json.Text(Name.render(&project.name))),
+      ("description", Json.Text(project.description)),
+      ("keywords", texts(&project.keywords)),
+      ("latest", latestVersion),
+      ("visibility", Json.Text(project.visibility))
+    ])
+}
+
+fn textOf(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+fn intOf(value: &Json.Json, key: Str) -> Int {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asInt(&held)), 0)
+}
+
+fn boolOf(value: &Json.Json, key: Str) -> Bool {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asBool(&held)), false)
+}
+
+fn textsOf(value: &Json.Json, key: Str) -> Array[Str] {
+  let items = Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asList(&held)), [])
+  var found: Array[Str] = []
+  for item in items {
+    if let Some(text) = Json.asText(&item) { found = found.push(text) }
+  }
+  found
+}
+
+fn pairsOf(value: &Json.Json, key: Str) -> Array[(Str, Str)] {
+  var found: Array[(Str, Str)] = []
+  if let Some(Json.Object(fields)) = Json.field(value, key) {
+    for field in fields {
+      if let Some(text) = Json.asText(&field[1]) { found = found.push((field[0], text)) }
+    }
+  }
+  found
+}
+
+fn releaseFrom(value: &Json.Json) -> Release {
+  Release {
+    version: textOf(value, "version"),
+    publishedAt: textOf(value, "publishedAt"),
+    publisher: textOf(value, "publisher"),
+    checksum: textOf(value, "checksum"),
+    size: intOf(value, "size"),
+    language: textOf(value, "language"),
+    dependencies: pairsOf(value, "dependencies"),
+    modules: textsOf(value, "modules"),
+    notes: textOf(value, "notes"),
+    yanked: boolOf(value, "yanked")
+  }
+}
+
+/// Read a stored project document.
+export fn fromJson(value: &Json.Json) -> Result[Project, Str] {
+  let name = Name.parse(textOf(value, "name")) ?
+  let head = match Json.field(value, "head") {
+    case Some(Json.Object(fields)) => {
+      let held = Json.Object(fields)
+      Some(Head{uploadedAt: textOf(&held, "uploadedAt"), checksum: textOf(&held, "checksum"), size: intOf(&held, "size"), modules: textsOf(&held, "modules")})
+    }
+    case _ => None
+  }
+  let releases = Option.unwrapOr(Option.andThen(Json.field(value, "releases"), |held: Json.Json| Json.asList(&held)), [])
+  Ok(Project {
+      name: name,
+      description: textOf(value, "description"),
+      keywords: textsOf(value, "keywords"),
+      license: textOf(value, "license"),
+      visibility: if textOf(value, "visibility") == "private" { "private" } else { "public" },
+      root: textOf(value, "root"),
+      readme: textOf(value, "readme"),
+      createdAt: textOf(value, "createdAt"),
+      head: head,
+      releases: releases.map(|release: Json.Json| releaseFrom(&release)),
+      unlisted: boolOf(value, "unlisted")
+    })
+}

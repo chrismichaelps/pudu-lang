@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — The package registry
+
+- `registry/` is the package registry, a Pudu program serving the `/api/v1` API from a data
+  directory: search, project documents, release archives and single files, push of a head snapshot,
+  immutable releases, yanking, settings, unlisting, handle profiles, device pairing for `pudu login`,
+  `whoami`, and token revocation. A release's version, dependencies, root, and modules come from the
+  `pudu.toml` and files inside its archive; archives with links, unsupported entries, unsafe paths,
+  duplicate paths, or past the size and file limits are refused. Private projects answer 404 to
+  anyone but their owner. `registry account` creates an account and prints a token.
+- `Std.Http.Multipart` reads a file part whose content is not UTF-8; such parts were dropped.
+
 ## 2026-09-22 — Tar paths past 100 bytes, and types it does not know
 
 - `Std.Archive.Tar` writes a path longer than 100 bytes through the USTAR prefix field and reads it back

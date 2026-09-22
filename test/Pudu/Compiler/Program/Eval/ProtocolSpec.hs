@@ -172,7 +172,7 @@ testProtocolEvaluation = do
         reading rather than once the memory is gone. -}
     , counterexample
         "an uploaded name never becomes a path"
-        (uploaded === Just "44")
+        (uploaded === Just "45")
     {-| That a message cannot carry more than it says. A line break in an
         address or a subject would let whoever supplied it write headers of
         their own, which is how bulk mail is sent through somebody else's

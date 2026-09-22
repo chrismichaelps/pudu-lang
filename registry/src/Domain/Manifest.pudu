@@ -1,0 +1,79 @@
+module Domain.Manifest
+
+import Std.Option as Option
+import Std.Toml.Read as TomlRead
+import Std.Toml as Toml
+import Domain.Name as Name
+import Domain.Version as Version
+
+/// The fields of a package's `pudu.toml` that the registry records.
+/// `dependencies` pairs each package name with its requirement text.
+export type Manifest = {
+  name: Name.PackageName,
+  version: Str,
+  description: Str,
+  license: Str,
+  keywords: Array[Str],
+  language: Str,
+  root: Str,
+  source: Str,
+  dependencies: Array[(Str, Str)]
+}
+
+fn textAt(table: &Toml.Toml, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Toml.field(table, key), |held: Toml.Toml| Toml.asText(&held)), "")
+}
+
+fn textsAt(table: &Toml.Toml, key: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  for item in Option.unwrapOr(Option.andThen(Toml.field(table, key), |held: Toml.Toml| Toml.asList(&held)), []) {
+    if let Some(text) = Toml.asText(&item) { found = found.push(text) }
+  }
+  found
+}
+
+/// Read a manifest for publishing. The package must be named `@handle/name`,
+/// the root must be one the package may own, and every dependency must be a
+/// registry requirement. With `release`, the version must be present and a
+/// release version; otherwise it may be absent.
+export fn read(text: Str, release: Bool) -> Result[Manifest, Str] {
+  let document = match TomlRead.read(text) {
+    case Ok(held) => held
+    case Err(_) => { return Err("pudu.toml is not valid TOML") }
+  }
+  let package = Option.unwrapOr(Toml.field(&document, "package"), Toml.table())
+  let written = textAt(&package, "name")
+  if written.isEmpty() { return Err("pudu.toml names no package; set [package] name = \"@handle/name\"") }
+  let name = Name.parse(written) ?
+  let version = textAt(&package, "version")
+  if version.isEmpty() && release { return Err("pudu.toml gives no version; set [package] version") }
+  if !version.isEmpty() {
+    let _parsed = Version.parse(version) ?
+  }
+  let named = textAt(&package, "root")
+  let root = Name.validRoot(if named.isEmpty() { Name.defaultRoot(name.name) } else { named }) ?
+  let source = textAt(&package, "source")
+  var dependencies: Array[(Str, Str)] = []
+  for entry in Option.unwrapOr(Option.andThen(Toml.field(&document, "dependencies"), |held: Toml.Toml| Toml.asTable(&held)), []) {
+    match Toml.asText(&entry[1]) {
+      case Some(requirement) => {
+        let _dependency = Name.parse(entry[0]) ?
+        dependencies = dependencies.push((entry[0], requirement))
+      }
+      case None => {
+        return Err(entry[0] + " is a path or git dependency; a release may depend only on registry packages")
+      }
+    }
+  }
+  Ok(Manifest {
+      name: name,
+      version: version,
+      description: textAt(&package, "description"),
+      license: textAt(&package, "license"),
+      keywords: textsAt(&package, "keywords"),
+      language: textAt(&package, "language"),
+      root: root,
+      source: if source.isEmpty() { "src" } else { source },
+      dependencies: dependencies
+    })
+}

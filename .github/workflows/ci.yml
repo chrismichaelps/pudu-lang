@@ -82,6 +82,11 @@ jobs:
           "$PUDU" check $(find website/src -name '*.pudu')
           "$PUDU" fmt --check website/src website/playground/examples
           "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu
+      - name: Verify the package registry compiles, is formatted, and passes its suite
+        run: |
+          "$PUDU" check $(find registry/src -name '*.pudu')
+          "$PUDU" fmt --check registry/src
+          "$PUDU" test registry/src/Test/Registry.pudu
       # The sandbox fails closed: asked to isolate a program on a host where it
       # cannot, it runs nothing and says so with its own status.
       - name: Verify the playground sandbox refuses to run unisolated

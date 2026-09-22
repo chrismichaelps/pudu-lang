@@ -41,6 +41,8 @@ what to do from that field alone has let the sender choose.
 part and not read as empty: those are guesses, and a guess about a malformed body is how one reader
 sees a form where another sees something else.
 ## Grill Log
+
+- **Q:** Decide whether a chunk is the closing marker by decoding it as text? **A:** Only chunks of six bytes or fewer. _Rationale:_ a binary part does not decode as UTF-8 and was dropped as empty. _Rejected:_ decoding every chunk.
 - **Q:** Answer the sender's filename in a form usable as a path? **A:** No — that is the whole
   vulnerability, and it is why the two are separate calls. _Rationale:_ a program that reaches for a
   path should have to say so, and one that does not should have nothing path-shaped in hand.

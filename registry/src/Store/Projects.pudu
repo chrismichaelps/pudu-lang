@@ -1,0 +1,37 @@
+module Store.Projects
+
+import Domain.Name as Name
+import Domain.Project as Project
+import Store.Files as Files
+
+export fn load(store: &Files.Store, package: &Name.PackageName) -> Result[Option[Project.Project], Str] {
+  match Files.readJson(Files.projectPath(store, package)) ? {
+    case Some(value) => Ok(Some(Project.fromJson(&value) ?))
+    case None => Ok(None)
+  }
+}
+
+export fn save(store: &Files.Store, project: &Project.Project) -> Result[(), Str] {
+  Files.writeJson(Files.projectPath(store, &project.name), &Project.toJson(project))
+}
+
+/// Every project a handle owns.
+export fn ofHandle(store: &Files.Store, handle: Str) -> Array[Project.Project] {
+  var found: Array[Project.Project] = []
+  for name in Files.children(store.root + "/projects/" + handle) {
+    match load(store, &Name.PackageName{handle: handle, name: name}) {
+      case Ok(Some(project)) => { found = found.push(project) }
+      case _ => {}
+    }
+  }
+  found
+}
+
+/// Every project in the registry, for search and for the website's catalogue.
+export fn all(store: &Files.Store) -> Array[Project.Project] {
+  var found: Array[Project.Project] = []
+  for handle in Files.children(store.root + "/projects") {
+    found = found.concat(ofHandle(store, handle))
+  }
+  found
+}

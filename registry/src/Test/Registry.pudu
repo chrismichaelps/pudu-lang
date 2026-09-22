@@ -1,0 +1,225 @@
+module Test.Registry
+
+import Std.Archive.Tar as Tar
+import Std.Compress.Gzip as Gzip
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+import Std.Test as Test
+import Domain.Archive as Archive
+import Domain.Manifest as Manifest
+import Domain.Name as Name
+import Domain.Project as Project
+import Service.Accounts as AccountService
+import Service.Device as Device
+import Service.Publish as Publish
+import Service.Search as Search
+import Service.Tokens as Tokens
+import Store.Files as Files
+import Store.Projects as Projects
+import Web.Api as Api
+
+fn archiveOf(entries: Array[Tar.TarEntry]) -> Bytes {
+  Gzip.compress(&Tar.writeArchive(entries), &Gzip.config())
+}
+
+fn manifestText(name: Str, version: Str, extra: Str) -> Str {
+  "[package]\nname = \"" + name + "\"\nversion = \"" + version + "\"\ndescription = \"Parsing JSON\"\nkeywords = [\"json\", \"parser\"]\n" + extra
+}
+
+fn packageArchive(name: Str, version: Str) -> Bytes {
+  archiveOf([
+      Tar.entry("pudu.toml", manifestText(name, version, "").toBytes()),
+      Tar.entry("README.md", "# Kit".toBytes()),
+      Tar.entry("src/JsonKit/Parse.pudu", "module JsonKit.Parse\n".toBytes())
+    ])
+}
+
+fn named(text: Str) -> Name.PackageName {
+  match Name.parse(text) {
+    case Ok(held) => held
+    case Err(_) => Name.PackageName{handle: "x", name: "x"}
+  }
+}
+
+fn isOk[T, E](result: &Result[T, E]) -> Bool {
+  match *result {
+    case Ok(_) => true
+    case Err(_) => false
+  }
+}
+
+fn refusedWith[T](result: &Result[T, Publish.Refusal], status: Int) -> Bool {
+  match *result {
+    case Ok(_) => false
+    case Err(held) => held.status == status
+  }
+}
+
+fn failsWith[T](result: &Result[T, Str], fragment: Str) -> Bool {
+  match *result {
+    case Ok(_) => false
+    case Err(problem) => problem.contains(fragment)
+  }
+}
+
+fn requestFor(method: Http.Method, target: Str, token: Str) -> Route.Request {
+  let headers = if token.isEmpty() { [] } else { [("authorization", "Bearer " + token)] }
+  Route.Request {
+    message: Http.Request{method: method, target: target, headers: headers, body: "", binaryBody: None},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "test"
+  }
+}
+
+fn viewer(handle: Str) -> Option[Tokens.Viewer] { Some(Tokens.Viewer{handle: handle, access: Tokens.PUBLISH}) }
+
+fn manifestChecks() -> Array[Test.Check] {
+  let good = Manifest.read(manifestText("@alice/json-kit", "1.2.0", "\n[dependencies]\n\"@bob/text\" = \"^0.6\"\n"), true)
+  let rooted = match good {
+    case Ok(held) => held.root == "JsonKit" && held.dependencies == [("@bob/text", "^0.6")]
+    case Err(_) => false
+  }
+  [
+    Test.that("a manifest gives its root and registry dependencies", rooted),
+    Test.that("a manifest without a handle is refused", failsWith(&Manifest.read(manifestText("json-kit", "1.0.0", ""), true), "not a package")),
+    Test.that("a release manifest needs a version", failsWith(&Manifest.read("[package]\nname = \"@a/b\"\n", true), "no version")),
+    Test.that("a pushed manifest may omit the version", isOk(&Manifest.read("[package]\nname = \"@a/b\"\n", false))),
+    Test.that("a path dependency is refused in a release", failsWith(&Manifest.read(manifestText("@a/b", "1.0.0", "\n[dependencies]\nlocal = \{ path = \"../x\" \}\n"), true), "path or git")),
+    Test.that("a package may not own Std", failsWith(&Manifest.read(manifestText("@a/b", "1.0.0", "root = \"Std\"\n"), true), "belongs to the compiler"))
+  ]
+}
+
+fn archiveChecks() -> Array[Test.Check] {
+  let unpacked = Archive.unpack(&packageArchive("@alice/json-kit", "1.0.0"))
+  let files = match unpacked {
+    case Ok(held) => held
+    case Err(_) => []
+  }
+  let link = Tar.TarEntry{..Tar.entry("src/link", "".toBytes()), typeFlag: Tar.Symlink, linkName: "/etc/passwd"}
+  [
+    Test.that("an archive unpacks to sorted files", files.map(|f: Archive.File| f.path) == ["README.md", "pudu.toml", "src/JsonKit/Parse.pudu"]),
+    Test.that("modules are named from paths under the source", Archive.modulesUnder(&files, "src") == ["JsonKit.Parse"]),
+    Test.that("a symbolic link is refused", failsWith(&Archive.unpack(&archiveOf([link])), "symbolic link")),
+    Test.that("a parent segment is refused", failsWith(&Archive.unpack(&archiveOf([Tar.entry("src/../../escape", "x".toBytes())])), "plain relative")),
+    Test.that("an absolute path is refused", failsWith(&Archive.unpack(&archiveOf([Tar.entry("/etc/cron", "x".toBytes())])), "absolute")),
+    Test.that("a path given twice is refused", failsWith(&Archive.unpack(&archiveOf([Tar.entry("a", "x".toBytes()), Tar.entry("a", "y".toBytes())])), "twice")),
+    Test.that("bytes that are not gzip are refused", failsWith(&Archive.unpack(&"not an archive".toBytes()), "not gzip"))
+  ]
+}
+
+fn storeChecks(root: Str) -> Array[Test.Check] {
+  let store = Files.at(root)
+  let alice = named("@alice/json-kit")
+  let signed = AccountService.signUp(&store, "alice", "correct-horse", "Alice")
+  let _bob = AccountService.signUp(&store, "bob", "battery-staple", "")
+  let secret = Result.unwrapOr(Tokens.issue(&store, "alice", Tokens.PUBLISH, "test"), "")
+  let found = Tokens.viewerOf(&store, Some("Bearer " + secret))
+  let first = Publish.release(&store, &viewer("alice"), &alice, "1.0.0", "First", &packageArchive("@alice/json-kit", "1.0.0"), "")
+  let second = Publish.release(&store, &viewer("alice"), &alice, "1.1.0", "", &packageArchive("@alice/json-kit", "1.1.0"), "")
+  let again = Publish.release(&store, &viewer("alice"), &alice, "1.1.0", "", &packageArchive("@alice/json-kit", "1.1.0"), "")
+  let lower = Publish.release(&store, &viewer("alice"), &alice, "1.0.5", "", &packageArchive("@alice/json-kit", "1.0.5"), "")
+  let mismatch = Publish.release(&store, &viewer("alice"), &alice, "2.0.0", "", &packageArchive("@alice/json-kit", "1.9.0"), "")
+  let stranger = Publish.release(&store, &viewer("bob"), &alice, "1.2.0", "", &packageArchive("@alice/json-kit", "1.2.0"), "")
+  let lookalike = Publish.release(&store, &viewer("bob"), &named("@bob/json-kits"), "1.0.0", "", &packageArchive("@bob/json-kits", "1.0.0"), "")
+  let project = Result.unwrapOr(Projects.load(&store, &alice), None)
+  let latest = match project {
+    case Some(held) => Option.map(Project.latest(&held), |r: Project.Release| r.version)
+    case None => None
+  }
+  let yanked = Publish.yank(&store, &viewer("alice"), &alice, "1.1.0", true)
+  let afterYank = match yanked {
+    case Ok(held) => Option.map(Project.latest(&held), |r: Project.Release| r.version)
+    case Err(_) => None
+  }
+  let checksumMatches = match first {
+    case Ok(held) => held.checksum == Publish.checksumOf(&packageArchive("@alice/json-kit", "1.0.0"))
+    case Err(_) => false
+  }
+  let hidden = named("@alice/secret-kit")
+  let _private = Publish.push(&store, &viewer("alice"), &hidden, &packageArchive("@alice/secret-kit", "0.1.0"), "private")
+  let routes = Route.routing(&Api.routes(&Api.Context{store: store, siteUrl: "http://registry.test"}))
+  let anonymous = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/packages/@alice/secret-kit", ""))
+  let owner = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/packages/@alice/secret-kit", secret))
+  let publicDocument = Route.dispatch(&routes, requestFor(Http.Get, "/api/v1/packages/@alice/json-kit", ""))
+  let searched = Search.search(&store, "json", 1)
+  let _revoked = Tokens.revoke(&store, secret)
+  let afterRevoke = Tokens.viewerOf(&store, Some("Bearer " + secret))
+  [
+    Test.that("an account is created", isOk(&signed)),
+    Test.that("a taken handle is refused", failsWith(&AccountService.signUp(&store, "alice", "another-password", ""), "taken")),
+    Test.that("a reserved handle is refused", failsWith(&AccountService.signUp(&store, "admin", "correct-horse", ""), "reserved")),
+    Test.that("a short password is refused", failsWith(&AccountService.signUp(&store, "carol", "short", ""), "at least")),
+    Test.that("the right password signs in", isOk(&AccountService.signIn(&store, "alice", "correct-horse"))),
+    Test.that("a wrong password does not", failsWith(&AccountService.signIn(&store, "alice", "wrong-password"), "not right")),
+    Test.that("a token names its account", Option.map(found, |v: Tokens.Viewer| v.handle) == Some("alice")),
+    Test.that("a release is published", isOk(&first) && isOk(&second)),
+    Test.that("a release's checksum is its archive's digest", checksumMatches),
+    Test.that("a release is never replaced", refusedWith(&again, 409)),
+    Test.that("a lower version on the same major line is refused", refusedWith(&lower, 409)),
+    Test.that("the manifest's version must be the release's", refusedWith(&mismatch, 422)),
+    Test.that("another handle may not publish", refusedWith(&stranger, 403)),
+    Test.that("a name one edit from another handle's project is refused", refusedWith(&lookalike, 409)),
+    Test.that("the latest release is the newest", latest == Some("1.1.0")),
+    Test.that("a yanked release is not the latest", afterYank == Some("1.0.0")),
+    Test.that("a private project is absent to others", anonymous.status.code == 404),
+    Test.that("a private project answers its owner", owner.status.code == 200),
+    Test.that("a public project answers anyone", publicDocument.status.code == 200 && publicDocument.body.contains("\"latest\":\"1.0.0\"")),
+    Test.that("search finds public projects only", searched.total == 1 && searched.projects.map(|p: Project.Project| Name.render(&p.name)) == ["@alice/json-kit"]),
+    Test.that("a revoked token names nobody", Option.isNone(&afterRevoke))
+  ]
+}
+
+fn deviceChecks(root: Str) -> Array[Test.Check] {
+  let store = Files.at(root)
+  let _account = AccountService.signUp(&store, "dana", "correct-horse", "")
+  let pairing = Device.begin(&store)
+  let codes = match pairing {
+    case Ok(held) => (held.deviceCode, held.userCode)
+    case Err(_) => ("", "")
+  }
+  let waiting = Device.poll(&store, codes[0])
+  let approved = Device.approve(&store, codes[1].toLower(), "dana")
+  let answered = Device.poll(&store, codes[0])
+  let issued = match answered {
+    case Ok(Device.Approved(handle, secret)) => handle == "dana" && Option.map(Tokens.viewerOf(&store, Some("Bearer " + secret)), |v: Tokens.Viewer| v.handle) == Some("dana")
+    case _ => false
+  }
+  let spent = Device.poll(&store, codes[0])
+  [
+    Test.that("a user code reads as two groups of four", codes[1].length() == 9 && codes[1].slice(4, 5) == "-"),
+    Test.that("a pairing waits for approval", match waiting {
+        case Ok(Device.Waiting) => true
+        case _ => false
+      }),
+    Test.that("a code is approved whatever its case", isOk(&approved)),
+    Test.that("an approved pairing issues a working token", issued),
+    Test.that("a pairing issues its token once", match spent {
+        case Ok(Device.Unknown) => true
+        case _ => false
+      }),
+    Test.that("an unknown code cannot be approved", failsWith(&Device.approve(&store, "ZZZZ-ZZZZ", "dana"), "no pairing"))
+  ]
+}
+
+export fn main() -> Int {
+  let outcome = Fs.withTemporaryDirectory("pudu-registry", fn(root: Str) -> Result[Test.Report, Fs.FsError] {
+      let suite = Test.group("registry", &[
+          Test.suite("manifest", &manifestChecks()),
+          Test.suite("archive", &archiveChecks()),
+          Test.suite("store", &storeChecks(root + "/store")),
+          Test.suite("device", &deviceChecks(root + "/device"))
+        ])
+      Ok(Test.run(&suite))
+    })
+  match outcome {
+    case Ok(report) => Test.report(&report)
+    case Err(_) => -1
+  }
+}

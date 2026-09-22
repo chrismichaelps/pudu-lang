@@ -1,0 +1,78 @@
+module Web.Pages
+
+import Std.Html as Html
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Service.Accounts as AccountService
+import Service.Device as Device
+import Store.Files as Files
+
+fn field(request: &Route.Request, name: Str) -> Str {
+  Option.unwrapOr(Route.fieldsOf(request).get(name), "")
+}
+
+fn page(status: Int, title: Str, body: Str) -> Http.Response {
+  Reply.html(status, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>"
+      + Html.escape(title)
+      + " · Pudu packages</title><style>body\{font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;color:#1d2750\}"
+      + "label\{display:block;margin:.75rem 0 .25rem\}input\{width:100%;padding:.5rem;font:inherit;box-sizing:border-box\}"
+      + "button\{margin-top:1rem;padding:.5rem 1rem;font:inherit\}.note\{color:#556\}.error\{color:#a11\}</style></head><body><h1>"
+      + Html.escape(title)
+      + "</h1>"
+      + body
+      + "</body></html>")
+}
+
+fn notice(kind: Str, text: Str) -> Str {
+  if text.isEmpty() { "" } else { "<p class=\"" + kind + "\">" + Html.escape(text) + "</p>" }
+}
+
+fn deviceForm(code: Str, problem: Str) -> Str {
+  notice("error", problem)
+    + "<p class=\"note\">Enter the code <code>pudu login</code> printed, and sign in to pair that machine with your account.</p>"
+    + "<form method=\"post\" action=\"/login/device\">"
+    + "<label for=\"code\">Code</label><input id=\"code\" name=\"code\" autocomplete=\"off\" value=\"" + Html.escape(code) + "\">"
+    + "<label for=\"handle\">Handle</label><input id=\"handle\" name=\"handle\" autocomplete=\"username\">"
+    + "<label for=\"password\">Password</label><input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\">"
+    + "<button type=\"submit\">Approve</button></form>"
+    + "<p class=\"note\">No account yet? <a href=\"/signup\">Create one</a>.</p>"
+}
+
+fn signupForm(problem: Str) -> Str {
+  notice("error", problem)
+    + "<form method=\"post\" action=\"/signup\">"
+    + "<label for=\"handle\">Handle</label><input id=\"handle\" name=\"handle\" autocomplete=\"username\">"
+    + "<label for=\"displayName\">Display name</label><input id=\"displayName\" name=\"displayName\" autocomplete=\"name\">"
+    + "<label for=\"password\">Password (" + show(AccountService.PASSWORD_MINIMUM) + " characters or more)</label>"
+    + "<input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"new-password\">"
+    + "<button type=\"submit\">Create account</button></form>"
+}
+
+/// The sign-up and device-approval pages.
+export fn routes(store: &Files.Store) -> Array[Route.Route] {
+  let held = *store
+  [
+    Route.get("/login/device", fn(request: Route.Request) -> Http.Response {
+        page(200, "Pair a machine", deviceForm(Option.unwrapOr(Route.queryParam(&request, "code"), ""), ""))
+      }),
+    Route.post("/login/device", fn(request: Route.Request) -> Http.Response {
+        let code = field(&request, "code")
+        match AccountService.signIn(&held, field(&request, "handle"), field(&request, "password")) {
+          case Err(problem) => page(401, "Pair a machine", deviceForm(code, problem))
+          case Ok(account) => match Device.approve(&held, code, account.handle) {
+            case Err(problem) => page(400, "Pair a machine", deviceForm(code, problem))
+            case Ok(_) => page(200, "Machine paired", notice("note", "The machine is signed in as @" + account.handle + ". You can close this page."))
+          }
+        }
+      }),
+    Route.get("/signup", fn(_request: Route.Request) -> Http.Response { page(200, "Create an account", signupForm("")) }),
+    Route.post("/signup", fn(request: Route.Request) -> Http.Response {
+        match AccountService.signUp(&held, field(&request, "handle"), field(&request, "password"), field(&request, "displayName")) {
+          case Err(problem) => page(400, "Create an account", signupForm(problem))
+          case Ok(account) => page(201, "Account created", notice("note", "@" + account.handle + " is yours. Run pudu login to publish from a machine."))
+        }
+      })
+  ]
+}

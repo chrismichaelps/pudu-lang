@@ -1,0 +1,14 @@
+module Service.Clock
+
+import Std.Time as Time
+
+/// The current time as RFC 3339 text in UTC, or the empty text when the clock cannot be read.
+export fn stamp() -> Str {
+  match Time.toRfc3339(&Time.currentInstant()) {
+    case Ok(text) => text
+    case Err(_) => ""
+  }
+}
+
+/// Milliseconds since the Unix epoch.
+export fn millis() -> Int { Time.toMillis(&Time.currentInstant()) }
