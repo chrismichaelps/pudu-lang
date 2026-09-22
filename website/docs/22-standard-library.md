@@ -12,6 +12,8 @@ The standard library ships with the compiler. Every module lives under `Std`, no
 | [Std.Char](/module/Std.Char) | single characters |
 | [Std.Math](/module/Std.Math) | numeric functions |
 | [Std.Decimal](/module/Std.Decimal) | exact decimal arithmetic and rounding |
+| [Std.Num](/module/Std.Num), [Std.Bits](/module/Std.Bits) | numeric traits, conversion through `BigInt`, and bitwise work |
+| [Std.Random](/module/Std.Random) | seeded and clock-driven random numbers |
 | [Std.Fmt](/module/Std.Fmt) | formatting values as text |
 
 ## Collections

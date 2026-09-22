@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-22 — Documentation for numbers, compile time, macros, and foreign code
+
+- Three documentation chapters: **Numbers** (widths and literal suffixes; checked, wrapping, and
+  saturating arithmetic; conversion through `BigInt`; `Decimal` and its rounding rules), **Compile
+  time and macros** (`comptime fn`, what compile-time code may do, typed hygienic macros), and
+  **Unsafe and foreign code** (named capabilities, unsafe functions with safe wrappers, `foreign`
+  blocks, owned handles, output slots). Generics gains parameters of higher kind, `F[_]`.
+- The chapters are renumbered to place the new ones in reading order; addresses are unchanged.
+- A documentation table cell keeps a pipe written `\|`, so the saturating operators can be listed.
+
 ## 2026-09-21 — A watched program follows more than its source; the site follows it
 
 - `pudu run --watch --also <path>` starts the program again when anything under a path changes, not

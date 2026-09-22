@@ -197,7 +197,8 @@ export fn main() -> Int {
       "",
       "| left | right |",
       "| --- | --- |",
-      "| 1 | 2 |"
+      "| 1 | 2 |",
+      "| `+\\|` | a \\| b |"
     ]
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
@@ -341,7 +342,7 @@ export fn main() -> Int {
       // The documentation is Markdown read from files and rendered on the
       // server, so a page is only as good as what the renderer made of it: its
       // sections, its code, its neighbours, and what it refused to render.
-      Test.that("documentation loads every page in order", docs.pages.length() == 20 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[19].slug == "tooling"),
+      Test.that("documentation loads every page in order", docs.pages.length() == 23 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[5].slug == "numbers" && docs.pages[22].slug == "tooling"),
       Test.that("documentation index lists every page", docsIndex.status.code == 200 && docsIndex.body.contains("href=\"/docs/introduction\"") && docsIndex.body.contains("href=\"/docs/tooling\"")),
       Test.that("a documentation page renders its sections", docsPage.status.code == 200 && docsPage.body.contains("<h2 id=\"the-operator\">")),
       Test.that("a documentation page renders its code", docsPage.body.contains("class=\"code-block\"") && docsPage.body.contains("language-pudu")),
@@ -350,7 +351,7 @@ export fn main() -> Int {
       Test.that("a documentation page marks itself in the sidebar", docsPage.body.contains("href=\"/docs/errors\" aria-current=\"page\"")),
       Test.that("navigation identifies the documentation", docsPage.body.contains("aria-current=\"page\">Docs")),
       Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.0</dd>")),
-      Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/09-errors.md")),
+      Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/10-errors.md")),
       Test.that("a documentation page labels its code by language", docsPage.body.contains("class=\"code-label\"")),
       Test.that("a narrow screen gets the page list folded away", docsPage.body.contains("<details class=\"docs-nav-mobile\">")),
       Test.that("the library is grouped into sections", modulesIndex.body.contains("id=\"collections\"") && modulesIndex.body.contains("id=\"web\"")),
@@ -365,6 +366,7 @@ export fn main() -> Int {
       Test.not("markdown refuses a script as a link target", writtenHtml.contains("href=\"javascript")),
       Test.that("markdown gives repeated headings distinct anchors", writtenHtml.contains("id=\"same\"") && writtenHtml.contains("id=\"same-2\"")),
       Test.that("markdown renders tables", writtenHtml.contains("<table>") && writtenHtml.contains("<td>2</td>")),
+      Test.that("markdown keeps an escaped pipe in its cell", writtenHtml.contains("<td><code>+|</code></td>") && writtenHtml.contains("<td>a | b</td>")),
       Test.that("home explains references", home.body.contains("&amp;mut T asks for the exclusive right to change it")),
       Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
       Test.that("search explains its query syntax", search.body.contains("module:Std.List") && search.body.contains("type after ::")),

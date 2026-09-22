@@ -167,4 +167,4 @@ fn main() -> Int {
 
 ## Resources
 
-Resources such as files, sockets, and database connections are released when their owner is done with them. Where release can fail or must happen at a particular point, the standard library gives an explicit `close` and a scoped form — such as `Io.withReader` — that releases the resource however the work inside it ended.
+Resources such as files, sockets, and database connections are released when their owner is done with them. Where release can fail or must happen at a particular point, the standard library gives an explicit `close` and a scoped form — such as `Io.withReader` — that releases the resource however the work inside it ended. A resource a C library hands back is declared with the function that releases it; see [unsafe and foreign code](/docs/foreign-code).

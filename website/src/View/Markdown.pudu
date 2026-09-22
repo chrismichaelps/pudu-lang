@@ -220,13 +220,30 @@ fn separatorRow(line: Str) -> Bool {
   true
 }
 
+/// A row's cells. A pipe written `\\|` belongs to its cell, even inside code,
+/// so a table can show an operator that contains one.
 fn cellsOf(bare: Str) -> Array[Str] {
   var inner = bare
   if inner.startsWith("|") { inner = inner.drop(1) }
-  if inner.endsWith("|") { inner = inner.take(inner.length() - 1) }
+  if inner.endsWith("|") && !inner.endsWith("\\|") { inner = inner.take(inner.length() - 1) }
   var cells: Array[Str] = []
-  for cell in inner.split("|") { cells = cells.push(cell.trim()) }
-  cells
+  var cell = ""
+  var escaped = false
+  for character in inner.chars() {
+    if escaped {
+      cell = if character == '|' { cell + "|" } else { cell + "\\" + character.toText() }
+      escaped = false
+    } else if character == '\\' {
+      escaped = true
+    } else if character == '|' {
+      cells = cells.push(cell.trim())
+      cell = ""
+    } else {
+      cell = cell + character.toText()
+    }
+  }
+  if escaped { cell = cell + "\\" }
+  cells.push(cell.trim())
 }
 
 fn table(header: &Array[Str], rows: &Array[Array[Str]]) -> H.Node {

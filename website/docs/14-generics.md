@@ -124,6 +124,44 @@ fn main() -> Int {
 }
 ```
 
+## Parameters that stand for a container
+
+A type parameter usually stands for a type, like `Int` or `Str`. A parameter written `F[_]` stands for a type that still takes one argument — `Array`, `Option`, or a generic type of the program's own — so one trait can describe every container that can be transformed without changing its shape:
+
+```pudu
+module Containers
+
+trait Container[F[_]] {
+  fn transformed[A, B](self: &F[A], change: fn(A) -> B) -> F[B]
+}
+
+type Pair[T] = { left: T, right: T }
+
+impl Container[Pair] for Pair {
+  fn transformed[A, B](self: &Pair[A], change: fn(A) -> B) -> Pair[B] {
+    Pair{left: change(self.left), right: change(self.right)}
+  }
+}
+
+impl Container[Array] for Array {
+  fn transformed[A, B](self: &Array[A], change: fn(A) -> B) -> Array[B] {
+    self.map(change)
+  }
+}
+
+fn lengths[F[_]](texts: &F[Str]) -> F[Int] where F: Container {
+  texts.transformed(fn(text: Str) => text.length())
+}
+
+fn main() -> Int {
+  let sized = lengths(&Pair{left: "pudu", right: "deer"})
+  let many = lengths(&["forest", "fern"])
+  if sized.left == 4 && sized.right == 4 && many == [6, 4] { 0 } else { 1 }
+}
+```
+
+`F[_]` declares that `F` takes exactly one argument; `F[_, _]` would take two. An implementation names the bare constructor, `impl Container[Pair] for Pair`, and `lengths` then works for anything that implements `Container`, keeping the caller's container: a `Pair` in, a `Pair` out. [Std.Mappable](/module/Std.Mappable) is the standard library's trait of this kind.
+
 ## Type aliases
 
 An alias gives a type a shorter or more meaningful name. It stands for exactly the type it names, and it can take parameters of its own:
