@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — Package-ready generated projects (#302)
+
+- `pudu init --lib --name @owner/repo` creates a library under the package system's canonical
+  module root with a runnable test and editable package metadata. The default application scaffold
+  remains runnable.
+- The project manifest's source directory is an implicit compiler search root, so tests can import
+  project modules without declaring a local-only self dependency. Existing manifests still parse.
+- Project search roots are deduplicated by canonical path, so a file already under `src/` never
+  searches `src` a second time, including through an existing `src = "src"` self dependency.
+- `pudu search <query> <file>...` is the declaration search again; words without source paths
+  search packages. `pudu help` lists the package and publication commands.
+- The generated-project gate now installs a Git dependency, verifies stable lock bytes, releases
+  a named library to a local bare remote, and imports the tagged library from another project.
+
 ## 2026-09-23 — Incremental package snapshots (#301)
 
 - Package discovery lists every `topic:pudu-package` repository past GitHub's 1,000-result search cap

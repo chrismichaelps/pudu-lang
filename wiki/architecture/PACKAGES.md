@@ -186,7 +186,7 @@ All in `pudu`:
 
 | Command | Does |
 | --- | --- |
-| `pudu init [dir] [--name @h/n]` | create a project, its manifest, `src/Main.pudu`, and `.gitignore` |
+| `pudu init [dir] [--name @h/n] [--lib]` | create an application with `src/Main.pudu` or a library under its package root, plus manifest, test, README, and `.gitignore` |
 | `pudu install` | install exactly what `pudu.lock` names; resolve and write the lock if there is none |
 | `pudu install <spec>…` | add dependencies, resolve, lock, and install |
 | `pudu uninstall <name>…` | remove dependencies from the manifest, the lock, and `deps/` |

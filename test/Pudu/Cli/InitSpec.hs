@@ -8,8 +8,11 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Cli.Init
   ( InitError (..)
   , createProject
+  , createProjectWith
   , packageNameFrom
   )
+import Pudu.Compiler.Manifest (Manifest (..), readManifest)
+import Pudu.Package.Identity (defaultRoot, parsePackageId, validRoot)
 import System.Directory
   ( canonicalizePath
   , createDirectory
@@ -30,6 +33,8 @@ initProperties =
   , ("an incompatible managed path leaves no partial project", testIncompatiblePath)
   , ("reserved project names are refused before creating a directory", testReservedName)
   , ("an initialization lock refuses concurrent scaffolding", testInitializationLock)
+  , ("a named library has publishable identity, root, and metadata", testFreshLibrary)
+  , ("an invalid explicit identity leaves no directory", testInvalidIdentity)
   ]
 
 testPackageNames :: Property
@@ -44,6 +49,7 @@ testPackageNames = conjoin
   , packageNameFrom "my  app" === Right "my-app"
   , packageNameFrom "---" === Left (InvalidPackageName "---")
   , packageNameFrom "CORE" === Left (ReservedPackageName "core")
+  , property (case packageNameFrom (replicate 40 'a') of Left (InvalidPackageName _) -> True; _ -> False)
   ]
 
 testFreshProject :: IO Property
@@ -53,6 +59,7 @@ testFreshProject = withSystemTempDirectory "pudu-init" $ \temporaryRoot -> do
   root <- canonicalizePath target
   filesPresent <- traverse doesFileExist (managedFiles root)
   manifest <- TextIO.readFile (root </> "pudu.toml")
+  parsed <- readManifest root
   entry <- TextIO.readFile (root </> "src" </> "Main.pudu")
   application <- TextIO.readFile (root </> "src" </> "App" </> "Greeting.pudu")
   domain <- TextIO.readFile (root </> "src" </> "Domain" </> "Greeting.pudu")
@@ -61,6 +68,9 @@ testFreshProject = withSystemTempDirectory "pudu-init" $ \temporaryRoot -> do
     [ result === Right root
     , filesPresent === replicate 7 True
     , property ("name = \"my-product\"" `Text.isInfixOf` manifest)
+    , manifestDependencies parsed === []
+    , counterexample "an application manifest has no library root or empty field line"
+        (property (not ("root =" `Text.isInfixOf` manifest || "\n\n\n" `Text.isInfixOf` manifest)))
     , property ("import App.Greeting as Greeting" `Text.isInfixOf` entry)
     , property ("import Domain.Greeting as Domain" `Text.isInfixOf` application)
     , property (not ("import App." `Text.isInfixOf` domain))
@@ -146,6 +156,45 @@ testInitializationLock = withSystemTempDirectory "pudu-init" $ \target -> do
   pure $ conjoin
     [ result === Left (InitializationInProgress lock)
     , manifest === False
+    ]
+
+testFreshLibrary :: IO Property
+testFreshLibrary = withSystemTempDirectory "pudu-init" $ \temporaryRoot -> do
+  let target = temporaryRoot </> "greeter"
+  result <- createProjectWith (Just target) (Just "@alice/greeter") True
+  root <- canonicalizePath target
+  manifest <- readManifest root
+  source <- TextIO.readFile (root </> "src" </> "Greeter.pudu")
+  suite <- TextIO.readFile (root </> "test" </> "GreeterTest.pudu")
+  application <- doesFileExist (root </> "src" </> "Main.pudu")
+  let identity = manifestName manifest >>= either (const Nothing) Just . parsePackageId
+      valid = case identity of
+        Just package -> validRoot (defaultRoot package) == Right "Greeter"
+        Nothing -> False
+  pure $ counterexample (show result) $ conjoin
+    [ result === Right root
+    , manifestName manifest === Just "@alice/greeter"
+    , manifestVersion manifest === Just "0.1.0"
+    , manifestRoot manifest === Just "Greeter"
+    , manifestSource manifest === Just "src"
+    , manifestDescription manifest === Just ""
+    , manifestLicense manifest === Just ""
+    , manifestKeywords manifest === []
+    , manifestDependencies manifest === []
+    , property valid
+    , property ("module Greeter" `Text.isInfixOf` source)
+    , property ("import Greeter as Library" `Text.isInfixOf` suite)
+    , application === False
+    ]
+
+testInvalidIdentity :: IO Property
+testInvalidIdentity = withSystemTempDirectory "pudu-init" $ \temporaryRoot -> do
+  let target = temporaryRoot </> "greeter"
+  result <- createProjectWith (Just target) (Just "@Alice/greeter") True
+  created <- doesDirectoryExist target
+  pure $ conjoin
+    [ property (case result of Left (InvalidPackageIdentity _) -> True; _ -> False)
+    , created === False
     ]
 
 managedFiles :: FilePath -> [FilePath]

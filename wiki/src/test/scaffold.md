@@ -15,6 +15,16 @@ aliases: [Generated Project Gate]
 Given the path to a freshly built `pudu` executable, create a project outside the repository and
 exercise the commands its README promises: check, run, test, lint, formatter check, build, and bundled
 execution. It also changes one assertion and requires `pudu test` to fail visibly.
+It additionally creates a named library through the real CLI, adds a local Git dependency, installs
+the graph twice to prove stable lock content, checks and tests it, and verifies its manifest against
+the package identity and publication shape. A separate generated application installs the released
+library tag and imports its root, catching dependencies that work only in the publisher's tree.
+The library receives a local Git dependency, commits its stable lock, and publishes a tag to a
+temporary bare remote through `pudu release`. No public network or repository is touched.
+The application's missing-import help must name `src` alone for a file under `src/` and
+`test, src` for a suite under `test/`, both with the generated manifest and with one that still
+declares `src = "src"` and `./src/` as self dependencies; `pudu test` passes under each. A
+declaration search over a generated source file must answer from that file, not from package search.
 
 ## Governance and algorithm
 

@@ -20,6 +20,9 @@ separators once turned `hello` into `helo`.
 Properties cover a fresh complete layered Pudu scaffold, its exact inward imports, preservation of existing source and tests, existing
 manifest refusal, incompatible object refusal without partial managed files, reserved/empty package
 name refusal, and a concurrent lock refusal. Exact file contents and typed errors are compared.
+Library properties also read the generated manifest through the compiler parser, require the
+identity and root to be accepted by package identity rules, require no local-only self dependency,
+and exercise invalid explicit names.
 
 The repository release gate separately invokes the built CLI inside a generated project and proves
 `check`, `run`, `test`, `build`, and execution of the bundle. Unit properties do not substitute for

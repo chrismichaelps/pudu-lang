@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-23-init-package-release]] — issue #302 generated package project, release, and download chain.
+
 - [[2026-09-22-package-website]] — issue #297 public package snapshot, catalog, project pages,
   source/docs/releases, install control, and hosted-registry activation handoff.
 

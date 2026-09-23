@@ -13,7 +13,7 @@
 // Usage: node test/scaffold.mjs <path-to-pudu>
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -82,6 +82,38 @@ inProject("fmt --check", ["fmt", "--check", "src", "test"]);
 // does not start by suppressing generated code.
 inProject("lint", ["lint", "src", "test"]);
 
+// Declaration search over the project's own sources is not a package search.
+const found = inProject("declaration search", ["search", "forName", "src/Domain/Greeting.pudu"]);
+if (!found.includes("forName")) failures.push(`declaration search did not find forName: ${JSON.stringify(found.slice(0, 160))}`);
+
+// A file under src/ searches src once; a suite under test/ searches itself,
+// then src. The same holds for a manifest that still names src as a path
+// dependency of itself.
+const lookedIn = (file) => {
+  writeFileSync(join(project, file), "module Probe\n\nimport Nowhere\n");
+  try {
+    execFileSync(executable, ["check", file], { cwd: project, stdio: "pipe" });
+    return "";
+  } catch (problem) {
+    return (String(problem.stderr ?? "") + String(problem.stdout ?? "")).match(/looked in ([^\n]*)/)?.[1] ?? "";
+  } finally {
+    rmSync(join(project, file));
+  }
+};
+const generatedManifest = readFileSync(join(project, "pudu.toml"), "utf8");
+for (const [label, manifest] of [
+  ["generated", generatedManifest],
+  ["self dependency", `${generatedManifest}src = "src"\nslashed = "./src/"\n`],
+]) {
+  writeFileSync(join(project, "pudu.toml"), manifest);
+  const fromSource = lookedIn("src/Probe.pudu");
+  const fromTest = lookedIn("test/Probe.pudu");
+  if (fromSource !== "src") failures.push(`${label}: a file under src looked in ${JSON.stringify(fromSource)}`);
+  if (fromTest !== "test, src") failures.push(`${label}: a suite under test looked in ${JSON.stringify(fromTest)}`);
+  inProject(`${label}: test imports project modules`, ["test"]);
+}
+writeFileSync(join(project, "pudu.toml"), generatedManifest);
+
 // It compiles to one file that runs.
 inProject("build", ["build", "src/Main.pudu", "-o", "app"]);
 if (existsSync(join(project, "app"))) {
@@ -108,6 +140,94 @@ if (!broke.includes("FAIL")) {
   failures.push(`a broken suite did not report FAIL: ${JSON.stringify(broke.slice(0, 160))}`);
 }
 
+// A distributable library owns the module root its manifest announces. A
+// local Git dependency exercises the actual lock writer without a network.
+const workspace = join(project, "..");
+const library = join(workspace, "package");
+const helper = join(workspace, "helper");
+const packageHome = join(workspace, "pudu-home");
+const libraryRun = (label, args) => {
+  try {
+    return execFileSync(executable, args, {
+      cwd: library, stdio: "pipe", env: { ...process.env, PUDU_HOME: packageHome },
+    }).toString();
+  } catch (problem) {
+    failures.push(`${label} failed: ${String(problem.stderr ?? problem).trim().slice(0, 200)}`);
+    return "";
+  }
+};
+
+try {
+  execFileSync(executable, ["init", library, "--lib", "--name", "@alice/package"], { stdio: "pipe" });
+  const manifestPath = join(library, "pudu.toml");
+  const manifest = readFileSync(manifestPath, "utf8");
+  for (const field of [
+    'name = "@alice/package"', 'version = "0.1.0"', 'root = "Package"',
+    'source = "src"', 'description = ""', 'license = ""', 'keywords = []',
+  ]) {
+    if (!manifest.includes(field)) failures.push(`library manifest omitted ${field}`);
+  }
+  if (!existsSync(join(library, "src/Package.pudu")) || !existsSync(join(library, "test/PackageTest.pudu"))) {
+    failures.push("library source or test does not follow its package root");
+  }
+  libraryRun("library check", ["check", "src/Package.pudu"]);
+  libraryRun("library test", ["test"]);
+  libraryRun("library format", ["fmt", "--check", "src", "test"]);
+  libraryRun("library lint", ["lint", "src", "test"]);
+
+  mkdirSync(join(helper, "src"), { recursive: true });
+  writeFileSync(join(helper, "pudu.toml"), '[package]\nname = "helper"\nversion = "0.1.0"\nsource = "src"\nroot = "Helper"\n');
+  writeFileSync(join(helper, "src/Helper.pudu"), 'module Helper\nexport fn answer() -> Int { 42 }\n');
+  execFileSync("git", ["init", "-q"], { cwd: helper });
+  execFileSync("git", ["add", "."], { cwd: helper });
+  execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "init"], { cwd: helper });
+  writeFileSync(manifestPath, manifest + `helper = { git = "file://${helper}" }\n`);
+  libraryRun("library install", ["install"]);
+  const lockPath = join(library, "pudu.lock");
+  const firstLock = existsSync(lockPath) ? readFileSync(lockPath, "utf8") : "";
+  if (!firstLock.includes('name = "helper"')) failures.push("library install did not lock its Git dependency");
+  libraryRun("library locked install", ["install", "--locked"]);
+  if (firstLock !== readFileSync(lockPath, "utf8")) failures.push("locked install changed pudu.lock");
+  libraryRun("library check with dependency", ["check", "src/Package.pudu"]);
+  libraryRun("library test with dependency", ["test"]);
+
+  // Publication validates the generated manifest, sources, tests, clean tree,
+  // and tag path against a bare local remote.
+  const remote = join(workspace, "package-remote.git");
+  execFileSync("git", ["init", "-q", "--bare", remote]);
+  execFileSync("git", ["init", "-q"], { cwd: library });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: library });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: library });
+  execFileSync("git", ["add", "."], { cwd: library });
+  execFileSync("git", ["commit", "-qm", "publishable"], { cwd: library });
+  execFileSync("git", ["remote", "add", "origin", remote], { cwd: library });
+  const released = libraryRun("library release", ["release", "0.1.0"]);
+  if (!released.includes("released @alice/package 0.1.0")) failures.push("generated library was not accepted by the release command");
+  const tagged = execFileSync("git", ["show-ref", "--tags"], { cwd: remote }).toString();
+  if (!tagged.includes("refs/tags/v0.1.0")) failures.push("release did not push its package tag");
+
+  const consumer = join(workspace, "consumer");
+  execFileSync(executable, ["init", consumer], { stdio: "pipe" });
+  const consumerRun = (label, args) => {
+    try {
+      return execFileSync(executable, args, {
+        cwd: consumer, stdio: "pipe", env: { ...process.env, PUDU_HOME: packageHome },
+      }).toString();
+    } catch (problem) {
+      failures.push(`${label} failed: ${String(problem.stderr ?? problem).trim().slice(0, 200)}`);
+      return "";
+    }
+  };
+  consumerRun("install released library", ["install", `git+file://${remote}#v0.1.0`]);
+  writeFileSync(join(consumer, "src/UsePackage.pudu"),
+    "module UsePackage\n\nimport Package as Package\n\nexport fn message() -> Str { Package.greeting(\"Ada\") }\n");
+  consumerRun("check released library import", ["check", "src/UsePackage.pudu"]);
+  const installedManifest = join(consumer, "deps/package/pudu.toml");
+  if (!existsSync(installedManifest)) failures.push("the released library was not materialized in the consumer");
+} catch (problem) {
+  failures.push(`library workflow failed: ${String(problem.stderr ?? problem).trim().slice(0, 200)}`);
+}
+
 // The project built a bundle, which is the size of the compiler. Removed
 // whatever the outcome: a failing run leaks as much as a passing one.
 try {
@@ -130,4 +250,8 @@ console.log(JSON.stringify({
   formatted: true,
   linted: true,
   built: true,
+  packageReady: true,
+  lockStable: true,
+  sourceRootOnce: true,
+  declarationSearch: true,
 }));
