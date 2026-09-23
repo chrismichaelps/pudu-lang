@@ -19,6 +19,8 @@ built from the `@alice/json-kit` fixture plus synthetic projects and declaration
   or handle; an empty query without a filter suggests nothing.
 - **Bounds:** suggestions stop at the service limits while totals count every match; the reply cuts
   an overlong query.
+- **Standard library:** a shape ranks library entries by result type; the reply links them to their
+  symbol pages with the API search as `libraryMore`; a filtered reply has no library group.
 - **Output:** the reply is `200` JSON with site-built project, handle, and declaration links, kind
   marks, and the full-results path carrying the filter.
 

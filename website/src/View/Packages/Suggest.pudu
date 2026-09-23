@@ -5,6 +5,8 @@ import Std.Http.Server.Reply as Reply
 import Std.Json as Json
 import Std.Option as Option
 import Std.Url as Url
+import Domain.Entry as Domain
+import Seo as Seo
 import Service.PackageSearch as PackageSearch
 import Service.Packages as Packages
 import View.Packages.Frame as Frame
@@ -58,26 +60,41 @@ fn declaration(found: &PackageSearch.Found) -> Json.Json {
     ])
 }
 
+fn libraryEntry(hit: &PackageSearch.LibraryHit) -> Json.Json {
+  Json.object(&[
+      ("name", text(hit.entry.name)),
+      ("module", text(hit.entry.moduleName)),
+      ("kind", text(hit.entry.kind)),
+      ("mark", text(Frame.kindMark(hit.entry.kind))),
+      ("signature", text(hit.entry.signature)),
+      ("href", text(Seo.symbolPath(&hit.entry)))
+    ])
+}
+
 /// The full results page for a query and filter.
 export fn resultsPath(query: Str, filter: Str) -> Str {
   "/packages/search?q=" + Url.encodeComponent(query) + (if filter.isEmpty() { "" } else { "&filter=" + Url.encodeComponent(filter) })
 }
 
-/// The suggestions for a query and optional project filter.
-export fn json(packages: &Packages.Packages, query: Str, filter: Str) -> Json.Json {
+/// The suggestions for a query and optional project filter. Standard
+/// library declarations join them unless the search is inside a project.
+export fn json(packages: &Packages.Packages, entries: &Array[Domain.Entry], query: Str, filter: Str) -> Json.Json {
   let found = PackageSearch.suggest(packages, query, filter)
+  let library = if filter.isEmpty() { PackageSearch.library(entries, query) } else { [] }
   Json.object(&[
       ("query", text(query)),
       ("filter", text(filter)),
       ("handles", Json.list(&found.handles.map(|held: Packages.Profile| handle(packages, &held)))),
       ("projects", Json.list(&found.projects.map(|held: Packages.Project| project(packages, &held)))),
       ("declarations", Json.list(&found.declarations.map(|held: PackageSearch.Found| declaration(&held)))),
-      ("totals", Json.object(&[("projects", Json.Number(found.projectTotal)), ("declarations", Json.Number(found.declarationTotal))])),
-      ("more", text(resultsPath(query, filter)))
+      ("library", Json.list(&library.slice(0, PackageSearch.LIBRARY_LIMIT).map(|held: PackageSearch.LibraryHit| libraryEntry(&held)))),
+      ("totals", Json.object(&[("projects", Json.Number(found.projectTotal)), ("declarations", Json.Number(found.declarationTotal)), ("library", Json.Number(library.length()))])),
+      ("more", text(resultsPath(query, filter))),
+      ("libraryMore", text("/search?q=" + Url.encodeComponent(query)))
     ])
 }
 
 /// The suggestion response both routers serve.
-export fn reply(packages: &Packages.Packages, query: Str, filter: Str) -> Http.Response {
-  Reply.jsonValue(200, json(packages, query.take(QUERY_LIMIT), filter.take(QUERY_LIMIT)))
+export fn reply(packages: &Packages.Packages, entries: &Array[Domain.Entry], query: Str, filter: Str) -> Http.Response {
+  Reply.jsonValue(200, json(packages, entries, query.take(QUERY_LIMIT), filter.take(QUERY_LIMIT)))
 }

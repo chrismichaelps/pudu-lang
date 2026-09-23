@@ -75,7 +75,7 @@ function declarationRow(held, query) {
   const name = element("span", "package-suggest-name");
   name.append(element("span", "package-symbol-module", `${held.module}.`), highlighted("", held.name, query));
   const identity = element("span", "package-suggest-identity");
-  identity.append(name, element("span", "package-suggest-detail", `${held.project} ${held.version}`));
+  identity.append(name, element("span", "package-suggest-detail", held.project ? `${held.project} ${held.version}` : MESSAGES.libraryDetail));
   return row("declaration", held.href, [mark, identity, element("code", "package-suggest-signature", held.signature)]);
 }
 
@@ -113,7 +113,8 @@ export function suggestionList(answer, query, listId) {
   };
   addSection("Owners", answer.handles, handleRow);
   addSection("Projects", answer.projects, projectRow);
-  addSection(answer.filter ? `Declarations in ${answer.filter}` : "Declarations", answer.declarations, declarationRow);
+  addSection(answer.filter ? `Declarations in ${answer.filter}` : "Package declarations", answer.declarations, declarationRow);
+  addSection("Standard library", answer.library ?? [], declarationRow);
   const shown = answer.projects.length + answer.declarations.length;
   const total = answer.totals.projects + answer.totals.declarations;
   if (query.trim() && total > shown) {
@@ -121,10 +122,15 @@ export function suggestionList(answer, query, listId) {
     rows.push(more);
     list.append(more);
   }
+  if (query.trim() && (answer.totals.library ?? 0) > (answer.library ?? []).length) {
+    const more = row("more", answer.libraryMore, [element("span", "package-suggest-more", `All ${plural(answer.totals.library, "standard library match", "standard library matches")}`)], MESSAGES.openHint);
+    rows.push(more);
+    list.append(more);
+  }
   return { list, rows };
 }
 
 export function summary(answer) {
-  const count = answer.handles.length + answer.projects.length + answer.declarations.length;
+  const count = answer.handles.length + answer.projects.length + answer.declarations.length + (answer.library ?? []).length;
   return count ? `${plural(count, "suggestion", "suggestions")}. Use the arrow keys to choose.` : MESSAGES.empty;
 }

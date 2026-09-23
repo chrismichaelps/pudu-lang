@@ -27,8 +27,8 @@ Each file is one concern; a lower layer never imports a higher one.
 
 ## Behaviour
 
-The input is an ARIA combobox that owns a listbox of labelled groups (owners, projects,
-declarations); the selected row is its active descendant, so focus stays in the field. No row is
+The input is an ARIA combobox that owns a listbox of labelled groups (owners, projects, package
+declarations, standard library); the selected row is its active descendant, so focus stays in the field. No row is
 selected until the reader moves the selection, and typing clears it, so keys never act on a row the
 reader did not choose or on results from an earlier query. Each row highlights its match. The box
 and the help panel are fixed-position and placed under their anchor by `place.js`, because page

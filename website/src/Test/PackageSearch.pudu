@@ -3,6 +3,7 @@ module Test.PackageSearch
 import Std.Http as Http
 import Std.Io as Io
 import Std.Test as Test
+import Domain.Entry as Domain
 import Service.PackageSearch as PackageSearch
 import Service.Packages as Packages
 import View.Packages.Suggest as Suggest
@@ -54,11 +55,19 @@ export fn main() -> Int {
   let resultFirst = names(&PackageSearch.declarations(&packages, "Str -> Int", ""))
   let browsing = names(&PackageSearch.declarations(&packages, "", "@alice/json-kit"))
   let suggested = PackageSearch.suggest(&packages, "item", "")
-  let reply = Suggest.reply(&packages, "json", "")
-  let filtered = Suggest.reply(&packages, "", "@alice/json-kit")
+  let library = [
+    Domain.Entry{name: "length", kind: "fn", moduleName: "Std.Str", signature: "Str -> Int", documentation: []},
+    Domain.Entry{name: "parse", kind: "fn", moduleName: "Std.Json", signature: "Str -> Result[Json, JsonError]", documentation: []},
+    Domain.Entry{name: "show", kind: "fn", moduleName: "Std.Show", signature: "Int -> Str", documentation: []}
+  ]
+  let libraryShape = PackageSearch.library(&library, "Str -> Int")
+  let libraryReply = Suggest.reply(&packages, &library, "parse", "")
+  let libraryFiltered = Suggest.reply(&packages, &library, "parse", "@alice/json-kit")
+  let reply = Suggest.reply(&packages, &library, "json", "")
+  let filtered = Suggest.reply(&packages, &library, "", "@alice/json-kit")
   var long = ""
   while long.length() < 500 { long = long + "a" }
-  let overlong = Suggest.reply(&packages, long, "")
+  let overlong = Suggest.reply(&packages, &library, long, "")
 
   let suite = Test.suite("package search", &[
       Test.equals("identifiers split on everything but letters, digits, and _", &PackageSearch.identifiers("JsonKit.Value.Value -> Array[my_type]"), &["JsonKit", "Value", "Value", "Array", "my_type"]),
@@ -87,6 +96,9 @@ export fn main() -> Int {
       Test.that("the reply is JSON", reply.status.code == 200 && Http.header(&reply.headers, "content-type") == Some("application/json") && reply.body.startsWith("\{")),
       Test.that("the reply links projects and declarations by site path", reply.body.contains("\"href\":\"/@alice/json-kit\"") && reply.body.contains("\"href\":\"/@alice/json-kit/docs#JsonKit-Value-fn-textOf\"") && reply.body.contains("\"mark\":\"ƒ\"")),
       Test.that("the reply points to the full results for its filter", filtered.body.contains("\"more\":\"/packages/search?q=&filter=%40alice%2Fjson-kit\"") && filtered.body.contains("\"name\":\"Value\"")),
+      Test.that("a shape ranks the standard library by its result type", libraryShape.length() == 2 && libraryShape[0].entry.name == "length"),
+      Test.that("the reply adds standard library declarations linked to their docs", libraryReply.body.contains("\"library\":[\{\"name\":\"parse\"") && libraryReply.body.contains("\"href\":\"/docs/Std.Json/fn/parse\"") && libraryReply.body.contains("\"libraryMore\":\"/search?q=parse\"")),
+      Test.that("a search inside a project leaves the standard library out", libraryFiltered.body.contains("\"library\":[]")),
       Test.that("the reply cuts an overlong query", !overlong.body.contains(long) && overlong.body.contains(long.take(200)))
     ])
   let report = Test.run(&suite)

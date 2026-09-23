@@ -39,6 +39,10 @@ An unknown filter yields no declarations rather than falling back to every proje
 `suggest` returns bounded lists (3 handles, 5 projects, 8 declarations) and the unbounded totals,
 so the box can say how many results the full page holds.
 
+`library` ranks the standard library catalogue's declarations with the same name and shape scores,
+so one query such as `Str -> Int` finds package and standard library declarations alike. An empty
+query matches none. The suggestion box shows up to 5 (`LIBRARY_LIMIT`).
+
 See [[website View Packages Suggest]] · [[website View Packages Catalog]] · [[architecture/PACKAGES]] · [[src/website/_MOC]].
 
 ## Grill Log
@@ -52,6 +56,9 @@ See [[website View Packages Suggest]] · [[website View Packages Catalog]] · [[
 - **Q:** Match shapes by exact signature text? **A:** No; by identifiers. _Rationale:_ readers do
   not know module qualification or spacing, and `Value -> Str` must find
   `JsonKit.Value.Value -> Str`.
+- **Q:** Search the standard library from the package box? **A:** Yes, as its own group, and never
+  inside a project. _Rationale:_ a reader looking for a function by its types should not need to know
+  whether it ships with Pudu or in a package.
 - **Q:** Should an unknown filter widen to every project? **A:** No. _Rationale:_ a narrowed box
   that silently widens shows results the reader excluded.
 

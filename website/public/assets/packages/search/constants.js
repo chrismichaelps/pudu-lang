@@ -19,4 +19,5 @@ export const MESSAGES = {
   failed: "Suggestions are unavailable. Press Enter for full results.",
   projectHint: "→ search inside",
   openHint: "↵ open",
+  libraryDetail: "Standard library",
 };

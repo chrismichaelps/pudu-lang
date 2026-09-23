@@ -38,6 +38,10 @@ tags: [changelog]
   pill badges for ink on surfaces tinted from the soft blue of the logo's `P`: typographic page headers with a four-colour logo rule, ink primary buttons, sentence-case
   section titles, a package ledger with release and star columns beside topic counts, a project banner
   with a facts line, and owner marks drawn from the logo's two-tone letter pairs.
+- The package search box also suggests standard library declarations as their own group, ranked by
+  the same name and signature rules, and linked to their API pages.
+- API search results, module pages, the documentation index, and the home module list use ledger
+  rows under ink rules instead of boxed signatures and cards.
 - Project tabs share one heading style. Overview shows the README as a file beside Install, Latest
   release, Dependencies, Topics, and Details; Releases puts the latest release and its command above
   a ledger; Docs lists declarations as rows with kind marks beside a ruled module index; Tickets and

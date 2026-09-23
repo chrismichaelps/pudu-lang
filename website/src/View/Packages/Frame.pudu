@@ -69,7 +69,7 @@ export fn kindMark(kind: Str) -> Str {
 
 /// The address of the full package search script, which also serves every
 /// search box's suggestions.
-export const SEARCH_SCRIPT_PATH: Str = "/assets/packages/search.js?v=7"
+export const SEARCH_SCRIPT_PATH: Str = "/assets/packages/search.js?v=8"
 
 fn searchHelpRow(example: Str, meaning: Str) -> H.Node {
   H.li().holding([H.code().says(example), H.span().says(meaning)])

@@ -3,11 +3,13 @@ module Service.PackageSearch
 import Std.Char as Chars
 import Std.List as List
 import Std.Option as Option
+import Domain.Entry as Domain
 import Service.Packages as Packages
 
 export const HANDLE_LIMIT: Int = 3
 export const PROJECT_LIMIT: Int = 5
 export const DECLARATION_LIMIT: Int = 8
+export const LIBRARY_LIMIT: Int = 5
 
 /// A declaration that matched, with the project it belongs to and its score;
 /// a lower score ranks first.
@@ -88,9 +90,9 @@ fn shapeScore(query: Str, signature: Str) -> Int {
   if !result.isEmpty() && holdsAll(&result, &lowered(&identifiers(given[given.length() - 1]))) { base } else { base + 10 }
 }
 
-fn nameScore(wanted: Str, entry: &Packages.PublicDeclaration) -> Int {
-  let name = entry.name.toLower()
-  let qualified = (entry.moduleName + "." + entry.name).toLower()
+fn nameScore(wanted: Str, moduleName: Str, declared: Str) -> Int {
+  let name = declared.toLower()
+  let qualified = (moduleName + "." + declared).toLower()
   if name == wanted { return 0 }
   if qualified == wanted || qualified.endsWith("." + wanted) { return 1 }
   if name.startsWith(wanted) { return 2 }
@@ -116,12 +118,34 @@ export fn declarations(packages: &Packages.Packages, query: Str, filter: Str) ->
     if !filter.isEmpty() && project.name != filter { continue }
     let version = Option.unwrapOr(project.latest, "")
     for entry in project.searchEntries {
-      let score = if trimmed.isEmpty() { if filter.isEmpty() { -1 } else { 0 } } else if shape { shapeScore(trimmed, entry.signature) } else { nameScore(wanted, &entry) }
+      let score = if trimmed.isEmpty() { if filter.isEmpty() { -1 } else { 0 } } else if shape { shapeScore(trimmed, entry.signature) } else { nameScore(wanted, entry.moduleName, entry.name) }
       if score >= 0 { found = found.push(Found{projectName: project.name, version: version, entry: entry, score: score}) }
     }
   }
   if trimmed.isEmpty() { return found }
   List.sortBy(&found, fn(left: Found, right: Found) -> Bool { before(&left, &right) })
+}
+
+/// A standard library declaration that matched, with its score.
+export type LibraryHit = { entry: Domain.Entry, score: Int }
+
+/// Standard library declarations matching a query, best first, ranked as
+/// package declarations are. An empty query matches none.
+export fn library(entries: &Array[Domain.Entry], query: Str) -> Array[LibraryHit] {
+  let trimmed = query.trim()
+  if trimmed.isEmpty() { return [] }
+  let wanted = trimmed.toLower()
+  let shape = isShape(trimmed)
+  var found: Array[LibraryHit] = []
+  for entry in *entries {
+    let score = if shape { shapeScore(trimmed, entry.signature) } else { nameScore(wanted, entry.moduleName, entry.name) }
+    if score >= 0 { found = found.push(LibraryHit{entry: entry, score: score}) }
+  }
+  List.sortBy(&found, fn(left: LibraryHit, right: LibraryHit) -> Bool {
+      if left.score != right.score { return left.score < right.score }
+      if left.entry.name.length() != right.entry.name.length() { return left.entry.name.length() < right.entry.name.length() }
+      Domain.qualifiedName(&left.entry) < Domain.qualifiedName(&right.entry)
+    })
 }
 
 /// Handles a query names: by prefix when it starts with `@`, otherwise by

@@ -109,7 +109,7 @@ export fn routes(site: &Site.Site) -> Route.Router {
               packageCatalogFiltered(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
             }),
           Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
-              PackageSuggest.reply(packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+              PackageSuggest.reply(packages, &catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
             }),
           Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
               let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))

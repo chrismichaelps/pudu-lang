@@ -53,7 +53,7 @@ export fn routes(edge: &Dynamic) -> Route.Router {
       Reply.page(200, PackageCatalog.pageNumberFiltered(held.siteUrl, &held.packages, query, page, filter))
     })
   let packageSuggest = Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
-      PackageSuggest.reply(&held.packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+      PackageSuggest.reply(&held.packages, &held.catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
     })
   Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch, packageSuggest])), fn(asked: Route.Request) -> Http.Response {
       missing(held.siteUrl, asked.path)

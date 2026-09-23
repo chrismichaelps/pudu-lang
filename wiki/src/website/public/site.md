@@ -22,6 +22,11 @@ and placed by script. A project's banner instead draws its corner as a radial gr
 overflow visible, so the install disclosure can open below it above the page. Inside a banner,
 labels, leads, facts, and links are light; the install panel restores ink text.
 
+API search results and module pages are ledgers too: a monospace name with its kind and module at the
+right, the signature beneath without a box, then the summary. The documentation index lists chapters
+in two ruled columns rather than cards, and the home page's module list sits under an ink rule in
+monospace.
+
 The catalogue is a ledger (mark, identity and description, release, stars) beside a topics and
 publishing column that drops below at 900px. Search results reuse the ledger for projects and give
 declarations a kind mark, module, project and release, and signature. A project page has the banner

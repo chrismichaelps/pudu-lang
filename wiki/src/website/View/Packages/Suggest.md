@@ -18,14 +18,19 @@ Encodes [[website Service PackageSearch]] suggestions as the JSON body of
                 "latest": "2.0.0", "stars": 1284, "avatar": "…", "tone": 1, "href": "/@alice/json-kit"}],
   "declarations": [{"name": "textOf", "module": "JsonKit.Value", "kind": "fn", "mark": "ƒ", "signature": "…",
                     "project": "@alice/json-kit", "version": "2.0.0", "href": "/@alice/json-kit/docs#…"}],
-  "totals": {"projects": 1, "declarations": 3},
-  "more": "/packages/search?q=json"
+  "library": [{"name": "parse", "module": "Std.Json", "kind": "fn", "mark": "ƒ", "signature": "…",
+               "href": "/docs/Std.Json/fn/parse"}],
+  "totals": {"projects": 1, "declarations": 3, "library": 12},
+  "more": "/packages/search?q=json",
+  "libraryMore": "/search?q=json"
 }
 ```
 
 Every link is a site path built here, never by the browser, so the script concatenates nothing into
 an address. `avatar` uses the same source preference as the rendered pages ([[website View Packages Frame]]);
-`tone` selects the two-tone mark shown when the image is absent. `more` is the full results page for
+`tone` selects the two-tone mark shown when the image is absent. `library` holds standard library
+matches from the catalogue both routers already load, linked to their symbol pages; it is empty when a
+filter is set. `libraryMore` is the API search page for the same query. `more` is the full results page for
 the same query and filter. Text is carried verbatim; the script inserts it as text, never markup.
 
 See [[website Web Routes]] · [[website Web Dynamic]] · [[src/website/_MOC]].
