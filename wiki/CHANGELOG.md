@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — 0.1.1 on the download page (#302)
+
+- v0.1.1 is published as a pre-release with linux-amd64 and darwin-arm64 archives.
+  `website/data/releases.json` names them, and production `/download` serves only those links.
+- The site is deployed with `https://www.pudu-lang.org` as its canonical origin, on a musl runtime
+  built from the 0.1.1 checkout.
+
 ## 2026-09-23 — Release 0.1.1 prepared (#302)
 
 - `release/0.1.1` raises the compiler package to 0.1.1, adds its release notes, and regenerates the

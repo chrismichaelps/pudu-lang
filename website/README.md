@@ -3,7 +3,7 @@
 The website is a server-rendered Pudu application. Its dependency rules are documented in
 `wiki/architecture/WEBSITE.md`.
 
-Live production URL: **https://website-ivory-one-hyy8j9ljag.vercel.app/**
+Live production URL: **https://www.pudu-lang.org/**
 
 ## Local development
 
@@ -57,7 +57,7 @@ also writes `dist/pudu-musl-lambda-x86_64` and packages its matching loader as
 ```bash
 scripts/build-musl-runtime.sh -o dist/pudu-musl-x86_64
 
-PUDU_SITE_URL=https://website-ivory-one-hyy8j9ljag.vercel.app \
+PUDU_SITE_URL=https://www.pudu-lang.org \
 website/scripts/build-vercel.sh
 
 vercel deploy --prebuilt --archive=tgz --prod

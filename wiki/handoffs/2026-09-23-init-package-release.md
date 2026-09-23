@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 302
 tags: [handoff, packages, release, website]
 ---
@@ -40,10 +40,19 @@ parity and behavior before integration.
 Validation → **Release Engineer**: `release/0.1.1` carries the version, release notes, and
 download-page data; its PR to `main` runs CI and the archive build before merge.
 
+## Release evidence
+
+- #303 passed CI and both release-branch archive builds before merge. The `main` release run
+  published v0.1.1 as a pre-release; `main` CI passed.
+- Production `/download` on `www.pudu-lang.org` and the apex domain links only the v0.1.1 archives.
+  Both download with HTTP 200 and pass their published checksums. The darwin binary reports
+  `pudu 0.1.1`; the linux archive is the same bytes the release job ran and version-checked.
+- Home, releases, docs, modules, packages, playground, about, search, and sitemap answer 200, and
+  unknown paths answer 404. The production playground runs a submitted program.
+
 ## Exact next action
 
-Open the `release/0.1.1` PR to `main` and merge it only after CI and the release-branch archive
-build pass.
+None; the slice is complete.
 
 ## Referenced by
 
