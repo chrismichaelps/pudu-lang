@@ -30,7 +30,8 @@ moves above the tabs below 1000px. Every tab opens with the same heading closed 
 overview shows the README as a file beside a hairline-divided facts column; releases give the latest
 a block with its command and the rest a ledger table; docs pair a ruled module index with declaration
 rows; tickets and contributions are ledgers with state dots, and a detail reads as a post. The source
-tab keeps its dark file tree, linkable code lines, and outline.
+tab is a light file column beside a file with a monospace header bar, a plain line-number gutter,
+and a ruled declarations outline; the pane fades only while a slow file request is outstanding.
 
 **Package search box.** A drawn magnifier, a `/` key hint hidden while focused, a `?` query-forms
 disclosure, a filter chip in ink, and a suggestion box anchored to the form with section headings,

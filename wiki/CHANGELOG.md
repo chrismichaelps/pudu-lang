@@ -28,6 +28,9 @@ tags: [changelog]
   release, Dependencies, Topics, and Details; Releases puts the latest release and its command above
   a ledger; Docs lists declarations as rows with kind marks beside a ruled module index; Tickets and
   Contributions are ledgers with state dots, and a detail reads as a post.
+- The Source tab is a light file column beside a file with a header bar and plain gutter. Choosing a
+  file replaces only the file pane (prefetched on hover, with Back and Forward), so the page no
+  longer reloads and flashes.
 - No suggestion is selected until the reader chooses one; Enter otherwise submits, and Right Arrow
   narrows only on a chosen project with the caret at the end. Title-case queries still find projects
   and owners.

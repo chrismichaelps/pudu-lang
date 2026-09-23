@@ -8,7 +8,7 @@ import Service.Packages as Packages
 import View.Layout as Layout
 
 /// The address of the script that adds the version picker and copy buttons.
-export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=5"
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=6"
 
 /// The address of a project, and of one of its tabs.
 export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }

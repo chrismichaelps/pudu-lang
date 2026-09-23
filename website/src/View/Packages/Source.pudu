@@ -103,7 +103,7 @@ fn tree(project: &Packages.Project, directory: Str, selected: Str) -> H.Node {
 fn sidebar(project: &Packages.Project, selected: Str) -> H.Node {
   H.aside().class("code-sidebar").holding([
       H.div().class("code-sidebar-head").holding([
-          H.span().class("code-sidebar-title").says("Code"),
+          H.span().class("code-sidebar-title").says("Files"),
           H.span().class("code-release").says(Option.unwrapOr(project.latest, "unreleased"))
         ]),
       H.labelFor().class("skip").at("for", "code-filter").says("Filter files"),
@@ -212,7 +212,7 @@ export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Pr
   Some(Frame.pageAt(siteUrl, packages, project, "source", canonical, chosen + " · " + project.name, "The source of " + chosen + " in " + project.name + " " + version + ".", [
         H.div().class("code-view").holding([
             sidebar(project, chosen),
-            H.section().class("code-main").holding([
+            H.section().class("code-main").at("data-code-main", "").at("aria-live", "polite").holding([
                 crumbs(project, chosen),
                 H.div().class("code-body").holding([shown, outline(project, moduleOf(chosen))])
               ])
