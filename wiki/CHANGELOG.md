@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — Release 0.1.1 prepared (#302)
+
+- `release/0.1.1` raises the compiler package to 0.1.1, adds its release notes, and regenerates the
+  website catalogue at that version. The release decision is a pre-release tagged `v0.1.1`.
+
 ## 2026-09-23 — Package-ready generated projects (#302)
 
 - `pudu init --lib --name @owner/repo` creates a library under the package system's canonical
