@@ -9,7 +9,7 @@ import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
-import Pudu.Cli.Init (createProject, renderInitError)
+import Pudu.Cli.Init (createProjectWith, renderInitError)
 import Pudu.Cli.Package (packageCommands, runPackageCommand)
 import Pudu.Cli.Publish (publishCommands, runPublishCommand)
 import Pudu.Cli.Terminate (interruptOnTerminate)
@@ -424,11 +424,18 @@ runCommand = do
         exitFailure
       Right (path, target, runtime) -> buildProgram style path target runtime
     ("test" : paths) -> testPaths style paths
+    {-| `search` names two commands. Source paths after the query select the
+        declaration search; words alone search published packages. -}
+    ("search" : query : paths@(_ : _)) -> do
+      local <- and <$> traverse doesPathExist paths
+      if local
+        then searchPaths (Text.pack query) paths
+        else runPublishCommand "search" (query : paths)
     (command : rest) | command `elem` packageCommands -> runPackageCommand command rest
     (command : rest) | command `elem` publishCommands -> runPublishCommand command rest
-    ["init", path] -> initProject (Just path)
-    ["init"] -> initProject Nothing
-    ("init" : _) -> hPutStrLn stderr "usage: pudu init [directory]" >> exitFailure
+    ("init" : initArgs) -> case initArguments initArgs of
+      Left message -> hPutStrLn stderr message >> exitFailure
+      Right (target, identity, library) -> initProject target identity library
     ("lsp" : _) -> runServer
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
@@ -1010,9 +1017,20 @@ testSummaryLine passed total assertions =
       <> show assertions <> " assertions held"
     )
 
-initProject :: Maybe FilePath -> IO ()
-initProject target = do
-  result <- createProject target
+initArguments :: [String] -> Either String (Maybe FilePath, Maybe Text.Text, Bool)
+initArguments = go Nothing Nothing False
+ where
+  invalid = Left "usage: pudu init [directory] [--name @owner/repo] [--lib]"
+  go target identity library arguments = case arguments of
+    [] -> Right (target, identity, library)
+    "--lib" : rest | not library -> go target identity True rest
+    "--name" : name : rest | identity == Nothing -> go target (Just (Text.pack name)) library rest
+    path : rest | take 2 path /= "--" && target == Nothing -> go (Just path) identity library rest
+    _ -> invalid
+
+initProject :: Maybe FilePath -> Maybe Text.Text -> Bool -> IO ()
+initProject target identity library = do
+  result <- createProjectWith target identity library
   case result of
     Left problem -> hPutStrLn stderr ("pudu init: " <> Text.unpack (renderInitError problem)) >> exitFailure
     Right root -> TextIO.putStrLn ("initialized " <> Text.pack root)
@@ -1088,7 +1106,17 @@ usage =
     , "                       rather than to this compiler, so one machine can"
     , "                       build for a platform it is not (same version only)"
     , "  pudu test [path]...  discover and execute test fixtures"
-    , "  pudu init [path]     initialize a canonical project with pudu.toml"
+    , "  pudu init [path] [--name @owner/repo] [--lib]  initialize an application or library"
+    , "  pudu install [package]...  add dependencies, or install what pudu.toml"
+    , "                       and pudu.lock name into deps/ (--locked, --offline)"
+    , "  pudu uninstall <name>...  remove dependencies"
+    , "  pudu update [name]...  refresh locked dependencies within their requirements"
+    , "  pudu upgrade [name]...  raise requirements to the newest releases"
+    , "  pudu deps | pudu tree  list the dependencies, or show them as a tree"
+    , "  pudu login | logout | whoami  manage the GitHub identity that releases"
+    , "  pudu release <version> [--notes file]  tag and publish this package"
+    , "  pudu search <words>...  find published packages; with source paths after"
+    , "                       the query it is the declaration search below"
     , "  pudu explain <file>  run a program and report what running it cost"
     , "  pudu lsp             speak the language server protocol over stdio"
     , "  pudu fmt <path>...   rewrite files, or every file under a directory"

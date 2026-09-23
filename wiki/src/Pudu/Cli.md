@@ -31,11 +31,13 @@ pudu lint [--json] [--fix] [--allow CODE] <path>...  analyze files or directorie
 pudu run <file>      compile a program and run its main function
 pudu watch <file>    watch project sources and restart program on change
 pudu test [path]...  discover and execute test fixtures, reporting assertion summaries
-pudu init [path]     scaffold a canonical pudu.toml package manifest and project layout
+pudu init [path] [--name @owner/repo] [--lib]   scaffold an application or package library
 pudu doc <file>...   describe every name a program declares
 pudu doc --json ...  the same index, for an editor or a search server
 pudu doc --html ...  emit a self-contained searchable documentation page
 pudu search <query> <file>...  find a name, or a type shape
+pudu install | uninstall | update | upgrade | deps | tree   package commands ([[architecture/PACKAGES]])
+pudu login | logout | whoami | release <version> | search <words>...   publication commands
 pudu version         print the version
 pudu help            print usage
 ```
@@ -67,6 +69,11 @@ pudu help            print usage
 - A run prints its result only when there is one, so a `main` returning unit prints nothing and a
   shell pipeline stays usable.
 
+- `search` names two commands. When every argument after the query is an existing path it is the
+  declaration search over those sources; otherwise the words search published packages. The
+  declaration form predates package search and keeps its meaning.
+- `pudu help` lists the package and publication commands a generated project's README names.
+
 - `pudu doc` and `pudu search` write the index to stdout and every diagnostic to stderr, so a
   program with errors still yields a machine-readable index rather than a corrupted one.
 - Documentation and search finish writing every recoverable result before returning non-zero when
@@ -91,6 +98,8 @@ pudu help            print usage
   object is refused before managed content is written.
   Generated application code is Pudu-only and forms the graph `Main → App.Greeting →
   Domain.Greeting`; the effectful composition root depends inward on pure policy, never the reverse.
+  `--lib` instead writes a root-owned library module and its test. `--name` selects an identity
+  validated by the package system, including a publishable `@owner/repo`.
 - `pudu watch` watches the project root enclosing the specified file, automatically restarting the program on source changes:
   - Scopes child process lifetime using `bracket`, ensuring that terminating or re-spawning a process terminates the running handle and reaps the exit status before launching the next iteration.
   - Debounces rapid saves using a 100ms settling loop until both file modification times and file sizes stabilize.
@@ -135,6 +144,10 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 
 ## Grill Log
 
+- **Q:** Should `pudu search` belong to the package commands alone? **A:** No. _Rationale:_ the
+  declaration search `search <query> <file>...` shipped first and is documented; existing paths
+  after the query are an unambiguous signal, and package words are not paths. _Rejected:_ a
+  renamed declaration search; dispatch by argument count.
 - **Q:** Should the checker stop at the first failing file? **A:** No. _Rationale:_ a person fixing a project wants every file's diagnostics in one run. _Rejected:_ fail-fast checking.
 - **Q:** Where is colour decided? **A:** Here, once, from the terminal and `NO_COLOR`. _Rationale:_ [[Diagnostic Render]] stays pure and testable byte for byte. _Rejected:_ ambient detection inside the renderer.
 - **Q:** Should `pudu check B.pudu` ignore `B`'s imports? **A:** No; each argument is a root program and its absolute imports are loaded transitively. _Rationale:_ command-line and REPL loading must compile the program the file declares. _Rejected:_ independent opaque single-file checks.
@@ -151,7 +164,9 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 - **Q:** How are assertion counts and outcomes communicated by `pudu test`?
   **A:** Each test file is evaluated via `evaluateProgramEntry`. An integer exit code represents the count of assertions held. A panic, exception, or runtime error is treated as a test failure. The CLI prints individual test progress, passed assertion counts, total elapsed count, and exits with 0 on all tests passing, or non-zero if any test failed.
 - **Q:** What does `pudu init` generate?
-  **A:** It creates a canonical `pudu.toml` (with package name, version "0.1.0", language version, source directory "src"), creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore` if absent. It never overwrites an existing `pudu.toml`.
+  **A:** It creates a canonical `pudu.toml` with identity, version, language, source, and package
+  metadata; a runnable application or a root-owned library with `--lib`; a test, README, and
+  `.gitignore`. It never overwrites an existing `pudu.toml`.
   _Rationale:_ Protects existing project configurations while providing immediate onboarding.
 - **Q:** Refuse a directory merely because it already contains `src/Main.pudu` or a test?
   **A:** No. _Rationale:_ `init` is also how an existing source directory becomes a canonical
