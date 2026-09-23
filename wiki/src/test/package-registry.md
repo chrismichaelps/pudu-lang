@@ -20,6 +20,13 @@ It checks that full discussion records live outside the compact project index an
 links use GitHub's singular `/pull/` detail path.
 The stand-in also serves a profile PNG and checks that the snapshot stores the GitHub image locally
 and records its source URL.
+The stand-in answers with ETags and `304 Not Modified`, understands `created:` ranges in search, and
+records every request. After the first snapshot, the suite checks the incremental cases:
+- A second build reuses the unchanged package: no archive and no manifest reads, with not-modified
+  answers.
+- A starved budget (`PUDU_GITHUB_RESERVE` above the reported limit) keeps the previous release
+  instead of failing.
+- A new `v1.2.0` tag refreshes the package and reads only that tag's manifest.
 
 See [[architecture/PACKAGES]] · [[Package GitHubIndex]].
 

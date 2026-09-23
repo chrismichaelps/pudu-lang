@@ -17,6 +17,7 @@ Visual system: [[website stylesheet]]. Content: [[website documentation pages]].
 
 Delivery surfaces: [[Vercel output builder]] · [[Linux Pudu renderer builder]] ·
 [[Musl Runtime Workflow]] · [[Musl Runtime Builder]] · [[website regression suite]] · [[website package search suite]] ·
-[[Website Operations]] · [[Package snapshot generator]].
+[[Website Operations]] · [[Package snapshot generator]] · [[Package snapshot GitHub client]] ·
+[[Package topic discovery]] · [[Package snapshot cache]].
 
 All modules follow [[architecture/WEBSITE]].

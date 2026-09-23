@@ -18,12 +18,22 @@
 // `GITHUB_TOKEN`, when set, raises GitHub's rate limit. Nothing is written
 // when no repository carries the topic.
 //
-// Usage: node generate-packages.mjs [--api URL] [--out path] [--pudu path]
+// Builds are incremental through --cache (default `<out>.cache`): API answers
+// are asked for conditionally, each tag commit's manifest is read once, and a
+// package whose tags and GitHub releases have not changed reuses its files
+// and API catalogue from the previous build. When the remaining rate limit
+// falls to PUDU_GITHUB_RESERVE (default 250), changed packages keep their
+// previous entry until the next build.
+//
+// Usage: node generate-packages.mjs [--api URL] [--out path] [--cache path] [--pudu path]
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
+import { openCache, releaseKey } from "./packages/cache.mjs";
+import { discover } from "./packages/discover.mjs";
+import { githubClient } from "./packages/github.mjs";
 
 const TOPIC = "pudu-package";
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
@@ -38,32 +48,14 @@ function argument(name, fallback) {
 const api = argument("--api", process.env.PUDU_GITHUB_API || "https://api.github.com").replace(/\/$/, "");
 const out = resolve(argument("--out", "website/data/packages"));
 const pudu = argument("--pudu", "pudu");
+const cache = openCache(resolve(argument("--cache", `${out}.cache`)));
+const github = githubClient(api, cache.etags);
+const RESERVE = Number(process.env.PUDU_GITHUB_RESERVE ?? 250);
+const summary = { refreshed: 0, reused: 0, deferred: 0 };
 const here = dirname(new URL(import.meta.url).pathname);
 
-async function request(url, accept = "application/vnd.github+json") {
-  const headers = { accept, "user-agent": "pudu-website-package-generator", "x-github-api-version": "2022-11-28" };
-  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  const answer = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(60000) });
-  return answer;
-}
-
-async function json(path) {
-  const answer = await request(api + path);
-  if (answer.status === 404) return null;
-  if (!answer.ok) throw new Error(`${answer.status} ${answer.statusText} for ${api}${path}`);
-  return answer.json();
-}
-
-async function pages(path) {
-  const found = [];
-  for (let page = 1; ; page += 1) {
-    const joiner = path.includes("?") ? "&" : "?";
-    const batch = await json(`${path}${joiner}per_page=100&page=${page}`);
-    const items = Array.isArray(batch) ? batch : batch?.items ?? [];
-    found.push(...items);
-    if (items.length < 100) return found;
-  }
-}
+const json = github.json;
+const pages = github.pages;
 
 function compareVersions(left, right) {
   const a = VERSION.exec(left);
@@ -98,9 +90,14 @@ function manifestOf(text) {
   return manifest;
 }
 
-async function fileAt(owner, repo, path, ref) {
-  const found = await json(`/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`);
-  return found?.content ? Buffer.from(found.content, "base64").toString("utf8") : null;
+/** The manifest at a tag commit; a commit's file never changes, so each is read from GitHub once. */
+async function manifestAt(owner, repo, commit) {
+  const key = `${owner}/${repo}@${commit}`;
+  if (key in cache.manifests) return cache.manifests[key];
+  const found = await json(`/repos/${owner}/${repo}/contents/pudu.toml?ref=${encodeURIComponent(commit)}`);
+  const text = found?.content ? Buffer.from(found.content, "base64").toString("utf8") : null;
+  cache.manifests[key] = text;
+  return text;
 }
 
 function packaged(path) {
@@ -118,7 +115,7 @@ function walk(directory) {
 }
 
 async function unpack(owner, repo, commit, directory) {
-  const answer = await request(`${api}/repos/${owner}/${repo}/tarball/${commit}`);
+  const answer = await github.archive(`/repos/${owner}/${repo}/tarball/${commit}`);
   if (!answer.ok) throw new Error(`${answer.status} for the archive of ${owner}/${repo}`);
   const scratch = mkdtempSync(join(tmpdir(), "pudu-package-archive-"));
   try {
@@ -196,16 +193,56 @@ async function discussions(owner, repo, kind) {
   return records;
 }
 
+async function writeDiscussions(owner, repo, name) {
+  const tickets = await discussions(owner, repo, "ticket");
+  const contributions = await discussions(owner, repo, "contribution");
+  const target = join(out, "discussions", `${name}.json`);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, JSON.stringify({ tickets, contributions }) + "\n");
+}
+
+/** The previous build's entry for an unchanged package, with its files carried over and GitHub's live counts. */
+async function reuse(prior, repository, owner, repo) {
+  if (!cache.carry(join("files", prior.name, prior.latest), out)) return null;
+  cache.carry(join("docs", `${prior.name}.json`), out);
+  if (github.remaining() > RESERVE) await writeDiscussions(owner, repo, prior.name);
+  else cache.carry(join("discussions", `${prior.name}.json`), out);
+  return {
+    ...prior,
+    repository: repository.html_url,
+    stars: repository.stargazers_count ?? prior.stars,
+    forks: repository.forks_count ?? prior.forks,
+    openIssues: repository.open_issues_count ?? prior.openIssues,
+  };
+}
+
 async function project(repository) {
   const owner = repository.owner.login.toLowerCase();
   const repo = repository.name.toLowerCase();
   const name = `@${owner}/${repo}`;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(owner) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(repo)) return null;
   const tags = (await pages(`/repos/${owner}/${repo}/tags`)).filter((tag) => VERSION.test(tag.name));
-  const published = new Map((await pages(`/repos/${owner}/${repo}/releases`)).map((release) => [release.tag_name, release]));
+  const listed = await pages(`/repos/${owner}/${repo}/releases`);
+  const published = new Map(listed.map((release) => [release.tag_name, release]));
+  const key = releaseKey(tags, listed);
+  const prior = cache.previous(name);
+  const unchanged = cache.unchanged(name, key);
+  if (prior && (unchanged || github.remaining() <= RESERVE)) {
+    const carried = await reuse(prior, repository, owner, repo);
+    if (carried) {
+      cache.remember(name, unchanged ? key : "");
+      summary[unchanged ? "reused" : "deferred"] += 1;
+      return carried;
+    }
+  }
+  if (github.remaining() <= RESERVE) {
+    summary.deferred += 1;
+    console.warn(`${name} is left for the next build: ${github.remaining()} GitHub requests remain`);
+    return null;
+  }
   const releases = [];
   for (const tag of tags) {
-    const text = await fileAt(owner, repo, "pudu.toml", tag.commit.sha);
+    const text = await manifestAt(owner, repo, tag.commit.sha);
     if (text === null) continue;
     const manifest = manifestOf(text);
     if (manifest.name !== name || manifest.version !== tag.name.replace(/^v/, "")) continue;
@@ -248,11 +285,9 @@ async function project(repository) {
     ? JSON.parse(readFileSync(docsTarget, "utf8")).entries.map((entry) => ({ moduleName: entry.module, kind: entry.kind, name: entry.name, signature: entry.signature }))
     : [];
   const words = (value) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
-  const tickets = await discussions(owner, repo, "ticket");
-  const contributions = await discussions(owner, repo, "contribution");
-  const discussionTarget = join(out, "discussions", `${name}.json`);
-  mkdirSync(dirname(discussionTarget), { recursive: true });
-  writeFileSync(discussionTarget, JSON.stringify({ tickets, contributions }) + "\n");
+  await writeDiscussions(owner, repo, name);
+  cache.remember(name, key);
+  summary.refreshed += 1;
   return {
     name,
     description: latest.manifest.description || repository.description || "",
@@ -275,7 +310,7 @@ async function project(repository) {
 }
 
 async function main() {
-  const repositories = (await pages(`/search/repositories?q=${encodeURIComponent(`topic:${TOPIC}`)}&sort=stars`)).filter((repository) => !repository.private && !repository.archived);
+  const repositories = await discover(json, TOPIC, { warn: (text) => console.warn(text) });
   rmSync(out, { recursive: true, force: true });
   if (repositories.length === 0) {
     console.log(`no repository carries the ${TOPIC} topic; no package pages are written`);
@@ -291,11 +326,13 @@ async function main() {
     const owner = repository.owner.login.toLowerCase();
     if (!handles.has(owner)) {
       const profile = await json(`/users/${owner}`);
+      const before = cache.previousHandle(`@${owner}`);
+      const kept = before?.avatar && before.avatarUrl === profile?.avatar_url && cache.carry(before.avatar.replace(/^\/packages\//, ""), out);
       handles.set(owner, {
         handle: `@${owner}`,
         name: profile?.name ?? "",
         avatarUrl: profile?.avatar_url ?? "",
-        avatar: profile?.avatar_url ? await avatarOf(owner, profile.avatar_url) : "",
+        avatar: kept ? before.avatar : profile?.avatar_url ? await avatarOf(owner, profile.avatar_url) : "",
         githubUrl: profile?.html_url ?? `https://github.com/${owner}`,
         kind: profile?.type === "Organization" ? "organization" : "user",
       });
@@ -306,7 +343,9 @@ async function main() {
     join(out, "packages.json"),
     JSON.stringify({ schemaVersion: 1, source: `${api} topic:${TOPIC}`, generatedAt: new Date().toISOString(), projects, handles: [...handles.values()] }, null, 2) + "\n",
   );
-  console.log(`wrote ${projects.length} packages from GitHub into ${out}`);
+  cache.save(out);
+  const { requests, notModified, archives } = github.counts;
+  console.log(`wrote ${projects.length} packages from GitHub into ${out}: ${summary.refreshed} refreshed, ${summary.reused} reused, ${summary.deferred} deferred; ${requests} requests (${notModified} not modified), ${archives} archives`);
 }
 
 main().catch((problem) => {

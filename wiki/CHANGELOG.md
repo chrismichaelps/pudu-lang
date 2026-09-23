@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — Incremental package snapshots (#301)
+
+- Package discovery lists every `topic:pudu-package` repository past GitHub's 1,000-result search cap
+  by splitting the query by creation date.
+- Snapshot builds are incremental:
+  - API reads are conditional (ETags; `304` answers cost no rate limit).
+  - Each tag commit's manifest is read once.
+  - Packages with unchanged tags and releases carry their files and API catalogue forward with no
+    archive download.
+- A build that runs low on rate limit defers changed packages to the next build instead of failing,
+  and ends with a summary of refreshed, reused, and deferred packages and requests made.
+- `discover.test.mjs` lists 2,500 synthetic repositories through a capped search. The package suite
+  checks reuse, not-modified answers, a starved budget, and a new tag.
+
 ## 2026-09-23 — Package search suggestions and a banner-headed site (#300)
 
 - `GET /packages/suggest` returns bounded JSON suggestions: owners, projects, and public

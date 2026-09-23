@@ -13,6 +13,7 @@ by topic, tags, file contents, commits, and commit archives.
 
 import argparse
 import base64
+import hashlib
 import http.server
 import json
 import os
@@ -56,13 +57,26 @@ class GitHub(http.server.BaseHTTPRequestHandler):
     root = None
     topics = {}
     releases = {}
+    seen = []
 
     def log_message(self, *_):
         pass
 
     def answer(self, status, body, kind="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
-        self.send_response(status)
+        if self.command == "GET" and status == 200 and kind == "application/json":
+            etag = '"' + hashlib.sha1(data).hexdigest() + '"'
+            if self.headers.get("If-None-Match") == etag:
+                GitHub.seen.append(("304", self.path))
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.end_headers()
+                return
+            self.send_response(status)
+            self.send_header("ETag", etag)
+            self.send_header("X-RateLimit-Remaining", "4000")
+        else:
+            self.send_response(status)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -114,6 +128,7 @@ class GitHub(http.server.BaseHTTPRequestHandler):
         self.answer(404, {"message": "Not Found"})
 
     def do_GET(self):
+        GitHub.seen.append(("GET", self.path))
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         parts = parsed.path.strip("/").split("/")
@@ -132,8 +147,11 @@ class GitHub(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/search/repositories":
             words = query.get("q", [""])[0].split()
             topic = next((w.split(":", 1)[1] for w in words if w.startswith("topic:")), None)
-            rest = [w for w in words if not w.startswith("topic:")]
+            created = next((w.split(":", 1)[1].split("..") for w in words if w.startswith("created:")), None)
+            rest = [w for w in words if not w.startswith("topic:") and not w.startswith("created:")]
             found = [self.repository(o, n) for (o, n), names in sorted(GitHub.topics.items()) if topic in names and all(w in n for w in rest)]
+            if created:
+                found = [r for r in found if created[0] <= r["created_at"][:10] <= created[1]]
             return self.answer(200, {"total_count": len(found), "items": found if page == 1 else []})
         if parts[0] != "repos" or len(parts) < 3:
             return self.answer(404, {"message": "Not Found"})
@@ -320,6 +338,25 @@ def main():
         check("it carries the latest release's files and API catalogue", (snapshot / "files" / "@alice" / "json-kit" / latest / "src" / "JsonKit" / "Parse.pudu").exists() and docs.exists() and "one" in docs.read_text(), done.stderr)
         check("it separates public tickets from contributions and uses canonical pull URLs", len(discussion_data.get("tickets", [])) == 1 and discussion_data["tickets"][0]["number"] == 42 and discussion_data["tickets"][0]["labels"] == ["bug"] and len(discussion_data.get("contributions", [])) == 1 and discussion_data["contributions"][0]["state"] == "merged" and discussion_data["contributions"][0]["url"].endswith("/pull/56") and "tickets" not in projects[0], json.dumps(discussion_data)[:500])
         check("it keeps declaration search facts in the dynamic snapshot", any(entry["name"] == "one" and entry["moduleName"] == "JsonKit.Parse" for entry in projects[0]["searchEntries"]), json.dumps(projects[0]["searchEntries"])[:500])
+        GitHub.seen.clear()
+        again = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--api", api, "--out", str(snapshot), "--pudu", pudu], env=environment, capture_output=True, text=True, timeout=300)
+        rewritten = json.loads((snapshot / "packages.json").read_text()) if (snapshot / "packages.json").exists() else {}
+        fetched = [path for kind, path in GitHub.seen if kind == "GET"]
+        answered = [path for kind, path in GitHub.seen if kind == "304"]
+        check("an unchanged package is reused on the next build without its archive", again.returncode == 0 and not any("/tarball/" in path for path in fetched) and not any("/contents/" in path for path in fetched) and "1 reused" in again.stdout, again.stdout + again.stderr)
+        check("the next build asks conditionally and GitHub answers not modified", len(answered) >= 4 and "not modified" in again.stdout, again.stdout)
+        check("a reused package keeps its releases, files, and API catalogue", rewritten.get("projects", [{}])[0].get("releases") == projects[0]["releases"] and (snapshot / "files" / "@alice" / "json-kit" / latest / "src" / "JsonKit" / "Parse.pudu").exists() and docs.exists(), again.stderr)
+        library(lib, "1.2.0")
+        code, out = run(["release", "1.2.0"], lib)
+        GitHub.seen.clear()
+        starved = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--api", api, "--out", str(snapshot), "--pudu", pudu], env=dict(environment, PUDU_GITHUB_RESERVE="100000"), capture_output=True, text=True, timeout=300)
+        kept = json.loads((snapshot / "packages.json").read_text()).get("projects", [{}])[0]
+        check("a low rate-limit budget keeps the previous entry instead of failing", code == 0 and starved.returncode == 0 and kept.get("latest") == "1.1.0" and "1 deferred" in starved.stdout and not any("/tarball/" in path for kind, path in GitHub.seen), starved.stdout + starved.stderr + out)
+        GitHub.seen.clear()
+        fresh_build = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--api", api, "--out", str(snapshot), "--pudu", pudu], env=environment, capture_output=True, text=True, timeout=300)
+        renewed = json.loads((snapshot / "packages.json").read_text()).get("projects", [{}])[0]
+        new_contents = [path for kind, path in GitHub.seen if kind == "GET" and "/contents/" in path]
+        check("a new tag refreshes the package and reads only the new tag's manifest", fresh_build.returncode == 0 and renewed.get("latest") == "1.2.0" and "1 refreshed" in fresh_build.stdout and any("/tarball/" in path for kind, path in GitHub.seen) and len(new_contents) == 1 and (snapshot / "files" / "@alice" / "json-kit" / "1.2.0" / "pudu.toml").exists(), fresh_build.stdout + fresh_build.stderr + str(new_contents))
         handles = written.get("handles", [])
         avatar_file = snapshot / "avatars" / "alice.png"
         check("it copies the GitHub profile avatar into the package snapshot", len(handles) == 1 and handles[0]["avatar"] == "/packages/avatars/alice.png" and handles[0]["avatarUrl"].endswith("/avatar.png") and avatar_file.exists() and avatar_file.read_bytes() == AVATAR_PNG)

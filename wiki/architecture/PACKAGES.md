@@ -317,6 +317,17 @@ public declarations from their generated API catalogues in a focused result pane
 latest release's archive), the way `/download` reads the release list, so a page answers from the CDN
 and never waits on GitHub; a new release appears on the next deployment.
 
+Discovery reads GitHub's topic index (`topic:pudu-package`); it never scans repositories. Because one
+search returns at most 1,000 results, the generator splits the query by creation date until each
+slice fits ([[Package topic discovery]]). Builds are incremental ([[Package snapshot cache]]):
+- API reads are conditional, and an unchanged answer (`304`) costs no rate limit.
+- Each tag commit's manifest is read once.
+- A package whose tags and GitHub releases are unchanged carries its files and API catalogue forward
+  with no archive download; only its live counts and discussions are re-read.
+
+When the remaining rate limit falls to a reserve, changed packages keep their previous entry and are
+refreshed by the next build rather than failing it. Readers never cause GitHub requests.
+
 | Address | Shows |
 | --- | --- |
 | `/packages` | a ledger of public projects (owner mark, `@handle / name`, description, latest release, stars) beside topic links with counts; its search box suggests from `/packages/suggest` and submits to `/packages/search?q=` |
