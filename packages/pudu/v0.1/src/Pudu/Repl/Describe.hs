@@ -132,6 +132,7 @@ wiredInArity name = case name of
   "Option" -> Just 1
   "Result" -> Just 2
   "Array" -> Just 1
+  "Range" -> Just 1
   "Task" -> Just 2
   _ | name `elem` scalarNames -> Just 0
   _ -> Nothing

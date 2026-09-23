@@ -1,5 +1,10 @@
 *
 !cabal.project
+# The built artefacts the deployment images copy. Named one by one, because the
+# rest of dist/ is several runtimes that no image needs in its build context.
+!dist/server
+!dist/pudu-musl-x86_64
+!dist/playground-runner
 !packages/
 !packages/**
 !website/

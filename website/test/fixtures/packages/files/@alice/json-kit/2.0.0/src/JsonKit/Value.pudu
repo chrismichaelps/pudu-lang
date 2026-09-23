@@ -1,0 +1,12 @@
+module JsonKit.Value
+
+/// A JSON value.
+export type Value = Text(Str) | Number(Int)
+
+/// The text of a value, or the empty text.
+export fn textOf(value: Value) -> Str {
+  match value {
+    case Text(held) => held
+    case Number(_) => ""
+  }
+}

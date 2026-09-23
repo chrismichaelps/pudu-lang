@@ -11,7 +11,8 @@ import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
+  ( ArrayRest (..)
+  , Block (..)
   , Constraint (..)
   , Declaration (..)
   , Expression (..)
@@ -59,17 +60,20 @@ import Pudu.Semantic.Resolve.Context
   , markAmbiguousVariant
   , declareNamed
   , inScope
+  , inScopeOver
   , insideLoop
   , outsideLoops
   , recordVariantSymbol
+  , visibleAfter
   , resolveExpressionName
   , resolveLoopTarget
   , resolveTypeName
   , resolveValueName
   , runResolver
   )
+import Pudu.Semantic.ScopeIndex (ScopeIndex, delimitedExtent, spanExtent, spanningExtent)
 import Pudu.Semantic.Symbol (Namespace (..), Reference, Symbol (..), SymbolOrigin (..))
-import Pudu.Source (Span)
+import Pudu.Source (Span, spanEnd, unOffset)
 
 {-| @Semantic.Resolve.Result — the symbol table and reference map later phases
     consume, separate from the diagnostics produced alongside them -}
@@ -77,6 +81,7 @@ data Resolution = Resolution
   { resolutionSymbols :: ![Symbol]
   , resolutionReferences :: ![Reference]
   , resolutionExports :: ![Symbol]
+  , resolutionScopes :: !ScopeIndex
   }
   deriving stock (Eq, Show)
 
@@ -99,6 +104,7 @@ resolvePrepared prepared importDiagnostics moduleValue =
           { resolutionSymbols = symbols
           , resolutionReferences = producedReferences products
           , resolutionExports = filter isExported symbols
+          , resolutionScopes = producedScopes products
           }
       , sortDiagnostics (importDiagnostics <> producedDiagnostics products)
       )
@@ -224,26 +230,26 @@ collectVariants (Located _ definition) = case definition of
   recordVariant (Located _ variant) = recordVariantSymbol (variantName variant)
 
 walkDeclaration :: Located Declaration -> Resolver ()
-walkDeclaration (Located _ declaration) = case declaration of
+walkDeclaration (Located spanValue declaration) = case declaration of
   BindingDeclaration _ _ _ annotation value -> do
     mapM_ walkType annotation
     walkExpression value
-  FunctionDeclaration value -> walkFunction value
-  TypeDeclaration value -> inScope $ do
+  FunctionDeclaration value -> walkFunction spanValue value
+  TypeDeclaration value -> inScopeOver (spanExtent spanValue) $ do
     mapM_ bindTypeParam (typeTypeParams value)
     walkDefinition (typeDefinition value)
-  TraitDeclaration value -> inScope $ do
+  TraitDeclaration value -> inScopeOver (spanExtent spanValue) $ do
     mapM_ bindTypeParam (traitTypeParams value)
     bindSelf
     mapM_ walkConstraint (traitConstraints value)
-    mapM_ (\member -> walkFunction (locatedValue member)) (traitMembers value)
-  ImplDeclaration value -> inScope $ do
+    mapM_ (\(Located at member) -> walkFunction at member) (traitMembers value)
+  ImplDeclaration value -> inScopeOver (spanExtent spanValue) $ do
     mapM_ bindTypeParam (implTypeParams value)
     bindSelf
     walkType (implTrait value)
     walkType (implTarget value)
     mapM_ walkConstraint (implConstraints value)
-    mapM_ (\member -> walkFunction (locatedValue member)) (implFunctions value)
+    mapM_ (\(Located at member) -> walkFunction at member) (implFunctions value)
   MacroDeclaration _ -> pure ()
   ForeignDeclaration value ->
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
@@ -259,8 +265,8 @@ walkForeignFunction function = do
 
 {-| A parameter is visible to the defaults of later parameters and to the body,
     which is exactly the left-to-right rule for default arguments. -}
-walkFunction :: Function -> Resolver ()
-walkFunction value = outsideLoops $ inScope $ do
+walkFunction :: Span -> Function -> Resolver ()
+walkFunction spanValue value = outsideLoops $ inScopeOver (spanExtent spanValue) $ do
   mapM_ bindTypeParam (functionTypeParams value)
   mapM_ bindParameter (functionParameters value)
   mapM_ walkType (functionReturn value)
@@ -313,7 +319,7 @@ walkVariant (Located _ variant) = case variantPayload variant of
 {-| A block binding takes effect after its own declaration, so an initializer
     sees the outer binding of the same name rather than the one being declared. -}
 walkBlock :: Located Block -> Resolver ()
-walkBlock (Located _ block) = inScope $ do
+walkBlock (Located spanValue block) = inScopeOver (delimitedExtent spanValue) $ do
   mapM_ walkStatement (blockStatements block)
   mapM_ walkExpression (blockResult block)
 
@@ -322,7 +328,7 @@ walkStatement (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ kind name annotation value)) -> do
     mapM_ walkType annotation
     walkExpression value
-    declareNamed ValueSpace LocalOrigin Private (kind == Mutable) name
+    visibleAfter (unOffset (spanEnd spanValue)) (declareNamed ValueSpace LocalOrigin Private (kind == Mutable) name)
   DeclarationStatement other -> walkDeclaration other
   ExpressionStatement value -> walkExpression value
   ReturnStatement value -> mapM_ walkExpression value
@@ -337,7 +343,14 @@ walkStatement (Located spanValue statement) = case statement of
   LetElseStatement pattern' subject fallback -> do
     walkExpression subject
     walkBlock fallback
-    bindPattern pattern'
+    visibleAfter (unOffset (spanEnd spanValue)) (bindPattern pattern')
+  {-| A destructuring binding follows the same order an ordinary one does: the
+      subject resolves against the scope as it stands, and only then do the
+      pattern's names enter it, so `let [x, ..rest] = x` reads the outer `x`. -}
+  LetPatternStatement kind pattern' annotation subject -> do
+    mapM_ walkType annotation
+    walkExpression subject
+    visibleAfter (unOffset (spanEnd spanValue)) (bindPatternWith (kind == Mutable) pattern')
   InvalidStatement -> pure ()
 
 walkExpression :: Located Expression -> Resolver ()
@@ -349,6 +362,7 @@ walkExpression (Located spanValue expression) = case expression of
   CallExpression callee arguments -> walkExpression callee >> mapM_ walkExpression arguments
   MemberExpression target _ -> walkMemberTarget target
   IndexExpression target index -> walkExpression target >> walkExpression index
+  RangeExpression lower _ upper -> mapM_ walkExpression lower >> mapM_ walkExpression upper
   TryExpression target -> walkExpression target
   AwaitExpression target -> walkExpression target
   TupleExpression members -> mapM_ walkExpression members
@@ -357,7 +371,7 @@ walkExpression (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> walkBlock body
   MacroCall _ arguments -> mapM_ walkExpression arguments
   ScopeExpression body -> walkBlock body
-  LambdaExpression value -> walkFunction value
+  LambdaExpression value -> walkFunction spanValue value
   TypeApplication target arguments -> do
     walkExpression target
     mapM_ walkType arguments
@@ -375,7 +389,7 @@ walkExpression (Located spanValue expression) = case expression of
     mapM_ walkExpression elseBranch
   IfLetExpression pattern' subject thenBlock elseBranch -> do
     walkExpression subject
-    inScope $ do
+    inScopeOver (spanningExtent (locatedSpan pattern') (locatedSpan thenBlock)) $ do
       bindPattern pattern'
       walkBlock thenBlock
     mapM_ walkExpression elseBranch
@@ -389,13 +403,13 @@ walkExpression (Located spanValue expression) = case expression of
       scope the pattern opens; only the body sees what the pattern binds. -}
   WhileLetExpression label pattern' subject body -> do
     walkExpression subject
-    insideLoop label $ inScope $ do
+    insideLoop label $ inScopeOver (spanningExtent (locatedSpan pattern') (locatedSpan body)) $ do
       bindPattern pattern'
       walkBlock body
   LoopExpression label body -> insideLoop label (walkBlock body)
   ForExpression label binder iterated body -> do
     walkExpression iterated
-    insideLoop label $ inScope $ do
+    insideLoop label $ inScopeOver (spanningExtent (locatedSpan binder) (locatedSpan body)) $ do
       bindPattern binder
       walkBlock body
   InvalidExpression -> pure ()
@@ -408,7 +422,7 @@ walkFieldInit (Located _ field) = case fieldInitValue field of
   Nothing -> resolveValueName (locatedSpan (fieldInitName field)) (locatedValue (fieldInitName field))
 
 walkArm :: Located MatchArm -> Resolver ()
-walkArm (Located _ arm) = inScope $ do
+walkArm (Located spanValue arm) = inScopeOver (spanExtent spanValue) $ do
   bindPattern (armPattern arm)
   mapM_ walkExpression (armGuard arm)
   walkExpression (armBody arm)
@@ -416,25 +430,42 @@ walkArm (Located _ arm) = inScope $ do
 {-| Pattern bindings enter the arm's own frame; a constructor path is resolved
     in the type namespace, and its payload patterns bind in turn. -}
 bindPattern :: Located Pattern -> Resolver ()
-bindPattern (Located patternSpan value) = case value of
+bindPattern = bindPatternWith False
+
+{-| Bind a pattern's names, and say whether they may be assigned.
+
+    A match arm and a `let` bind names that may not; `var (a, b) = pair` binds
+    names that may, and the difference has to reach every name the pattern
+    introduces rather than only the one an ordinary `var` would have named. -}
+bindPatternWith :: Bool -> Located Pattern -> Resolver ()
+bindPatternWith mutable (Located patternSpan value) = case value of
   WildcardPattern -> pure ()
-  BindingPattern name -> declareNamed ValueSpace PatternOrigin Private False name
+  BindingPattern name -> declareNamed ValueSpace PatternOrigin Private mutable name
   LiteralPattern _ -> pure ()
   RangePattern{} -> pure ()
-  TuplePattern members -> mapM_ bindPattern members
+  TuplePattern members -> mapM_ recurse members
+  ArrayPattern prefix rest suffix -> do
+    mapM_ recurse prefix
+    case rest of
+      Just (BoundRest name) -> declareNamed ValueSpace PatternOrigin Private mutable name
+      _ -> pure ()
+    mapM_ recurse suffix
   ConstructorPattern path arguments -> do
     resolveConstructorPath patternSpan path
-    mapM_ bindPattern arguments
+    mapM_ recurse arguments
   RecordPattern path fields _ -> do
     mapM_ (resolveConstructorPath patternSpan) path
-    mapM_ bindFieldPattern fields
-  AlternativePattern alternatives -> mapM_ bindPattern alternatives
+    mapM_ (bindFieldPatternWith mutable) fields
+  AlternativePattern alternatives -> mapM_ recurse alternatives
   InvalidPattern -> pure ()
+ where
+  recurse = bindPatternWith mutable
 
-bindFieldPattern :: Located FieldPattern -> Resolver ()
-bindFieldPattern (Located _ field) = case fieldPatternValue field of
-  Just nested -> bindPattern nested
-  Nothing -> declareNamed ValueSpace PatternOrigin Private False (fieldPatternName field)
+bindFieldPatternWith :: Bool -> Located FieldPattern -> Resolver ()
+bindFieldPatternWith mutable (Located _ field) = case fieldPatternValue field of
+  Just nested -> bindPatternWith mutable nested
+  Nothing ->
+    declareNamed ValueSpace PatternOrigin Private mutable (fieldPatternName field)
 
 walkType :: Located TypeSyntax -> Resolver ()
 walkType (Located typeSpan value) = case value of

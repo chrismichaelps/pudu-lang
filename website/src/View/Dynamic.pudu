@@ -6,20 +6,17 @@ import Domain.Entry as Domain
 import Seo as Seo
 import Service.Search as Search
 import View.Layout as Layout
+import View.MarkdownInline as Inline
 
 /// Ranked search results shared by local and serverless routes.
-export fn results(siteUrl: Str, entries: &Array[Domain.Entry], query: Str) -> Html.Html {
-  let hits = Search.find(entries, query, 200)
+export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html {
+  let hits = Search.ranked(search, query, 200)
   var rows: Array[H.Node] = []
   for hit in hits { rows = rows.push(resultRow(&hit)) }
   let heading = if query.trim().isEmpty() { "Search Pudu" } else { "Results for “" + query + "”" }
   let body = H.div().holding([
-      H.section().class("intro").holding([
-          H.h1().says(heading),
-          H.p().says(show(hits.length()) + " matching declarations"),
-          H.p().class("query-help").says("Use module:Std.List, kind:fn, or is:exact. Put a Pudu type after ::.")
-        ]),
-      Layout.searchForm(query, "home-search"),
+      Layout.banner("page-banner", "API search", heading, show(hits.length()) + " matching declarations", [Layout.searchForm(query, "banner-search")]),
+      H.p().class("query-help").says("Use module:Std.List, kind:fn, or is:exact. Put a Pudu type after ::."),
       H.ul().class("results").holding(rows)
     ]).html()
   Layout.page(siteUrl, heading, "Search results from the Pudu public API catalogue.", "/search", false, None, body)
@@ -27,10 +24,8 @@ export fn results(siteUrl: Str, entries: &Array[Domain.Entry], query: Str) -> Ht
 
 /// The shared dynamic fallback page.
 export fn missing(siteUrl: Str, path: Str) -> Html.Html {
-  Layout.page(siteUrl, "Not found", "The requested Pudu documentation page does not exist.", path, false, None, H.article().class("doc").holding([
-        H.span().class("kind").says("404"),
-        H.h1().says("That page is not here."),
-        H.p().says("No documentation route matches " + path + "."),
+  Layout.page(siteUrl, "Not found", "The requested Pudu page does not exist.", path, false, None, H.article().class("doc").holding([
+        Layout.banner("page-banner", "404", "That page is not here.", "No page matches " + path + ".", []),
         H.p().holding([H.a().href("/").says("Return to search")])
       ]).html())
 }
@@ -40,7 +35,7 @@ fn resultRow(hit: &Domain.Hit) -> H.Node {
   H.li().class("result").holding([
       H.a().class("result-name").href(symbolPath(&entry)).says(Domain.qualifiedName(&entry)),
       H.code().class("signature").says(entry.signature),
-      H.p().class("summary").says(Domain.summary(&entry)),
+      H.p().class("summary").holding(Inline.render(Domain.summary(&entry))),
       H.div().class("meta").says(entry.kind + " · " + entry.moduleName)
     ])
 }

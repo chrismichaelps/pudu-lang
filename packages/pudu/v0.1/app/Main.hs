@@ -1,14 +1,18 @@
 {-| @Program.Cli.Module — the pudu command line entry point -}
 module Main (main) where
 
-import Control.Monad (unless, when)
+import Control.Monad (filterM, unless, when)
 import Control.Exception (IOException, bracket, try)
 import System.IO.Temp (withSystemTempDirectory)
-import Data.List (sort, sortOn)
+import Data.List (isSuffixOf, sort, sortOn)
 import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
+import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
-import Pudu.Cli.Init (createProject, renderInitError)
+import Pudu.Cli.Init (createProjectWith, renderInitError)
+import Pudu.Cli.Package (packageCommands, runPackageCommand)
+import Pudu.Cli.Publish (publishCommands, runPublishCommand)
+import Pudu.Cli.Terminate (interruptOnTerminate)
 import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -21,6 +25,8 @@ import System.Directory
   , getModificationTime
   , doesDirectoryExist
   , doesFileExist
+  , doesPathExist
+  , makeAbsolute
   , listDirectory
   )
 import System.FilePath
@@ -40,16 +46,19 @@ import Pudu.Bundle
   , writeBundledOnto
   )
 import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Cache (openProductCache)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileProgramCached
   , programDependencies
+  , programFolded
   , programIntegerKinds
   , programDocs
   , rootCompileResult
   )
 import Pudu.Eval (EvalOutcome (..))
-import Pudu.Eval.Program (evaluateProgramEntry, evaluateProgramTallied)
+import Pudu.Eval.Program (evaluateProgramEntryFolded, evaluateProgramTalliedFolded)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value (Value (..))
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
@@ -60,7 +69,7 @@ import Pudu.Semantic (Resolution (..), Symbol (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
-import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
+import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticMessage, diagnosticSpan, hasErrors)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
   , defaultRenderConfig
@@ -68,13 +77,15 @@ import Pudu.Diagnostic.Render
   , renderSummary
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
-import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
+import Pudu.Source (Source, SourceName (..), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
-import System.Environment (getArgs, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
+import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
 import System.Process
-  ( ProcessHandle
+  ( CreateProcess (env)
+  , ProcessHandle
+  , createProcess
   , getProcessExitCode
-  , spawnProcess
+  , proc
   , terminateProcess
   , waitForProcess
   )
@@ -165,12 +176,33 @@ useEveryCore = do
     A program that stops on its own is not restarted, and the watch continues.
     That is what makes the loop usable while a program is still crashing at
     start-up: the failure is on screen, the fix is a save away, and nothing had
-    to be typed in between. -}
-watchProgram :: RenderStyle -> FilePath -> [String] -> IO ()
-watchProgram _style path carried = do
+    to be typed in between.
+
+    A program reads more than its source — a site its pages, its data, its
+    styles — and a change to any of those is one its author expects to see as
+    well. Each `--also` path is watched whole, every file in it whatever its
+    kind, so the program starts again for those too.
+
+    The program is told it is being watched, and what the watch saw: `PUDU_WATCH`
+    counts its starts from 1, and `PUDU_WATCH_CHANGED` names the files that
+    changed before this start, one per line. A service can answer a browser
+    with that — reload when the count moves, or swap in only a stylesheet when
+    a stylesheet is all that changed — with nothing to configure. -}
+watchProgram :: RenderStyle -> [FilePath] -> FilePath -> [String] -> IO ()
+watchProgram style given path carried = mapM makeAbsolute given >>= \also -> watchAbsolute style also path carried
+
+watchAbsolute :: RenderStyle -> [FilePath] -> FilePath -> [String] -> IO ()
+watchAbsolute _style also path carried = do
+  -- Stopped by a supervisor rather than by Ctrl-C, the program it started
+  -- must stop too, or it keeps the port the next start needs.
+  interruptOnTerminate
   present <- doesFileExist path
   unless present $ do
     hPutStrLn stderr ("pudu run: cannot read " <> path)
+    exitFailure
+  missing <- filterM (fmap not . doesPathExist) also
+  unless (null missing) $ do
+    hPutStrLn stderr ("pudu run: cannot watch " <> unwords missing <> "; there is nothing there")
     exitFailure
   self <- getExecutablePath
   root <- watchedRoot path
@@ -178,20 +210,20 @@ watchProgram _style path carried = do
   -- short lines between a save and a restart, and held in a buffer they
   -- arrive after the thing they were meant to announce.
   hSetBuffering stdout LineBuffering
-  TextIO.putStrLn (Text.pack ("watching " <> root))
-  stamps <- sourceStamps root
-  follow self root stamps
+  TextIO.putStrLn (Text.pack ("watching " <> unwords (root : also)))
+  stamps <- watchedStamps root also
+  follow self root (1 :: Int) [] stamps
  where
-  follow self root stamps = do
+  follow self root generation changed stamps = do
     settled <- bracket
-      (startWatched self path carried)
+      (startWatched self path carried generation changed)
       stopWatched
       (\_ -> awaitChange root stamps)
-    follow self root settled
+    follow self root (generation + 1) (changedNames stamps settled) settled
 
   awaitChange root stamps = do
     threadDelay pollMicroseconds
-    fresh <- sourceStamps root
+    fresh <- watchedStamps root also
     if fresh == stamps
       then awaitChange root stamps
       else do
@@ -201,6 +233,27 @@ watchProgram _style path carried = do
           else do
             TextIO.putStrLn (Text.pack (changedLine (changedNames stamps settled)))
             pure settled
+
+  settle root previous = do
+    threadDelay 100000
+    current <- watchedStamps root also
+    if current == previous then pure current else settle root current
+
+{-| The `--also` paths before the program's path, the path, and what follows
+    it, which is the program's. -}
+watchOptions :: [FilePath] -> [String] -> Either String ([FilePath], FilePath, [String])
+watchOptions also arguments = case arguments of
+  "--also" : watched : rest -> watchOptions (also <> [watched]) rest
+  ["--also"] -> Left "--also needs a path to watch"
+  path : carried -> Right (also, path, carried)
+  [] -> Left "--watch needs the program to run"
+
+{-| The sources under `root` and every file under each `--also` path. -}
+watchedStamps :: FilePath -> [FilePath] -> IO [(FilePath, (UTCTime, Integer))]
+watchedStamps root also = do
+  sources <- sourceStamps root
+  others <- mapM (fileStamps (const True)) also
+  pure (Map.toAscList (Map.fromList (sources <> concat others)))
 
 stopWatched :: ProcessHandle -> IO ()
 stopWatched running = do
@@ -212,12 +265,6 @@ stopWatched running = do
       _ <- waitForProcess running
       pure ()
 
-settle :: FilePath -> [(FilePath, (UTCTime, Integer))] -> IO [(FilePath, (UTCTime, Integer))]
-settle root previous = do
-  threadDelay 100000
-  current <- sourceStamps root
-  if current == previous then pure current else settle root current
-
 {-| How long to wait between looks.
 
     Short enough that a save feels answered and long enough that the loop is
@@ -226,9 +273,15 @@ settle root previous = do
 pollMicroseconds :: Int
 pollMicroseconds = 250000
 
-{-| Start the program, as this same executable running it without watching. -}
-startWatched :: FilePath -> FilePath -> [String] -> IO ProcessHandle
-startWatched self path carried = spawnProcess self (["run", path] <> carried)
+{-| Start the program, as this same executable running it without watching,
+    told which start this is and what changed before it. -}
+startWatched :: FilePath -> FilePath -> [String] -> Int -> [FilePath] -> IO ProcessHandle
+startWatched self path carried generation changed = do
+  inherited <- getEnvironment
+  let told = [("PUDU_WATCH", show generation), ("PUDU_WATCH_CHANGED", unlines changed)]
+      environment = told <> [binding | binding@(name, _) <- inherited, name `notElem` map fst told]
+  (_, _, _, handle) <- createProcess (proc self (["run", path] <> carried)) {env = Just environment}
+  pure handle
 
 {-| What was changed, said by name.
 
@@ -278,7 +331,14 @@ nearestManifest directory = do
     `.pudu` files a build produced would restart the program in response to its
     own output. -}
 sourceStamps :: FilePath -> IO [(FilePath, (UTCTime, Integer))]
-sourceStamps root = sort <$> walk Set.empty root
+sourceStamps = fileStamps (\full -> takeExtension full == ".pudu" || takeFileName full == "pudu.toml")
+
+{-| Every file under a path that `wanted` admits, with when it was last written
+    and its size; a path that is a file is that file alone. -}
+fileStamps :: (FilePath -> Bool) -> FilePath -> IO [(FilePath, (UTCTime, Integer))]
+fileStamps wanted top = do
+  isFile <- doesFileExist top
+  if isFile then stampOf top else sort <$> walk Set.empty top
  where
   walk ancestors directory = do
     resolved <- try (canonicalizePath directory) :: IO (Either IOException FilePath)
@@ -298,14 +358,17 @@ sourceStamps root = sort <$> walk Set.empty root
         isDirectory <- doesDirectoryExist full
         if isDirectory
           then walk ancestors full
-          else
-            if takeExtension full == ".pudu" || name == "pudu.toml"
-              then do
-                stamp <- try ((,) <$> getModificationTime full <*> getFileSize full)
-                  :: IO (Either IOException (UTCTime, Integer))
-                pure (either (const []) (\at -> [(full, at)]) stamp)
-              else pure []
-  ignored name = name `elem` [".git", ".pudu", "dist-newstyle", "node_modules", "target"]
+          else if wanted full then stampOf full else pure []
+  stampOf full = do
+    stamp <- try ((,) <$> getModificationTime full <*> getFileSize full)
+      :: IO (Either IOException (UTCTime, Integer))
+    pure (either (const []) (\at -> [(full, at)]) stamp)
+  -- Directories whose contents tools write, and an editor's own files: a
+  -- restart in answer to the program's output, or to a swap file, is noise.
+  ignored name =
+    name `elem` [".git", ".pudu", "dist-newstyle", "node_modules", "target", ".vercel", ".DS_Store"]
+      || "~" `isSuffixOf` name
+      || ".swp" `isSuffixOf` name
 
 {-| Run the program attached to this executable.
 
@@ -337,8 +400,10 @@ runCommand = do
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
     ("lint" : rest) -> runLint style rest
-    ("run" : "--watch" : path : carried) -> watchProgram style path carried
-    ("run" : path : "--watch" : carried) -> watchProgram style path carried
+    ("run" : "--watch" : rest) -> case watchOptions [] rest of
+      Right (also, path, carried) -> watchProgram style also path carried
+      Left problem -> hPutStrLn stderr ("pudu run: " <> problem) >> exitFailure
+    ("run" : path : "--watch" : carried) -> watchProgram style [] path carried
     {-| What follows the program's path belongs to the program.
 
         A bundle is the program, so its arguments are its own and nothing
@@ -347,6 +412,7 @@ runCommand = do
         `Env.at(0)` meant the subcommand here and the first real argument
         there. A program written and tried this way stopped working when it
         was built, and the reason was nowhere near the change. -}
+    ("run" : "--confined" : path : carried) -> confine >> withArgs carried (runProgram style path)
     ("run" : path : carried) -> withArgs carried (runProgram style path)
     ("explain" : path : carried) -> withArgs carried (explainProgram style path)
     ("run" : []) -> do
@@ -358,9 +424,18 @@ runCommand = do
         exitFailure
       Right (path, target, runtime) -> buildProgram style path target runtime
     ("test" : paths) -> testPaths style paths
-    ["init", path] -> initProject (Just path)
-    ["init"] -> initProject Nothing
-    ("init" : _) -> hPutStrLn stderr "usage: pudu init [directory]" >> exitFailure
+    {-| `search` names two commands. Source paths after the query select the
+        declaration search; words alone search published packages. -}
+    ("search" : query : paths@(_ : _)) -> do
+      local <- and <$> traverse doesPathExist paths
+      if local
+        then searchPaths (Text.pack query) paths
+        else runPublishCommand "search" (query : paths)
+    (command : rest) | command `elem` packageCommands -> runPackageCommand command rest
+    (command : rest) | command `elem` publishCommands -> runPublishCommand command rest
+    ("init" : initArgs) -> case initArguments initArgs of
+      Left message -> hPutStrLn stderr message >> exitFailure
+      Right (target, identity, library) -> initProject target identity library
     ("lsp" : _) -> runServer
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
@@ -401,6 +476,14 @@ startRepl style initial =
 
 {-| Check every named file, report all diagnostics, and fail only after the last
     one so a broken first file cannot hide the rest. -}
+{-| Compile a program, reusing what earlier runs stored for the modules that
+    have not changed. Every command that only reports and runs goes through
+    this; tooling that reads tokens and types compiles from scratch. -}
+compileReusing :: FilePath -> IO ProgramResult
+compileReusing path = do
+  cache <- openProductCache
+  compileProgramCached cache path
+
 checkPaths :: RenderStyle -> [FilePath] -> IO ()
 checkPaths style paths
   | null paths = do
@@ -412,7 +495,7 @@ checkPaths style paths
 
 checkOne :: RenderStyle -> FilePath -> IO Bool
 checkOne style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -439,7 +522,7 @@ checkOne style path = do
     the machine is busy and two runs of the same program agree. -}
 explainProgram :: RenderStyle -> FilePath -> IO ()
 explainProgram style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -451,7 +534,8 @@ explainProgram style path = do
         exitFailure
       Just parsed -> do
         (outcome, counted) <-
-          evaluateProgramTallied
+          evaluateProgramTalliedFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
@@ -475,12 +559,18 @@ renderTally counted =
   right shown =
     Text.replicate (max 1 (12 - length shown)) " " <> Text.pack shown
 
+{-| Compile a program and run its entry point.
+
+    Everything the compiler and the evaluator report goes to standard error,
+    so standard output is only what the program itself wrote: a program whose
+    output is piped elsewhere is not interleaved with warnings, and a reader of
+    both streams can tell the program's words from the tool's. -}
 runProgram :: RenderStyle -> FilePath -> IO ()
 runProgram style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
-    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+    TextIO.hPutStrLn stderr (renderProgramDiagnostics style program diagnostics)
   if hasErrors diagnostics
     then exitFailure
     else case rootCompileResult program >>= compileModule of
@@ -489,12 +579,13 @@ runProgram style path = do
         exitFailure
       Just parsed -> do
         outcome <-
-          evaluateProgramEntry
+          evaluateProgramEntryFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
             parsed
-        mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
+        mapM_ (TextIO.hPutStrLn stderr . renderRuntime style program) (outcomeDiagnostics outcome)
         case outcomeValue outcome of
           Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure
           Just value -> reportResult value
@@ -850,7 +941,7 @@ isPuduFile path = takeExtension path == ".pudu"
     and produces no runtime diagnostics. The integer is the assertion count. -}
 runTestFile :: RenderStyle -> FilePath -> IO (Bool, Int)
 runTestFile style path = do
-  program <- compileProgram path
+  program <- compileReusing path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -864,7 +955,8 @@ runTestFile style path = do
         pure (False, 0)
       Just parsed -> do
         outcome <-
-          evaluateProgramEntry
+          evaluateProgramEntryFolded
+            (programFolded program)
             (programIntegerKinds program)
             (programDependencies program)
             entryPointName
@@ -925,9 +1017,20 @@ testSummaryLine passed total assertions =
       <> show assertions <> " assertions held"
     )
 
-initProject :: Maybe FilePath -> IO ()
-initProject target = do
-  result <- createProject target
+initArguments :: [String] -> Either String (Maybe FilePath, Maybe Text.Text, Bool)
+initArguments = go Nothing Nothing False
+ where
+  invalid = Left "usage: pudu init [directory] [--name @owner/repo] [--lib]"
+  go target identity library arguments = case arguments of
+    [] -> Right (target, identity, library)
+    "--lib" : rest | not library -> go target identity True rest
+    "--name" : name : rest | identity == Nothing -> go target (Just (Text.pack name)) library rest
+    path : rest | take 2 path /= "--" && target == Nothing -> go (Just path) identity library rest
+    _ -> invalid
+
+initProject :: Maybe FilePath -> Maybe Text.Text -> Bool -> IO ()
+initProject target identity library = do
+  result <- createProjectWith target identity library
   case result of
     Left problem -> hPutStrLn stderr ("pudu init: " <> Text.unpack (renderInitError problem)) >> exitFailure
     Right root -> TextIO.putStrLn ("initialized " <> Text.pack root)
@@ -952,7 +1055,12 @@ renderProgramDiagnostics style program =
  where
   sources = programSources program
   renderOne value = case sourceFor value sources of
-    Nothing -> "error: diagnostic source is unavailable"
+    Nothing ->
+      -- A diagnostic about the project rather than a module — its manifest or
+      -- its lock — names a file the program never read as source. It is still
+      -- a sentence the reader needs, so it is written without the excerpt.
+      "error[" <> diagnosticCodeText (diagnosticCode value) <> "]: " <> diagnosticMessage value
+        <> "\n  --> " <> unSourceName (spanSource (diagnosticSpan value))
     Just source -> renderDiagnosticsWith (defaultRenderConfig style) source [value]
 
 sourceFor :: Diagnostic -> [Source] -> Maybe Source
@@ -984,15 +1092,31 @@ usage =
     , "  pudu lint [--json] [--fix] [--allow CODE] <path>..."
     , "                       analyze Pudu files or directories"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu run --confined <file>  the same, allowed to print, read the clock,"
+    , "                       and use threads, but not files, programs, the"
+    , "                       network, or foreign code"
   , "  pudu run --watch <file>  the same, run again whenever a source file"
   , "                       under it changes"
+  , "  pudu run --watch --also <path>... <file>  also run again when anything"
+  , "                       under a path changes; the program reads PUDU_WATCH"
+  , "                       and PUDU_WATCH_CHANGED"
     , "  pudu build <file> [-o name]  write one file that runs anywhere the"
     , "                       compiler runs, with every module it needs inside it"
     , "  pudu build <file> --runtime <path>  the same, attached to that runtime"
     , "                       rather than to this compiler, so one machine can"
     , "                       build for a platform it is not (same version only)"
     , "  pudu test [path]...  discover and execute test fixtures"
-    , "  pudu init [path]     initialize a canonical project with pudu.toml"
+    , "  pudu init [path] [--name @owner/repo] [--lib]  initialize an application or library"
+    , "  pudu install [package]...  add dependencies, or install what pudu.toml"
+    , "                       and pudu.lock name into deps/ (--locked, --offline)"
+    , "  pudu uninstall <name>...  remove dependencies"
+    , "  pudu update [name]...  refresh locked dependencies within their requirements"
+    , "  pudu upgrade [name]...  raise requirements to the newest releases"
+    , "  pudu deps | pudu tree  list the dependencies, or show them as a tree"
+    , "  pudu login | logout | whoami  manage the GitHub identity that releases"
+    , "  pudu release <version> [--notes file]  tag and publish this package"
+    , "  pudu search <words>...  find published packages; with source paths after"
+    , "                       the query it is the declaration search below"
     , "  pudu explain <file>  run a program and report what running it cost"
     , "  pudu lsp             speak the language server protocol over stdio"
     , "  pudu fmt <path>...   rewrite files, or every file under a directory"

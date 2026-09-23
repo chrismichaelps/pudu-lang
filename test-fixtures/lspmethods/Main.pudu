@@ -1,0 +1,30 @@
+module Main
+
+import Other as O
+
+trait Sized {
+  fn size(self: &Self) -> Int { 1 }
+  fn named(self: &Self) -> Str
+}
+
+type Box = { value: Int }
+
+impl Sized for Box {
+  fn named(self: &Box) -> Str { "box" }
+}
+
+fn local(box: Box) -> Int {
+  box.size()
+}
+
+fn foreign(box: O.Box) -> Int {
+  box.wrongMethod()
+}
+
+fn bounded[T](item: T) -> Int where T: Sized {
+  item.size()
+}
+
+fn dyn(item: dynamic Sized) -> Int {
+  item.size()
+}

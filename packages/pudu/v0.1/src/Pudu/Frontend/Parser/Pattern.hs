@@ -22,7 +22,8 @@ import Pudu.Frontend.Parser.State
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
-import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Literal (..), Pattern (..))
+import Pudu.Frontend.Syntax.Tree
+  ( ArrayRest (..), FieldPattern (..), Literal (..), Pattern (..) )
 import Pudu.Frontend.Token
   ( Keyword (KwFalse, KwNull, KwTrue)
   , Token (..)
@@ -85,6 +86,7 @@ parseAlternative = do
       | isSymbol "-" (tokenKind token) -> parseNegativeLiteral token
       | isSymbol "(" (tokenKind token) -> parseTuple
       | isSymbol "{" (tokenKind token) -> advanceToken >> parseRecord Nothing (tokenSpan token)
+      | isSymbol "[" (tokenKind token) -> parseArray
     _ -> invalidPattern token
 
 startsUpper :: Text.Text -> Bool
@@ -154,6 +156,72 @@ negativeBound = do
     IntegerLiteral value -> advanceToken >> pure (Just (IntegerValue ("-" <> value)))
     FloatLiteral value -> advanceToken >> pure (Just (FloatValue ("-" <> value)))
     _ -> pure Nothing
+
+{-| Parse a sequence pattern: `[a, b]`, `[first, ..rest]`, `[..init, last]`.
+
+    At most one `..` is admitted, because two would leave no way to say which
+    of them holds a given element. What precedes it is taken from the front and
+    what follows it from the back, so the pattern reads in the order the
+    sequence does however much of the middle it skips. -}
+parseArray :: Parser (Located Pattern)
+parseArray = do
+  opening <- advanceToken
+  (prefix, rest, suffix) <- parseElements [] Nothing []
+  closing <- closeDelimiter "]" "to close the sequence pattern"
+  let spanValue = maybe (tokenSpan opening) (mergedOrLeft (tokenSpan opening) . tokenSpan) closing
+  pure (Located spanValue (ArrayPattern prefix rest suffix))
+
+parseElements
+  :: [Located Pattern]
+  -> Maybe ArrayRest
+  -> [Located Pattern]
+  -> Parser ([Located Pattern], Maybe ArrayRest, [Located Pattern])
+parseElements prefix rest suffix = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol "]" kind || kind == EndOfFile || exhausted
+    then pure (reverse prefix, rest, reverse suffix)
+    else do
+      before <- peekToken
+      dots <- matchSymbol ".."
+      case dots of
+        Just marker -> do
+          found <- parseRestBinder marker
+          case rest of
+            Nothing -> continueAfter prefix (Just found) suffix
+            Just _ -> do
+              emitParseError "E1050" (tokenSpan marker)
+                "a sequence pattern admits one .."
+                (Just "name the elements around a single .., or match the whole sequence")
+              continueAfter prefix rest suffix
+        Nothing -> do
+          element <- parsePattern
+          after <- peekToken
+          if before == after
+            then pure (reverse prefix, rest, reverse suffix)
+            else case rest of
+              Nothing -> continueAfter (element : prefix) rest suffix
+              Just _ -> continueAfter prefix rest (element : suffix)
+ where
+  continueAfter nextPrefix nextRest nextSuffix = do
+    comma <- matchSymbol ","
+    case comma of
+      Nothing -> pure (reverse nextPrefix, nextRest, reverse nextSuffix)
+      Just _ -> parseElements nextPrefix nextRest nextSuffix
+
+{-| `..` on its own skips what it covers and `..name` binds it. `.._` is the
+    first written out, for a reader who would rather say that the rest is being
+    ignored than leave it to the bare dots. -}
+parseRestBinder :: Token -> Parser ArrayRest
+parseRestBinder marker = do
+  kind <- peekKind
+  case kind of
+    Identifier "_" -> advanceToken >> pure (IgnoredRest (tokenSpan marker))
+    Identifier name
+      | not (startsUpper name) -> do
+          token <- advanceToken
+          pure (BoundRest (Located (tokenSpan token) name))
+    _ -> pure (IgnoredRest (tokenSpan marker))
 
 {-| An uppercase path is a constructor; `(` introduces positional payloads and
     `{` introduces a record payload. -}
@@ -264,7 +332,11 @@ parseField = do
 invalidPattern :: Token -> Parser (Located Pattern)
 invalidPattern token = do
   emitParseError "E1050" (tokenSpan token) "expected a pattern"
-    (Just "use _, a name, a literal, a tuple, a constructor, or a record pattern")
+    ( Just
+        ( "use _, a name, a literal, a tuple, a sequence, a constructor, or a "
+            <> "record pattern"
+        )
+    )
   case tokenKind token of
     EndOfFile -> pure ()
     kind | isRecoveryBoundary kind -> pure ()

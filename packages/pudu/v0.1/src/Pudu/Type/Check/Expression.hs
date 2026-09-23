@@ -59,6 +59,8 @@ import Pudu.Type.Check.Rule
   , instantiateWith
   , callType
   , elementType
+  , rangeType
+  , sliceType
   , literalType
   , memberType
   , nameType
@@ -159,11 +161,24 @@ inferExpression around declared rigid spanValue expression = case expression of
       Nothing -> do
         targetType <- checkExpression around declared rigid target
         memberType spanValue targetType (locatedValue member)
+  {-| A range is a value like any other, so it is typed where it is written
+      rather than only where it is used. -}
+  RangeExpression lower _ upper -> do
+    lowerType <- mapM (checkExpression around declared rigid) lower
+    upperType <- mapM (checkExpression around declared rigid) upper
+    rangeType spanValue lowerType upperType
+  {-| Indexing by a number reads one element; indexing by a range reads the
+      stretch it names. One expression, because it is one question asked of one
+      value, and the index decides which answer it wants. -}
   IndexExpression target index -> do
     targetType <- checkExpression around declared rigid target
     indexType <- checkExpression around declared rigid index
-    _ <- unify (locatedSpan index) integerType indexType
-    elementType spanValue (literalIndex index) targetType
+    resolvedIndex <- zonk indexType
+    case resolvedIndex of
+      NominalType "Range" _ -> sliceType spanValue targetType
+      _ -> do
+        _ <- unify (locatedSpan index) integerType indexType
+        elementType spanValue (literalIndex index) targetType
   TryExpression target -> do
     checkpoint <- integerLiteralCheckpoint
     targetType <- checkExpression around declared rigid target

@@ -7,7 +7,7 @@ aliases: [website Prerender]
 ---
 # Website Prerender
 
-Loads the catalogue and the documentation pages, calls `Web.render` for every canonical path returned
+Loads the catalogue, documentation pages, and public package snapshot; calls `Web.render` for every canonical path returned
 by `Seo.paths` — documentation pages included — then writes each successful response into the Vercel
 static output tree. A documentation directory that cannot be read fails the build. It also writes `robots.txt` and `sitemap.xml` without
 starting a server or making loopback requests.

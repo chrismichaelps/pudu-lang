@@ -1,0 +1,5 @@
+module Chain.Middle
+
+import Chain.Base as Base
+
+export fn grown() -> Int { Base.seed() + 1 }

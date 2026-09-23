@@ -27,12 +27,19 @@ An exception is valid only for one semantic condition crossing implementation bo
 also rejects stale exceptions once a code returns to one module, so this registry cannot become an
 unchecked allow-list.
 
+`E7005` is shared by checked integer operators and range extent methods. Both mean that a computed
+integer result cannot be represented by the operation's declared fixed-width result type; the
+operation-specific wording does not change that identity.
+
 ## Grill Log
 
 - **Q:** Ignore the lint modules wholesale? **A:** No. _Rationale:_ explicit per-code declarations
   keep new warning reuse auditable and preserve the stale-exception check.
 - **Q:** Mint lint-only aliases for compiler warnings? **A:** No. _Rationale:_ users need one stable
   identity across `check`, human lint output, JSON, fixes, and suppression policy.
+- **Q:** Give range extent overflow a new code? **A:** No. _Rationale:_ `E7005` already means a
+  computed integer result does not fit its declared kind, whether the computation is an operator,
+  `Range.length`, or `Range.sum`. _Rejected:_ splitting one recovery category by call syntax.
 
 ## Referenced by
 

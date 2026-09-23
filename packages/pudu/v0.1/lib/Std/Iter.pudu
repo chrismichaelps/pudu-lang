@@ -24,9 +24,12 @@ export trait Sequence[S, T] {
 /// A half-open range of whole numbers, from `first` up to but not including
 /// `last`.
 ///
-/// Generic over the integer family rather than fixed to `Int`: a range of
-/// `UInt8` indices is a range, and a caller working in one width should not
-/// have to leave it to count.
+/// The language writes a range `first..last`, and that is the spelling to reach
+/// for: it needs no import, it is understood by slicing and by `for`, and it
+/// answers its own questions. This type is what remains for the case that one
+/// cannot serve — it is generic over the integer family, so a caller counting
+/// in `UInt8` indices does not have to leave that width to count, where the
+/// written range counts in `Int`.
 export type Range[N] = { first: N, last: N }
 
 /// The numbers from `first` up to but not including `last`.

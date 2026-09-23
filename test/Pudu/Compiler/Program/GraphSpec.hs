@@ -7,15 +7,35 @@ module Pudu.Compiler.Program.GraphSpec
   , testImportFailures
   , testImportedMethods
   , testInterfaceEdges
+  , testInterfaceGraph
   , testPathDependencies
+  , testResolutionContext
+  , testSourceRootOnce
   ) where
 
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Text.IO as TextIO
+import Pudu.Compiler.Library
+  ( ResolutionMetrics (..)
+  , newResolutionContext
+  , resolutionDiagnostics
+  , resolutionMetrics
+  , resolutionSearchRoots
+  )
+import Pudu.Compiler (CompileContext (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   )
-import Pudu.Compiler.Program.Common (codes)
-import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Compiler.Program.Common (codes, runEntry)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Type.Interface.Graph (graphInterfaces, graphOrder)
+import qualified Data.List as List
+import qualified Data.Map.Strict as Map
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 graphProperties :: [(String, IO Property)]
@@ -26,6 +46,9 @@ graphProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
+  , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
+  , ("interface facts are prepared once per module graph", testInterfaceGraph)
   ]
 
 testImportedMethods :: IO Property
@@ -62,6 +85,98 @@ testPathDependencies = do
         (absent === ["E2014"])
     ]
 
+{-| One manifest snapshot serves every lookup in an invocation, while the next
+    invocation sees changed project configuration. Duplicate dependency paths
+    are removed before filesystem probing without changing their precedence. -}
+testResolutionContext :: IO Property
+testResolutionContext = withSystemTempDirectory "pudu-resolution" $ \root -> do
+  let project = root </> "project"
+      sourceRoot = project </> "src"
+      firstDependency = root </> "first"
+      secondDependency = root </> "second"
+      manifestPath = project </> "pudu.toml"
+      ordinaryModule = ModuleName ("Ordinary" :| [])
+  mapM_ (createDirectoryIfMissing True) [sourceRoot, firstDependency, secondDependency]
+  TextIO.writeFile manifestPath
+    ( "[package]\nlanguage = \"not-a-constraint\"\n[dependencies]\n"
+        <> "first = \"../first\"\nduplicate = \"../first\"\nmissing = \"../missing\"\n"
+    )
+  first <- newResolutionContext sourceRoot
+  let firstMetrics = resolutionMetrics first
+      firstRoots = resolutionSearchRoots first ordinaryModule
+      firstCodes = map (diagnosticCodeText . diagnosticCode) (resolutionDiagnostics first)
+  TextIO.writeFile manifestPath "[dependencies]\nsecond = \"../second\"\n"
+  second <- newResolutionContext sourceRoot
+  let secondMetrics = resolutionMetrics second
+      secondRoots = resolutionSearchRoots second ordinaryModule
+  TextIO.writeFile (sourceRoot </> "Main.pudu") "module Main\n\nimport A\nimport B\n"
+  TextIO.writeFile (sourceRoot </> "A.pudu") "module A\n\nimport Missing\n"
+  TextIO.writeFile (sourceRoot </> "B.pudu") "module B\n\nimport Missing\n"
+  failed <- compileProgram (sourceRoot </> "Main.pudu")
+  let failedCodes = map (diagnosticCodeText . diagnosticCode) (programDiagnostics failed)
+  pure $ conjoin
+    [ counterexample "one snapshot walks only src and its project directory"
+        (resolutionManifestAncestorChecks firstMetrics === 2)
+    , counterexample "one governing manifest is read once"
+        (resolutionManifestReads firstMetrics === 1)
+    , counterexample "duplicate dependency roots are probed once"
+        (resolutionProjectRootProbes firstMetrics === 2)
+    , counterexample "invalid language diagnostics use the same manifest snapshot"
+        (firstCodes === ["E2090"])
+    , counterexample "only existing first-snapshot dependencies are searched"
+        (firstRoots === [sourceRoot, project </> ".." </> "first"])
+    , counterexample "a later invocation reads the changed manifest"
+        (secondRoots === [sourceRoot, project </> ".." </> "second"])
+    , counterexample "the later snapshot still reads and probes once"
+        ( (resolutionManifestReads secondMetrics, resolutionProjectRootProbes secondMetrics)
+            === (1, 1)
+        )
+    , counterexample "pure lookup does not mutate setup counts"
+        (resolutionMetrics first === firstMetrics)
+    , counterexample "a memoized miss is still diagnosed at every importing span"
+        (failedCodes === ["E2014", "E2014"])
+    ]
+
+{-| The manifest's source directory is searched after the compile's own root.
+    A file already under it must not see it twice, whatever spelling a
+    self dependency uses; a suite under test/ still reaches it first. -}
+testSourceRootOnce :: IO Property
+testSourceRootOnce = withSystemTempDirectory "pudu-source-root" $ \root -> do
+  let project = root </> "project"
+      sourceRoot = project </> "src"
+      testRoot = project </> "test"
+      external = root </> "external"
+      ordinaryModule = ModuleName ("Ordinary" :| [])
+  mapM_ (createDirectoryIfMissing True) [sourceRoot, testRoot, external]
+  TextIO.writeFile (project </> "pudu.toml")
+    ( "[package]\nname = \"project\"\nsource = \"src\"\n[dependencies]\n"
+        <> "src = \"src\"\nslashed = \"./src/\"\nexternal = \"../external\"\n"
+    )
+  fromSource <- newResolutionContext sourceRoot
+  fromSlashed <- newResolutionContext (sourceRoot <> "/")
+  fromTest <- newResolutionContext testRoot
+  TextIO.writeFile (project </> "pudu.toml") "[package]\nname = \"project\"\n"
+  implicit <- newResolutionContext testRoot
+  TextIO.writeFile (sourceRoot </> "Greeting.pudu") "module Greeting\n\nexport fn answer() -> Int { 42 }\n"
+  TextIO.writeFile (sourceRoot </> "Main.pudu") "module Main\n\nimport Greeting as G\n\nfn main() -> Int { G.answer() }\n"
+  TextIO.writeFile (testRoot </> "GreetingTest.pudu") "module GreetingTest\n\nimport Greeting as G\n\nfn main() -> Int { G.answer() - 42 }\n"
+  sourceCompile <- compileProgram (sourceRoot </> "Main.pudu")
+  testCompile <- compileProgram (testRoot </> "GreetingTest.pudu")
+  let externalRoot = project </> ".." </> "external"
+      compiled = map (diagnosticCodeText . diagnosticCode) . programDiagnostics
+  pure $ conjoin
+    [ counterexample "src is not repeated for a file under src"
+        (resolutionSearchRoots fromSource ordinaryModule === [sourceRoot, externalRoot])
+    , counterexample "a trailing separator names the same root"
+        (resolutionSearchRoots fromSlashed ordinaryModule === [sourceRoot <> "/", externalRoot])
+    , counterexample "test/ searches itself, then src once, then dependencies"
+        (resolutionSearchRoots fromTest ordinaryModule === [testRoot, sourceRoot, externalRoot])
+    , counterexample "the default source directory is implicit"
+        (resolutionSearchRoots implicit ordinaryModule === [testRoot, sourceRoot])
+    , counterexample "src compiles" (compiled sourceCompile === [])
+    , counterexample "test imports a project module" (compiled testCompile === [])
+    ]
+
 {-| A type re-exported under the name it already has.
 
     An alias is recorded under its bare name as well as its qualified one, and
@@ -77,9 +192,17 @@ testPathDependencies = do
 testAliasedReexport :: IO Property
 testAliasedReexport = do
   layered <- codes "test-fixtures/typealias/Root.pudu"
-  pure $ counterexample
-    "a type re-exported under its own name is still the type that declared it"
-    (layered === [])
+  throughField <- codes "test-fixtures/aliasfield/Main.pudu"
+  ran <- runEntry "test-fixtures/aliasfield/Main.pudu"
+  pure $ conjoin
+    [ counterexample
+        "a type re-exported under its own name is still the type that declared it"
+        (layered === [])
+    , counterexample
+        "an alias a record field names from a third module is what it stands for"
+        (throughField === [])
+    , counterexample "the record's alias fields hold text and a function" (ran === Just "43")
+    ]
 
 testDiscoveryFailures :: IO Property
 testDiscoveryFailures = do
@@ -133,4 +256,40 @@ testInterfaceEdges = do
         (incompleteConsumer === ["E3010", "E3010", "E3005"])
     , counterexample "an unreadable root is a structured loader failure"
         (unreadableRoot === ["E2014"])
+    ]
+
+{-| A module graph's interfaces are prepared once and shared by every module
+    checked against them.
+
+    Each consumer used to form every other interface's declarations for itself,
+    so a mistake in one of them was reported once per module that imported it:
+    three importers of `Lib` printed its one `E3030` three times. Formed once,
+    the mistake is reported once, by the module that wrote it.
+
+    The cycle is the case the shared preparation has to keep exact: `Wrap`
+    imports the module being checked, so it forms its declarations without that
+    module's names, as it did when each consumer prepared its own. -}
+testInterfaceGraph :: IO Property
+testInterfaceGraph = do
+  repeated <- codes "test-fixtures/interfacegraph/Main.pudu"
+  program <- compileProgram "test-fixtures/interfacegraph/Main.pudu"
+  cycleCodes <- codes "test-fixtures/interfacegraph/Cycle.pudu"
+  ran <- runEntry "test-fixtures/interfacegraph/Cycle.pudu"
+  let graph = contextTypes (programContext program)
+      order = map moduleNameText (graphOrder graph)
+      position name = List.elemIndex name order
+  pure $ conjoin
+    [ counterexample "a dependency's mistake is reported once, not once per importer"
+        (repeated === ["E3030"])
+    , counterexample "the graph orders every interface exactly once"
+        (List.sort order === List.sort (map moduleNameText (Map.keys (graphInterfaces graph))))
+    , counterexample "every interface follows the interfaces it imports"
+        ( conjoin
+            [ counterexample (show (dependency, dependent))
+                (((<) <$> position dependency <*> position dependent) === Just True)
+            | (dependency, dependent) <- [("Lib", "Left"), ("Lib", "Right"), ("Left", "Main"), ("Right", "Main")]
+            ]
+        )
+    , counterexample "records naming each other across a cycle check" (cycleCodes === [])
+    , counterexample "and run with the fields each side declared" (ran === Just "23")
     ]

@@ -73,7 +73,7 @@ import Pudu.Eval.Env
   , ascend
   , catchUnwind
   , descend
-  , lookupName
+  , lookupMethod
   , unwind
   , Unwind (..)
   , withFrame
@@ -94,9 +94,11 @@ import Pudu.Eval.Place
   , storePlace
   , withFrameKeeping
   )
+import Pudu.Eval.Range (callRangeMethod)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
+  , Captured (..)
   , Closure (..)
   , intOf
   , Value (..)
@@ -161,7 +163,7 @@ evaluateCall needs spanValue callee arguments = do
  where
   fallbackWith lentHere receiver member vals = do
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupName (owner <> "." <> member)) owners
+    method <- firstBound (\owner -> lookupMethod (owner <> "." <> member)) owners
     calleeVal <- case method of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -236,6 +238,8 @@ dispatchCall needs spanValue lent target values =
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
     SetMethodValue method receiver -> callSetMethod spanValue method receiver values
+    RangeMethodValue method receiver ->
+      callRangeMethod (applyFunction needs) spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
     BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
@@ -279,7 +283,7 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
   MemberExpression target member -> do
     receiver <- callEvaluate needs target
     owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupName (owner <> "." <> locatedValue member)) owners
+    method <- firstBound (\owner -> lookupMethod (owner <> "." <> locatedValue member)) owners
     case method of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -328,9 +332,9 @@ evaluateScope needs spanValue body = do
 
 scopeTo :: [Map Text Value] -> Value -> Value
 scopeTo environment value = case value of
-  FunctionValue closure
-    | closureCaptured closure == Nothing ->
-        FunctionValue closure{closureCaptured = Just environment}
+  FunctionValue closure@Closure{closureCaptured = Nothing} ->
+    FunctionValue closure
+      { closureCaptured = Just (Captured environment (length environment)) }
   other -> other
 
 
@@ -382,6 +386,8 @@ applyFunction needs spanValue function arguments = case function of
   StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
   MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
   SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
+  RangeMethodValue method receiver ->
+    callRangeMethod (applyFunction needs) spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
   BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments
@@ -490,5 +496,3 @@ callSpawnThread apply spanValue arguments = case arguments of
     Left problem -> Just (Text.pack (show problem))
     Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
     Right _ -> Nothing
-
-

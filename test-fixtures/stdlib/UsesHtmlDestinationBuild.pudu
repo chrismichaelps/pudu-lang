@@ -1,0 +1,66 @@
+module UsesHtmlDestinationBuild
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Html.Ssr as Ssr
+import Std.Result as Result
+
+fn renderedChecked(value: Result[H.Node, Html.Unsafe]) -> Str {
+  match value {
+    case Ok(node) => { H.render(&node) }
+    case Err(_) => { "" }
+  }
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  if renderedChecked(H.a().hrefChecked("https://example.com/a?b=1"))
+    == "<a href=\"https://example.com/a?b=1\"></a>" {
+    held = held + 1
+  }
+  if renderedChecked(H.img().srcChecked("/image.png")) == "<img src=\"/image.png\" />" {
+    held = held + 1
+  }
+  if renderedChecked(H.form().actionChecked("/submit")) == "<form action=\"/submit\"></form>" {
+    held = held + 1
+  }
+
+  let trusted = Html.trustedDestination("custom:owned")
+  if H.render(&H.a().hrefTo(&trusted)) == "<a href=\"custom:owned\"></a>" { held = held + 1 }
+
+  if let Err(Html.BadScheme(_)) = H.a().hrefChecked("javascript:run()") { held = held + 1 }
+  if let Err(Html.BadScheme(_)) = H.a().hrefChecked("JaVaScRiPt:run()") { held = held + 1 }
+  if let Err(Html.BadScheme(_)) = H.img().srcChecked("data:text/html,x") { held = held + 1 }
+  if let Err(Html.Control(_)) = H.form().actionChecked("/submit\nnext") { held = held + 1 }
+
+  if let Err(Html.BadScheme(_)) = H.a().atChecked("href", "javascript:run()") {
+    held = held + 1
+  }
+  if let Err(Html.BadScheme(_)) = H.img().atChecked("SrC", "data:text/html,x") {
+    held = held + 1
+  }
+  if let Err(Html.Handler(_)) = H.div().atChecked("  OnClIcK", "run()") { held = held + 1 }
+  if renderedChecked(H.div().atChecked("data-id", "7")) == "<div data-id=\"7\"></div>" {
+    held = held + 1
+  }
+
+  let accepted = Result.unwrapOr(H.a().hrefChecked("/orders"), H.nothing()).says("orders")
+  let ordinary = H.render(&accepted)
+  let prepared = Ssr.prepare(&[Ssr.Fixed(accepted.html())])
+  if ordinary == "<a href=\"/orders\">orders</a>"
+    && Ssr.render(&prepared, &mapOf([])) == Ok(ordinary) {
+    held = held + 1
+  }
+
+  if H.render(&H.a().href("javascript:legacy()"))
+    == "<a href=\"javascript:legacy()\"></a>" {
+    held = held + 1
+  }
+  if H.render(&H.div().at("OnLoAd", "run()")) == "<div></div>" { held = held + 1 }
+  if let Err(Html.BadScheme(_)) = Html.attribute("AcTiOn", "javascript:run()") {
+    held = held + 1
+  }
+
+  held
+}

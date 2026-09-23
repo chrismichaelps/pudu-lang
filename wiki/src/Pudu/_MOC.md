@@ -10,6 +10,7 @@ tags: [moc, module]
 - [[Pudu CLI Lint]] — project discovery, suppression, output, atomic safe fixes, and lint status.
 - [[Pudu Lint]] — typed linear analysis and source-verified safe edits.
 - [[Pudu Lint Config]] — closed project and source suppression policy.
+- [[Cache Persist]] — the compact binary form stored products are written in, with deferred parts.
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
 - [[Integer Literal]] — shared arbitrary-precision integer decoding, suffix vocabulary, and concrete-type fit laws.

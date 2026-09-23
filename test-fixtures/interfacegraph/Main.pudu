@@ -1,0 +1,7 @@
+module Main
+
+import Left
+import Lib
+import Right
+
+fn main() -> Int { Left.left() + Right.right() + Lib.make() }

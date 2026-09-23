@@ -171,6 +171,35 @@ export fn main() -> Int {
     }
   }
 
+  // A handler that fails while running is answered 500, and what wraps it sees
+  // that answer.
+  let failing = Route.routing(&[
+      Route.get("/boom", fn(_request: Route.Request) -> Http.Response { Reply.text(200, nameAt(5)) }),
+      Route.get("/fine", fn(_request: Route.Request) -> Http.Response { Reply.text(200, "fine") })
+    ])
+  let stampedFailure = Server.handlerOf(&Server.server(&failing).using(stamping("outer")))(requestFor(Http.Get, "/boom"))
+  if stampedFailure.status.code == 500 && headerOf(&stampedFailure, "X-Step-outer") == "yes" {
+    held = held + 1
+  }
+
+  // A server with one worker goes on answering after its handler failed twice.
+  if let Ok(fragile) = Server.start("127.0.0.1", 0) {
+    let lonePort = Server.portOf(&fragile)
+    let lone = Server.Server{..Server.server(&failing), workers: 1}
+    let loneWorker = Concurrent.start(fn() -> () {
+        let _served = Server.run(&lone, &fragile, 3)
+        ()
+      })
+    let first = fetch(lonePort, "GET /boom HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    let second = fetch(lonePort, "GET /boom HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    let third = fetch(lonePort, "GET /fine HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    if first.contains("500") && second.contains("500") && third.contains("fine") { held = held + 1 }
+    let _stopped = Server.stop(&fragile)
+    if let Ok(started) = loneWorker {
+      let _joined = Concurrent.join(&started)
+    }
+  }
+
   // Two decisions made through the trait rather than through the type.
   let bounded = boundedServer(&Server.server(&routed), 4096, 250)
   if bounded.headLimit == 4096 && bounded.readMillis == 250 { held = held + 1 }
@@ -298,6 +327,12 @@ fn headerOf(answer: &Http.Response, name: Str) -> Str {
     if entry[0] == name { found = entry[1] }
   }
   found
+}
+
+/// A name by position, which fails for a position past the two it has.
+fn nameAt(position: Int) -> Str {
+  let names = ["zero", "one"]
+  names[position]
 }
 
 /// Send raw request bytes and read everything that comes back.

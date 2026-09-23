@@ -1,0 +1,250 @@
+module View.Packages.Frame
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Std.Url as Url
+import Service.Packages as Packages
+import View.Layout as Layout
+
+/// The address of the script that adds the version picker and copy buttons.
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=6"
+
+/// The address of a project, and of one of its tabs.
+export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }
+
+export fn tabPath(project: &Packages.Project, which: Str) -> Str {
+  if which == "overview" { projectPath(project) } else { projectPath(project) + "/" + which }
+}
+
+/// The address of a file in the source tab.
+export fn sourcePath(project: &Packages.Project, file: Str) -> Str {
+  var encoded: Array[Str] = []
+  for segment in file.split("/") { encoded = encoded.push(Url.encodeComponent(segment)) }
+  tabPath(project, "source") + "/" + encoded.join("/")
+}
+
+/// The image shown for a handle: the snapshot's copy, then GitHub's own
+/// avatar address, or the empty text when neither is usable.
+export fn avatarSource(profile: &Option[Packages.Profile]) -> Str {
+  match *profile {
+    case Some(held) => if !held.avatar.isEmpty() { held.avatar } else if held.avatarUrl.startsWith("https://avatars.githubusercontent.com/") { held.avatarUrl } else { "" }
+    case None => ""
+  }
+}
+
+/// Which of the logo's four two-tone letter pairs marks a handle, so one
+/// owner keeps one colour everywhere.
+export fn tone(handle: Str) -> Int {
+  var hash = 7
+  for c in handle.chars() { hash = (hash * 31 + c.code()) % 1000003 }
+  (hash / 7) % 4
+}
+
+/// A handle's GitHub avatar over its two-tone mark; the mark shows when the
+/// image is absent or fails to load.
+export fn avatar(profile: &Option[Packages.Profile], handle: Str, size: Str) -> H.Node {
+  let source = avatarSource(profile)
+  let image = if source.isEmpty() { [] } else { [H.img().class("package-avatar-image").src(source).alt("").at("width", size).at("height", size).at("loading", "lazy")] }
+  H.span().class("package-avatar package-avatar-fallback").at("data-tone", show(tone(handle))).at("aria-hidden", "true").at("style", "width:" + size + "px;height:" + size + "px").holding(image)
+}
+
+/// The mark a declaration row carries for its kind. A method's kind is
+/// `fn (Owner)`, so the word before the owner selects the mark.
+const KIND_MARKS: Map[Str, Str] = mapOf([
+    ("fn", "ƒ"),
+    ("type", "T"),
+    ("trait", "◇"),
+    ("const", "="),
+    ("macro", "!"),
+    ("foreign", "↗")
+  ])
+
+export fn kindMark(kind: Str) -> Str {
+  match KIND_MARKS.get(kind.split(" ")[0]) {
+    case Some(mark) => mark
+    case None => "·"
+  }
+}
+
+/// The address of the full package search script, which also serves every
+/// search box's suggestions.
+export const SEARCH_SCRIPT_PATH: Str = "/assets/packages/search.js?v=8"
+
+fn searchHelpRow(example: Str, meaning: Str) -> H.Node {
+  H.li().holding([H.code().says(example), H.span().says(meaning)])
+}
+
+/// The query forms, beside every package search box.
+fn searchHelp() -> H.Node {
+  H.details().class("package-search-help").holding([
+      H.summary().at("aria-label", "Search help").says("?"),
+      H.div().class("package-search-help-panel").holding([
+          H.p().class("package-search-help-title").says("Search by"),
+          H.ul().holding([
+              searchHelpRow("@alice", "an owner"),
+              searchHelpRow("@alice/json", "an owner's project"),
+              searchHelpRow("textOf", "a declaration name"),
+              searchHelpRow("Value -> Str", "a signature's types")
+            ]),
+          H.p().class("package-search-help-keys").says("↑ ↓ choose · ↵ open · → search inside a project · Esc close · / focus")
+        ])
+    ])
+}
+
+/// A package search form. `id` identifies its field; `filter`, when not
+/// empty, is the project its declaration matches are narrowed to, and
+/// `fixed` keeps that narrowing (a project page's own box).
+export fn searchBox(id: Str, variant: Str, query: Str, filter: Str, placeholder: Str, fixed: Bool) -> H.Node {
+  let form = H.form().class("search package-search " + variant).at("role", "search").at("data-package-search", "").action("/packages/search").method("get")
+  let marked = if fixed { form.at("data-filter-fixed", "") } else { form }
+  marked.holding([
+      H.labelFor().at("for", id).class("skip").says(if filter.isEmpty() { "Search packages" } else { "Search " + filter }),
+      if filter.isEmpty() || fixed { H.nothing() } else { H.a().class("package-search-active-filter").href("/packages/search?q=" + Url.encodeComponent(query)).at("aria-label", "Remove the " + filter + " filter").says(filter + " ×") },
+      H.input().id(id).name("q").kind("search").value(query).placeholder(placeholder).at("autocomplete", "off").at("spellcheck", "false").required(),
+      if filter.isEmpty() { H.nothing() } else { H.input().kind("hidden").name("filter").value(filter) },
+      H.span().class("package-search-key").at("aria-hidden", "true").says("/"),
+      searchHelp(),
+      H.button().submit().says("Search")
+    ])
+}
+
+/// `pudu install @owner/repo`, or with an exact version.
+export fn installCommand(project: &Packages.Project, version: Str) -> Str {
+  if version.isEmpty() { "pudu install " + project.name } else { "pudu install " + project.name + "@" + version }
+}
+
+/// The module a reader imports first: the root module when the release has
+/// it, otherwise the first one under the root.
+export fn firstModule(project: &Packages.Project) -> Str {
+  match Packages.latestRelease(project) {
+    case Some(release) => {
+      if release.modules.contains(project.root) { return project.root }
+      for held in release.modules {
+        if held.startsWith(project.root + ".") { return held }
+      }
+      if release.modules.isEmpty() { project.root } else { release.modules[0] }
+    }
+    case None => project.root
+  }
+}
+
+/// The heading every project tab opens with: its title, a lead, and an
+/// optional action on the right.
+export fn tabHeading(title: Str, lead: Str, action: H.Node) -> H.Node {
+  H.header().class("package-tab-head").holding([
+      H.div().holding([H.h1().says(title), if lead.isEmpty() { H.nothing() } else { H.p().says(lead) }]),
+      action
+    ])
+}
+
+/// A command in a code line with its copy button.
+export fn copyable(command: Str, label: Str) -> H.Node {
+  H.div().class("install-command").holding([
+      H.code().class("install-text").says(command),
+      H.button().class("install-copy").kind("button").at("data-copy", command).at("aria-label", "Copy " + label).says("Copy")
+    ])
+}
+
+/// The install panel: the command for the latest release, a version picker
+/// that rewrites it, the import line, and how to contribute. It opens without
+/// script; the script adds the picker's effect and the copy buttons.
+fn installPanel(project: &Packages.Project) -> H.Node {
+  let available = project.releases.filter(|release: Packages.Release| !release.yanked)
+  if available.isEmpty() { return H.nothing() }
+  var options: Array[H.Node] = []
+  let latest = available[0].version
+  for release in available {
+    let label = if release.version == latest { release.version + " (latest)" } else { release.version }
+    options = options.push(H.option().value(release.version).says(label))
+  }
+  let moduleName = firstModule(project)
+  let last = moduleName.split(".")
+  let alias = last[last.length() - 1]
+  H.details().class("install").id("install").holding([
+      H.summary().class("install-open").at("aria-label", "Toggle install instructions").holding([H.span().class("install-open-label").says("Install"), H.span().class("install-close-label").says("Close")]),
+      H.div().class("install-panel").at("role", "dialog").at("aria-label", "Use " + project.name).holding([
+          H.h2().says("Use " + project.name),
+          H.h3().says("Install this release"),
+          H.p().says("From your project, run:"),
+          H.div().class("install-picked").at("data-package", project.name).holding([copyable(installCommand(project, latest), "the install command")]),
+          H.labelFor().class("install-version").holding([
+              H.span().says("Version"),
+              H.select().class("install-select").at("data-package", project.name).holding(options)
+            ]),
+          H.p().class("install-note").says("An exact version can install a new release immediately. Without a version, pudu follows the 72-hour minimum release age for new resolutions."),
+          copyable(installCommand(project, ""), "the unversioned install command"),
+          H.h3().says("Then import it"),
+          copyable("import " + moduleName + " as " + alias, "the import line"),
+          H.h3().says("To contribute"),
+          copyable("git clone " + project.repository, "the clone command")
+        ])
+    ])
+}
+
+/// A count as a reader scans it: `1.2k` from a thousand on.
+export fn shortCount(value: Int) -> Str {
+  if value < 1000 { return show(value) }
+  let tenths = value / 100
+  show(tenths / 10) + (if tenths % 10 == 0 { "" } else { "." + show(tenths % 10) }) + "k"
+}
+
+/// The release, licence, and GitHub stars under a project's description.
+fn facts(project: &Packages.Project) -> H.Node {
+  var parts: Array[H.Node] = [H.span().class("package-fact-version").says(Option.unwrapOr(project.latest, "not yet released"))]
+  if !project.license.isEmpty() { parts = parts.push(H.span().says(project.license)) }
+  if !project.repository.isEmpty() {
+    parts = parts.push(H.a().class("package-github-link").href(project.repository + "/stargazers").at("rel", "external noopener noreferrer").at("aria-label", show(project.stars) + " stars on GitHub").holding([
+          H.span().at("aria-hidden", "true").says("★ "),
+          H.span().class("package-count-badge").says(shortCount(project.stars))
+        ]))
+  }
+  H.p().class("package-hero-release").holding(parts)
+}
+
+fn tab(project: &Packages.Project, name: Str, label: Str, current: Str) -> H.Node {
+  let linked = H.a().href(tabPath(project, name)).says(label)
+  if name == current { linked.at("aria-current", "page") } else { linked }
+}
+
+/// A project page: the bar with the project's name, its tabs, and the install
+/// panel, above what the tab shows.
+export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, current: Str, title: Str, description: Str, content: Array[H.Node]) -> Html.Html {
+  pageAt(siteUrl, packages, project, current, tabPath(project, current), title, description, content)
+}
+
+/// A project tab whose selected child has its own canonical address.
+export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, current: Str, path: Str, title: Str, description: Str, content: Array[H.Node]) -> Html.Html {
+  let profile = Packages.profile(packages, project.handle)
+  let bar = H.div().class("package-bar").holding([
+      H.header().class("hero-banner page-banner package-project-hero").holding([
+          H.span().class("hero-banner-label").says("Package"),
+          H.div().class("package-heading").holding([
+              avatar(&profile, project.handle, "48"),
+              H.div().class("package-identity").holding([
+                  H.p().class("package-name").holding([
+                      H.a().class("package-owner").href("/" + project.handle).says(project.handle),
+                      H.span().class("package-slash").says(" / "),
+                      H.strong().says(project.project)
+                    ]),
+                  H.p().class("package-hero-description").says(project.description),
+                  facts(project)
+                ]),
+              installPanel(project)
+            ])
+        ]),
+      H.div().class("package-tabs").holding([
+          H.nav().class("package-tab-links").label("Project").holding([
+              tab(project, "overview", "Overview", current),
+              tab(project, "source", "Source", current),
+              tab(project, "docs", "Docs", current),
+              tab(project, "releases", "Releases", current),
+              tab(project, "tickets", "Tickets", current),
+              tab(project, "contributions", "Contributions", current)
+            ]),
+          if project.searchEntries.isEmpty() { H.nothing() } else { searchBox("package-scope-q", "package-scope-search", "", project.name, "Search " + project.project, true) }
+        ])
+    ])
+  let article = H.article().class("package-page").holding([bar].concat(content).concat([H.script().kind("module").src(SCRIPT_PATH), H.script().kind("module").src(SEARCH_SCRIPT_PATH)]))
+  Layout.page(siteUrl, title, description, path, true, None, article.html())
+}

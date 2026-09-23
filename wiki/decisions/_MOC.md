@@ -5,7 +5,12 @@ tags: [moc, adr]
 
 # Decision Map
 
-- [[ADR-0021-a-value-the-library-owns]] — proposed: a struct a library passes by value that it owns. Identity and transfer are declared per result, never inferred from which scalars are pointers — HDF5 names every object by an integer, cairo and GObject count references, and one type arrives owned from one function and borrowed from another.
+- [[ADR-0023-bounded-range-extent]] — accepted: a range has a measurable extent only when both ends
+  are present, and array sequence patterns do not silently admit tuples in the evaluator.
+- [[ADR-0021-a-value-the-library-owns]] — accepted design, not yet implemented: opaque by-value
+  resources preserve nested ABI shape, declare transfer per result and identity by layout paths, and
+  qualify live claims with generations so reused addresses or integer names do not revive stale
+  values.
 - [[ADR-0022-lending-a-place]] — accepted: a place is a `var`, a `mut` field, an array element, or `*r`; `&mut` is only a parameter type and a call argument, and the evaluator hands each loan back on every exit, which the rules make indistinguishable from writing through it.
 - [[ADR-0020-handing-a-library-a-run-of-bytes]] — accepted: a run of bytes a library only reads crosses as `Bytes`, which is most of what "buffers" means; the runs a library writes into or allocates keep their own ownership and lifetime questions.
 - [[ADR-0019-getting-a-value-back-out-of-a-library]] — accepted: output slots return beside the

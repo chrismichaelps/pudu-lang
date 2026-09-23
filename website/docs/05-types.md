@@ -16,7 +16,7 @@ Every value in Pudu has one type, known when the program is compiled. This page 
 | `Str` | UTF-8 text |
 | `()` | the unit value, for results that carry nothing |
 
-Fixed-width arithmetic is checked: `+`, `-`, and `*` stop the program with a diagnostic naming the type rather than wrapping around. The wrapping operators `&+ &- &*` and the saturating operators `+| -| *|` are there when that is what you mean. A literal may carry its width, as in `255u8` or `1.5f32`.
+Fixed-width arithmetic is checked: `+`, `-`, and `*` stop the program with a diagnostic naming the type rather than wrapping around. The wrapping operators `&+ &- &*` and the saturating operators `+| -| *|` are there when that is what you mean. A literal may carry its width, as in `255u8` or `1.5f32`. [Numbers](/docs/numbers) covers each of these in depth.
 
 ## Records
 

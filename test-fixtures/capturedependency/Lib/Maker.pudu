@@ -1,0 +1,9 @@
+module Lib.Maker
+
+/// Return a literal made beside a value it cannot reach. The program-level
+/// regression inspects the capture, because both narrow and over-retained
+/// environments produce the same numeric answer.
+export fn make(kept: Int) -> fn(Int) -> Int {
+  let unused = (0..500).toArray()
+  |value| kept + value
+}

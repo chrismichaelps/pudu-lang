@@ -1,0 +1,182 @@
+module PlaygroundRunner
+
+import Std.Crypto as Crypto
+import Std.Http as Http
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Io as Io
+import Std.Option as Option
+import Config as Config
+import Domain.Playground as Play
+import Error as SiteError
+import Service.Playground.Admission as Admission
+import Service.Playground as Playground
+import Service.Playground.Remote as Remote
+import Service.Playground.Wire as Wire
+
+/// The playground's runner: a service that runs programs for the website.
+///
+/// It is the only program that runs what a reader wrote, and it runs each one
+/// through the sandbox. The website reaches it with a secret it shares, names
+/// the reader a run is for, and is answered in the playground's JSON.
+///
+/// Configured from the same `PUDU_PLAYGROUND_*` settings the website reads,
+/// with `PUDU_RUNNER_HOST` and `PUDU_RUNNER_PORT` for where it listens. A
+/// runner that listens beyond the loopback address without a secret refuses
+/// to start: anyone who could reach it could run programs.
+fn main() -> Int {
+  let settings = match Config.loadPlayground() {
+    case Ok(loaded) => loaded
+    case Err(problem) => { return fail(&problem) }
+  }
+  if settings.token.isEmpty() && !isLoopback(settings.listenHost) {
+    return fail(&SiteError.PlaygroundMisconfigured("a runner listening on " + settings.listenHost + " needs PUDU_PLAYGROUND_TOKEN"))
+  }
+  let limits = Play.sane(&Play.Limits {
+      sourceBytes: settings.sourceBytes,
+      runMillis: settings.runMillis,
+      outputBytes: settings.outputBytes
+    })
+  let service = Service {
+    token: settings.token,
+    limits: limits,
+    runner: Playground.remembering(&Playground.local(&Playground.sandboxOf(&settings), &limits), settings.cacheEntries),
+    gates: Playground.gatesFor(&settings)
+  }
+  // Every run holds a worker for up to its deadline, so the pool is sized from
+  // the runs allowed at once: those, plus room to refuse the rest promptly.
+  let server = Server.server(&routes(&service))
+    .using(Guard.boundedConcurrency(settings.concurrency))
+    .withLimits(16384, settings.sourceBytes * 6 + 4096)
+    .withWorkers(settings.concurrency * 2, settings.concurrency * 8)
+    .withReadDeadline(10000)
+    .withWriteDeadline(settings.runMillis + 10000)
+  match Server.start(settings.listenHost, settings.listenPort) {
+    case Err(_) => fail(&SiteError.ListenFailed)
+    case Ok(live) => {
+      let _drains = Server.stopOnSignal(&live)
+      let _announced = Io.writeLine(
+        "Pudu playground runner listening on http://" + settings.listenHost + ":" + show(Server.portOf(&live))
+          + " with isolation " + settings.isolation
+      )
+      let result = Server.run(&server, &live, 0)
+      let _stopped = Server.stop(&live)
+      match result {
+        case Ok(_) => 0
+        case Err(_) => 1
+      }
+    }
+  }
+}
+
+/// What the runner serves with.
+export type Service = {
+  token: Str,
+  limits: Play.Limits,
+  runner: Playground.Runner,
+  gates: Playground.Gates
+}
+
+/// The runner's routes: `POST /run` to run or format a program, `POST /assist`
+/// to ask the language server about one, and `GET /health` for the platform
+/// that keeps it running.
+export fn routes(service: &Service) -> Route.Router {
+  let held = *service
+  Route.routing(&[
+      Route.post("/run", fn(asked: Route.Request) -> Http.Response { run(&held, &asked) }),
+      Route.post("/assist", fn(asked: Route.Request) -> Http.Response { assist(&held, &asked) }),
+      Route.get("/health", fn(_request: Route.Request) -> Http.Response { Reply.text(200, "ok") })
+    ])
+}
+
+/// One run or formatting, from an authorised caller.
+export fn run(service: &Service, asked: &Route.Request) -> Http.Response {
+  if let Some(refusal) = refusalOf(service, asked) { return refusal }
+  let requested = match Wire.requestOf(Route.body(asked)) {
+    case Some(found) => found
+    case None => { return Reply.json(400, Wire.encode(&Play.Refused("The request body is not a playground request."))) }
+  }
+  let reader = readerOf(asked)
+  let wait = Admission.waitFor(&service.gates.runs, reader)
+  if wait > 0 {
+    return tooMany(wait, Wire.encode(&Play.Refused("Too many runs.")))
+  }
+  let outcome = match Play.accept(requested[0], requested[1], &service.limits) {
+    case Err(reason) => Play.Refused(reason)
+    case Ok(submission) => Playground.execute(&service.runner, submission, reader)
+  }
+  Reply.json(200, Wire.encode(&outcome))
+}
+
+/// One question for the language server, from an authorised caller.
+export fn assist(service: &Service, asked: &Route.Request) -> Http.Response {
+  if let Some(refusal) = refusalOf(service, asked) { return refusal }
+  let requested = match Wire.questionOf(Route.body(asked)) {
+    case Some(found) => found
+    case None => { return Reply.json(400, Wire.answerText(&Play.NotAnswered("The request body is not a question."))) }
+  }
+  let reader = readerOf(asked)
+  let wait = Admission.waitFor(&service.gates.questions, reader)
+  if wait > 0 {
+    return tooMany(wait, Wire.answerText(&Play.NotAnswered("Too many questions.")))
+  }
+  let checked = match Play.askable(&requested[1]) {
+    case Ok(value) => value
+    case Err(reason) => { return Reply.json(200, Wire.answerText(&Play.NotAnswered(reason))) }
+  }
+  let answer = match Play.acceptForQuestion(requested[0], &service.limits) {
+    case Err(reason) => Play.NotAnswered(reason)
+    case Ok(submission) => Playground.question(&service.runner, submission, checked, reader)
+  }
+  Reply.json(200, Wire.answerText(&answer))
+}
+
+/// Why a request is refused before it is read, when it is.
+fn refusalOf(service: &Service, asked: &Route.Request) -> Option[Http.Response] {
+  if !authorised(service, asked) {
+    return Some(Reply.text(401, "this runner answers only the site it was configured for"))
+  }
+  if !Option.unwrapOr(Route.header(asked, "content-type"), "").toLower().startsWith("application/json") {
+    return Some(Reply.unsupportedMediaType(&["application/json"]))
+  }
+  None
+}
+
+/// The reader a request is counted against: the one the website names, a name
+/// believed only because the request carried the secret, or the caller's own
+/// address when it named nobody.
+fn readerOf(asked: &Route.Request) -> Str {
+  let named = Option.unwrapOr(Route.header(asked, Remote.CLIENT_HEADER), "").trim()
+  if named.isEmpty() { Admission.peerReader(asked) } else { named }
+}
+
+fn tooMany(wait: Int, body: Str) -> Http.Response {
+  let refused = Reply.tooManyRequests(wait)
+  Http.Response {
+    ..refused,
+    headers: Http.setHeader(&refused.headers, "content-type", "application/json"),
+    body: body
+  }
+}
+
+/// Whether a request carries the shared secret.
+///
+/// Compared in constant time, so how long a refusal takes says nothing about
+/// how much of a guess was right. A runner with no secret is one listening only
+/// on the loopback address, where every caller is this machine.
+fn authorised(service: &Service, asked: &Route.Request) -> Bool {
+  if service.token.isEmpty() { return true }
+  let stated = Option.unwrapOr(Route.header(asked, "authorization"), "")
+  stated.startsWith("Bearer ") && Crypto.secretsMatch(stated.drop("Bearer ".length()), service.token)
+}
+
+fn isLoopback(host: Str) -> Bool {
+  host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+fn fail(problem: &SiteError.SiteError) -> Int {
+  let _written = Io.writeErrorLine(SiteError.explain(problem))
+  1
+}

@@ -25,6 +25,7 @@ tags: [moc, module]
 - [[Eval Audio Stream]] — evaluation-owned persistent playback, controls, telemetry, and media clock.
 - [[Eval Audio Kernel]] — compiled exact waveform and automation loops for bounded PCM slices.
 - [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
+- [[Eval Frozen]] — constant values that are plain data, bound at link instead of evaluated again.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
@@ -35,6 +36,8 @@ tags: [moc, module]
 - [[Eval Order]] — which values may be keys, and the order they are compared by.
 - [[Evaluator]] — declaration installation, statement and expression walking, and bounded execution.
 - [[Eval Dispatch]] — array method dispatch (currently inline in Eval.hs, extraction planned).
+- [[Eval Capture]] — which names a function literal can reach, so a capture holds only those.
+- [[Eval Range]] — what a range is, and what can be asked of one without walking it.
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
 - [[Eval Method]] — the closed vocabulary of built-in methods a value answers to, and the name each is spelled by.
 - [[Eval Value]] — runtime values, and the total order the keyed collections are held in.

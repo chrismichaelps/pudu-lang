@@ -69,21 +69,38 @@ saturating forms, which are three different operators and read as three.
 | Feature | Comes from |
 |---|---|
 | Diagnostics as you type | the ordinary compile — same codes, spans, and help as `pudu check` |
-| Hover | the signature the checker *inferred*, plus the doc comment |
-| Go to definition | the documentation index |
-| Outline and breadcrumbs | every documented declaration, with its signature |
-| Completion | every documented name, with its signature and documentation |
+| Hover | the signature the checker *inferred*, plus the doc comment; an imported name shows its module's documentation |
+| Go to definition | the resolver's symbol identity, into the imported module's file for an imported name or an import path |
+| References, rename, highlights | the resolver's symbol identity, never spelling |
+| Completion | members of the receiver's type, a module's exports after `Q.`, whole module paths and selections in imports, a match arm's variants, a record literal's unset fields, and the names in scope |
+| Signature help | the called function's parameters, with the active one marked |
+| Inlay hints | the types the checker inferred for bindings |
+| Semantic tokens | the lexer and resolver, so a name is coloured by what it is |
+| Outline, breadcrumbs, workspace symbols | every documented declaration, with its signature |
+| Code actions | `pudu fmt`, offered as a fix-all when the file is not formatted |
 | Format document | `pudu fmt`, applied as one edit |
 
 Hover shows what the compiler concluded, not what was written down: an
 unannotated function still has a signature, and an annotated one is shown as it
 was *understood*.
 
-## What does not work yet
+Completion opens on its own after `.`, and after `{` or `,` where a list of
+names is being written — an import's selection or a record literal's fields.
+Anywhere else a brace opens a block and a comma separates arguments, so nothing
+is offered there until asked for.
 
-Rename, find references, workspace symbols, and semantic tokens. The server
-does not announce these, so VS Code keeps offering its own text-based fallback
-rather than showing an empty result.
+## Commands and settings
+
+- **Pudu: Restart Language Server** stops the running server and starts the
+  configured one — what you want after rebuilding the compiler. Changing
+  `pudu.serverPath` restarts it too.
+- `pudu.serverPath` — the compiler to run as `<path> lsp`.
+- `pudu.trace.server` — `messages` or `verbose` logs the traffic between the
+  editor and the server to the **Pudu** output channel.
+
+## Limits
 
 Synchronisation is full-document. Incremental edits are not accepted, because
 the server would be applying a range it has no guarantee it can interpret.
+While an edit is analysed the server keeps reading, so a newer edit replaces an
+older one still waiting and a cancelled request stops its work.

@@ -158,5 +158,14 @@ export fn main() -> Int {
   if Multipart.explain(&NoBoundary).contains("separates") { held = held + 1 }
   if !Multipart.explainName(&NotAName("../../etc/passwd")).contains("passwd") { held = held + 1 }
 
+  // A file part whose content is not UTF-8 is read whole.
+  let binary = ByteSeq.fromText("--XbCY\r\nContent-Disposition: form-data; name=\"archive\"; filename=\"a.gz\"\r\n\r\n")
+    .concat(ByteSeq.fromArray(&[31u8, 139u8, 8u8, 0u8, 255u8, 254u8]))
+    .concat(ByteSeq.fromText("\r\n--XbCY--\r\n"))
+  match Multipart.read(&binary, contentType, &bounds) {
+    case Ok(parts) => if parts.length() == 1 && parts[0].content.length() == 6 { held = held + 1 }
+    case Err(_) => {}
+  }
+
   held
 }

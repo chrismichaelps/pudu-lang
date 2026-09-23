@@ -35,9 +35,20 @@ data ProgramResult = ProgramResult
 
 compileProgram :: FilePath -> IO ProgramResult
 rootCompileResult :: ProgramResult -> Maybe CompileResult
+sourceRootFor :: FilePath -> ModuleName -> (FilePath, Bool)
+compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO ProgramResult
 ```
 
 ### Governance
+
+- `compileProgramSourceOver` reads a module whose normalised path is in the overlay from there
+  instead of the disk. Paths are still tried in search order, so an overlaid module never shadows
+  one an earlier root holds. The command line compiles with an empty overlay; the language server
+  passes its open buffers, whose text the disk has not seen.
+- `sourceRootFor` is the one rule for where a file-backed program's modules are: the entry path
+  with its declared module's segments taken off the end, or the file's directory with `True` when
+  the path does not end in the name. The command line and the language server both ask it, so an
+  import resolves to the same file in both.
 
 - `compileProgramSource` compiles a root that is already in memory, taking its source root rather than deriving one. The interactive session's buffer is not a file, but its imports still have to reach the modules a compiled program's would, and there is no path to derive the root from.
 
@@ -55,9 +66,25 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - Cycles are allowed for declaration signatures. Interface skeletons for an SCC are available before bodies in that SCC are checked; no module-scope runtime initialization is introduced.
 - The graph compiles through [[Semantic Interface]] and [[Type Interface]]. It never concatenates ASTs or pretends dependency declarations belong to the root module.
 - Diagnostics retain their original source identities and are stable-sorted once across the program.
+- `compileProgramCached` reuses stored products from the [[Compiler Cache]]: a module whose text
+  was parsed before is not lexed or parsed, and one checked before in a program presenting the
+  same interfaces is not expanded, resolved, or checked. The compile context is built only when a
+  module has to be checked. Reused modules carry no tokens, resolution, types, or documentation,
+  so tooling that reads those compiles with `compileProgram`.
+- `finish` prepares one [[Type Interface Graph]] from every admitted module's interface and every
+  module checks against it, so interface order, collection, and installation happen once per
+  program rather than once per module.
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
 - `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
 - Manifest validation verifies project `pudu.toml` constraints via `manifestVersionDiagnostics`. If `package.language` is incompatible with the compiler's version, `E2090` is reported without compiling modules.
+- `discoverFrom` creates one invocation-owned `ResolutionContext` before chasing imports. Every
+  import in that graph sees the same manifest snapshot, ordered project roots, ordered standard
+  library roots, and diagnostic attempted-root descriptions. The context is discarded when the
+  invocation returns, so a later compile observes environment, manifest, executable, and filesystem
+  changes.
+- Successful discoveries remain memoized by module name. Missing-module resolution is memoized
+  separately by requested name: repeated imports do not probe the same candidate files again, but
+  each importing span still receives its own `E2014` diagnostic.
 
 ### Linkage
 
@@ -66,7 +93,12 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 
 ## Algorithm
 
-Parse the root, derive its source root, then chase each import name to its canonical `.pudu` path while memoizing loaded frontends. Build graph nodes from parsed import lists, classify and order them with `stronglyConnComp`, construct export/interface skeletons for all parsed modules, and compile SCCs in dependency order. Aggregate every diagnostic by source/span/code/message and expose the root result separately from the graph map.
+Parse the root, derive its source root, construct one [[Compiler Library]] resolution context, then
+chase each import name to its canonical `.pudu` path while memoizing loaded frontends and failed
+lookups. Build graph nodes from parsed import lists, classify and order them with `stronglyConnComp`,
+construct export/interface skeletons for all parsed modules, and compile SCCs in dependency order.
+Aggregate every diagnostic by source/span/code/message and expose the root result separately from
+the graph map.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -83,6 +115,10 @@ Parse the root, derive its source root, then chase each import name to its canon
 - A missing transitive dependency is reported at the transitive import, not at the root command line.
 - An invalid dependency may produce frontend diagnostics, but it exports no interface and cannot cause follow-on type diagnostics in dependents.
 - An unreadable root has no module identity, but still returns one `E2014` and its requested-path source snapshot; command-line checking therefore cannot report success for an I/O failure.
+- Two modules may import the same missing name. Its candidate paths are probed once, while the
+  diagnostic remains attached to both import spans.
+- A file, manifest, dependency root, or `PUDU_LIB` value changed after an invocation is visible to
+  the next invocation; no resolution state survives a call.
 
 ## Depth
 
@@ -95,6 +131,13 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 - **Q:** Why SCCs rather than rejecting every cycle? **A:** [[architecture/SEMANTICS]] admits cycles for signatures. _Rationale:_ interface skeletons break signature cycles without module-load execution. _Rejected:_ naive DFS order; unconditional cycle error; fixed-point body checking.
 - **Q:** Should dependency ASTs be merged into the root? **A:** No. _Rationale:_ merging destroys module ownership, privacy, nominal identity, and diagnostic provenance. _Rejected:_ synthetic mega-module; textual inclusion.
 - **Q:** Should runtime dependency execution be bundled into issue #29? **A:** No. _Rationale:_ static interface loading closes the reported `E3005`; runtime linking requires a separate value/module environment and conformance gates. _Rejected:_ silently installing dependency bodies into one evaluator frame.
+- **Q:** Should resolution state be process-global so every command shares it? **A:** No. _Rationale:_
+  a compiler command must observe project and installation changes made between invocations, while
+  repeated discovery inside one immutable graph gains nothing from rereading them. _Rejected:_ a
+  global manifest cache; timestamp invalidation; rebuilding roots for each import.
+- **Q:** Should a memoized missing module suppress later diagnostics? **A:** No. _Rationale:_ the
+  expensive fact is that no candidate file resolved; the user-facing fact belongs to every import
+  span that requested it. _Rejected:_ storing the first diagnostic; probing again to recreate it.
 
 ## Variants
 
@@ -103,4 +146,4 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 
 ## Referenced by
 
-[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]]
+[[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]] · [[Compiler Cache]]

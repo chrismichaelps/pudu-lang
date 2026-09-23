@@ -1,0 +1,48 @@
+// Shapes
+// Records and sum types, taken apart with match.
+module Main
+
+import Std.Io as Io
+
+type Point = { x: Float64, y: Float64 }
+
+type Shape =
+  | Circle(Point, Float64)
+  | Rectangle(Point, Point)
+  | Triangle(Point, Point, Point)
+
+fn area(shape: &Shape) -> Float64 {
+  match shape {
+    case Circle(_, radius) => 3.14159 * radius * radius
+    case Rectangle(low, high) => (high.x - low.x) * (high.y - low.y)
+    case Triangle(a, b, c) => {
+      let doubled = a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)
+      if doubled < 0.0 { -doubled / 2.0 } else { doubled / 2.0 }
+    }
+  }
+}
+
+fn name(shape: &Shape) -> Str {
+  match shape {
+    case Circle(_, _) => "circle"
+    case Rectangle(_, _) => "rectangle"
+    case Triangle(_, _, _) => "triangle"
+  }
+}
+
+fn main() -> Int {
+  let origin = Point{x: 0.0, y: 0.0}
+  let shapes = [
+    Circle(origin, 1.0),
+    Rectangle(origin, Point{x: 2.0, y: 3.0}),
+    Triangle(origin, Point{x: 4.0, y: 0.0}, Point{x: 0.0, y: 3.0})
+  ]
+  var total = 0.0
+  for shape in shapes {
+    let size = area(&shape)
+    total = total + size
+    let _said = Io.writeLine("{name(&shape)}: {size}")
+  }
+  let _sum = Io.writeLine("total: {total}")
+  0
+}

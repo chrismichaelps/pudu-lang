@@ -1,0 +1,8 @@
+module OpenStartRangeLength
+
+/// A missing start has no implicit zero outside a slice. There is no finite
+/// extent to measure until a value supplies the lower boundary.
+export fn main() -> Int {
+  let endless =..5
+  endless.length()
+}

@@ -10,6 +10,9 @@ compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
 function_dir="$output/functions/dynamic.func"
 search_index="$function_dir/website/data/search-index.pudu-data"
+examples_dir="$function_dir/website/playground/examples"
+packages_data="$root/website/data/packages"
+packages_path="$output/.no-packages"
 
 if [[ -z "${PUDU_SITE_URL:-}" ]]; then
   echo "set PUDU_SITE_URL to the canonical HTTPS origin" >&2
@@ -17,6 +20,25 @@ if [[ -z "${PUDU_SITE_URL:-}" ]]; then
 fi
 site_url_json="${PUDU_SITE_URL//\\/\\\\}"
 site_url_json="${site_url_json//\"/\\\"}"
+
+# The playground's runner is named at build time because it is an address or
+# a mode, not a secret. `local` runs programs inside the function, confined: the
+# function carries the compiler, the standard library, and the sandbox, and the
+# sandbox gives each program an emptied environment and the runtime's
+# confinement. A runner's https:// address sends programs elsewhere instead;
+# its shared secret is a project environment variable, PUDU_PLAYGROUND_TOKEN,
+# which the platform gives the function when it runs, and is never written into
+# the build output.
+playground_runner="${PUDU_PLAYGROUND_RUNNER:-local}"
+case "$playground_runner" in
+  off|local|https://*) ;;
+  *)
+    echo "PUDU_PLAYGROUND_RUNNER must be off, local, or a runner's https:// address for a deployment" >&2
+    exit 1
+    ;;
+esac
+runner_json="${playground_runner//\\/\\\\}"
+runner_json="${runner_json//\"/\\\"}"
 
 # The dynamic half of the site is Pudu, not JavaScript.
 #
@@ -48,13 +70,27 @@ for dependency in "${musl_libraries[@]}"; do
 done
 
 rm -rf "$output"
-mkdir -p "$function_dir/website/data" "$output/static/assets" "$output/static/fonts"
+mkdir -p "$function_dir/website/data" "$examples_dir" "$output/static/assets" "$output/static/fonts"
+if [[ "${PUDU_PACKAGES_FROM_GITHUB:-1}" != "0" ]]; then
+  node "$root/website/scripts/generate-packages.mjs" --out "$packages_data" --pudu "$compiler"
+  if [[ -f "$packages_data/packages.json" ]]; then
+    packages_path="$packages_data"
+    mkdir -p "$function_dir/website/data/packages"
+    cp "$packages_data/packages.json" "$function_dir/website/data/packages/packages.json"
+    if [[ -d "$packages_data/avatars" ]]; then
+      mkdir -p "$output/static/packages"
+      cp -R "$packages_data/avatars" "$output/static/packages/avatars"
+    fi
+  fi
+fi
 cp "$musl_loader" "$function_dir/ld-musl-x86_64.so.1"
 for dependency in "${musl_libraries[@]}"; do
   cp "$musl_library_dir/$dependency" "$function_dir/$dependency"
 done
 cp "$root/website/public/site.css" "$output/static/assets/site.css"
-cp "$root/website/public/assets/"* "$output/static/assets/"
+# The playground's script is a folder of modules, one per layer, so the assets
+# are copied with their folders.
+cp -R "$root/website/public/assets/." "$output/static/assets/"
 cp "$root/website/public/fonts/"* "$output/static/fonts/"
 
 # The complete documentation catalogue drives static generation. The function
@@ -64,6 +100,12 @@ cp "$root/website/public/fonts/"* "$output/static/fonts/"
   "$root/website/data/api.json" "$search_index"
 chmod 644 "$search_index" 2>/dev/null || true
 
+# The playground's examples are read by the function as they are by the site:
+# once, before the first invocation. They are its menu, and a shared or posted
+# program is recognised as one of them.
+cp "$root/website/playground/examples/"*.pudu "$examples_dir/"
+chmod 644 "$examples_dir/"*.pudu 2>/dev/null || true
+
 # A custom runtime is started by running `bootstrap`, so the artefact is named
 # that. The compiler attaching the program must be the same version of Pudu as
 # the runtime it is attached to; both come from this checkout.
@@ -72,6 +114,16 @@ chmod 644 "$search_index" 2>/dev/null || true
   --runtime "$musl_runtime"
 chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 
+# What the function runs a reader's program with: the same runtime, as the
+# compiler, beside the library it reads and the sandbox that confines it.
+if [[ "$playground_runner" == local ]]; then
+  cp "$musl_runtime" "$function_dir/pudu"
+  cp -R "$root/packages/pudu/v0.1/lib" "$function_dir/lib"
+  cp "$root/website/playground/sandbox.sh" "$function_dir/website/playground/sandbox.sh"
+  chmod 755 "$function_dir/pudu" "$function_dir/website/playground/sandbox.sh"
+  chmod -R a+rX "$function_dir/lib"
+fi
+
 # The static half of the site, rendered by the site.
 #
 # `Web.render` answers a response for a path, so producing every page is that
@@ -79,8 +131,15 @@ chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 # requests to itself. What is rendered is `Seo.paths`, the list the sitemap is
 # built from, so the two cannot disagree about which pages exist.
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
+  PUDU_PACKAGES_PATH="$packages_path" \
   PUDU_DOCS_PATH="$root/website/docs" \
   PUDU_RELEASES_PATH="$root/website/data/releases.json" \
+  PUDU_DOCUMENTS_PATH="$root" \
+  PUDU_RELEASE_NOTES_PATH="$root/packages/pudu/v0.1/release-notes" \
+  PUDU_PLAYGROUND_EXAMPLES="$root/website/playground/examples" \
+  PUDU_PLAYGROUND_RUNNER="$playground_runner" \
+  PUDU_PLAYGROUND_ISOLATION=confined \
+  PUDU_PLAYGROUND_TOKEN="${PUDU_PLAYGROUND_TOKEN:-prerender}" \
   "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
 # `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and
@@ -92,7 +151,14 @@ printf '%s\n' \
   '  "handler": "bootstrap",' \
   '  "architecture": "x86_64",' \
   '  "environment": {' \
-  "    \"PUDU_SITE_URL\": \"$site_url_json\"" \
+  "    \"PUDU_SITE_URL\": \"$site_url_json\"," \
+  "    \"PUDU_PLAYGROUND_RUNNER\": \"$runner_json\"," \
+  '    "PUDU_PACKAGES_PATH": "website/data/packages",' \
+  '    "PUDU_PLAYGROUND_ISOLATION": "confined",' \
+  '    "PUDU_PLAYGROUND_COMPILER": "/var/task/pudu",' \
+  '    "PUDU_PLAYGROUND_LIBRARY": "/var/task/lib",' \
+  '    "PUDU_PLAYGROUND_SANDBOX": "/var/task/website/playground/sandbox.sh",' \
+  '    "PUDU_PLAYGROUND_WORKSPACE": "/tmp"' \
   '  },' \
   '  "maxDuration": 60' \
   '}' > "$function_dir/.vc-config.json"
@@ -116,14 +182,46 @@ while IFS= read -r page; do
 "
 done < <(find "$output/static" -mindepth 2 -maxdepth 2 -name index.html | sort)
 
+# Each playground example is a rendered page one level below the playground.
+# Listed by name, like the pages above, so an address that is not an example —
+# the shared-program page among them — reaches the function.
+example_routes=""
+while IFS= read -r page; do
+  name="$(basename "$(dirname "$page")")"
+  example_routes="$example_routes    { \"src\": \"/playground/$name\", \"dest\": \"/playground/$name/index.html\" },
+"
+done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.html 2>/dev/null | sort)
+
 {
-  printf '%s\n' '{' '  "version": 3,' '  "routes": [' '    { "handle": "filesystem" },'
+  # Running a program is a post, and a post is never a static file: it is sent
+  # to the function before the platform looks for one. Both APIs — running a
+  # program and asking about one — and a shared program are the function's too.
+  # The script modules import one another without a version in their address,
+  # so each is checked again on every load.
+  printf '%s\n' '{' '  "version": 3,' '  "routes": [' \
+    '    { "src": "/playground", "methods": ["POST"], "dest": "/dynamic" },' \
+    '    { "src": "/api/playground/(run|assist)", "dest": "/dynamic" },' \
+    '    { "src": "/assets/playground/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
+    '    { "src": "/assets/docs/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
+    '    { "src": "/packages/search", "dest": "/dynamic" },' \
+    '    { "src": "/packages/suggest", "dest": "/dynamic" },' \
+    '    { "src": "/playground/shared", "dest": "/dynamic" },' \
+    '    { "handle": "filesystem" },'
   printf '%s' "$page_routes"
+  printf '%s' "$example_routes"
   printf '%s\n' \
     '    { "src": "/", "dest": "/index.html" },' \
     '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
     '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
     '    { "src": "/docs/([^/]+)", "dest": "/docs/$1/index.html" },' \
+    '    { "src": "/(packages/page/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/page/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/source/.+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/page/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(source|docs|releases|tickets|contributions))", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+)", "dest": "/$1/index.html" },' \
     '    { "src": "/guide", "status": 308, "headers": { "Location": "/docs" } },' \
     '    { "src": "/search", "dest": "/dynamic" },' \
     '    { "src": "/.*", "dest": "/dynamic" }' \

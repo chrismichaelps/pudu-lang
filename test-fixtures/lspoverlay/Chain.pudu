@@ -1,0 +1,7 @@
+module Chain
+
+import Mid as M
+
+fn main() -> Int {
+  M.relay()
+}

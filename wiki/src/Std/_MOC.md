@@ -5,9 +5,14 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
-- [[Std Html SSR]] — reusable static render plans, typed slots and output budgets.
-- [[Std Html Buffer]] — hardware-aware unboxed byte templates, memcpy rendering, and MSS coalescing.
-- [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.
+- [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
+  conditionals, and exact rendering delegated to `Std.Html`.
+- [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
+  lengths, output budgets, and pull-based bounded incremental delivery.
+- [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
+  static blocks, typed failures, and explicitly bounded application-output coalescing.
+- [[Std Html Stream]] — prepared safe heads, typed progressive suspense output, deferred producers,
+  and retained unchecked compatibility helpers.
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
 - [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.
@@ -15,7 +20,7 @@ tags: [moc, module, stdlib]
 - [[Std App IsrCache]] — zero-copy thread-safe byte cache with tag-based invalidation for ISR.
 - [[Std Ui Island]] — isolated island elements, client micro-runtime, and zero-JS form fallback.
 
-- [[Std Html Compose]] — fluent content composition with reusable view functions.
+- [[Std Html Compose]] — fluent persistent content composition with eager or deferred conditionals.
 
 - [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
 - [[Std BitVector]] — dense 64-bit word packed bit-vector, SIMD bitwise algebra, and hardware scans.
@@ -62,7 +67,8 @@ tags: [moc, module, stdlib]
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
 - [[Std Db]] — queries, rows, transactions, and pools over a session.
 - [[Std App]] — the program as a value: what starts it, and what stops it.
-- [[Std Html]] — a page as a value, so text placed in one cannot become markup.
+- [[Std Html]] — a page as a value, with typed eager or deferred conditional construction.
+- [[Std Html Bounded]] — iterative HTML rendering that stops at an exact UTF-8 output budget.
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.

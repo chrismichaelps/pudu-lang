@@ -157,6 +157,68 @@ fn main() -> Int {
 
 `adder` returns a function. Each call makes a new one that remembers its own `amount`.
 
+## The short form
+
+The same literal is written with bars instead of `fn`, which is the form to reach for when the
+literal is an argument and the interesting part is the body. The types are usually clear from where
+it is used, so they can be left off:
+
+```pudu
+module ShortLiterals
+
+fn twice(f: fn(Int) -> Int) -> fn(Int) -> Int { |x| f(f(x)) }
+
+fn main() -> Int {
+  let numbers = [1, 2, 3, 4, 5, 6]
+  let evens = numbers.filter(|n| n % 2 == 0)
+  let doubled = numbers.map(|n| n * 2)
+  let total = numbers.reduce(|carried, n| carried + n, 0)
+
+  let annotated = |n: Int| -> Int { n * 3 }
+  let takesNothing = || 7
+  let block = |n| {
+    let squared = n * n
+    squared + 1
+  }
+
+  if evens == [2, 4, 6]
+    && doubled[0] == 2
+    && total == 21
+    && annotated(2) == 6
+    && takesNothing() == 7
+    && block(3) == 10
+    && twice(|n| n + 3)(1) == 7
+  {
+    0
+  } else {
+    1
+  }
+}
+```
+
+`|x| body` and `fn(x) => body` build the same value; nothing can tell them apart afterwards. `||` is
+the literal that takes nothing — the two bars written together. `async` goes in front of either form.
+
+Because a bar is also the operator that joins two values, a literal that begins a line is read as a
+new statement rather than as a continuation of the line above. That is what lets a literal be the
+last expression of a block, which is where one most often goes:
+
+```pudu
+module LiteralResult
+
+fn chooser(step: Int) -> fn(Int) -> Int {
+  let doubled = step * 2
+  |n| n + doubled
+}
+
+fn main() -> Int {
+  if chooser(5)(1) == 11 { 0 } else { 1 }
+}
+```
+
+A literal holds on to the names it mentions, and only those. `doubled` above is kept because the
+literal uses it; anything else in scope is free to be collected as soon as the function returns.
+
 ## Generic functions
 
 A function can work for many types by naming a type parameter in square brackets. The compiler works out the type at each call:

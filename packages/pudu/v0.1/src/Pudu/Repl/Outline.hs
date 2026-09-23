@@ -11,20 +11,21 @@ import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Foreign (..)
-  , ForeignFunction (..)
-  , Function (..)
-  , Parameter (..)
+  ( ArrayRest (..)
+  , BindingKind (..)
   , Block (..)
   , Capability (..)
   , Declaration (..)
   , Expression (..)
-  , FieldPattern (..)
   , FieldInit (..)
+  , FieldPattern (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
-  , Macro (..)
   , Literal (..)
+  , Macro (..)
   , MatchArm (..)
+  , Parameter (..)
   , Pattern (..)
   , Statement (..)
   , TypeDeclarationValue (..)
@@ -49,6 +50,9 @@ outlineStatement (Located _ statement) = case statement of
   ContinueStatement label -> "continue" <> foldMap outlineLabel label
   LetElseStatement pattern' subject _ ->
     "let " <> outlinePattern pattern' <> " = " <> outlineExpression subject <> " else ..."
+  LetPatternStatement bindingKind pattern' _ subject ->
+    bindingWord bindingKind <> " " <> outlinePattern pattern'
+      <> " = " <> outlineExpression subject
   InvalidStatement -> "invalid"
 
 outlineDeclaration :: Located Declaration -> Text
@@ -78,6 +82,10 @@ outlineExpression (Located _ expression) = case expression of
   MemberExpression target member -> outlineExpression target <> "." <> locatedValue member
   IndexExpression target index ->
     outlineExpression target <> "[" <> outlineExpression index <> "]"
+  RangeExpression lower inclusive upper ->
+    foldMap outlineExpression lower
+      <> (if inclusive then "..=" else "..")
+      <> foldMap outlineExpression upper
   TryExpression target -> outlineExpression target <> "?"
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
@@ -148,6 +156,19 @@ outlineArm (Located _ arm) =
     <> maybe Text.empty (\guard -> " if " <> outlineExpression guard) (armGuard arm)
     <> " => " <> outlineExpression (armBody arm)
 
+outlineRest :: ArrayRest -> Text
+outlineRest rest = case rest of
+  IgnoredRest _ -> ".."
+  BoundRest name -> ".." <> locatedValue name
+
+{-| The keyword a binding was written with, so an outline reads back as the
+    statement it describes. -}
+bindingWord :: BindingKind -> Text
+bindingWord bindingKind = case bindingKind of
+  Immutable -> "let"
+  Mutable -> "var"
+  CompileTime -> "const"
+
 outlinePattern :: Located Pattern -> Text
 outlinePattern (Located _ pattern') = case pattern' of
   WildcardPattern -> "_"
@@ -156,6 +177,10 @@ outlinePattern (Located _ pattern') = case pattern' of
   RangePattern lower inclusive upper ->
     outlineLiteral lower <> (if inclusive then "..=" else "..") <> outlineLiteral upper
   TuplePattern members -> "(" <> Text.intercalate ", " (map outlinePattern members) <> ")"
+  ArrayPattern prefix rest suffix ->
+    "[" <> Text.intercalate ", "
+      (map outlinePattern prefix <> foldMap (pure . outlineRest) rest <> map outlinePattern suffix)
+      <> "]"
   ConstructorPattern path arguments ->
     moduleNameText path
       <> if null arguments

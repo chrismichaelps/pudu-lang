@@ -1,0 +1,87 @@
+module LambdaComposition
+
+/// Literals used as the values they are: composed, chained, threaded through
+/// collections, and stored in a table that is chosen from at run time.
+///
+/// A literal cannot name itself, so the recursion here goes through a declared
+/// function that takes a literal as its step. That is the arrangement a reader
+/// reaches for anyway once the step is worth naming.
+
+import Std.Option as Option
+
+fn compose(outer: fn(Int) -> Int, inner: fn(Int) -> Int) -> fn(Int) -> Int {
+  |n| outer(inner(n))
+}
+
+fn twice(step: fn(Int) -> Int) -> fn(Int) -> Int { compose(step, step) }
+
+fn applyTimes(step: fn(Int) -> Int, count: Int, start: Int) -> Int {
+  if count <= 0 { start } else { applyTimes(step, count - 1, step(start)) }
+}
+
+fn adder(amount: Int) -> fn(Int) -> Int { |n| n + amount }
+
+fn pick(name: Str) -> fn(Int) -> Int {
+  match name {
+    case "double" => |n| n * 2
+    case "negate" => |n| 0 - n
+    case _ => |n| n
+  }
+}
+
+fn foldArray(values: &Array[Int], step: fn(Int, Int) -> Int, start: Int) -> Int {
+  var carried = start
+  for value in *values {
+    carried = step(carried, value)
+  }
+  carried
+}
+
+export fn main() -> Int {
+  let increment = |n| n + 1
+  let double = |n| n * 2
+
+  let composed = compose(double, increment)
+  let doubledTwice = twice(double)
+  let repeated = applyTimes(increment, 5, 0)
+
+  let addTen = adder(10)
+  let addOne = adder(1)
+
+  let chosen = pick("double")
+  let fallback = pick("unknown")
+
+  let values = [1, 2, 3, 4]
+  let summed = foldArray(&values, |carried, value| carried + value, 0)
+  let largest = foldArray(&values, |carried, value| if value > carried { value } else { carried }, 0)
+
+  // A literal that takes a literal and answers one.
+  let around = |step| |n| step(n) + 1
+  let wrapped = around(double)
+
+  // A table of literals, indexed at run time.
+  let steps = [increment, double, addTen]
+  var throughTable = 1
+  for step in steps {
+    throughTable = step(throughTable)
+  }
+
+  // Ranges and arrays take the same literals.
+  let mappedRange = (1..4).map(|n| n * 10)
+  let mappedArray = values.map(|n| n * 10)
+  let keptRange = (1..10).filter(|n| n % 3 == 0)
+  let reducedRange = (1..5).reduce(|carried, n| carried * n, 1)
+
+  // A literal answering an Option, unwrapped by the library.
+  let maybe = |n| if n > 0 { Some(n) } else { None }
+  let unwrapped = Option.unwrapOr(maybe(3), 0) + Option.unwrapOr(maybe(0 - 3), 7)
+
+  composed(1) + doubledTwice(2) + repeated
+    + addTen(1) + addOne(1)
+    + chosen(5) + fallback(5)
+    + summed + largest
+    + wrapped(3)
+    + throughTable
+    + mappedRange[0] + mappedArray[3] + keptRange.length() + reducedRange
+    + unwrapped
+}

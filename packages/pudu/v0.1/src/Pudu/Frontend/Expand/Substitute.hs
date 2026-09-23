@@ -14,7 +14,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..), locatedValue)
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
+  ( ArrayRest (..)
+  , Block (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
@@ -32,11 +33,16 @@ patternNames :: Located Pattern -> [Text]
 patternNames (Located _ pattern') = case pattern' of
   BindingPattern name -> [locatedValue name]
   TuplePattern members -> concatMap patternNames members
+  ArrayPattern prefix rest suffix ->
+    concatMap patternNames prefix <> restName rest <> concatMap patternNames suffix
   ConstructorPattern _ members -> concatMap patternNames members
   RecordPattern _ fields _ -> concatMap fieldNames fields
   AlternativePattern alternatives -> concatMap patternNames alternatives
   _ -> []
  where
+  restName rest = case rest of
+    Just (BoundRest name) -> [locatedValue name]
+    _ -> []
   fieldNames (Located _ field) =
     maybe [locatedValue (fieldPatternName field)] patternNames (fieldPatternValue field)
 
@@ -63,6 +69,8 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
     at (CallExpression (recurse callee) (map recurse arguments))
   MemberExpression target member -> at (MemberExpression (recurse target) member)
   IndexExpression target index -> at (IndexExpression (recurse target) (recurse index))
+  RangeExpression lower inclusive upper ->
+    at (RangeExpression (fmap recurse lower) inclusive (fmap recurse upper))
   TryExpression target -> at (TryExpression (recurse target))
   AwaitExpression target -> at (AwaitExpression (recurse target))
   TupleExpression members -> at (TupleExpression (map recurse members))
@@ -157,6 +165,18 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
                   (recurseActive subject)
                   (recurseBlockWith active fallback)
              in (Located callSpan statement', after)
+          {-| A destructuring `let` binds for the rest of the block exactly as
+              an ordinary one does, so its names extend the active map and its
+              subject is substituted before they exist. -}
+          LetPatternStatement bindingKind pattern' annotation subject ->
+            let locals = Map.fromList
+                  [(name, hygienicName name identifier) | name <- patternNames pattern']
+                after = Map.union locals active
+                statement' = LetPatternStatement bindingKind
+                  (renamePattern callSpan after pattern')
+                  annotation
+                  (recurseActive subject)
+             in (Located callSpan statement', after)
           other -> unchanged other
 
 {-| Give an argument the call's span so its diagnostics stay where it was
@@ -168,12 +188,17 @@ renamePattern :: Span -> Map Text Text -> Located Pattern -> Located Pattern
 renamePattern callSpan renames (Located _ pattern') = Located callSpan $ case pattern' of
   BindingPattern name -> BindingPattern (renameLocated name)
   TuplePattern members -> TuplePattern (map recurse members)
+  ArrayPattern prefix rest suffix ->
+    ArrayPattern (map recurse prefix) (fmap renameRest rest) (map recurse suffix)
   ConstructorPattern path members -> ConstructorPattern path (map recurse members)
   RecordPattern path fields rest -> RecordPattern path (map renameField fields) rest
   AlternativePattern alternatives -> AlternativePattern (map recurse alternatives)
   other -> other
  where
   recurse = renamePattern callSpan renames
+  renameRest rest = case rest of
+    IgnoredRest _ -> IgnoredRest callSpan
+    BoundRest name -> BoundRest (renameLocated name)
   renameLocated (Located _ name) = Located callSpan (Map.findWithDefault name name renames)
   renameField (Located _ field) = Located callSpan field
     { fieldPatternValue = case fieldPatternValue field of

@@ -1,0 +1,360 @@
+module Domain.Playground
+
+import Std.Bytes as ByteSeq
+import Std.Char as Chars
+import Std.Option as Option
+
+/// What a reader asked the playground to do with a program.
+export type Action
+  = Run
+  | Format
+
+/// The spelling of each action in a form and on the wire.
+const ACTIONS: Map[Str, Action] = mapOf([("run", Run), ("format", Format)])
+
+/// A program a reader asked to run or format, and the module it declares.
+///
+/// The module is read once, when the program is accepted, because it decides
+/// the file the program is written to: the compiler refuses a module whose
+/// name does not match its path.
+export type Submission = { source: Str, moduleName: Str, action: Action }
+
+/// What running one program may cost.
+export type Limits = { sourceBytes: Int, runMillis: Int, outputBytes: Int }
+
+/// What a program did, as far as a reader is shown it.
+///
+/// `truncated` says the program wrote more than the playground keeps, and was
+/// stopped when it passed that bound rather than left to fill memory.
+export type Run = { status: Int, output: Str, errors: Str, millis: Int, truncated: Bool }
+
+/// How one request ended.
+///
+/// `Formatted` carries the program as the formatter wrote it; a program the
+/// formatter could not read is `Finished` with the formatter's diagnostics, so
+/// it is shown exactly as a failed run is. `Refused` is about the program as
+/// submitted and is the reader's to fix.
+/// `Unavailable` is about the service and is not: the two are told apart so a
+/// reader is never asked to change a program that was never looked at.
+export type Outcome
+  = Finished(Run)
+  | TimedOut(Run)
+  | Formatted(Str)
+  | Refused(Str)
+  | Unavailable(Str)
+
+export const DEFAULT_SOURCE_BYTES: Int = 65536
+export const DEFAULT_RUN_MILLIS: Int = 10000
+export const DEFAULT_OUTPUT_BYTES: Int = 65536
+
+/// The status the sandbox exits with when it cannot isolate a program. The
+/// program never started, so this is the service's failure, not the reader's.
+export const SANDBOX_REFUSED: Int = 125
+
+/// What an exit status means when the program did not choose it.
+///
+/// 251 is the runtime reporting that the program outgrew the heap it was given.
+/// 137 and 143 are a shell's report of a process ended by `SIGKILL` or
+/// `SIGTERM`; -9 and -15 are the same signals reported directly. In a
+/// container, `SIGKILL` is usually the memory controller.
+const STATUS_MEANINGS: Map[Int, Str] = mapOf([
+    (251, "The program ran out of memory."),
+    (137, "The program was stopped by the system, usually for using too much memory."),
+    (-9, "The program was stopped by the system, usually for using too much memory."),
+    (143, "The program was stopped before it finished."),
+    (-15, "The program was stopped before it finished.")
+  ])
+
+/// The bounds a playground applies when it is not told otherwise.
+export fn defaultLimits() -> Limits {
+  Limits {
+    sourceBytes: DEFAULT_SOURCE_BYTES,
+    runMillis: DEFAULT_RUN_MILLIS,
+    outputBytes: DEFAULT_OUTPUT_BYTES
+  }
+}
+
+/// Text as a program file holds it.
+///
+/// A browser submits a text area with CRLF line breaks. The lexer does not
+/// admit a raw carriage return inside a string, so a program that ran from a
+/// file would fail to compile when pasted, for a reason the reader cannot see.
+export fn normalized(source: Str) -> Str {
+  source.replace("\r\n", "\n").replace("\r", "\n")
+}
+
+/// The action a form field or request names, when it names one.
+export fn actionFrom(name: Str) -> Option[Action] { ACTIONS.get(name.trim().toLower()) }
+
+/// The spelling of an action.
+export fn actionName(action: &Action) -> Str {
+  match action {
+    case Run => "run"
+    case Format => "format"
+  }
+}
+
+/// A submission the playground will act on, or why it will not.
+export fn accept(source: Str, action: Action, limits: &Limits) -> Result[Submission, Str] {
+  let text = normalized(source)
+  if text.trim().isEmpty() { return Err("Write a program to run.") }
+  let size = text.toBytes().length()
+  if size > limits.sourceBytes {
+    return Err(
+      "The program is " + show(size) + " bytes; the playground runs programs up to "
+        + show(limits.sourceBytes) + " bytes."
+    )
+  }
+  let moduleName = moduleOf(text) ?
+  Ok(Submission{source: text, moduleName: moduleName, action: action})
+}
+
+/// The module a program declares, read from its first line that is not a
+/// comment.
+///
+/// The name becomes a path, so it is held to the module grammar here — upper
+/// case segments of letters, digits, and underscores — and nothing else can
+/// reach the file system: no separator, no `..`, no absolute path.
+export fn moduleOf(source: Str) -> Result[Str, Str] {
+  let missing = "A program starts with its module, such as `module Main`."
+  var inBlock = false
+  for line in source.split("\n") {
+    let trimmed = line.trim()
+    if inBlock {
+      if trimmed.contains("*/") { inBlock = false }
+    } else if trimmed.isEmpty() || trimmed.startsWith("//") {
+      ()
+    } else if trimmed.startsWith("/*") {
+      inBlock = !trimmed.contains("*/")
+    } else {
+      if !trimmed.startsWith("module ") { return Err(missing) }
+      let name = trimmed.drop("module ".length()).trim()
+      if !isModuleName(name) {
+        return Err("`" + name + "` is not a module name. Module names are segments such as `Main` or `Demo.Shapes`.")
+      }
+      return Ok(name)
+    }
+  }
+  Err(missing)
+}
+
+/// Where a module's file lives, relative to the program's source root.
+export fn pathOf(moduleName: Str) -> Str {
+  moduleName.split(".").join("/") + ".pudu"
+}
+
+fn isModuleName(name: Str) -> Bool {
+  if name.isEmpty() { return false }
+  for segment in name.split(".") {
+    if !isSegment(segment) { return false }
+  }
+  true
+}
+
+fn isSegment(segment: Str) -> Bool {
+  let characters = segment.chars()
+  if characters.length() == 0 || !Chars.isUpper(characters[0]) { return false }
+  for character in characters {
+    if !(Chars.isAscii(character) && Chars.isIdentifier(character)) { return false }
+  }
+  true
+}
+
+/// At most `limit` bytes of what a program wrote, as text, and whether any
+/// was left out.
+///
+/// The cut is moved back to the start of a character, so a bound that falls
+/// inside one does not turn the whole output into something that is not text.
+/// Output that is not UTF-8 at all is replaced by a sentence saying so.
+///
+/// The bytes are handled through `Std.Bytes` by name rather than by method: a
+/// program that loads a module importing `Std.Bytes as Bytes` has the built-in
+/// methods replaced by that module's functions at run time, and a call made by
+/// name answers the same `Result` either way.
+export fn textWithin(written: &Bytes, limit: Int) -> (Str, Bool) {
+  let size = ByteSeq.length(written)
+  let over = size > limit
+  let kept = if over { ByteSeq.take(written, limit) } else { *written }
+  let keptSize = ByteSeq.length(&kept)
+  if keptSize == 0 { return ("", over) }
+  // A character is at most four bytes, so at most three are cut from the end,
+  // and never all of them: an empty prefix always decodes and would hide
+  // output that is not text at all.
+  var back = 0
+  while back < 4 && back < keptSize {
+    match ByteSeq.toText(&ByteSeq.take(&kept, keptSize - back)) {
+      case Ok(text) => { return (text, over || back > 0) }
+      case Err(_) => { back = back + 1 }
+    }
+  }
+  ("[the program wrote bytes that are not UTF-8 text]", over)
+}
+
+/// The run an outcome carries, when the program started.
+export fn runOf(outcome: &Outcome) -> Option[Run] {
+  match outcome {
+    case Finished(run) => Some(run)
+    case TimedOut(run) => Some(run)
+    case Formatted(_) => None
+    case Refused(_) => None
+    case Unavailable(_) => None
+  }
+}
+
+/// Whether the program ran to its end and reported success.
+export fn succeeded(outcome: &Outcome) -> Bool {
+  match outcome {
+    case Finished(run) => run.status == 0 && !run.truncated
+    case _other => false
+  }
+}
+
+/// Whether the same program would be answered the same way again.
+///
+/// Only a completed run is worth remembering: a timeout depends on how busy
+/// the machine was, and an unavailable service is expected to recover.
+export fn isRepeatable(outcome: &Outcome) -> Bool {
+  match outcome {
+    case Finished(_) => true
+    case Formatted(_) => true
+    case Refused(_) => true
+    case _other => false
+  }
+}
+
+/// One line saying how the request ended, for the top of the output.
+export fn headline(outcome: &Outcome, limits: &Limits) -> Str {
+  match outcome {
+    case Finished(run) => {
+      if run.truncated && run.status < 0 {
+        return "Stopped after " + show(run.millis) + " ms, when its output passed "
+          + show(limits.outputBytes) + " bytes."
+      }
+      let finished = match failureOf(&run) {
+        case Compiling => "The program did not compile. Its problems are listed below."
+        case Evaluating => "The program stopped with an error after " + show(run.millis) + " ms."
+        case Ended => {
+          if run.status == 0 { "Finished in " + show(run.millis) + " ms." } else {
+            "Exited with status " + show(run.status) + " in " + show(run.millis) + " ms."
+          }
+        }
+      }
+      if run.truncated {
+        finished + " Output was cut at " + show(limits.outputBytes) + " bytes."
+      } else {
+        finished
+      }
+    }
+    case TimedOut(run) => "Stopped after " + show(run.millis) + " ms: programs here may run for "
+      + show(limits.runMillis / 1000) + " seconds."
+    case Formatted(_) => "Formatted."
+    case Refused(reason) => reason
+    case Unavailable(reason) => reason
+  }
+}
+
+/// Where a program that failed was stopped: while it was compiled, while it
+/// ran, or by its own choice of status.
+export type Failure
+  = Compiling
+  | Evaluating
+  | Ended
+
+/// The leading digit of the first diagnostic code the evaluator uses. The
+/// compiler's codes, from reading a program to checking its types, all start
+/// with a smaller digit.
+const FIRST_EVALUATOR_DIGIT: Str = "7"
+
+/// Where a failed run was stopped, read from the first diagnostic the toolchain
+/// wrote to standard error. A run that succeeded, or that failed without a
+/// diagnostic, ended on its own terms.
+export fn failureOf(run: &Run) -> Failure {
+  if run.status == 0 { return Ended }
+  let marker = "error[E"
+  let at = run.errors.indexOf(marker)
+  if at < 0 { return Ended }
+  let digit = run.errors.drop(at + marker.length()).take(1)
+  if digit >= FIRST_EVALUATOR_DIGIT { Evaluating } else { Compiling }
+}
+
+/// What a status means when the program itself did not choose it.
+export fn statusMeaning(outcome: &Outcome) -> Option[Str] {
+  let run = runOf(outcome) ?
+  STATUS_MEANINGS.get(run.status)
+}
+
+/// A limits value with every bound at least one, whatever configuration asked.
+export fn sane(limits: &Limits) -> Limits {
+  Limits {
+    sourceBytes: atLeastOne(limits.sourceBytes),
+    runMillis: atLeastOne(limits.runMillis),
+    outputBytes: atLeastOne(limits.outputBytes)
+  }
+}
+
+fn atLeastOne(value: Int) -> Int { if value < 1 { 1 } else { value } }
+
+/// Something a reader's editor asks about a program while it is being written.
+///
+/// `method` is one of the language server's requests the playground answers —
+/// completion, hover, signature help — or `diagnostics`, which asks only for
+/// the problems the server reports on opening the program. `line` and
+/// `character` are the cursor, counted as the language server counts them.
+/// `trigger` is the character whose typing asked, or empty when the reader asked
+/// or kept typing a name: the server answers some characters only where they
+/// start a list of names.
+export type Question = { method: Str, line: Int, character: Int, trigger: Str }
+
+/// The questions the playground passes to the language server, by the name the
+/// page asks them with and the method the server answers.
+const QUESTION_METHODS: Map[Str, Str] = mapOf([
+    ("completion", "textDocument/completion"),
+    ("hover", "textDocument/hover"),
+    ("signatureHelp", "textDocument/signatureHelp"),
+    ("diagnostics", "")
+  ])
+
+/// The language server's method for a question, or nothing for a question the
+/// playground does not pass on. `diagnostics` answers with an empty method: it
+/// is carried by opening the document and asks nothing further.
+export fn methodFor(question: &Question) -> Option[Str] { QUESTION_METHODS.get(question.method) }
+
+/// A question the playground will pass on, or why it will not.
+export fn askable(question: &Question) -> Result[Question, Str] {
+  if Option.isNone(&methodFor(question)) {
+    return Err("The playground answers completion, hover, signatureHelp, and diagnostics.")
+  }
+  if question.line < 0 || question.character < 0 {
+    return Err("A cursor position is never negative.")
+  }
+  Ok(*question)
+}
+
+/// A program an editor is asking about.
+///
+/// Held to the size bound like a program to run, but a program half written
+/// may not declare its module yet, and the questions are still worth answering:
+/// it is then written as `Main`, and the server reports what is missing.
+export fn acceptForQuestion(source: Str, limits: &Limits) -> Result[Submission, Str] {
+  let text = normalized(source)
+  let size = text.toBytes().length()
+  if size > limits.sourceBytes {
+    return Err("The program is " + show(size) + " bytes; the playground reads programs up to " + show(limits.sourceBytes) + " bytes.")
+  }
+  let moduleName = match moduleOf(text) {
+    case Ok(name) => name
+    case Err(_) => "Main"
+  }
+  Ok(Submission{source: text, moduleName: moduleName, action: Run})
+}
+
+/// What the language server said.
+///
+/// `result` is the server's answer to the question as JSON text, `null` when
+/// it had none, and `diagnostics` the problems it reported on the program, as
+/// the JSON array it published them in. Both are passed to the page as the
+/// server wrote them: the page reads the language server's own vocabulary, so a
+/// feature the server gains needs no translation here.
+export type Answer
+  = Answered{result: Str, diagnostics: Str}
+  | NotAnswered(Str)

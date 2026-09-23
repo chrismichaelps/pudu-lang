@@ -86,7 +86,9 @@ and preserving typed failures. Updated UsesConcurrent.pudu and RuntimeSpec.hs.
 ## Enterprise-grade SSR application framework with low-level hardware integration
 
 Implemented enterprise streaming SSR application framework:
-- `Std.Html.Buffer`: Pre-compiled unboxed byte templates, zero-copy slot rendering via `Buffer.copy`, bitwise chunk hex headers, and TCP MSS coalescing (~1460 bytes).
+- `Std.Html.Buffer`: Pre-compiled unboxed byte templates, direct slot rendering via `Buffer.copy`,
+  bitwise chunk hex headers, legacy best-effort batching, and explicitly bounded application-output
+  coalescing without transport-packet promises.
 - `Std.Http.Server.Stream`: Direct HTTP/1.1 chunked transport over raw sockets (`Net.sendWithin`) with early flush of `<head>`.
 - `Std.Html.Stream`: Streaming document shells, `<head>` early flush, and out-of-order Suspense boundaries with inline DOM resolution scripts.
 - `Std.Http.Server.Resilience`: Network profile inspection (`Save-Data`, `ECT: 2g/3g`), 1-RTT 14KB `initcwnd` budget enforcement, and SWR caching headers.

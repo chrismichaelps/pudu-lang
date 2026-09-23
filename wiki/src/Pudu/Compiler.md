@@ -38,6 +38,8 @@ runFrontend :: Source -> FrontendResult
 data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
+  , compileSyntax :: !(Maybe Module)   -- tooling tree; never linked or evaluated
+  , compileMethods :: ![(NominalId, Text, Scheme)]  -- this module's declared methods, by owner
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   , compileDiagnostics :: ![Diagnostic]
@@ -48,7 +50,7 @@ runCompile :: Source -> CompileResult
 
 data CompileContext = CompileContext
   { contextExports :: !ExportIndex
-  , contextTypes :: !(Map ModuleName TypeInterface)
+  , contextTypes :: !InterfaceGraph   -- prepared once per program; see [[Type Interface Graph]]
   , contextStrictImports :: !Bool
   }
 emptyCompileContext :: CompileContext
@@ -57,6 +59,9 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 ```
 
 ### Governance
+
+- `compileFolded` holds the constants folding computed that are plain data; linking binds them
+  instead of evaluating their initializers again ([[Eval Frozen]]).
 
 - Compiling runs the evaluator to fold constants, and the evaluator lives in `IO` so that a program
   can reach the world. Folding itself never does: it runs with effects denied. The `IO` in
@@ -74,6 +79,15 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 - Each phase runs only on what the previous one admitted — resolution on a parsed module, typing on a resolved one — so a syntax error never earns a second explanation from a later phase, matching the earliest-phase rule in [[architecture/SEMANTICS]].
 - Parser still runs after lexical errors when a token stream exists, allowing useful independent diagnostics.
 - The module result becomes `Nothing` when any error-severity diagnostic exists; raw parser result is not exposed as compilable.
+- `recoveredSyntax` returns the lexer's tokens and the parser's recovered tree for text that does
+  not parse. It is a tooling product only: it is never resolved, checked, linked, or evaluated, and
+  a recovery node in it is a hole.
+- `compileSyntax` is the tree tooling reads positions against: the expanded parsed module whenever
+  the frontend admitted one, kept even when resolution, typing, or folding reported errors. An editor
+  adding a match arm is looking at a non-exhaustive match, and the tree is exactly what it needs.
+  `compileModule` alone is the executable product; nothing links or evaluates `compileSyntax`.
+- `compileMethods` is only the module's own methods, which keeps it proportional to the module; a
+  product reused from the cache carries none, so tooling compiles without the cache.
 - Diagnostics are combined and sorted once at the boundary.
 - `runCompile` remains the isolated-source convenience API and delegates through `emptyCompileContext`, whose opaque-import mode preserves isolated tools and interactive buffers without a loaded program. [[Compiler Program]] parses each source once and calls `compileFrontendWith` with authoritative semantic and type interfaces.
 - A compile context contains pure interfaces only. Filesystem discovery and IO errors never enter this module.
@@ -113,6 +127,10 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
 - **Q:** Should a shallow orchestrator exist? **A:** Yes as the stable public composition point, but do not add service abstractions around it. _Rationale:_ later phases need one boundary and tools must not orchestrate independently. _Rejected:_ every caller directly chaining phases; framework-style pipeline objects.
 - **Q:** Parse after lexical errors? **A:** Yes, because invalid tokens preserve progress. _Rationale:_ multiple actionable diagnostics improve tooling. _Rejected:_ fail-fast on first phase.
 - **Q:** Return recovered AST with errors? **A:** Keep it internal; public compilable module is `Nothing`, while future tooling API may expose an explicitly recovered tree. _Rationale:_ prevent accidental compilation of poison nodes. _Rejected:_ treating recovery AST as valid.
+- **Q:** Why keep a tree for tooling after a later phase fails? **A:** Completion, hover, and
+  navigation ask which construct a position is in, which parsing alone answers. _Rationale:_ a type
+  error must not cost the editor its syntax. _Rejected:_ relaxing `compileModule` admission, which
+  would let a rejected module reach linking.
 - **Q:** Should program compilation re-run the frontend after graph discovery? **A:** No; pass the saved `FrontendResult` into `compileFrontendWith`. _Rationale:_ a module is parsed once per program compile and phase provenance stays stable. _Rejected:_ calling `runCompile` again for every loaded source.
 
 ## Variants

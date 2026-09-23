@@ -1,0 +1,62 @@
+module Main
+
+import Std.Option as Option
+
+/// Every constant here is folded when the module compiles. The ones that are
+/// plain data are bound from that fold when the program links; the function is
+/// evaluated again, because a function carries the environment it was made in.
+
+type Point = { x: Int, y: Int }
+
+type Shape = Dot | Line(Int) | Box(Int, Int)
+
+comptime fn sumTo(limit: Int) -> Int {
+  var total = 0
+  var index = 1
+  while index <= limit {
+    total = total + index
+    index = index + 1
+  }
+  total
+}
+
+const TOTAL: Int = sumTo(200)
+const SMALL: UInt8 = 200u8
+const WIDE: BigInt = 123456789012345678901234567890
+const RATIO: Float = 1.5
+const PRICE: Decimal = 12.25d
+const NAME: Str = "héllo"
+const LETTER: Char = 'q'
+const ORIGIN: Point = Point{x: 3, y: 4}
+const SHAPE: Shape = Box(2, 5)
+const PAIR: (Int, Str) = (7, "seven")
+const DAYS: Array[Str] = ["mon", "tue"]
+const LIMITS: Map[Str, Int] = mapOf([("low", 1), ("high", 9)])
+const STEP: fn(Int) -> Int = |value| value + 1
+
+fn area(shape: Shape) -> Int {
+  match shape {
+    case Dot => 0
+    case Line(length) => length
+    case Box(width, height) => width * height
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  if TOTAL == 20100 { held = held + 1 }
+  if SMALL == 200u8 { held = held + 1 }
+  if WIDE > 123456789012345678901234567889 { held = held + 1 }
+  if RATIO == 1.5 { held = held + 1 }
+  if PRICE == 12.25d { held = held + 1 }
+  if NAME.length() == 5 { held = held + 1 }
+  if LETTER == 'q' { held = held + 1 }
+  if ORIGIN.x + ORIGIN.y == 7 { held = held + 1 }
+  if area(SHAPE) == 10 { held = held + 1 }
+  let (first, _) = PAIR
+  if first == 7 { held = held + 1 }
+  if DAYS[1] == "tue" { held = held + 1 }
+  if Option.unwrapOr(LIMITS.get("high"), 0) == 9 { held = held + 1 }
+  if STEP(41) == 42 { held = held + 1 }
+  held
+}

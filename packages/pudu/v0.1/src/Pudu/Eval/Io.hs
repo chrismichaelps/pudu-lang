@@ -44,7 +44,9 @@ import Control.Exception
   , try
   , tryJust
   )
+import qualified Data.ByteString as ByteString
 import Data.Text (Text)
+import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import GHC.Clock (getMonotonicTime)
@@ -78,7 +80,7 @@ import System.Environment (getArgs, getEnvironment, lookupEnv)
 import qualified System.FilePath as FilePath
 import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
-import System.IO (hClose, hFlush, hIsEOF, hPutStrLn, openBinaryTempFile, stderr, stdin, stdout)
+import System.IO (Handle, hClose, hFlush, hIsEOF, openBinaryTempFile, stderr, stdin, stdout)
 import System.IO.Error (doesNotExistErrorType, mkIOError)
 
 {-| An action's failure as a value, for every failure the action itself raised.
@@ -114,12 +116,21 @@ data IoOutcome a
     already shown what it printed. Buffering that hid a prompt would be a
     correctness problem, not a performance one. -}
 writeStandardOutput :: Text -> IO (IoOutcome ())
-writeStandardOutput text = attempt $ do
-  TextIO.hPutStrLn stdout text
-  hFlush stdout
+writeStandardOutput text = attempt (writeWholeLine stdout text)
 
 writeStandardError :: Text -> IO (IoOutcome ())
-writeStandardError text = attempt (hPutStrLn stderr (Text.unpack text))
+writeStandardError text = attempt (writeWholeLine stderr text)
+
+{-| A line and its line break as one write.
+
+    Standard error is unbuffered, and a line handed over one character at a time
+    is written that way, so two threads reporting at once produced one line of
+    both interleaved. Encoded first and written as one run of bytes, a line
+    holds the handle for the whole of it. -}
+writeWholeLine :: Handle -> Text -> IO ()
+writeWholeLine handle text = do
+  ByteString.hPut handle (Encoding.encodeUtf8 (text <> "\n"))
+  hFlush handle
 
 {-| Write text and leave the line open, so a prompt, a progress report, or a
     line assembled from several writes is possible at all. Flushed for the same

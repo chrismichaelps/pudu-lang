@@ -7,7 +7,7 @@ aliases: [website Config]
 ---
 # Website Config
 
-Reads host, port, connection limit, catalogue path, and documentation directory
+Reads host, port, connection limit, catalogue path, package snapshot path (`PUDU_PACKAGES_PATH`), and documentation directory
 (`PUDU_DOCS_PATH`, default `website/docs`) from environment variables with checked defaults and typed
 errors.
 

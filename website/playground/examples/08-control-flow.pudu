@@ -1,0 +1,62 @@
+// Control flow
+// if as a value, match with or-patterns, if let, let else, while, loop with a value, and labels.
+module Main
+
+import Std.Io as Io
+import Std.Text as Text
+
+type Command =
+  | Move(Int)
+  | Turn(Str)
+  | Wait
+  | Stop
+
+fn describe(command: &Command) -> Str {
+  match command {
+    case Move(steps) => if steps == 1 { "move one step" } else { "move {steps} steps" }
+    case Turn("left") | Turn("right") => "turn"
+    case Turn(other) => "cannot turn {other}"
+    case Wait | Stop => "stand still"
+  }
+}
+
+fn portOf(text: Str) -> Int {
+  let Some(port) = Text.wholeOf(text) else { return 80 }
+  port
+}
+
+fn main() -> Int {
+  for command in [Move(3), Move(1), Turn("left"), Turn("up"), Wait] {
+    let _said = Io.writeLine(describe(&command))
+  }
+
+  if let Some(value) = Text.wholeOf("42") {
+    let _found = Io.writeLine("if let found {value}")
+  }
+  let _ports = Io.writeLine("ports {portOf("8080")} and {portOf("http")}")
+
+  var countdown = 3
+  while countdown > 0 {
+    let _tick = Io.writeLine("countdown {countdown}")
+    countdown = countdown - 1
+  }
+
+  var guess = 1
+  let power = loop {
+    guess = guess * 2
+    if guess > 100 { break guess }
+  }
+  let _power = Io.writeLine("first power of two above 100: {power}")
+
+  var pair = (0, 0)
+  @rows for row in 1..=5 {
+    for column in 1..=5 {
+      if row * column == 12 {
+        pair = (row, column)
+        break @rows
+      }
+    }
+  }
+  let _pair = Io.writeLine("first pair whose product is 12: {pair}")
+  0
+}

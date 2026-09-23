@@ -12,6 +12,8 @@
 module Pudu.Eval.Method
   ( ArrayMethod (..)
   , BucketsMethod (..)
+  , RangeMethod (..)
+  , rangeMethodName
   , BytesMethod (..)
   , CharMethod (..)
   , MapMethod (..)
@@ -80,6 +82,48 @@ data BytesMethod
   | BytesToArray
   | BytesToText
   deriving stock (Eq, Show)
+
+{-| @Eval.Value.RangeMethod — one built-in operation on a range.
+
+    A range is two numbers and a rule for reading them, which is little enough
+    that everything worth asking of one can be answered without walking it:
+    `length` and `contains` are arithmetic, and only the methods that hand back
+    the numbers themselves enumerate. The set is closed, so an unbounded range
+    asked for something only a bounded one can answer is refused by name rather
+    than by running out of memory. -}
+data RangeMethod
+  = RangeLength
+  | RangeIsEmpty
+  | RangeContains
+  | RangeStart
+  | RangeEnd
+  | RangeIsInclusive
+  | RangeIsBounded
+  | RangeToArray
+  | RangeReverse
+  | RangeStep
+  | RangeMap
+  | RangeFilter
+  | RangeReduce
+  | RangeSum
+  deriving stock (Eq, Show)
+
+rangeMethodName :: RangeMethod -> Text
+rangeMethodName method = case method of
+  RangeLength -> "length"
+  RangeIsEmpty -> "isEmpty"
+  RangeContains -> "contains"
+  RangeStart -> "start"
+  RangeEnd -> "end"
+  RangeIsInclusive -> "isInclusive"
+  RangeIsBounded -> "isBounded"
+  RangeToArray -> "toArray"
+  RangeReverse -> "reverse"
+  RangeStep -> "step"
+  RangeMap -> "map"
+  RangeFilter -> "filter"
+  RangeReduce -> "reduce"
+  RangeSum -> "sum"
 
 {-| @Eval.Value.SetMethod — one built-in operation on a set. -}
 data SetMethod

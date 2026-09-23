@@ -1,5 +1,7 @@
 module UsesHtmlServer
 
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
 import Std.Html.Compose as Compose
 import Std.Html as Html
 import Std.Html.Ssr as Ssr
@@ -30,6 +32,13 @@ fn plan() -> Ssr.Plan {
 
 fn filled(name: Str, view: Html.Html) -> Map[Str, Html.Html] {
   Map.insert(&mapOf([]), name, view)
+}
+
+fn chunksFit(chunks: &Array[Bytes], maximum: Int) -> Bool {
+  for chunk in chunks {
+    if chunk.length() > maximum { return false }
+  }
+  true
 }
 
 export fn main() -> Int {
@@ -100,6 +109,212 @@ export fn main() -> Int {
       &Compose.documentIn("fr", "Commandes", Compose.content().paragraph("une ligne"))
   )
   if spoken.contains("fr") { held = held + 1 }
+
+  let shell = Compose.documentShell("Orders", "body")
+  let shellPlan = Ssr.prepareShell(&shell)
+  let shellBody = Compose.content().paragraph("two < orders").fragment()
+  let ordinaryPage = Html.render(&Compose.document("Orders", Compose.content().paragraph("two < orders")))
+  if Ssr.render(&shellPlan, &filled("body", shellBody)) == Ok(ordinaryPage) {
+    held = held + 1
+  }
+
+  let frenchShell = Compose.documentShellIn("fr", "Commandes", "body")
+  let frenchPlan = Ssr.prepareShell(&frenchShell)
+  let frenchBody = Compose.content().paragraph("une ligne").fragment()
+  if Ssr.render(&frenchPlan, &filled("body", frenchBody)) == Ok(spoken) { held = held + 1 }
+
+  let attributed = Ssr.ShellElement("div", [
+      ("z", "<"),
+      ("onclick", "run()"),
+      ("a", "&")
+    ], [Ssr.ShellSlot("body")])
+  let attributedPlan = Ssr.prepareShell(&attributed)
+  if Ssr.render(&attributedPlan, &filled("body", Html.text("<x>")))
+    == Ok("<div z=\"&lt;\" a=\"&amp;\">&lt;x&gt;</div>") {
+    held = held + 1
+  }
+  if Ssr.render(&attributedPlan, &filled("body", Html.trusted("<em>x</em>")))
+    == Ok("<div z=\"&lt;\" a=\"&amp;\"><em>x</em></div>") {
+    held = held + 1
+  }
+
+  let repeatedShell = Ssr.ShellFragment([
+      Ssr.ShellElement("section", [], [Ssr.ShellSlot("item")]),
+      Ssr.ShellElement("section", [], [Ssr.ShellSlot("item")])
+    ])
+  let repeatedPlan = Ssr.prepareShell(&repeatedShell)
+  if Ssr.render(&repeatedPlan, &filled("item", Html.text("x")))
+    == Ok("<section>x</section><section>x</section>") {
+    held = held + 1
+  }
+
+  let missingShell = Ssr.ShellFragment([Ssr.ShellSlot("first"), Ssr.ShellSlot("second")])
+  let missingPlan = Ssr.prepareShell(&missingShell)
+  if let Err(Ssr.MissingSlot("first")) = Ssr.render(&missingPlan, &mapOf([])) {
+    held = held + 1
+  }
+
+  let voidShell = Ssr.ShellElement("img", [
+      ("alt", "x"),
+      ("onclick", "run()")
+    ], [Ssr.ShellSlot("ignored")])
+  let voidPlan = Ssr.prepareShell(&voidShell)
+  if Ssr.render(&voidPlan, &mapOf([])) == Ok("<img alt=\"x\" />") { held = held + 1 }
+
+  var deepShell = Ssr.ShellSlot("leaf")
+  var depth = 0
+  while depth < 1600 {
+    deepShell = Ssr.ShellElement("div", [], [deepShell])
+    depth = depth + 1
+  }
+  let deepPlan = Ssr.prepareShell(&deepShell)
+  match Ssr.render(&deepPlan, &filled("leaf", Html.text("end"))) {
+    case Ok(output) => { if output.length() == 17603 { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  let mixedShell = Ssr.ShellElement("main", [], [
+      Ssr.ShellFixed(Html.element("h1", &[], &[Html.text("Title")])),
+      Ssr.ShellFragment([Ssr.ShellFixed(Html.text(" ")), Ssr.ShellSlot("body")])
+    ])
+  let mixedPlan = Ssr.prepareShell(&mixedShell)
+  if Ssr.render(&mixedPlan, &filled("body", Html.text("done")))
+    == Ok("<main><h1>Title</h1> done</main>") {
+    held = held + 1
+  }
+
+  let exactBytes = rendered.toBytes().length()
+  match Ssr.renderWithin(&prepared, &filled("body", body), exactBytes) {
+    case Ok(output) => {
+      if output.body == rendered && output.byteLength == exactBytes { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(limit))
+    = Ssr.renderWithin(&prepared, &filled("body", body), exactBytes - 1) {
+    if limit == exactBytes - 1 { held = held + 1 }
+  }
+
+  let emptyPlan = Ssr.prepare(&[Ssr.Slot("body")])
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("")), 0) {
+    case Ok(output) => {
+      if output.body.isEmpty() && output.byteLength == 0 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.InvalidLimit(-1))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("")), 0 - 1) {
+    held = held + 1
+  }
+
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("é")), 2) {
+    case Ok(output) => { if output.body == "é" && output.byteLength == 2 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(1))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("é")), 1) {
+    held = held + 1
+  }
+  match Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("<")), 4) {
+    case Ok(output) => {
+      if output.body == "&lt;" && output.byteLength == 4 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(3))
+    = Ssr.renderWithin(&emptyPlan, &filled("body", Html.text("<")), 3) {
+    held = held + 1
+  }
+
+  if HtmlBuffer.coalesceBounded(&[], 4) == Ok([]) { held = held + 1 }
+  if let Err(error) = HtmlBuffer.coalesceBounded(&[], 0) {
+    if error.maximum == 0 { held = held + 1 }
+  }
+  if let Err(error) = HtmlBuffer.coalesceBounded(&[], 0 - 2) {
+    if error.maximum == 0 - 2 { held = held + 1 }
+  }
+
+  let exactChunks = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[
+        ByteSeq.empty(), ByteSeq.fromText("abcd"), ByteSeq.empty()
+      ], 4),
+    []
+  )
+  if exactChunks.length() == 1
+    && exactChunks[0].length() == 4
+    && ByteSeq.toText(&exactChunks[0]) == Ok("abcd") {
+    held = held + 1
+  }
+
+  let oversized = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[ByteSeq.fromText("abcdefghij")], 4),
+    []
+  )
+  if oversized.length() == 3
+    && chunksFit(&oversized, 4)
+    && ByteSeq.toText(&ByteSeq.join(&oversized)) == Ok("abcdefghij") {
+    held = held + 1
+  }
+
+  let mixed = Result.unwrapOr(
+    HtmlBuffer.coalesceBounded(&[
+        ByteSeq.fromText("ab"),
+        ByteSeq.fromText("cdefgh"),
+        ByteSeq.empty(),
+        ByteSeq.fromText("ijklmno")
+      ], 5),
+    []
+  )
+  if chunksFit(&mixed, 5)
+    && ByteSeq.toText(&ByteSeq.join(&mixed)) == Ok("abcdefghijklmno") {
+    held = held + 1
+  }
+
+  let legacyOversized = HtmlBuffer.coalesceToMss(&[ByteSeq.fromText("abcdef")], 4)
+  if legacyOversized.length() == 1 && legacyOversized[0].length() == 6 {
+    held = held + 1
+  }
+
+  let repeatedBudget = Ssr.prepare(&[Ssr.Slot("body"), Ssr.Slot("body")])
+  match Ssr.renderWithin(&repeatedBudget, &filled("body", Html.text("é")), 4) {
+    case Ok(output) => { if output.body == "éé" && output.byteLength == 4 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if let Err(Ssr.TooLarge(3))
+    = Ssr.renderWithin(&repeatedBudget, &filled("body", Html.text("é")), 3) {
+    held = held + 1
+  }
+
+  let missingFirst = Ssr.prepare(&[Ssr.Slot("missing"), Ssr.Fixed(Html.text("x"))])
+  if let Err(Ssr.MissingSlot("missing")) = Ssr.renderWithin(&missingFirst, &mapOf([]), 0) {
+    held = held + 1
+  }
+  let overflowFirst = Ssr.prepare(&[Ssr.Fixed(Html.text("x")), Ssr.Slot("missing")])
+  if let Err(Ssr.TooLarge(0)) = Ssr.renderWithin(&overflowFirst, &mapOf([]), 0) {
+    held = held + 1
+  }
+
+  let huge = Html.fragment(&[
+      Html.text("<".repeat(100000)),
+      Html.element("p", &[], &[Html.text("unreached")])
+    ])
+  if let Err(Ssr.TooLarge(3)) = Ssr.renderWithin(&emptyPlan, &filled("body", huge), 3) {
+    held = held + 1
+  }
+
+  let boundedElement = Html.element("div", &[
+      ("b", "<&\"'"),
+      ("onclick", "run()"),
+      ("a", "é")
+    ], &[Html.trusted("雪")])
+  let boundedExpected = Html.render(&boundedElement)
+  let boundedBytes = boundedExpected.toBytes().length()
+  match Ssr.renderWithin(&emptyPlan, &filled("body", boundedElement), boundedBytes) {
+    case Ok(output) => {
+      if output.body == boundedExpected && output.byteLength == boundedBytes { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
 
   held
 }

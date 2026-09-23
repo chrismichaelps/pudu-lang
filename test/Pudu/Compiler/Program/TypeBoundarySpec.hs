@@ -24,6 +24,7 @@ import Pudu.Repl.Session
   , submitEntry
   )
 import Pudu.Type.Check.Rule (typesNamingModules)
+import Pudu.Type.Interface.Graph (graphInterfaces)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeBoundaryProperties :: [(String, IO Property)]
@@ -109,7 +110,7 @@ testReplLoadContext = do
   pure $ conjoin
     [ map (diagnosticCodeText . diagnosticCode) loadedDiagnostics === []
     , counterexample "the loaded context retains both graph interfaces"
-        (Map.size (contextTypes (sessionContext loaded)) === 2)
+        (Map.size (graphInterfaces (contextTypes (sessionContext loaded))) === 2)
     , counterexample
         ("post-load diagnostics: " <> show
           [(diagnosticCodeText (diagnosticCode value), diagnosticMessage value) | value <- resultDiagnostics entry])

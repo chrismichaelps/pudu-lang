@@ -9,6 +9,8 @@ import Constants as Constants
 import Domain.Entry as Domain
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Packages as Packages
+import Service.Playground.Examples as Examples
 
 export fn head(
   siteUrl: Str,
@@ -29,11 +31,14 @@ export fn head(
     property("og:title", title + " | " + Constants.SITE_NAME),
     property("og:description", description),
     property("og:url", canonical),
-    property("og:image", siteUrl + Constants.FULL_LOGO_PATH),
-    H.meta().name("twitter:card").at("content", "summary"),
+    property("og:image", siteUrl + Constants.SOCIAL_IMAGE_PATH),
+    property("og:image:width", "1200"),
+    property("og:image:height", "630"),
+    property("og:image:alt", "The Pudu logo"),
+    H.meta().name("twitter:card").at("content", "summary_large_image"),
     H.meta().name("twitter:title").at("content", title + " | " + Constants.SITE_NAME),
     H.meta().name("twitter:description").at("content", description),
-    H.meta().name("twitter:image").at("content", siteUrl + Constants.FULL_LOGO_PATH)
+    H.meta().name("twitter:image").at("content", siteUrl + Constants.SOCIAL_IMAGE_PATH)
   ]
   if let Some(value) = structured {
     let safe = Json.encode(&value).replace("</", "<\\/")
@@ -104,10 +109,17 @@ export fn robots(siteUrl: Str) -> Str {
 /// A symbol can be reached by more than one declaration sharing a name, so the
 /// paths are deduplicated here: rendering one twice is work done twice, and
 /// listing it twice is a sitemap a crawler reports as containing duplicates.
-export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Array[Str] {
-  var found = ["/", "/docs", "/download", "/releases", "/about", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand", "/donate", "/modules"]
+export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples, packages: &Packages.Packages) -> Array[Str] {
+  var found = ["/", "/docs", "/playground", "/download", "/releases", "/about", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand", "/donate", "/modules"]
   for page in docs.pages {
     found = found.push("/docs/" + Url.encodeComponent(page.slug))
+  }
+  // The first example is what `/playground` itself shows, so it is listed
+  // once, under that address.
+  var first = true
+  for example in examples.entries {
+    if !first { found = found.push("/playground/" + Url.encodeComponent(example.slug)) }
+    first = false
   }
   for moduleName in catalog.modules {
     found = found.push("/module/" + Url.encodeComponent(moduleName))
@@ -120,12 +132,52 @@ export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Array[Str] {
       found = found.push(path)
     }
   }
+  found = found.push("/packages")
+  if Packages.present(packages) {
+    var cataloguePage = 2
+    while cataloguePage <= Packages.listPages(packages.projects.length()) {
+      found = found.push("/packages/page/" + show(cataloguePage))
+      cataloguePage = cataloguePage + 1
+    }
+    var handles: Map[Str, Bool] = mapOf([])
+    for project in packages.projects {
+      if !Map.containsKey(&handles, project.handle) {
+        handles = handles.insert(project.handle, true)
+        found = found.push("/" + project.handle)
+        let owned = Packages.ofHandle(packages, project.handle)
+        var handlePage = 2
+        while handlePage <= Packages.listPages(owned.length()) {
+          found = found.push("/" + project.handle + "/page/" + show(handlePage))
+          handlePage = handlePage + 1
+        }
+      }
+      let base = "/" + project.name
+      found = found.concat([base, base + "/source", base + "/docs", base + "/releases", base + "/tickets", base + "/contributions"])
+      var ticketPage = 2
+      while ticketPage <= Packages.listPages(project.tickets.length()) {
+        found = found.push(base + "/tickets/page/" + show(ticketPage))
+        ticketPage = ticketPage + 1
+      }
+      var contributionPage = 2
+      while contributionPage <= Packages.listPages(project.contributions.length()) {
+        found = found.push(base + "/contributions/page/" + show(contributionPage))
+        contributionPage = contributionPage + 1
+      }
+      for ticket in project.tickets { found = found.push(base + "/tickets/" + show(ticket.number)) }
+      for contribution in project.contributions { found = found.push(base + "/contributions/" + show(contribution.number)) }
+      for file in project.files {
+        var segments: Array[Str] = []
+        for segment in file.split("/") { segments = segments.push(Url.encodeComponent(segment)) }
+        found = found.push(base + "/source/" + segments.join("/"))
+      }
+    }
+  }
   found
 }
 
-export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Str {
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples.Examples, packages: &Packages.Packages) -> Str {
   var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
-  for path in paths(catalog, docs) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
+  for path in paths(catalog, docs, examples, packages) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
   body + "</urlset>\n"
 }
 

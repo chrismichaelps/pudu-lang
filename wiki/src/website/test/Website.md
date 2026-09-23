@@ -24,6 +24,27 @@ and leave no module unplaced; home must link a new reader to the introduction. T
 title stays out of the body, a script in prose is escaped, a `javascript:` target is not a link,
 repeated headings get distinct anchors, and tables render.
 
+The `@alice/json-kit` snapshot exercises catalog, search, profile, overview, install command, source, docs, releases, sitemap, missing routes, binary file preview, encoded filename, and immutable GitHub source link.
+It checks linked package rows and the shared banner across documentation, API, download, release,
+about, support, search, and missing pages.
+A seven-project synthetic catalogue checks the most-starred group and the complete list.
+The package fixture checks the framed search view, compact declaration matches in the dynamic
+function, native ticket and contribution lists and detail pages, escaped discussion Markdown,
+initial discussion headings, unknown-number refusal, and sitemap paths. A JSON-only fixture
+proves the compact dynamic loader starts without release trees.
+Synthetic 25-record catalogues and conversations prove the first page is bounded, the next page
+contains the remaining rows, and file icons resolve locally. The three-state checks require
+bordered empty banners for an unpublished catalogue, no search matches, and no tickets; loaded
+lists expose their state and include a hidden live loader for the next bounded request. The 404
+banner names the missing page.
+Avatar checks cover the preferred local GitHub copy, the GitHub image URL fallback, and the
+two-tone owner mark when an owner has no usable image.
+Search checks cover the live script hook, both routers serving `/packages/suggest` JSON, a signature
+search listing its declaration with a kind mark, a project page's fixed search box, and a filter that
+searches inside one project (no project rows, declarations from that project only) in both local and
+serverless routes. Ranking itself is checked in [[website package search suite]]. The avatar checks
+cover the two-tone mark beneath a missing image.
+
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.
 Search checks assert rank position and exclusion for module intent, explicit scope, exact names,

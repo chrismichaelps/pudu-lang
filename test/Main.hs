@@ -8,10 +8,13 @@ import Pudu.DecimalLiteralSpec (decimalProperties)
 import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.FormatSpec (formatProperties)
 import Pudu.Lsp.JsonSpec (jsonProperties)
+import Pudu.Lsp.SchedulerSpec (schedulerProperties)
 import Pudu.Lsp.ServerSpec (serverProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
+import Pudu.Cache.PersistSpec (persistProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
 import Pudu.Cli.InitSpec (initProperties)
+import Pudu.PackageSpec (packageProperties)
 import Pudu.Cli.LintSpec (lintCommandProperties)
 import Pudu.LintSpec (lintProperties)
 import Pudu.Foreign.SlotSpec (slotProperties)
@@ -46,6 +49,8 @@ import Pudu.Type.InterfaceSpec (interfaceProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
+import Data.List (isInfixOf)
+import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
@@ -82,9 +87,12 @@ main = do
   formatOutcomes <- traverse (uncurry check) formatProperties
   jsonOutcomes <- traverse (uncurry check) jsonProperties
   lspOutcomes <- traverse (uncurry check) serverProperties
+  schedulerOutcomes <- traverse (uncurry check) schedulerProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) programProperties
+  persistOutcomes <- traverse (uncurry check) persistProperties
   initOutcomes <- traverse (uncurry check) initProperties
+  packageOutcomes <- traverse (uncurry check) packageProperties
   lintCommandOutcomes <- traverse (uncurry check) lintCommandProperties
   lintOutcomes <- traverse (uncurry check) lintProperties
   tokenOutcomes <- traverse (uncurry check) tokenProperties
@@ -116,13 +124,20 @@ main = do
   slotOutcomes <- traverse (uncurry check) slotProperties
   ownershipOutcomes <- traverse (uncurry check) ownershipProperties
   resultOutcomes <- traverse (uncurry check) resultProperties
-  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> renderOutcomes <> programOutcomes <> initOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+{-| Runs one property, or skips it when `PUDU_TEST_MATCH` is set and the label
+    does not contain it: a focused run of the few properties a change touches,
+    without building a second suite. -}
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
-  putStrLn ("[test] " <> label)
-  propertyValue <- loadProperty
-  result <- quickCheckResult (withMaxSuccess 200 propertyValue)
-  pure (isSuccess result)
+  wanted <- lookupEnv "PUDU_TEST_MATCH"
+  case wanted of
+    Just fragment | not (fragment `isInfixOf` label) -> pure True
+    _ -> do
+      putStrLn ("[test] " <> label)
+      propertyValue <- loadProperty
+      result <- quickCheckResult (withMaxSuccess 200 propertyValue)
+      pure (isSuccess result)
 testEmptySourcePosition :: IO Property
 testEmptySourcePosition = do
   source <- newSource (SourceName "empty") Text.empty

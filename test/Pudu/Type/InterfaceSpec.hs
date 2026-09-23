@@ -15,13 +15,12 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Source (SourceName (SourceName), newSource)
 import Pudu.Type.Interface
-  ( ImportTypes (..)
-  , importsFor
-  , interfaceDeclarations
+  ( interfaceDeclarations
   , interfaceDefaults
   , interfacePrivateDeclarations
   , interfaceSkeleton
   )
+import Pudu.Type.Interface.Graph (ImportTypes (..), importsFor, prepareInterfaces)
 import Pudu.Type.Value (canonicalNominal)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -55,7 +54,7 @@ testPrivateShells = withModule librarySource $ \library ->
 testSelectedImports :: IO Property
 testSelectedImports = withModules librarySource consumerSource $ \library consumer ->
   let interface = interfaceSkeleton library
-      imports = importsFor (Map.singleton (moduleIdentity library) interface) consumer
+      imports = importsFor (prepareInterfaces (Map.singleton (moduleIdentity library) interface)) consumer
    in conjoin
         [ Map.lookup "User" (importedNames imports)
             === Just (canonicalNominal (moduleIdentity library) "User")

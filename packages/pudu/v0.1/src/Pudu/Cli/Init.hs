@@ -2,6 +2,7 @@
 module Pudu.Cli.Init
   ( InitError (..)
   , createProject
+  , createProjectWith
   , packageNameFrom
   , renderInitError
   ) where
@@ -12,6 +13,7 @@ import Data.List (group)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import Pudu.Package.Identity (PackageId (..), defaultRoot, parsePackageId, renderPackageId, validRoot, validSegment)
 import Pudu.Version (languageConstraint)
 import System.Directory
   ( canonicalizePath
@@ -33,6 +35,7 @@ data InitError
   = EmptyProjectPath
   | UnnamedProjectPath FilePath
   | InvalidPackageName String
+  | InvalidPackageIdentity Text
   | ReservedPackageName Text
   | SymbolicLinkNotAllowed FilePath
   | ManifestAlreadyExists FilePath
@@ -50,6 +53,7 @@ renderInitError problem = case problem of
   UnnamedProjectPath path -> Text.pack path <> " does not name a project directory"
   InvalidPackageName name ->
     "cannot derive a package name from " <> Text.pack (show name)
+  InvalidPackageIdentity message -> message
   ReservedPackageName name -> name <> " is a reserved package name"
   SymbolicLinkNotAllowed path -> Text.pack path <> " must not be a symbolic link"
   ManifestAlreadyExists path -> Text.pack path <> " already exists"
@@ -71,10 +75,12 @@ packageNameFrom directoryName =
   let mapped = map normalize directoryName
       collapsed = concatMap separatorsOnce (group mapped)
       packageName = Text.dropAround (== '-') (Text.pack collapsed)
-   in if Text.null packageName
+   in if not (validSegment packageName)
         then Left (InvalidPackageName directoryName)
         else
-          if packageName == "std" || packageName == "core"
+          if case validRoot (defaultRoot (LocalName packageName)) of
+               Left _ -> True
+               Right _ -> False
             then Left (ReservedPackageName packageName)
             else Right packageName
   where
@@ -88,42 +94,60 @@ packageNameFrom directoryName =
 {-| Create a project or return one typed refusal. Host failures are translated at
     this boundary; expected collisions never travel as exceptions. -}
 createProject :: Maybe FilePath -> IO (Either InitError FilePath)
-createProject target = do
-  attempted <- try (createProjectIo target) :: IO (Either IOException (Either InitError FilePath))
+createProject target = createProjectWith target Nothing False
+
+createProjectWith :: Maybe FilePath -> Maybe Text -> Bool -> IO (Either InitError FilePath)
+createProjectWith target identity library = do
+  attempted <- try (createProjectIo target identity library) :: IO (Either IOException (Either InitError FilePath))
   pure $ case attempted of
     Left problem -> Left (InitIoFailure (Text.pack (displayException problem)))
     Right result -> result
 
-createProjectIo :: Maybe FilePath -> IO (Either InitError FilePath)
-createProjectIo target = do
-  resolved <- resolveInitRoot target
+createProjectIo :: Maybe FilePath -> Maybe Text -> Bool -> IO (Either InitError FilePath)
+createProjectIo target identity library = do
+  resolved <- resolveInitRoot target identity
   case resolved of
     Left problem -> pure (Left problem)
-    Right (root, packageName) -> initialize root packageName
+    Right (root, packageId) -> initialize root packageId library
 
-resolveInitRoot :: Maybe FilePath -> IO (Either InitError (FilePath, Text))
-resolveInitRoot target = do
+resolveInitRoot :: Maybe FilePath -> Maybe Text -> IO (Either InitError (FilePath, PackageId))
+resolveInitRoot target explicitName = do
   path <- maybe getCurrentDirectory pure target
   if null path
     then pure (Left EmptyProjectPath)
     else case projectDirectoryName (normalise path) of
       "" -> pure (Left (UnnamedProjectPath path))
-      directoryName -> case packageNameFrom directoryName of
+      directoryName -> case selectedIdentity directoryName explicitName of
         Left problem -> pure (Left problem)
-        Right packageName -> do
+        Right packageId -> do
           linked <- isLinked path
           if linked
             then pure (Left (SymbolicLinkNotAllowed path))
             else do
               createDirectoryIfMissing True path
               root <- canonicalizePath path
-              pure (Right (root, packageName))
+              pure (Right (root, packageId))
+
+selectedIdentity :: String -> Maybe Text -> Either InitError PackageId
+selectedIdentity directoryName explicitName = case explicitName of
+  Just name -> case parsePackageId name of
+    Left problem -> Left (InvalidPackageIdentity problem)
+    Right package -> checkRoot package
+  Nothing -> do
+    name <- packageNameFrom directoryName
+    case parsePackageId name of
+      Left _ -> Left (InvalidPackageName directoryName)
+      Right package -> checkRoot package
+ where
+  checkRoot package = case validRoot (defaultRoot package) of
+    Left problem -> Left (InvalidPackageIdentity problem)
+    Right _ -> Right package
 
 projectDirectoryName :: FilePath -> String
 projectDirectoryName = takeFileName . dropTrailingPathSeparator
 
-initialize :: FilePath -> Text -> IO (Either InitError FilePath)
-initialize root packageName = do
+initialize :: FilePath -> PackageId -> Bool -> IO (Either InitError FilePath)
+initialize root packageId library = do
   let lock = root </> ".pudu-init"
   acquired <- try (createDirectory lock) :: IO (Either IOException ())
   case acquired of
@@ -133,10 +157,10 @@ initialize root packageName = do
     Right () -> bracket
       (pure ())
       (const (removeDirectoryRecursive lock))
-      (const (initializeLocked root lock packageName))
+      (const (initializeLocked root lock packageId library))
 
-initializeLocked :: FilePath -> FilePath -> Text -> IO (Either InitError FilePath)
-initializeLocked root staging packageName = do
+initializeLocked :: FilePath -> FilePath -> PackageId -> Bool -> IO (Either InitError FilePath)
+initializeLocked root staging packageId library = do
   let manifest = root </> "pudu.toml"
       sourceDirectory = root </> "src"
       entry = sourceDirectory </> "Main.pudu"
@@ -149,41 +173,55 @@ initializeLocked root staging packageName = do
       suite = testAppDirectory </> "GreetingTest.pudu"
       ignore = root </> ".gitignore"
       readme = root </> "README.md"
+      moduleRoot = defaultRoot packageId
+      librarySource = sourceDirectory </> Text.unpack moduleRoot <> ".pudu"
+      libraryTest = testDirectory </> Text.unpack moduleRoot <> "Test.pudu"
+      libraryChecks = [validateRegularFile librarySource, validateRegularFile libraryTest]
+      applicationChecks =
+        [ validateDirectory appDirectory, validateDirectory domainDirectory
+        , validateDirectory testAppDirectory, validateRegularFile entry
+        , validateRegularFile application, validateRegularFile domain
+        , validateRegularFile suite
+        ]
   validation <- firstProblem
     [ validateAbsent manifest
     , validateDirectory sourceDirectory
-    , validateDirectory appDirectory
-    , validateDirectory domainDirectory
     , validateDirectory testDirectory
-    , validateDirectory testAppDirectory
-    , validateRegularFile entry
-    , validateRegularFile application
-    , validateRegularFile domain
-    , validateRegularFile suite
     , validateRegularFile ignore
     , validateRegularFile readme
     ]
+    >>= \problem -> case problem of
+      Just _ -> pure problem
+      Nothing -> firstProblem (if library then libraryChecks else applicationChecks)
   case validation of
     Just problem -> pure (Left problem)
     Nothing -> do
       createDirectoryIfMissing True sourceDirectory
-      createDirectoryIfMissing True appDirectory
-      createDirectoryIfMissing True domainDirectory
       createDirectoryIfMissing True testDirectory
-      createDirectoryIfMissing True testAppDirectory
+      if library then pure () else do
+        createDirectoryIfMissing True appDirectory
+        createDirectoryIfMissing True domainDirectory
+        createDirectoryIfMissing True testAppDirectory
+      let applicationPlans =
+            [ (staging </> "Main.pudu", entry, mainTemplate)
+            , (staging </> "App-Greeting.pudu", application, applicationTemplate)
+            , (staging </> "Domain-Greeting.pudu", domain, domainTemplate)
+            , (staging </> "GreetingTest.pudu", suite, testTemplate)
+            ]
+          libraryPlans =
+            [ (staging </> "Library.pudu", librarySource, libraryTemplate moduleRoot)
+            , (staging </> "LibraryTest.pudu", libraryTest, libraryTestTemplate moduleRoot)
+            ]
       installed <- installAll
-        [ (staging </> "Main.pudu", entry, mainTemplate)
-        , (staging </> "App-Greeting.pudu", application, applicationTemplate)
-        , (staging </> "Domain-Greeting.pudu", domain, domainTemplate)
-        , (staging </> "GreetingTest.pudu", suite, testTemplate)
-        , (staging </> "gitignore", ignore, gitignoreTemplate)
-        , (staging </> "README.md", readme, readmeTemplate (projectDirectoryName root))
-        ]
+        ( (if library then libraryPlans else applicationPlans) <>
+          [ (staging </> "gitignore", ignore, gitignoreTemplate)
+          , (staging </> "README.md", readme, if library then libraryReadmeTemplate (projectDirectoryName root) moduleRoot else readmeTemplate (projectDirectoryName root))
+          ] )
       case installed of
         Left problem -> pure (Left problem)
         Right () -> do
           committed <- installRequired
-            (staging </> "pudu.toml") manifest (manifestTemplate packageName)
+            (staging </> "pudu.toml") manifest (manifestTemplate packageId library)
           pure (root <$ committed)
 
 firstProblem :: [IO (Maybe InitError)] -> IO (Maybe InitError)
@@ -250,19 +288,59 @@ isLinked path = do
       | isDoesNotExistError problem -> pure False
       | otherwise -> ioError problem
 
-manifestTemplate :: Text -> Text
-manifestTemplate name = Text.unlines
+manifestTemplate :: PackageId -> Bool -> Text
+manifestTemplate packageId library = Text.unlines $
   [ "[package]"
-  , "name = \"" <> name <> "\""
+  , "name = \"" <> renderPackageId packageId <> "\""
   , "version = \"0.1.0\""
+  , "description = \"\""
+  , "license = \"\""
+  , "keywords = []"
   , "language = \"" <> languageConstraint <> "\""
   , "source = \"src\""
+  ]
+    <> ["root = \"" <> defaultRoot packageId <> "\"" | library]
+    <> ["", "[dependencies]"]
+
+libraryTemplate :: Text -> Text
+libraryTemplate root = Text.unlines
+  [ "module " <> root
   , ""
-  , "# A suite under test/ has its own root, so the code it is testing has to"
-  , "# be named as somewhere else the project's modules live."
-  , "[dependencies]"
-  , "src = \"src\""
+  , "export fn greeting(name: Str) -> Str {"
+  , "  if name.isEmpty() { \"Hello, world.\" } else { \"Hello, \" + name + \".\" }"
+  , "}"
+  ]
+
+libraryTestTemplate :: Text -> Text
+libraryTestTemplate root = Text.unlines
+  [ "module " <> root <> "Test"
   , ""
+  , "import Std.Test as Test"
+  , "import " <> root <> " as Library"
+  , ""
+  , "fn main() -> Int {"
+  , "  let checks = Test.suite(\"" <> root <> "\", &["
+  , "      Test.equals(\"names somebody\", &Library.greeting(\"Ada\"), &\"Hello, Ada.\")"
+  , "    ])"
+  , "  Test.report(&Test.run(&checks))"
+  , "}"
+  ]
+
+libraryReadmeTemplate :: String -> Text -> Text
+libraryReadmeTemplate name root = Text.unlines
+  [ "# " <> Text.pack name
+  , ""
+  , "A Pudu library that provides `" <> root <> "`. Fill in the package description and license"
+  , "in `pudu.toml` before publication. Its `@owner/repo` name must match its GitHub repository."
+  , ""
+  , "```bash"
+  , "pudu check src/" <> root <> ".pudu"
+  , "pudu test"
+  , "pudu install"
+  , "pudu fmt --check ."
+  , "pudu lint src test"
+  , "pudu release 0.1.0"
+  , "```"
   ]
 
 mainTemplate :: Text
@@ -338,6 +416,7 @@ readmeTemplate name = Text.unlines
 gitignoreTemplate :: Text
 gitignoreTemplate = Text.unlines
   [ ".pudu/"
+  , "deps/"
   , "*.o"
   , ""
   , ".DS_Store"

@@ -51,6 +51,13 @@ renderValue value = case value of
   SetValue members -> "#{" <> Text.intercalate ", " (map (renderValue . unOrdValue) (Set.toAscList members)) <> "}"
   MapMethodValue method _ -> "<map method " <> mapMethodName method <> ">"
   SetMethodValue method _ -> "<set method " <> setMethodName method <> ">"
+  RangeMethodValue method _ -> "<range method " <> rangeMethodName method <> ">"
+  {-| A range prints as it was written, ends and all, so an absent end is
+      visibly absent rather than filled in with a number nobody wrote. -}
+  RangeValue lower inclusive upper ->
+    foldMap (Text.pack . show) lower
+      <> (if inclusive then "..=" else "..")
+      <> foldMap (Text.pack . show) upper
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
   StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
@@ -104,6 +111,8 @@ valueKind value = case value of
   UnitValue -> "unit"
   TupleValue _ -> "tuple"
   ArrayValue _ -> "array"
+  RangeValue{} -> "range"
+  RangeMethodValue _ _ -> "range method"
   RecordValue name _ -> name
   VariantValue name _ -> name
   FunctionValue _ -> "function"

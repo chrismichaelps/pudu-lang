@@ -4,6 +4,17 @@ export const SITE_NAME: Str = "Pudu"
 export const SITE_DESCRIPTION: Str = "Search the Pudu language and standard library."
 export const FULL_LOGO_PATH: Str = "/assets/pudu-lang-full-logo.png"
 export const SHORT_LOGO_PATH: Str = "/assets/pudu-lang-short.png"
+/// The masthead logo, twice the width it is drawn at (168 by 56 pixels).
+export const LOGO_PATH: Str = "/assets/pudu-lang-logo.webp"
+/// The short mark beside the footer's name, twice its drawn 34 pixels.
+export const MARK_PATH: Str = "/assets/pudu-lang-mark.webp"
+export const ICON_PATH: Str = "/assets/pudu-lang-icon.png"
+export const TOUCH_ICON_PATH: Str = "/assets/apple-touch-icon.png"
+/// The card a link preview shows: 1200 by 630, the size link previews ask for.
+export const SOCIAL_IMAGE_PATH: Str = "/assets/pudu-lang-social.png"
+/// The two faces every page draws text in, fetched with the page rather than
+/// after the stylesheet names them.
+export const PRELOADED_FONTS: Array[Str] = ["/fonts/Nunito-Book.woff2", "/fonts/Nunito-Bold.woff2"]
 export const REPOSITORY_URL: Str = "https://github.com/chrismichaelps/pudu-lang/"
 export const DONATION_URL: Str = "https://paypal.me/chrismperezsantiago"
 export const HASKELL_URL: Str = "https://www.haskell.org/"
@@ -19,3 +30,8 @@ export const REPOSITORY_SOURCE_URL: Str = "https://github.com/chrismichaelps/pud
 export const CATALOGUE_PATH: Str = "website/data/api.json"
 export const RELEASES_PATH: Str = "website/data/releases.json"
 export const STYLESHEET_PATH: Str = "website/public/site.css"
+/// Where the playground's script modules are kept, one folder per layer.
+export const PLAYGROUND_SCRIPTS_DIRECTORY: Str = "website/public/assets/playground"
+/// Where the documentation pages' script modules are kept.
+export const DOCS_SCRIPTS_DIRECTORY: Str = "website/public/assets/docs"
+export const PACKAGES_SCRIPTS_DIRECTORY: Str = "website/public/assets/packages"

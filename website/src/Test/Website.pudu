@@ -2,18 +2,27 @@ module Test.Website
 
 import Std.Html.Build as H
 import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Io as Io
 import Std.Json as Json
 import Std.Result as Result
 import Std.Test as Test
 import Domain.Entry as Domain
+import Domain.Playground as Play
 import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
 import Service.Documents as Documents
+import Service.Packages as Packages
+import Service.Playground.Admission as Admission
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
 import Service.Releases as Releases
 import Service.Search as Search
+import Site as Site
 import View.Markdown as Markdown
 import Web.Dynamic as DynamicWeb
+import Web.LiveReload as LiveReload
 import Web.Routes as Web
 
 /// The path a function would dispatch on, for an event written as text.
@@ -77,6 +86,57 @@ fn footerLinks(response: &Http.Response) -> Bool {
   true
 }
 
+/// Whether a stylesheet's blocks all close, and a rule meant for every screen
+/// is outside every media query.
+///
+/// A rule missing its closing brace swallows everything after it into the
+/// block it was in, which is how the documentation lost its layout and its
+/// code background on every screen wider than a phone.
+fn stylesheetIsWellFormed(css: Str, topLevelRule: Str) -> Bool {
+  var depth = 0
+  var quoted = false
+  var ruleAtTop = false
+  var index = 0
+  let characters = css.chars()
+  let rule = topLevelRule.chars()
+  while index < characters.length() {
+    let character = characters[index]
+    if character == '"' { quoted = !quoted }
+    if !quoted {
+      if character == '{' { depth = depth + 1 }
+      if character == '}' {
+        depth = depth - 1
+        if depth < 0 { return false }
+      }
+      if depth == 0 && startsAt(&characters, index, &rule) { ruleAtTop = true }
+    }
+    index = index + 1
+  }
+  depth == 0 && ruleAtTop
+}
+
+fn startsAt(characters: &Array[Char], index: Int, wanted: &Array[Char]) -> Bool {
+  if index + wanted.length() > characters.length() { return false }
+  var offset = 0
+  while offset < wanted.length() {
+    if characters[index + offset] != wanted[offset] { return false }
+    offset = offset + 1
+  }
+  true
+}
+
+/// Whether the first rule for a selector declares each of the declarations, in
+/// whatever order the rule writes them.
+fn ruleDeclares(css: Str, selector: Str, declarations: &Array[Str]) -> Bool {
+  let pieces = css.split("\n" + selector + "\{")
+  if pieces.length() < 2 { return false }
+  let body = pieces[1].split("\}")[0]
+  for declaration in declarations {
+    if !body.contains(declaration) { return false }
+  }
+  true
+}
+
 fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   for entry in entries {
     if entry.documentation.length() == 0 { return false }
@@ -102,12 +162,38 @@ export fn main() -> Int {
     case Ok(value) => value
     case Err(_) => { return 1 }
   }
+  let examples = match Examples.load("website/playground/examples") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let stylesheet = match Io.read("website/public/site.css") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
   let origin = "https://pudu.example"
-  let docsIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/docs")
-  let docsPage = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/errors")
-  let docsMissing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/not-a-page")
-  let modulesIndex = Web.render(origin, &catalog, &docs, &release, &documents, "/modules")
-  let guide = Web.render(origin, &catalog, &docs, &release, &documents, "/guide")
+  let packages = match Packages.load("website/test/fixtures/packages") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let brokenPackages = Packages.load("website/test/fixtures/packages-broken")
+  let compactPackages = Packages.loadCompact("website/test/fixtures/packages-broken")
+  let runsNothing = Playground.disabled("not in this suite")
+  let site = Site.Site {
+    siteUrl: origin,
+    catalog: catalog,
+    packages: packages,
+    search: Search.index(&catalog.entries),
+    docs: docs,
+    release: release,
+    documents: documents,
+    playground: Playground.using(&runsNothing, &examples, &Play.defaultLimits()),
+    gates: Playground.openGates()
+  }
+  let docsIndex = Web.render(&site, "/docs")
+  let docsPage = Web.render(&site, "/docs/errors")
+  let docsMissing = Web.render(&site, "/docs/not-a-page")
+  let modulesIndex = Web.render(&site, "/modules")
+  let guide = Web.render(&site, "/guide")
   let written = Markdown.parse(
       &[
       "# Title",
@@ -119,30 +205,110 @@ export fn main() -> Int {
       "",
       "| left | right |",
       "| --- | --- |",
-      "| 1 | 2 |"
+      "| 1 | 2 |",
+      "| `+\\|` | a \\| b |"
     ]
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
-  let home = Web.render(origin, &catalog, &docs, &release, &documents, "/")
-  let search = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=checksum")
-  let hostile = Web.render(origin, &catalog, &docs, &release, &documents, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-  let modulePage = Web.render(origin, &catalog, &docs, &release, &documents, "/module/Std.Adler32")
-  let symbol = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/checksum")
-  let missing = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Adler32/fn/notThere")
-  let robots = Web.render(origin, &catalog, &docs, &release, &documents, "/robots.txt")
-  let sitemap = Web.render(origin, &catalog, &docs, &release, &documents, "/sitemap.xml")
-  let health = Web.render(origin, &catalog, &docs, &release, &documents, "/health")
-  let donation = Web.render(origin, &catalog, &docs, &release, &documents, "/donate")
-  let about = Web.render(origin, &catalog, &docs, &release, &documents, "/about")
-  let overloads = Web.render(origin, &catalog, &docs, &release, &documents, "/docs/Std.Bits/fn/width")
-  let download = Web.render(origin, &catalog, &docs, &release, &documents, "/download")
-  let releases = Web.render(origin, &catalog, &docs, &release, &documents, "/releases")
-  let conduct = Web.render(origin, &catalog, &docs, &release, &documents, "/conduct")
-  let contributing = Web.render(origin, &catalog, &docs, &release, &documents, "/contributing")
-  let security = Web.render(origin, &catalog, &docs, &release, &documents, "/security")
-  let community = Web.render(origin, &catalog, &docs, &release, &documents, "/community")
-  let privacy = Web.render(origin, &catalog, &docs, &release, &documents, "/privacy")
-  let brand = Web.render(origin, &catalog, &docs, &release, &documents, "/brand")
+  let home = Web.render(&site, "/")
+  let bare = Site.Site{..site, packages: Packages.empty()}
+  let emptyCatalog = Web.render(&bare, "/packages")
+  let emptyPackageSearch = Web.render(&site, "/packages/search?q=not-a-real-package-zz")
+  let bareHome = Web.render(&bare, "/")
+  let search = Web.render(&site, "/search?q=checksum")
+  let hostile = Web.render(&site, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(&site, "/module/Std.Adler32")
+  let symbol = Web.render(&site, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(&site, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(&site, "/robots.txt")
+  let sitemap = Web.render(&site, "/sitemap.xml")
+  let health = Web.render(&site, "/health")
+  let donation = Web.render(&site, "/donate")
+  let about = Web.render(&site, "/about")
+  let overloads = Web.render(&site, "/docs/Std.Bits/fn/width")
+  let download = Web.render(&site, "/download")
+  let releases = Web.render(&site, "/releases")
+  let conduct = Web.render(&site, "/conduct")
+  let contributing = Web.render(&site, "/contributing")
+  let security = Web.render(&site, "/security")
+  let community = Web.render(&site, "/community")
+  let privacy = Web.render(&site, "/privacy")
+  let brand = Web.render(&site, "/brand")
+  let packageCatalog = Web.render(&site, "/packages")
+  let githubAvatar = Packages.Profile{..packages.handles[0], avatar: "", avatarUrl: "https://avatars.githubusercontent.com/u/123"}
+  let githubAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [githubAvatar]}}
+  let githubAvatarCatalog = Web.render(&githubAvatarSite, "/packages")
+  let localAvatar = Packages.Profile{..githubAvatar, avatar: "/packages/avatars/alice.png"}
+  let localAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [localAvatar]}}
+  let localAvatarCatalog = Web.render(&localAvatarSite, "/packages")
+  let seedProject = packages.projects[0]
+  var manyProjects: Array[Packages.Project] = []
+  var projectNumber = 0
+  while projectNumber < 7 {
+    let name = "pkg-" + show(projectNumber)
+    manyProjects = manyProjects.push(Packages.Project{..seedProject, name: "@alice/" + name, project: name, stars: projectNumber})
+    projectNumber = projectNumber + 1
+  }
+  let manySite = Site.Site{..site, packages: Packages.Packages{..packages, projects: manyProjects}}
+  let manyCatalog = Web.render(&manySite, "/packages")
+  var longProjects: Array[Packages.Project] = []
+  var longNumber = 0
+  while longNumber < 25 {
+    let name = "json-" + show(longNumber)
+    longProjects = longProjects.push(Packages.Project{..seedProject, name: "@alice/" + name, project: name})
+    longNumber = longNumber + 1
+  }
+  let longSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: longProjects}}
+  let longCatalog = Web.render(&longSite, "/packages")
+  let longCatalogNext = Web.render(&longSite, "/packages/page/2")
+  let longSitemap = Web.render(&longSite, "/sitemap.xml")
+  let longProfile = Web.render(&longSite, "/@alice")
+  let longProfileNext = Web.render(&longSite, "/@alice/page/2")
+  let longSearch = Web.render(&longSite, "/packages/search?q=json")
+  let filteredSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fmissing")
+  let knownFilterSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fjson-0")
+  let filteredDynamicSearch = DynamicWeb.render(&DynamicWeb.Dynamic{packages: longSite.packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, "/packages/search?q=json&filter=%40alice%2Fmissing")
+  let suggestRoute = Web.render(&site, "/packages/suggest?q=json")
+  let suggestDynamic = DynamicWeb.render(&DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, "/packages/suggest?q=&filter=%40alice%2Fjson-kit")
+  let shapeSearch = Web.render(&site, "/packages/search?q=Value+-%3E+Str")
+  let longSearchNext = Web.render(&longSite, "/packages/search?q=json&page=2")
+  let longSearchBeyond = Web.render(&longSite, "/packages/search?q=json&page=999")
+  let longDynamic = DynamicWeb.Dynamic{..DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, packages: longSite.packages}
+  let longDynamicSearchNext = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=2")
+  let longDynamicSearchBeyond = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=999")
+  var longTickets: Array[Packages.Discussion] = []
+  var longContributions: Array[Packages.Discussion] = []
+  var ticketNumber = 0
+  while ticketNumber < 25 {
+    longTickets = longTickets.push(Packages.Discussion{..seedProject.tickets[0], number: ticketNumber + 100, title: "Ticket " + show(ticketNumber)})
+    longContributions = longContributions.push(Packages.Discussion{..seedProject.contributions[0], number: ticketNumber + 200, title: "Contribution " + show(ticketNumber)})
+    ticketNumber = ticketNumber + 1
+  }
+  let discussionProject = Packages.Project{..seedProject, tickets: longTickets, contributions: longContributions}
+  let discussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [discussionProject]}}
+  let emptyDiscussionProject = Packages.Project{..seedProject, tickets: [], contributions: []}
+  let emptyDiscussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [emptyDiscussionProject]}}
+  let emptyTickets = Web.render(&emptyDiscussionSite, "/@alice/json-kit/tickets")
+  let longTicketPage = Web.render(&discussionSite, "/@alice/json-kit/tickets")
+  let longTicketNext = Web.render(&discussionSite, "/@alice/json-kit/tickets/page/2")
+  let longContributionNext = Web.render(&discussionSite, "/@alice/json-kit/contributions/page/2")
+  let discussionSitemap = Web.render(&discussionSite, "/sitemap.xml")
+  let packageSearch = Web.render(&site, "/packages/search?q=json")
+  let packageMissing = Web.render(&site, "/@alice/missing")
+  let packageProfile = Web.render(&site, "/@alice")
+  let packageOverview = Web.render(&site, "/@alice/json-kit")
+  let packageSource = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Parse.pudu")
+  let packageBinary = Web.render(&site, "/@alice/json-kit/source/assets/icon.bin")
+  let packageEncoded = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Extra%20Test.pudu")
+  let packageSourceMissing = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Missing.pudu")
+  let packageDocs = Web.render(&site, "/@alice/json-kit/docs")
+  let packageReleases = Web.render(&site, "/@alice/json-kit/releases")
+  let packageTickets = Web.render(&site, "/@alice/json-kit/tickets")
+  let packageTicket = Web.render(&site, "/@alice/json-kit/tickets/42")
+  let packageTicketMissing = Web.render(&site, "/@alice/json-kit/tickets/999")
+  let packageContributions = Web.render(&site, "/@alice/json-kit/contributions")
+  let packageContribution = Web.render(&site, "/@alice/json-kit/contributions/56")
+  let packageContributionMissing = Web.render(&site, "/@alice/json-kit/contributions/999")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -157,16 +323,91 @@ export fn main() -> Int {
   let typeKinds = Search.find(&catalog.entries, "Listener kind:type", 20)
   let invalidFilter = Search.find(&catalog.entries, "kind:not-a-kind", 20)
   let multiTerm = Search.find(&catalog.entries, "adler checksum", 10)
-  let dynamicSearch = DynamicWeb.render(origin, &searchCatalog, "/search?q=checksum")
-  let dynamicMissing = DynamicWeb.render(origin, &searchCatalog, "/not-a-page")
+  let edge = DynamicWeb.Dynamic {
+    packages: packages,
+    siteUrl: origin,
+    catalog: searchCatalog,
+    search: Search.index(&searchCatalog.entries),
+    playground: site.playground,
+    gates: Playground.openGates()
+  }
+  let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
+  let leanProjects = packages.projects.map(|project: Packages.Project| Packages.Project{..project, catalog: None})
+  let leanPackages = Packages.Packages{..packages, projects: leanProjects}
+  let leanEdge = DynamicWeb.Dynamic{..edge, packages: leanPackages}
+  let dynamicPackageSearch = DynamicWeb.render(&leanEdge, "/packages/search?q=json")
+  // A site run under `pudu run --watch` follows the files it was made from.
+  let watch = LiveReload.Watch{start: "3", changed: ["/work/website/public/site.css"]}
+  let following = LiveReload.middleware(&watch)
+  let rendering = fn(request: Route.Request) -> Http.Response { Web.render(&site, request.message.target) }
+  let watchedPage = following(requestFor("/docs/errors"), rendering)
+  let watchedState = following(requestFor("/__pudu/reload"), rendering)
+  let watchedStyle = following(requestFor("/assets/site.css"), rendering)
+  let contentsScript = Web.render(&site, "/assets/docs/contents.js")
+  let outsideScripts = Web.render(&site, "/assets/docs/../site.css")
+  let dynamicMissing = DynamicWeb.render(&edge, "/not-a-page")
+  let dynamicPlayground = DynamicWeb.render(&edge, "/playground/shared?code=module%20Main")
+  let playgroundPage = Web.render(&site, "/playground")
+  let postedEvent = Json.object(&[
+      ("body", Json.Text("\{\"method\":\"POST\",\"path\":\"/api/playground/run\",\"headers\":\{\"Content-Type\":\"application/json\",\"X-Forwarded-For\":\"203.0.113.9\"\},\"encoding\":\"base64\",\"body\":\"eyJzb3VyY2UiOiIifQ==\"\}")),
+      ("Action", Json.Text("Invoke"))
+    ])
+  let posted = Function.requestOf(&postedEvent)
   let vercelEvent = Json.object(&[
       ("body", Json.Text("\{\"method\":\"GET\",\"path\":\"/search?q=map\"\}")),
       ("Action", Json.Text("Invoke"))
     ])
 
   let suite = Test.suite("website", &[
+      Test.that("a playground script module is served by its path", Web.isModulePath("main.js") && Web.isModulePath("lsp/completion-list.js")),
+      Test.not("a path outside the script folder is not a module", Web.isModulePath("../site.css.js") || Web.isModulePath("lsp//x.js") || Web.isModulePath("Main.js") || Web.isModulePath("lsp/x.css")),
+      Test.that("the stylesheet styles the playground editor", stylesheetIsWellFormed(stylesheet, ".playground-source\{")),
+      Test.that("the stylesheet closes every block and styles code blocks on every screen", stylesheetIsWellFormed(stylesheet, ".code-block\{")),
+      Test.that("documentation code blocks use the code background", stylesheet.contains(".code-block\{margin:1.25em 0;padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--code)")),
+      Test.that("the playground's printed output uses the code background", ruleDeclares(stylesheet, ".playground-stream", &["background:var(--code)", "color:#222838", "font-family:"])),
+      Test.that("the playground puts the editor beside its output", ruleDeclares(stylesheet, ".playground-panes", &["display:grid", "grid-template-columns:minmax(160px,var(--split,50%)) 7px minmax(160px,1fr)"])),
+      Test.that("the playground renders", playgroundPage.status.code == 200 && playgroundPage.body.contains("id=\"playground-source\"")),
+      Test.that("the playground is in the navigation", about.body.contains("href=\"/playground\">Playground")),
+      Test.that("the playground and its examples are in the sitemap", sitemap.body.contains(origin + "/playground</loc>") && sitemap.body.contains(origin + "/playground/shapes</loc>")),
+      Test.not("the opening example is listed once, as the playground", sitemap.body.contains(origin + "/playground/hello</loc>")),
+      Test.that("the function serves a shared program", dynamicPlayground.status.code == 200 && dynamicPlayground.body.contains("playground-link")),
+      Test.that("a platform post keeps its method", posted.message.method == Http.Post && posted.path == "/api/playground/run"),
+      Test.that("a platform post keeps its headers in lower case", Http.header(&posted.message.headers, "x-forwarded-for") == Some("203.0.113.9")),
+      Test.that("a platform post decodes its base64 body", posted.message.body == "\{\"source\":\"\"\}"),
       Test.that("download page answers", download.status.code == 200),
       Test.that("release notes answer", releases.status.code == 200),
+      Test.that("the package catalog lists public projects", packageCatalog.status.code == 200 && packageCatalog.body.contains("@alice") && packageCatalog.body.contains("json-kit")),
+      Test.that("catalogue, profile, and search serve bounded pages", longCatalog.body.split("class=\"package-row-link\"").length() == 27 && longCatalog.body.contains("href=\"/packages/page/2\"") && longCatalogNext.status.code == 200 && longCatalogNext.body.split("class=\"package-row-link\"").length() == 6 && longProfile.body.split("class=\"package-row-link\"").length() == 21 && longProfileNext.body.split("class=\"package-row-link\"").length() == 6 && longSearch.body.split("class=\"package-row-link\"").length() == 21 && longSearchNext.body.split("class=\"package-row-link\"").length() == 6 && longDynamicSearchNext.body.split("class=\"package-row-link\"").length() == 6),
+      Test.that("search pages continue declaration matches", longSearch.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.contains("page=3") && longDynamicSearchNext.body.split("class=\"package-symbol-row\"").length() == 21),
+      Test.that("a package filter searches inside one project and keeps the filter", filteredSearch.status.code == 200 && filteredSearch.body.split("class=\"package-symbol-row\"").length() == 1 && filteredSearch.body.split("class=\"package-row-link\"").length() == 1 && filteredSearch.body.contains("name=\"filter\" value=\"@alice/missing\"") && filteredSearch.body.contains("class=\"package-search-active-filter\" href=\"/packages/search?q=json\"") && filteredSearch.body.contains("No matching packages") && knownFilterSearch.body.split("class=\"package-symbol-row\"").length() == 4 && knownFilterSearch.body.split("class=\"package-row-link\"").length() == 1 && knownFilterSearch.body.contains(" in @alice/json-0") && filteredDynamicSearch.status.code == 200 && filteredDynamicSearch.body.split("class=\"package-symbol-row\"").length() == 1),
+      Test.that("search refuses pages beyond its result count", longSearchBeyond.status.code == 404 && longDynamicSearchBeyond.status.code == 404 && Web.render(&longSite, "/packages/page/999").status.code == 404),
+      Test.that("ticket and contribution histories serve bounded pages", longTicketPage.body.split("class=\"discussion-row\"").length() == 21 && longTicketPage.body.contains("href=\"/@alice/json-kit/tickets/page/2\"") && longTicketNext.status.code == 200 && longTicketNext.body.split("class=\"discussion-row\"").length() == 6 && longContributionNext.status.code == 200 && longContributionNext.body.split("class=\"discussion-row\"").length() == 6),
+      Test.that("numbered list pages are in the static path graph", sitemapHasAll(&longSitemap, origin, &["/packages/page/2", "/@alice/page/2"]) && sitemapHasAll(&discussionSitemap, origin, &["/@alice/json-kit/tickets/page/2", "/@alice/json-kit/contributions/page/2"])),
+      Test.that("a missing snapshot file tree fails startup", Result.isErr(&brokenPackages)),
+      Test.that("the dynamic loader accepts a JSON-only package snapshot", Result.isOk(&compactPackages)),
+      Test.that("package search presents focused project and declaration results", packageSearch.status.code == 200 && packageSearch.body.contains("package-search-panel") && packageSearch.body.contains("json-kit") && packageSearch.body.contains("package-symbol-row") && packageSearch.body.contains("noindex,follow")),
+      Test.that("dynamic package search keeps declaration matches without API documents", dynamicPackageSearch.status.code == 200 && dynamicPackageSearch.body.contains("JsonKit.Parse.</span><span>one") && dynamicPackageSearch.body.contains("/@alice/json-kit/docs#JsonKit-Parse-fn-one")),
+      Test.that("a handle shows its public projects", packageProfile.status.code == 200 && packageProfile.body.contains("Alice")),
+      Test.that("a project overview shows its README and install command", packageOverview.status.code == 200 && packageOverview.body.contains("Parse and build JSON") && packageOverview.body.contains("pudu install @alice/json-kit")),
+      Test.that("a source file has linkable lines", packageSource.status.code == 200 && packageSource.body.contains("id=\"L1\"")),
+      Test.that("a binary release file has a source page", packageBinary.status.code == 200 && packageBinary.body.contains("no text preview")),
+      Test.that("an encoded filename resolves and keeps its canonical path", packageEncoded.status.code == 200 && packageEncoded.body.contains("Extra Test.pudu") && packageEncoded.body.contains("/source/src/JsonKit/Extra%20Test.pudu")),
+      Test.that("source links pin the published commit", packageSource.body.contains("/blob/df14b267bcd333dac23e53ab68d015ad1b447d4c/")),
+      Test.that("missing project source is refused", packageSourceMissing.status.code == 404),
+      Test.that("missing package is refused", packageMissing.status.code == 404),
+      Test.that("package docs and releases answer", packageDocs.status.code == 200 && packageReleases.status.code == 200 && packageReleases.body.contains("2.0.0")),
+      Test.that("project navigation has native tickets and contributions", packageOverview.body.contains("href=\"/@alice/json-kit/tickets\">Tickets") && packageOverview.body.contains("href=\"/@alice/json-kit/contributions\">Contributions") && packageOverview.body.contains("href=\"https://github.com/alice/json-kit/stargazers\"")),
+      Test.that("repository stars remain visible", packageOverview.body.contains(">1.2k<")),
+      Test.that("tickets render natively and preserve status", packageTickets.status.code == 200 && packageTickets.body.contains("Handle escaped object keys") && packageTickets.body.contains("discussion-state-open") && packageTickets.body.contains("discussion-state-closed")),
+      Test.that("ticket details preserve headings, escape Markdown, and link to GitHub", packageTicket.status.code == 200 && packageTicket.body.contains("id=\"expected-parser-behavior\"") && packageTicket.body.contains("Expected parser behavior") && packageTicket.body.contains("parser should preserve escaped keys") && packageTicket.body.contains("&lt;script&gt;") && !packageTicket.body.contains("<script>alert(1)</script>") && packageTicket.body.contains("https://github.com/alice/json-kit/issues/42")),
+      Test.that("contributions render natively including merged state", packageContributions.status.code == 200 && packageContributions.body.contains("Add streaming decoder") && packageContributions.body.contains("discussion-state-merged") && packageContribution.status.code == 200 && packageContribution.body.contains("Read and reply on GitHub")),
+      Test.that("only snapshot discussion numbers have detail pages", packageTicketMissing.status.code == 404 && packageContributionMissing.status.code == 404),
+      Test.that("a Pudu source file is highlighted", packageSource.body.contains("class=\"tk-keyword\">module<") && packageSource.body.contains("class=\"tk-keyword\">export<")),
+      Test.that("a module's source lists its declarations beside it", packageSource.body.contains("code-outline") && packageSource.body.contains("/@alice/json-kit/docs#JsonKit-Parse-fn-one")),
+      Test.that("the source view carries the file tree, filter, and path", packageSource.body.contains("code-filter") && packageSource.body.contains("code-crumbs") && packageSource.body.contains("aria-current=\"page\"")),
+      Test.that("source files map to local Pudu and Markdown icons", packageSource.body.contains("/assets/packages/files/pudu.png") && packageSource.body.contains("/assets/packages/files/markdown.svg") && Web.render(&site, "/assets/packages/files/pudu.png").status.code == 200 && Web.render(&site, "/assets/packages/files/markdown.svg").status.code == 200),
+      Test.that("a Markdown file is shown rendered", Web.render(&site, "/@alice/json-kit/source/README.md").body.contains("code-preview")),
+      Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases", "/@alice/json-kit/tickets", "/@alice/json-kit/tickets/42", "/@alice/json-kit/contributions", "/@alice/json-kit/contributions/56"])),
       Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),
       Test.that("code of conduct answers", conduct.status.code == 200),
       Test.that("code of conduct names how to report", conduct.body.contains("chrisperezsantiago1@gmail.com")),
@@ -183,7 +424,7 @@ export fn main() -> Int {
       Test.that("download page publishes each checksum", downloadShowsChecksums(&download, &release)),
       Test.that("download page is in the sitemap", sitemap.body.contains(origin + "/download")),
       Test.that("download page is linked from every page", about.body.contains("href=\"/download\"")),
-      Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.0"),
+      Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.1"),
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
       Test.that("every public declaration has documentation", everyEntryHasDocumentation(&catalog.entries)),
       Test.that("ranked search returns a result", hits.length() > 0),
@@ -200,11 +441,38 @@ export fn main() -> Int {
       Test.that("every ordinary term must match", multiTerm.length() > 0 && Domain.qualifiedName(&multiTerm[0].entry) == "Std.Adler32.checksum"),
       Test.that("dynamic search uses the shared result view", dynamicSearch.status.code == 200 && dynamicSearch.body.contains("Std.Adler32.checksum")),
       Test.that("dynamic fallback is a no-index 404", dynamicMissing.status.code == 404 && hasHeader(&dynamicMissing, "X-Robots-Tag", "noindex") && dynamicMissing.body.contains("noindex,follow")),
+      Test.that("a watched page runs the reload script last in its body", watchedPage.body.contains("src=\"/__pudu/live/main.js\" data-start=\"3\"></script></body>")),
+      Test.that("a watched site says which start serves it and what changed", watchedState.body.contains("\"start\":\"3\"") && watchedState.body.contains("site.css")),
+      Test.that("nothing a watched site answers is kept", hasHeader(&watchedStyle, "cache-control", "no-store") && hasHeader(&watchedPage, "cache-control", "no-store")),
+      Test.that("a site nobody watches carries no reload script", !docsPage.body.contains("/__pudu/")),
+      Test.that("a documentation page marks the section being read", docsPage.body.contains("/assets/docs/contents.js")),
+      Test.that("the contents script is served", contentsScript.status.code == 200 && contentsScript.body.contains("aria-current")),
+      Test.that("only script modules are served from the documentation folder", outsideScripts.status.code == 404),
       Test.that("home renders", home.status.code == 200),
+      Test.that("home opens with the shared banner and API search", home.body.contains("class=\"hero-banner home-hero\"") && home.body.contains("banner-search")),
+      Test.that("home features published packages", home.body.contains("home-packages") && home.body.contains("href=\"/@alice/json-kit\"")),
+      Test.that("home features no packages when none are published", !bareHome.body.contains("home-packages")),
+      Test.that("the masthead links the packages", home.body.contains("href=\"/packages\">Packages")),
+      Test.that("the packages page explains publishing before any package exists", emptyCatalog.status.code == 200 && emptyCatalog.body.contains("pudu release 0.1.0") && !emptyCatalog.body.contains("package-rows")),
+      Test.that("empty package lists show a banner", emptyCatalog.body.contains("class=\"data-empty-banner\" data-state=\"empty\"") && emptyPackageSearch.body.contains("No matching packages") && emptyPackageSearch.body.contains("data-state=\"empty\"") && emptyTickets.body.contains("No tickets yet") && emptyTickets.body.contains("data-state=\"empty\"")),
+      Test.that("loaded package lists expose their state and a hidden loader", longCatalog.body.contains("data-page-items=\"projects\" data-state=\"loaded\"") && longCatalog.body.contains("data-page-loading") && longCatalog.body.contains("Loading more") && longCatalog.body.contains("hidden=\"\"")),
+      Test.that("the catalogue and handle show linked package rows", packageCatalog.body.contains("class=\"package-rows\"") && packageCatalog.body.contains("class=\"package-row-link\" href=\"/@alice/json-kit\"") && packageProfile.body.contains("class=\"package-rows\"")),
+      Test.that("both routers serve package suggestions as JSON", suggestRoute.status.code == 200 && suggestRoute.body.contains("\"href\":\"/@alice/json-kit\"") && suggestDynamic.status.code == 200 && suggestDynamic.body.contains("\"filter\":\"@alice/json-kit\"") && suggestDynamic.body.contains("\"name\":\"textOf\"")),
+      Test.that("a signature search lists the matching declaration with its kind mark", shapeSearch.status.code == 200 && shapeSearch.body.split("class=\"package-symbol-row\"").length() == 2 && shapeSearch.body.contains("textOf") && shapeSearch.body.contains("class=\"package-symbol-mark\" title=\"fn\"")),
+      Test.that("a project page searches inside that project", packageOverview.body.contains("data-filter-fixed") && packageOverview.body.contains("name=\"filter\" value=\"@alice/json-kit\"") && packageOverview.body.contains("placeholder=\"Search json-kit\"")),
+      Test.that("package searches provide the live enhancement hook", packageCatalog.body.contains("data-package-search") && packageCatalog.body.contains("/assets/packages/search.js?v=8") && packageSearch.body.contains("data-package-search")),
+      Test.that("package avatars prefer a local GitHub image with a neutral fallback", localAvatarCatalog.body.contains("src=\"/packages/avatars/alice.png\"") && !localAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && githubAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && packageCatalog.body.contains("package-avatar-fallback") && !packageCatalog.body.contains("package-initial")),
+      Test.that("larger catalogues feature six most-starred projects and retain all seven", manyCatalog.body.contains("Most starred") && manyCatalog.body.contains("All packages") && manyCatalog.body.split("class=\"package-row-link\"").length() == 14 && manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-6") && !manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-0")),
+      Test.that("reading pages share the page banner", docsIndex.body.contains("class=\"hero-banner page-banner\"") && docsPage.body.contains("class=\"hero-banner page-banner\"") && modulesIndex.body.contains("class=\"hero-banner page-banner\"") && modulePage.body.contains("class=\"hero-banner page-banner\"") && symbol.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("public pages share the page banner", download.body.contains("class=\"hero-banner page-banner\"") && releases.body.contains("class=\"hero-banner page-banner\"") && about.body.contains("class=\"hero-banner page-banner\"") && donation.body.contains("class=\"hero-banner page-banner\"") && conduct.body.contains("class=\"hero-banner page-banner\"") && brand.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("search and missing pages share the banner", search.body.contains("class=\"hero-banner page-banner\"") && missing.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("the 404 banner explains the missing route", missing.status.code == 404 && missing.body.contains("That page is not here.")),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
       Test.that("home has structured data", home.body.contains("application/ld+json")),
-      Test.that("home uses the supplied logo", home.body.contains("pudu-lang-full-logo.png")),
-      Test.that("home advertises the short logo as its icon", home.body.contains("rel=\"icon\" type=\"image/png\" href=\"/assets/pudu-lang-short.png\"")),
+      Test.that("home draws the logo at its size, sized before it arrives", home.body.contains("src=\"/assets/pudu-lang-logo.webp\" alt=\"Pudu programming language\" width=\"168\" height=\"56\"")),
+      Test.that("home advertises a small icon", home.body.contains("rel=\"icon\" type=\"image/png\" sizes=\"64x64\" href=\"/assets/pudu-lang-icon.png\"")),
+      Test.that("home preloads the faces its text is set in", home.body.contains("rel=\"preload\" href=\"/fonts/Nunito-Book.woff2\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\"") && home.body.contains("/fonts/Nunito-Bold.woff2")),
+      Test.that("a link preview gets a card of the size it asks for", home.body.contains("/assets/pudu-lang-social.png") && home.body.contains("summary_large_image")),
       Test.that("home links the repository", home.body.contains("https://github.com/chrismichaelps/pudu-lang/")),
       Test.that("home names the copyright holder", home.body.contains("© 2026 Chris M. Pérez Santiago")),
       Test.that("home has one search field", home.body.split("name=\"q\"").length() == 2),
@@ -218,7 +486,7 @@ export fn main() -> Int {
       // The documentation is Markdown read from files and rendered on the
       // server, so a page is only as good as what the renderer made of it: its
       // sections, its code, its neighbours, and what it refused to render.
-      Test.that("documentation loads every page in order", docs.pages.length() == 20 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[19].slug == "tooling"),
+      Test.that("documentation loads every page in order", docs.pages.length() == 24 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[5].slug == "numbers" && docs.pages[12].slug == "dependencies" && docs.pages[23].slug == "tooling"),
       Test.that("documentation index lists every page", docsIndex.status.code == 200 && docsIndex.body.contains("href=\"/docs/introduction\"") && docsIndex.body.contains("href=\"/docs/tooling\"")),
       Test.that("a documentation page renders its sections", docsPage.status.code == 200 && docsPage.body.contains("<h2 id=\"the-operator\">")),
       Test.that("a documentation page renders its code", docsPage.body.contains("class=\"code-block\"") && docsPage.body.contains("language-pudu")),
@@ -226,8 +494,8 @@ export fn main() -> Int {
       Test.that("a documentation page links its neighbours", docsPage.body.contains("pager-previous") && docsPage.body.contains("pager-next")),
       Test.that("a documentation page marks itself in the sidebar", docsPage.body.contains("href=\"/docs/errors\" aria-current=\"page\"")),
       Test.that("navigation identifies the documentation", docsPage.body.contains("aria-current=\"page\">Docs")),
-      Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.0</dd>")),
-      Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/09-errors.md")),
+      Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.1</dd>")),
+      Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/10-errors.md")),
       Test.that("a documentation page labels its code by language", docsPage.body.contains("class=\"code-label\"")),
       Test.that("a narrow screen gets the page list folded away", docsPage.body.contains("<details class=\"docs-nav-mobile\">")),
       Test.that("the library is grouped into sections", modulesIndex.body.contains("id=\"collections\"") && modulesIndex.body.contains("id=\"web\"")),
@@ -242,6 +510,7 @@ export fn main() -> Int {
       Test.not("markdown refuses a script as a link target", writtenHtml.contains("href=\"javascript")),
       Test.that("markdown gives repeated headings distinct anchors", writtenHtml.contains("id=\"same\"") && writtenHtml.contains("id=\"same-2\"")),
       Test.that("markdown renders tables", writtenHtml.contains("<table>") && writtenHtml.contains("<td>2</td>")),
+      Test.that("markdown keeps an escaped pipe in its cell", writtenHtml.contains("<td><code>+|</code></td>") && writtenHtml.contains("<td>a | b</td>")),
       Test.that("home explains references", home.body.contains("&amp;mut T asks for the exclusive right to change it")),
       Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
       Test.that("search explains its query syntax", search.body.contains("module:Std.List") && search.body.contains("type after ::")),
@@ -250,6 +519,7 @@ export fn main() -> Int {
       Test.that("module page renders", modulePage.status.code == 200),
       Test.that("symbol page renders", symbol.status.code == 200),
       Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
+      Test.that("symbol documentation renders its code spans", symbol.body.contains("checksum of <code>bytes</code>.</p>") && symbol.body.contains("content=\"Computes the RFC 1950 Adler-32 checksum of bytes.\"")),
       Test.that("symbol explains its signature notation", symbol.body.contains("Read the signature") && symbol.body.contains("Read arrows from left to right") && symbol.body.contains("borrows a value")),
       Test.that("missing page is 404", missing.status.code == 404),
       Test.that("missing page is not indexed", missing.body.contains("noindex,follow")),
@@ -302,5 +572,17 @@ export fn main() -> Int {
       Test.that("an answer says its body is not encoded", Function.answered(&home).contains("\"isBase64Encoded\":false")),
       Test.that("a page that was not found answers as not found", Function.answered(&missing).contains("\"statusCode\":404"))
     ])
-  Test.report(&Test.run(&suite))
+  let report = Test.run(&suite)
+  for failure in report.failures { let _shown = Io.writeErrorLine(failure) }
+  Test.report(&report)
+}
+
+fn requestFor(target: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "test"
+  }
 }

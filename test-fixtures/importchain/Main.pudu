@@ -1,0 +1,5 @@
+module Main
+
+import Chain.Top as Top
+
+fn main() -> Int { Top.doubled() }

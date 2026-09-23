@@ -25,6 +25,13 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- A sequence pattern checks the **length first**: without a rest the value must have exactly as many
+  elements as the pattern names, with one it must have at least that many. Both are one comparison,
+  so a pattern that does not apply fails before a single element is matched. It applies to an array
+  and not to a tuple, because a tuple's members may differ and binding them all at the one element
+  type the pattern implies would claim something the tuple does not say — which is what the checker
+  tells a reader who tries, so this must not quietly allow it anyway.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
@@ -33,8 +40,6 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - **A record pattern that names something must match that name.** A record type has one shape, so its own pattern could ignore the tag and nothing depended on it; a variant that names its payload does not. `Add` and `Mul` may declare the same fields, and matching on fields alone let the first arm accept the other's value — a program that read `case Add{left, right}` and computed a product, with no diagnostic anywhere.
 - A pattern that names nothing still matches any record, which is what an unqualified `case {value}` has always meant.
-
-- **A number is the same number whatever width holds it.** `==` meets the two widths and compares what they hold, and matching says the same thing. Structural equality was what made them disagree — it compares the width tag as though it were part of the value, so `7i8` did not match `case 7` and fell to the wildcard while `a == 7` on the next line was true. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way as one that is not.
 
 - **A number is the same number whatever width holds it.** `==` meets the two widths and compares what they hold, and matching says the same thing. Structural equality was what made them disagree — it compares the width tag as though it were part of the value, so `7i8` did not match `case 7` and fell to the wildcard while `a == 7` on the next line was true. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way as one that is not.
 
@@ -64,7 +69,6 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Grill Log
 
 - **Q:** Why not compare widths in both places instead? **A:** Because the width is not part of the number. _Rationale:_ `7i8` and `7` denote the same integer and the language already says so everywhere else — arithmetic meets the two kinds rather than refusing them — so making `==` structural would refuse comparisons every program makes. _Rejected:_ comparing width tags in both places; a separate pattern form for widths.
-- **Q:** Why not make matching structural and equality structural too? **A:** Because the width is not part of the number. _Rationale:_ `7i8` and `7` denote the same integer, and the language already says so everywhere else — arithmetic meets the two kinds rather than refusing them. Making `==` structural instead would refuse comparisons every program makes. _Rejected:_ comparing width tags in both places; a separate pattern form for widths.
 - **Q:** Why did ignoring the tag ever work? **A:** Because until variants could name their payload, a record pattern could only name a record type, and a value of the wrong type never reached the match. _Rationale:_ the checker guaranteed what the matcher assumed, so the assumption was invisible until the checker stopped guaranteeing it. _Rejected:_ leaving the tag to the checker, which cannot tell two variants of one type apart at a match arm.
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Reparse suffixed integers with host `read`? **A:** No; use [[Integer Literal]]'s total arbitrary-precision decoder. _Rationale:_ type checking and evaluation must agree on bases, separators, suffix removal, and sign. _Rejected:_ permissive partial `reads`; silently keeping the suffix in host input.

@@ -33,6 +33,8 @@ data ResolverProducts = ResolverProducts
 newtype Resolver a
 runResolver     :: Resolver a -> ResolverProducts
 inScope         :: Resolver a -> Resolver ()
+inScopeOver     :: Maybe (Int, Int) -> Resolver a -> Resolver ()
+visibleAfter    :: Int -> Resolver a -> Resolver a
 insideLoop      :: Maybe (Located Text) -> Resolver a -> Resolver a
 outsideLoops    :: Resolver a -> Resolver a
 resolveLoopTarget :: Text -> Span -> Maybe (Located Text) -> Resolver ()
@@ -54,6 +56,11 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 - `resolveLoopTarget` reports `E2016` for a `break` or `continue` outside every loop and `E2017` for one naming a label no enclosing loop carries. Both were previously runtime failures; a jump with no loop to act on is not a program that works on some input, so it is rejected before it runs.
 - `insideLoop` warns `W2002` when a label repeats one already enclosing it. The program still means something definite — the inner label is nearer and wins — but the outer loop has become unreachable by name, which is a mistake in the making rather than a plan.
 - `outsideLoops` clears the stack for a function body, so a closure written inside a loop is not treated as inside it. The closure may outlive the loop entirely, and a `break` in one has nothing to leave.
+- `inScopeOver` is `inScope` for a frame with a known extent. Each frame receives an identity and
+  its parent's; every introduced symbol records the frame it entered and the offset it is visible
+  after. Parameters, locals, pattern and type-parameter bindings are visible after their names, or
+  after the offset `visibleAfter` sets while they are declared; every other origin is visible
+  throughout its frame. `runResolver` publishes them as `producedScopes`.
 - `inScope` pushes a lexical frame for the duration of an action and pops it on exit. A nested scope's declarations cannot leak outward, which is the structural guarantee that makes `let x = x` see the outer binding.
 - `declareBuiltin` binds a wired-in name at `BuiltinOrigin` with `Private` visibility; `declarePreludeName` binds a prelude name at `PreludeOrigin`. The origin distinction is what lets a module declaration shadow a prelude name without conflict or warning while a wired-in name is never displaced.
 - `declareNamed` is the general introduction path. It delegates to `introduce`, which reports a same-frame duplicate as `E2001` with the earlier declaration attached as a related span, and an outer shadow as `W2001` only when the displaced binding is one the language warns about — a `var`, parameter, import, or type name. An immutable local shadowing another immutable local is silent and legal.

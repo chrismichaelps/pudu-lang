@@ -1,0 +1,95 @@
+---
+type: module
+path: "@root/lib/Std/Html/Build.pudu"
+fidelity: Active
+domain: "[[Standard Library]]"
+subsystem: "[[architecture/STDLIB]]"
+tags: [module, stdlib, html, builder]
+aliases: [Std Html Build]
+---
+
+# Std Html Build
+
+## Purpose
+
+Provide a fluent, persistent HTML node builder while preserving [[Std Html]] as the only renderer
+and safety boundary. A builder node is a value: every method returns a new node, so a partial node
+can be reused without shared mutation.
+
+## Interface
+
+`Node` stores one tag name, ordered attributes, and ordered `Html` children. `Building` supplies the
+general attribute, flag, text, trusted-markup, child, conditional-child, and conversion operations,
+plus named methods for common attributes. Tag constructors cover document structure, text content,
+forms, tables, media, and common semantic elements. `render` emits a fragment; `document` emits the
+builder-specific compact `<!DOCTYPE html>` prefix followed by the root node.
+`whenBuilt(condition, builder: fn() -> Node)` is additive beside eager `when`. False returns the
+same persistent receiver without invoking the callback; true calls the builder once, converts its
+node through `html`, and appends it at that exact child position.
+
+`at`, `href`, `src`, and `action` remain unchecked compatibility setters; new code migrates to
+`atChecked`, the `hrefChecked`/`srcChecked`/`actionChecked` string conveniences, or the
+`hrefTo`/`srcFrom`/`actionTo` methods that accept a checked `Html.Destination`. The checked generic
+path refuses handler names, controls, and unsafe values for every destination-bearing name. A
+caller intentionally bypassing destination checks must first call `Html.trustedDestination`, so the
+escape hatch remains visible in source. The renderer still drops event-handler attributes as a
+final backstop for values built through unchecked compatibility paths.
+
+## Algorithm and boundaries
+
+Node methods append to persistent arrays and never render eagerly. `html` converts an ordinary node
+to `Html.Element`; the empty-name nodes produced by `words` and `nothing` convert to fragments.
+`holding` preserves source order while converting child nodes. Rendering delegates to `Std.Html`, so
+escaping, void-element spelling, handler blocking, iterative traversal, and trusted-markup behavior
+have one implementation.
+
+`document` prepends its prefix to `Std.Html.renderChunks` before the final join rather than render the
+body to one string and then concatenate the prefix. Its prefix deliberately has no newline, unlike
+`Std.Html.document`. That whitespace is observable and remains stable.
+
+## Dependencies and consumers
+
+The module depends only on [[Std Html]]. Its fluent API is exercised by
+`test-fixtures/stdlib/UsesHtmlBuild.pudu`; server-side rendering consumers may convert a node through
+`html` and then use the lower-level prepared or streaming APIs.
+Nested reusable slots remain the responsibility of [[Std Html SSR]] `Shell`. The builder keeps
+`Node.children` as `Array[Html]`; callers may place a built node's `Html` in `ShellFixed` and combine
+it with typed shell elements and child slots.
+
+## Grill Log
+
+- **Q:** Duplicate the renderer for fluent nodes? **A:** No; convert to `Html` and retain one safety
+  and output contract. _Rationale:_ two renderers would drift on escaping, void elements, and handler
+  refusal. _Rejected:_ a builder-specific serializer.
+- **Q:** Make every fluent destination setter return `Result`? **A:** Not in this performance issue.
+  _Rationale:_ that is a public compatibility and safety redesign tracked separately; changing it
+  here would mix API semantics with traversal mechanics. _Rejected:_ silently changing setter
+  signatures while optimizing rendering.
+- **Q:** Change the existing string setter signatures? **A:** No; keep them for source compatibility
+  and add explicitly checked alternatives. _Rejected:_ silently changing accepted values or return
+  types in an additive migration.
+- **Q:** Let `atChecked("href", value)` bypass destination validation? **A:** No; destination-bearing
+  names use the same `Html.destination` check as named conveniences. _Rejected:_ a checked generic
+  setter that is safe only for callers who remember a separate list of attribute names.
+- **Q:** Accept an unchecked string in the typed setters? **A:** No; they accept `Html.Destination`.
+  An intentional exception is constructed through the visibly named `Html.trustedDestination`.
+- **Q:** Normalize both document prefixes? **A:** No; preserve their existing bytes. _Rationale:_
+  output is observable and current callers may compare exact documents. _Rejected:_ adding or
+  removing the newline for consistency.
+- **Q:** Prefix after rendering? **A:** No; prepend it to the fragment collection before the one
+  final join. _Rationale:_ the body should not be materialized and then copied solely to add a
+  constant prefix. _Rejected:_ string concatenation after `Html.render`.
+- **Q:** Add slots directly to `Node.children`? **A:** No; changing that array would duplicate the
+  shell model and weaken the builder's simple conversion contract. Reusable child slots compose
+  through `Std.Html.Ssr.Shell`.
+- **Q:** Replace eager `when`? **A:** No; callers relying on ordinary argument evaluation retain it.
+  `whenBuilt` separately states deferred evaluation.
+- **Q:** Build the child before testing the condition? **A:** No; false returns `*self` immediately.
+  True invokes the callback exactly once and uses the same `holds(child.html())` path as eager input.
+- **Q:** Mutate the earlier builder value? **A:** No; both outcomes return a new or existing
+  persistent `Node`, so aliases to the receiver retain their original children.
+
+## Referenced by
+
+[[src/Std/_MOC]] · [[Std Html]] · [[architecture/STDLIB]] · [[2026-09-20-typed-html-shells]]
+· [[2026-09-20-deferred-html-builders]] · [[2026-09-20-checked-html-destinations]]

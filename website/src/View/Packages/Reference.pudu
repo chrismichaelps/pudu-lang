@@ -1,0 +1,60 @@
+module View.Packages.Reference
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Service.Catalog as Catalog
+import Service.Packages as Packages
+import View.MarkdownInline as Inline
+import View.Packages.Frame as Frame
+
+/// The in-page address of a declaration: its module, kind, and name.
+export fn anchorOf(moduleName: Str, kind: Str, name: Str) -> Str {
+  (moduleName + "-" + kind + "-" + name).replace(".", "-").replace(" ", "-").replace("(", "").replace(")", "")
+}
+
+/// One module: its name, then each public declaration as a row with its kind
+/// mark and signature over its documentation.
+fn declarations(catalog: &Catalog.Catalog, moduleName: Str) -> H.Node {
+  var items: Array[H.Node] = []
+  for entry in Catalog.moduleEntries(catalog, moduleName) {
+    let anchor = anchorOf(moduleName, entry.kind, entry.name)
+    var body: Array[H.Node] = [
+      H.div().class("package-declaration-head").holding([
+          H.span().class("package-symbol-mark").at("title", entry.kind).at("aria-hidden", "true").says(Frame.kindMark(entry.kind)),
+          H.a().class("package-declaration-name").href("#" + anchor).holding([
+              H.code().holding([H.strong().says(entry.name), H.span().says(if entry.signature.isEmpty() { "" } else { ": " + entry.signature })])
+            ]),
+          H.span().class("package-declaration-kind").says(entry.kind)
+        ])
+    ]
+    for line in entry.documentation {
+      if !line.isEmpty() { body = body.push(H.p().holding(Inline.render(line))) }
+    }
+    items = items.push(H.li().class("package-declaration").id(anchor).holding(body))
+  }
+  H.section().class("package-module").id(anchorOf(moduleName, "module", "")).holding([
+      H.h2().class("package-module-name").says(moduleName),
+      H.ul().class("package-declarations").holding(items)
+    ])
+}
+
+/// The public declarations of the latest release, module by module, with the
+/// modules listed beside them.
+export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project) -> Html.Html {
+  let version = Option.unwrapOr(project.latest, "")
+  let heading = Frame.tabHeading("API reference", "The public declarations of " + project.name + " " + version + ".", H.nothing())
+  let content = match project.catalog {
+    case None => [H.section().class("package-body").holding([heading, H.p().says("No API reference has been generated for this project yet.")])]
+    case Some(catalog) => {
+      let index = H.nav().class("package-docs-index").label("Modules").holding([
+          H.p().class("package-docs-index-title").says("Modules"),
+          H.ul().holding(catalog.modules.map(|name: Str| H.li().holding([H.a().href("#" + anchorOf(name, "module", "")).says(name)])))
+        ])
+      var modules: Array[H.Node] = [heading]
+      for name in catalog.modules { modules = modules.push(declarations(&catalog, name)) }
+      [H.div().class("package-docs").holding([index, H.section().class("package-docs-main doc").holding(modules)])]
+    }
+  }
+  Frame.page(siteUrl, packages, project, "docs", project.name + " API", "The public declarations of " + project.name + " " + version + ".", content)
+}

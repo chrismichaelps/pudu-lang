@@ -1,0 +1,21 @@
+module View.Packages.State
+
+import Std.Html.Build as H
+
+export fn empty(title: Str, message: Str, extra: Array[H.Node]) -> H.Node {
+  H.section().class("data-empty-banner").at("data-state", "empty").holding([
+      H.span().class("data-empty-label").says("Nothing here yet"),
+      H.h2().says(title),
+      H.p().says(message)
+    ].concat(extra))
+}
+
+export fn more(url: Str) -> H.Node {
+  H.div().class("package-pagination").holding([
+      H.p().class("package-page-more").holding([H.a().at("data-page-next", "").href(url).says("Load more")]),
+      H.p().class("package-load-status").at("data-page-loading", "").at("role", "status").at("aria-live", "polite").at("hidden", "").holding([
+          H.span().class("package-loader").at("aria-hidden", "true"),
+          H.span().says("Loading more…")
+        ])
+    ])
+}

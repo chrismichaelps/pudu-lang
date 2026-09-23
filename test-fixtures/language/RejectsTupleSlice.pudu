@@ -1,0 +1,9 @@
+module RejectsTupleSlice
+
+/// A tuple's members may differ, so the type of a stretch of one depends on
+/// which stretch — a number the checker does not have.
+export fn main() -> Int {
+  let mixed = (1, "two", 3)
+  let part = mixed[0..2]
+  1
+}

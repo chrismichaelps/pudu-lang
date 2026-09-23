@@ -6,7 +6,9 @@ module Pudu.Semantic.Interface
   , ModuleExports
   , emptyExportIndex
   , exportIndex
+  , exportsOf
   , importBindings
+  , moduleExportKeys
   , moduleExports
   ) where
 
@@ -64,6 +66,17 @@ emptyExportIndex = ExportIndex Map.empty
 
 exportIndex :: Map ModuleName Module -> ExportIndex
 exportIndex modules = ExportIndex (Map.map moduleExports modules)
+
+{-| Everything a module the index holds exports, in namespace and name order;
+    nothing for a module it does not hold. -}
+exportsOf :: ExportIndex -> ModuleName -> [ExportedName]
+exportsOf (ExportIndex modules) owner = case Map.lookup owner modules of
+  Just (ModuleExports exported) -> Map.elems exported
+  Nothing -> []
+
+{-| What a module exports, by namespace and name alone. -}
+moduleExportKeys :: ModuleExports -> [(Namespace, Text)]
+moduleExportKeys (ModuleExports exported) = Map.keys exported
 
 moduleExports :: Module -> ModuleExports
 moduleExports moduleValue =

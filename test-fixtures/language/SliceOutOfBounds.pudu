@@ -1,0 +1,9 @@
+module SliceOutOfBounds
+
+/// A slice that reaches past the end is reported rather than quietly clamped:
+/// a clamped slice hands back a different sequence than the one asked for and
+/// hides the arithmetic that produced the bounds.
+export fn main() -> Int {
+  let values = [1, 2, 3]
+  values[1..9].length()
+}

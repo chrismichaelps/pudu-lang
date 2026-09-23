@@ -1,0 +1,34 @@
+// Ranges, slices, and sets
+// Arrays that never change in place, ranges, slices, set literals, and map, filter, and reduce.
+module Main
+
+import Std.Io as Io
+import Std.List as List
+
+fn main() -> Int {
+  // A range counts; 1..=10 includes its end.
+  var squares: Array[Int] = []
+  for n in 1..=10 {
+    squares = squares.push(n * n)
+  }
+  let _squares = Io.writeLine("squares {squares}")
+
+  // A slice takes part of an array.
+  let _first = Io.writeLine("first three {squares[0..3]}")
+  let _last = Io.writeLine("from the eighth {squares[7..]}")
+
+  // Operations answer new arrays; the original is untouched.
+  let evens = squares.filter(|n| n % 2 == 0)
+  let halves = evens.map(|n| n / 2)
+  let total = squares.reduce(|sum, n| sum + n, 0)
+  let _evens = Io.writeLine("even squares {evens}, halved {halves}, all added {total}")
+  let _sorted = Io.writeLine("largest first {List.sortBy(&squares, |a, b| a > b)[0..3]}")
+
+  // A set holds each member once, kept in sorted order.
+  let visited = #{"chile", "argentina", "chile", "peru"}
+  let planned = #{"peru", "bolivia"}
+  let _visited = Io.writeLine("visited {visited.size()} countries: {visited}")
+  let _peru = Io.writeLine("peru visited? {"peru" in visited}; bolivia? {"bolivia" in visited}")
+  let _both = Io.writeLine("in both: {visited.intersect(planned)}, in either: {visited.union(planned)}")
+  0
+}

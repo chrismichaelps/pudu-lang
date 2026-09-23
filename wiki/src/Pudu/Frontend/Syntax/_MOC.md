@@ -10,6 +10,7 @@ tags: [moc, module]
 - [[Syntax Tree]] — mutually recursive untyped declarations, blocks, statements, types, and expressions.
 
 The mutually recursive tree remains one data-only file; behavior belongs to parser and semantic modules.
+- [[Syntax Stored]] — the stored form of every tree node, with deferred declarations and bodies.
 
 ## Referenced by
 

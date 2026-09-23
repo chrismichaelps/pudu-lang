@@ -13,6 +13,10 @@ testServiceEvaluation = do
   addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  checkedDestinations <- runEntry "test-fixtures/stdlib/UsesHtmlDestinationBuild.pudu"
+  safeStreaming <- runEntry "test-fixtures/stdlib/UsesHtmlSafeStream.pudu"
+  incrementalHtml <- runEntry "test-fixtures/stdlib/UsesHtmlIncremental.pudu"
+  compactMarkup <- runEntry "test-fixtures/stdlib/UsesHtmlCompact.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
@@ -118,7 +122,19 @@ testServiceEvaluation = do
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "60")
+        (markup === Just "66")
+    , counterexample
+        "checked HTML builder destinations reject program-bearing values without compatibility drift"
+        (checkedDestinations === Just "16")
+    , counterexample
+        "safe HTML streaming keeps text inert and boundary identifiers out of code contexts"
+        (safeStreaming === Just "18")
+    , counterexample
+        "prepared HTML output flushes before delayed producers and remains bounded under backpressure"
+        (incrementalHtml === Just "22")
+    , counterexample
+        "compact HTML plans join static runs without crossing typed slots"
+        (compactMarkup === Just "39")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than

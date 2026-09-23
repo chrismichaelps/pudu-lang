@@ -113,7 +113,7 @@ parseValue source = case Text.uncons source of
     '{' -> parseMembers False (skipSpace rest) []
     '[' -> parseElements False (skipSpace rest) []
     '"' -> do
-      (content, remaining) <- quoted rest Text.empty
+      (content, remaining) <- quoted rest
       pure (JsonText content, remaining)
     't' -> literal "true" (JsonBool True) source
     'f' -> literal "false" (JsonBool False) source
@@ -134,7 +134,7 @@ parseMembers required source accumulated = case Text.uncons source of
   Just ('}', rest) | not required -> Just (JsonObject (reverse accumulated), rest)
   _ -> do
     afterQuote <- Text.stripPrefix "\"" source
-    (name, afterName) <- quoted afterQuote Text.empty
+    (name, afterName) <- quoted afterQuote
     afterColon <- Text.stripPrefix ":" (skipSpace afterName)
     (member, afterMember) <- parseValue (skipSpace afterColon)
     let rest = skipSpace afterMember
@@ -154,15 +154,25 @@ parseElements required source accumulated = case Text.uncons source of
       Just (']', more) -> Just (JsonArray (reverse (member : accumulated)), more)
       _ -> Nothing
 
-{-| Read a string body, the opening quote already consumed. -}
-quoted :: Text -> Text -> Maybe (Text, Text)
-quoted source accumulated = case Text.uncons source of
-  Nothing -> Nothing
-  Just ('"', rest) -> Just (accumulated, rest)
-  Just ('\\', rest) -> do
-    (decoded, remaining) <- escaped rest
-    quoted remaining (accumulated <> decoded)
-  Just (scalar, rest) -> quoted rest (Text.snoc accumulated scalar)
+{-| Read a string body, the opening quote already consumed.
+
+    The body is taken in runs between quotes and escapes and joined once at the
+    end. Appending one scalar at a time copies everything read so far on every
+    scalar, and a document the client opens arrives as one string: a
+    sixty-kilobyte program would be copied sixty thousand times before the
+    server could look at it. -}
+quoted :: Text -> Maybe (Text, Text)
+quoted source = go source []
+ where
+  go input pieces =
+    let (plain, rest) = Text.break (\scalar -> scalar == '"' || scalar == '\\') input
+        gathered = plain : pieces
+     in case Text.uncons rest of
+          Nothing -> Nothing
+          Just ('"', after) -> Just (Text.concat (reverse gathered), after)
+          Just (_, after) -> do
+            (decoded, remaining) <- escaped after
+            go remaining (decoded : gathered)
 
 escaped :: Text -> Maybe (Text, Text)
 escaped source = case Text.uncons source of

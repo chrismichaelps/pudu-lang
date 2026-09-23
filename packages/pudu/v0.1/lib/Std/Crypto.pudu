@@ -5,10 +5,37 @@ module Std.Crypto
 /// numbers, and only rendering turns them into hexadecimal.
 export type Digest = { words: Array[UInt32] }
 
-/// The SHA-256 digest of text, taken over its UTF-8 bytes.
-export fn sha256(message: Str) -> Digest { sha256Bytes(&utf8(message)) }
+/// The SHA-256 digest of text, taken over its UTF-8 bytes, computed by the
+/// runtime's implementation.
+///
+/// 104 KB at `-O2`: under 1 ms here, 4.5 s with the rounds in `sha256Bytes`.
+export fn sha256(message: Str) -> Digest { wordsOf(&sha256Of(message.toBytes())) }
 
-/// The SHA-256 digest of bytes.
+/// The thirty-two bytes of a digest as the eight big-endian words `Digest` holds.
+fn wordsOf(digest: &Bytes) -> Digest {
+  var words: Array[UInt32] = []
+  var word = 0u32
+  var count = 0
+  for octet in digest.toArray() {
+    word = (word << 8) | widen(octet)
+    count = count + 1
+    if count % 4 == 0 {
+      words = words.push(word)
+      word = 0u32
+    }
+  }
+  Digest{words: words}
+}
+
+fn widen(octet: UInt8) -> UInt32 {
+  match convertInteger[UInt32](octet) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+/// The SHA-256 digest of bytes, given one to a word, computed by the rounds
+/// below. Reference implementation checked against `sha256` by the fixtures.
 export fn sha256Bytes(message: &Array[UInt32]) -> Digest {
   let padded = pad(message)
   var state = initialState()

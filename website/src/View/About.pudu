@@ -8,9 +8,8 @@ import View.Layout as Layout
 
 export fn page(siteUrl: Str) -> Html.Html {
   Layout.page(siteUrl, "About Pudu", "What Pudu is, what it is built around, where it stands before its first release, and who makes it.", "/about", true, Some(Seo.aboutSchema(siteUrl)), H.article().class("doc about").holding([
-        H.span().class("kind").says("about"),
-        H.h1().says("About Pudu"),
-        H.p().says("Pudu is a statically typed programming language for programs that are easy to read, safe to change, and honest about failure. A function's signature says what it takes, what it gives back, whether it can fail, and whether it changes what it was given, so a reader can tell what code promises without reading its body."),
+        Layout.banner("page-banner", "About", "About Pudu", "Statically typed, easy to read, safe to change, and honest about failure.", []),
+        H.p().class("section-lead").says("A function's signature says what it takes, what it gives back, whether it can fail, and whether it changes what it was given, so a reader can tell what code promises without reading its body."),
         H.h2().says("What Pudu is built around"),
         H.ul().holding([
             point("Failure is a value.", "A function that can fail returns Result[T, E], and the caller decides what happens. There are no exceptions to forget to catch."),
@@ -29,7 +28,7 @@ export fn page(siteUrl: Str) -> Html.Html {
             H.span().says(".")
           ]),
         H.h2().says("Where Pudu stands"),
-        H.p().says("Pudu is pre-release, at version 0.1.0. Programs run on an interpreter, dependencies are local directories, and the language and its standard library may still change before the first release. macOS and Linux x86-64 are tested; Windows is not yet."),
+        H.p().says("Pudu is pre-release, at version 0.1.1. Programs run on an interpreter, dependencies are GitHub packages or local directories, and the language and its standard library may still change before the first release. macOS and Linux x86-64 are tested; Windows is not yet."),
         H.h2().says("Why Haskell matters"),
         H.p().holding([
             H.a().href(Constants.HASKELL_URL).at("rel", "external noopener noreferrer").says("Haskell"),

@@ -1,6 +1,7 @@
 {-| @Program.Syntax.Tree — models recoverable surface structure -}
 module Pudu.Frontend.Syntax.Tree
-  ( BindingKind (..)
+  ( ArrayRest (..)
+  , BindingKind (..)
   , Block (..)
   , Capability (..)
   , Constraint (..)
@@ -38,6 +39,7 @@ module Pudu.Frontend.Syntax.Tree
   ) where
 
 import Data.List.NonEmpty (NonEmpty)
+import GHC.Generics (Generic)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located, locatedValue)
 import Pudu.Frontend.Syntax.Name (ModuleName)
@@ -50,7 +52,7 @@ data Module = Module
   , moduleImports :: ![Located Import]
   , moduleDeclarations :: ![Located Declaration]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Module.Syntax.Import — records one explicit dependency -}
 data Import = Import
@@ -58,11 +60,11 @@ data Import = Import
   , importAlias :: !(Maybe (Located Text))
   , importItems :: ![Located Text]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Module.Syntax.Visibility — marks explicit public declarations -}
 data Visibility = Private | Exported
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
 
 {-| @Program.Syntax.Capability — one unchecked ability an unsafe context grants.
 
@@ -74,11 +76,11 @@ data Capability
   | ForeignCapability
   | UncheckedCapability
   | NullCapability
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 {-| @Program.Syntax.BindingKind — distinguishes binding lifetime policy -}
 data BindingKind = Immutable | Mutable | CompileTime
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show, Generic)
 
 {-| @Program.Syntax.Declaration — models admitted declaration forms -}
 data Declaration
@@ -100,7 +102,7 @@ data Declaration
       is one place to look. -}
   | ForeignDeclaration !Foreign
   | InvalidDeclaration
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Function — carries one complete function signature. The body
     is absent only for a trait member that declares behavior without providing
@@ -117,7 +119,7 @@ data Function = Function
   , functionConstraints :: ![Located Constraint]
   , functionBody :: !(Maybe (Located FunctionBody))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| How many arguments a call of this function must supply.
 
@@ -143,14 +145,14 @@ data TypeParam = TypeParam
   , typeParamArity :: !Int
   , typeParamBounds :: ![Located TypeSyntax]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Constraint — one `where` obligation -}
 data Constraint = Constraint
   { constraintSubject :: !(Located Text)
   , constraintBounds :: ![Located TypeSyntax]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Declaration — names a record, sum, or alias definition -}
 data TypeDeclarationValue = TypeDeclarationValue
@@ -159,7 +161,7 @@ data TypeDeclarationValue = TypeDeclarationValue
   , typeTypeParams :: ![Located TypeParam]
   , typeDefinition :: !(Located TypeDefinition)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Definition — distinguishes the three declared shapes -}
 data TypeDefinition
@@ -167,7 +169,7 @@ data TypeDefinition
   | SumDefinition ![Located Variant]
   | AliasDefinition !(Located TypeSyntax)
   | InvalidDefinition
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Field — one record field and its declared mutability -}
 data FieldDeclaration = FieldDeclaration
@@ -175,21 +177,21 @@ data FieldDeclaration = FieldDeclaration
   , fieldName :: !(Located Text)
   , fieldType :: !(Located TypeSyntax)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Variant — one sum variant and its payload shape -}
 data Variant = Variant
   { variantName :: !(Located Text)
   , variantPayload :: !VariantPayload
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.VariantPayload — unit, positional, or record payload -}
 data VariantPayload
   = UnitPayload
   | TuplePayload ![Located TypeSyntax]
   | RecordPayload ![Located FieldDeclaration]
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Trait — declares a behavior contract without state -}
 data Trait = Trait
@@ -199,7 +201,7 @@ data Trait = Trait
   , traitConstraints :: ![Located Constraint]
   , traitMembers :: ![Located Function]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Impl — implements one trait for one nominal type -}
 data Impl = Impl
@@ -209,7 +211,7 @@ data Impl = Impl
   , implConstraints :: ![Located Constraint]
   , implFunctions :: ![Located Function]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Macro — a typed syntax transformer.
 
@@ -222,20 +224,20 @@ data Macro = Macro
   , macroParameters :: ![Located MacroParam]
   , macroBody :: !(Located Expression)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 data MacroParam = MacroParam
   { macroParamName :: !(Located Text)
   , macroParamKind :: !MacroKind
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.MacroKind — the syntax a macro parameter accepts -}
 data MacroKind
   = ExpressionKind
   | IdentifierKind
   | BlockKind
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
 
 {-| The name a function literal is known by.
 
@@ -251,7 +253,7 @@ data Parameter = Parameter
   , parameterType :: !(Maybe (Located TypeSyntax))
   , parameterDefault :: !(Maybe (Located Expression))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Type.Syntax.Reference — models unresolved type spelling -}
 data TypeSyntax
@@ -268,20 +270,20 @@ data TypeSyntax
   | UnsafeType ![Located Capability] !(Located TypeSyntax)
   | UnitType
   | InvalidType
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.FunctionBody — distinguishes block and expression bodies -}
 data FunctionBody
   = BlockBody !(Located Block)
   | ExpressionBody !(Located Expression)
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Block — orders statements and optional result -}
 data Block = Block
   { blockStatements :: ![Located Statement]
   , blockResult :: !(Maybe (Located Expression))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Statement — models non-result block entries -}
 data Statement
@@ -294,8 +296,23 @@ data Statement
       the enclosing block, which the fallback pays for by not being able to
       reach it. -}
   | LetElseStatement !(Located Pattern) !(Located Expression) !(Located Block)
+  {-| `let PATTERN = EXPRESSION`, where the pattern takes a value apart rather
+      than naming it whole: `let {x, y} = point`, `let (a, b) = pair`,
+      `let [head, ..rest] = items`.
+
+      It carries the binding kind so `var {x, y} = point` binds parts that may
+      be assigned, and an optional annotation for the subject as a whole, which
+      is the only place a reader can state the type of a value that is never
+      given one name. A pattern here may only fail on a sequence's length; one
+      that tests a tag or a literal needs `let ... else`, which has somewhere
+      to go when the test fails. -}
+  | LetPatternStatement
+      !BindingKind
+      !(Located Pattern)
+      !(Maybe (Located TypeSyntax))
+      !(Located Expression)
   | InvalidStatement
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Literal — preserves unresolved literal values -}
 data Literal
@@ -306,7 +323,7 @@ data Literal
   | CharValue !Char
   | BoolValue !Bool
   | NullValue
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Pattern — models match and binding-position patterns -}
 data Pattern
@@ -315,11 +332,30 @@ data Pattern
   | LiteralPattern !Literal
   | RangePattern !Literal !Bool !Literal
   | TuplePattern ![Located Pattern]
+  {-| A sequence taken apart by position: `[first, second]`, or
+      `[first, ..rest]` where the rest is everything the named elements did not
+      take.
+
+      The elements before the rest and the elements after it are held apart
+      rather than in one list with a marker inside it, because that is the
+      shape the matcher needs: a prefix is read from the front, a suffix from
+      the back, and what lies between them is the rest. Holding them in one
+      list would mean finding the marker again at every use. -}
+  | ArrayPattern ![Located Pattern] !(Maybe ArrayRest) ![Located Pattern]
   | ConstructorPattern !ModuleName ![Located Pattern]
   | RecordPattern !(Maybe ModuleName) ![Located FieldPattern] !Bool
   | AlternativePattern ![Located Pattern]
   | InvalidPattern
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+
+{-| The `..` in a sequence pattern, and the name it binds when it binds one.
+
+    `..` skips what it covers and `..rest` holds it, so a program that only
+    needs the front of a sequence does not have to name what follows. -}
+data ArrayRest
+  = IgnoredRest !Span
+  | BoundRest !(Located Text)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.FieldPattern — one record field pattern; an absent value
     binds the field to its own name. -}
@@ -327,7 +363,7 @@ data FieldPattern = FieldPattern
   { fieldPatternName :: !(Located Text)
   , fieldPatternValue :: !(Maybe (Located Pattern))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.FieldInit — one field of a record construction; an absent
     value takes the binding with the field's own name. -}
@@ -346,7 +382,7 @@ data Foreign = Foreign
   , foreignTypes :: ![Located Text]
   , foreignFunctions :: ![Located ForeignFunction]
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| One function in a foreign library, as this program asserts its shape.
 
@@ -370,7 +406,7 @@ data ForeignFunction = ForeignFunction
       must be released. -}
   , foreignReleasedBy :: !(Maybe (Located Text))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| One parameter of a foreign function.
 
@@ -390,13 +426,13 @@ data ForeignParameter = ForeignParameter
   , foreignParameterOwned :: !Bool
   , foreignParameterReleasedBy :: !(Maybe (Located Text))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 data FieldInit = FieldInit
   { fieldInitName :: !(Located Text)
   , fieldInitValue :: !(Maybe (Located Expression))
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.MatchArm — one `case` pattern, optional guard, and body -}
 data MatchArm = MatchArm
@@ -404,7 +440,7 @@ data MatchArm = MatchArm
   , armGuard :: !(Maybe (Located Expression))
   , armBody :: !(Located Expression)
   }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
 
 {-| @Program.Syntax.Expression — models admitted expression forms -}
 data Expression
@@ -415,6 +451,14 @@ data Expression
   | CallExpression !(Located Expression) ![Located Expression]
   | MemberExpression !(Located Expression) !(Located Text)
   | IndexExpression !(Located Expression) !(Located Expression)
+  {-| `a..b`, `a..=b`, `a..`, `..b`, `..`.
+
+      A range is its own node rather than a binary operator on two numbers,
+      because either end may be absent and a binary node has no way to say so.
+      An absent end means "as far as the thing being indexed goes", which is
+      what makes `items[2..]` the tail of a sequence without the writer having
+      to ask how long it is. -}
+  | RangeExpression !(Maybe (Located Expression)) !Bool !(Maybe (Located Expression))
   | TryExpression !(Located Expression)
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]
@@ -450,4 +494,4 @@ data Expression
   | LoopExpression !(Maybe (Located Text)) !(Located Block)
   | ForExpression !(Maybe (Located Text)) !(Located Pattern) !(Located Expression) !(Located Block)
   | InvalidExpression
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)

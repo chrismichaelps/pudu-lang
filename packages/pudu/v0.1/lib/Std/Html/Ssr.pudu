@@ -1,9 +1,18 @@
 module Std.Html.Ssr
 
+import Std.Bytes as ByteSeq
+import Std.Html.Bounded as Bounded
+import Std.Html.Buffer as Buffer
 import Std.Html as Html
 
 /// Part of a page: either fixed markup or a named hole.
 export type Piece = Fixed(Html.Html) | Slot(Str)
+/// A typed reusable HTML tree whose dynamic positions are complete child fragments.
+export type Shell
+  = ShellFixed(Html.Html)
+  | ShellSlot(Str)
+  | ShellElement(Str, Array[(Str, Str)], Array[Shell])
+  | ShellFragment(Array[Shell])
 /// A piece after preparing: rendered text, or the hole still to fill.
 export type Prepared = Markup(Array[Str]) | Hole(Str)
 /// A page prepared once, ready to be filled and rendered many times.
@@ -12,6 +21,36 @@ export type Plan = { parts: Array[Prepared] }
 export type RenderError = MissingSlot(Str) | InvalidLimit(Int) | TooLarge(Int)
 /// A rendered page and its length in bytes.
 export type Rendered = { body: Str, byteLength: Int }
+/// A reusable SSR plan retaining encoded static bytes and exact lengths.
+export type EncodedPlan = { bytes: Buffer.CompactBytePlan }
+/// Encoded response parts and their exact combined byte length.
+export type EncodedSegments = { parts: Array[Bytes], byteLength: Int }
+/// One contiguous encoded response and its exact byte length.
+export type EncodedResponse = { body: Bytes, byteLength: Int }
+/// A fallible request-local producer for one complete typed slot value.
+export type Producer = fn() -> Result[Html.Html, Str]
+/// Pull state for bounded incremental encoded output.
+export type IncrementalCursor = {
+  plan: Buffer.CompactBytePlan,
+  producers: Map[Str, Producer],
+  cached: Map[Str, Bytes],
+  partIndex: Int,
+  partOffset: Int,
+  maxBytes: Int,
+  cancelled: Bool
+}
+/// One bounded output chunk or completion of an incremental plan.
+export type IncrementalStep
+  = IncrementalOutput(Bytes, IncrementalCursor)
+  | IncrementalFinished
+/// Why incremental encoded output stopped.
+export type IncrementalError
+  = MissingProducer(Str)
+  | ProducerFailed(Str, Str)
+  | InvalidIncrementalLimit(Int)
+  | InvalidIncrementalStatic(Int, Int)
+  | InvalidIncrementalState(Int, Int)
+  | StreamCancelled
 
 /// Render static sections once; the plan never stores request-specific slots.
 export fn prepare(pieces: &Array[Piece]) -> Plan {
@@ -25,9 +64,132 @@ export fn prepare(pieces: &Array[Piece]) -> Plan {
   Plan{parts: parts}
 }
 
+/// Render and join each adjacent static run once without crossing a slot.
+export fn prepareCompact(pieces: &Array[Piece]) -> Plan {
+  var parts: Array[Prepared] = []
+  var pending: Array[Str] = []
+  for piece in pieces {
+    match piece {
+      case Fixed(view) => {
+        for renderedPart in Html.renderChunks(&view) {
+          if !renderedPart.isEmpty() { pending = pending.push(renderedPart) }
+        }
+      }
+      case Slot(name) => {
+        parts = flushStatic(parts, pending)
+        pending = []
+        parts = parts.push(Hole(name))
+      }
+    }
+  }
+  Plan{parts: flushStatic(parts, pending)}
+}
+
+fn flushStatic(parts: Array[Prepared], pending: Array[Str]) -> Array[Prepared] {
+  if pending.isEmpty() { parts } else { parts.push(Markup([pending.join("")])) }
+}
+
+/// Render and encode static sections once without retaining request values.
+export fn prepareBytes(pieces: &Array[Piece]) -> EncodedPlan {
+  var rawParts: Array[Buffer.RawChunk] = []
+  var pending: Array[Str] = []
+  for piece in pieces {
+    match piece {
+      case Fixed(view) => {
+        for renderedPart in Html.renderChunks(&view) {
+          if !renderedPart.isEmpty() { pending = pending.push(renderedPart) }
+        }
+      }
+      case Slot(name) => {
+        rawParts = flushEncodedStatic(rawParts, pending)
+        pending = []
+        rawParts = rawParts.push(Buffer.Dynamic(name))
+      }
+    }
+  }
+  rawParts = flushEncodedStatic(rawParts, pending)
+  EncodedPlan{bytes: Buffer.compileCompact(&rawParts)}
+}
+
+fn flushEncodedStatic(
+  parts: Array[Buffer.RawChunk],
+  pending: Array[Str]
+) -> Array[Buffer.RawChunk] {
+  if pending.isEmpty() { parts } else { parts.push(Buffer.Static(pending.join("").toBytes())) }
+}
+
+type ShellWriting
+  = ResumeShell(Array[Shell], Int)
+  | CloseShell(Str, Array[Shell], Int)
+
+/// Compile a typed nested shell without placing request values in the reusable plan.
+export fn prepareShell(shell: &Shell) -> Plan {
+  var parts: Array[Prepared] = []
+  var current: Array[Shell] = [*shell]
+  var index = 0
+  var pending: Array[ShellWriting] = []
+
+  while index < current.length() || pending.length() > 0 {
+    if index >= current.length() {
+      let step = pending[pending.length() - 1]
+      pending = pending.pop()
+      match step {
+        case ResumeShell(parent, next) => {
+          current = parent
+          index = next
+        }
+        case CloseShell(closing, parent, next) => {
+          parts = parts.push(Markup([closing]))
+          current = parent
+          index = next
+        }
+      }
+    } else {
+      let node = current[index]
+      index = index + 1
+      match node {
+        case ShellFixed(view) => { parts = parts.push(Markup(Html.renderChunks(&view))) }
+        case ShellSlot(name) => { parts = parts.push(Hole(name)) }
+        case ShellFragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(ResumeShell(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case ShellElement(name, attributes, children) => {
+          let shallow = Html.element(name, &attributes, &[Html.trusted("")])
+          let boundary = Html.renderChunks(&shallow)
+          let split = boundary.length() >= 2 && boundary[boundary.length() - 2].isEmpty()
+          if split {
+            var opening: Array[Str] = []
+            var at = 0
+            while at < boundary.length() - 2 {
+              opening = opening.push(boundary[at])
+              at = at + 1
+            }
+            parts = parts.push(Markup(opening))
+            let closing = boundary[boundary.length() - 1]
+            if children.length() == 0 {
+              parts = parts.push(Markup([closing]))
+            } else {
+              pending = pending.push(CloseShell(closing, current, index))
+              current = children
+              index = 0
+            }
+          } else {
+            parts = parts.push(Markup(boundary))
+          }
+        }
+      }
+    }
+  }
+  Plan{parts: parts}
+}
+
 /// The page as its pieces, in order, so a caller may write them as they come.
 export fn chunks(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
-  assemble(plan, values, None)
+  assemble(plan, values)
 }
 
 /// The page as one piece of text.
@@ -44,8 +206,8 @@ export fn finish(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Rendered, 
 /// The page, refused if it would exceed the given number of bytes.
 export fn renderWithin(plan: &Plan, values: &Map[Str, Html.Html], maxBytes: Int) -> Result[Rendered, RenderError] {
   if maxBytes < 0 { return Err(InvalidLimit(maxBytes)) }
-  let output = assemble(plan, values, Some(maxBytes)) ?
-  Ok(completed(output.join("")))
+  let output = assembleWithin(plan, values, maxBytes) ?
+  Ok(Rendered{body: output.parts.join(""), byteLength: output.byteLength})
 }
 
 /// A view rendered with its length, without a plan.
@@ -53,14 +215,202 @@ export fn fragment(view: &Html.Html) -> Rendered { completed(Html.render(view)) 
 /// A whole view rendered with its length, without a plan.
 export fn document(view: &Html.Html) -> Rendered { completed(Html.document(view)) }
 
+fn encodeValues(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[Map[Str, Bytes], Buffer.AssembleError] {
+  var encoded: Map[Str, Bytes] = mapOf([])
+  for part in plan.bytes.parts {
+    match part {
+      case Buffer.StaticBlock(_, _) => {}
+      case Buffer.DynamicBlock(name) => {
+        if let None = encoded.get(name) {
+          let view = match values.get(name) {
+            case None => { return Err(Buffer.MissingSlot(name)) }
+            case Some(held) => held
+          }
+          encoded = encoded.insert(name, Html.render(&view).toBytes())
+        }
+      }
+    }
+  }
+  Ok(encoded)
+}
+
+/// Render each used slot once and retain segmented encoded output with its exact length.
+export fn byteSegments(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[EncodedSegments, Buffer.AssembleError] {
+  let encoded = encodeValues(plan, values) ?
+  let segments = Buffer.segmentsCompactChecked(&plan.bytes, &encoded) ?
+  Ok(EncodedSegments{parts: segments.parts, byteLength: segments.byteLength})
+}
+
+/// Render encoded output into one exact-size checked byte buffer.
+export fn finishBytes(
+  plan: &EncodedPlan,
+  values: &Map[Str, Html.Html]
+) -> Result[EncodedResponse, Buffer.AssembleError] {
+  let encoded = encodeValues(plan, values) ?
+  let body = Buffer.renderCompactChecked(&plan.bytes, &encoded) ?
+  Ok(EncodedResponse{body: body, byteLength: body.length()})
+}
+
+/// Begins bounded pull delivery without invoking a dynamic producer.
+export fn beginIncremental(
+  plan: &EncodedPlan,
+  producers: &Map[Str, Producer],
+  maxBytes: Int
+) -> Result[IncrementalCursor, IncrementalError] {
+  if maxBytes <= 0 { return Err(InvalidIncrementalLimit(maxBytes)) }
+  Ok(IncrementalCursor {
+      plan: plan.bytes,
+      producers: *producers,
+      cached: mapOf([]),
+      partIndex: 0,
+      partOffset: 0,
+      maxBytes: maxBytes,
+      cancelled: false
+    })
+}
+
+/// Emits at most one bounded chunk, stopping before an unrequested producer.
+export fn flushIncremental(
+  cursor: &IncrementalCursor
+) -> Result[IncrementalStep, IncrementalError] {
+  if cursor.cancelled { return Err(StreamCancelled) }
+  if cursor.maxBytes <= 0 { return Err(InvalidIncrementalLimit(cursor.maxBytes)) }
+  if cursor.partIndex < 0 || cursor.partOffset < 0 {
+    return Err(InvalidIncrementalState(cursor.partIndex, cursor.partOffset))
+  }
+
+  var partIndex = cursor.partIndex
+  var partOffset = cursor.partOffset
+  var cached = cursor.cached
+  var pieces: Array[Bytes] = []
+  var outputBytes = 0
+  var filling = true
+
+  while filling && partIndex < cursor.plan.parts.length() {
+    let part = cursor.plan.parts[partIndex]
+    var ready = false
+    var current = ByteSeq.empty()
+    match part {
+      case Buffer.StaticBlock(bytes, declaredLength) => {
+        let actualLength = bytes.length()
+        if declaredLength != actualLength {
+          return Err(InvalidIncrementalStatic(declaredLength, actualLength))
+        }
+        current = bytes
+        ready = true
+      }
+      case Buffer.DynamicBlock(name) => {
+        if partOffset == 0 && outputBytes > 0 {
+          filling = false
+        } else {
+          current = match cached.get(name) {
+            case Some(found) => found
+            case None => {
+              let produce = match cursor.producers.get(name) {
+                case Some(found) => found
+                case None => { return Err(MissingProducer(name)) }
+              }
+              let view = match produce() {
+                case Ok(found) => found
+                case Err(reason) => { return Err(ProducerFailed(name, reason)) }
+              }
+              let rendered = Html.render(&view).toBytes()
+              cached = cached.insert(name, rendered)
+              rendered
+            }
+          }
+          ready = true
+        }
+      }
+    }
+
+    if ready {
+      let length = current.length()
+      if partOffset > length {
+        return Err(InvalidIncrementalState(partIndex, partOffset))
+      }
+      if partOffset == length {
+        partIndex = partIndex + 1
+        partOffset = 0
+      } else {
+        let room = cursor.maxBytes - outputBytes
+        let remaining = length - partOffset
+        let amount = if remaining < room { remaining } else { room }
+        pieces = pieces.push(ByteSeq.slice(&current, partOffset, partOffset + amount))
+        outputBytes = outputBytes + amount
+        partOffset = partOffset + amount
+        if partOffset == length {
+          partIndex = partIndex + 1
+          partOffset = 0
+        }
+        if outputBytes == cursor.maxBytes { filling = false }
+      }
+    }
+  }
+
+  if outputBytes == 0 {
+    Ok(IncrementalFinished)
+  } else {
+    Ok(IncrementalOutput(
+        ByteSeq.join(&pieces),
+        IncrementalCursor {
+          plan: cursor.plan,
+          producers: cursor.producers,
+          cached: cached,
+          partIndex: partIndex,
+          partOffset: partOffset,
+          maxBytes: cursor.maxBytes,
+          cancelled: false
+        }
+      ))
+  }
+}
+
+/// Prevents every later producer and output step.
+export fn cancelIncremental(cursor: &IncrementalCursor) -> IncrementalCursor {
+  IncrementalCursor {
+    plan: cursor.plan,
+    producers: cursor.producers,
+    cached: cursor.cached,
+    partIndex: cursor.partIndex,
+    partOffset: cursor.partOffset,
+    maxBytes: cursor.maxBytes,
+    cancelled: true
+  }
+}
+
+/// Drains the remaining cursor into bounded chunks without joining them.
+export fn finishIncremental(
+  cursor: &IncrementalCursor
+) -> Result[Array[Bytes], IncrementalError] {
+  var state = *cursor
+  var output: Array[Bytes] = []
+  var finished = false
+  while !finished {
+    match flushIncremental(&state) ? {
+      case IncrementalOutput(bytes, next) => {
+        output = output.push(bytes)
+        state = next
+      }
+      case IncrementalFinished => { finished = true }
+    }
+  }
+  Ok(output)
+}
+
 fn completed(body: Str) -> Rendered {
   Rendered{body: body, byteLength: body.toBytes().length()}
 }
 
-fn assemble(plan: &Plan, values: &Map[Str, Html.Html], limit: Option[Int]) -> Result[Array[Str], RenderError] {
+fn assemble(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
   var cached: Map[Str, Array[Str]] = mapOf([])
   var output: Array[Str] = []
-  var total = 0
   for part in plan.parts {
     let fragments = match part {
       case Markup(held) => held
@@ -80,13 +430,62 @@ fn assemble(plan: &Plan, values: &Map[Str, Html.Html], limit: Option[Int]) -> Re
       }
     }
     for piece in fragments {
-      if let Some(maximum) = limit {
-        let size = piece.toBytes().length()
-        if size > maximum - total { return Err(TooLarge(maximum)) }
-        total = total + size
-      }
       output = output.push(piece)
     }
   }
   Ok(output)
+}
+
+fn bounded(view: &Html.Html, remaining: Int, maximum: Int) -> Result[Bounded.Rendered, RenderError] {
+  match Bounded.render(view, remaining) {
+    case Ok(rendered) => Ok(rendered)
+    case Err(_) => Err(TooLarge(maximum))
+  }
+}
+
+fn appendParts(output: Array[Str], parts: &Array[Str]) -> Array[Str] {
+  var next = output
+  for piece in parts { next = next.push(piece) }
+  next
+}
+
+fn assembleWithin(
+  plan: &Plan,
+  values: &Map[Str, Html.Html],
+  maximum: Int
+) -> Result[Bounded.Rendered, RenderError] {
+  var cached: Map[Str, Bounded.Rendered] = mapOf([])
+  var output: Array[Str] = []
+  var total = 0
+  for part in plan.parts {
+    match part {
+      case Markup(fragments) => {
+        for piece in fragments {
+          let rendered = bounded(&Html.trusted(piece), maximum - total, maximum) ?
+          output = appendParts(output, &rendered.parts)
+          total = total + rendered.byteLength
+        }
+      }
+      case Hole(name) => {
+        let rendered = match cached.get(name) {
+          case Some(held) => {
+            if held.byteLength > maximum - total { return Err(TooLarge(maximum)) }
+            held
+          }
+          case None => {
+            let view = match values.get(name) {
+              case Some(held) => held
+              case None => { return Err(MissingSlot(name)) }
+            }
+            let held = bounded(&view, maximum - total, maximum) ?
+            cached = cached.insert(name, held)
+            held
+          }
+        }
+        output = appendParts(output, &rendered.parts)
+        total = total + rendered.byteLength
+      }
+    }
+  }
+  Ok(Bounded.Rendered{parts: output, byteLength: total})
 }

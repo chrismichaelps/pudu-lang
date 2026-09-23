@@ -33,6 +33,9 @@ lastSegmentOf    :: NonEmpty Text -> Text
 
 ### Governance
 
+- `loadModuleDeclarationsWith` binds a constant from its folded value ([[Eval Frozen]]) when folding
+  produced one, and evaluates its initializer, in declaration order, when it did not.
+
 - The wired-in sums record their variants' owners exactly as a declared sum does. Without it an implementation written for `Option` or `Result` is looked for under `Some` or `Err`, and is never found.
 - **Order is the whole point.** Functions and variant constructors are installed before any constant
   runs, so mutual recursion and forward references work exactly as [[Name Resolution]] promised they

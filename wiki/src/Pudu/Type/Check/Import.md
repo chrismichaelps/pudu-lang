@@ -17,7 +17,9 @@ aliases: [Type Check Import]
 
 ## Purpose
 
-Install body-free [[Type Interface]] declarations as the outer declared/signature environment consumed by [[Type Check]], without making dependency declarations local or rechecking their bodies/coherence.
+Give one consumer its view of the graph prepared by [[Type Interface Graph]]: the graph's collected
+declarations overlaid with the consumer's import spellings, and the values and implementation
+methods only this consumer receives, installed through [[Type Check Install]].
 
 ## Interface
 
@@ -37,6 +39,10 @@ declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 - One canonical trait table is built across all imported interfaces before implementations are installed, so a default and its implementation may live in different modules.
 - Installing a second visible trait method for the same concrete target/member reports `E3013` instead of overwriting the first scheme.
 - The caller collects local declarations only after this outer environment exists.
+- **Nothing here is formed once per graph.** Collection, constructors, trait members, and foreign
+  functions come prepared from [[Type Interface Graph]]; only imported values and visible-trait
+  implementation methods are installed per consumer, and only from interfaces that can contribute.
+- A dependency's formation mistake is reported by that dependency alone, never once per importer.
 - **An imported signature carries the restrictions it was declared under.** Unsafe capabilities and
   compile-time purity are properties of the function, not of the file it was written in. Without
   this an unsafe function became ordinary on import and a `comptime` one lost its transitive
@@ -47,7 +53,7 @@ declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 
 ## Linkage
 
-- **Requires:** [[Type Interface]], [[Type Env]], [[Type Formation]], [[Type Check Method]], [[Type Value]], [[Syntax Tree]].
+- **Requires:** [[Type Interface Graph]], [[Type Check Install]], [[Type Interface]], [[Type Env]], [[Type Formation]], [[Type Check Method]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -77,8 +83,11 @@ DEPTH 0.64 (MEDIUM). The module isolates canonical interface installation and ke
 - **Q:** Put this logic in the program loader? **A:** No. _Rationale:_ the loader owns files and graphs; installing checker schemes is a type-phase concern. _Rejected:_ checker mutation from [[Compiler Program]].
 - **Q:** Merge imported declarations into the local declaration list? **A:** No. _Rationale:_ that would reassign ownership and rerun coherence. _Rejected:_ a synthetic combined module.
 - **Q:** Resolve method keys from the final merged basename map? **A:** No; temporarily overlay the interface's own local names while forming it. _Rationale:_ otherwise two modules exporting the same basename overwrite each other's heads. _Rejected:_ insertion-order identity.
+- **Q:** Should each consumer collect every interface itself? **A:** No; the collection is the
+  graph's, formed once. _Rationale:_ M consumers repeated work as large as the graph and reported a
+  dependency's formation mistake once per importer. _Rejected:_ per-consumer folds.
 - **Q:** Why consume `interfaceIdentities` from `TypeInterface`? **A:** `TypeInterface` now computes and stores canonical nominal identities during skeleton construction, so `Type.Check.Import` does not re-extract identities from AST declaration lists.
 
 ## Referenced by
 
-[[Type Check]] · [[src/Pudu/Type/_MOC]]
+[[Type Check]] · [[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Type Check Install]]

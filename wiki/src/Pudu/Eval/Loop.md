@@ -35,6 +35,11 @@ receiverOwners  :: Value -> Evaluator [Text]
 
 ### Governance
 
+- A range is walked from its own ends rather than turned into an array first. The list is lazy, so a
+  loop that breaks early reads only as far as it got and `for i in 0..20_000_000` allocates nothing
+  up front — residency is flat across two orders of magnitude of range length. An unbounded range has
+  no last value and so is not iterable, which the ordinary refusal reports.
+
 - A loop's body is a block and a block holds loops, so what this needs of the
   evaluator **arrives as a record**. Three things: a condition is an expression,
   a body is a block, and a sequence's `advance` is a closure the program

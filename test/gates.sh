@@ -57,6 +57,8 @@ run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
+run 'pudu installs and publishes packages through git and a stand-in GitHub' \
+  bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
 run 'a generated project works outside the repository' \
   bash -c 'node test/scaffold.mjs "$PUDU"'
 run 'typed lint findings and safe fixes work through the real CLI' \
@@ -65,6 +67,8 @@ run 'the language server answers a real session' \
   bash -c 'node test/lsp-session.mjs "$PUDU"'
 run 'the language server survives what an editor sends it' \
   bash -c 'node test/lsp-robustness.mjs "$PUDU"'
+run 'a watched program starts again for its sources and its --also paths' \
+  bash -c 'node test/watch.mjs "$PUDU"'
 run 'the documentation site keeps its contract' \
   bash -c 'cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
 

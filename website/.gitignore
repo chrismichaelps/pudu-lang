@@ -4,3 +4,5 @@ bin/*
 data/*.tmp
 
 .vercel
+data/packages/
+data/packages.cache/

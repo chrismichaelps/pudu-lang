@@ -1,6 +1,6 @@
 cabal-version:      3.12
 name:               pudu
-version:            0.1.0
+version:            0.1.1
 synopsis:           Pudu language compiler and tools
 description:        A statically typed native systems language compiler with explicit safety and performance semantics.
 category:           Language
@@ -59,12 +59,31 @@ library
   other-modules:     Paths_pudu
   exposed-modules:
     Pudu.Cli.Init
+    Pudu.Cli.Package
+    Pudu.Cli.Progress
+    Pudu.Cli.Publish
+    Pudu.Package.Concurrent
+    Pudu.Package.Credentials
+    Pudu.Package.Digest
+    Pudu.Package.Git
+    Pudu.Package.GitHubIndex
+    Pudu.Package.Http
+    Pudu.Package.Identity
+    Pudu.Package.Install
+    Pudu.Package.Lock
+    Pudu.Package.ManifestEdit
+    Pudu.Package.Progress
+    Pudu.Package.Solve
+    Pudu.Package.Version
+    Pudu.Cli.Terminate
     Pudu.Cli.Lint
     Pudu.Lint
     Pudu.Lint.Config
     Pudu.Version
     Pudu.Bundle
+    Pudu.Cache.Persist
     Pudu.Compiler
+    Pudu.Compiler.Cache
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program
@@ -80,6 +99,7 @@ library
     Pudu.Eval.Builtin.Numeric
     Pudu.Eval.Bytes
     Pudu.Eval.Call
+    Pudu.Eval.Capture
     Pudu.Eval.Csv
     Pudu.Eval.Json
     Pudu.Eval.Xml
@@ -98,6 +118,7 @@ library
     Pudu.Eval.Entropy
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Frozen
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Argument
     Pudu.Eval.Foreign.Resource
@@ -120,6 +141,7 @@ library
     Pudu.Eval.Compress
     Pudu.Eval.Tls
     Pudu.Eval.Order
+    Pudu.Eval.Range
     Pudu.Eval.Render
     Pudu.Eval.Value
     Pudu.Frontend.Expand
@@ -159,6 +181,7 @@ library
     Pudu.Frontend.Syntax
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Stored
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
     Pudu.DecimalLiteral
@@ -181,6 +204,18 @@ library
     Pudu.Lsp.WorkspaceSymbols
     Pudu.Lsp.CodeAction
     Pudu.Lsp.Completion
+    Pudu.Lsp.Context
+    Pudu.Lsp.PatternCompletion
+    Pudu.Lsp.ImportCompletion
+    Pudu.Lsp.ModuleCatalog
+    Pudu.Lsp.Shapes
+    Pudu.Lsp.Receiver
+    Pudu.Lsp.Analysis
+    Pudu.Lsp.RepairCache
+    Pudu.Lsp.Scheduler
+    Pudu.Lsp.ImportedName
+    Pudu.Lsp.Repair
+    Pudu.Eval.Confinement
     Pudu.IntegerLiteral
     Pudu.Doc
     Pudu.Doc.Json
@@ -204,6 +239,7 @@ library
     Pudu.Type.Check
     Pudu.Type.Check.Foreign
     Pudu.Type.Check.Import
+    Pudu.Type.Check.Install
     Pudu.Type.Check.Call
     Pudu.Type.Check.Collection
     Pudu.Type.Check.Coherence
@@ -225,12 +261,14 @@ library
     Pudu.Type.Formation
     Pudu.Type.Marker
     Pudu.Type.Interface
+    Pudu.Type.Interface.Graph
     Pudu.Type.Unify
     Pudu.Type.Value
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
     Pudu.Semantic.Scope
+    Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol
     Pudu.Source
     Pudu.Runtime.Word

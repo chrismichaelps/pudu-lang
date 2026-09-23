@@ -1,0 +1,49 @@
+// Building HTML
+// Std.Html builds a page as typed values, so text is escaped by construction and a bad link is refused.
+module Main
+
+import Std.Html.Build as H
+import Std.Io as Io
+
+type Deer = { name: Str, heightCm: Int, note: Str }
+
+fn row(deer: &Deer) -> H.Node {
+  H.tr().holding([
+      H.td().says(deer.name),
+      H.td().class("number").says("{deer.heightCm} cm"),
+      H.td().says(deer.note)
+    ])
+}
+
+fn page(herd: &Array[Deer]) -> H.Node {
+  var rows = [H.tr().holding([H.th().says("Name"), H.th().says("Height"), H.th().says("Note")])]
+  for deer in *herd {
+    rows = rows.push(row(&deer))
+  }
+  H.section().class("herd").holding([
+      H.h1().says("The smallest deer"),
+      H.p().holding([H.strong().says("{herd.length()}"), H.span().says(" deer, shortest first.")]),
+      H.table().holding(rows)
+    ])
+}
+
+fn main() -> Int {
+  let herd = [
+    Deer{name: "Pudu", heightCm: 40, note: "lives in Chile & Argentina"},
+    Deer{name: "Muntjac", heightCm: 50, note: "<script>alert('barks')</script>"}
+  ]
+  // Each row on its own line. The note with a script in it arrives as text, not markup.
+  for deer in herd {
+    let _row = Io.writeLine(H.render(&row(&deer)))
+  }
+  let whole = H.render(&page(&herd))
+  let _page = Io.writeLine("the whole section is {whole.length()} characters and starts {whole.take(40)}")
+
+  // A link whose target could run code is refused rather than written.
+  match H.a().hrefChecked("javascript:alert(1)") {
+    case Ok(_) => { let _kept = Io.writeLine("kept the link") }
+    case Err(_) => { let _refused = Io.writeLine("refused a javascript: link") }
+  }
+  let _safe = Io.writeLine(H.render(&H.a().href("/docs/http").says("Read about HTTP")))
+  0
+}

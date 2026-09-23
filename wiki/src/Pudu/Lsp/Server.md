@@ -26,6 +26,12 @@ data Analysis = Analysis
   , analysisDiagnostics  :: ![Diagnostic]
   , analysisFileIndex    :: !DocIndex
   , analysisProgramIndex :: !DocIndex
+  , analysisTokens       :: ![Token]
+  , analysisModule       :: !(Maybe Module)
+  , analysisSums         :: !(Map Text SumShape)
+  , analysisRecords      :: !(Map Text RecordShape)
+  , analysisMethods      :: !(Map Text [(Text, Scheme)])   -- every module's declared methods, by owner
+  , analysisExports      :: !ExportIndex                   -- the program's export index
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis
@@ -51,6 +57,27 @@ serverCapabilities :: Json
   within one keystroke would otherwise compile the program three times.
 - The stored analysis retains the root module's resolver result. Hover and definition therefore use
   symbol identity from the same compile as diagnostics and types rather than guessing by spelling.
+- The stored analysis also retains the root module's tooling tree and visible sum and record shapes ([[Lsp Shapes]]). Completion can
+  derive syntax context and legal constructors from one coherent compile rather than reparsing an
+  editor buffer or scanning unrelated documentation entries.
+- A document whose root did not parse stores the parser's recovered tree beside its tokens, built
+  only in that case, so completion knows the construct at the cursor while the text is unfinished.
+- A document's tokens are always stored, lexed directly when the compile produced no root result,
+  so comment, literal, and import contexts are known for text that does not parse. The stored tree
+  is the compiler's tooling syntax, which survives type errors.
+- **Open documents stand in for the disk.** Every compile — of an edited document, of a repair —
+  reads the other open documents' text in place of their files. When a document changes, is
+  closed, or a closed file changes on disk (`workspace/didChangeWatchedFiles`), every open document
+  whose program read that file (`analysisDependencies`, transitive) is analysed again and its
+  diagnostics are published again. Closing a document hands its file back to the disk. A save of an
+  open document changes nothing, because its buffer was already what everything read.
+- A repaired text is compiled through [[Lsp Repair Cache]], keyed by the documents' generation, so
+  a completion or signature help asked again at the same state compiles nothing. The loop keeps the
+  cache and the module catalogs in one session record beside the documents.
+- Import completion reads a module catalog ([[Lsp Module Catalog]]) for the document's source root.
+  The loop keeps one catalog per root in a cache of its own, built on the first import completion
+  and cleared by `didSave`, `didChangeWatchedFiles`, and the file create/delete/rename
+  notifications — the only events that change which modules exist.
 - **All standard capabilities are implemented and announced.** In addition to hover, definition,
   outline, formatting, and completions, the server provides find references, rename (with prepare),
   document highlight, semantic tokens (full), signature help, inlay hints, workspace symbols,
@@ -64,9 +91,11 @@ serverCapabilities :: Json
 - Formatting replaces the whole document in one edit. The formatter guarantees it only moves
   whitespace, so a full replacement cannot change the program, and a client applies one edit
   atomically.
-- The server records workspace roots from `initialize` (`rootUri`, `workspaceFolders`, or `rootPath`)
-  and walks up project boundary markers (`pudu.cabal`, `pudu.toml`, `.git`, `lib`) so submodules
-  inside subdirectories resolve sibling and library imports accurately.
+- The server records every workspace folder from `initialize` (`workspaceFolders`, and the older
+  `rootUri` or `rootPath`). Each document is compiled under the source root [[Lsp Analysis]] derives
+  from its own path and module name, as the command line derives it; folders only root a file with
+  no header and an untitled buffer. A repaired or probe text is compiled under the written
+  document's root, so it reaches the same modules.
 - Every new language surface joins the real stdio-session fixture. The fixture opens a clean
   compatibility document and requires an empty diagnostic list, so an editor cannot silently keep
   an older parser or checker contract while command-line-only tests advance.
@@ -82,18 +111,20 @@ serverCapabilities :: Json
 
 - **Requires:** [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Lsp Hover]], [[Lsp Definition]],
   [[Lsp References]], [[Lsp Rename]], [[Lsp Highlight]], [[Lsp Semantic Tokens]], [[Lsp Signature Help]],
-  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Compiler Program]], [[Doc]],
+  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Lsp Context]], [[Lsp Module Catalog]], [[Lsp Scheduler]], [[Compiler Program]], [[Doc]],
   [[Format]], [[Diagnostic Model]].
 - **Consumed by:** [[Pudu CLI]] through `pudu lsp`, and the VS Code client under `editors/vscode`.
 
 ## Algorithm
 
-Read a message; if it carried text, compile and store the analysis; answer purely from what is
-stored; write the replies. The loop ends when the stream closes, when `exit` arrives, or when a
-framing fault leaves the reader with no way to find the next message.
+Each message is one step of [[Lsp Scheduler]]: if it carried text, compile and store the analysis;
+answer purely from what is stored; return the replies. The scheduler reads on its own thread, so a
+cancellation or a newer text for the same document is seen while a step runs, and it ends when the
+stream closes, when `exit` arrives, or when a framing fault leaves the reader with no way to find the
+next message. Replies are written under one lock, a frame at a time.
 
 Everything a message costs is guarded. A failure while compiling or answering is caught, reported,
-and answered with an error to the request that caused it; the loop then carries on and the document
+and answered with an error to the request that caused it; the server then carries on and the document
 store keeps whatever it last held, since what the failed analysis would have stored is unknown. The
 replies are forced inside that guard, because `answer` is pure and builds them lazily, so a failure
 inside one would otherwise surface where it is written to the handle rather than where it can be
@@ -109,6 +140,10 @@ caught.
 - No disk read for an open document.
 
 ## Grill Log
+
+- **Q:** Why cache the module catalog outside the document store? **A:** It belongs to a source
+  root, not a document, and is filled from IO during a request. _Rationale:_ one walk per root per
+  file-set change, never one per keystroke. _Rejected:_ walking the tree on every import completion.
 
 - **Q:** Why not compute diagnostics incrementally? **A:** Because a whole-program compile is
   already fast enough, and incrementality is where language servers go wrong. _Rationale:_ a stale

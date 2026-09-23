@@ -127,7 +127,7 @@ testProtocolEvaluation = do
         arriving and a reply going back are checked over a real socket. -}
     , counterexample
         "a server routes, wraps, and answers over a connection"
-        (serving === Just "37")
+        (serving === Just "39")
     {-| That a client bounds what a request may cost and where it may go: an
         address the network trusts is refused unless the caller named it, and
         refused again at every redirect rather than only at the first, since a
@@ -172,7 +172,7 @@ testProtocolEvaluation = do
         reading rather than once the memory is gone. -}
     , counterexample
         "an uploaded name never becomes a path"
-        (uploaded === Just "44")
+        (uploaded === Just "45")
     {-| That a message cannot carry more than it says. A line break in an
         address or a subject would let whoever supplied it write headers of
         their own, which is how bulk mail is sent through somebody else's
@@ -262,7 +262,7 @@ testProtocolEvaluation = do
         padding that a body shorter or longer than a block must get. -}
     , counterexample
         "a USTAR archive round-trips entries, sizes, directories, and padding"
-        (tarArchive === Just "13")
+        (tarArchive === Just "14")
     {-| Each piece of pattern syntax against a subject that distinguishes it
         from the piece next to it: greedy against lazy on the same subject, a
         group that took part against one that did not, a bound that is met
@@ -350,7 +350,7 @@ testProtocolEvaluation = do
         ends on its own is only read from if both are running at once. -}
     , counterexample
         "a started program streams, honours a deadline, is stopped, and pipes into another"
-        (childProcesses === Just "13")
+        (childProcesses === Just "14")
     {-| The document is checked against the shape a collector requires rather
         than against itself, because a round trip through one writer and its
         own reader agrees however wrong both are. Two of these are about what
@@ -430,13 +430,13 @@ testProtocolEvaluation = do
         of. -}
     , counterexample
         "a page rendered from a prepared plan, its holes, its limit, and its escaping"
-        (htmlServer === Just "18")
+        (htmlServer === Just "48")
     {-| Every export of the markup builder, checked against what it renders:
         each attribute against the attribute it sets, each tag against its own
         opening tag, and text against the escaping that keeps it text. -}
     , counterexample
         "every tag and attribute renders the markup it names"
-        (htmlBuild === Just "97")
+        (htmlBuild === Just "106")
     {-| Every export of the protocol module against the wire form it stands
         for. The header names are checked against the spelling that goes on
         the wire, since a name answering the wrong header asks for something

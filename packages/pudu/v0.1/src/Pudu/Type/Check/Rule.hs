@@ -5,6 +5,8 @@ module Pudu.Type.Check.Rule
   , binaryType
   , awaitType
   , elementType
+  , rangeType
+  , sliceType
   , enclosingFunctionType
   , enclosingReturnType
   , instantiate
@@ -486,9 +488,6 @@ binaryType spanValue operator left right
   | operator == "in" = do
       _ <- unify spanValue (NominalType "Set" [left]) right
       pure boolType
-  | operator `elem` ["..", "..="] = do
-      unified <- unify spanValue left right
-      pure (NominalType "Range" [unified])
   {-| A shift's count is a position, not a second operand of the same type. It
       answers "how far", which is a plain count whatever the value's width is,
       and requiring the two to match would mean writing `1u8 << 3u8` and make a
@@ -647,6 +646,7 @@ memberType spanValue targetType member = do
     NominalType "Char" [] -> charMethodType spanValue member
     NominalType "Map" [key, held] -> mapMethodType spanValue member key held
     NominalType "Set" [element] -> setMethodType spanValue member element
+    NominalType "Range" [element] -> rangeMethodType spanValue member element
     {-| A field of a generic record carries the arguments the value was built
         with, not the declaration's rigid parameters: reading `value` from a
         `Boxed[Int]` gives `Int`. -}
@@ -701,6 +701,92 @@ mapMethodType spanValue member key held = case member of
  where
   mapType = NominalType "Map" [key, held]
   arrayOf element = NominalType "Array" [element]
+
+{-| The type of a range, from the ends that were written.
+
+    Each end is a platform integer, which is the type an index is and therefore
+    the type a range is useful at. Both ends may be absent: `..` is the whole of
+    whatever it is applied to, and it is still a `Range[Int]` so that one rule
+    types every spelling. -}
+rangeType :: Span -> Maybe Type -> Maybe Type -> Checker Type
+rangeType spanValue lower upper = do
+  {-| The two ends meet each other before either meets `Int`, so a range written
+      between two values of one wrong type is one mistake and one diagnostic
+      rather than the same complaint about each end. Once they have met, holding
+      one of them to `Int` holds both. -}
+  case (lower, upper) of
+    (Just low, Just high) -> do
+      unified <- unify spanValue low high
+      _ <- unify spanValue integerType unified
+      pure ()
+    (Just low, Nothing) -> unify spanValue integerType low >> pure ()
+    (Nothing, Just high) -> unify spanValue integerType high >> pure ()
+    (Nothing, Nothing) -> pure ()
+  pure (NominalType "Range" [integerType])
+
+{-| The type of a slice: the value that was sliced.
+
+    A stretch of an array is an array, a stretch of text is text, and a stretch
+    of bytes is bytes. A tuple is refused, because its members may differ and
+    the type of a stretch of one depends on which stretch — which is a number
+    the checker does not have. -}
+sliceType :: Span -> Type -> Checker Type
+sliceType spanValue targetType = do
+  resolved <- zonk targetType
+  case resolved of
+    ErrorType -> pure ErrorType
+    VariableType _ -> freshVariable
+    ReferenceTypeValue _ referent -> sliceType spanValue referent
+    NominalType "Array" [element] -> pure (NominalType "Array" [element])
+    NominalType "Str" [] -> pure stringType
+    NominalType "Bytes" [] -> pure bytesType
+    _ -> do
+      report "E3006" spanValue ("a " <> renderType resolved <> " cannot be sliced")
+        (Just "slice an array, a string, or a byte sequence")
+      pure ErrorType
+
+{-| Built-in range methods, typed exactly.
+
+    A range is two numbers and a rule for reading them, so most of these are
+    arithmetic and answer without walking anything. The ones that hand back the
+    values themselves answer with an array, because that is what they are: a
+    range counts upward by one, and nothing that skips or reverses is one. -}
+rangeMethodType :: Span -> Text -> Type -> Checker Type
+rangeMethodType spanValue member element = case member of
+  "length" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "isBounded" -> pure (FunctionTypeValue False [] boolType)
+  "isInclusive" -> pure (FunctionTypeValue False [] boolType)
+  "contains" -> pure (FunctionTypeValue False [element] boolType)
+  "start" -> pure (FunctionTypeValue False [] (optionOf element))
+  "end" -> pure (FunctionTypeValue False [] (optionOf element))
+  "toArray" -> pure (FunctionTypeValue False [] (arrayOf element))
+  "reverse" -> pure (FunctionTypeValue False [] (arrayOf element))
+  "step" -> pure (FunctionTypeValue False [integerType] (arrayOf element))
+  "sum" -> pure (FunctionTypeValue False [] element)
+  "map" -> do
+    result <- freshVariable
+    pure (FunctionTypeValue False [FunctionTypeValue False [element] result] (arrayOf result))
+  "filter" ->
+    pure
+      ( FunctionTypeValue False
+          [FunctionTypeValue False [element] boolType]
+          (arrayOf element)
+      )
+  "reduce" -> do
+    carried <- freshVariable
+    pure
+      ( FunctionTypeValue False
+          [FunctionTypeValue False [carried, element] carried, carried]
+          carried
+      )
+  _ -> do
+    report "E3005" spanValue ("Range has no method " <> member)
+      (Just "check the method name against the documented range methods")
+    pure ErrorType
+ where
+  arrayOf held = NominalType "Array" [held]
+  optionOf held = NominalType "Option" [held]
 
 {-| Built-in set methods, typed exactly. -}
 setMethodType :: Span -> Text -> Type -> Checker Type

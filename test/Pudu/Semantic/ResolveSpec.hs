@@ -6,6 +6,7 @@ import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticRelated)
 import Pudu.Semantic (Resolution (..), Symbol (..))
+import Pudu.Semantic.ScopeIndex (emptyScopeIndex)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -359,7 +360,7 @@ resolve inputLines = do
 
 emptyResolution :: Resolution
 emptyResolution =
-  Resolution{resolutionSymbols = [], resolutionReferences = [], resolutionExports = []}
+  Resolution{resolutionSymbols = [], resolutionReferences = [], resolutionExports = [], resolutionScopes = emptyScopeIndex}
 
 compile :: [Text] -> IO CompileResult
 compile inputLines = do

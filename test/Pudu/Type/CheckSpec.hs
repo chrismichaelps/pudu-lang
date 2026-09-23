@@ -22,7 +22,8 @@ import Pudu.Type.Check.FunctionGenericSpec
   , testLambdaTypes
   )
 import Pudu.Type.Check.ControlFlowSpec
-  ( testControlFlow
+  ( testBlockScope
+  , testControlFlow
   , testExportedSignatures
   , testIterationTypes
   , testNoCascade
@@ -81,6 +82,7 @@ typeProperties =
   , ("records check fields on construction and access", testRecords)
   , ("sum constructors and patterns type their payloads", testVariants)
   , ("control flow unifies its branches", testControlFlow)
+  , ("a block's bindings end with the block", testBlockScope)
   , ("exported signatures must be annotated", testExportedSignatures)
   , ("a type error reports once and does not cascade", testNoCascade)
   , ("an earlier phase's error suppresses type checking", testPhaseOrder)

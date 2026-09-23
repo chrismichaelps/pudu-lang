@@ -17,9 +17,16 @@ page in a three-column layout: the list of pages, the article, and the page's ow
 - **Article.** A link back to the documentation, the title, a metadata list — author, the language
   version the catalogue was generated from, and a link to the page's Markdown on GitHub — the blocks
   [[website View Markdown]] produced, and links to the previous and next pages. The index carries the
-  author and version, numbers its chapters, and says that every example runs as written.
+  author and version, numbers its chapters, and says that every example runs as written. The index
+  and each chapter open with the shared page banner; chapter source metadata sits within it, while
+  the chapter summary remains once in the source Markdown below.
 - **Contents.** The page's second- and third-level headings as links to their anchors, hidden below
-  1100px.
+  1100px. `/assets/docs/contents.js` marks the section being read with `aria-current="location"`:
+  the last heading above a reading line 96px below the top of the window, or the last section once
+  the page cannot scroll further. Heading positions are measured when the page's size changes — a
+  `ResizeObserver` on the document — and a scroll compares its offset with them once per frame, so
+  scrolling reads nothing from the layout. The mark changes colour and border only, which repaint
+  without reflow. Without the script the contents are plain links.
 
 `/docs` is the index and `/docs/:page` a page; `/guide`, the address the earlier hand-written guide
 used, renders the index with `/docs` as its canonical address. Page addresses are one segment below

@@ -1,0 +1,9 @@
+module Lib
+
+export trait Shape {
+  fn area(self: &Self) -> Int
+}
+
+export type Holder = { value: Shape }
+
+export fn make() -> Int { 1 }

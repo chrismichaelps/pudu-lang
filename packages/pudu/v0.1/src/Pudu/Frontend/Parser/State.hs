@@ -1,3 +1,4 @@
+{-# LANGUAGE UnboxedTuples #-}
 {-| @Program.Parser.State — owns bounded token traversal -}
 module Pudu.Frontend.Parser.State
   ( BlockParser
@@ -76,29 +77,31 @@ data ParserState = ParserState
   , parserFallbackEof :: !Token
   }
 
-{-| @Program.Parser.Action — threads opaque parser state -}
-newtype Parser a = Parser (ParserState -> (a, ParserState))
+{-| @Program.Parser.Action — threads opaque parser state
+
+    A step answers with an unboxed pair, so the value and the state it leaves
+    come back in registers: no pair is built for each step, and no deferred
+    selection of its halves is left for the next step to force. The value
+    itself stays as lazy as the grammar makes it. -}
+newtype Parser a = Parser (ParserState -> (# a, ParserState #))
 
 instance Functor Parser where
   fmap transform (Parser action) =
-    Parser $ \state ->
-      let (value, next) = action state
-       in (transform value, next)
+    Parser $ \state -> case action state of
+      (# value, next #) -> (# transform value, next #)
 
 instance Applicative Parser where
-  pure value = Parser (\state -> (value, state))
+  pure value = Parser (\state -> (# value, state #))
   Parser functionAction <*> Parser valueAction =
-    Parser $ \state ->
-      let (functionValue, afterFunction) = functionAction state
-          (value, afterValue) = valueAction afterFunction
-       in (functionValue value, afterValue)
+    Parser $ \state -> case functionAction state of
+      (# functionValue, afterFunction #) -> case valueAction afterFunction of
+        (# value, afterValue #) -> (# functionValue value, afterValue #)
 
 instance Monad Parser where
   Parser action >>= continue =
-    Parser $ \state ->
-      let (value, afterValue) = action state
-          Parser nextAction = continue value
-       in nextAction afterValue
+    Parser $ \state -> case action state of
+      (# value, afterValue #) -> case continue value of
+        Parser nextAction -> nextAction afterValue
 
 initialParserState :: Source -> [Token] -> ParserState
 initialParserState source tokens =
@@ -114,8 +117,8 @@ initialParserState source tokens =
 
 runParser :: Source -> Parser a -> [Token] -> (a, [Diagnostic])
 runParser source (Parser action) tokens =
-  let (value, finalState) = action (initialParserState source tokens)
-   in (value, sortDiagnostics (reverse (parserDiagnosticsRev finalState)))
+  case action (initialParserState source tokens) of
+    (# value, finalState #) -> (value, sortDiagnostics (reverse (parserDiagnosticsRev finalState)))
 
 {-| Parse a separate token stream, then resume where the caller was.
 
@@ -132,11 +135,11 @@ withTokens tokens (Parser action) =
             { parserRemaining = normalizeTokens (parserFallbackEof state) tokens
             , parserBudgetExhausted = False
             }
-        (value, after) = action nested
-     in (value, state{parserDiagnosticsRev = parserDiagnosticsRev after})
+     in case action nested of
+          (# value, after #) -> (# value, state{parserDiagnosticsRev = parserDiagnosticsRev after} #)
 
 peekToken :: Parser Token
-peekToken = Parser $ \state -> (tokenAt 0 state, state)
+peekToken = Parser $ \state -> (# tokenAt 0 state, state #)
 
 {-| Line significance is answered from preserved leading trivia. No terminator
     token is synthesized, so lossless reconstruction stays intact. -}
@@ -157,7 +160,7 @@ peekKind = tokenKind <$> peekToken
     A type-argument list and an index both open with `[`, and only what follows
     the closing bracket tells them apart. -}
 matchingBracketDistance :: Parser (Maybe Int)
-matchingBracketDistance = Parser $ \state -> (scan 0 (0 :: Int) state, state)
+matchingBracketDistance = Parser $ \state -> (# scan 0 (0 :: Int) state, state #)
  where
   scan distance depth state
     | distance > 256 = Nothing
@@ -170,7 +173,7 @@ matchingBracketDistance = Parser $ \state -> (scan 0 (0 :: Int) state, state)
           | otherwise -> scan (distance + 1) depth state
 
 lookaheadKind :: Int -> Parser TokenKind
-lookaheadKind distance = Parser $ \state -> (tokenKind (tokenAt distance state), state)
+lookaheadKind distance = Parser $ \state -> (# tokenKind (tokenAt distance state), state #)
 
 isAtEnd :: Parser Bool
 isAtEnd = (== EndOfFile) <$> peekKind
@@ -181,7 +184,7 @@ advanceToken = Parser $ \state ->
       remaining = case parserRemaining state of
         current : rest | tokenKind current /= EndOfFile -> rest
         _ -> parserRemaining state
-   in (token, state{parserRemaining = remaining})
+   in (# token, state{parserRemaining = remaining} #)
 
 matchKind :: (TokenKind -> Bool) -> Parser (Maybe Token)
 matchKind predicate = do
@@ -231,7 +234,7 @@ expectIdentifier context = do
 emitParseDiagnostic :: Diagnostic -> Parser ()
 emitParseDiagnostic value =
   Parser $ \state ->
-    ((), state{parserDiagnosticsRev = value : parserDiagnosticsRev state})
+    (# (), state{parserDiagnosticsRev = value : parserDiagnosticsRev state} #)
 
 {-| How many diagnostics this parse has produced so far.
 
@@ -239,7 +242,7 @@ emitParseDiagnostic value =
     to stay quiet once something has already gone wrong, which is what keeps a
     hostile file from turning one mistake into hundreds. -}
 diagnosticCount :: Parser Int
-diagnosticCount = Parser $ \state -> (length (parserDiagnosticsRev state), state)
+diagnosticCount = Parser $ \state -> (# length (parserDiagnosticsRev state), state #)
 
 {-| Report a parse error, unless the nesting budget has already been exhausted.
 
@@ -261,7 +264,7 @@ emitParseError codeText spanValue message help = do
     expression that precedes a block, where `Name {` would be ambiguous with the
     block itself, and is reinstated inside any bracketed context. -}
 recordsAdmitted :: Parser Bool
-recordsAdmitted = Parser $ \state -> (parserAdmitsRecords state, state)
+recordsAdmitted = Parser $ \state -> (# parserAdmitsRecords state, state #)
 
 {-| Run an action with record constructions admitted, or withheld.
 
@@ -277,14 +280,14 @@ withoutRecords = withRecordAdmission False
 withRecordAdmission :: Bool -> Parser a -> Parser a
 withRecordAdmission admitted (Parser action) =
   Parser $ \state ->
-    let (value, next) = action state{parserAdmitsRecords = admitted}
-     in (value, next{parserAdmitsRecords = parserAdmitsRecords state})
+    case action state{parserAdmitsRecords = admitted} of
+      (# value, next #) -> (# value, next{parserAdmitsRecords = parserAdmitsRecords state} #)
 
 {-| Whether the shared nesting budget has already been exhausted during this
     parse. Grammar loops stop instead of re-descending, so one hostile input
     reports exactly one `E1099` and no unwinding delimiter cascade. -}
 budgetExhausted :: Parser Bool
-budgetExhausted = Parser $ \state -> (parserBudgetExhausted state, state)
+budgetExhausted = Parser $ \state -> (# parserBudgetExhausted state, state #)
 
 currentSpan :: Parser Span
 currentSpan = tokenSpan <$> peekToken
@@ -300,12 +303,12 @@ withRecursionBudget (Parser action) =
             diagnostics
               | parserBudgetExhausted state = parserDiagnosticsRev state
               | otherwise = maybe (parserDiagnosticsRev state) (: parserDiagnosticsRev state) finding
-         in (Nothing, state{parserDiagnosticsRev = diagnostics, parserBudgetExhausted = True})
+         in (# Nothing, state{parserDiagnosticsRev = diagnostics, parserBudgetExhausted = True} #)
       else
         let reduced = state{parserRecursionBudget = parserRecursionBudget state - 1}
-            (value, afterAction) = action reduced
-            restored = afterAction{parserRecursionBudget = parserRecursionBudget state}
-         in (Just value, restored)
+         in case action reduced of
+              (# value, afterAction #) ->
+                (# Just value, afterAction{parserRecursionBudget = parserRecursionBudget state} #)
 
 synchronizeDeclaration :: Parser ()
 synchronizeDeclaration = do

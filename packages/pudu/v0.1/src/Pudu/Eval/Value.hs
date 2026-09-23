@@ -13,6 +13,8 @@ module Pudu.Eval.Value
   , BucketsMethod (..)
   , CharMethod (..)
   , MapMethod (..)
+  , RangeMethod (..)
+  , rangeMethodName
   , SetMethod (..)
   , bytesMethodName
   , bucketsMethodName
@@ -21,6 +23,7 @@ module Pudu.Eval.Value
   , StringMethod (..)
   , charMethodName
   , stringMethodName
+  , Captured (..)
   , Closure (..)
   , Value (..)
   , ForeignBinding (..)
@@ -84,6 +87,17 @@ data Value
       store holds no opinion about hashing or equality: those belong to the
       library, where a type's own `Eq` can be called. -}
   | BucketsValue !(IntMap Value)
+  {-| Two ends and a rule for reading them, rather than the numbers between.
+
+      `0..1000000` is three fields here and a million values if it were the
+      list it stands for, which is the difference between a loop that starts
+      and one that allocates first. Either end may be absent, which is what
+      lets `items[2..]` mean the tail of something whose length the writer
+      never had to ask for; the value that is indexed supplies what is missing.
+
+      Elements are platform integers, which is the type a range's ends are
+      checked at. -}
+  | RangeValue !(Maybe Integer) !Bool !(Maybe Integer)
   | CharValue !Char
   | BoolValue !Bool
   | NullValue
@@ -102,6 +116,7 @@ data Value
   | CharMethodValue !CharMethod !Value
   | MapMethodValue !MapMethod !Value
   | SetMethodValue !SetMethod !Value
+  | RangeMethodValue !RangeMethod !Value
   | BytesMethodValue !BytesMethod !Value
   | BucketsMethodValue !BucketsMethod !Value
   {-| A function that is somebody else's, reached through the boundary the
@@ -233,17 +248,23 @@ falseValue = BoolValue False
     receiver is bound to the first parameter, which is what `value.method()`
     means.
 
-    `closureCaptured` is present for a function *literal* and absent for a
-    declaration. A declaration is called in the environment it is called from,
-    which is what lets a module's functions see each other and an imported
-    module's frame stay reachable. A literal cannot work that way: it may be
-    returned, stored, and called long after the block that gave its free names
-    meaning has ended, so it carries that environment with it. -}
+    `closureCaptured` carries both the retained frames and the module boundary.
+    A literal may be returned, stored, and called long after the block that gave
+    its free names meaning has ended, so it carries its narrowed environment.
+    A declaration is scoped to the module frames installed by the linker. The
+    boundary travels with either capture so a nested literal can still tell
+    durable module bindings from transient call locals. -}
+data Captured = Captured
+  { capturedEnvironment :: ![Map Text Value]
+  , capturedModuleDepth :: !Int
+  }
+  deriving stock (Show)
+
 data Closure = Closure
   { closureName :: !Text
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
-  , closureCaptured :: !(Maybe [Map Text Value])
+  , closureCaptured :: !(Maybe Captured)
   }
   deriving stock (Show)
 
@@ -312,6 +333,12 @@ compareValues left right = case (left, right) of
       routes to the same contents compare equal. -}
   (BucketsValue a, BucketsValue b) ->
     compareIndexed (IntMap.toAscList a) (IntMap.toAscList b)
+  {-| Two ranges compare by where they start, then by how far they reach, so
+      an ordered collection holding ranges holds them in the order they cover.
+      An absent end sorts before every present one, which is the order the two
+      `Maybe`s already have. -}
+  (RangeValue lowA inclusiveA highA, RangeValue lowB inclusiveB highB) ->
+    compare lowA lowB <> compare highA highB <> compare inclusiveA inclusiveB
   (CharValue a, CharValue b) -> compare a b
   (BoolValue a, BoolValue b) -> compare a b
   (NullValue, NullValue) -> EQ
@@ -395,4 +422,5 @@ shapeRank value = case value of
   BucketsMethodValue _ _ -> 24
   ForeignValue _ -> 25
   ForeignHandleValue _ _ _ -> 26
-
+  RangeValue{} -> 27
+  RangeMethodValue _ _ -> 28

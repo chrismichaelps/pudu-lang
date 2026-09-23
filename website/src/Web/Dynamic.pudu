@@ -4,23 +4,80 @@ import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Option as Option
+import Std.Text as Text
 import Service.Catalog as Catalog
-import View.Dynamic as Dynamic
+import Service.Packages as Packages
+import Service.Playground.Admission as Admission
+import Service.Playground as Playground
+import Service.Search as Search
+import View.Dynamic as DynamicView
+import View.Packages.Catalog as PackageCatalog
+import View.Packages.Suggest as PackageSuggest
+import Web.Playground as PlaygroundWeb
 
-/// Render only the requests that are not already static edge files.
-export fn render(siteUrl: Str, catalog: &Catalog.Catalog, target: Str) -> Http.Response {
-  let asked = Route.Request {
-    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
-    path: Route.pathOf(target),
-    params: mapOf([]),
-    query: Route.queryOf(target),
-    peer: "platform"
+/// What the serverless function serves: the requests that are not static
+/// files at the edge.
+export type Dynamic = {
+  siteUrl: Str,
+  catalog: Catalog.Catalog,
+  /// The catalogue as search reads it, prepared once per cold start.
+  search: Search.Index,
+  packages: Packages.Packages,
+  playground: Playground.Playground,
+  gates: Playground.Gates
+}
+
+/// The function's routes: search, the playground's dynamic addresses, and a
+/// no-index answer for everything else.
+///
+/// The platform stands in front of the function and states the reader's
+/// address in `x-forwarded-for`, so that is who a run is counted against.
+export fn routes(edge: &Dynamic) -> Route.Router {
+  let held = *edge
+  let playground = PlaygroundWeb.Serving {
+    siteUrl: held.siteUrl,
+    playground: held.playground,
+    reader: Admission.forwardedReader,
+    gates: held.gates,
+    missing: fn(path: Str) -> Http.Response { missing(held.siteUrl, path) }
   }
-  if asked.path == "/search" {
-    Reply.page(200, Dynamic.results(siteUrl, &catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
-  } else {
-    noIndex(Reply.page(404, Dynamic.missing(siteUrl, asked.path)))
-  }
+  let search = Route.get("/search", fn(asked: Route.Request) -> Http.Response {
+      Reply.page(200, DynamicView.results(held.siteUrl, &held.search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+    })
+  let packageSearch = Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
+      if !Packages.present(&held.packages) { return missing(held.siteUrl, asked.path) }
+      let query = Option.unwrapOr(Route.queryParam(&asked, "q"), "")
+      let filter = Option.unwrapOr(Route.queryParam(&asked, "filter"), "")
+      let page = Option.unwrapOr(Text.wholeOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), 0)
+      if page < 1 || page > PackageCatalog.resultPagesFiltered(&held.packages, query, filter) { return missing(held.siteUrl, asked.path) }
+      Reply.page(200, PackageCatalog.pageNumberFiltered(held.siteUrl, &held.packages, query, page, filter))
+    })
+  let packageSuggest = Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
+      PackageSuggest.reply(&held.packages, &held.catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+    })
+  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch, packageSuggest])), fn(asked: Route.Request) -> Http.Response {
+      missing(held.siteUrl, asked.path)
+    })
+}
+
+/// The function's answer to a request.
+export fn answer(edge: &Dynamic, request: Route.Request) -> Http.Response {
+  Route.dispatch(&routes(edge), request)
+}
+
+/// The function's answer to a request for a page.
+export fn render(edge: &Dynamic, target: Str) -> Http.Response {
+  answer(edge, Route.Request {
+      message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
+      path: Route.pathOf(target),
+      params: mapOf([]),
+      query: Route.queryOf(target),
+      peer: "platform"
+    })
+}
+
+fn missing(siteUrl: Str, path: Str) -> Http.Response {
+  noIndex(Reply.page(404, DynamicView.missing(siteUrl, path)))
 }
 
 fn noIndex(response: Http.Response) -> Http.Response {

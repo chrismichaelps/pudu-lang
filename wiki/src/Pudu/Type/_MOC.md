@@ -10,6 +10,8 @@ tags: [moc, module]
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.
 - [[Type Formation]] — type syntax to formed type, and what declarations contribute.
 - [[Type Interface]] — exported signatures, canonical declaration identity, and import-scoped implementation visibility.
+- [[Type Interface Graph]] — interface facts prepared once per module graph, and each consumer's overlay.
+- [[Type Check Install]] — declaring one interface's shared and consumer-specific signatures.
 - [[Type Unify]] — making two types equal, or explaining why they are not.
 - [[Type Check]] — checking declarations, statements, and expressions.
 - [[Type Check Rule]] — the closed operator, call, member, and index rules.

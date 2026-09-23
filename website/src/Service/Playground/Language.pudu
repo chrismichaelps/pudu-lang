@@ -1,0 +1,145 @@
+module Service.Playground.Language
+
+import Std.Json as Json
+import Std.Option as Option
+import Domain.Playground as Play
+
+/// One question put to the language server, as the whole conversation.
+///
+/// The server is started for the question and stopped after it, so the
+/// conversation is written in full before anything is read: introduce the
+/// client, open the program, ask, and say goodbye. A server that is not asked
+/// to keep anything between questions can be run anywhere, by any number of
+/// runners, with nothing to route back to the one that answered last.
+
+/// The request identifier the question is asked under.
+const QUESTION_ID: Int = 2
+
+/// The request identifier the goodbye is asked under.
+const SHUTDOWN_ID: Int = 3
+
+/// The protocol's kinds of completion request: asked for, and set off by typing
+/// a trigger character.
+const INVOKED: Int = 1
+const TRIGGERED: Int = 2
+
+/// The notification the server reports a program's problems in.
+const DIAGNOSTICS_METHOD: Str = "textDocument/publishDiagnostics"
+
+/// Every message of one conversation, framed as the server reads them.
+///
+/// `root` is the directory the program is in and `uri` the program itself, both
+/// as the server will see them: inside the sandbox they are not the paths the
+/// runner wrote to.
+export fn conversation(root: Str, uri: Str, source: Str, question: &Play.Question) -> Str {
+  let method = Option.unwrapOr(Play.methodFor(question), "")
+  var messages = [
+    request(1, "initialize", Json.object(&[
+          ("processId", Json.Null),
+          ("rootUri", Json.Text(root)),
+          ("capabilities", Json.object(&[]))
+        ])),
+    notification("initialized", Json.object(&[])),
+    notification("textDocument/didOpen", Json.object(&[
+          ("textDocument", Json.object(&[
+                ("uri", Json.Text(uri)),
+                ("languageId", Json.Text("pudu")),
+                ("version", Json.Number(1)),
+                ("text", Json.Text(source))
+              ]))
+        ]))
+  ]
+  if !method.isEmpty() {
+    messages = messages.push(request(QUESTION_ID, method, Json.object(&[
+            ("textDocument", Json.object(&[("uri", Json.Text(uri))])),
+            ("position", Json.object(&[
+                  ("line", Json.Number(question.line)),
+                  ("character", Json.Number(question.character))
+                ])),
+            ("context", context(question))
+          ])))
+  }
+  messages = messages.push(request(SHUTDOWN_ID, "shutdown", Json.Null))
+  messages = messages.push(notification("exit", Json.Null))
+  var framed = ""
+  for message in messages {
+    framed = framed + frame(message)
+  }
+  framed
+}
+
+/// What the server said, read from everything it wrote.
+///
+/// Every reply body is JSON, which never holds a raw line break, so the
+/// transcript is cut at each header rather than counted out byte by byte. A
+/// transcript with no answer to the question — the server stopped early, or
+/// was stopped — is `NotAnswered`.
+export fn answerIn(transcript: Str, question: &Play.Question) -> Play.Answer {
+  var result: Option[Str] = None
+  var diagnostics = "[]"
+  for piece in transcript.split("Content-Length:") {
+    let start = piece.indexOf("\r\n\r\n")
+    if start >= 0 {
+      match Json.decode(piece.drop(start + 4).trim()) {
+        case Ok(message) => {
+          if idOf(&message) == Some(QUESTION_ID) {
+            result = Some(match Json.field(&message, "result") {
+                case Some(value) => Json.encode(&value)
+                case None => "null"
+              })
+          }
+          if textAt(&message, "method") == Some(DIAGNOSTICS_METHOD) {
+            if let Some(found) = Json.path(&message, &["params", "diagnostics"]) {
+              diagnostics = Json.encode(&found)
+            }
+          }
+        }
+        case Err(_) => ()
+      }
+    }
+  }
+  let asked = Option.unwrapOr(Play.methodFor(question), "")
+  if asked.isEmpty() { return Play.Answered{result: "null", diagnostics: diagnostics} }
+  match result {
+    case Some(found) => Play.Answered{result: found, diagnostics: diagnostics}
+    case None => Play.NotAnswered("The language server did not answer in time.")
+  }
+}
+
+/// How a question was asked: typing `trigger`, or on request.
+fn context(question: &Play.Question) -> Json.Json {
+  if question.trigger.isEmpty() {
+    Json.object(&[("triggerKind", Json.Number(INVOKED))])
+  } else {
+    Json.object(&[("triggerKind", Json.Number(TRIGGERED)), ("triggerCharacter", Json.Text(question.trigger))])
+  }
+}
+
+fn request(id: Int, method: Str, params: Json.Json) -> Json.Json {
+  Json.object(&[
+      ("jsonrpc", Json.Text("2.0")),
+      ("id", Json.Number(id)),
+      ("method", Json.Text(method)),
+      ("params", params)
+    ])
+}
+
+fn notification(method: Str, params: Json.Json) -> Json.Json {
+  Json.object(&[("jsonrpc", Json.Text("2.0")), ("method", Json.Text(method)), ("params", params)])
+}
+
+/// One message with the header that says how many bytes of UTF-8 follow.
+fn frame(message: Json.Json) -> Str {
+  let body = Json.encode(&message)
+  "Content-Length: " + show(body.toBytes().length()) + "\r\n\r\n" + body
+}
+
+fn idOf(message: &Json.Json) -> Option[Int] {
+  let held = Json.field(message, "id") ?
+  Json.asInt(&held)
+}
+
+fn textAt(message: &Json.Json, name: Str) -> Option[Str] {
+  let held = Json.field(message, name) ?
+  Json.asText(&held)
+}

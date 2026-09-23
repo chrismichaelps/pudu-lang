@@ -15,7 +15,7 @@ aliases: [Lsp Signature Help]
 
 ## Purpose
 
-Provide active function/method signatures and current parameter indicators when the user invokes or edits arguments within parentheses.
+The signature is the function type the checker gave the callee, which covers declared, imported, built-in, and trait methods alike; parameter names and documentation come from the index when the file declares the function. Labels are `name(parameters) -> result` with each parameter given as its range. An unclosed call is answered from a [[Lsp Repair|repaired copy]].
 
 ## Interface
 

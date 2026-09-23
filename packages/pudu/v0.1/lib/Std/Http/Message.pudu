@@ -149,6 +149,34 @@ export fn responseComplete(source: &Bytes, method: &Http.Method) -> Bool {
   }
 }
 
+/// Where a response's body ends, as its head says: at the head itself, after
+/// a declared length, at the terminating chunk, or when the connection closes.
+export type Framing
+  = HeadOnly
+  | Length(Int)
+  | Chunked
+  | UntilClose
+
+/// The framing of a response whose head (through the blank line) is given,
+/// or nothing when the head does not parse.
+export fn framingOf(head: &Bytes, method: &Http.Method) -> Option[Framing] {
+  let text = match ByteSeq.toText(head) {
+    case Ok(held) => held
+    case Err(_) => { return None }
+  }
+  match parseResponse(text) {
+    case Err(_) => None
+    case Ok(response) => {
+      if Http.methodName(method) == "HEAD" || hasNoBody(response.status.code) { return Some(HeadOnly) }
+      if Http.isChunked(&response.headers) { return Some(Chunked) }
+      match Http.contentLength(&response.headers) {
+        case Some(length) => Some(Length(length))
+        case None => Some(UntilClose)
+      }
+    }
+  }
+}
+
 fn hasNoBody(code: Int) -> Bool {
   (code >= 100 && code < 200) || code == 204 || code == 304
 }

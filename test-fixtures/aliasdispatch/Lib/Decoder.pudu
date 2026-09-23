@@ -1,0 +1,15 @@
+module Lib.Decoder
+
+import Std.Bytes as Bytes
+import Std.Map as Map
+
+/// Decodes through the module, whose answer is a `Result`.
+export fn decoded(raw: &Bytes) -> Result[Str, Str] {
+  match Bytes.toText(raw) {
+    case Ok(text) => Ok(text)
+    case Err(_) => Err("not text")
+  }
+}
+
+/// How many entries a map holds, read through the module.
+export fn counted(table: &Map[Str, Int]) -> Int { Map.size(table) }

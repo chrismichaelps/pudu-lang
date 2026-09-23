@@ -1,0 +1,7 @@
+module RangeSumOverflow
+
+/// A short range can still have a sum outside Int. Checked arithmetic applies
+/// to the method result just as it does to an explicit `+` expression.
+export fn main() -> Int {
+  (9223372036854775806..=9223372036854775807).sum()
+}

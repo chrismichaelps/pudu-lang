@@ -1,0 +1,415 @@
+module Test.Playground
+
+import Std.Bytes as ByteSeq
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.List as List
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+import Std.Test as Test
+import Domain.Playground as Play
+import PlaygroundRunner as RunnerService
+import Service.Playground.Admission as Admission
+import Service.Playground.Examples as Examples
+import Service.Playground.Language as Language
+import Service.Playground as Playground
+import Service.Playground.Remote as Remote
+import Service.Playground.Sandbox as Sandbox
+import Service.Playground.Wire as Wire
+import View.Playground as PlaygroundView
+import Web.Playground as PlaygroundWeb
+
+const ORIGIN: Str = "https://pudu.example"
+
+/// Every script module beneath the playground's folder other than its entry,
+/// named as `folder/file.js`, in order.
+fn scriptModulesOnDisk(root: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  let folders = match Io.list(root) {
+    case Ok(names) => names
+    case Err(_) => []
+  }
+  for folder in folders {
+    if !folder.endsWith(".js") {
+      let files = match Io.list(root + "/" + folder) {
+        case Ok(names) => names
+        case Err(_) => []
+      }
+      for file in files {
+        if file.endsWith(".js") { found = found.push(folder + "/" + file) }
+      }
+    }
+  }
+  List.sortBy(&found, |left: Str, right: Str| left < right)
+}
+
+const HELLO: Str = "module Main\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  let _said = Io.writeLine(\"hello from the sandbox\")\n  0\n\}\n"
+
+/// A runner that says what it was given, and counts how often it was asked.
+fn echoing(calls: &Sync.Counter) -> Playground.Runner {
+  let counted = *calls
+  Playground.Runner {
+    run: fn(submission: Play.Submission, client: Str) -> Play.Outcome {
+      let _counted = Sync.increment(&counted, 1)
+      Play.Finished(Play.Run {
+          status: 0,
+          output: "ran " + submission.moduleName + " for " + client + " <script>",
+          errors: "",
+          millis: 1,
+          truncated: false
+        })
+    },
+    ask: fn(submission: Play.Submission, asked: Play.Question, _client: Str) -> Play.Answer {
+      Play.Answered{result: "\"" + asked.method + " in " + submission.moduleName + "\"", diagnostics: "[]"}
+    }
+  }
+}
+
+/// A run that exited with status 1 after writing `errors`.
+fn failedWith(errors: Str) -> Play.Outcome {
+  Play.Finished(Play.Run{status: 1, output: "", errors: errors, millis: 5, truncated: false})
+}
+
+fn timingOut(calls: &Sync.Counter) -> Playground.Runner {
+  let counted = *calls
+  Playground.Runner {
+    run: fn(_submission: Play.Submission, _client: Str) -> Play.Outcome {
+      let _counted = Sync.increment(&counted, 1)
+      Play.TimedOut(Play.Run{status: -1, output: "", errors: "", millis: 10000, truncated: false})
+    },
+    ask: fn(_submission: Play.Submission, _asked: Play.Question, _client: Str) -> Play.Answer { Play.NotAnswered("slow") }
+  }
+}
+
+fn request(method: Http.Method, target: Str, headers: &Array[(Str, Str)], body: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: method, target: target, headers: *headers, body: body, binaryBody: None},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "198.51.100.7"
+  }
+}
+
+fn serving(playground: &Playground.Playground, runs: &Admission.Gate) -> PlaygroundWeb.Serving {
+  PlaygroundWeb.Serving {
+    siteUrl: ORIGIN,
+    playground: *playground,
+    reader: Admission.peerReader,
+    gates: Playground.Gates{runs: *runs, questions: Admission.open()},
+    missing: fn(path: Str) -> Http.Response { Http.Response{status: Http.status(404), headers: [], body: "missing " + path, binaryBody: None} }
+  }
+}
+
+fn answer(served: &PlaygroundWeb.Serving, asked: Route.Request) -> Http.Response {
+  Route.dispatch(&Route.routing(&PlaygroundWeb.routes(served)), asked)
+}
+
+fn formPost(source: Str, site: Str) -> Route.Request {
+  request(
+    Http.Post,
+    "/playground",
+      &[("content-type", "application/x-www-form-urlencoded"), ("sec-fetch-site", site)],
+    "code=" + source
+  )
+}
+
+fn apiPost(body: Str) -> Route.Request {
+  request(Http.Post, "/api/playground/run", &[("content-type", "application/json")], body)
+}
+
+fn assistPost(body: Str) -> Route.Request {
+  request(Http.Post, "/api/playground/assist", &[("content-type", "application/json")], body)
+}
+
+fn runRequest(source: Str) -> Str { Wire.request(source, &Play.Run) }
+
+fn requestedSource(body: Str) -> Str {
+  match Wire.requestOf(body) {
+    case Some(found) => found[0]
+    case None => ""
+  }
+}
+
+fn questionAbout(method: Str, line: Int) -> Str {
+  Wire.question("module Main", &Play.Question{method: method, line: line, character: 3, trigger: ""})
+}
+
+/// One message as a language server frames it.
+fn framed(body: Str) -> Str { "Content-Length: " + show(body.toBytes().length()) + "\r\n\r\n" + body }
+
+fn answeredWith(reply: &Play.Answer) -> (Str, Str) {
+  match reply {
+    case Play.Answered{result, diagnostics} => (result, diagnostics)
+    case Play.NotAnswered(_) => ("", "")
+  }
+}
+
+fn isAnswered(reply: &Play.Answer) -> Bool {
+  match reply {
+    case Play.Answered{..} => true
+    case Play.NotAnswered(_) => false
+  }
+}
+
+fn sameOutcome(left: &Play.Outcome, right: &Option[Play.Outcome]) -> Bool {
+  match *right {
+    case Some(decoded) => Wire.encode(left) == Wire.encode(&decoded)
+    case None => false
+  }
+}
+
+fn isRefused(outcome: &Play.Outcome) -> Bool {
+  match outcome {
+    case Play.Refused(_) => true
+    case _other => false
+  }
+}
+
+fn isUnavailable(outcome: &Play.Outcome) -> Bool {
+  match outcome {
+    case Play.Unavailable(_) => true
+    case _other => false
+  }
+}
+
+fn outputOf(outcome: &Play.Outcome) -> Str {
+  match Play.runOf(outcome) {
+    case Some(run) => run.output
+    case None => ""
+  }
+}
+
+fn refusalReason(outcome: &Result[Play.Submission, Str]) -> Str {
+  match outcome {
+    case Ok(_) => ""
+    case Err(reason) => reason
+  }
+}
+
+export fn main() -> Int {
+  let examples = match Examples.load("website/playground/examples") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let limits = Play.defaultLimits()
+  let small = Play.Limits{sourceBytes: 64, runMillis: 3000, outputBytes: 8}
+
+  // Accepting a program.
+  let accepted = Play.accept("// a comment\n/* a\n block */\nmodule Demo.Shapes\r\n\r\nfn main() -> Int \{ 0 \}\r\n", Play.Run, &limits)
+  let submission = Result.unwrapOr(accepted, Play.Submission{source: "", moduleName: "", action: Play.Run})
+  let tooLarge = Play.accept("module Main\n" + "x".repeat(100), Play.Run, &small)
+  let noModule = Play.accept("fn main() -> Int \{ 0 \}", Play.Run, &limits)
+  let traversal = Play.accept("module ../../Etc", Play.Run, &limits)
+  let lowercase = Play.accept("module main", Play.Run, &limits)
+  let blank = Play.accept("  \n\t", Play.Run, &limits)
+
+  // Output bounds.
+  let cut = Play.textWithin(&"aé".toBytes(), 2)
+  let whole = Play.textWithin(&"aé".toBytes(), 3)
+  let notText = Play.textWithin(&ByteSeq.fromArray(&[255u8, 254u8]), 10)
+
+  // The wire format.
+  let finished = Play.Finished(Play.Run{status: 3, output: "out \"quoted\"\n", errors: "err", millis: 12, truncated: true})
+  let timed = Play.TimedOut(Play.Run{status: -1, output: "", errors: "", millis: 10000, truncated: false})
+  let refused = Play.Refused("no")
+  let unavailable = Play.Unavailable("down")
+
+  // Remembering answers.
+  let calls = Sync.counter(0)
+  let remembered = Playground.remembering(&echoing(&calls), 4)
+  let _first = Playground.execute(&remembered, submission, "reader")
+  let _second = Playground.execute(&remembered, submission, "reader")
+  let rememberedCalls = Result.unwrapOr(Sync.count(&calls), -1)
+  let slowCalls = Sync.counter(0)
+  let slow = Playground.remembering(&timingOut(&slowCalls), 4)
+  let _slowFirst = Playground.execute(&slow, submission, "reader")
+  let _slowSecond = Playground.execute(&slow, submission, "reader")
+
+  // Admission.
+  let gate = Admission.gate(&Admission.Policy{runs: 2, windowSeconds: 60, clients: 2})
+  let firstWait = Admission.waitFor(&gate, "a")
+  let secondWait = Admission.waitFor(&gate, "a")
+  let thirdWait = Admission.waitFor(&gate, "a")
+  let otherReader = Admission.waitFor(&gate, "b")
+  let _evicting = Admission.waitFor(&gate, "c")
+  let _evictingAgain = Admission.waitFor(&gate, "b")
+  let evictedAgain = Admission.waitFor(&gate, "a")
+
+  // Routes.
+  let playground = Playground.using(&echoing(&Sync.counter(0)), &examples, &limits)
+  let open = serving(&playground, &Admission.open())
+  let opening = answer(&open, request(Http.Get, "/playground", &[], ""))
+  let shapes = answer(&open, request(Http.Get, "/playground/shapes", &[], ""))
+  let unknown = answer(&open, request(Http.Get, "/playground/not-an-example", &[], ""))
+  let shared = answer(&open, request(Http.Get, "/playground/shared?code=module%20Main%0A%3C%2Ftextarea%3E", &[], ""))
+  let posted = answer(&open, formPost("module+Main%0D%0A", "same-origin"))
+  let crossSite = answer(&open, formPost("module+Main", "cross-site"))
+  let sibling = answer(&open, formPost("module+Main", "same-site"))
+  let unstated = answer(&open, request(Http.Post, "/playground", &[("content-type", "application/x-www-form-urlencoded")], "code=module+Main"))
+  let fromOrigin = answer(&open, request(Http.Post, "/playground", &[("content-type", "application/x-www-form-urlencoded"), ("origin", ORIGIN)], "code=module+Main"))
+  let apiRun = answer(&open, apiPost(runRequest("module Main")))
+  let apiWrongType = answer(&open, request(Http.Post, "/api/playground/run", &[("content-type", "text/plain")], "module Main"))
+  let apiNotJson = answer(&open, apiPost("module Main"))
+  let apiRefused = answer(&open, apiPost(runRequest("fn main() -> Int \{ 0 \}")))
+  let limited = serving(&playground, &Admission.gate(&Admission.Policy{runs: 1, windowSeconds: 60, clients: 10}))
+  let _allowed = answer(&limited, apiPost(runRequest("module Main")))
+  let throttled = answer(&limited, apiPost(runRequest("module Main")))
+  let throttledForm = answer(&limited, formPost("module+Main", "same-origin"))
+  let disabled = Playground.Playground{..playground, runner: Playground.disabled(Playground.DISABLED_REASON), enabled: false}
+  let off = serving(&disabled, &Admission.open())
+  let offPage = answer(&off, request(Http.Get, "/playground", &[], ""))
+  let offRun = answer(&off, apiPost(runRequest("module Main")))
+
+  // Formatting and questions through the API.
+  let apiFormat = answer(&open, apiPost(Wire.request("module Main", &Play.Format)))
+  let asked = answer(&open, assistPost(questionAbout("hover", 0)))
+  let askedUnknown = answer(&open, assistPost(questionAbout("rename", 0)))
+  let askedNegative = answer(&open, assistPost(questionAbout("hover", -1)))
+  let askedWrongType = answer(&open, request(Http.Post, "/api/playground/assist", &[("content-type", "text/plain")], "hover"))
+  let askedNotJson = answer(&open, assistPost("hover"))
+  let askedOff = answer(&off, assistPost(questionAbout("hover", 0)))
+
+  // One conversation with the language server.
+  let hover = Play.Question{method: "hover", line: 2, character: 4, trigger: ""}
+  let conversation = Language.conversation("file:///work", "file:///work/Main.pudu", "module Main", &hover)
+  let braced = Language.conversation("file:///work", "file:///work/Main.pudu", "module Main", &Play.Question{method: "completion", line: 1, character: 17, trigger: "\{"})
+  let roundTrip = Wire.questionOf(Wire.question("module Main", &Play.Question{method: "completion", line: 0, character: 0, trigger: ","}))
+  let published = framed("\{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":\{\"uri\":\"file:///work/Main.pudu\",\"diagnostics\":[\{\"message\":\"unused\"\}]\}\}")
+  let replied = framed("\{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":\{\"contents\":\"Int — a number\"\}\}")
+  let heard = answeredWith(&Language.answerIn(published + replied, &hover))
+  let unheard = Language.answerIn(published, &hover)
+  let problemsOnly = answeredWith(&Language.answerIn(published, &Play.Question{method: "diagnostics", line: 0, character: 0, trigger: ""}))
+
+  // What a runner's answer means to the site.
+  let busy = Remote.read(&Http.Response{status: Http.status(503), headers: [], body: "", binaryBody: None})
+  let tooMany = Remote.read(&Http.Response{status: Http.status(429), headers: [("retry-after", "7")], body: "", binaryBody: None})
+  let garbage = Remote.read(&Http.Response{status: Http.status(200), headers: [], body: "<html>", binaryBody: None})
+  let relayed = Remote.read(&Http.Response{status: Http.status(200), headers: [], body: Wire.encode(&finished), binaryBody: None})
+  let unreachable = Remote.run(&Remote.Endpoint{url: "http://127.0.0.1:9/run", token: "t"}, &submission, &small, "reader")
+
+  // The runner service.
+  let service = RunnerService.Service {
+    token: "s3cret",
+    limits: limits,
+    runner: echoing(&Sync.counter(0)),
+    gates: Playground.openGates()
+  }
+  let withoutToken = RunnerService.run(&service, &apiPost(runRequest("module Main")))
+  let wrongToken = RunnerService.run(&service, &request(Http.Post, "/run", &[("content-type", "application/json"), ("authorization", "Bearer guess")], runRequest("module Main")))
+  let authorised = RunnerService.run(&service, &request(Http.Post, "/run", &[("content-type", "application/json"), ("authorization", "Bearer s3cret"), (Remote.CLIENT_HEADER, "203.0.113.9")], runRequest("module Main")))
+
+  // A real program, through the sandbox. Isolation is off here because the
+  // suite runs on developer machines and CI hosts alike; the isolated path is
+  // exercised by the runner image.
+  let sandbox = Sandbox.Settings {
+    script: "website/playground/sandbox.sh",
+    compiler: Env.variableOr("PUDU", "pudu"),
+    library: "packages/pudu/v0.1/lib",
+    workspace: "",
+    isolation: "none",
+    memoryMegabytes: 256
+  }
+  let hello = Sandbox.run(&sandbox, &Result.unwrapOr(Play.accept(HELLO, Play.Run, &limits), submission), &limits)
+  let flood = Sandbox.run(
+      &sandbox,
+      &Result.unwrapOr(Play.accept("module Main\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  while true \{\n    let _said = Io.writeLine(\"é é é é\")\n  \}\n  0\n\}\n", Play.Run, &limits), submission),
+      &Play.Limits{sourceBytes: 65536, runMillis: 20000, outputBytes: 1000}
+  )
+  let endless = Sandbox.run(
+      &sandbox,
+      &Result.unwrapOr(Play.accept("module Main\n\nfn main() -> Int \{\n  var i = 0\n  while true \{\n    i = i + 1\n  \}\n  0\n\}\n", Play.Run, &limits), submission),
+      &Play.Limits{sourceBytes: 65536, runMillis: 1500, outputBytes: 1000}
+  )
+  let refusing = Sandbox.run(&Sandbox.Settings{..sandbox, isolation: "bwrap-missing"}, &submission, &limits)
+
+  let suite = Test.suite("playground", &[
+      Test.that("a program is accepted after its comments", Result.isOk(&accepted) && submission.moduleName == "Demo.Shapes"),
+      Test.that("line breaks a browser sends are normalized", !submission.source.contains("\r")),
+      Test.that("a nested module is written where its name says", Play.pathOf("Demo.Shapes") == "Demo/Shapes.pudu"),
+      Test.that("a program over the size bound is refused", refusalReason(&tooLarge).contains("64 bytes")),
+      Test.that("a program without a module is refused", refusalReason(&noModule).contains("module Main")),
+      Test.that("a module name cannot leave its directory", Result.isErr(&traversal)),
+      Test.that("a module name starts with a capital", Result.isErr(&lowercase)),
+      Test.that("an empty program is refused", refusalReason(&blank) == "Write a program to run."),
+      Test.that("a cut inside a character moves back to its start", cut[0] == "a" && cut[1]),
+      Test.that("output within the bound is kept whole", whole[0] == "aé" && !whole[1]),
+      Test.that("output that is not text says so", notText[0].contains("not UTF-8")),
+      Test.that("a finished run survives the wire", sameOutcome(&finished, &Wire.decode(Wire.encode(&finished)))),
+      Test.that("a timeout survives the wire", sameOutcome(&timed, &Wire.decode(Wire.encode(&timed)))),
+      Test.that("a refusal survives the wire", sameOutcome(&refused, &Wire.decode(Wire.encode(&refused)))),
+      Test.that("an unavailable answer survives the wire", sameOutcome(&unavailable, &Wire.decode(Wire.encode(&unavailable)))),
+      Test.that("a document that is not an outcome is not one", Option.isNone(&Wire.decode("\{\"outcome\":\"exploded\"\}"))),
+      Test.that("a request carries its program", requestedSource(runRequest("module Main")) == "module Main"),
+      Test.that("a program run once is answered from memory the second time", rememberedCalls == 1),
+      Test.that("a timeout is not remembered", Result.unwrapOr(Sync.count(&slowCalls), 0) == 2),
+      Test.that("a gate admits up to its allowance", firstWait == 0 && secondWait == 0),
+      Test.that("a gate makes the next run wait", thirdWait > 0 && thirdWait <= 60),
+      Test.that("a gate counts each reader apart", otherReader == 0),
+      Test.that("a forgotten reader starts a fresh window", evictedAgain == 0),
+      Test.that("the playground opens with the first example", opening.status.code == 200 && opening.body.contains("Hello, Pudu")),
+      Test.that("the page preloads every module the script imports", List.sortBy(&PlaygroundView.SCRIPT_MODULES, |left: Str, right: Str| left < right) == scriptModulesOnDisk("website/public/assets/playground") && opening.body.contains("<link rel=\"modulepreload\" href=\"/assets/playground/lsp/assist.js\" />")),
+      Test.that("the page lays out the splitter and the shortcut before the script arrives", opening.body.contains("<div class=\"playground-splitter\"></div>") && opening.body.contains("<span class=\"tool-key\" aria-hidden=\"true\">Ctrl ↵</span>")),
+      Test.that("the opening example is canonical at the playground", opening.body.contains("rel=\"canonical\" href=\"https://pudu.example/playground\"")),
+      Test.that("an example has its own indexed page", shapes.status.code == 200 && shapes.body.contains("href=\"https://pudu.example/playground/shapes\"") && shapes.body.contains("index,follow")),
+      Test.that("the menu marks the example shown", shapes.body.contains("<option value=\"shapes\"") && shapes.body.contains("selected=\"selected\">Shapes</option>")),
+      Test.that("an unknown example is missing", unknown.status.code == 404),
+      Test.that("a shared program is shown with its link", shared.status.code == 200 && shared.body.contains("id=\"playground-link\"")),
+      Test.not("a shared program cannot close the editor", shared.body.contains("\n</textarea>\n")),
+      Test.that("a shared program is not indexed", Http.header(&shared.headers, "x-robots-tag") == Some("noindex") && shared.body.contains("noindex,follow")),
+      Test.that("a form post runs the program and shows the page", posted.status.code == 200 && posted.body.contains("ran Main for 198.51.100.7")),
+      Test.not("a program's output cannot add markup", posted.body.contains("<script>")),
+      Test.that("a run is never stored by a cache", Http.header(&posted.headers, "cache-control") == Some("no-store")),
+      Test.that("a post from another site is refused", crossSite.status.code == 403),
+      Test.that("a post from a sibling site is refused", sibling.status.code == 403),
+      Test.that("a post that says nothing of where it came from is refused", unstated.status.code == 403),
+      Test.that("a post from this origin is accepted without fetch metadata", fromOrigin.status.code == 200),
+      Test.that("the API answers JSON", apiRun.status.code == 200 && Http.header(&apiRun.headers, "content-type") == Some("application/json") && apiRun.body.contains("\"outcome\":\"finished\"")),
+      Test.that("the API says how the run ended in words", apiRun.body.contains("\"headline\":\"Finished in 1 ms.\"")),
+      Test.that("the API reads only JSON", apiWrongType.status.code == 415),
+      Test.that("the API refuses a body that is not a request", apiNotJson.status.code == 400),
+      Test.that("the API refuses a program it will not run", apiRefused.status.code == 422 && apiRefused.body.contains("\"outcome\":\"refused\"")),
+      Test.that("a reader over the allowance is told to wait", throttled.status.code == 429 && Option.isSome(&Http.header(&throttled.headers, "retry-after"))),
+      Test.that("a form over the allowance is a page that says so", throttledForm.status.code == 429 && throttledForm.body.contains("Try again in")),
+      Test.that("a playground that runs nothing says so on its page", offPage.body.contains("switched off")),
+      Test.that("a playground that runs nothing answers unavailable", offRun.status.code == 503 && offRun.body.contains("Install Pudu")),
+      Test.that("a busy runner is unavailable", isUnavailable(&busy)),
+      Test.that("a runner's refusal to run more passes on its wait", isRefused(&tooMany) && Play.headline(&tooMany, &limits).contains("7 seconds")),
+      Test.that("a runner answering nonsense is unavailable", isUnavailable(&garbage)),
+      Test.that("a runner's outcome is relayed as it is", sameOutcome(&finished, &Some(relayed))),
+      Test.that("a runner that cannot be reached is unavailable", isUnavailable(&unreachable)),
+      Test.that("a runner refuses a caller without its secret", withoutToken.status.code == 401 && wrongToken.status.code == 401),
+      Test.that("a runner counts a run against the reader the site names", authorised.status.code == 200 && authorised.body.contains("for 203.0.113.9")),
+      Test.that("a program runs in the sandbox", outputOf(&hello) == "hello from the sandbox\n" && Play.succeeded(&hello)),
+      Test.that("a program that writes without end is stopped at the bound", Play.headline(&flood, &limits).contains("output passed") && outputOf(&flood).toBytes().length() <= 1000),
+      Test.that("a program that never ends is stopped at its deadline", Play.headline(&endless, &limits).startsWith("Stopped after")),
+      Test.that("a sandbox that cannot isolate runs nothing", isUnavailable(&refusing)),
+      Test.that("the API formats a program when asked", apiFormat.status.code == 200 && apiFormat.body.contains("\"outcome\"")),
+      Test.that("an editor's question is answered", asked.status.code == 200 && asked.body.contains("hover in Main")),
+      Test.that("a question the playground does not pass on is refused", askedUnknown.status.code == 422 && askedUnknown.body.contains("signatureHelp")),
+      Test.that("a question about a negative position is refused", askedNegative.status.code == 422),
+      Test.that("the question API reads only JSON", askedWrongType.status.code == 415),
+      Test.that("the question API refuses a body that is not a question", askedNotJson.status.code == 400),
+      Test.that("a playground that runs nothing answers no questions", askedOff.status.code == 503),
+      Test.that("a conversation opens the program and asks one question", conversation.contains("textDocument/didOpen") && conversation.contains("textDocument/hover") && conversation.contains("\"line\":2")),
+      Test.that("a conversation ends by saying goodbye", conversation.contains("\"shutdown\"") && conversation.endsWith("\"exit\",\"params\":null\}")),
+      Test.that("a typed trigger reaches the server as the request's context", braced.contains("\"triggerCharacter\":\"\{\"") && braced.contains("\"triggerKind\":2")),
+      Test.that("a question asked on request says so", conversation.contains("\"triggerKind\":1") && !conversation.contains("triggerCharacter")),
+      Test.that("a trigger survives the wire", match roundTrip {
+          case Some((_, asked)) => asked.trigger == ","
+          case None => false
+        }),
+      Test.that("every message of a conversation is framed", conversation.split("Content-Length: ").length() == 7),
+      Test.that("the server's answer is read from its transcript", heard[0].contains("a number") && heard[1].contains("unused")),
+      Test.that("a transcript without the answer is no answer", !isAnswered(&unheard)),
+      Test.that("asking only for problems needs no answer", problemsOnly[0] == "null" && problemsOnly[1].contains("unused")),
+      Test.that("a program that did not compile says so", Play.headline(&failedWith("error[E2010]: unresolved value name nope\n"), &limits).startsWith("The program did not compile.")),
+      Test.that("a program stopped by the evaluator says so", Play.headline(&failedWith("error[E7007]: boom\n"), &limits).startsWith("The program stopped with an error after")),
+      Test.that("a program's own status is reported as it chose", Play.headline(&failedWith(""), &limits).startsWith("Exited with status 1")),
+      Test.that("a program that succeeded says it finished", Play.headline(&Play.Finished(Play.Run{status: 0, output: "", errors: "", millis: 3, truncated: false}), &limits) == "Finished in 3 ms.")
+    ])
+  Test.report(&Test.run(&suite))
+}

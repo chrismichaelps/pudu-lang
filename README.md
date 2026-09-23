@@ -43,8 +43,8 @@ export fn main() -> Result[(), Str] {
 }
 ```
 
-> **Pudu is pre-release (0.1.0).** Programs are interpreted, dependencies are local directories, and
-> the language may change before 1.0. Open work is tracked in
+> **Pudu is pre-release (0.1.1).** Programs are interpreted, dependencies are GitHub packages or
+> local directories, and the language may change before 1.0. Open work is tracked in
 > [RELEASE-READINESS.md](wiki/architecture/RELEASE-READINESS.md).
 
 ## Installing a pre-release
@@ -54,8 +54,8 @@ Pre-release archives for Linux x86-64 and macOS on Apple silicon are attached to
 the standard library beside it:
 
 ```bash
-tar -xzf pudu-0.1.0-darwin-arm64.tar.gz
-export PATH="$PWD/pudu-0.1.0-darwin-arm64/bin:$PATH"
+tar -xzf pudu-0.1.1-darwin-arm64.tar.gz
+export PATH="$PWD/pudu-0.1.1-darwin-arm64/bin:$PATH"
 pudu version
 ```
 

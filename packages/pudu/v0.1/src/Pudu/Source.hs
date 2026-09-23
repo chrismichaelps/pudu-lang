@@ -13,6 +13,8 @@ module Pudu.Source
   , offsetFromInt
   , offsetPosition
   , sourceLength
+  , sameSource
+  , sourceDigest
   , sourceName
   , sourceText
   , spanEnd
@@ -23,10 +25,14 @@ module Pudu.Source
   , zeroOffset
   ) where
 
+import Crypto.Hash (Blake2b_256, Digest, hash)
+import qualified Data.ByteArray as ByteArray
+import Data.ByteString (ByteString)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
 import Data.Unique (Unique, newUnique)
 
 {-| @Source.Text.Identity — names one immutable source -}
@@ -65,6 +71,9 @@ data Source = Source
       out a file cost the square of its size. This is built once, in the pass
       that already reads the text. -}
   , sourceLineStarts :: !(Map Int Int)
+  {-| The text's content digest, formed at most once and only when something
+      keys work by this text, as a cache of compiled products does. -}
+  , sourceDigestValue :: ~ByteString
   }
 
 {-| @Source.Text.Span — identifies a half-open range in one snapshot -}
@@ -124,7 +133,17 @@ newSource name textValue = do
       , sourceTextValue = textValue
       , sourceScalarLength = Text.length textValue
       , sourceLineStarts = lineStartsOf textValue
+      , sourceDigestValue =
+          ByteArray.convert (hash (Encoding.encodeUtf8 textValue) :: Digest Blake2b_256)
       }
+
+{-| Whether two values are the same ingestion of a text, which two readings of
+    one file with the same name and contents are not. -}
+sameSource :: Source -> Source -> Bool
+sameSource left right = sourceIdentity left == sourceIdentity right
+
+sourceDigest :: Source -> ByteString
+sourceDigest = sourceDigestValue
 
 sourceName :: Source -> SourceName
 sourceName = identityName . sourceIdentity
@@ -191,51 +210,28 @@ offsetPosition Source{sourceLineStarts, sourceScalarLength} (Offset requested)
     after each half — because a position between them is column one as surely
     as the position after them is. -}
 lineStartsOf :: Text -> Map Int Int
-lineStartsOf textValue = Map.fromDistinctAscList (reverse collected)
+lineStartsOf textValue = Map.fromDistinctAscList ((0, 1) : walk 0 1 False textValue)
  where
-  collected =
-    scanCollected (Text.foldl' step (LineScan 0 initialPositionFold [(0, 1)]) textValue)
-  {-| The accumulator is a strict record rather than a tuple. `foldl'` forces
-      what it accumulates only to weak head normal form, and a tuple is already
-      in it, so the offset and the running position would each build a chain of
-      unevaluated work as long as the text — paid for at the end, in memory the
-      whole way. -}
-  step (LineScan index folded acc) value =
-    let next = advancePosition folded value
-        after = index + 1
-     in LineScan
-          after
-          next
-          (if foldColumn next == 1 then (after, foldLine next) : acc else acc)
-
-{-| @Source.Text.LineScan — the state of one walk over a text looking for the
-    offsets where a line begins. -}
-data LineScan = LineScan !Int !PositionFold ![(Int, Int)]
-
-scanCollected :: LineScan -> [(Int, Int)]
-scanCollected (LineScan _ _ collected) = collected
+  {-| Jumps from one line break to the next, so the work is one step per line
+      rather than a step, and an allocation, per character. -}
+  walk index line afterCarriageReturn rest =
+    let (plain, remaining) = Text.break isLineBreak rest
+        reached = index + Text.length plain
+        pairedNewline = afterCarriageReturn && Text.null plain
+     in case Text.uncons remaining of
+          Nothing -> []
+          Just ('\r', more) ->
+            let after = reached + 1
+             in (after, line + 1) : walk after (line + 1) True more
+          Just (_, more)
+            | pairedNewline ->
+                let after = reached + 1
+                 in (after, line) : walk after line False more
+            | otherwise ->
+                let after = reached + 1
+                 in (after, line + 1) : walk after (line + 1) False more
+  isLineBreak character = character == '\n' || character == '\r'
 
 sourceLength :: Source -> Offset
 sourceLength = Offset . sourceScalarLength
-
-data PositionFold = PositionFold
-  { foldLine :: !Int
-  , foldColumn :: !Int
-  , foldAfterCarriageReturn :: !Bool
-  }
-
-initialPositionFold :: PositionFold
-initialPositionFold = PositionFold{foldLine = 1, foldColumn = 1, foldAfterCarriageReturn = False}
-
-advancePosition :: PositionFold -> Char -> PositionFold
-advancePosition PositionFold{foldLine, foldColumn, foldAfterCarriageReturn} value =
-  case value of
-    '\r' -> PositionFold{foldLine = foldLine + 1, foldColumn = 1, foldAfterCarriageReturn = True}
-    '\n'
-      | foldAfterCarriageReturn ->
-          PositionFold{foldLine, foldColumn = 1, foldAfterCarriageReturn = False}
-      | otherwise ->
-          PositionFold{foldLine = foldLine + 1, foldColumn = 1, foldAfterCarriageReturn = False}
-    _ ->
-      PositionFold{foldLine, foldColumn = foldColumn + 1, foldAfterCarriageReturn = False}
 

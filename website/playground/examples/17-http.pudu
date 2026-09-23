@@ -1,0 +1,52 @@
+// HTTP routes
+// A server is built from values: handlers, routes, and a router answered here without opening a socket.
+module Main
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+
+fn hello(request: Route.Request) -> Http.Response {
+  let name = Option.unwrapOr(Route.queryParam(&request, "name"), "world")
+  Reply.text(200, "Hello, {name}!")
+}
+
+fn user(request: Route.Request) -> Http.Response {
+  match Route.param(&request, "id") {
+    case Some(id) => Reply.jsonValue(200, Json.object(&[("id", Json.Text(id)), ("name", Json.Text("user {id}"))]))
+    case None => Reply.text(400, "no user")
+  }
+}
+
+fn routes() -> Route.Router {
+  Route.routing(&[
+      Route.get("/hello", hello),
+      Route.get("/users/:id", user)
+    ])
+}
+
+// What the server does with each request, without the network.
+fn ask(router: &Route.Router, target: Str) -> Http.Response {
+  let request = Route.Request {
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "playground"
+  }
+  Route.dispatch(router, request)
+}
+
+fn main() -> Int {
+  let router = routes()
+  for target in ["/hello", "/hello?name=Ada", "/users/7", "/nowhere"] {
+    let response = ask(&router, target)
+    let _said = Io.writeLine("GET {target} -> {response.status.code} {response.body}")
+  }
+  // The playground has no network, so this program never serves. Elsewhere,
+  // Std.Http.Server listens on a port with the same router: see /docs/http.
+  0
+}

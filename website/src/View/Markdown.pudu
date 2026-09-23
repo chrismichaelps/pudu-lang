@@ -31,6 +31,15 @@ type Pending = { paragraph: Array[Str], items: Array[Str], ordered: Bool, quote:
 /// everything else. Every other heading gets an anchor made from its words, so
 /// a link to a section keeps working when the page around it changes.
 export fn parse(source: &Array[Str]) -> Document {
+  parseWithTitle(source, true)
+}
+
+/// Safe Markdown blocks for an embedded body whose headings remain visible.
+export fn parseBody(source: &Array[Str]) -> Document {
+  parseWithTitle(source, false)
+}
+
+fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
   var blocks: Array[H.Node] = []
   var headings: Array[Heading] = []
   var anchors: Map[Str, Int] = Map.empty()
@@ -58,7 +67,7 @@ export fn parse(source: &Array[Str]) -> Document {
     } else if let Some(heading) = headingOf(bare) {
       blocks = flush(blocks, &held)
       held = nothingPending()
-      if heading[0] == 1 && title.isEmpty() {
+      if extractTitle && heading[0] == 1 && title.isEmpty() {
         title = plainText(heading[1])
       } else {
         let anchor = uniqueAnchor(&anchors, heading[1])
@@ -220,13 +229,30 @@ fn separatorRow(line: Str) -> Bool {
   true
 }
 
+/// A row's cells. A pipe written `\\|` belongs to its cell, even inside code,
+/// so a table can show an operator that contains one.
 fn cellsOf(bare: Str) -> Array[Str] {
   var inner = bare
   if inner.startsWith("|") { inner = inner.drop(1) }
-  if inner.endsWith("|") { inner = inner.take(inner.length() - 1) }
+  if inner.endsWith("|") && !inner.endsWith("\\|") { inner = inner.take(inner.length() - 1) }
   var cells: Array[Str] = []
-  for cell in inner.split("|") { cells = cells.push(cell.trim()) }
-  cells
+  var cell = ""
+  var escaped = false
+  for character in inner.chars() {
+    if escaped {
+      cell = if character == '|' { cell + "|" } else { cell + "\\" + character.toText() }
+      escaped = false
+    } else if character == '\\' {
+      escaped = true
+    } else if character == '|' {
+      cells = cells.push(cell.trim())
+      cell = ""
+    } else {
+      cell = cell + character.toText()
+    }
+  }
+  if escaped { cell = cell + "\\" }
+  cells.push(cell.trim())
 }
 
 fn table(header: &Array[Str], rows: &Array[Array[Str]]) -> H.Node {

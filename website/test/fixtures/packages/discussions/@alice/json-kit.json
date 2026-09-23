@@ -1,0 +1,65 @@
+{
+  "tickets": [
+    {
+      "number": 42,
+      "title": "Handle escaped object keys",
+      "body": "# Expected parser behavior\n\nThe parser should preserve escaped keys.\n\nA <script>alert(1)</script> example must remain text.",
+      "author": "reader",
+      "state": "open",
+      "createdAt": "2026-09-20T12:00:00Z",
+      "updatedAt": "2026-09-22T12:00:00Z",
+      "comments": 3,
+      "labels": [
+        "bug",
+        "parser"
+      ],
+      "url": "https://github.com/alice/json-kit/issues/42",
+      "draft": false
+    },
+    {
+      "number": 17,
+      "title": "Document streaming limits",
+      "body": "Document the limit for large JSON values.",
+      "author": "alice",
+      "state": "closed",
+      "createdAt": "2026-09-18T12:00:00Z",
+      "updatedAt": "2026-09-21T12:00:00Z",
+      "comments": 1,
+      "labels": [
+        "documentation"
+      ],
+      "url": "https://github.com/alice/json-kit/issues/17",
+      "draft": false
+    }
+  ],
+  "contributions": [
+    {
+      "number": 56,
+      "title": "Add streaming decoder",
+      "body": "Adds a decoder that reads one value at a time.",
+      "author": "contributor",
+      "state": "open",
+      "createdAt": "2026-09-19T12:00:00Z",
+      "updatedAt": "2026-09-22T13:00:00Z",
+      "comments": 4,
+      "labels": [
+        "enhancement"
+      ],
+      "url": "https://github.com/alice/json-kit/pull/56",
+      "draft": false
+    },
+    {
+      "number": 30,
+      "title": "Tighten decode errors",
+      "body": "Adds source positions to errors.",
+      "author": "alice",
+      "state": "merged",
+      "createdAt": "2026-09-10T12:00:00Z",
+      "updatedAt": "2026-09-21T10:00:00Z",
+      "comments": 2,
+      "labels": [],
+      "url": "https://github.com/alice/json-kit/pull/30",
+      "draft": false
+    }
+  ]
+}

@@ -20,6 +20,16 @@ other project tooling. Letters are lowercased, every character outside ASCII let
 becomes a separator, and a run of separators becomes one; only separators collapse, so a doubled
 letter stays part of the name (`hello`, `book-keeper`, `app2`).
 
+`createProjectWith` accepts an optional explicit package identity and a library mode. An explicit
+identity is parsed by [[Package Identity]], so `@owner/repo` follows the same rules as installation
+and publication. The directory-derived local name is checked against that grammar too. Library mode
+derives its module root through `defaultRoot` and `validRoot`, writes `src/<Root>.pudu` and a test
+that imports it, and includes `root` in the manifest. Application mode retains the existing layered
+entry point and test. Both modes write the package schema's name, version, language, source,
+description, license, keywords, and an empty dependency table; empty descriptive fields invite the author to
+fill in real metadata. Only a registered identity can be published, and it must match the GitHub
+repository. `createProject` remains the default application entry point for compatibility.
+
 ## Governance and algorithm
 
 Initialization resolves and validates the target before writing managed content. An explicit target
@@ -28,7 +38,7 @@ managed files must be regular files and not links. An existing manifest is alway
 Existing source, test, README, and ignore files are preserved. The generated project itself contains
 only Pudu source: `Main` is the composition root, `App.Greeting` is the application layer, and
 `Domain.Greeting` is the pure domain layer. Dependencies point inward only. The test root exercises
-both public layers through the manifest's `src` search root.
+both public layers through the manifest's implicit project source root.
 The README includes the native lint command, and the generated graph is clean under it without an
 initial suppression list.
 
@@ -62,8 +72,15 @@ The README heading retains the human directory name; the manifest gets the norma
   three-node acyclic Pudu graph with the effect at the composition root. _Rejected:_ Haskell files
   or Haskell knowledge in the generated project; a framework-heavy starter.
 
+- **Q:** Should an application starter pretend its `App` and `Domain` modules belong to a
+  distributable root? **A:** No. An explicit library mode writes a module under the canonical root;
+  the application starter keeps its runnable composition graph. _Rationale:_ installed packages
+  promise a module root and an application entry point serves a different job. _Rejected:_ a root
+  field that names no generated module.
+
 Resolved Grill Log: initialization is additive, typed, serialized, staged, and uses the package
-identity grammar rather than only the serialization grammar.
+identity grammar rather than only the serialization grammar. Library source lives under its owned
+root without a local-only dependency.
 
 ## Referenced by
 

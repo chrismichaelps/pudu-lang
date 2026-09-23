@@ -61,6 +61,50 @@ fn main() -> Int {
 
 At module scope only `const` is allowed, so a program has no global mutable state. A `const` initialiser runs at compile time and cannot read files, the clock, or anything else outside the program.
 
+## Taking a value apart
+
+A binding can name the parts of a value instead of the value itself. A record is taken apart by
+field, a tuple and an array by position, and `..` in an array pattern holds whatever the named
+elements did not take:
+
+```pudu
+module Apart
+
+type Point = { x: Int, y: Int }
+
+fn main() -> Int {
+  let point = Point{x: 3, y: 4}
+  let {x, y} = point
+  let {x: across} = point
+
+  let pair = (10, 20)
+  let (left, right) = pair
+
+  let scores = [95, 82, 47, 61]
+  let [best, second, ..rest] = scores
+  let [..earlier, worst] = scores
+
+  var {y: movable} = point
+  movable = movable + 1
+
+  if x == 3 && y == 4 && across == 3
+    && left == 10 && right == 20
+    && best == 95 && second == 82 && rest == [47, 61]
+    && earlier.length() == 3 && worst == 61
+    && movable == 5
+  {
+    0
+  } else {
+    1
+  }
+}
+```
+
+`var` binds parts that may be assigned again. A pattern here has to be one that always applies: one
+that tests a tag, like `Some(value)`, has nowhere to go when it does not match, so it belongs in
+`let … else` instead. An array pattern is the exception — it names a length, and an array of another
+length stops the program where the binding is.
+
 ## Functions
 
 A function names its parameters and their types, and writes its result type after `->`. The body is a block whose last expression is the result, or an expression after `=`:

@@ -8,24 +8,32 @@ module Pudu.Lsp.Documents
   , Documents (..)
   , allDocuments
   , analysisOf
+  , documentGeneration
   , documentOf
   , emptyDocuments
+  , nextGeneration
   , forgetDocument
   , rememberAnalysis
-  , setWorkspaceRoot
+  , setWorkspaceFolders
   , uriOf
-  , workspaceRoot
+  , workspaceFolders
   ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
+import Pudu.Frontend.Syntax.Tree (Module)
+import Pudu.Frontend.Token (Token)
+import Pudu.Lsp.Shapes (RecordShape, SumShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
+import Pudu.Semantic.Interface (ExportIndex)
 import Pudu.Semantic.Resolve (Resolution)
 import Pudu.Type (TypeInfo)
+import Pudu.Type.Value (Scheme)
 
 data Analysis = Analysis
   { analysisText :: !Text
@@ -52,6 +60,24 @@ data Analysis = Analysis
       about the function a cursor is inside. A reader hovering a binding is
       asking about the binding. -}
   , analysisTypes :: !(Maybe TypeInfo)
+  , analysisTokens :: ![Token]
+  {-| The document's own tree, when it compiled, for questions about what
+      construct a position is in. -}
+  , analysisModule :: !(Maybe Module)
+  {-| Every sum type the program can see, by its canonical name — the
+      declaring module and the type's name — with its variants. -}
+  , analysisSums :: !(Map Text SumShape)
+  {-| Every record type the program can see, keyed the same way. -}
+  , analysisRecords :: !(Map Text RecordShape)
+  {-| Every method the program's modules declare, by the canonical key of the
+      type or trait that owns it, with the scheme the checker gave it. -}
+  , analysisMethods :: !(Map Text [(Text, Scheme)])
+  {-| What each module of the program exports, as imports see it. -}
+  , analysisExports :: !ExportIndex
+  {-| Every module file the program read besides this document, transitive
+      imports included, by normalised path: what an edit elsewhere must be
+      checked against to know whether this analysis is stale. -}
+  , analysisDependencies :: !(Set FilePath)
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.
@@ -61,27 +87,42 @@ data Analysis = Analysis
     diagnostics against text the reader is not looking at, which is worse than
     reporting none. -}
 data Documents = Documents
-  { docWorkspaceRoot :: !(Maybe FilePath)
+  {-| The folders the editor opened, most specific first. They say which
+      files the session owns; a document's module source root is derived from
+      its own path and module name, as the command line derives it. -}
+  { docWorkspaceFolders :: ![FilePath]
+  {-| Advanced whenever what any compile would read may have changed: an open
+      document stored or closed, or a file changed on disk. Anything kept
+      from a compile is valid only while this stays the same. -}
+  , docGeneration :: !Int
   , docMap           :: !(Map Text Analysis)
   }
 
 emptyDocuments :: Documents
-emptyDocuments = Documents Nothing Map.empty
+emptyDocuments = Documents [] 0 Map.empty
 
-setWorkspaceRoot :: FilePath -> Documents -> Documents
-setWorkspaceRoot root docs = docs { docWorkspaceRoot = Just root }
+documentGeneration :: Documents -> Int
+documentGeneration = docGeneration
 
-workspaceRoot :: Documents -> Maybe FilePath
-workspaceRoot = docWorkspaceRoot
+nextGeneration :: Documents -> Documents
+nextGeneration docs = docs { docGeneration = docGeneration docs + 1 }
+
+setWorkspaceFolders :: [FilePath] -> Documents -> Documents
+setWorkspaceFolders folders docs = docs { docWorkspaceFolders = folders }
+
+workspaceFolders :: Documents -> [FilePath]
+workspaceFolders = docWorkspaceFolders
 
 allDocuments :: Documents -> [(Text, Analysis)]
-allDocuments (Documents _ store) = Map.toList store
+allDocuments (Documents _ _ store) = Map.toList store
 
 rememberAnalysis :: Text -> Analysis -> Documents -> Documents
-rememberAnalysis uri value docs = docs { docMap = Map.insert uri value (docMap docs) }
+rememberAnalysis uri value docs =
+  docs { docMap = Map.insert uri value (docMap docs), docGeneration = docGeneration docs + 1 }
 
 forgetDocument :: Text -> Documents -> Documents
-forgetDocument uri docs = docs { docMap = Map.delete uri (docMap docs) }
+forgetDocument uri docs =
+  docs { docMap = Map.delete uri (docMap docs), docGeneration = docGeneration docs + 1 }
 
 analysisOf :: Text -> Documents -> Maybe Analysis
 analysisOf uri docs = Map.lookup uri (docMap docs)

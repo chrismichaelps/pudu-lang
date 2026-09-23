@@ -1,0 +1,7 @@
+module RangeLengthOverflow
+
+/// Both endpoints fit Int, but the number of included values does not. The
+/// method must not construct an Int outside its declared interval.
+export fn main() -> Int {
+  (0..=9223372036854775807).length()
+}

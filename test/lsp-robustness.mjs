@@ -56,6 +56,27 @@ const cases = [
     middle: frame({ jsonrpc: "2.0", id: 5, method: "textDocument/nonsense", params: {} }),
     survives: true,
   },
+  {
+    name: "a cancellation for a request never sent",
+    middle: frame({ jsonrpc: "2.0", method: "$/cancelRequest", params: { id: 404 } }),
+    survives: true,
+  },
+  {
+    // Answered with its result or as cancelled, depending on how far it got,
+    // but exactly once either way.
+    name: "a request cancelled straight after it is sent",
+    middle: Buffer.concat([
+      frame({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "textDocument/completion",
+        params: { textDocument: { uri: "file:///nowhere.pudu" }, position: { line: 0, character: 0 } },
+      }),
+      frame({ jsonrpc: "2.0", method: "$/cancelRequest", params: { id: 7 } }),
+    ]),
+    survives: true,
+    answeredOnce: 7,
+  },
   // Framing faults leave the reader mid-stream with nothing to resynchronise
   // on, so these end the session — and must say so in the exit status.
   {
@@ -103,6 +124,8 @@ for (const testCase of cases) {
   if (testCase.survives) {
     if (!answeredBoth) {
       failures.push(`${testCase.name}: the session stopped answering (exit ${code})`);
+    } else if (testCase.answeredOnce && answered.filter(id => id === testCase.answeredOnce).length !== 1) {
+      failures.push(`${testCase.name}: request ${testCase.answeredOnce} was not answered exactly once`);
     } else if (code !== 0) {
       failures.push(`${testCase.name}: survived but exited ${code}`);
     } else {

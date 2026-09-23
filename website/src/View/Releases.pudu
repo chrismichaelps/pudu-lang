@@ -10,9 +10,7 @@ import View.Markdown as Markdown
 export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
   let read = Markdown.parse(&release.notes)
   let opening = [
-    H.span().class("kind").says("releases"),
-    H.h1().says("Release notes"),
-    H.p().class("section-lead").says("What each release of Pudu changed. The notes here are the ones the release itself was published with."),
+    Layout.banner("page-banner", "Releases", "Release notes", "What each release of Pudu changed. The notes here are the ones the release itself was published with.", []),
     H.div().class("release-header").holding([
         H.h2().class("release-version").says("Pudu " + release.version),
         H.p().class("release-meta").holding(meta(release)),

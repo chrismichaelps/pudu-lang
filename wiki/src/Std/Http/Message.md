@@ -41,6 +41,8 @@ exactly three digits from 100, then nothing or one space and a reason that may h
 any other width, a doubled space, and a later version are `BadStatusLine`, because whether a response
 carries a body is decided by its code. A missing reason is filled from the code.
 ## Grill Log
+
+- **Q:** Export how a response is framed? **A:** `Framing` (`HeadOnly`, `Length`, `Chunked`, `UntilClose`) and `framingOf`. _Rationale:_ a reader decides the boundary once from the head instead of re-reading the message. `responseComplete` remains for callers holding a whole buffer.
 - **Q:** Trim whitespace before a header's colon, as the parser once did? **A:** No. _Rationale:_ a
   proxy following the protocol rejects `Content-Length : 5` or ignores it, and a server behind it that
   obeys it reads a different body length from the same bytes — the remainder becomes a request only

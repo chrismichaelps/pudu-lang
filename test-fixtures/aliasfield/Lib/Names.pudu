@@ -1,0 +1,10 @@
+module Lib.Names
+
+/// A name, which is text.
+export type Name = Str
+
+/// A decision about a reader, which is a function.
+export type Gate = fn(Str) -> Int
+
+/// A name, typed by its alias.
+export fn named() -> Name { "pudu" }

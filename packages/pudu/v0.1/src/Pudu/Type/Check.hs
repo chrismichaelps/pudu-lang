@@ -45,6 +45,7 @@ import Pudu.Type.Env
   , runChecker
   , setWritableNames
   , withDeclared
+  , installNames
   )
 import Pudu.Type.Check.Place
   ( checkAnswer
@@ -76,7 +77,6 @@ import Pudu.Type.Check.Rule
 import Pudu.Type.Check.Method
   ( declareBounds
   , declareMethods
-  , declareBuiltinConstructors
   , declareTraitMembers
   , dischargeObligations
   , functionRigid
@@ -103,7 +103,7 @@ import Pudu.Type.Value
   , restrictedBy
   , Type (..)
   )
-import Pudu.Type.Interface (ImportTypes)
+import Pudu.Type.Interface.Graph (ImportTypes (..), emptyImportTypes, graphInstalled)
 import Pudu.Foreign.Crossing (RecordLayouts, recordLayouts)
 import Pudu.Type.Check.Foreign (checkForeign, declareForeign)
 import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
@@ -111,13 +111,13 @@ import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
 checkModule :: Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
-checkModule = checkModuleWith mempty
+checkModule = checkModuleWith emptyImportTypes
 
 {-| The set is the spans of every use of a `var` binding, which resolution
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -130,12 +130,13 @@ checkModuleDetailed
   :: ImportTypes
   -> Set (Int, Int)
   -> Module
-  -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [Diagnostic])
+  -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit imported moduleValue)
    in ( producedTypes products
       , producedSchemes products
       , producedIntegerKinds products
+      , producedMethods products
       , producedDiagnostics products
       )
 
@@ -146,7 +147,9 @@ checkUnit imported moduleValue = do
     (locatedValue (moduleName moduleValue))
     (moduleDeclarations moduleValue)
   withDeclared declared
-  declareBuiltinConstructors
+  {-| The language's constructors and every interface's shared declarations
+      were installed once for the whole graph; this module starts from them. -}
+  installNames (graphInstalled (importedGraph imported))
   declareImportedTypes declared imported
   let traits = traitTable declared (moduleDeclarations moduleValue)
   let layouts = recordLayouts (moduleDeclarations moduleValue)

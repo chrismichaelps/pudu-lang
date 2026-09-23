@@ -1,0 +1,65 @@
+module RangeForms
+
+/// Every way a range can be written, and everywhere one can go.
+///
+/// A range is a value, so the questions worth asking of it are the ones asked
+/// of any value: can it be named, passed, returned, stored, compared, ordered,
+/// and rendered. Each answer is a number `main` adds, so one wrong answer moves
+/// the total.
+
+type Window = { span: Range[Int], label: Str }
+
+fn widthOf(span: Range[Int]) -> Int { span.length() }
+
+fn wholeOf(count: Int) -> Range[Int] { 0..count }
+
+export fn main() -> Int {
+  let exclusive = 1..4
+  let inclusive = 1..=4
+  let openUpper = 2..
+  let openLower =..3
+  let openInclusiveLower =..=3
+  let openBoth =..
+
+  // An end may be any expression, not only a literal, and a range binds
+  // looser than arithmetic so the end runs to the whole of it.
+  let start = 2
+  let computed = start..start + 3
+
+  // A negative end is the unary operator on the end, not on the range: the
+  // prefix binds tighter than every binary form.
+  let negative = -5..5
+
+  let empty = 5..5
+  let reversed = 5..3
+  let single = 5..6
+  let singleInclusive = 5..=5
+
+  let stored = [1..2, 3..4]
+  let field = Window{span: 0..3, label: "first"}
+  let carried = (1..2, "tag")
+  let (fromTuple, _) = carried
+
+  let sameValue = if (1..4) == (1..4) { 1 } else { 0 }
+  let differentEnd = if (1..4) == (1..=4) { 0 } else { 1 }
+  // A range can be ordered, which is what lets it be a set member: two equal
+  // ranges collapse and two different ones do not.
+  let members = #{1..2, 3..4, 1..2}
+
+  let rendered = if display(1..4) == "1..4" { 1 } else { 0 }
+  let renderedInclusive = if display(1..=4) == "1..=4" { 1 } else { 0 }
+  let renderedOpen = if display(2..) == "2.." { 1 } else { 0 }
+
+  exclusive.length() + inclusive.length()
+    + widthOf(exclusive) + wholeOf(4).length()
+    + computed.length() + negative.length()
+    + (if empty.isEmpty() { 1 } else { 0 })
+    + reversed.length() + single.length() + singleInclusive.length()
+    + stored.length() + field.span.length() + fromTuple.length()
+    + sameValue + differentEnd + members.size()
+    + rendered + renderedInclusive + renderedOpen
+    + [1, 2, 3, 4][openLower].length()
+    + [1, 2, 3, 4][openInclusiveLower].length()
+    + [1, 2, 3, 4][openBoth].length()
+    + [1, 2, 3, 4][openUpper].length()
+}

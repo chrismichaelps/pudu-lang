@@ -36,6 +36,7 @@ comparableValue value = case value of
       values landed on one entry. -}
   MapMethodValue _ _ -> False
   SetMethodValue _ _ -> False
+  RangeMethodValue _ _ -> False
   BytesMethodValue _ _ -> False
   BucketsMethodValue _ _ -> False
   MapValue entries ->

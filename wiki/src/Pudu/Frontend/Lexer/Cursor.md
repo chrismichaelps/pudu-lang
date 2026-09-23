@@ -50,7 +50,14 @@ outputDiagnostics :: LexerOutput -> [Diagnostic]
 
 ### Governance
 
-- The cursor is immutable and strict. It owns one [[Source]] snapshot, its current zero-width point, its last committed point, the unconsumed `Text` suffix, reversed token/diagnostic/trivia accumulators, and a strict pending-trivia count.
+- The cursor is immutable and strict. It owns one [[Source]] snapshot, the source's whole text, its
+  position as a byte index into that text and the scalar index it corresponds to, the scalar index
+  of its last commit, reversed token/diagnostic/trivia accumulators, and a strict pending-trivia
+  count.
+- **Nothing is allocated for a character passed over.** A character is read in place at its byte
+  index, advancing moves two numbers, a lexeme is a slice of the source rather than a copy, and a
+  span is made only when a token or trivia is emitted. The earlier form split the remaining text and
+  formed a zero-width span on every step, which made lexing about a third of all compile allocation.
 - `CursorMark` is opaque and carries a snapshot-bound zero-width point plus the suffix at that point. Capture validates snapshot identity and forward ordering before taking only the consumed prefix from the mark suffix.
 - Token and trivia emission require a positive-width capture beginning exactly at the last committed point. Successful emission advances the committed point, preventing gaps, overlap, duplication, and mark reuse.
 - Emitting `Invalid rejected` additionally requires `rejected` to equal the exact captured text.

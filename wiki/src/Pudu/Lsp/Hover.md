@@ -30,12 +30,16 @@ hoverAt :: Analysis -> Int -> Json
 - A foreign function is answered from its documentation entry only when the resolver says the
   declaration or reference under the cursor has that exact symbol identity. Its inferred signature
   remains visible beside the named library and the fact that the signature is asserted, not proved.
+- A name another module exports, reached as `Q.name` or selected by an import
+  ([[Lsp Imported Name]]), is described by that declaration's documentation entry in the program's
+  index — its signature as its module wrote it, its comment, and its module — before any inferred
+  type, since the reader asked what the name is.
 - A declaration entry is a fallback only when no expression type answers; whitespace returns null.
 - A call-site hover carries no declaration range because that range is elsewhere in the document.
 
 ### Linkage
 
-- **Requires:** [[Lsp Documents]], [[Lsp Feature]], [[Doc]], [[Type Boundary]].
+- **Requires:** [[Lsp Documents]], [[Lsp Feature]], [[Lsp Imported Name]], [[Doc]], [[Type Boundary]].
 - **Consumed by:** [[Lsp Server]].
 
 ## Algorithm

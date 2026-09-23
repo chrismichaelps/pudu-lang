@@ -5,6 +5,71 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-23-init-package-release]] — issue #302 generated package project, release, and download chain.
+
+- [[2026-09-22-package-website]] — issue #297 public package snapshot, catalog, project pages,
+  source/docs/releases, install control, and hosted-registry activation handoff.
+
+- [[2026-09-21-lsp-completion-context]] — issue #274 syntax-directed pattern, type, import,
+  expression, and suppressed completion contexts with canonical generic sum candidates.
+
+- [[2026-09-21-folded-constants]] — issue #271 plain-data constants bound from their fold at link,
+  stored with checked products, and startup evidence.
+
+- [[2026-09-21-linked-registry]] — issue #270 one published registry frame for linking, bounded
+  module environments, and request-latency evidence.
+
+- [[2026-09-21-product-cache]] — issues #272 and #273 compiled products kept across runs under
+  content and interface keys, lazily read stored trees, integrity, bounds, and warm-start evidence.
+
+- [[2026-09-21-untallied-entry]] — issue #269 one entry action for ordinary and tallied runs, with
+  counters only when asked for.
+
+- [[2026-09-21-interface-graph]] — issue #268 interface facts prepared once per module graph,
+  consumer overlays, shared installation, lexer/parser allocation, and scaling evidence.
+
+- [[2026-09-21-resolution-context]] — issue #267 invocation-owned manifest/library roots, failed
+  resolution memoization, freshness, deterministic operation counts, and startup evidence.
+
+- [[2026-09-21-incremental-html-output]] — issue #266 pull-based bounded prepared output, deferred
+  producer ordering, backpressure, cancellation, and explicit late failures.
+
+- [[2026-09-21-safe-html-streaming]] — issue #265 reusable typed heads, checked preload destinations,
+  explicit CSS trust, typed suspense content, and context-free boundary identifiers.
+
+- [[2026-09-20-checked-html-destinations]] — issue #264 typed and checked fluent destination setters,
+  generic-attribute bypass closure, trusted escape-hatch visibility, and compatibility.
+
+- [[2026-09-20-bounded-html-output]] — issue #263 hard application-output chunk bounds, shared
+  oversized slices, typed invalid-limit refusal, compatibility, and mixed-size measurements.
+
+- [[2026-09-20-deferred-html-builders]] — issue #262 zero/one-call deferred conditionals across
+  typed HTML, fluent nodes, and persistent composition with eager compatibility.
+
+- [[2026-09-20-bounded-ssr-slots]] — issue #261 early UTF-8 budget enforcement inside dynamic
+  values, preserved error precedence, repeated-slot accounting, and rejection measurements.
+
+- [[2026-09-20-typed-html-shells]] — issue #260 structural nested child slots, iterative shell
+  preparation, Compose document helpers, deep coverage, and comparative measurements.
+
+- [[2026-09-20-encoded-ssr-responses]] — issue #259 reusable encoded static runs, per-request unique
+  slot encoding, exact segmented lengths, and checked contiguous completion.
+
+- [[2026-09-20-html-byte-plan-errors]] — issue #258 checked ordinary and compact byte-plan assembly
+  with typed missing-slot, metadata, overflow, copy, and final-length failures.
+
+- [[2026-09-20-html-plan-compaction]] — issue #257 compact static text and byte-plan runs, exact
+  compatibility tests, and same-machine preparation/render measurements.
+
+- [[2026-09-20-owned-foreign-values]] — accepted issue #227's nested ABI layout, explicit identity,
+  and generation-qualified ownership design; implementation remains deliberately unavailable.
+
+- [[2026-09-20-html-renderer-overhead]] — completed issue #256 cursor-frame renderer optimization
+  with exact chunk, escaping, and document-prefix compatibility.
+
+- [[2026-09-19-language-foundations-audit]] — active production-readiness audit for function
+  literals, ranges and slicing, destructuring bindings, and closure capture.
+
 - [[2026-09-12-release-readiness-ui]] — corrected first-release audit and checked UI patch application on `dev`.
 
 - [[2026-09-10-private-book-and-website]] — private book completion, website verification, and disk-space blocker before the Vercel preview.
@@ -47,6 +112,7 @@ tags: [moc, handoff]
 - [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
 - [[2026-08-31-json-string-decoding]] — standard-library handoff for linear, strict JSON string escape decoding and encoding.
 - [[2026-09-15-places-and-documentation-book]] — language and website handoff for assignment through `&mut`, `mut` fields, and array elements, and the twenty-chapter documentation.
+- [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
 ## Referenced by
 
