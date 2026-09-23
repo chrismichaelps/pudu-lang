@@ -7,7 +7,7 @@ aliases: [website Service Packages]
 ---
 # Website Service Packages
 
-Loads one build-time snapshot of public GitHub repositories, profiles, latest-release files, API catalogues, and recent public issues and pull requests. Missing snapshot means an empty catalogue; malformed names or missing release file trees fail startup. Search ranks exact project names, handles, names containing the query, then description and keyword matches. File reads are confined to the snapshot's listed release files. Text and raw byte reads distinguish a valid binary release file from a missing snapshot file.
+Loads one build-time snapshot of public GitHub repositories, profiles, latest-release files, API catalogues, and recent public issues and pull requests. Missing snapshot means an empty catalogue; malformed names or missing release file trees fail startup. Search ranks exact project names and `@owner/prefix` matches, then handles and `@prefix` matches, names containing the query, then description and keyword matches. An `@` query matches only owners and their projects. [[website Service PackageSearch]] adds handle and declaration ranking on top of this project order. File reads are confined to the snapshot's listed release files. Text and raw byte reads distinguish a valid binary release file from a missing snapshot file.
 Compact declaration names, modules, kinds, and signatures stay in each project document so dynamic
 package search works in the serverless function without the larger static API catalogue files.
 The full loader requires the latest release tree and reads per-project discussion documents.

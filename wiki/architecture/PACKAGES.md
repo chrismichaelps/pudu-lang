@@ -319,7 +319,7 @@ and never waits on GitHub; a new release appears on the next deployment.
 
 | Address | Shows |
 | --- | --- |
-| `/packages` | a catalog of public projects, with `@handle / name`, description, and latest version; keyword links filter the catalog, and its search form submits to `/packages/search?q=` |
+| `/packages` | a ledger of public projects (owner mark, `@handle / name`, description, latest release, stars) beside topic links with counts; its search box suggests from `/packages/suggest` and submits to `/packages/search?q=` |
 | `/@h` | a handle's profile and its public projects |
 | `/@h/n` | the project: a banner with identity, description, release, and **Install** disclosure; README as the landing content beside a sidebar with keywords, dependencies, and latest release |
 | `/@h/n/source` | the latest release's files as a tree beside the selected file, with linkable source lines |
@@ -335,11 +335,17 @@ line are provided. Projects with no release have no install control. The project
 and contributions natively from a bounded build-time GitHub snapshot; new posts, review, and replies
 continue on GitHub. Stars still link to the repository's GitHub stargazers.
 
-Project search on `/packages/search?q=` ranks exact names, then handles, then words in descriptions and
-keywords. Its focused result panel also shows matching public declarations from each project's
-generated API catalogue and links each to the package Docs section. A submitted query renders on
-the server, so the result remains usable without client JavaScript. The dynamic function receives
-compact declaration facts in `packages.json`; it does not need full API catalogue files.
+Every package search box (catalogue, results page, and each project page) accepts four query forms:
+`@owner`, `@owner/prefix`, a declaration name or qualified name, and a signature shape such as
+`Str -> Int` or `Array Value`. `/packages/search?q=&filter=` renders the full results on the server:
+matching projects, then public declarations from each project's generated API catalogue, each linked
+to the package Docs section, so the page works without client JavaScript. `GET /packages/suggest`
+answers the box under each field with bounded JSON (3 owners, 5 projects, 8 declarations, plus
+totals). One service ranks both, so the box and the page agree. A `filter` names one project and
+searches inside it: no project rows, declarations from that project only, and with an empty query
+the project's declarations in order. A project page's own box is fixed to that project. The dynamic
+function receives compact declaration facts in `packages.json` and serves both routes; it does not
+need full API catalogue files.
 The static snapshot keeps recent ticket and contribution bodies in separate per-project documents.
 The dynamic search loader reads only the compact project index, while the full loader requires
 release files and reads the discussion documents for static pages.

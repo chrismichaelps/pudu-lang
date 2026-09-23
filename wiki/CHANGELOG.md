@@ -5,6 +5,35 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — Package search suggestions and a banner-headed site (#300)
+
+- `GET /packages/suggest` returns bounded JSON suggestions: owners, projects, and public
+  declarations with kind marks, signatures, and site-built links. Queries may name an owner
+  (`@alice`), an owner's project (`@alice/js`), a declaration (`textOf`, `Value.textOf`), or a
+  signature shape (`Value -> Str`, `Array Value`). One service ranks the suggestions and the full
+  `/packages/search` page.
+- Every package search box is a combobox: Up/Down select, Enter opens, Right Arrow on a project
+  searches inside it behind a removable chip, Backspace removes the chip, Escape closes, and `/`
+  focuses the field. A `?` disclosure lists the query forms. Project pages carry a box fixed to that
+  project. The script is split into constants, text, network, view, and feature modules and inserts
+  package text only as text.
+- A filter now means "inside this project": filtered results list that project's declarations and no
+  project rows.
+- Every page with a header, now including package search results, owner profiles, and project
+  pages, opens with the dark blue gradient banner. Below it the site drops glows, lifted cards, and
+  pill badges for ink on surfaces tinted from the soft blue of the logo's `P`: typographic page headers with a four-colour logo rule, ink primary buttons, sentence-case
+  section titles, a package ledger with release and star columns beside topic counts, a project banner
+  with a facts line, and owner marks drawn from the logo's two-tone letter pairs.
+- Project tabs share one heading style. Overview shows the README as a file beside Install, Latest
+  release, Dependencies, Topics, and Details; Releases puts the latest release and its command above
+  a ledger; Docs lists declarations as rows with kind marks beside a ruled module index; Tickets and
+  Contributions are ledgers with state dots, and a detail reads as a post.
+- No suggestion is selected until the reader chooses one; Enter otherwise submits, and Right Arrow
+  narrows only on a chosen project with the caret at the end. Title-case queries still find projects
+  and owners.
+- `Test/PackageSearch.pudu` (27 checks) covers ranking, query forms, filters, bounds, and the JSON
+  reply; the website suite checks both routers, the signature search page, and the project box.
+
 ## 2026-09-23 — Visible package data states
 
 - Catalogue, search, ticket, and contribution lists now show a bordered banner when empty, retain

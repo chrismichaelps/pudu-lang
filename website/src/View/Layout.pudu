@@ -59,7 +59,7 @@ fn document(
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").at("sizes", "64x64").href(Constants.ICON_PATH),
           H.link().rel("apple-touch-icon").href(Constants.TOUCH_ICON_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=38")
+          H.link().rel("stylesheet").href("/assets/site.css?v=50")
         ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       body.holding(parts)
     ]).html()

@@ -1,0 +1,154 @@
+module Service.PackageSearch
+
+import Std.Char as Chars
+import Std.List as List
+import Std.Option as Option
+import Service.Packages as Packages
+
+export const HANDLE_LIMIT: Int = 3
+export const PROJECT_LIMIT: Int = 5
+export const DECLARATION_LIMIT: Int = 8
+
+/// A declaration that matched, with the project it belongs to and its score;
+/// a lower score ranks first.
+export type Found = { projectName: Str, version: Str, entry: Packages.PublicDeclaration, score: Int }
+
+/// What the box under the search field shows: each list bounded, with the
+/// totals the full results page holds.
+export type Suggestions = {
+  handles: Array[Packages.Profile],
+  projects: Array[Packages.Project],
+  declarations: Array[Found],
+  projectTotal: Int,
+  declarationTotal: Int
+}
+
+/// The identifiers of a text, in order: runs of letters, digits, and `_`.
+export fn identifiers(text: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  var current = ""
+  for c in text.chars() {
+    if Chars.isIdentifier(c) { current = current + c.toText() } else if !current.isEmpty() {
+      found = found.push(current)
+      current = ""
+    }
+  }
+  if current.isEmpty() { found } else { found.push(current) }
+}
+
+fn capitalised(word: Str) -> Bool {
+  let chars = word.chars()
+  !chars.isEmpty() && Chars.isUpper(chars[0])
+}
+
+/// Whether a query describes a signature rather than a name.
+export fn isShape(query: Str) -> Bool {
+  let trimmed = query.trim()
+  if isSignature(trimmed) { return true }
+  let words = trimmed.split(" ").filter(|word: Str| !word.isEmpty())
+  words.length() >= 2 && List.all(&words, |word: Str| capitalised(word))
+}
+
+/// Whether a query can only be a signature: it holds an arrow or a bracket.
+/// Capitalised words alone may still name a project or an owner.
+export fn isSignature(query: Str) -> Bool {
+  let trimmed = query.trim()
+  trimmed.contains("->") || trimmed.contains("[") || trimmed.contains("(")
+}
+
+fn lowered(items: &Array[Str]) -> Array[Str] { items.map(|item: Str| item.toLower()) }
+
+fn distinct(items: &Array[Str]) -> Array[Str] {
+  var seen: Set[Str] = setOf([])
+  for item in *items { seen = seen.insert(item) }
+  seen.toArray()
+}
+
+fn holdsAll(wanted: &Array[Str], present: &Array[Str]) -> Bool {
+  for word in *wanted {
+    if !present.contains(word) { return false }
+  }
+  true
+}
+
+/// Shape score: -1 when the signature lacks a named type, otherwise the
+/// number of identifiers it holds beyond those named, less a bonus when the
+/// named result is the signature's result.
+fn shapeScore(query: Str, signature: Str) -> Int {
+  let wanted = distinct(&lowered(&identifiers(query)))
+  if wanted.isEmpty() || signature.isEmpty() { return -1 }
+  let present = lowered(&identifiers(signature))
+  if !holdsAll(&wanted, &present) { return -1 }
+  let extra = distinct(&present).length() - wanted.length()
+  let base = if extra < 0 { 0 } else { extra }
+  if !query.contains("->") || !signature.contains("->") { return base + 20 }
+  let asked = query.split("->")
+  let given = signature.split("->")
+  let result = lowered(&identifiers(asked[asked.length() - 1]))
+  if !result.isEmpty() && holdsAll(&result, &lowered(&identifiers(given[given.length() - 1]))) { base } else { base + 10 }
+}
+
+fn nameScore(wanted: Str, entry: &Packages.PublicDeclaration) -> Int {
+  let name = entry.name.toLower()
+  let qualified = (entry.moduleName + "." + entry.name).toLower()
+  if name == wanted { return 0 }
+  if qualified == wanted || qualified.endsWith("." + wanted) { return 1 }
+  if name.startsWith(wanted) { return 2 }
+  if name.contains(wanted) { return 3 }
+  if qualified.contains(wanted) { return 4 }
+  -1
+}
+
+fn before(left: &Found, right: &Found) -> Bool {
+  if left.score != right.score { return left.score < right.score }
+  if left.entry.name.length() != right.entry.name.length() { return left.entry.name.length() < right.entry.name.length() }
+  (left.entry.moduleName + "." + left.entry.name) < (right.entry.moduleName + "." + right.entry.name)
+}
+
+/// Every declaration matching a query, best first. `filter`, when not empty,
+/// is the one project searched.
+export fn declarations(packages: &Packages.Packages, query: Str, filter: Str) -> Array[Found] {
+  let trimmed = query.trim()
+  let wanted = trimmed.toLower()
+  let shape = isShape(trimmed)
+  var found: Array[Found] = []
+  for project in packages.projects {
+    if !filter.isEmpty() && project.name != filter { continue }
+    let version = Option.unwrapOr(project.latest, "")
+    for entry in project.searchEntries {
+      let score = if trimmed.isEmpty() { if filter.isEmpty() { -1 } else { 0 } } else if shape { shapeScore(trimmed, entry.signature) } else { nameScore(wanted, &entry) }
+      if score >= 0 { found = found.push(Found{projectName: project.name, version: version, entry: entry, score: score}) }
+    }
+  }
+  if trimmed.isEmpty() { return found }
+  List.sortBy(&found, fn(left: Found, right: Found) -> Bool { before(&left, &right) })
+}
+
+/// Handles a query names: by prefix when it starts with `@`, otherwise by
+/// the exact handle or display name.
+export fn handles(packages: &Packages.Packages, query: Str) -> Array[Packages.Profile] {
+  let wanted = query.trim().toLower()
+  if wanted.isEmpty() || wanted.contains("/") || isSignature(query) { return [] }
+  if wanted.startsWith("@") { return packages.handles.filter(|held: Packages.Profile| held.handle.toLower().startsWith(wanted)) }
+  packages.handles.filter(|held: Packages.Profile| held.handle.toLower() == "@" + wanted || held.name.toLower() == wanted)
+}
+
+/// Projects a query names; a query with an arrow or bracket names none.
+export fn projects(packages: &Packages.Packages, query: Str) -> Array[Packages.Project] {
+  if query.trim().isEmpty() || isSignature(query) { return [] }
+  Packages.search(packages, query)
+}
+
+/// The bounded suggestions for a query and optional project filter.
+export fn suggest(packages: &Packages.Packages, query: Str, filter: Str) -> Suggestions {
+  let found = declarations(packages, query, filter)
+  let named = if filter.isEmpty() { projects(packages, query) } else { [] }
+  let owners = if filter.isEmpty() { handles(packages, query) } else { [] }
+  Suggestions {
+    handles: owners.slice(0, HANDLE_LIMIT),
+    projects: named.slice(0, PROJECT_LIMIT),
+    declarations: found.slice(0, DECLARATION_LIMIT),
+    projectTotal: named.length(),
+    declarationTotal: found.length()
+  }
+}

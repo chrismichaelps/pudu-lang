@@ -61,6 +61,27 @@ releases, and install control from the registry snapshot under [[architecture/PA
     an avatar, and the fixture test holds local, remote, and empty cases.
 18. **Forensic Guardian:** reviewed the avatar fallback, later-page image binding, cache revision,
     tests, and wiki parity; no actionable finding remains.
+19. **Website Engineer:** owns the live search enhancement, declaration filter, responsive package
+    list, stylesheet, route wiring, tests, and corresponding vault mirrors.
+20. **Forensic Guardian:** reviews the source/wiki parity and focused browser evidence before the
+    direct `dev` commit.
+21. **Language Architect (#300):** a package filter means "search inside this project"; queries take
+    four forms (owner, owner/project, name, signature shape); one ranking service feeds the full
+    results page and the new `GET /packages/suggest` JSON. Recorded in [[architecture/PACKAGES]] and
+    [[website Service PackageSearch]].
+22. **Website Engineer (#300):** owns `website/src/Service/PackageSearch.pudu`,
+    `website/src/View/Packages/Suggest.pudu`, `Catalog.pudu`, `Frame.pudu`, the suggest routes,
+    `website/public/assets/packages/search.js` and `search/`, `site.css`, `Test/PackageSearch.pudu`,
+    the website suite's search checks, the Vercel route, and their mirrors. Replaces the gradient
+    visual system with ink on the logo's soft blue across every page.
+23. **Independent reviewer (#300):** reviewed the diff without editing and found six issues:
+    title-case queries lost project and owner results; the auto-selected first row let Enter, Right
+    Arrow, and Tab act on unchosen or stale rows; listbox headings were not groups; a footer column,
+    a dead selector, and an unused class; and duplicate shape identifiers. All were fixed and tested.
+24. **Website Engineer (#300):** at the owner's direction, surfaces use the soft blue of the logo's
+    `P`, and the dark gradient banner heads every page, including search results, owner profiles,
+    and project pages. The project tabs (Overview, Docs, Releases, Tickets, Contributions) are
+    redrawn as file, ledger, and post layouts under one tab heading.
 
 ## Delivery exception
 
@@ -71,8 +92,14 @@ is created.
 ## Evidence
 
 - `registry/src/Test/Registry.pudu`: 40 assertions pass, including an unreadable release tree.
-- `website/src/Test/Website.pudu`: 189 assertions pass against the `@alice/json-kit` snapshot,
-  including empty, loaded, loader, and 404 markup.
+- `website/src/Test/Website.pudu`: 194 assertions pass against the `@alice/json-kit` snapshot,
+  including empty, loaded, loader, and 404 markup, both suggest routes, and the project search box.
+- `website/src/Test/PackageSearch.pudu`: 27 assertions pass (ranking, query forms, filters, bounds,
+  JSON reply); a deliberately wrong expectation was seen to fail.
+- #300 browser check on a nine-project fixture at the pane's desktop width and at 375px: catalogue
+  ledger and side column, owner/project/name/shape suggestions, Right Arrow filter chip and
+  Backspace removal, Enter opening the selection, the project page's fixed box, results page, install
+  panel on a phone, and no horizontal overflow; no console errors.
 - The latest package UI and native discussion suite holds 189 assertions. The GitHub stand-in
   integration passes with separate discussion documents and singular pull request detail URLs.
 - `test/package-registry.py`: local fake GitHub and registry flow passes, including snapshot and

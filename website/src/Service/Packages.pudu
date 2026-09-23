@@ -324,14 +324,22 @@ export fn keywords(packages: &Packages) -> Array[Str] {
   List.sorted(&seen.toArray())
 }
 
-/// Rank of a project for a query: 0 an exact name, 1 the handle, 2 a name
-/// containing the query, 3 every word found in the description or keywords,
-/// and -1 no match.
+/// Rank of a project for a query: 0 an exact name or an `@owner/prefix` of
+/// it, 1 the handle or an `@prefix` of it, 2 a name containing the query, 3
+/// every word found in the description or keywords, and -1 no match.
 fn rank(project: &Project, query: Str) -> Int {
   let wanted = query.trim().toLower()
   if wanted.isEmpty() { return 3 }
   if wanted == project.name || wanted == project.project { return 0 }
+  if wanted.startsWith("@") && wanted.contains("/") {
+    if project.name.toLower().startsWith(wanted) { return 0 }
+    return -1
+  }
   if wanted == project.handle || "@" + wanted == project.handle { return 1 }
+  if wanted.startsWith("@") {
+    if project.handle.toLower().startsWith(wanted) { return 1 }
+    return -1
+  }
   if project.project.contains(wanted) { return 2 }
   let words = (project.description + " " + project.keywords.join(" ")).toLower()
   for word in wanted.split(" ") {

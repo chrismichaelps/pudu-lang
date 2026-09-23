@@ -12,6 +12,7 @@ import Service.Playground as Playground
 import Service.Search as Search
 import View.Dynamic as DynamicView
 import View.Packages.Catalog as PackageCatalog
+import View.Packages.Suggest as PackageSuggest
 import Web.Playground as PlaygroundWeb
 
 /// What the serverless function serves: the requests that are not static
@@ -46,11 +47,15 @@ export fn routes(edge: &Dynamic) -> Route.Router {
   let packageSearch = Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
       if !Packages.present(&held.packages) { return missing(held.siteUrl, asked.path) }
       let query = Option.unwrapOr(Route.queryParam(&asked, "q"), "")
+      let filter = Option.unwrapOr(Route.queryParam(&asked, "filter"), "")
       let page = Option.unwrapOr(Text.wholeOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), 0)
-      if page < 1 || page > PackageCatalog.resultPages(&held.packages, query) { return missing(held.siteUrl, asked.path) }
-      Reply.page(200, PackageCatalog.pageNumber(held.siteUrl, &held.packages, query, page))
+      if page < 1 || page > PackageCatalog.resultPagesFiltered(&held.packages, query, filter) { return missing(held.siteUrl, asked.path) }
+      Reply.page(200, PackageCatalog.pageNumberFiltered(held.siteUrl, &held.packages, query, page, filter))
     })
-  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch])), fn(asked: Route.Request) -> Http.Response {
+  let packageSuggest = Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
+      PackageSuggest.reply(&held.packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+    })
+  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch, packageSuggest])), fn(asked: Route.Request) -> Http.Response {
       missing(held.siteUrl, asked.path)
     })
 }

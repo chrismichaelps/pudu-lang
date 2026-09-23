@@ -13,8 +13,10 @@ documentation, API, about page, and donation page; the repository remains in the
 header. Mobile pages use a native disclosure immediately followed by the same navigation links, while
 desktop pages show the direct link row. The footer names the copyright holder on every page. Static style
 references carry a revision so browser and CDN caches change with this visual system.
-Revision `38` includes the compact catalogue rows, search result panel, native discussions,
-the shared page banner, data states, and profile placeholder. `banner` owns the
+Revision `50` is the banner-headed, ink-on-soft-blue system: typographic page headers, the package ledger, the
+package search box and its suggestions, two-tone owner marks, native discussions, and data states.
+Every page with a header opens with `banner`, including package search results, owner profiles, and
+project pages. `banner` owns the
 label, one page title, lead, and optional actions or metadata; `page-banner` uses its reading-page
 variant while home and catalogue use the full height.
 

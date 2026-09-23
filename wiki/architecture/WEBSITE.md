@@ -47,7 +47,7 @@ second generated catalogue: `website/scripts/generate-packages.mjs` copies GitHu
 profiles, latest-release files, generated API summaries, and recent public issues and pull requests
 at build time. The local router and
 prerender use the full snapshot; the Lambda loads only its compact project documents, including
-declaration search facts, for `/packages/search`. Recent discussion bodies live in separate static
+declaration search facts, for `/packages/search` and `/packages/suggest`. Recent discussion bodies live in separate static
 documents. A package with invalid Pudu source omits its API reference but does not stop
 the catalogue and source pages from deploying. Missing snapshot files or malformed project names
 fail startup rather than publishing incomplete source pages.

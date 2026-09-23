@@ -27,6 +27,7 @@ import View.Packages.Discussion as PackageDiscussion
 import View.Packages.Project as PackageProject
 import View.Packages.Reference as PackageReference
 import View.Packages.Source as PackageSource
+import View.Packages.Suggest as PackageSuggest
 import View.Releases as ReleasesView
 import Web.Playground as PlaygroundWeb
 
@@ -105,7 +106,10 @@ export fn routes(site: &Site.Site) -> Route.Router {
               packageCatalog(siteUrl, packages, "", 1)
             }),
           Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
-              packageCatalog(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")))
+              packageCatalogFiltered(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+            }),
+          Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
+              PackageSuggest.reply(packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
             }),
           Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
               let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
@@ -293,6 +297,11 @@ fn pageOf(raw: Str) -> Int { Option.unwrapOr(Text.wholeOf(raw), 0) }
 fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int) -> Http.Response {
   if page < 1 || page > PackageCatalog.resultPages(packages, query) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
   Reply.page(200, PackageCatalog.pageNumber(siteUrl, packages, query, page))
+}
+
+fn packageCatalogFiltered(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int, filter: Str) -> Http.Response {
+  if page < 1 || page > PackageCatalog.resultPagesFiltered(packages, query, filter) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
+  Reply.page(200, PackageCatalog.pageNumberFiltered(siteUrl, packages, query, page, filter))
 }
 
 fn discussion(siteUrl: Str, packages: &Packages.Packages, asked: &Route.Request, kind: Str, number: Str, page: Int) -> Http.Response {

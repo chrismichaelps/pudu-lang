@@ -16,6 +16,10 @@ metadata. A route matches only a path with its own number of segments, so `/docs
 never captures `/docs/:module/:kind/:name`. Specific site and asset routes precede general package paths; package file parameters are URL-decoded and admitted only by the snapshot's file listing.
 Numbered catalogue, handle, ticket, and contribution paths serve bounded list pages. The local
 asset route admits only the reviewed package file icons.
+Package search accepts an optional project filter. The filter searches inside that project, so
+declaration matches come from it alone and no project rows are listed; pagination preserves it.
+`GET /packages/suggest?q=&filter=` answers the suggestion box with bounded JSON from
+[[website View Packages Suggest]].
 
 Resolved Grill Log: route handlers translate only; catalogue lookup and ranking remain services.
 Same-kind, same-name declarations are passed to one symbol-family view rather than discarded or

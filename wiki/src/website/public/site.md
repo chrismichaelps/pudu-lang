@@ -7,24 +7,42 @@ aliases: [website stylesheet]
 ---
 # Website Stylesheet
 
-The home and catalogue use the full Pudu gradient banner. Reading, search, and missing pages use
-its compact `page-banner` variant with white metadata and links. The package catalogue uses bordered
-linked rows for project identity, description, release, and stars. Package search uses a focused
-white result panel with aligned project and declaration rows. Project views use a restrained
-profile header, a project banner, an install disclosure, a metadata sidebar beside a bounded README,
-releases, a responsive source tree, linkable code lines, and native read-only ticket and contribution
-lists and details. The package and conversation lists reserve an accessible next-page control for
-progressive loading. Source-tree icons are sized consistently, including local PNG and SVG file
-types.
-Data lists have distinct loading, empty, and loaded presentations: a live spinner beside the
-next-page action, a bordered empty banner, and regular list rows.
-Package avatars use a quiet square frame and a neutral user silhouette when no GitHub image exists.
-The project banner leaves the desktop disclosure unclipped. On narrow screens the install
-disclosure is fixed within the viewport rather
-than overflowing past the left edge; on short screens the native summary remains visible as a close
-control above a full-height scrollable panel.
+**Visual system.** Ink text and primary buttons on surfaces tinted from the soft blue of the logo's
+`P` (`--line`, `--soft`, `--paper`, `--code`), with Pudu blue for links and focus. Every page with a
+header opens with the dark blue gradient banner (`hero-banner`, and the shorter `page-banner`): home,
+the package catalogue, search results, owner profiles, project pages, documentation, API reference,
+download, releases, policy, and missing pages. Its diagonal lines and warm corner shape are the
+page's one decoration; below it, section titles are sentence case over a two-pixel ink rule, radii
+stay at 10px or less, and shadows belong to the banner's search field and to popovers (`--lift`).
+The logo's four two-tone pairs (`--tone-0` to `--tone-3` with `-soft` halves) mark owners and draw the
+short rule before section labels such as `kind`.
 
-Defines the white, Pudu-blue visual system, local Nunito family, responsive documentation layout,
+The banner clips its overflow for the corner shape, so suggestion and help panels are fixed-position
+and placed by script. A project's banner instead draws its corner as a radial gradient and leaves
+overflow visible, so the install disclosure can open below it above the page. Inside a banner,
+labels, leads, facts, and links are light; the install panel restores ink text.
+
+The catalogue is a ledger (mark, identity and description, release, stars) beside a topics and
+publishing column that drops below at 900px. Search results reuse the ledger for projects and give
+declarations a kind mark, module, project and release, and signature. A project page has the banner
+with identity, facts, and the install control, then tabs on one rule with a project search box that
+moves above the tabs below 1000px. Every tab opens with the same heading closed by an ink rule. The
+overview shows the README as a file beside a hairline-divided facts column; releases give the latest
+a block with its command and the rest a ledger table; docs pair a ruled module index with declaration
+rows; tickets and contributions are ledgers with state dots, and a detail reads as a post. The source
+tab keeps its dark file tree, linkable code lines, and outline.
+
+**Package search box.** A drawn magnifier, a `/` key hint hidden while focused, a `?` query-forms
+disclosure, a filter chip in ink, and a suggestion box anchored to the form with section headings,
+highlighted matches, a visible selection, key hints on the selected row, and loading, empty, and error
+messages. At phone width suggestion rows drop their meta column and the help disclosure hides.
+
+Data lists have distinct loading, empty, and loaded presentations: a live spinner beside the
+next-page action, a dashed empty banner on paper, and regular list rows. On narrow screens the install
+disclosure is fixed within the viewport; on short screens the native summary remains visible as a
+close control above a full-height scrollable panel.
+
+Defines the local Nunito family, responsive documentation layout,
 mobile disclosure navigation, code surfaces, result density, and footer. It reserves visible focus,
 44-pixel interactive targets, readable line lengths, text zoom, reduced-motion preference, and
 high-contrast behavior.
@@ -59,8 +77,21 @@ and the example menu narrows to 170 pixels; on a phone the toolbar is two rows.
 Measured at 320, 375, 768, 1024, and 1440 pixels on every page: no page overflows horizontally, and
 the playground toolbar is one row from 761 pixels up.
 
+## Grill Log
+
+- **Q:** Keep the gradient banner? **A:** Yes, as every page's header, and nothing else decorated.
+  _Rationale:_ the owner chose the banner; confining decoration to it keeps the rest of each page
+  plain type, ledgers, and rules.
+- **Q:** Warm cream or the logo's soft blue for surfaces? **A:** The soft blue of the `P`.
+  _Rationale:_ the owner chose it; it ties every surface to the mark readers already know.
+- **Q:** Where does colour come from? **A:** The banner, the `P`'s soft blue on surfaces, and the
+  logo's four two-tone pairs for owner marks and section-label rules. _Rationale:_ one recognisable
+  source of colour; links and focus remain the only saturated blue in page content.
+- **Q:** Primary buttons in blue? **A:** No, in ink. _Rationale:_ blue already means "link"; a dark
+  button reads as the one action without competing with inline links.
+
 Resolved Grill Log: the mobile menu is CSS plus native HTML disclosure, not a hidden checkbox or
 script-only control. Desktop and mobile navigation are mutually hidden from both layout and the
 accessibility tree, and no viewport gains horizontal overflow at 200 percent text zoom.
 
-Text is set in Nunito, served as WOFF2 (44 KiB a face, against 130 KiB as TrueType), with the regular and bold faces preloaded from every page's head. Until they arrive a `Nunito Fallback` face draws local Arial (or Helvetica, or Roboto) scaled and with its ascent and descent overridden to Nunito's measured metrics — size-adjust 102.38% regular and 97.85% bold, taken from each face's advance widths over English letter frequencies — so the swap moves no line: measured on the home page, a chapter, and the playground at 412 and 1350 pixels, every heading, paragraph, toolbar, and pane is at the same place in both faces. The masthead logo is a 336×112 WebP (6 KiB) drawn at 168×56 with its size in the markup; the footer mark is 68×65 WebP; the icon is a 64-pixel PNG with a 180-pixel touch icon; link previews get a 1200×630 card. The original logo PNGs stay as the brand page's source art.
+Text is set in Nunito, served as WOFF2 (44 KiB a face, against 130 KiB as TrueType), with the regular and bold faces preloaded from every page's head. Until they arrive a `Nunito Fallback` face draws local Arial (or Helvetica, or Roboto) scaled and with its ascent and descent overridden to Nunito's measured metrics — size-adjust 102.38% regular and 97.85% bold, taken from each face's advance widths over English letter frequencies — so the swap moves no line: measured on the home page, a chapter, and the playground at 412 and 1350 pixels, every heading, paragraph, toolbar, and pane is at the same place in both faces. The masthead logo is a 336×112 WebP (6 KiB) whose markup states 168×56 for its aspect ratio and which the stylesheet draws 132 pixels wide; the footer mark is 68×65 WebP; the icon is a 64-pixel PNG with a 180-pixel touch icon; link previews get a 1200×630 card. The original logo PNGs stay as the brand page's source art.

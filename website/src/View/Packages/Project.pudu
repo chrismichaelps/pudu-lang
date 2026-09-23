@@ -8,6 +8,8 @@ import Service.Packages as Packages
 import View.Markdown as Markdown
 import View.Packages.Frame as Frame
 
+const GITHUB: Str = "https://github.com/"
+
 /// The day part of an RFC 3339 time.
 export fn day(stamp: Str) -> Str { if stamp.length() >= 10 { stamp.take(10) } else { stamp } }
 
@@ -25,41 +27,49 @@ fn sideSection(title: Str, body: Array[H.Node]) -> H.Node {
   H.section().class("package-side-section").holding([H.h2().says(title)].concat(body))
 }
 
+/// The overview's side column: how to install, the latest release, what it
+/// depends on, its topics, and where it lives.
 fn sidebar(packages: &Packages.Packages, project: &Packages.Project) -> H.Node {
   var parts: Array[H.Node] = []
-  if !project.keywords.isEmpty() {
-    parts = parts.push(H.ul().class("package-chips").holding(project.keywords.map(|word: Str| H.li().holding([chip(word, "/packages/search?q=" + Url.encodeComponent(word))]))))
-  }
   match Packages.latestRelease(project) {
     case Some(release) => {
+      parts = parts.push(sideSection("Install", [Frame.copyable(Frame.installCommand(project, ""), "the install command")]))
       parts = parts.push(sideSection("Latest release", [
-            H.p().holding([chip(release.version, Frame.tabPath(project, "releases")), H.span().class("package-muted").says(" " + day(release.publishedAt))]),
-            H.a().href(Frame.tabPath(project, "releases")).says("All releases")
+            H.p().class("package-side-release").holding([
+                H.a().class("package-side-version").href(Frame.tabPath(project, "releases")).says(release.version),
+                H.span().class("package-muted").says(day(release.publishedAt))
+              ]),
+            H.a().class("package-side-more").href(Frame.tabPath(project, "releases")).says("All releases →")
           ]))
       let dependencies = if release.dependencies.isEmpty() { [H.p().class("package-muted").says("None")] } else {
-        [H.ul().class("package-chips").holding(release.dependencies.map(|pair: (Str, Str)| dependencyChip(packages, pair[0], pair[1])))]
+        [H.ul().class("package-dependencies").holding(release.dependencies.map(|pair: (Str, Str)| dependencyChip(packages, pair[0], pair[1])))]
       }
       parts = parts.push(sideSection("Dependencies", dependencies))
     }
     case None => {}
   }
+  if !project.keywords.isEmpty() {
+    parts = parts.push(sideSection("Topics", [H.ul().class("package-chips").holding(project.keywords.map(|word: Str| H.li().holding([chip(word, "/packages/search?q=" + Url.encodeComponent(word))])))]))
+  }
   var facts: Array[H.Node] = []
   if !project.root.isEmpty() { facts = facts.concat([H.dt().says("Module root"), H.dd().holding([H.code().says(project.root)])]) }
   if !project.license.isEmpty() { facts = facts.concat([H.dt().says("License"), H.dd().says(project.license)]) }
   if !project.repository.isEmpty() {
-    facts = facts.concat([H.dt().says("Repository"), H.dd().holding([H.a().href(project.repository).at("rel", "external noopener noreferrer").says(project.repository.drop(8))])])
+    facts = facts.concat([H.dt().says("Repository"), H.dd().holding([H.a().href(project.repository).at("rel", "external noopener noreferrer").says((if project.repository.startsWith(GITHUB) { project.repository.drop(GITHUB.length()) } else { project.repository }) + " ↗")])])
   }
-  if !facts.isEmpty() { parts = parts.push(H.dl().class("package-facts").holding(facts)) }
+  if !facts.isEmpty() { parts = parts.push(sideSection("Details", [H.dl().class("package-facts").holding(facts)])) }
   H.aside().class("package-side").holding(parts)
 }
 
+/// The README as a file: its name above its rendered text.
 fn readme(project: &Packages.Project) -> H.Node {
+  let head = H.div().class("package-readme-head").holding([H.span().class("package-readme-file").says("README.md")])
   if project.readme.trim().isEmpty() {
-    return H.section().class("package-readme doc").holding([H.h1().says(project.name), H.p().class("package-muted").says("This project has no README.")])
+    return H.section().class("package-readme").holding([head, H.div().class("package-readme-body doc").holding([H.p().class("package-muted").says("This project has no README.")])])
   }
   let read = Markdown.parse(&project.readme.split("\n"))
   let title = if read.title.isEmpty() { [H.h1().says(project.name)] } else { [H.h1().says(read.title)] }
-  H.section().class("package-readme doc").holding([H.span().class("package-label").says("README")].concat(title).concat(read.blocks))
+  H.section().class("package-readme").holding([head, H.div().class("package-readme-body doc").holding(title.concat(read.blocks))])
 }
 
 /// The project's landing page: its README beside what it is and what it needs.
@@ -85,17 +95,20 @@ fn byline(project: &Packages.Project, release: &Packages.Release) -> H.Node {
 
 /// The latest release with its notes and install command, then every earlier one.
 export fn releases(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project) -> Html.Html {
-  var content: Array[H.Node] = [H.h1().says("Releases"), H.p().class("section-lead").says("Every release of " + project.name + ". A release never changes; a yanked one still installs from an existing lock.")]
+  var content: Array[H.Node] = [Frame.tabHeading("Releases", "A release never changes; a yanked one still installs from an existing lock.", H.nothing())]
   match Packages.latestRelease(project) {
     case Some(latest) => {
       let notes = if latest.notes.trim().isEmpty() { [H.p().class("package-muted").says("No notes were published with this release.")] } else { Markdown.parse(&latest.notes.split("\n")).blocks }
       content = content.push(H.section().class("package-release").holding([
-            H.h2().class("package-release-version").says(latest.version),
-            byline(project, &latest),
+            H.div().class("package-release-head").holding([
+                H.span().class("package-release-tag").says("Latest"),
+                H.h2().class("package-release-version").says(latest.version),
+                byline(project, &latest)
+              ]),
             H.div().class("package-release-notes doc").holding(notes),
             H.div().class("package-release-actions").holding([
-                H.code().class("install-text").says(Frame.installCommand(project, latest.version)),
-                H.a().href(Frame.tabPath(project, "source")).says("Browse the source")
+                Frame.copyable(Frame.installCommand(project, latest.version), "the install command"),
+                H.a().href(Frame.tabPath(project, "source")).says("Browse the source →")
               ])
           ]))
     }
@@ -106,19 +119,19 @@ export fn releases(siteUrl: Str, packages: &Packages.Packages, project: &Package
     var rows: Array[H.Node] = []
     for release in earlier {
       rows = rows.push(H.tr().holding([
-            H.td().holding([H.strong().says(release.version)].concat(if release.yanked { [H.span().class("package-yanked").says(" yanked")] } else { [] })),
+            H.td().holding([H.span().class("package-release-number").says(release.version)].concat(if release.yanked { [H.span().class("package-yanked").says("yanked")] } else { [] })),
             H.td().says(day(release.publishedAt)),
             H.td().says(if release.publisher.isEmpty() { "" } else { "@" + release.publisher }),
             H.td().holding([commitLink(project, &release)])
           ]))
     }
     content = content.concat([
-        H.h2().says("Earlier releases"),
+        H.h2().class("package-subheading").holding([H.span().says("Earlier releases"), H.span().class("package-group-count").says(show(earlier.length()))]),
         H.table().class("package-release-table").holding([
             H.thead().holding([H.tr().holding([H.th().says("Version"), H.th().says("Published"), H.th().says("By"), H.th().says("Commit")])]),
             H.tbody().holding(rows)
           ])
       ])
   }
-  Frame.page(siteUrl, packages, project, "releases", project.name + " releases", "Every release of " + project.name + ", with notes and install commands.", [H.section().class("package-body").holding(content)])
+  Frame.page(siteUrl, packages, project, "releases", project.name + " releases", "Every release of " + project.name + ", with notes and install commands.", [H.section().class("package-body package-releases").holding(content)])
 }

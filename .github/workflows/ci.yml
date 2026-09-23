@@ -81,7 +81,7 @@ jobs:
         run: |
           "$PUDU" check $(find website/src -name '*.pudu')
           "$PUDU" fmt --check website/src website/playground/examples
-          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu
+          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu
       - name: Verify packages install and publish through git and a stand-in GitHub
         run: python3 test/package-registry.py --pudu "$PUDU"
       # The sandbox fails closed: asked to isolate a program on a host where it

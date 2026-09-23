@@ -38,7 +38,12 @@ bordered empty banners for an unpublished catalogue, no search matches, and no t
 lists expose their state and include a hidden live loader for the next bounded request. The 404
 banner names the missing page.
 Avatar checks cover the preferred local GitHub copy, the GitHub image URL fallback, and the
-geometric placeholder when an owner has no usable image.
+two-tone owner mark when an owner has no usable image.
+Search checks cover the live script hook, both routers serving `/packages/suggest` JSON, a signature
+search listing its declaration with a kind mark, a project page's fixed search box, and a filter that
+searches inside one project (no project rows, declarations from that project only) in both local and
+serverless routes. Ranking itself is checked in [[website package search suite]]. The avatar checks
+cover the two-tone mark beneath a missing image.
 
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.
