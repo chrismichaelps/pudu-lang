@@ -48,8 +48,8 @@ import Pudu.Source (SourceName (..), emptySpan, newSource)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import System.Directory (doesDirectoryExist, doesFileExist)
-import System.FilePath (isAbsolute, normalise, takeDirectory, (</>))
+import System.Directory (canonicalizePath, doesDirectoryExist, doesFileExist, makeAbsolute)
+import System.FilePath (dropTrailingPathSeparator, isAbsolute, normalise, takeDirectory, (</>))
 
 {-| Where a dependency's code comes from.
 
@@ -179,7 +179,8 @@ readManifestSnapshot sourceRoot = do
           let manifest = parseManifest contents
               candidates = distinct
                 (map (resolveAgainst root) (mapMaybe dependencyPath (manifestDependencies manifest)))
-          roots <- existing candidates
+              source = resolveAgainst root (maybe "src" id (manifestSource manifest))
+          roots <- existing =<< beyondSourceRoot sourceRoot (source : candidates)
           diagnostics <- versionDiagnostics path contents manifest
           (packages, packageProblems) <- installedPackageRoots root
           pure
@@ -280,6 +281,27 @@ existing (path : rest) = do
   there <- doesDirectoryExist path
   remaining <- existing rest
   pure (if there then path : remaining else remaining)
+
+{-| The roots a project adds after the compile's own source root, each directory
+    once and in search order. Directories are compared by canonical path, so
+    `src`, `src/`, an absolute spelling, and a self dependency such as
+    `src = "src"` are one root, and the compile root is never searched twice. -}
+beyondSourceRoot :: FilePath -> [FilePath] -> IO [FilePath]
+beyondSourceRoot sourceRoot paths = do
+  own <- rootKey sourceRoot
+  keyed <- traverse (\path -> (,) path <$> rootKey path) paths
+  pure (go (Set.singleton own) keyed)
+ where
+  go _ [] = []
+  go seen ((path, key) : rest)
+    | Set.member key seen = go seen rest
+    | otherwise = path : go (Set.insert key seen) rest
+
+rootKey :: FilePath -> IO FilePath
+rootKey path = do
+  resolved <- try (canonicalizePath path) :: IO (Either IOException FilePath)
+  absolute <- either (const (makeAbsolute path)) pure resolved
+  pure (dropTrailingPathSeparator (normalise absolute))
 
 distinct :: [FilePath] -> [FilePath]
 distinct = go Set.empty

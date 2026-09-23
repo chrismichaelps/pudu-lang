@@ -24,6 +24,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testAliasedReexport
   , testPathDependencies
   , testResolutionContext
+  , testSourceRootOnce
   , testInterfaceGraph
   )
 import Pudu.Compiler.Program.LanguageSpec
@@ -52,6 +53,7 @@ programProperties =
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   , ("stored products compile and run exactly as source does", testCacheEquivalence)
   , ("stored products are never reused for changed input", testCacheInvalidation)

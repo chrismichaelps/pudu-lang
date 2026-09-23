@@ -45,8 +45,8 @@ manifestVersionDiagnostics :: FilePath -> IO [Diagnostic]
 ### Governance
 
 - A snapshot walks upward at most six directories, reads at most one `pudu.toml`, parses those bytes
-  once, resolves dependency paths against that manifest's directory, deduplicates them in declaration
-  order, and probes each unique dependency root once.
+  once, resolves the project's source and dependency paths against that manifest's directory,
+  deduplicates them in search order, and probes each unique root once.
 - `package.language` validation uses the parsed manifest and retained contents from the same snapshot.
   It never rediscovers or rereads the manifest merely to produce `E2090`.
 - A missing manifest is valid and produces an empty snapshot. An unreadable discovered manifest
@@ -70,7 +70,8 @@ probe unique paths. Derive compatibility results and language diagnostics from t
 
 ## Negative Logic (Prohibited Paths)
 
-- No network, registry, lock file, recursive dependency-manifest reading, or process-global cache.
+- No network, registry fetch, recursive dependency-manifest reading, or process-global cache. A
+  checked lock contributes installed search roots without fetching packages.
 - No second read for version diagnostics and no repeated dependency probe within a snapshot.
 - No sorting of dependency roots: declaration order is semantic resolution precedence.
 
@@ -97,6 +98,10 @@ diagnostics, ordered dependency-root resolution, and deterministic measurement o
 - **Q:** Should dependency manifests be followed recursively? **A:** No. _Rationale:_ the declared
   path is a module root; recursive manifests would introduce package resolution semantics absent
   from the language contract. _Rejected:_ transitive manifest traversal; implicit package manager.
+- **Q:** Should roots be deduplicated by their written spelling? **A:** No, by canonical path.
+  _Rationale:_ a compile root and a manifest path can spell one directory differently, which
+  searched `src` twice for a file already under it. _Rejected:_ string equality; dropping only the
+  manifest `source` while keeping a `src = "src"` self dependency.
 - **Q:** Should snapshots persist between commands? **A:** No. _Rationale:_ independent invocations
   must observe environment and filesystem changes without timestamps or invalidation. _Rejected:_
   global cache; mtime cache; watch-service dependency.
@@ -106,6 +111,15 @@ diagnostics, ordered dependency-root resolution, and deterministic measurement o
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Library]] · [[Compiler Program]]
 
 ## Dependency sources and installed packages
+
+The manifest's own `source` directory is an implicit project search root. A suite in `test/` can
+import the modules it tests without declaring a path dependency on its own `src/`; the compiler
+searches that source root before external dependency roots. When the file already lives under that
+source root, the root is not added twice. Existing manifests that explicitly name
+`src = "src"` remain readable and their duplicate root is searched once. Roots are compared by
+canonical path, so `src`, `src/`, `./src/`, and an absolute spelling are one directory; the
+returned root keeps the first spelling in search order. This keeps a generated
+package free of local-only self dependencies, which repository consumers cannot resolve.
 
 A dependency is a `DependencySource`: a path (bare string or `{ path = … }`), a repository
 (`{ git = …, rev|tag|branch = … }`), a registry requirement under a `@handle/name` key, or an

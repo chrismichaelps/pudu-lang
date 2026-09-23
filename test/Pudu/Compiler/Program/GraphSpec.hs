@@ -10,6 +10,7 @@ module Pudu.Compiler.Program.GraphSpec
   , testInterfaceGraph
   , testPathDependencies
   , testResolutionContext
+  , testSourceRootOnce
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
@@ -46,6 +47,7 @@ graphProperties =
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   ]
 
@@ -133,6 +135,46 @@ testResolutionContext = withSystemTempDirectory "pudu-resolution" $ \root -> do
         (resolutionMetrics first === firstMetrics)
     , counterexample "a memoized miss is still diagnosed at every importing span"
         (failedCodes === ["E2014", "E2014"])
+    ]
+
+{-| The manifest's source directory is searched after the compile's own root.
+    A file already under it must not see it twice, whatever spelling a
+    self dependency uses; a suite under test/ still reaches it first. -}
+testSourceRootOnce :: IO Property
+testSourceRootOnce = withSystemTempDirectory "pudu-source-root" $ \root -> do
+  let project = root </> "project"
+      sourceRoot = project </> "src"
+      testRoot = project </> "test"
+      external = root </> "external"
+      ordinaryModule = ModuleName ("Ordinary" :| [])
+  mapM_ (createDirectoryIfMissing True) [sourceRoot, testRoot, external]
+  TextIO.writeFile (project </> "pudu.toml")
+    ( "[package]\nname = \"project\"\nsource = \"src\"\n[dependencies]\n"
+        <> "src = \"src\"\nslashed = \"./src/\"\nexternal = \"../external\"\n"
+    )
+  fromSource <- newResolutionContext sourceRoot
+  fromSlashed <- newResolutionContext (sourceRoot <> "/")
+  fromTest <- newResolutionContext testRoot
+  TextIO.writeFile (project </> "pudu.toml") "[package]\nname = \"project\"\n"
+  implicit <- newResolutionContext testRoot
+  TextIO.writeFile (sourceRoot </> "Greeting.pudu") "module Greeting\n\nexport fn answer() -> Int { 42 }\n"
+  TextIO.writeFile (sourceRoot </> "Main.pudu") "module Main\n\nimport Greeting as G\n\nfn main() -> Int { G.answer() }\n"
+  TextIO.writeFile (testRoot </> "GreetingTest.pudu") "module GreetingTest\n\nimport Greeting as G\n\nfn main() -> Int { G.answer() - 42 }\n"
+  sourceCompile <- compileProgram (sourceRoot </> "Main.pudu")
+  testCompile <- compileProgram (testRoot </> "GreetingTest.pudu")
+  let externalRoot = project </> ".." </> "external"
+      compiled = map (diagnosticCodeText . diagnosticCode) . programDiagnostics
+  pure $ conjoin
+    [ counterexample "src is not repeated for a file under src"
+        (resolutionSearchRoots fromSource ordinaryModule === [sourceRoot, externalRoot])
+    , counterexample "a trailing separator names the same root"
+        (resolutionSearchRoots fromSlashed ordinaryModule === [sourceRoot <> "/", externalRoot])
+    , counterexample "test/ searches itself, then src once, then dependencies"
+        (resolutionSearchRoots fromTest ordinaryModule === [testRoot, sourceRoot, externalRoot])
+    , counterexample "the default source directory is implicit"
+        (resolutionSearchRoots implicit ordinaryModule === [testRoot, sourceRoot])
+    , counterexample "src compiles" (compiled sourceCompile === [])
+    , counterexample "test imports a project module" (compiled testCompile === [])
     ]
 
 {-| A type re-exported under the name it already has.

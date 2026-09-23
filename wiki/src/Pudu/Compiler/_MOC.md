@@ -13,6 +13,8 @@ aliases: [Program Compiler Module Map]
 - [[Compiler Manifest]] — one-read project snapshots, ordered dependency roots, version diagnostics,
   and setup-operation evidence.
 - [[Standard Library Program Spec]] — loaded-standard-library discovery and qualified-member diagnostic regressions.
+- [[Program Spec]] — the aggregate program-compiler property list.
+- [[Program Graph Spec]] — discovery, graph, interface, and search-root regressions.
 - [[Program Test Common]] — complete-program evaluation and exact diagnostic observations for tests.
 - [[Language Foundation Program Spec]] — function literal, capture, range, slice, and destructuring regressions.
 
