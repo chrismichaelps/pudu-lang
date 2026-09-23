@@ -9,13 +9,13 @@ aliases: [website View Documentation]
 
 Renders the standard library index, module pages, symbol-family detail pages, and not-found
 responses. `/modules` is a map of the library rather than a flat list: author, version, and counts
-first, links to each section, then one table per [[website Domain Library]] section whose rows give a
+in a shared page banner, links to each section, then one table per [[website Domain Library]] section whose rows give a
 module, its declaration count, the sentence saying what it is for, and the modules beneath it. A
 catalogue module no section reaches is listed under Other, so nothing disappears. The language
 documentation that replaced the hand-written guide is [[website View Docs]]. A symbol page lists every same-kind, same-name declaration and signature so
 trait methods, implementations, and overloads remain visible at one stable canonical path. Kind is
 part of the path so `stage` the function and `Stage` the type cannot collide on a case-insensitive
-filesystem.
+filesystem. Module and symbol pages also open with the shared page banner.
 
 Each declaration starts with its source-derived signature. A concise kind explanation and a
 conditional signature guide explain arrows, references, mutable references, type arguments,

@@ -46,7 +46,7 @@ fn main() -> Int {
         case Ok(loaded) => loaded
         case Err(problem) => { return couldNotStart(&problem) }
       }
-      let packages = match Packages.load(settings.packagesPath) {
+      let packages = match Packages.loadCompact(settings.packagesPath) {
         case Ok(loaded) => loaded
         case Err(problem) => { return couldNotStart(&problem) }
       }

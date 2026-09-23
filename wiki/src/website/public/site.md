@@ -7,7 +7,22 @@ aliases: [website stylesheet]
 ---
 # Website Stylesheet
 
-The package catalogue and project views use an original Pudu gradient banner, a compact two-column package list on wide screens, a restrained profile header, a project banner, an install disclosure, a metadata sidebar beside a bounded README, releases, a responsive source tree, and linkable code lines using the site's existing colors, fonts, borders, and focus rules. The project banner leaves the desktop disclosure unclipped. On narrow screens the install disclosure is fixed within the viewport rather than overflowing past the left edge; on short screens the native summary remains visible as a close control above a full-height scrollable panel.
+The home and catalogue use the full Pudu gradient banner. Reading, search, and missing pages use
+its compact `page-banner` variant with white metadata and links. The package catalogue uses bordered
+linked rows for project identity, description, release, and stars. Package search uses a focused
+white result panel with aligned project and declaration rows. Project views use a restrained
+profile header, a project banner, an install disclosure, a metadata sidebar beside a bounded README,
+releases, a responsive source tree, linkable code lines, and native read-only ticket and contribution
+lists and details. The package and conversation lists reserve an accessible next-page control for
+progressive loading. Source-tree icons are sized consistently, including local PNG and SVG file
+types.
+Data lists have distinct loading, empty, and loaded presentations: a live spinner beside the
+next-page action, a bordered empty banner, and regular list rows.
+Package avatars use a quiet square frame and a neutral user silhouette when no GitHub image exists.
+The project banner leaves the desktop disclosure unclipped. On narrow screens the install
+disclosure is fixed within the viewport rather
+than overflowing past the left edge; on short screens the native summary remains visible as a close
+control above a full-height scrollable panel.
 
 Defines the white, Pudu-blue visual system, local Nunito family, responsive documentation layout,
 mobile disclosure navigation, code surfaces, result density, and footer. It reserves visible focus,

@@ -8,9 +8,8 @@ import View.Layout as Layout
 
 export fn page(siteUrl: Str) -> Html.Html {
   Layout.page(siteUrl, "About Pudu", "What Pudu is, what it is built around, where it stands before its first release, and who makes it.", "/about", true, Some(Seo.aboutSchema(siteUrl)), H.article().class("doc about").holding([
-        H.span().class("kind").says("about"),
-        H.h1().says("About Pudu"),
-        H.p().says("Pudu is a statically typed programming language for programs that are easy to read, safe to change, and honest about failure. A function's signature says what it takes, what it gives back, whether it can fail, and whether it changes what it was given, so a reader can tell what code promises without reading its body."),
+        Layout.banner("page-banner", "About", "About Pudu", "Statically typed, easy to read, safe to change, and honest about failure.", []),
+        H.p().class("section-lead").says("A function's signature says what it takes, what it gives back, whether it can fail, and whether it changes what it was given, so a reader can tell what code promises without reading its body."),
         H.h2().says("What Pudu is built around"),
         H.ul().holding([
             point("Failure is a value.", "A function that can fail returns Result[T, E], and the caller decides what happens. There are no exceptions to forget to catch."),

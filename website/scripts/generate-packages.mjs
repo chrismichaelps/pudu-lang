@@ -20,7 +20,7 @@
 //
 // Usage: node generate-packages.mjs [--api URL] [--out path] [--pudu path]
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
@@ -28,6 +28,7 @@ import process from "node:process";
 const TOPIC = "pudu-package";
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 const IMAGE_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
+const DISCUSSION_LIMIT = 100;
 
 function argument(name, fallback) {
   const at = process.argv.indexOf(name);
@@ -165,6 +166,36 @@ async function avatarOf(owner, url) {
   }
 }
 
+async function discussions(owner, repo, kind) {
+  const path = kind === "ticket" ? "issues" : "pulls";
+  const webPath = kind === "ticket" ? "issues" : "pull";
+  const records = [];
+  for (let page = 1; page <= 3 && records.length < DISCUSSION_LIMIT; page += 1) {
+    const batch = await json(`/repos/${owner}/${repo}/${path}?state=all&sort=updated&direction=desc&per_page=100&page=${page}`);
+    if (!Array.isArray(batch)) break;
+    for (const item of batch) {
+      if (kind === "ticket" && item.pull_request) continue;
+      if (!Number.isSafeInteger(item.number) || item.number <= 0) continue;
+      records.push({
+        number: item.number,
+        title: String(item.title ?? "").slice(0, 500),
+        body: String(item.body ?? "").slice(0, 50000),
+        author: String(item.user?.login ?? ""),
+        state: item.merged_at ? "merged" : item.state === "open" ? "open" : "closed",
+        createdAt: String(item.created_at ?? ""),
+        updatedAt: String(item.updated_at ?? ""),
+        comments: Math.max(0, Number(item.comments ?? 0)),
+        labels: Array.isArray(item.labels) ? item.labels.slice(0, 12).map((label) => String(label.name ?? "")) : [],
+        url: `https://github.com/${owner}/${repo}/${webPath}/${item.number}`,
+        draft: kind === "contribution" && item.draft === true,
+      });
+      if (records.length >= DISCUSSION_LIMIT) break;
+    }
+    if (batch.length < 100) break;
+  }
+  return records;
+}
+
 async function project(repository) {
   const owner = repository.owner.login.toLowerCase();
   const repo = repository.name.toLowerCase();
@@ -213,7 +244,15 @@ async function project(repository) {
     rmSync(docsTarget, { force: true });
     console.warn(`no API reference for ${name}@${latest.version}: ${problem.message}`);
   }
+  const searchEntries = existsSync(docsTarget)
+    ? JSON.parse(readFileSync(docsTarget, "utf8")).entries.map((entry) => ({ moduleName: entry.module, kind: entry.kind, name: entry.name, signature: entry.signature }))
+    : [];
   const words = (value) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
+  const tickets = await discussions(owner, repo, "ticket");
+  const contributions = await discussions(owner, repo, "contribution");
+  const discussionTarget = join(out, "discussions", `${name}.json`);
+  mkdirSync(dirname(discussionTarget), { recursive: true });
+  writeFileSync(discussionTarget, JSON.stringify({ tickets, contributions }) + "\n");
   return {
     name,
     description: latest.manifest.description || repository.description || "",
@@ -230,6 +269,7 @@ async function project(repository) {
     stars: repository.stargazers_count ?? 0,
     forks: repository.forks_count ?? 0,
     openIssues: repository.open_issues_count ?? 0,
+    searchEntries,
     releases: releases.map(({ manifest, ...release }) => release),
   };
 }

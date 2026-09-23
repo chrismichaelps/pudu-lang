@@ -2,40 +2,128 @@ module View.Packages.Catalog
 
 import Std.Html.Build as H
 import Std.Html as Html
+import Std.List as List
 import Std.Option as Option
 import Std.Url as Url
 import Service.Packages as Packages
 import View.Layout as Layout
 import View.Packages.Frame as Frame
+import View.Packages.Reference as Reference
+import View.Packages.State as State
 
 export const PATH: Str = "/packages"
+export fn pages(length: Int) -> Int { Packages.listPages(length) }
+export fn resultPages(packages: &Packages.Packages, query: Str) -> Int {
+  if query.trim().isEmpty() { return pages(packages.projects.length()) }
+  let projects = pages(Packages.search(packages, query).length())
+  let declarations = pages(declarationRows(packages, query).length())
+  if projects > declarations { projects } else { declarations }
+}
 
-fn card(packages: &Packages.Packages, project: &Packages.Project) -> H.Node {
+fn segment[T](items: &Array[T], pageIndex: Int) -> Array[T] {
+  items.slice((pageIndex - 1) * Packages.LIST_PAGE_SIZE, pageIndex * Packages.LIST_PAGE_SIZE)
+}
+
+fn nextLink(url: Str, pageIndex: Int, total: Int) -> H.Node {
+  if pageIndex >= pages(total) { return H.nothing() }
+  State.more(url)
+}
+
+fn row(packages: &Packages.Packages, project: &Packages.Project) -> H.Node {
   let owner = Packages.profile(packages, project.handle)
-  H.li().class("package-card").holding([
-      Frame.avatar(&owner, project.handle, "40"),
-      H.div().class("package-card-body").holding([
-          H.a().class("package-card-name").href(Frame.projectPath(project)).holding([
-              H.span().class("package-owner").says(project.handle),
-              H.span().class("package-slash").says(" / "),
-              H.strong().says(project.project)
+  H.li().class("package-row").holding([
+      H.a().class("package-row-link").href(Frame.projectPath(project)).holding([
+          Frame.avatar(&owner, project.handle, "32"),
+          H.span().class("package-row-body").holding([
+              H.span().class("package-row-name").holding([
+                  H.span().class("package-owner").says(project.handle),
+                  H.span().class("package-slash").says(" / "),
+                  H.strong().says(project.project)
+                ]),
+              H.span().class("package-row-description").says(project.description)
             ]),
-          H.p().class("package-muted").says(project.description)
-        ]),
-      H.span().class("package-card-version").says(Option.unwrapOr(project.latest, "unreleased"))
+          H.span().class("package-row-meta").holding([
+              H.span().class("package-row-version").says(Option.unwrapOr(project.latest, "unreleased")),
+              H.span().class("package-row-stars").says("★ " + Frame.shortCount(project.stars))
+            ])
+        ])
     ])
 }
 
-fn cards(packages: &Packages.Packages, projects: &Array[Packages.Project]) -> H.Node {
-  H.ul().class("package-cards").holding(projects.map(|project: Packages.Project| card(packages, &project)))
+/// Projects as the reference list rows: avatar, `@owner / name` over its
+/// description, and the release and stars on the right.
+fn rows(packages: &Packages.Packages, projects: &Array[Packages.Project], paged: Bool) -> H.Node {
+  let list = H.ul().class("package-rows").holding(projects.map(|project: Packages.Project| row(packages, &project)))
+  if paged { list.at("data-page-items", "projects").at("data-state", "loaded") } else { list }
 }
 
-fn searchForm(query: Str) -> H.Node {
-  H.form().class("search banner-search").action(PATH + "/search").method("get").holding([
+fn group(packages: &Packages.Packages, title: Str, projects: &Array[Packages.Project], paged: Bool) -> H.Node {
+  H.section().class("package-group").holding([H.h2().class("package-group-title").says(title), rows(packages, projects, paged)])
+}
+
+/// Rows in the most-starred group, shown only when the catalogue holds more
+/// projects than this, so a small catalogue lists each project once.
+const FEATURED: Int = 6
+
+fn featured(packages: &Packages.Packages) -> Array[Packages.Project] {
+  List.sortBy(&packages.projects, fn(left: Packages.Project, right: Packages.Project) -> Bool {
+      if left.stars != right.stars { left.stars > right.stars } else { left.name < right.name }
+    }).slice(0, FEATURED)
+}
+
+fn searchForm(query: Str, fieldClass: Str) -> H.Node {
+  H.form().class("search " + fieldClass).action(PATH + "/search").method("get").holding([
       H.labelFor().at("for", "package-q").class("skip").says("Search packages"),
       H.input().id("package-q").name("q").kind("search").value(query).placeholder("Search packages, such as @alice or json").required(),
       H.button().submit().says("Search")
     ])
+}
+
+fn declarationRows(packages: &Packages.Packages, query: Str) -> Array[H.Node] {
+  let wanted = query.trim().toLower()
+  var matches: Array[H.Node] = []
+  for project in packages.projects {
+    for entry in project.searchEntries {
+      if entry.name.toLower().contains(wanted) || entry.moduleName.toLower().contains(wanted) {
+        matches = matches.push(H.li().class("package-symbol-row").holding([
+              H.a().href(Frame.tabPath(&project, "docs") + "#" + Reference.anchorOf(entry.moduleName, entry.kind, entry.name)).holding([
+                  H.span().class("package-symbol-mark").at("aria-hidden", "true").says("ƒ"),
+                  H.span().class("package-symbol-identity").holding([
+                      H.strong().says(entry.moduleName + "." + entry.name),
+                      H.small().says(project.name + " · " + Option.unwrapOr(project.latest, "unreleased"))
+                    ]),
+                  H.code().says(entry.signature)
+                ])
+            ]))
+      }
+    }
+  }
+  matches
+}
+
+fn searchResults(siteUrl: Str, packages: &Packages.Packages, query: Str, pageIndex: Int) -> Html.Html {
+  let found = Packages.search(packages, query)
+  let declarations = declarationRows(packages, query)
+  let projectWord = if found.length() == 1 { "project" } else { "projects" }
+  let declarationWord = if declarations.length() == 1 { "declaration" } else { "declarations" }
+  let panel = H.section().class("package-search-panel").holding([
+      H.h1().class("skip").says("Search Pudu packages"),
+      H.div().class("package-search-toolbar").holding([
+          H.span().class("package-search-icon").at("aria-hidden", "true").says("⌕"),
+          searchForm(query, "package-modal-search"),
+          H.a().class("package-search-close").href(PATH).says("Close")
+        ]),
+      H.div().class("package-search-content").holding([
+          H.p().class("package-search-count").says(show(found.length()) + " " + projectWord + " and " + show(declarations.length()) + " " + declarationWord + " for “" + query + "”"),
+          if found.isEmpty() && declarations.isEmpty() { State.empty("No matching packages", "Try a different package name, owner, or declaration.", []) } else if found.isEmpty() { H.nothing() } else { group(packages, "Projects", &segment(&found, pageIndex), true) },
+          nextLink(PATH + "/search?q=" + Url.encodeComponent(query) + "&page=" + show(pageIndex + 1), pageIndex, if found.length() > declarations.length() { found.length() } else { declarations.length() }),
+          if declarations.isEmpty() { H.nothing() } else { H.section().class("package-group").holding([
+                H.h2().class("package-group-title").says("Public declarations"),
+                H.ul().class("package-symbol-rows").at("data-page-items", "declarations").at("data-state", "loaded").holding(segment(&declarations, pageIndex))
+              ]) }
+        ])
+    ])
+  Layout.page(siteUrl, "Search packages", "Search Pudu projects and public package declarations.", PATH + "/search", false, None, H.article().class("package-search-stage").holding([panel, H.script().kind("module").src("/assets/packages/pagination.js?v=3")]).html())
 }
 
 fn step(number: Str, title: Str, command: Str) -> H.Node {
@@ -47,9 +135,7 @@ fn step(number: Str, title: Str, command: Str) -> H.Node {
 
 /// What the catalogue shows before any package has been published.
 fn emptyState() -> H.Node {
-  H.section().class("package-empty").holding([
-      H.h2().says("The first packages are on their way"),
-      H.p().class("section-lead").says("A Pudu package is a GitHub repository with a pudu.toml. Publishing one takes three commands from its directory."),
+  State.empty("The first packages are on their way", "A Pudu package is a GitHub repository with a pudu.toml. Publishing one takes three commands from its directory.", [
       H.ol().class("package-steps").holding([
           step("1", "Name it after its repository", "name = \"@owner/repo\""),
           step("2", "Sign in with GitHub", "pudu login"),
@@ -62,23 +148,19 @@ fn emptyState() -> H.Node {
     ])
 }
 
-/// The catalogue: search, every project, and projects by keyword. With a
-/// query, the projects that match it instead.
+/// The catalogue: search, topic links, the most-starred projects, and every
+/// project. With a query, the projects that match it instead.
 export fn page(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Html.Html {
+  pageNumber(siteUrl, packages, query, 1)
+}
+
+export fn pageNumber(siteUrl: Str, packages: &Packages.Packages, query: Str, pageIndex: Int) -> Html.Html {
+  if !query.trim().isEmpty() { return searchResults(siteUrl, packages, query, pageIndex) }
   var content: Array[H.Node] = [
-    H.section().class("hero-banner").holding([
-        H.span().class("hero-banner-label").says("Pudu packages"),
-        H.h1().says("Build with what the community shares."),
-        H.p().says("Explore published Pudu packages. Read their source and documentation, then add a release to your project."),
-        if Packages.present(packages) { searchForm(query) } else { H.nothing() }
-      ])
+    Layout.banner("", "Pudu packages", "Build with what the community shares.", "Explore published Pudu packages. Read their source and documentation, then add a release to your project.", [if Packages.present(packages) { searchForm(query, "banner-search") } else { H.nothing() }])
   ]
   if !Packages.present(packages) {
     content = content.push(emptyState())
-  } else if !query.trim().isEmpty() {
-    let found = Packages.search(packages, query)
-    content = content.push(H.div().class("package-list-heading").holding([H.h2().says(if found.isEmpty() { "No package matches “" + query + "”" } else { show(found.length()) + " for “" + query + "”" })]))
-    if !found.isEmpty() { content = content.push(cards(packages, &found)) }
   } else {
     content = content.push(H.div().class("package-list-heading").holding([
           H.h2().says("Explore packages"),
@@ -91,16 +173,22 @@ export fn page(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Html.H
             H.ul().holding(words.map(|word: Str| H.li().holding([H.a().href(PATH + "/search?q=" + Url.encodeComponent(word)).says(word)])))
           ]))
     }
-    content = content.push(cards(packages, &packages.projects))
+    if pageIndex == 1 && packages.projects.length() > FEATURED { content = content.push(group(packages, "Most starred", &featured(packages), false)) }
+    content = content.push(group(packages, "All packages", &segment(&packages.projects, pageIndex), true))
+    content = content.push(nextLink(PATH + "/page/" + show(pageIndex + 1), pageIndex, packages.projects.length()))
   }
-  let path = if query.trim().isEmpty() { PATH } else { PATH + "/search" }
-  Layout.page(siteUrl, "Pudu packages", "Find, read, and install Pudu packages published from GitHub.", path, query.trim().isEmpty(), None, H.article().class("doc package-catalog").holding(content).html())
+  let path = if pageIndex == 1 { PATH } else { PATH + "/page/" + show(pageIndex) }
+  Layout.page(siteUrl, "Pudu packages", "Find, read, and install Pudu packages published from GitHub.", path, true, None, H.article().class("doc package-catalog").holding(content.concat([H.script().kind("module").src("/assets/packages/pagination.js?v=3")])).html())
 }
 
 /// A handle's profile and its public projects.
 export fn profile(siteUrl: Str, packages: &Packages.Packages, owner: Str) -> Option[Html.Html] {
+  profilePage(siteUrl, packages, owner, 1)
+}
+
+export fn profilePage(siteUrl: Str, packages: &Packages.Packages, owner: Str, pageIndex: Int) -> Option[Html.Html] {
   let projects = Packages.ofHandle(packages, owner)
-  if projects.isEmpty() { return None }
+  if projects.isEmpty() || pageIndex < 1 || pageIndex > pages(projects.length()) { return None }
   let found = Packages.profile(packages, owner)
   let shown = match found {
     case Some(held) => if held.name.isEmpty() { owner } else { held.name }
@@ -110,12 +198,15 @@ export fn profile(siteUrl: Str, packages: &Packages.Packages, owner: Str) -> Opt
     case Some(held) => if held.githubUrl.isEmpty() { H.nothing() } else { H.a().href(held.githubUrl).at("rel", "external noopener noreferrer").says("On GitHub") }
     case None => H.nothing()
   }
-  Some(Layout.page(siteUrl, owner, "Pudu packages published by " + owner + ".", "/" + owner, true, None, H.article().class("doc package-catalog").holding([
+  let path = if pageIndex == 1 { "/" + owner } else { "/" + owner + "/page/" + show(pageIndex) }
+  Some(Layout.page(siteUrl, owner, "Pudu packages published by " + owner + ".", path, true, None, H.article().class("doc package-catalog").holding([
           H.div().class("package-profile").holding([
               Frame.avatar(&found, owner, "72"),
               H.div().holding([H.h1().says(shown), H.p().class("package-muted").holding([H.span().says(owner + " · "), github])])
             ]),
           H.h2().says("Projects"),
-          cards(packages, &projects)
+          rows(packages, &segment(&projects, pageIndex), true),
+          nextLink("/" + owner + "/page/" + show(pageIndex + 1), pageIndex, projects.length()),
+          H.script().kind("module").src("/assets/packages/pagination.js?v=3")
         ]).html()))
 }

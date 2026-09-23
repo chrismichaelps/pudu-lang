@@ -8,8 +8,10 @@ aliases: [website View Packages Source]
 # Website Package Source
 
 The code view of a release. A dark sidebar holds the release, a file filter (enhanced by
-`assets/packages/source/filter.js`), and the file tree with folder icons and per-type badges
-(`BADGES`), the current file marked. Beside it: a breadcrumb from the package through the file's
+`assets/packages/source/filter.js`), and the file tree with local per-type icons mapped by extension,
+the current file marked. Pudu files reuse the VS Code extension's logo, Markdown and common
+configuration/source files have distinct icons, and unknown types use a generic document.
+Beside it: a breadcrumb from the package through the file's
 directories, then a file card whose header names the file, its language (`LANGUAGES`), line count, and
 size, with Copy path and GitHub actions; its body is the numbered, linkable listing (`#L12`),
 highlighted by [[website View Packages Highlight]] for `.pudu`, or the rendered document for `.md`, or a

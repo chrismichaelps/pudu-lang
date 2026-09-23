@@ -59,7 +59,7 @@ fn document(
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").at("sizes", "64x64").href(Constants.ICON_PATH),
           H.link().rel("apple-touch-icon").href(Constants.TOUCH_ICON_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=32")
+          H.link().rel("stylesheet").href("/assets/site.css?v=38")
         ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       body.holding(parts)
     ]).html()
@@ -97,6 +97,19 @@ export fn searchForm(query: Str, extraClass: Str) -> H.Node {
         .placeholder("Search names or types, such as Array[T] -> T").required(),
       H.button().submit().says("Search")
     ])
+}
+
+/// The banner that opens a page: a label, the page's one `h1`, a lead, and
+/// whatever the page places under it (a search form, actions, facts).
+/// `variant` is added to `hero-banner`: empty for the full banner, or
+/// `page-banner` for the shorter one reference pages open with.
+export fn banner(variant: Str, label: Str, title: Str, lead: Str, extra: Array[H.Node]) -> H.Node {
+  let classes = if variant.isEmpty() { "hero-banner" } else { "hero-banner " + variant }
+  H.header().class(classes).holding([
+      H.span().class("hero-banner-label").says(label),
+      H.h1().says(title),
+      if lead.isEmpty() { H.nothing() } else { H.p().says(lead) }
+    ].concat(extra))
 }
 
 fn masthead(path: Str) -> H.Node {

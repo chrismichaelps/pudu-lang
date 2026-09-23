@@ -311,7 +311,8 @@ so CI can use its own. The API is `PUDU_GITHUB_API`, or `https://api.github.com`
 ## Website
 
 The package pages are part of the existing site: same masthead, typography, and code surfaces, with
-an original Pudu banner and compact package list. They are built from the GitHub API at deploy time
+an original Pudu banner and dense, linked package rows. Package search shows matching projects and
+public declarations from their generated API catalogues in a focused result panel. They are built from the GitHub API at deploy time
 (`website/scripts/generate-packages.mjs`: search by topic, tags, releases, `pudu.toml` at each tag, the
 latest release's archive), the way `/download` reads the release list, so a page answers from the CDN
 and never waits on GitHub; a new release appears on the next deployment.
@@ -324,16 +325,32 @@ and never waits on GitHub; a new release appears on the next deployment.
 | `/@h/n/source` | the latest release's files as a tree beside the selected file, with linkable source lines |
 | `/@h/n/docs` | the API reference for the release, rendered from its generated catalogue in a package-specific reference view |
 | `/@h/n/releases` | the latest release first with its notes and install command, then earlier releases |
+| `/@h/n/tickets` and `/@h/n/tickets/:number` | recent public GitHub issues, then one issue's title, state, labels, author, date, and body |
+| `/@h/n/contributions` and `/@h/n/contributions/:number` | recent public pull requests, then one contribution's title, review state, author, date, and body |
 
 The install disclosure starts with `pudu install @h/n@<latest>` so the selected release is available
 even during the 72-hour minimum release age. The version picker rewrites that command; a separate
 unversioned command follows the configured release-age policy. Copy buttons and a root-module import
-line are provided. Projects with no release have no install control. A project's issues, pull
-requests, and stars are its repository's on GitHub.
+line are provided. Projects with no release have no install control. The project tabs show tickets
+and contributions natively from a bounded build-time GitHub snapshot; new posts, review, and replies
+continue on GitHub. Stars still link to the repository's GitHub stargazers.
 
 Project search on `/packages/search?q=` ranks exact names, then handles, then words in descriptions and
-keywords. Declarations across public packages join the site's existing API search once packages
-carry the same documentation catalogue `pudu doc --json` produces for the standard library.
+keywords. Its focused result panel also shows matching public declarations from each project's
+generated API catalogue and links each to the package Docs section. A submitted query renders on
+the server, so the result remains usable without client JavaScript. The dynamic function receives
+compact declaration facts in `packages.json`; it does not need full API catalogue files.
+The static snapshot keeps recent ticket and contribution bodies in separate per-project documents.
+The dynamic search loader reads only the compact project index, while the full loader requires
+release files and reads the discussion documents for static pages.
+Long package, handle, search, ticket, and contribution lists render a bounded first page and
+address subsequent pages by stable URLs. A small script fetches the next page near the scroll edge
+and appends its rows; the same next-page link remains usable without JavaScript. Each request
+contains only one page's rows. Search results use query pagination in the dynamic function.
+Source tree file icons are local assets mapped by file extension, including the Pudu VS Code icon.
+Data lists expose three clear states: a visible loading status while another page is requested,
+an explanatory empty banner when no records match, and a loaded list. The next-page link stays
+usable while loading or after a failed request. Missing pages use the shared reading-page banner.
 
 `/packages` always answers and the masthead links it. Before a snapshot holds any project, it shows
 how to publish the first one; project, handle, source, docs, and release pages exist for each project
@@ -399,10 +416,14 @@ entries and changes nothing else. Moving a local directory to a package is pushi
 - **Root ownership across packages.** Roots are unique per program, not across GitHub. Reserving a
   root on first release would prevent most conflicts before they reach a program, at
   the cost of first-come names.
-- **Favourites, tickets, contributions.** Resolved: a project links its repository's GitHub Issues,
-  Pull requests, and Stars, with open-issue and star counts copied at publish time.
+- **Favourites, tickets, contributions.** Resolved: a project renders recent public GitHub issues
+  and pull requests as native read-only pages from the deploy snapshot, with direct GitHub links for
+  writing, review, and complete history. Stars link to GitHub, with star counts copied at build time.
 
 ## Grill Log
+
+- **Q:** Host ticket and contribution writes in Pudu? **A:** No; render the public conversation and link to GitHub for participation. _Rationale:_ identity, permissions, notifications, and review state remain with the repository owner. _Rejected:_ a second Pudu account or write proxy.
+- **Q:** Fetch issue and pull request pages on each request? **A:** No; copy the most recently updated public records at build time. _Rationale:_ native pages stay fast and available during a GitHub outage. _Rejected:_ a live GitHub proxy.
 
 - **Q:** Pudu accounts, or GitHub's? **A:** GitHub's, for identity and for source. _Rationale:_ the
   code already lives there and a handle means the same owner in both places. _Rejected:_ Pudu

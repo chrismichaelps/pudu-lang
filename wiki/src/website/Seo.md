@@ -17,7 +17,10 @@ only unique canonical home, documentation index and page, about, donation, modul
 symbol-family URLs. `paths` takes the loaded [[website Service Docs]] beside the catalogue, so the
 prerender renders every documentation page the sitemap names. The old `/guide` address still answers
 but is not listed, because its canonical address is `/docs`.
-Package paths include the catalog, handle profiles, project tabs, and each latest-release file with encoded path segments. The same path list drives prerendering, and each source file is its own canonical page. Symbol paths include the declaration kind to remain distinct on case-insensitive filesystems. It uses absolute UTF-8 URLs and
+Package paths include the catalog and its numbered pages, handle profiles and their numbered pages,
+project tabs, numbered ticket and contribution lists and their details, and each latest-release file
+with encoded path segments. The same path list drives prerendering, and each source file and
+discussion detail is its own canonical page. Symbol paths include the declaration kind to remain distinct on case-insensitive filesystems. It uses absolute UTF-8 URLs and
 stays one file while the catalogue remains below 50,000 URLs.
 
 ## Grill Log

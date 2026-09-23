@@ -4,6 +4,7 @@ import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Option as Option
+import Std.Text as Text
 import Service.Catalog as Catalog
 import Service.Packages as Packages
 import Service.Playground.Admission as Admission
@@ -44,7 +45,10 @@ export fn routes(edge: &Dynamic) -> Route.Router {
     })
   let packageSearch = Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
       if !Packages.present(&held.packages) { return missing(held.siteUrl, asked.path) }
-      Reply.page(200, PackageCatalog.page(held.siteUrl, &held.packages, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+      let query = Option.unwrapOr(Route.queryParam(&asked, "q"), "")
+      let page = Option.unwrapOr(Text.wholeOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), 0)
+      if page < 1 || page > PackageCatalog.resultPages(&held.packages, query) { return missing(held.siteUrl, asked.path) }
+      Reply.page(200, PackageCatalog.pageNumber(held.siteUrl, &held.packages, query, page))
     })
   Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch])), fn(asked: Route.Request) -> Http.Response {
       missing(held.siteUrl, asked.path)

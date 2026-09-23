@@ -33,8 +33,7 @@ export fn page(siteUrl: Str, documents: &Documents.Documents, slug: Str) -> Opti
   let title = described[0]
   let summary = if read.summary.isEmpty() { described[2] } else { read.summary }
   let opening = [
-    H.span().class("kind").says(described[1]),
-    H.h1().says(title),
+    Layout.banner("page-banner", described[1], title, described[2], []),
     H.p().class("document-source").holding([
         H.span().says("This page is "),
         H.a().href(Constants.REPOSITORY_SOURCE_URL + found.file).at("rel", "external noopener noreferrer").says(found.file),

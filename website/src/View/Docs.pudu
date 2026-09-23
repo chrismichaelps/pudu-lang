@@ -29,10 +29,7 @@ export fn index(siteUrl: Str, docs: &Docs.Docs, version: Str) -> Html.Html {
     number = number + 1
   }
   let article = H.article().class("docs-article").holding([
-      H.span().class("kind").says("Documentation"),
-      H.h1().says("Learn Pudu"),
-      metadata(version, None),
-      H.p().class("section-lead").says("The language from a first program to traits, ownership, concurrency, and the standard library. Read the chapters in order, or start with the topic you need. Every example on these pages is a complete program that runs as written."),
+      Layout.banner("page-banner", "Documentation", "Learn Pudu", "The language from a first program to traits, ownership, concurrency, and the standard library. Read the chapters in order, or start with the topic you need. Every example on these pages is a complete program that runs as written.", [metadata(version, None)]),
       H.ol().class("docs-cards").holding(cards)
     ])
   let layout = H.div().class("docs-layout docs-layout-index").holding([sidebar(docs, ""), H.div().holding([mobileNavigation(docs, ""), article])])
@@ -43,15 +40,14 @@ export fn index(siteUrl: Str, docs: &Docs.Docs, version: Str) -> Html.Html {
 export fn page(siteUrl: Str, docs: &Docs.Docs, slug: Str, version: Str) -> Option[Html.Html] {
   let found = Docs.find(docs, slug) ?
   let read = Markdown.parse(&found.lines)
+  let description = if read.summary.isEmpty() { found.title + " in the Pudu documentation." } else { read.summary }
   let opening = [
     mobileNavigation(docs, slug),
     H.p().class("docs-crumb").holding([H.a().href(INDEX_PATH).says("Documentation")]),
-    H.h1().says(found.title),
-    metadata(version, Some(found.file))
+    Layout.banner("page-banner", "Guide", found.title, "", [metadata(version, Some(found.file))])
   ]
   let article = H.article().class("docs-article").holding(opening.concat(read.blocks).concat([pager(Docs.neighbours(docs, slug))]))
   let layout = H.div().class("docs-layout").holding([sidebar(docs, slug), article, contents(&read.headings)])
-  let description = if read.summary.isEmpty() { found.title + " in the Pudu documentation." } else { read.summary }
   Some(Layout.page(siteUrl, found.title + " · Pudu documentation", description, pathOf(slug), true, None, layout.html()))
 }
 

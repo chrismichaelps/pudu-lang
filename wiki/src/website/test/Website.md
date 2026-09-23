@@ -25,6 +25,20 @@ title stays out of the body, a script in prose is escaped, a `javascript:` targe
 repeated headings get distinct anchors, and tables render.
 
 The `@alice/json-kit` snapshot exercises catalog, search, profile, overview, install command, source, docs, releases, sitemap, missing routes, binary file preview, encoded filename, and immutable GitHub source link.
+It checks linked package rows and the shared banner across documentation, API, download, release,
+about, support, search, and missing pages.
+A seven-project synthetic catalogue checks the most-starred group and the complete list.
+The package fixture checks the framed search view, compact declaration matches in the dynamic
+function, native ticket and contribution lists and detail pages, escaped discussion Markdown,
+initial discussion headings, unknown-number refusal, and sitemap paths. A JSON-only fixture
+proves the compact dynamic loader starts without release trees.
+Synthetic 25-record catalogues and conversations prove the first page is bounded, the next page
+contains the remaining rows, and file icons resolve locally. The three-state checks require
+bordered empty banners for an unpublished catalogue, no search matches, and no tickets; loaded
+lists expose their state and include a hidden live loader for the next bounded request. The 404
+banner names the missing page.
+Avatar checks cover the preferred local GitHub copy, the GitHub image URL fallback, and the
+geometric placeholder when an owner has no usable image.
 
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.

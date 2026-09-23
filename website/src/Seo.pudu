@@ -134,14 +134,37 @@ export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs, examples: &Examples
   }
   found = found.push("/packages")
   if Packages.present(packages) {
+    var cataloguePage = 2
+    while cataloguePage <= Packages.listPages(packages.projects.length()) {
+      found = found.push("/packages/page/" + show(cataloguePage))
+      cataloguePage = cataloguePage + 1
+    }
     var handles: Map[Str, Bool] = mapOf([])
     for project in packages.projects {
       if !Map.containsKey(&handles, project.handle) {
         handles = handles.insert(project.handle, true)
         found = found.push("/" + project.handle)
+        let owned = Packages.ofHandle(packages, project.handle)
+        var handlePage = 2
+        while handlePage <= Packages.listPages(owned.length()) {
+          found = found.push("/" + project.handle + "/page/" + show(handlePage))
+          handlePage = handlePage + 1
+        }
       }
       let base = "/" + project.name
-      found = found.concat([base, base + "/source", base + "/docs", base + "/releases"])
+      found = found.concat([base, base + "/source", base + "/docs", base + "/releases", base + "/tickets", base + "/contributions"])
+      var ticketPage = 2
+      while ticketPage <= Packages.listPages(project.tickets.length()) {
+        found = found.push(base + "/tickets/page/" + show(ticketPage))
+        ticketPage = ticketPage + 1
+      }
+      var contributionPage = 2
+      while contributionPage <= Packages.listPages(project.contributions.length()) {
+        found = found.push(base + "/contributions/page/" + show(contributionPage))
+        contributionPage = contributionPage + 1
+      }
+      for ticket in project.tickets { found = found.push(base + "/tickets/" + show(ticket.number)) }
+      for contribution in project.contributions { found = found.push(base + "/contributions/" + show(contribution.number)) }
       for file in project.files {
         var segments: Array[Str] = []
         for segment in file.split("/") { segments = segments.push(Url.encodeComponent(segment)) }

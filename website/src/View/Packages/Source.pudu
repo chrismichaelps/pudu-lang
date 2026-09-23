@@ -26,8 +26,13 @@ const LANGUAGES: Map[Str, Str] = mapOf([
     ("html", "HTML")
   ])
 
-/// The short badge a file's icon carries, by extension.
-const BADGES: Map[Str, Str] = mapOf([("pudu", "P"), ("md", "M"), ("toml", "T"), ("json", "J")])
+/// Local icons for the source tree's known file types.
+const ICONS: Map[Str, Str] = mapOf([
+    ("pudu", "pudu.png"), ("md", "markdown.svg"), ("mdx", "markdown.svg"),
+    ("toml", "toml.svg"), ("json", "json.svg"), ("yaml", "yaml.svg"),
+    ("yml", "yaml.svg"), ("js", "js.svg"), ("mjs", "js.svg"),
+    ("css", "css.svg"), ("html", "html.svg"), ("htm", "html.svg")
+  ])
 
 /// The file a source page opens on: the README, the manifest, or the first file.
 export fn defaultFile(project: &Packages.Project) -> Str {
@@ -73,9 +78,8 @@ fn entriesUnder(files: &Array[Str], directory: Str) -> (Array[Str], Array[Str]) 
 }
 
 fn fileIcon(path: Str) -> H.Node {
-  let extension = extensionOf(path)
-  let badge = Option.unwrapOr(BADGES.get(extension), "")
-  H.span().class("code-icon code-icon-" + (if extension.isEmpty() { "file" } else { extension })).at("aria-hidden", "true").says(badge)
+  let icon = Option.unwrapOr(ICONS.get(extensionOf(path)), "text.svg")
+  H.img().class("code-file-icon").src("/assets/packages/files/" + icon).alt("").at("width", "20").at("height", "20").at("loading", "lazy")
 }
 
 fn tree(project: &Packages.Project, directory: Str, selected: Str) -> H.Node {

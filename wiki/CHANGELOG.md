@@ -5,6 +5,46 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-23 — Visible package data states
+
+- Catalogue, search, ticket, and contribution lists now show a bordered banner when empty, retain
+  visible loaded rows, and show an accessible spinner while the next page loads. The 404 page uses
+  the compact shared banner. Regression checks cover the rendered states and missing page.
+- Owner images use the GitHub profile avatar: the build's local copy first, then GitHub's hosted
+  avatar if the copy is unavailable. A neutral user silhouette replaces missing images and the
+  stylesheet revision makes it visible to returning browsers. Failed images on later scrolled pages
+  also reveal the silhouette.
+
+## 2026-09-22 — Progressive package lists and source icons
+
+- Catalog, handle, search, ticket, and contribution lists now render 20 rows per request. The next
+  page loads near the scroll edge, with a normal “Load more” link as a fallback. Numbered public
+  pages are prerendered; search pages use a page query in the dynamic function.
+- The source tree uses the Pudu VS Code file icon and local, attributed icons for Markdown and
+  common source/configuration files, with a generic file fallback.
+
+## 2026-09-22 — Native package conversations and focused search
+
+- Package search now presents linked projects and matching public declarations in a focused result
+  panel. Compact declaration facts travel in the dynamic package snapshot, so search works without
+  the static API catalogue files.
+- Project Tickets and Contributions tabs render up to 100 recent public GitHub issues and pull
+  requests respectively, with native detail pages, states, labels, authors, dates, and safe Markdown
+  bodies. GitHub retains posting and review. The sitemap and local package fixture cover these paths.
+- The GitHub snapshot generator filters pull requests out of Tickets and preserves merged state in
+  Contributions; the stand-in GitHub integration gate checks both. Recent discussion bodies are
+  stored in static per-project documents, while the search function loads only the compact index.
+  Ticket and contribution paths resolve to prerendered pages in the deployment.
+
+## 2026-09-22 — Shared page banners and package catalogue rows
+
+- Download, About, Releases, documentation indexes and chapters, library modules and symbols,
+  search, support, policy documents, and missing pages now open with the home banner's compact
+  reading-page variant. Their title, lead, metadata, and actions remain in the page's content order.
+- The package catalogue and handle pages use linked rows showing name, description, release, and
+  stars. Larger catalogues show six most-starred packages before the complete list; smaller ones
+  list each package once. Regression checks cover the banner and row markup.
+
 ## 2026-09-22 — Package pages from public registry snapshots
 
 - The website can snapshot public projects from a hosted registry and prerender `/packages`,

@@ -9,6 +9,7 @@ aliases: [website Web Dynamic]
 
 Dispatches `/search`, `/packages/search`, and the dynamic 404 fallback for the serverless function. It uses the same
 search and missing views as the complete local router and marks missing responses against indexing.
+Package search accepts a page query so scroll loading fetches only the next bounded result page.
 
 Resolved Grill Log: Vercel serves all known canonical pages and assets from static output before this
 function. Package search holds the small public project document in memory, while source and canonical package pages remain static. The bounded router therefore refuses unknown paths rather than carrying the full static route

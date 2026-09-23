@@ -8,6 +8,7 @@ aliases: [website View Markdown]
 # Website View Markdown
 
 Turns a documentation page's Markdown lines into a `Document { title, summary, blocks, headings }`.
+Body parsing uses the same safe blocks while retaining the first level-one heading inside the body.
 The subset is the one the documentation is written in: `#`–`####` headings, paragraphs, fenced code
 with a language, `-`/`*` and numbered lists, `>` quotations, pipe tables with a separator row, and
 `---` rules. A table cell keeps a pipe written `\|`, even inside code, so a table can show an

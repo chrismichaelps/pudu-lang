@@ -6,6 +6,7 @@ import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Io as Io
 import Std.Option as Option
+import Std.Text as Text
 import Std.Url as Url
 import Constants as Constants
 import Seo as Seo
@@ -22,6 +23,7 @@ import View.Donation as Donation
 import View.Download as Download
 import View.Home as Home
 import View.Packages.Catalog as PackageCatalog
+import View.Packages.Discussion as PackageDiscussion
 import View.Packages.Project as PackageProject
 import View.Packages.Reference as PackageReference
 import View.Packages.Source as PackageSource
@@ -100,10 +102,14 @@ export fn routes(site: &Site.Site) -> Route.Router {
               Reply.page(200, ReleasesView.page(siteUrl, release))
             }),
           Route.get("/packages", fn(_request: Route.Request) -> Http.Response {
-              packageCatalog(siteUrl, packages, "")
+              packageCatalog(siteUrl, packages, "", 1)
             }),
           Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
-              packageCatalog(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""))
+              packageCatalog(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")))
+            }),
+          Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
+              let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
+              if page < 2 || page > PackageCatalog.pages(packages.projects.length()) { Reply.page(404, Documentation.missing(siteUrl, asked.path)) } else { packageCatalog(siteUrl, packages, "", page) }
             }),
           Route.get("/packages/avatars/:login", fn(asked: Route.Request) -> Http.Response {
               let login = Option.unwrapOr(Route.param(&asked, "login"), "")
@@ -154,6 +160,11 @@ export fn routes(site: &Site.Site) -> Route.Router {
             }),
           Route.get("/assets/docs/*module", fn(asked: Route.Request) -> Http.Response {
               scriptModule(Constants.DOCS_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/packages/files/:icon", fn(asked: Route.Request) -> Http.Response {
+              let icon = Option.unwrapOr(Route.param(&asked, "icon"), "")
+              if !["pudu.png", "markdown.svg", "toml.svg", "json.svg", "yaml.svg", "js.svg", "css.svg", "html.svg", "text.svg"].contains(icon) { return Reply.text(404, "asset not found") }
+              binary("website/public/assets/packages/files/" + icon, if icon.endsWith(".png") { "image/png" } else { "image/svg+xml" })
             }),
           Route.get("/assets/packages/*module", fn(asked: Route.Request) -> Http.Response {
               scriptModule(Constants.PACKAGES_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
@@ -230,11 +241,38 @@ export fn routes(site: &Site.Site) -> Route.Router {
                 case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
               }
             }),
+          Route.get("/:handle/:project/tickets/page/:page", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+            }),
+          Route.get("/:handle/:project/tickets/:number", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+            }),
+          Route.get("/:handle/:project/tickets", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", "", 1)
+            }),
+          Route.get("/:handle/:project/contributions/page/:page", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+            }),
+          Route.get("/:handle/:project/contributions/:number", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+            }),
+          Route.get("/:handle/:project/contributions", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", "", 1)
+            }),
           Route.get("/:handle/:project", fn(asked: Route.Request) -> Http.Response {
               let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
               let name = Option.unwrapOr(Route.param(&asked, "project"), "")
               match Packages.find(packages, handle, name) {
                 case Some(project) => Reply.page(200, PackageProject.overview(siteUrl, packages, &project))
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/page/:page", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
+              if page < 2 { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+              match PackageCatalog.profilePage(siteUrl, packages, handle, page) {
+                case Some(shown) => Reply.page(200, shown)
                 case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
               }
             }),
@@ -250,8 +288,26 @@ export fn routes(site: &Site.Site) -> Route.Router {
     })
 }
 
-fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str) -> Http.Response {
-  Reply.page(200, PackageCatalog.page(siteUrl, packages, query))
+fn pageOf(raw: Str) -> Int { Option.unwrapOr(Text.wholeOf(raw), 0) }
+
+fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int) -> Http.Response {
+  if page < 1 || page > PackageCatalog.resultPages(packages, query) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
+  Reply.page(200, PackageCatalog.pageNumber(siteUrl, packages, query, page))
+}
+
+fn discussion(siteUrl: Str, packages: &Packages.Packages, asked: &Route.Request, kind: Str, number: Str, page: Int) -> Http.Response {
+  let handle = Option.unwrapOr(Route.param(asked, "handle"), "")
+  let name = Option.unwrapOr(Route.param(asked, "project"), "")
+  let Some(project) = Packages.find(packages, handle, name) else { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+  let records = if kind == "tickets" { project.tickets } else { project.contributions }
+  if number.isEmpty() {
+    if page < 1 || page > PackageDiscussion.pages(records.length()) || (asked.path.contains("/page/") && page < 2) { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+    return Reply.page(200, PackageDiscussion.listingPage(siteUrl, packages, &project, kind, page))
+  }
+  match Packages.discussion(&records, number) {
+    case Some(record) => Reply.page(200, PackageDiscussion.detail(siteUrl, packages, &project, kind, &record))
+    case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+  }
 }
 
 /// A request for a page, as a platform or a test asks for one: a `GET` with no

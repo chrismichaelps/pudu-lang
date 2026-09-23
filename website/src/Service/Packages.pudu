@@ -10,7 +10,7 @@ import Service.Catalog as Catalog
 
 /// A handle's profile, copied from GitHub. `avatar` is the site's own address
 /// for the image, or the empty text when the snapshot holds none.
-export type Profile = { handle: Str, name: Str, avatar: Str, githubUrl: Str, kind: Str }
+export type Profile = { handle: Str, name: Str, avatar: Str, avatarUrl: Str, githubUrl: Str, kind: Str }
 
 /// One immutable release.
 export type Release = {
@@ -26,6 +26,24 @@ export type Release = {
   tag: Str,
   commit: Str
 }
+
+/// A recent public GitHub issue or pull request copied at build time.
+export type Discussion = {
+  number: Int,
+  title: Str,
+  body: Str,
+  author: Str,
+  state: Str,
+  createdAt: Str,
+  updatedAt: Str,
+  comments: Int,
+  labels: Array[Str],
+  url: Str,
+  draft: Bool
+}
+
+/// Searchable declaration facts kept in the small dynamic snapshot.
+export type PublicDeclaration = { moduleName: Str, kind: Str, name: Str, signature: Str }
 
 /// A project: `name` is `@owner/repo`. `releases` is newest first. `files`
 /// lists the latest release's files, and `catalog` is its API, when the
@@ -43,6 +61,9 @@ export type Project = {
   stars: Int,
   forks: Int,
   openIssues: Int,
+  tickets: Array[Discussion],
+  contributions: Array[Discussion],
+  searchEntries: Array[PublicDeclaration],
   latest: Option[Str],
   releases: Array[Release],
   files: Array[Str],
@@ -52,6 +73,9 @@ export type Project = {
 /// Everything the package pages show, read once before the first request.
 /// `directory` is where the snapshot's files and avatars are.
 export type Packages = { registry: Str, directory: Str, projects: Array[Project], handles: Array[Profile] }
+export const LIST_PAGE_SIZE: Int = 20
+
+export fn listPages(length: Int) -> Int { if length == 0 { 1 } else { (length + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE } }
 
 export fn empty() -> Packages { Packages{registry: "", directory: "", projects: [], handles: []} }
 
@@ -94,6 +118,44 @@ fn releaseFrom(value: &Json.Json) -> Release {
   }
 }
 
+fn discussionFrom(value: &Json.Json) -> Discussion {
+  Discussion {
+    number: whole(value, "number"),
+    title: text(value, "title"),
+    body: text(value, "body"),
+    author: text(value, "author"),
+    state: text(value, "state"),
+    createdAt: text(value, "createdAt"),
+    updatedAt: text(value, "updatedAt"),
+    comments: whole(value, "comments"),
+    labels: texts(value, "labels"),
+    url: text(value, "url"),
+    draft: Option.unwrapOr(Option.andThen(Json.field(value, "draft"), |held: Json.Json| Json.asBool(&held)), false)
+  }
+}
+
+fn discussions(value: &Json.Json, key: Str) -> Array[Discussion] {
+  var found: Array[Discussion] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asList(&held)), []) {
+    let record = discussionFrom(&item)
+    if record.number > 0 { found = found.push(record) }
+  }
+  found
+}
+
+fn publicDeclarations(value: &Json.Json) -> Array[PublicDeclaration] {
+  var found: Array[PublicDeclaration] = []
+  for item in Option.unwrapOr(Option.andThen(Json.field(value, "searchEntries"), |held: Json.Json| Json.asList(&held)), []) {
+    found = found.push(PublicDeclaration {
+        moduleName: text(&item, "moduleName"),
+        kind: text(&item, "kind"),
+        name: text(&item, "name"),
+        signature: text(&item, "signature")
+      })
+  }
+  found
+}
+
 /// Every file under a directory, by its path relative to it, sorted.
 fn filesUnder(directory: Str) -> Result[Array[Str], SiteError.SiteError] {
   var found: Array[Str] = []
@@ -118,7 +180,18 @@ fn filesUnder(directory: Str) -> Result[Array[Str], SiteError.SiteError] {
   if found.isEmpty() { Err(SiteError.PackagesInvalid(directory)) } else { Ok(List.sorted(&found)) }
 }
 
-fn projectFrom(directory: Str, value: &Json.Json) -> Result[Project, SiteError.SiteError] {
+fn discussionDocument(directory: Str, name: Str) -> Result[Json.Json, SiteError.SiteError] {
+  let path = directory + "/discussions/" + name + ".json"
+  match Io.read(path) {
+    case Ok(source) => match Json.decode(source) {
+      case Ok(value) => Ok(value)
+      case Err(_) => Err(SiteError.PackagesInvalid(path))
+    }
+    case Err(_) => Err(SiteError.PackagesInvalid(path))
+  }
+}
+
+fn projectFrom(directory: Str, value: &Json.Json, compact: Bool) -> Result[Project, SiteError.SiteError] {
   let name = text(value, "name")
   let slash = name.indexOf("/")
   if !name.startsWith("@") || slash < 2 || name.drop(slash + 1).isEmpty() || name.drop(slash + 1).contains("/") || name.contains("..") {
@@ -129,14 +202,19 @@ fn projectFrom(directory: Str, value: &Json.Json) -> Result[Project, SiteError.S
   for item in Option.unwrapOr(Option.andThen(Json.field(value, "releases"), |held: Json.Json| Json.asList(&held)), []) {
     releases = [releaseFrom(&item)].concat(releases)
   }
-  let files = match latest {
-    case Some(version) => filesUnder(directory + "/files/" + name + "/" + version) ?
-    case None => []
+  let files = if compact { [] } else { match latest {
+      case Some(version) => filesUnder(directory + "/files/" + name + "/" + version) ?
+      case None => []
+    } }
+  let catalog = if compact { None } else { match Catalog.load(directory + "/docs/" + name + ".json") {
+      case Ok(held) => Some(held)
+      case Err(_) => None
+    } }
+  let discussionData = if compact { Json.Null } else {
+    let path = directory + "/discussions/" + name + ".json"
+    if Io.exists(path) { discussionDocument(directory, name) ? } else { Json.Null }
   }
-  let catalog = match Catalog.load(directory + "/docs/" + name + ".json") {
-    case Ok(held) => Some(held)
-    case Err(_) => None
-  }
+  let discussionSource = if discussionData == Json.Null { value } else { &discussionData }
   Ok(Project {
       name: name,
       handle: if slash > 0 { name.take(slash) } else { name },
@@ -150,6 +228,9 @@ fn projectFrom(directory: Str, value: &Json.Json) -> Result[Project, SiteError.S
       stars: whole(value, "stars"),
       forks: whole(value, "forks"),
       openIssues: whole(value, "openIssues"),
+      tickets: if compact { [] } else { discussions(discussionSource, "tickets") },
+      contributions: if compact { [] } else { discussions(discussionSource, "contributions") },
+      searchEntries: publicDeclarations(value),
       latest: latest,
       releases: releases,
       files: files,
@@ -159,7 +240,7 @@ fn projectFrom(directory: Str, value: &Json.Json) -> Result[Project, SiteError.S
 
 /// The snapshot `generate-packages.mjs` wrote, or no packages when the
 /// directory holds none.
-export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
+fn loadWith(directory: Str, compact: Bool) -> Result[Packages, SiteError.SiteError] {
   let path = directory + "/packages.json"
   if !Io.exists(path) { return Ok(empty()) }
   let document = match Io.read(path) {
@@ -172,7 +253,7 @@ export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
   if whole(&document, "schemaVersion") != 1 { return Err(SiteError.PackagesInvalid(path)) }
   var projects: Array[Project] = []
   for item in Option.unwrapOr(Option.andThen(Json.field(&document, "projects"), |held: Json.Json| Json.asList(&held)), []) {
-    projects = projects.push(projectFrom(directory, &item) ?)
+    projects = projects.push(projectFrom(directory, &item, compact) ?)
   }
   var handles: Array[Profile] = []
   for item in Option.unwrapOr(Option.andThen(Json.field(&document, "handles"), |held: Json.Json| Json.asList(&held)), []) {
@@ -180,6 +261,7 @@ export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
         handle: text(&item, "handle"),
         name: text(&item, "name"),
         avatar: text(&item, "avatar"),
+        avatarUrl: text(&item, "avatarUrl"),
         githubUrl: text(&item, "githubUrl"),
         kind: text(&item, "kind")
       })
@@ -191,6 +273,12 @@ export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] {
       handles: handles
     })
 }
+
+/// Full static snapshot, including release trees and recent discussions.
+export fn load(directory: Str) -> Result[Packages, SiteError.SiteError] { loadWith(directory, false) }
+
+/// Search-only snapshot bundled with the dynamic function.
+export fn loadCompact(directory: Str) -> Result[Packages, SiteError.SiteError] { loadWith(directory, true) }
 
 export fn find(packages: &Packages, handle: Str, project: Str) -> Option[Project] {
   for held in packages.projects {
@@ -208,6 +296,14 @@ export fn profile(packages: &Packages, handle: Str) -> Option[Profile] {
 
 export fn ofHandle(packages: &Packages, handle: Str) -> Array[Project] {
   packages.projects.filter(|held: Project| held.handle == handle)
+}
+
+/// A discussion is reachable only when it belongs to this project's snapshot.
+export fn discussion(records: &Array[Discussion], number: Str) -> Option[Discussion] {
+  for held in *records {
+    if show(held.number) == number { return Some(held) }
+  }
+  None
 }
 
 /// The release a project names latest.

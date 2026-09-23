@@ -43,10 +43,12 @@ Dependencies point downward. Domain code knows no HTTP or HTML. Services know ca
 values, not requests. Views receive values and return typed `Std.Html` trees. The static router owns
 the complete crawlable documentation graph. The dynamic router owns only search and the no-index
 fallback, so the Lambda closure does not retain static-page machinery. Public package documents are a
-second generated catalogue: `website/scripts/generate-packages.mjs` copies registry documents,
-profiles, latest-release files, and generated API summaries at build time. The local router and
-prerender use the loaded snapshot; the Lambda keeps only its project documents for
-`/packages/search`. A package with invalid Pudu source omits its API reference but does not stop
+second generated catalogue: `website/scripts/generate-packages.mjs` copies GitHub repository facts,
+profiles, latest-release files, generated API summaries, and recent public issues and pull requests
+at build time. The local router and
+prerender use the full snapshot; the Lambda loads only its compact project documents, including
+declaration search facts, for `/packages/search`. Recent discussion bodies live in separate static
+documents. A package with invalid Pudu source omits its API reference but does not stop
 the catalogue and source pages from deploying. Missing snapshot files or malformed project names
 fail startup rather than publishing incomplete source pages.
 

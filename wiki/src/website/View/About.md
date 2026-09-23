@@ -7,6 +7,8 @@ aliases: [website View About]
 ---
 # Website About View
 
+Opens with the shared page banner before its explanatory sections.
+
 Says what Pudu is in one paragraph, lists the five ideas it is built around (failure and absence as
 values, visible change, checked patterns, explicit imports), what ships with the compiler, and where
 the language stands: pre-release 0.1.0 on an interpreter, tested on macOS and Linux x86-64. It

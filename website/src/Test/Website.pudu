@@ -176,6 +176,7 @@ export fn main() -> Int {
     case Err(_) => { return 1 }
   }
   let brokenPackages = Packages.load("website/test/fixtures/packages-broken")
+  let compactPackages = Packages.loadCompact("website/test/fixtures/packages-broken")
   let runsNothing = Playground.disabled("not in this suite")
   let site = Site.Site {
     siteUrl: origin,
@@ -212,6 +213,7 @@ export fn main() -> Int {
   let home = Web.render(&site, "/")
   let bare = Site.Site{..site, packages: Packages.empty()}
   let emptyCatalog = Web.render(&bare, "/packages")
+  let emptyPackageSearch = Web.render(&site, "/packages/search?q=not-a-real-package-zz")
   let bareHome = Web.render(&bare, "/")
   let search = Web.render(&site, "/search?q=checksum")
   let hostile = Web.render(&site, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
@@ -233,6 +235,58 @@ export fn main() -> Int {
   let privacy = Web.render(&site, "/privacy")
   let brand = Web.render(&site, "/brand")
   let packageCatalog = Web.render(&site, "/packages")
+  let githubAvatar = Packages.Profile{..packages.handles[0], avatar: "", avatarUrl: "https://avatars.githubusercontent.com/u/123"}
+  let githubAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [githubAvatar]}}
+  let githubAvatarCatalog = Web.render(&githubAvatarSite, "/packages")
+  let localAvatar = Packages.Profile{..githubAvatar, avatar: "/packages/avatars/alice.png"}
+  let localAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [localAvatar]}}
+  let localAvatarCatalog = Web.render(&localAvatarSite, "/packages")
+  let seedProject = packages.projects[0]
+  var manyProjects: Array[Packages.Project] = []
+  var projectNumber = 0
+  while projectNumber < 7 {
+    let name = "pkg-" + show(projectNumber)
+    manyProjects = manyProjects.push(Packages.Project{..seedProject, name: "@alice/" + name, project: name, stars: projectNumber})
+    projectNumber = projectNumber + 1
+  }
+  let manySite = Site.Site{..site, packages: Packages.Packages{..packages, projects: manyProjects}}
+  let manyCatalog = Web.render(&manySite, "/packages")
+  var longProjects: Array[Packages.Project] = []
+  var longNumber = 0
+  while longNumber < 25 {
+    let name = "json-" + show(longNumber)
+    longProjects = longProjects.push(Packages.Project{..seedProject, name: "@alice/" + name, project: name})
+    longNumber = longNumber + 1
+  }
+  let longSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: longProjects}}
+  let longCatalog = Web.render(&longSite, "/packages")
+  let longCatalogNext = Web.render(&longSite, "/packages/page/2")
+  let longSitemap = Web.render(&longSite, "/sitemap.xml")
+  let longProfile = Web.render(&longSite, "/@alice")
+  let longProfileNext = Web.render(&longSite, "/@alice/page/2")
+  let longSearch = Web.render(&longSite, "/packages/search?q=json")
+  let longSearchNext = Web.render(&longSite, "/packages/search?q=json&page=2")
+  let longSearchBeyond = Web.render(&longSite, "/packages/search?q=json&page=999")
+  let longDynamic = DynamicWeb.Dynamic{..DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, packages: longSite.packages}
+  let longDynamicSearchNext = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=2")
+  let longDynamicSearchBeyond = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=999")
+  var longTickets: Array[Packages.Discussion] = []
+  var longContributions: Array[Packages.Discussion] = []
+  var ticketNumber = 0
+  while ticketNumber < 25 {
+    longTickets = longTickets.push(Packages.Discussion{..seedProject.tickets[0], number: ticketNumber + 100, title: "Ticket " + show(ticketNumber)})
+    longContributions = longContributions.push(Packages.Discussion{..seedProject.contributions[0], number: ticketNumber + 200, title: "Contribution " + show(ticketNumber)})
+    ticketNumber = ticketNumber + 1
+  }
+  let discussionProject = Packages.Project{..seedProject, tickets: longTickets, contributions: longContributions}
+  let discussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [discussionProject]}}
+  let emptyDiscussionProject = Packages.Project{..seedProject, tickets: [], contributions: []}
+  let emptyDiscussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [emptyDiscussionProject]}}
+  let emptyTickets = Web.render(&emptyDiscussionSite, "/@alice/json-kit/tickets")
+  let longTicketPage = Web.render(&discussionSite, "/@alice/json-kit/tickets")
+  let longTicketNext = Web.render(&discussionSite, "/@alice/json-kit/tickets/page/2")
+  let longContributionNext = Web.render(&discussionSite, "/@alice/json-kit/contributions/page/2")
+  let discussionSitemap = Web.render(&discussionSite, "/sitemap.xml")
   let packageSearch = Web.render(&site, "/packages/search?q=json")
   let packageMissing = Web.render(&site, "/@alice/missing")
   let packageProfile = Web.render(&site, "/@alice")
@@ -243,6 +297,12 @@ export fn main() -> Int {
   let packageSourceMissing = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Missing.pudu")
   let packageDocs = Web.render(&site, "/@alice/json-kit/docs")
   let packageReleases = Web.render(&site, "/@alice/json-kit/releases")
+  let packageTickets = Web.render(&site, "/@alice/json-kit/tickets")
+  let packageTicket = Web.render(&site, "/@alice/json-kit/tickets/42")
+  let packageTicketMissing = Web.render(&site, "/@alice/json-kit/tickets/999")
+  let packageContributions = Web.render(&site, "/@alice/json-kit/contributions")
+  let packageContribution = Web.render(&site, "/@alice/json-kit/contributions/56")
+  let packageContributionMissing = Web.render(&site, "/@alice/json-kit/contributions/999")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -266,6 +326,10 @@ export fn main() -> Int {
     gates: Playground.openGates()
   }
   let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
+  let leanProjects = packages.projects.map(|project: Packages.Project| Packages.Project{..project, catalog: None})
+  let leanPackages = Packages.Packages{..packages, projects: leanProjects}
+  let leanEdge = DynamicWeb.Dynamic{..edge, packages: leanPackages}
+  let dynamicPackageSearch = DynamicWeb.render(&leanEdge, "/packages/search?q=json")
   // A site run under `pudu run --watch` follows the files it was made from.
   let watch = LiveReload.Watch{start: "3", changed: ["/work/website/public/site.css"]}
   let following = LiveReload.middleware(&watch)
@@ -307,8 +371,15 @@ export fn main() -> Int {
       Test.that("download page answers", download.status.code == 200),
       Test.that("release notes answer", releases.status.code == 200),
       Test.that("the package catalog lists public projects", packageCatalog.status.code == 200 && packageCatalog.body.contains("@alice") && packageCatalog.body.contains("json-kit")),
+      Test.that("catalogue, profile, and search serve bounded pages", longCatalog.body.split("class=\"package-row-link\"").length() == 27 && longCatalog.body.contains("href=\"/packages/page/2\"") && longCatalogNext.status.code == 200 && longCatalogNext.body.split("class=\"package-row-link\"").length() == 6 && longProfile.body.split("class=\"package-row-link\"").length() == 21 && longProfileNext.body.split("class=\"package-row-link\"").length() == 6 && longSearch.body.split("class=\"package-row-link\"").length() == 21 && longSearchNext.body.split("class=\"package-row-link\"").length() == 6 && longDynamicSearchNext.body.split("class=\"package-row-link\"").length() == 6),
+      Test.that("search pages continue declaration matches", longSearch.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.contains("page=3") && longDynamicSearchNext.body.split("class=\"package-symbol-row\"").length() == 21),
+      Test.that("search refuses pages beyond its result count", longSearchBeyond.status.code == 404 && longDynamicSearchBeyond.status.code == 404 && Web.render(&longSite, "/packages/page/999").status.code == 404),
+      Test.that("ticket and contribution histories serve bounded pages", longTicketPage.body.split("class=\"discussion-row\"").length() == 21 && longTicketPage.body.contains("href=\"/@alice/json-kit/tickets/page/2\"") && longTicketNext.status.code == 200 && longTicketNext.body.split("class=\"discussion-row\"").length() == 6 && longContributionNext.status.code == 200 && longContributionNext.body.split("class=\"discussion-row\"").length() == 6),
+      Test.that("numbered list pages are in the static path graph", sitemapHasAll(&longSitemap, origin, &["/packages/page/2", "/@alice/page/2"]) && sitemapHasAll(&discussionSitemap, origin, &["/@alice/json-kit/tickets/page/2", "/@alice/json-kit/contributions/page/2"])),
       Test.that("a missing snapshot file tree fails startup", Result.isErr(&brokenPackages)),
-      Test.that("package search finds a project", packageSearch.status.code == 200 && packageSearch.body.contains("json-kit")),
+      Test.that("the dynamic loader accepts a JSON-only package snapshot", Result.isOk(&compactPackages)),
+      Test.that("package search presents focused project and declaration results", packageSearch.status.code == 200 && packageSearch.body.contains("package-search-panel") && packageSearch.body.contains("json-kit") && packageSearch.body.contains("package-symbol-row") && packageSearch.body.contains("noindex,follow")),
+      Test.that("dynamic package search keeps declaration matches without API documents", dynamicPackageSearch.status.code == 200 && dynamicPackageSearch.body.contains("JsonKit.Parse.one") && dynamicPackageSearch.body.contains("/@alice/json-kit/docs#JsonKit-Parse-fn-one")),
       Test.that("a handle shows its public projects", packageProfile.status.code == 200 && packageProfile.body.contains("Alice")),
       Test.that("a project overview shows its README and install command", packageOverview.status.code == 200 && packageOverview.body.contains("Parse and build JSON") && packageOverview.body.contains("pudu install @alice/json-kit")),
       Test.that("a source file has linkable lines", packageSource.status.code == 200 && packageSource.body.contains("id=\"L1\"")),
@@ -318,13 +389,18 @@ export fn main() -> Int {
       Test.that("missing project source is refused", packageSourceMissing.status.code == 404),
       Test.that("missing package is refused", packageMissing.status.code == 404),
       Test.that("package docs and releases answer", packageDocs.status.code == 200 && packageReleases.status.code == 200 && packageReleases.body.contains("2.0.0")),
-      Test.that("a project links its issues, pull requests, and stars on GitHub", packageOverview.body.contains("href=\"https://github.com/alice/json-kit/issues\"") && packageOverview.body.contains("href=\"https://github.com/alice/json-kit/pulls\"") && packageOverview.body.contains("href=\"https://github.com/alice/json-kit/stargazers\"")),
-      Test.that("repository counts are shown as a reader scans them", packageOverview.body.contains(">12<") && packageOverview.body.contains(">1.2k<")),
+      Test.that("project navigation has native tickets and contributions", packageOverview.body.contains("href=\"/@alice/json-kit/tickets\">Tickets") && packageOverview.body.contains("href=\"/@alice/json-kit/contributions\">Contributions") && packageOverview.body.contains("href=\"https://github.com/alice/json-kit/stargazers\"")),
+      Test.that("repository stars remain visible", packageOverview.body.contains(">1.2k<")),
+      Test.that("tickets render natively and preserve status", packageTickets.status.code == 200 && packageTickets.body.contains("Handle escaped object keys") && packageTickets.body.contains("discussion-state-open") && packageTickets.body.contains("discussion-state-closed")),
+      Test.that("ticket details preserve headings, escape Markdown, and link to GitHub", packageTicket.status.code == 200 && packageTicket.body.contains("id=\"expected-parser-behavior\"") && packageTicket.body.contains("Expected parser behavior") && packageTicket.body.contains("parser should preserve escaped keys") && packageTicket.body.contains("&lt;script&gt;") && !packageTicket.body.contains("<script>alert(1)</script>") && packageTicket.body.contains("https://github.com/alice/json-kit/issues/42")),
+      Test.that("contributions render natively including merged state", packageContributions.status.code == 200 && packageContributions.body.contains("Add streaming decoder") && packageContributions.body.contains("discussion-state-merged") && packageContribution.status.code == 200 && packageContribution.body.contains("Read and reply on GitHub")),
+      Test.that("only snapshot discussion numbers have detail pages", packageTicketMissing.status.code == 404 && packageContributionMissing.status.code == 404),
       Test.that("a Pudu source file is highlighted", packageSource.body.contains("class=\"tk-keyword\">module<") && packageSource.body.contains("class=\"tk-keyword\">export<")),
       Test.that("a module's source lists its declarations beside it", packageSource.body.contains("code-outline") && packageSource.body.contains("/@alice/json-kit/docs#JsonKit-Parse-fn-one")),
       Test.that("the source view carries the file tree, filter, and path", packageSource.body.contains("code-filter") && packageSource.body.contains("code-crumbs") && packageSource.body.contains("aria-current=\"page\"")),
+      Test.that("source files map to local Pudu and Markdown icons", packageSource.body.contains("/assets/packages/files/pudu.png") && packageSource.body.contains("/assets/packages/files/markdown.svg") && Web.render(&site, "/assets/packages/files/pudu.png").status.code == 200 && Web.render(&site, "/assets/packages/files/markdown.svg").status.code == 200),
       Test.that("a Markdown file is shown rendered", Web.render(&site, "/@alice/json-kit/source/README.md").body.contains("code-preview")),
-      Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases"])),
+      Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases", "/@alice/json-kit/tickets", "/@alice/json-kit/tickets/42", "/@alice/json-kit/contributions", "/@alice/json-kit/contributions/56"])),
       Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),
       Test.that("code of conduct answers", conduct.status.code == 200),
       Test.that("code of conduct names how to report", conduct.body.contains("chrisperezsantiago1@gmail.com")),
@@ -370,7 +446,16 @@ export fn main() -> Int {
       Test.that("home features published packages", home.body.contains("home-packages") && home.body.contains("href=\"/@alice/json-kit\"")),
       Test.that("home features no packages when none are published", !bareHome.body.contains("home-packages")),
       Test.that("the masthead links the packages", home.body.contains("href=\"/packages\">Packages")),
-      Test.that("the packages page explains publishing before any package exists", emptyCatalog.status.code == 200 && emptyCatalog.body.contains("pudu release 0.1.0") && !emptyCatalog.body.contains("package-cards")),
+      Test.that("the packages page explains publishing before any package exists", emptyCatalog.status.code == 200 && emptyCatalog.body.contains("pudu release 0.1.0") && !emptyCatalog.body.contains("package-rows")),
+      Test.that("empty package lists show a banner", emptyCatalog.body.contains("class=\"data-empty-banner\" data-state=\"empty\"") && emptyPackageSearch.body.contains("No matching packages") && emptyPackageSearch.body.contains("data-state=\"empty\"") && emptyTickets.body.contains("No tickets yet") && emptyTickets.body.contains("data-state=\"empty\"")),
+      Test.that("loaded package lists expose their state and a hidden loader", longCatalog.body.contains("data-page-items=\"projects\" data-state=\"loaded\"") && longCatalog.body.contains("data-page-loading") && longCatalog.body.contains("Loading more") && longCatalog.body.contains("hidden=\"\"")),
+      Test.that("the catalogue and handle show linked package rows", packageCatalog.body.contains("class=\"package-rows\"") && packageCatalog.body.contains("class=\"package-row-link\" href=\"/@alice/json-kit\"") && packageProfile.body.contains("class=\"package-rows\"")),
+      Test.that("package avatars prefer a local GitHub image with a neutral fallback", localAvatarCatalog.body.contains("src=\"/packages/avatars/alice.png\"") && !localAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && githubAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && packageCatalog.body.contains("package-avatar-fallback") && !packageCatalog.body.contains("package-initial")),
+      Test.that("larger catalogues feature six most-starred projects and retain all seven", manyCatalog.body.contains("Most starred") && manyCatalog.body.contains("All packages") && manyCatalog.body.split("class=\"package-row-link\"").length() == 14 && manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-6") && !manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-0")),
+      Test.that("reading pages share the page banner", docsIndex.body.contains("class=\"hero-banner page-banner\"") && docsPage.body.contains("class=\"hero-banner page-banner\"") && modulesIndex.body.contains("class=\"hero-banner page-banner\"") && modulePage.body.contains("class=\"hero-banner page-banner\"") && symbol.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("public pages share the page banner", download.body.contains("class=\"hero-banner page-banner\"") && releases.body.contains("class=\"hero-banner page-banner\"") && about.body.contains("class=\"hero-banner page-banner\"") && donation.body.contains("class=\"hero-banner page-banner\"") && conduct.body.contains("class=\"hero-banner page-banner\"") && brand.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("search and missing pages share the banner", search.body.contains("class=\"hero-banner page-banner\"") && missing.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("the 404 banner explains the missing route", missing.status.code == 404 && missing.body.contains("That page is not here.")),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
       Test.that("home has structured data", home.body.contains("application/ld+json")),
       Test.that("home draws the logo at its size, sized before it arrives", home.body.contains("src=\"/assets/pudu-lang-logo.webp\" alt=\"Pudu programming language\" width=\"168\" height=\"56\"")),

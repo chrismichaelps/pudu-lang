@@ -1,0 +1,81 @@
+module View.Packages.Discussion
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Service.Packages as Packages
+import View.Markdown as Markdown
+import View.Packages.Frame as Frame
+import View.Packages.State as State
+
+export fn pages(length: Int) -> Int { Packages.listPages(length) }
+
+fn title(kind: Str) -> Str { if kind == "tickets" { "Tickets" } else { "Contributions" } }
+
+fn records(project: &Packages.Project, kind: Str) -> Array[Packages.Discussion] {
+  if kind == "tickets" { project.tickets } else { project.contributions }
+}
+
+fn source(project: &Packages.Project, kind: Str) -> Str {
+  project.repository + (if kind == "tickets" { "/issues" } else { "/pulls" })
+}
+
+fn state(record: &Packages.Discussion) -> H.Node {
+  let shown = if record.draft { "draft" } else { record.state }
+  H.span().class("discussion-state discussion-state-" + shown).says(shown)
+}
+
+fn labels(record: &Packages.Discussion) -> H.Node {
+  if record.labels.isEmpty() { return H.nothing() }
+  H.ul().class("discussion-labels").holding(record.labels.map(|label: Str| H.li().says(label)))
+}
+
+fn row(project: &Packages.Project, kind: Str, record: &Packages.Discussion) -> H.Node {
+  H.li().class("discussion-row").holding([
+      H.div().class("discussion-row-main").holding([
+          H.a().class("discussion-title").href(Frame.tabPath(project, kind) + "/" + show(record.number)).says(record.title),
+          H.p().class("discussion-byline").says("#" + show(record.number) + " opened by @" + record.author + " · " + record.createdAt.take(10) + " · " + show(record.comments) + " comments"),
+          labels(record)
+        ]),
+      state(record)
+    ])
+}
+
+/// Recent public conversations copied from GitHub when the site was built.
+export fn listing(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, kind: Str) -> Html.Html {
+  listingPage(siteUrl, packages, project, kind, 1)
+}
+
+export fn listingPage(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, kind: Str, page: Int) -> Html.Html {
+  let found = records(project, kind)
+  let heading = title(kind)
+  let items = found.slice((page - 1) * Packages.LIST_PAGE_SIZE, page * Packages.LIST_PAGE_SIZE).map(|record: Packages.Discussion| row(project, kind, &record))
+  let base = Frame.tabPath(project, kind)
+  let path = if page == 1 { base } else { base + "/page/" + show(page) }
+  let content = H.section().class("package-discussions").holding([
+      H.div().class("discussion-heading").holding([
+          H.div().holding([H.h1().says(heading), H.p().class("section-lead").says("Recent public " + heading.toLower() + " from this repository, copied when the site was built.")]),
+          H.a().class("discussion-github-action").href(source(project, kind)).at("rel", "external noopener noreferrer").says(if kind == "tickets" { "Open an issue on GitHub ↗" } else { "Contribute on GitHub ↗" })
+        ]),
+      if found.isEmpty() { State.empty("No " + heading.toLower() + " yet", "No recent " + heading.toLower() + " are in this snapshot.", []) } else { H.ul().class("discussion-list").at("data-page-items", "discussions").at("data-state", "loaded").holding(items) },
+      if page >= pages(found.length()) { H.nothing() } else { State.more(base + "/page/" + show(page + 1)) },
+      H.p().class("discussion-history").holding([H.span().says("For the complete history, "), H.a().href(source(project, kind)).at("rel", "external noopener noreferrer").says("view this repository on GitHub")])
+    ])
+  Frame.pageAt(siteUrl, packages, project, kind, path, project.name + " " + heading, "Recent " + heading.toLower() + " for " + project.name + ".", [content])
+}
+
+/// One copied conversation; writing and reviewing continue at its GitHub URL.
+export fn detail(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, kind: Str, record: &Packages.Discussion) -> Html.Html {
+  let lines = record.body.split("\n")
+  let read = Markdown.parseBody(&lines)
+  let heading = title(kind)
+  let content = H.section().class("package-discussions discussion-detail").holding([
+      H.p().class("discussion-back").holding([H.a().href(Frame.tabPath(project, kind)).says("← All " + heading.toLower())]),
+      H.div().class("discussion-detail-head").holding([
+          H.div().holding([H.h1().says(record.title), H.p().class("discussion-byline").says("#" + show(record.number) + " opened by @" + record.author + " · " + record.createdAt.take(10) + " · " + show(record.comments) + " comments"), labels(record)]),
+          state(record)
+        ]),
+      H.div().class("discussion-body doc").holding(if lines.length() == 1 && lines[0].isEmpty() { [H.p().says("No description was provided.")] } else { read.blocks }),
+      H.p().class("discussion-history").holding([H.a().href(record.url).at("rel", "external noopener noreferrer").says("Read and reply on GitHub ↗")])
+    ])
+  Frame.pageAt(siteUrl, packages, project, kind, Frame.tabPath(project, kind) + "/" + show(record.number), record.title + " · " + project.name, "" + heading + " #" + show(record.number) + " in " + project.name + ".", [content])
+}

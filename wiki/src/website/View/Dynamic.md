@@ -7,7 +7,9 @@ aliases: [website View Dynamic]
 ---
 # Website Dynamic View
 
-Renders ranked search results and the no-index missing page. Static routes delegate these two views
+Renders ranked search results and the no-index missing page. Both open with the shared page banner;
+the missing banner describes any unmatched route as a missing page.
+the search form sits inside its banner and the filter help follows it. Static routes delegate these two views
 here, allowing the serverless graph to import no guide, module-index, donation, about, sitemap, or
 binary-asset rendering code.
 

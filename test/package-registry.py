@@ -28,6 +28,7 @@ import urllib.parse
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FAILURES = []
 TOKENS = {"gho_alice": "alice", "gho_bob": "bob"}
+AVATAR_PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aXcAAAAASUVORK5CYII=")
 
 
 def check(name, condition, detail=""):
@@ -117,11 +118,17 @@ class GitHub(http.server.BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
         parts = parsed.path.strip("/").split("/")
         page = int(query.get("page", ["1"])[0])
+        if parsed.path == "/avatar.png":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(AVATAR_PNG)))
+            self.end_headers()
+            return self.wfile.write(AVATAR_PNG)
         if parsed.path == "/user":
             login = self.login()
             return self.answer(200, {"login": login}) if login else self.answer(401, {"message": "Bad credentials"})
         if parts[0] == "users" and len(parts) == 2:
-            return self.answer(200, {"login": parts[1], "name": parts[1].title(), "avatar_url": "", "html_url": f"https://github.com/{parts[1]}", "type": "User"})
+            return self.answer(200, {"login": parts[1], "name": parts[1].title(), "avatar_url": f"http://127.0.0.1:{self.server.server_port}/avatar.png", "html_url": f"https://github.com/{parts[1]}", "type": "User"})
         if parsed.path == "/search/repositories":
             words = query.get("q", [""])[0].split()
             topic = next((w.split(":", 1)[1] for w in words if w.startswith("topic:")), None)
@@ -138,6 +145,15 @@ class GitHub(http.server.BaseHTTPRequestHandler):
             return self.answer(200, {"names": GitHub.topics.get((owner, name), [])})
         if len(parts) == 4 and parts[3] == "releases":
             return self.answer(200, GitHub.releases.get((owner, name), []) if page == 1 else [])
+        if len(parts) == 4 and parts[3] == "issues":
+            issues = [
+                {"number": 42, "title": "Preserve escaped keys", "body": "An issue body.", "user": {"login": "reader"}, "state": "open", "created_at": "2026-09-20T00:00:00Z", "updated_at": "2026-09-21T00:00:00Z", "comments": 2, "labels": [{"name": "bug"}]},
+                {"number": 56, "title": "A pull request", "pull_request": {"url": "ignored"}, "state": "open"},
+            ]
+            return self.answer(200, issues if page == 1 else [])
+        if len(parts) == 4 and parts[3] == "pulls":
+            pulls = [{"number": 56, "title": "Add streaming decoder", "body": "A contribution body.", "user": {"login": "helper"}, "state": "closed", "merged_at": "2026-09-22T00:00:00Z", "created_at": "2026-09-20T00:00:00Z", "updated_at": "2026-09-22T00:00:00Z", "comments": 1, "labels": [], "draft": False}]
+            return self.answer(200, pulls if page == 1 else [])
         if len(parts) == 4 and parts[3] == "tags":
             done = self.git(bare, "for-each-ref", "refs/tags", "--format=%(refname:strip=2) %(objectname) %(*objectname)")
             tags = []
@@ -299,7 +315,14 @@ def main():
         latest = projects[0]["latest"] if projects else ""
         check("it carries the releases GitHub lists, newest last", latest == "1.1.0" and [r["version"] for r in projects[0]["releases"]] == ["1.0.0", "1.0.1", "1.1.0"], json.dumps(projects)[:400])
         docs = snapshot / "docs" / "@alice" / "json-kit.json"
+        discussion_path = snapshot / "discussions" / "@alice" / "json-kit.json"
+        discussion_data = json.loads(discussion_path.read_text()) if discussion_path.exists() else {}
         check("it carries the latest release's files and API catalogue", (snapshot / "files" / "@alice" / "json-kit" / latest / "src" / "JsonKit" / "Parse.pudu").exists() and docs.exists() and "one" in docs.read_text(), done.stderr)
+        check("it separates public tickets from contributions and uses canonical pull URLs", len(discussion_data.get("tickets", [])) == 1 and discussion_data["tickets"][0]["number"] == 42 and discussion_data["tickets"][0]["labels"] == ["bug"] and len(discussion_data.get("contributions", [])) == 1 and discussion_data["contributions"][0]["state"] == "merged" and discussion_data["contributions"][0]["url"].endswith("/pull/56") and "tickets" not in projects[0], json.dumps(discussion_data)[:500])
+        check("it keeps declaration search facts in the dynamic snapshot", any(entry["name"] == "one" and entry["moduleName"] == "JsonKit.Parse" for entry in projects[0]["searchEntries"]), json.dumps(projects[0]["searchEntries"])[:500])
+        handles = written.get("handles", [])
+        avatar_file = snapshot / "avatars" / "alice.png"
+        check("it copies the GitHub profile avatar into the package snapshot", len(handles) == 1 and handles[0]["avatar"] == "/packages/avatars/alice.png" and handles[0]["avatarUrl"].endswith("/avatar.png") and avatar_file.exists() and avatar_file.read_bytes() == AVATAR_PNG)
 
         code, out = run(["logout"], lib)
         check("logout forgets the token", code == 0 and "signed out" in out, out)

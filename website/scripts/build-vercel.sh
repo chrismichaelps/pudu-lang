@@ -213,8 +213,12 @@ done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.ht
     '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
     '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
     '    { "src": "/docs/([^/]+)", "dest": "/docs/$1/index.html" },' \
+    '    { "src": "/(packages/page/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/page/[0-9]+)", "dest": "/$1/index.html" },' \
     '    { "src": "/(@[^/]+/[^/]+/source/.+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+/(source|docs|releases))", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/page/[0-9]+)", "dest": "/$1/index.html" },' \
+    '    { "src": "/(@[^/]+/[^/]+/(source|docs|releases|tickets|contributions))", "dest": "/$1/index.html" },' \
     '    { "src": "/(@[^/]+/[^/]+)", "dest": "/$1/index.html" },' \
     '    { "src": "/(@[^/]+)", "dest": "/$1/index.html" },' \
     '    { "src": "/guide", "status": 308, "headers": { "Location": "/docs" } },' \

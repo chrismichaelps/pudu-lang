@@ -8,7 +8,7 @@ import Service.Packages as Packages
 import View.Layout as Layout
 
 /// The address of the script that adds the version picker and copy buttons.
-export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=2"
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=5"
 
 /// The address of a project, and of one of its tabs.
 export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }
@@ -24,18 +24,19 @@ export fn sourcePath(project: &Packages.Project, file: Str) -> Str {
   tabPath(project, "source") + "/" + encoded.join("/")
 }
 
-/// A handle's avatar, or its first letter when the snapshot holds no image.
+/// A handle's GitHub avatar, or a neutral account silhouette.
 export fn avatar(profile: &Option[Packages.Profile], handle: Str, size: Str) -> H.Node {
   match *profile {
-    case Some(held) => if held.avatar.isEmpty() { initial(handle, size) } else {
-      H.img().class("package-avatar").src(held.avatar).alt("").at("width", size).at("height", size).at("loading", "lazy")
+    case Some(held) => {
+      let source = if !held.avatar.isEmpty() { held.avatar } else if held.avatarUrl.startsWith("https://avatars.githubusercontent.com/") { held.avatarUrl } else { "" }
+      if source.isEmpty() { fallback(size, []) } else { fallback(size, [H.img().class("package-avatar-image").src(source).alt("").at("width", size).at("height", size).at("loading", "lazy")]) }
     }
-    case None => initial(handle, size)
+    case None => fallback(size, [])
   }
 }
 
-fn initial(handle: Str, size: Str) -> H.Node {
-  H.span().class("package-avatar package-initial").at("aria-hidden", "true").at("style", "width:" + size + "px;height:" + size + "px").says(handle.drop(1).take(1).toUpper())
+fn fallback(size: Str, image: Array[H.Node]) -> H.Node {
+  H.span().class("package-avatar package-avatar-fallback").at("aria-hidden", "true").at("style", "width:" + size + "px;height:" + size + "px").holding(image)
 }
 
 /// `pudu install @owner/repo`, or with an exact version.
@@ -117,12 +118,10 @@ fn github(project: &Packages.Project, section: Str, label: Str, count: Option[In
   H.a().class("package-github-link").href(project.repository + "/" + section).at("rel", "external noopener noreferrer").holding(shown.concat([H.span().class("package-external").at("aria-hidden", "true").says("↗")]))
 }
 
-/// Issues, pull requests, and stars live on GitHub, where the repository is.
+/// Stars remain on GitHub; tickets and contributions have native read-only tabs.
 fn githubLinks(project: &Packages.Project) -> H.Node {
   if project.repository.isEmpty() { return H.nothing() }
   H.div().class("package-github").at("aria-label", "On GitHub").holding([
-      github(project, "issues", "Issues", Some(project.openIssues)),
-      github(project, "pulls", "Pull requests", None),
       github(project, "stargazers", "Stars", Some(project.stars))
     ])
 }
@@ -163,7 +162,9 @@ export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.
               tab(project, "overview", "Overview", current),
               tab(project, "source", "Source", current),
               tab(project, "docs", "Docs", current),
-              tab(project, "releases", "Releases", current)
+              tab(project, "releases", "Releases", current),
+              tab(project, "tickets", "Tickets", current),
+              tab(project, "contributions", "Contributions", current)
             ]),
           githubLinks(project)
         ])

@@ -81,7 +81,27 @@
       ],
       "stars": 1284,
       "forks": 37,
-      "openIssues": 12
+      "openIssues": 12,
+      "searchEntries": [
+        {
+          "moduleName": "JsonKit.Parse",
+          "kind": "fn",
+          "name": "one",
+          "signature": "Int"
+        },
+        {
+          "moduleName": "JsonKit.Value",
+          "kind": "fn",
+          "name": "textOf",
+          "signature": "JsonKit.Value.Value -> Str"
+        },
+        {
+          "moduleName": "JsonKit.Value",
+          "kind": "type",
+          "name": "Value",
+          "signature": ""
+        }
+      ]
     }
   ],
   "handles": [

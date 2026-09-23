@@ -15,9 +15,7 @@ export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
     true,
     None,
     H.article().class("doc download").holding([
-        H.span().class("kind").says("download"),
-        H.h1().says("Download Pudu"),
-        H.p().holding(heading(release)),
+        Layout.banner("page-banner", "Download", "Download Pudu", "", [H.p().holding(heading(release))]),
         H.div().class("download-cards").holding(cards(&release.downloads)),
         H.h2().says("Check what you downloaded"),
         H.p().says("Every archive is published with the SHA-256 checksum of its contents. Check the archive against it before you unpack it, so a download that was truncated or altered is caught rather than installed."),

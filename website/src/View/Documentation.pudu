@@ -34,17 +34,14 @@ export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
     sections = sections.push(librarySection("other", "Other", "Modules not yet placed in a section.", rows))
   }
   Layout.page(siteUrl, "Pudu standard library", "Every module in the Pudu standard library, grouped by what it is for.", "/modules", true, None, H.article().class("doc library").holding([
-        H.span().class("kind").says("Reference"),
-        H.h1().says("Pudu standard library"),
-        H.dl().class("docs-meta").holding([
-            H.dt().says("Author"),
-            H.dd().says(Constants.AUTHOR_NAME),
-            H.dt().says("Version"),
-            H.dd().says(catalog.languageVersion),
-            H.dt().says("Contents"),
-            H.dd().says(show(catalog.modules.length()) + " modules, " + show(catalog.entries.length()) + " public declarations")
-          ]),
-        H.p().says("The standard library ships with the compiler. Every module lives under Std, nothing is imported implicitly, and a program imports exactly the modules it uses. Pick a section, or search by name or type from the top of any page."),
+        Layout.banner("page-banner", "Reference", "Pudu standard library", "The standard library ships with the compiler. Every module lives under Std, nothing is imported implicitly, and a program imports exactly the modules it uses.", [H.dl().class("docs-meta").holding([
+                H.dt().says("Author"),
+                H.dd().says(Constants.AUTHOR_NAME),
+                H.dt().says("Version"),
+                H.dd().says(catalog.languageVersion),
+                H.dt().says("Contents"),
+                H.dd().says(show(catalog.modules.length()) + " modules, " + show(catalog.entries.length()) + " public declarations")
+              ])]),
         H.nav().label("Library sections").holding([H.ul().class("library-jump").holding(jumps)])
       ].concat(sections)).html())
 }
@@ -93,9 +90,7 @@ export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -
           ]))
     }
     Some(Layout.page(siteUrl, moduleName, "Public declarations in the " + moduleName + " Pudu module.", "/module/" + Url.encodeComponent(moduleName), true, None, H.article().class("doc").holding([
-            H.span().class("kind").says("module"),
-            H.h1().says(moduleName),
-            H.p().says(show(entries.length()) + " public declarations"),
+            Layout.banner("page-banner", "Module", moduleName, show(entries.length()) + " public declarations", []),
             H.ul().class("results").holding(rows)
           ]).html()))
   }
@@ -121,8 +116,7 @@ export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
     declarations = declarations.push(H.section().class("declaration").holding(content))
   }
   Layout.page(siteUrl, Domain.qualifiedName(&primary), Markdown.plainText(Domain.summary(&primary)), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
-        H.h1().says(Domain.qualifiedName(&primary)),
-        H.p().class("meta").says(if entries.length() == 1 { "1 declaration" } else { show(entries.length()) + " declarations with this name" }),
+        Layout.banner("page-banner", "API reference", Domain.qualifiedName(&primary), if entries.length() == 1 { "1 declaration" } else { show(entries.length()) + " declarations with this name" }, []),
         H.div().holding(declarations),
         H.p().class("symbol-actions").holding([
             H.a().href("/module/" + Url.encodeComponent(primary.moduleName)).says("Back to " + primary.moduleName),
