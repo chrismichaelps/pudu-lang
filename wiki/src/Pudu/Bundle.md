@@ -32,7 +32,7 @@ data Bundle = Bundle
   , bundleProducts :: ![(Text, ByteString)]    -- product-cache entries, by name
   }
 
-bundleOf :: ModuleName -> Map ModuleName Source -> Bundle
+bundleOf :: ModuleName -> Map ModuleName Source -> Text -> [(Text, ByteString)] -> Bundle
 writeBundled :: FilePath -> Bundle -> IO ()
 attachedBundle :: IO (Maybe Bundle)
 materialise :: FilePath -> Bundle -> IO FilePath
@@ -46,6 +46,9 @@ materialise :: FilePath -> Bundle -> IO FilePath
   ([[Compiler Cache]]). The runtime starts from them when `bundleCompiler` is its own version and
   ignores them otherwise, compiling from the modules as before. A bundle without the section, as
   older ones are, decodes with none.
+- An explicitly named runtime receives source modules but no checked products: its executable
+  identity cannot be verified by the compiler doing the build. The default build copies its own
+  executable and carries products made by that same executable.
 - `materialise` unpacks bundled modules into a target directory, validating module names and structure,
   and returns the entry module's path.
 
@@ -89,6 +92,9 @@ materialise :: FilePath -> Bundle -> IO FilePath
 - **Q:** Why materialise modules to disk instead of evaluating directly from memory?
   **A:** Pudu compiler's module discovery and diagnostic paths expect physical source files and canonical
   paths matching module names; disk materialisation ensures 100% parity with standalone development.
+- **Q:** Carry products when attaching to an explicitly named runtime? **A:** No. _Rationale:_ a
+  version string does not prove its cache format or checked semantics match the compiler that made
+  the products. _Rejected:_ accepting products from a different executable with the same version.
 
 ## Referenced by
 

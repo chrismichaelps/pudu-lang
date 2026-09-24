@@ -46,6 +46,37 @@ writeFileSync(source, program);
 
 const failures = [];
 
+// The product section is length-prefixed after the modules. Reading its count
+// checks the artifact itself, rather than inferring what the build carried from
+// an output message or a timing threshold.
+const productCount = (path) => {
+  const file = readFileSync(path);
+  const marker = Buffer.from("\n--pudu-bundle--\n");
+  const trailer = file.length - marker.length - 16;
+  if (trailer < 0 || !file.subarray(trailer + 16).equals(marker)) {
+    throw new Error("the bundle trailer is missing");
+  }
+  const size = Number(file.subarray(trailer, trailer + 16).toString());
+  const body = file.subarray(trailer - size, trailer);
+  let offset = 0;
+  const line = () => {
+    const end = body.indexOf(10, offset);
+    if (end < 0) throw new Error("the bundle body is incomplete");
+    const value = body.subarray(offset, end).toString();
+    offset = end + 1;
+    return value;
+  };
+  line();
+  const modules = Number(line());
+  for (let index = 0; index < modules; index += 1) {
+    line();
+    const length = Number(line());
+    offset += length;
+  }
+  line();
+  return Number(line());
+};
+
 const buildSaid = execFileSync(executable, ["build", source, "-o", built], { stdio: "pipe" })
   .toString()
   .trim();
@@ -67,6 +98,9 @@ if (carried < 4) {
     `build-bundle: the build carried ${carried} modules, so the library was left out: ${JSON.stringify(buildSaid)}`
   );
   process.exit(1);
+}
+if (productCount(built) < 1) {
+  failures.push("the default bundle carried no compiled products");
 }
 
 // Run it the way a deployment would: elsewhere, and with nothing inherited.
@@ -279,6 +313,9 @@ const onto = join(directory, "onto-named-runtime");
 const ontoSaid = run(onto);
 if (ontoSaid !== "Bundled true") {
   failures.push(`built onto a named runtime it printed ${JSON.stringify(ontoSaid)}`);
+}
+if (productCount(onto) !== 0) {
+  failures.push("a named runtime received products from a different compiler executable");
 }
 
 // Naming a runtime that already carries a program replaces that program rather

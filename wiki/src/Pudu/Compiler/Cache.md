@@ -60,8 +60,10 @@ pruneProducts :: ProductCache -> IO ()
 - **Bounded.** A compile that stored something prunes the directory to half of 4096 entries,
   least recently read first; reading an entry marks it used.
 - **In memory.** `openCollectingCache` holds entries in memory instead of a directory, seeded with
-  the entries given. `pudu build` compiles through an empty one and carries `collectedEntries` in
-  the bundle; a bundle starts from one seeded with them. Entries in memory are the same bytes a
+  the entries given. A default `pudu build` compiles through an empty one and carries
+  `collectedEntries` in the bundle; a bundle starts from one seeded with them. A build with an
+  explicitly named runtime leaves these products out because that executable's cache identity is
+  unverified. Entries in memory are the same bytes a
   directory holds, digest included, and are verified the same way. A cache in memory has no root, so
   it neither reads nor prunes any directory.
 - `PUDU_CACHE=off` disables it; any other value names the root.

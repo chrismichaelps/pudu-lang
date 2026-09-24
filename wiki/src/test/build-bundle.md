@@ -32,7 +32,8 @@ nonzero with collected failures. The optional executable path defaults to `pudu`
   checks the compiler version command and reports write failures without a crash or partial target.
 - Building onto a named runtime, rebuilding onto an already bundled runtime, refusing a missing
   runtime, and refusing an unknown option each preserve the documented target behavior. Rebuilding
-  the same program onto an existing bundle must produce byte-identical output.
+  the same program onto an existing bundle must produce byte-identical output. A default build
+  carries at least one product; a build onto an explicitly named runtime carries none.
 - Temporary executables are removed after use so the gate does not retain several compiler-sized
   artifacts.
 

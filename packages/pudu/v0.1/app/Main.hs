@@ -672,7 +672,10 @@ buildProgram style path target runtime = do
         hPutStrLn stderr "pudu build: the program produced no module"
         exitFailure
       Just entry -> do
-        let bundle = bundleOf entry (programNamedSources program) versionText [(Text.pack name, bytes) | (name, bytes) <- Map.toList products]
+        let carried = case runtime of
+              Nothing -> [(Text.pack name, bytes) | (name, bytes) <- Map.toList products]
+              Just _ -> []
+            bundle = bundleOf entry (programNamedSources program) versionText carried
         -- A build writes a file the size of the compiler, so the write is the
         -- step most likely to fail for a reason that has nothing to do with
         -- the program: a full disk, a directory that is not there, a path

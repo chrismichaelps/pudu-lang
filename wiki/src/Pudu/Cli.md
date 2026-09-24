@@ -196,6 +196,8 @@ the readiness evidence.
 bundle. `runBundled` seeds an in-memory cache from those entries when the bundled compiler version
 matches. An older bundle or mismatched version compiles from the bundled sources. Bundle execution
 never opens or prunes the host product cache ([[Compiler Cache]], [[Pudu Bundle]]).
+When `--runtime` names an executable, the build attaches only source modules: that executable's
+cache compatibility cannot be established from its version string.
 
 ### Resolved Grill Log
 

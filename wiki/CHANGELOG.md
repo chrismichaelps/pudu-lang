@@ -12,6 +12,8 @@ tags: [changelog]
   [[Bundle]]). A minimal HTTP server's time to `listen`, M1 `-O2`, best of 7: 628 → 40 ms with no
   host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
   which used to erase its products.
+- A build onto an explicitly named runtime carries sources without checked products, because the
+  named executable's cache compatibility cannot be established from its version string.
 
 ## 2026-09-24 — Integer literals resolved once, after checking (#317)
 
