@@ -10,6 +10,8 @@ module Pudu.Compiler.Cache
   , lookupFrontend
   , openProductCache
   , openProductCacheAt
+  , openCollectingCache
+  , collectedEntries
   , pruneProducts
   , sourceFingerprint
   , storeChecked
@@ -78,6 +80,9 @@ import System.IO (Handle, hClose, openBinaryTempFile)
     compiler reads none of its predecessor's, and removes them. -}
 data ProductCache = ProductCache
   { cacheDirectory :: !(Maybe FilePath)
+  {-| Entries held in memory instead of a directory: what a build collects
+      to carry in a bundle, and what a bundle starts from. -}
+  , cacheMemory :: !(Maybe (IORef (Map String ByteString)))
   {-| A source no module is, which spans are written against when only what a
       declaration says matters and not where it was written. -}
   , cacheDetached :: !(Maybe Source)
@@ -89,7 +94,7 @@ data ProductCache = ProductCache
   }
 
 disabledCache :: ProductCache
-disabledCache = ProductCache Nothing Nothing Nothing Nothing
+disabledCache = ProductCache Nothing Nothing Nothing Nothing Nothing
 
 {-| What a module's check produced that running it needs: the tree after
     expansion and what each integer literal became. Only a module that
@@ -134,8 +139,22 @@ openProductCacheAt root = do
       detached <- newSource (SourceName "\0interface") ""
       stored <- newIORef False
       keys <- newIORef Map.empty
-      pure (ProductCache (Just directory) (Just detached) (Just stored) (Just keys))
+      pure (ProductCache (Just directory) Nothing (Just detached) (Just stored) (Just keys))
     Left _ -> pure disabledCache
+
+{-| A cache held in memory, seeded with entries as a directory holds them,
+    digest included. It has no root, so it reads and prunes no directory. -}
+openCollectingCache :: Map String ByteString -> IO ProductCache
+openCollectingCache seed = do
+  memory <- newIORef seed
+  detached <- newSource (SourceName "\0interface") ""
+  stored <- newIORef False
+  keys <- newIORef Map.empty
+  pure (ProductCache Nothing (Just memory) (Just detached) (Just stored) (Just keys))
+
+{-| Every entry a cache in memory holds, as a directory would hold it. -}
+collectedEntries :: ProductCache -> IO (Map String ByteString)
+collectedEntries cache = maybe (pure Map.empty) readIORef (cacheMemory cache)
 
 {-| The compiler that is running, as a name no other build shares. -}
 compilerIdentity :: IO String
@@ -273,9 +292,12 @@ entryName kind parts =
 {-| The stored payload followed by its own digest: a file cut short, written
     by a crashed run, or damaged on disk fails the comparison and is a miss. -}
 withEntry :: ProductCache -> String -> (ByteString -> Maybe a) -> IO (Maybe a)
-withEntry cache name decode = case cacheDirectory cache of
-  Nothing -> pure Nothing
-  Just directory -> do
+withEntry cache name decode = case (cacheMemory cache, cacheDirectory cache) of
+  (Just memory, _) -> do
+    held <- readIORef memory
+    pure (Map.lookup name held >>= verified . Right >>= decode)
+  (Nothing, Nothing) -> pure Nothing
+  (Nothing, Just directory) -> do
     let path = directory </> name
     loaded <- try (ByteString.readFile path)
     case verified loaded >>= decode of
@@ -299,9 +321,12 @@ withEntry cache name decode = case cacheDirectory cache of
     interrupted part way, as the language server interrupts an analysis no
     longer needed, removes the partial file before the interruption goes on. -}
 writeEntry :: ProductCache -> String -> ByteString -> IO ()
-writeEntry cache name payload = case cacheDirectory cache of
-  Nothing -> pure ()
-  Just directory -> mask $ \restore -> do
+writeEntry cache name payload = case (cacheMemory cache, cacheDirectory cache) of
+  (Just memory, _) -> do
+    modifyIORef' memory (Map.insert name (payload <> checksum payload))
+    mapM_ (`writeIORef` True) (cacheStored cache)
+  (Nothing, Nothing) -> pure ()
+  (Nothing, Just directory) -> mask $ \restore -> do
     opened <- try (openBinaryTempFile directory (name <> ".tmp"))
     case opened :: Either IOException (FilePath, Handle) of
       Left _ -> pure ()

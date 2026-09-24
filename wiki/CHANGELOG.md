@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — A bundle carries its compiled products (#319)
+
+- `pudu build` compiles through a cache held in memory and carries its entries in the bundle; a
+  bundle starts from them and never reads or prunes the host cache ([[Compiler Cache]],
+  [[Bundle]]). A minimal HTTP server's time to `listen`, M1 `-O2`, best of 7: 628 → 40 ms with no
+  host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
+  which used to erase its products.
+- A build onto an explicitly named runtime carries sources without checked products, because the
+  named executable's cache compatibility cannot be established from its version string.
+
 ## 2026-09-24 — Integer literals resolved once, after checking (#317)
 
 - The evaluated module carries each integer literal as `ResolvedInteger kind value`

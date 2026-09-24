@@ -46,7 +46,7 @@ import Pudu.Bundle
   , writeBundledOnto
   )
 import Pudu.Compiler (CompileResult (..))
-import Pudu.Compiler.Cache (openProductCache)
+import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
@@ -380,7 +380,19 @@ runBundled :: Bundle -> IO ()
 runBundled bundle = withSystemTempDirectory "pudu-bundle" $ \root -> do
   style <- detectStyle
   entry <- materialise root bundle
-  withEnvironment "PUDU_LIB" root (runProgram style entry)
+  cache <- bundledCache bundle
+  withEnvironment "PUDU_LIB" root (runProgramWith cache style entry)
+
+{-| The products a bundle carries, when the compiler that made them is this
+    one; otherwise a cache in memory with none, so the program compiles from
+    its modules. Either way the host's cache directory is neither read nor
+    pruned: a bundle is its own identity, and its products travel with it. -}
+bundledCache :: Bundle -> IO ProductCache
+bundledCache bundle =
+  openCollectingCache $
+    if bundleCompiler bundle == versionText
+      then Map.fromList [(Text.unpack name, bytes) | (name, bytes) <- bundleProducts bundle]
+      else Map.empty
 
 {-| Run an action with one environment variable set, restoring it afterwards. -}
 withEnvironment :: String -> String -> IO a -> IO a
@@ -567,7 +579,13 @@ renderTally counted =
     both streams can tell the program's words from the tool's. -}
 runProgram :: RenderStyle -> FilePath -> IO ()
 runProgram style path = do
-  program <- compileReusing path
+  cache <- openProductCache
+  runProgramWith cache style path
+
+{-| Run a program compiled through a given product cache. -}
+runProgramWith :: ProductCache -> RenderStyle -> FilePath -> IO ()
+runProgramWith cache style path = do
+  program <- compileProgramCached cache path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.hPutStrLn stderr (renderProgramDiagnostics style program diagnostics)
@@ -641,7 +659,9 @@ buildArguments = go Nothing Nothing Nothing
 
 buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
 buildProgram style path target runtime = do
-  program <- compileProgram path
+  collecting <- openCollectingCache Map.empty
+  program <- compileProgramCached collecting path
+  products <- collectedEntries collecting
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
@@ -652,7 +672,10 @@ buildProgram style path target runtime = do
         hPutStrLn stderr "pudu build: the program produced no module"
         exitFailure
       Just entry -> do
-        let bundle = bundleOf entry (programNamedSources program)
+        let carried = case runtime of
+              Nothing -> [(Text.pack name, bytes) | (name, bytes) <- Map.toList products]
+              Just _ -> []
+            bundle = bundleOf entry (programNamedSources program) versionText carried
         -- A build writes a file the size of the compiler, so the write is the
         -- step most likely to fail for a reason that has nothing to do with
         -- the program: a full disk, a directory that is not there, a path
