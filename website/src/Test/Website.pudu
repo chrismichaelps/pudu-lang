@@ -70,6 +70,29 @@ fn downloadShowsChecksums(response: &Http.Response, release: &Releases.Release) 
   true
 }
 
+/// The banner offers every archive, each button naming its target, before
+/// anything else on the page.
+fn downloadButtonsInHero(response: &Http.Response, release: &Releases.Release) -> Bool {
+  let hero = response.body.split("class=\"hero-banner download-hero\"")
+  if hero.length() < 2 { return false }
+  let banner = hero[1].split("</section>")[0]
+  for download in release.downloads {
+    if !banner.contains("href=\"" + download.url + "\" data-platform=\"" + download.target + "\"") { return false }
+  }
+  true
+}
+
+/// Each archive's section names its own file in painted, copyable commands.
+fn downloadStepsPerArchive(response: &Http.Response, release: &Releases.Release) -> Bool {
+  for download in release.downloads {
+    let section = response.body.split("id=\"install-" + download.target + "\"")
+    if section.length() < 2 { return false }
+    let body = section[1].split("</section>")[0]
+    if !body.contains("code-copy") || !body.contains("<span class=\"tok-function\">tar</span>") || !body.contains(download.file + ".sha256") { return false }
+  }
+  true
+}
+
 /// The pages a crawler is told about are the pages that were rendered.
 fn sitemapHasAll(response: &Http.Response, origin: Str, paths: &Array[Str]) -> Bool {
   for path in paths {
@@ -422,6 +445,11 @@ export fn main() -> Int {
       Test.that("download page offers every published archive", downloadOffersEvery(&download, &release)),
       Test.that("download page names the version", download.body.contains("Pudu " + release.version)),
       Test.that("download page publishes each checksum", downloadShowsChecksums(&download, &release)),
+      Test.that("the download page opens with the home page's hero", download.body.contains("class=\"hero-banner download-hero\"")),
+      Test.that("each archive's download button is in the hero", downloadButtonsInHero(&download, &release)),
+      Test.that("each archive has its own install steps, painted and copyable", downloadStepsPerArchive(&download, &release)),
+      Test.that("the download page loads its platform script and the copy script", download.body.contains("/assets/download/main.js") && download.body.contains("/assets/docs/copy.js")),
+      Test.that("the platform script is served", Web.render(&site, "/assets/download/main.js").status.code == 200 && Web.render(&site, "/assets/download/tabs.js").body.contains("tablist")),
       Test.that("download page is in the sitemap", sitemap.body.contains(origin + "/download")),
       Test.that("download page is linked from every page", about.body.contains("href=\"/download\"")),
       Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.1"),
@@ -464,7 +492,7 @@ export fn main() -> Int {
       Test.that("package avatars prefer a local GitHub image with a neutral fallback", localAvatarCatalog.body.contains("src=\"/packages/avatars/alice.png\"") && !localAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && githubAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && packageCatalog.body.contains("package-avatar-fallback") && !packageCatalog.body.contains("package-initial")),
       Test.that("larger catalogues feature six most-starred projects and retain all seven", manyCatalog.body.contains("Most starred") && manyCatalog.body.contains("All packages") && manyCatalog.body.split("class=\"package-row-link\"").length() == 14 && manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-6") && !manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-0")),
       Test.that("reading pages share the page banner", docsIndex.body.contains("class=\"hero-banner page-banner\"") && docsPage.body.contains("class=\"hero-banner page-banner\"") && modulesIndex.body.contains("class=\"hero-banner page-banner\"") && modulePage.body.contains("class=\"hero-banner page-banner\"") && symbol.body.contains("class=\"hero-banner page-banner\"")),
-      Test.that("public pages share the page banner", download.body.contains("class=\"hero-banner page-banner\"") && releases.body.contains("class=\"hero-banner page-banner\"") && about.body.contains("class=\"hero-banner page-banner\"") && donation.body.contains("class=\"hero-banner page-banner\"") && conduct.body.contains("class=\"hero-banner page-banner\"") && brand.body.contains("class=\"hero-banner page-banner\"")),
+      Test.that("public pages share the page banner", releases.body.contains("class=\"hero-banner page-banner\"") && about.body.contains("class=\"hero-banner page-banner\"") && donation.body.contains("class=\"hero-banner page-banner\"") && conduct.body.contains("class=\"hero-banner page-banner\"") && brand.body.contains("class=\"hero-banner page-banner\"")),
       Test.that("search and missing pages share the banner", search.body.contains("class=\"hero-banner page-banner\"") && missing.body.contains("class=\"hero-banner page-banner\"")),
       Test.that("the 404 banner explains the missing route", missing.status.code == 404 && missing.body.contains("That page is not here.")),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
