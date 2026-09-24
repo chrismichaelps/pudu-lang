@@ -17,18 +17,21 @@ An array holds values of one type in order. `items[i]` reads the value at a posi
 ```pudu
 module Arrays
 
+import Std.List as List
+
 fn main() -> Int {
   let primes = [2, 3, 5, 7]
   let first = primes[0]
+  let missing = List.get(&primes, 9)
   let longer = primes.push(11)
   let front = longer.slice(0, 2)
   let both = primes.concat([13, 17])
-  let ok = first == 2 && primes.length() == 4 && longer.length() == 5
+  let ok = first == 2 && missing == None && primes.length() == 4 && longer.length() == 5
   if ok && front == [2, 3] && both.length() == 6 && primes.contains(5) { 0 } else { 1 }
 }
 ```
 
-`push` answered a new array, so `primes` still has four elements. Reading a position that is not there stops the program; `items.get(i)` answers an `Option` instead when a position might be missing.
+`push` answered a new array, so `primes` still has four elements. Reading a position that is not there stops the program, whether it is written `items[i]` or `items.get(i)`. When a position might be missing, `List.get(&items, i)` from `Std.List` answers an `Option` instead: `None` for a position past the end.
 
 ## Ranges and slices
 
