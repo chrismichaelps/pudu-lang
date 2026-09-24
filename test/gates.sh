@@ -59,6 +59,8 @@ run 'a streaming reader holds as much at ten times the input' \
   bash -c 'python3 test/residency.py "$PUDU"'
 run 'pudu installs and publishes packages through git and a stand-in GitHub' \
   bash -c 'python3 test/package-registry.py --pudu "$PUDU"'
+run 'pudu install adds, moves, restores, and removes packages as a terminal uses it' \
+  bash -c 'python3 test/package-install.py --pudu "$PUDU"'
 run 'a generated project works outside the repository' \
   bash -c 'node test/scaffold.mjs "$PUDU"'
 run 'typed lint findings and safe fixes work through the real CLI' \

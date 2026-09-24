@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Installing packages from a terminal is tested (#314)
+
+- [[Package install suite]] drives `pudu install`, `uninstall`, `deps`, and `tree` against real git
+  repositories: adding a package not in `pudu.toml` (bare, exact, caret, tilde, comma range, a named
+  pre-release, several at once), repeats, moves, restoring a clone, `--locked`, path and git
+  sources, transitive dependencies and their conflicts, removal, and refusals that must leave
+  `pudu.toml` and `pudu.lock` byte-identical. It runs in CI and in `test/gates.sh`.
+- The same suite uses what was installed: a program importing a package and its dependency checks,
+  runs, builds, and is tested; without `deps/` check says to install; and through `pudu lsp` on the
+  project's files, completion, hover, and definition reach into `deps/`, and a server already running
+  reads a package installed after it started on the next edit.
+
 ## 2026-09-24 — Download page around its buttons (#312)
 
 - `/download` opens with the home page's hero, carrying a release pill and a download button per

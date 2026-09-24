@@ -424,7 +424,8 @@ entries and changes nothing else. Moving a local directory to a package is pushi
 2. **GitHub index:** releases as tags, `install @owner/repo` with the requirement solver and the
    cache; `login`, `push`, `release`, `upgrade`; private projects.
 3. **Hardening:** archive limits and traversal tests, integrity failures, atomic lock and `deps/`
-   updates, deterministic lock snapshots, an end-to-end suite against git and a stand-in GitHub, repeated
+   updates, deterministic lock snapshots, an end-to-end suite against git and a stand-in GitHub ([[Package end-to-end suite]]), a suite of the
+   terminal's install, uninstall, and refusal cases ([[Package install suite]]), repeated
    clean/locked/offline builds producing the same program.
 4. **Website:** catalog, handle, project, source, docs, releases, the install dialog, and project
    search, built from the GitHub API at deploy time.

@@ -88,6 +88,8 @@ jobs:
         run: node --test website/scripts/syntax-parity.test.mjs
       - name: Verify packages install and publish through git and a stand-in GitHub
         run: python3 test/package-registry.py --pudu "$PUDU"
+      - name: Verify pudu install adds, moves, restores, and removes packages from a terminal
+        run: python3 test/package-install.py --pudu "$PUDU"
       # The sandbox fails closed: asked to isolate a program on a host where it
       # cannot, it runs nothing and says so with its own status.
       - name: Verify the playground sandbox refuses to run unisolated
