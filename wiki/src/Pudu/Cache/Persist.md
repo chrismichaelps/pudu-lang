@@ -55,6 +55,8 @@ failDecode :: Decode a
 
 ## Linkage
 
+- An `Integer` is written as its decimal text through the `Text` encoding, exact at every size; a
+  module the evaluator runs carries resolved literals of any width ([[Compiler Literals]]).
 - **Requires:** [[Source]].
 - **Consumed by:** [[Syntax Tree]], [[Located Syntax]], [[Syntax Name]], [[Compiler Cache]].
 
