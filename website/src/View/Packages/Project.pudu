@@ -67,7 +67,7 @@ fn readme(project: &Packages.Project) -> H.Node {
   if project.readme.trim().isEmpty() {
     return H.section().class("package-readme").holding([head, H.div().class("package-readme-body doc").holding([H.p().class("package-muted").says("This project has no README.")])])
   }
-  let read = Markdown.parse(&project.readme.split("\n"))
+  let read = Markdown.parseReadme(&project.readme.split("\n"), &Frame.fileTargets(project, ""))
   let title = if read.title.isEmpty() { [H.h1().says(project.name)] } else { [H.h1().says(read.title)] }
   H.section().class("package-readme").holding([head, H.div().class("package-readme-body doc").holding(title.concat(read.blocks))])
 }

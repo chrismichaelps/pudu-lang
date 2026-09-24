@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Package pages fit any phone and render README HTML (#308)
+
+- Below 900px a package overview stretches its columns to the page instead of sizing them to their
+  content, which had widened the page to 787px on a 375px phone. README images keep to their column,
+  and the install panel's version row wraps. No package page overflows from 280px through 884px
+  ([[website stylesheet]]).
+- A package's Markdown files render the HTML a README writes for GitHub, rebuilt from an allowlist
+  ([[website View MarkdownHtml]]), with Markdown images. Relative links open the source tab, and
+  relative images load from the release's commit on GitHub. The documentation keeps its stricter
+  subset.
+- [[website Markdown suite]] covers rendering, refusals, target resolution, and the width rules.
 ## 2026-09-24 — Release names modules outside the package root (#304)
 
 - `pudu release` writes a warning naming every module under the manifest's `source` that is neither
