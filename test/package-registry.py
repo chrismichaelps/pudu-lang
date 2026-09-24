@@ -348,6 +348,7 @@ def main():
         check("a reused package keeps its releases, files, and API catalogue", rewritten.get("projects", [{}])[0].get("releases") == projects[0]["releases"] and (snapshot / "files" / "@alice" / "json-kit" / latest / "src" / "JsonKit" / "Parse.pudu").exists() and docs.exists(), again.stderr)
         library(lib, "1.2.0")
         code, out = run(["release", "1.2.0"], lib)
+        check("a release inside its package root names no module outside it", code == 0 and "outside the package root" not in out, out)
         GitHub.seen.clear()
         starved = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--api", api, "--out", str(snapshot), "--pudu", pudu], env=dict(environment, PUDU_GITHUB_RESERVE="100000"), capture_output=True, text=True, timeout=300)
         kept = json.loads((snapshot / "packages.json").read_text()).get("projects", [{}])[0]
@@ -360,6 +361,14 @@ def main():
         handles = written.get("handles", [])
         avatar_file = snapshot / "avatars" / "alice.png"
         check("it copies the GitHub profile avatar into the package snapshot", len(handles) == 1 and handles[0]["avatar"] == "/packages/avatars/alice.png" and handles[0]["avatarUrl"].endswith("/avatar.png") and avatar_file.exists() and avatar_file.read_bytes() == AVATAR_PNG)
+
+        write(lib / "src" / "App" / "Context.pudu", "module App.Context\n\n/// A label.\nexport fn label() -> Str {\n  \"app\"\n}\n")
+        write(lib / "src" / "Main.pudu", "module Main\n\nimport JsonKit.Parse as Parse\n\nfn main() -> Int {\n  Parse.one() - 1\n}\n")
+        library(lib, "1.3.0")
+        code, out = run(["release", "1.3.0"], lib)
+        warning = next((line for line in out.splitlines() if "outside the package root" in line), "")
+        check("a release names each module outside the package root and still publishes", code == 0 and "outside the package root JsonKit" in warning and "src/App/Context.pudu" in warning and "tagged v1.3.0" in out, out)
+        check("the executable entry beside the root is not named", "Main.pudu" not in warning, warning)
 
         code, out = run(["logout"], lib)
         check("logout forgets the token", code == 0 and "signed out" in out, out)

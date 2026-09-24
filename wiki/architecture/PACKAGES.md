@@ -175,7 +175,8 @@ deliberately, in its own tree where a reader sees it, as it always could; a depe
 A package whose root is claimed by the project itself or by another package is a conflict, reported
 at `pudu install` with both owners named. A module file under `Std/` or `Core/` inside a package is
 refused at install. A module a package ships outside its root is allowed but reported as a warning
-at publish time, because it cannot be told apart from another package's.
+at publish time, because it cannot be told apart from another package's: `pudu release` names each
+such file under `source`, except an executable entry `Main.pudu` beside the root.
 
 `pudu check` compares `deps/` with `pudu.lock` before compiling and says which command fixes a
 difference (`pudu install`), instead of reporting a missing module.

@@ -17,6 +17,14 @@ tags: [changelog]
   subset.
 - [[website Markdown suite]] covers rendering, refusals, target resolution, and the width rules.
 
+## 2026-09-24 — Release names modules outside the package root (#304)
+
+- `pudu release` writes a warning naming every module under the manifest's `source` that is neither
+  the root module nor under the root's directory, as [[architecture/PACKAGES]] requires; the
+  executable entry `Main.pudu` is exempt and the release still publishes ([[Pudu CLI Publish]]).
+- Covered in [[src/test/package-registry]] for a release that names such modules and one that names
+  none. Whether the warning should refuse the release is open for Language Architect review.
+
 ## 2026-09-23 — 0.1.1 on the download page (#302)
 
 - v0.1.1 is published as a pre-release with linux-amd64 and darwin-arm64 archives.
