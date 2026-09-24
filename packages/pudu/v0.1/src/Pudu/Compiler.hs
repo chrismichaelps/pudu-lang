@@ -11,6 +11,7 @@ module Pudu.Compiler
   , runFrontend
   ) where
 
+import Pudu.Compiler.Literals (resolveLiterals)
 import Pudu.Diagnostic (Diagnostic, hasErrors, sortDiagnostics)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
@@ -141,7 +142,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just parsed
+                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) parsed)
                     , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types

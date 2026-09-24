@@ -190,6 +190,7 @@ literalValue literal = case literal of
     Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
       IntValue (kindOfSuffix parsedIntegerSuffix) parsedIntegerValue
     Nothing -> intOf 0
+  Tree.ResolvedInteger kind number -> IntValue kind number
   Tree.FloatValue text -> case parseFloatLiteral text of
     Just ParsedFloat{parsedFloatValue, parsedFloatWidth} ->
       FloatValue parsedFloatWidth parsedFloatValue

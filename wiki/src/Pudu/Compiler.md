@@ -86,6 +86,7 @@ runCompileWith :: CompileContext -> Source -> CompileResult
   the frontend admitted one, kept even when resolution, typing, or folding reported errors. An editor
   adding a match arm is looking at a non-exhaustive match, and the tree is exactly what it needs.
   `compileModule` alone is the executable product; nothing links or evaluates `compileSyntax`.
+  It is the parsed tree after [[Compiler Literals]] resolves its integer literals.
 - `compileMethods` is only the module's own methods, which keeps it proportional to the module; a
   product reused from the cache carries none, so tooling compiles without the cache.
 - Diagnostics are combined and sorted once at the boundary.

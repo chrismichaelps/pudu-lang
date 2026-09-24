@@ -32,7 +32,7 @@ import Pudu.FloatLiteral
 import Pudu.Source (Span)
 import Pudu.Semantic.Prelude (preludeTypeNames)
 import Pudu.IntegerLiteral
-  ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
+  ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
@@ -81,6 +81,7 @@ literalType spanValue literal = case literal of
     Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
       constrainIntegerLiteral spanValue parsedIntegerValue (integerSuffixType <$> parsedIntegerSuffix)
     Nothing -> pure ErrorType
+  Tree.ResolvedInteger kind _ -> pure (NominalType (NominalId Nothing (integerKindName kind)) [])
   Tree.FloatValue text -> case parseFloatLiteral text of
     Just ParsedFloat{parsedFloatFits = True, parsedFloatWidth} ->
       pure (NominalType (NominalId Nothing (floatWidthType parsedFloatWidth)) [])
