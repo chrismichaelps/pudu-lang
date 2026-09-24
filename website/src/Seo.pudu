@@ -48,13 +48,29 @@ export fn head(
 }
 
 export fn websiteSchema(siteUrl: Str) -> Json.Json {
-  Json.object(&[
-      ("@context", Json.Text("https://schema.org")),
-      ("@type", Json.Text("WebSite")),
+  let organization = Json.object(&[
+      ("@type", Json.Text("Organization")),
+      ("@id", Json.Text(siteUrl + "/#organization")),
       ("name", Json.Text(Constants.SITE_NAME)),
       ("url", Json.Text(siteUrl)),
-      ("description", Json.Text(Constants.SITE_DESCRIPTION))
+      ("logo", Json.Text(siteUrl + Constants.MARK_512_PATH)),
+      ("sameAs", Json.list(&[Json.Text(Constants.REPOSITORY_URL)]))
     ])
+  let website = Json.object(&[
+      ("@type", Json.Text("WebSite")),
+      ("@id", Json.Text(siteUrl + "/#website")),
+      ("name", Json.Text(Constants.SITE_NAME)),
+      ("alternateName", Json.list(&[Json.Text("Pudu language"), Json.Text("Pudu programming language"), Json.Text("pudu-lang")])),
+      ("url", Json.Text(siteUrl)),
+      ("description", Json.Text(Constants.SITE_DESCRIPTION)),
+      ("publisher", Json.object(&[("@id", Json.Text(siteUrl + "/#organization"))])),
+      ("potentialAction", Json.object(&[
+            ("@type", Json.Text("SearchAction")),
+            ("target", Json.Text(siteUrl + "/search?q=\{search_term_string\}")),
+            ("query-input", Json.Text("required name=search_term_string"))
+          ]))
+    ])
+  Json.object(&[("@context", Json.Text("https://schema.org")), ("@graph", Json.list(&[website, organization]))])
 }
 
 export fn symbolSchema(siteUrl: Str, entry: &Domain.Entry) -> Json.Json {

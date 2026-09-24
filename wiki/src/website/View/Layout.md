@@ -8,7 +8,10 @@ aliases: [website View Layout]
 # Website View Layout
 
 Builds the shared typed-HTML document shell, masthead, search form, navigation, metadata, and footer.
-The document advertises the supplied short Pudu logo as its browser icon. Navigation exposes the
+The document advertises the Pudu "P" mark as its icon at sizes search engines accept: `/favicon.ico`
+(16, 32, and 48 pixels) and PNGs of 48, 96, and 192 pixels, every one a multiple of 48 as Google's
+search results require. It also links a 180-pixel touch icon on white, the web manifest
+`/site.webmanifest` (192 and 512 pixels), and a `theme-color`. Navigation exposes the
 documentation, API, about page, and donation page; the repository remains in the footer without an icon in the
 header. Mobile pages use a native disclosure immediately followed by the same navigation links, while
 desktop pages show the direct link row. The footer names the copyright holder on every page. Static style

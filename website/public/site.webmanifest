@@ -1,0 +1,13 @@
+{
+  "name": "Pudu",
+  "short_name": "Pudu",
+  "description": "A statically typed programming language where a signature tells you what a function does.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#263f86",
+  "icons": [
+    { "src": "/assets/pudu-lang-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/pudu-lang-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

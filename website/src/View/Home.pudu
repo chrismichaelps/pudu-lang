@@ -31,7 +31,7 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
       exampleQueries()
     ])
   let modules = modulePanel(&catalog.modules, catalog.languageVersion)
-  Layout.page(siteUrl, "Pudu language and API search", "Search every public Pudu language and standard-library declaration by name or type.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
+  Layout.page(siteUrl, "Pudu: a statically typed programming language", "Pudu is a statically typed programming language where a signature tells you what a function takes, gives back, can fail with, and changes. Learn it, download it, and search its standard library.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
         intro,
         // The shape example sits beside its explanation, and the modules have a
         // row of their own below. Side by side, a two-line example next to a

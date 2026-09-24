@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — The Pudu mark in search results
+
+- Search results showed a globe for the site: its only icon was 64 pixels, and Google shows a favicon
+  only at a multiple of 48. The site now serves `/favicon.ico` (16, 32, 48) and the "P" mark at 48, 96,
+  192, and 512 pixels, a 180-pixel touch icon, `/site.webmanifest`, and a `theme-color`
+  ([[website View Layout]]).
+- The home page names the site `Pudu`, with alternate names, a `SearchAction`, and the organization
+  and its logo, in one JSON-LD graph. Its title and description now describe the language
+  ([[website Seo]]).
+
 ## 2026-09-24 — Installing packages from a terminal is tested (#314)
 
 - [[Package install suite]] drives `pudu install`, `uninstall`, `deps`, and `tree` against real git

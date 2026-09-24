@@ -188,8 +188,23 @@ export fn routes(site: &Site.Site) -> Route.Router {
           Route.get("/assets/pudu-lang-mark.webp", fn(_request: Route.Request) -> Http.Response {
               binary("website/public/assets/pudu-lang-mark.webp", "image/webp")
             }),
-          Route.get("/assets/pudu-lang-icon.png", fn(_request: Route.Request) -> Http.Response {
-              binary("website/public/assets/pudu-lang-icon.png", "image/png")
+          Route.get("/favicon.ico", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/favicon.ico", "image/x-icon")
+            }),
+          Route.get("/site.webmanifest", fn(_request: Route.Request) -> Http.Response {
+              asset("website/public/site.webmanifest", "application/manifest+json")
+            }),
+          Route.get("/assets/pudu-lang-icon-48.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-48.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-96.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-96.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-192.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-192.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-512.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-512.png", "image/png")
             }),
           Route.get("/assets/apple-touch-icon.png", fn(_request: Route.Request) -> Http.Response {
               binary("website/public/assets/apple-touch-icon.png", "image/png")

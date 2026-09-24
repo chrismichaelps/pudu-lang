@@ -9,6 +9,10 @@ aliases: [website Seo]
 
 Builds route-specific title, description, canonical, robots, Open Graph, Twitter, and JSON-LD head
 nodes. It also renders the root robots policy and an XML sitemap from the generated catalogue and public package snapshot.
+The home page carries a JSON-LD `@graph` of a `WebSite` (named `Pudu`, with the alternate names
+search results may show and a `SearchAction` into `/search?q=`) and the `Organization` behind it, with
+the 512-pixel mark as its logo and the repository as `sameAs`. That is what lets a result show the
+site as "Pudu" and with its logo rather than its domain.
 The about page carries `AboutPage` data for Pudu and its author; the author's profile identities
 are the same fixed destinations shown to readers.
 
@@ -29,6 +33,9 @@ stays one file while the catalogue remains below 50,000 URLs.
   duplicate thin pages and unbounded crawl space. _Rejected:_ indexing internal search results.
 - **Q:** Block search in robots.txt as well as using `noindex`? **A:** No. _Rationale:_ a crawler
   must fetch the page to read `noindex`. _Rejected:_ conflicting crawl and index controls.
+- **Q:** Why did search results show a globe for the site? **A:** Its only icon was 64 pixels, and
+  Google shows a favicon only at a multiple of 48 pixels, ideally with `/favicon.ico` at the root.
+  _Resolution:_ the icon set in [[website View Layout]].
 - **Q:** Add hreflang? **A:** Not until a translated canonical page exists. _Rationale:_ hreflang
   must identify real alternates, not planned translations. _Rejected:_ speculative language tags.
 
