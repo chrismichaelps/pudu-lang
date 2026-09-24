@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Installing packages from a terminal is tested (#314)
+
+- [[Package install suite]] drives `pudu install`, `uninstall`, `deps`, and `tree` against real git
+  repositories: adding a package not in `pudu.toml` (bare, exact, caret, tilde, comma range, a named
+  pre-release, several at once), repeats, moves, restoring a clone, `--locked`, path and git
+  sources, transitive dependencies and their conflicts, removal, and refusals that must leave
+  `pudu.toml` and `pudu.lock` byte-identical. It runs in CI and in `test/gates.sh`.
+
 ## 2026-09-24 — Painted, copyable code and steady avatars (#310)
 
 - Documentation and package Markdown paint `pudu` blocks on the server with the playground's `tok-*`

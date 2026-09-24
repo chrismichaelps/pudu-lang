@@ -30,7 +30,7 @@ records every request. After the first snapshot, the suite checks the incrementa
   instead of failing.
 - A new `v1.2.0` tag refreshes the package and reads only that tag's manifest.
 
-See [[architecture/PACKAGES]] · [[Package GitHubIndex]].
+See [[architecture/PACKAGES]] · [[Package GitHubIndex]] · [[Package install suite]].
 
 ## Grill Log
 
