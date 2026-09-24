@@ -17,6 +17,14 @@ tags: [changelog]
   subset.
 - [[website Markdown suite]] covers rendering, refusals, target resolution, and the width rules.
 
+## 2026-09-24 — Release names modules outside the package root (#304)
+
+- `pudu release` writes a warning naming every module under the manifest's `source` that is neither
+  the root module nor under the root's directory, as [[architecture/PACKAGES]] requires; the
+  executable entry `Main.pudu` is exempt and the release still publishes ([[Pudu CLI Publish]]).
+- Covered in [[src/test/package-registry]] for a release that names such modules and one that names
+  none. Whether the warning should refuse the release is open for Language Architect review.
+
 ## 2026-09-24 — Collections docs name the Option-answering get (#306)
 
 - The Collections chapter says `items.get(i)` stops the program at a missing position, as `items[i]`
