@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — A bundle carries its compiled products (#319)
+
+- `pudu build` compiles through a cache held in memory and carries its entries in the bundle; a
+  bundle starts from them and never reads or prunes the host cache ([[Compiler Cache]],
+  [[Bundle]]). A minimal HTTP server's time to `listen`, M1 `-O2`, best of 7: 628 → 40 ms with no
+  host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
+  which used to erase its products.
+
 ## 2026-09-24 — The Pudu mark in search results
 
 - Search results showed a globe for the site: its only icon was 64 pixels, and Google shows a favicon

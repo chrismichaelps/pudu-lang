@@ -28,6 +28,8 @@ appending program modules and a binary trailer to the compiler binary.
 data Bundle = Bundle
   { bundleEntry :: !Text
   , bundleModules :: ![(Text, Text)]
+  , bundleCompiler :: !Text                    -- the version that made the products
+  , bundleProducts :: ![(Text, ByteString)]    -- product-cache entries, by name
   }
 
 bundleOf :: ModuleName -> Map ModuleName Source -> Bundle
@@ -40,6 +42,10 @@ materialise :: FilePath -> Bundle -> IO FilePath
 - `writeBundled` copies the current compiler binary, appends the encoded bundle payload, padded size,
   and trailer marker, setting executable permissions.
 - `attachedBundle` inspects the running binary's trailer to detect and decode an attached bundle.
+- `bundleProducts` are the product-cache entries the build made compiling the program
+  ([[Compiler Cache]]). The runtime starts from them when `bundleCompiler` is its own version and
+  ignores them otherwise, compiling from the modules as before. A bundle without the section, as
+  older ones are, decodes with none.
 - `materialise` unpacks bundled modules into a target directory, validating module names and structure,
   and returns the entry module's path.
 
@@ -50,6 +56,8 @@ materialise :: FilePath -> Bundle -> IO FilePath
 - Materialisation validates all module names against valid identifier segment rules, rejects duplicates,
   and requires the declared entry module to be present, preventing arbitrary path traversal.
 - Module materialisation writes files only if not already present.
+- The products section follows the modules inside the same length-prefixed body, so the trailer and
+  the probe are unchanged.
 - Bundles interpret the contained modules using the embedded compiler; this packages distribution rather
   than native machine code generation.
 

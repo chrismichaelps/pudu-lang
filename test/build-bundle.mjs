@@ -9,7 +9,7 @@
 // Usage: node test/build-bundle.mjs [path-to-pudu]
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -99,6 +99,33 @@ if (first !== "Bundled true") {
 const moved = run(elsewhere);
 if (moved !== "Bundled true") {
   failures.push(`copied elsewhere it printed ${JSON.stringify(moved)}`);
+}
+
+// A bundle starts from the products its build carried, and never from the
+// host's cache: it creates no cache directory there, and leaves the directory
+// another Pudu program keeps exactly as it was. Before, each bundle compiled
+// every module on a machine without its products and erased every other
+// program's on start, so two Pudu programs on one host kept each other cold.
+const cacheHome = mkdtempSync(join(tmpdir(), "pudu-cache-home-"));
+const neighbour = join(cacheHome, "pudu", "a".repeat(64));
+mkdirSync(neighbour, { recursive: true });
+writeFileSync(join(neighbour, "entry"), "another program's product");
+const cached = (() => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", `XDG_CACHE_HOME=${cacheHome}`, elsewhere], { stdio: "pipe" }).toString().trim();
+  } catch (problem) {
+    return `exited with ${problem.status}`;
+  }
+})();
+if (cached !== "Bundled true") {
+  failures.push(`with a cache home it printed ${JSON.stringify(cached)}`);
+}
+const cacheEntries = readdirSync(join(cacheHome, "pudu"));
+if (cacheEntries.length !== 1 || cacheEntries[0] !== "a".repeat(64)) {
+  failures.push(`the bundle changed the host cache: ${JSON.stringify(cacheEntries)}`);
+}
+if (!existsSync(join(neighbour, "entry"))) {
+  failures.push("the bundle erased another program's cache directory");
 }
 
 // A bundle is the program, so the compiler's own words are the program's
