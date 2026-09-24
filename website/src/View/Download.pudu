@@ -5,6 +5,14 @@ import Std.Html as Html
 import Constants as Constants
 import Service.Releases as Releases
 import View.Layout as Layout
+import View.Markdown as Markdown
+
+/// The script that puts the reader's platform first and turns the install
+/// steps into tabs, and the version it is addressed with.
+const SCRIPT_PATH: Str = "/assets/download/main.js?v=1"
+
+/// The script that reveals each code block's copy button.
+const COPY_SCRIPT_PATH: Str = "/assets/docs/copy.js?v=2"
 
 export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
   Layout.page(
@@ -14,75 +22,82 @@ export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
     "/download",
     true,
     None,
-    H.article().class("doc download").holding([
-        Layout.banner("page-banner", "Download", "Download Pudu", "", [H.p().holding(heading(release))]),
-        H.div().class("download-cards").holding(cards(&release.downloads)),
-        H.h2().says("Check what you downloaded"),
-        H.p().says("Every archive is published with the SHA-256 checksum of its contents. Check the archive against it before you unpack it, so a download that was truncated or altered is caught rather than installed."),
-        H.pre().class("code-block").holding([H.code().says(instructions(release))]),
-        H.p().says("The archive carries the standard library beside the executable, so nothing else is installed and removing the directory removes Pudu."),
-        H.h2().says("All archives"),
-        H.div().class("table-wrap").holding([
-            H.table().class("download-table").holding([
-                H.thead().holding([
-                    H.tr().holding([
-                        H.th().says("OS"),
-                        H.th().says("Arch"),
-                        H.th().says("File"),
-                        H.th().says("Size"),
-                        H.th().says("SHA-256")
-                      ])
-                  ]),
-                H.tbody().holding(rows(&release.downloads))
-              ])
-          ]),
-        H.h2().says("Other platforms"),
-        H.p().says("Windows is not supported yet, and no archive is published for Linux on ARM. On a machine without an archive, build the compiler from source: the repository's README gives the steps and the versions they need."),
-        H.p().holding([
-            H.span().says("Release notes for every version are on the "),
-            H.a().href(release.releasesUrl).at("rel", "external noopener noreferrer").says("releases page"),
-            H.span().says(", and the source is on "),
-            H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub"),
-            H.span().says(". New to the language? Start with the "),
-            H.a().href("/docs").says("documentation"),
-            H.span().says(".")
-          ])
+    H.article().class("download").holding([
+        hero(release),
+        install(release),
+        checksums(release),
+        more(release),
+        H.script().kind("module").src(COPY_SCRIPT_PATH),
+        H.script().kind("module").src(SCRIPT_PATH)
       ]).html()
   )
 }
 
-/// The line under the title: which version this is, and what it promises.
-fn heading(release: &Releases.Release) -> Array[H.Node] {
-  let released = [
-    H.strong().says("Pudu " + release.version),
-    H.span().says(" was published on " + release.published + ".")
-  ]
-  if release.prerelease {
-    released.concat([
-        H.span().says(" This is a pre-release: it is for writing programs and reporting what gets in the way, and the language and its standard library may still change.")
-      ])
-  } else {
-    released
-  }
+/// The banner: which release this is, and a download button per archive.
+fn hero(release: &Releases.Release) -> H.Node {
+  let pill = H.a().class("hero-banner-release").href(release.url).at("rel", "external noopener noreferrer").holding([
+      H.span().class("release-pill").says(if release.prerelease { "Pre-release" } else { "Latest" }),
+      H.span().says("Pudu " + release.version + " · " + release.published)
+    ])
+  let caution = if release.prerelease { " The language and its standard library may still change." } else { "" }
+  H.section().class("hero-banner download-hero").holding([
+      pill,
+      H.h1().says("Download Pudu"),
+      H.p().says("One archive holds the compiler and its standard library. Unpack it anywhere; removing the directory removes Pudu." + caution),
+      H.div().class("download-buttons").holding(buttons(&release.downloads))
+    ])
 }
 
-fn cards(downloads: &Array[Releases.Download]) -> Array[H.Node] {
+fn buttons(downloads: &Array[Releases.Download]) -> Array[H.Node] {
   var built: Array[H.Node] = []
+  var first = true
   for download in downloads {
-    built = built.push(H.div().class("download-card").holding([
-          H.h3().says(download.os),
-          H.p().class("download-arch").says(download.arch + " · " + download.note),
-          H.a().class("download-link").href(download.url).says("Download " + download.size),
-          H.p().class("download-file").holding([H.code().says(download.file)])
+    let tone = if first { "button button-light download-button" } else { "button button-ghost download-button" }
+    built = built.push(H.a().class(tone).href(download.url).at("data-platform", download.target).holding([
+          H.span().class("download-button-name").says("Download for " + download.os),
+          H.span().class("download-button-meta").says(download.arch + " · " + download.size)
         ]))
+    first = false
   }
   built
 }
 
-fn rows(downloads: &Array[Releases.Download]) -> Array[H.Node] {
-  var built: Array[H.Node] = []
-  for download in downloads {
-    built = built.push(H.tr().holding([
+/// Install steps per archive; the script turns them into tabs.
+fn install(release: &Releases.Release) -> H.Node {
+  var panels: Array[H.Node] = []
+  for download in release.downloads {
+    panels = panels.push(H.section().class("download-platform").id("install-" + download.target).at("data-platform", download.target).at("data-label", download.os).holding([
+          H.h3().says(download.os + " · " + download.arch),
+          H.p().class("download-platform-meta").holding([H.code().says(download.file), H.span().says(download.note + " · " + download.size)])
+        ].concat(Markdown.parse(&steps(&download)).blocks)))
+  }
+  H.section().class("download-install").holding([
+      H.h2().says("Install"),
+      H.p().says("Check the archive against its published checksum before you unpack it, so a download that was cut short or altered is caught rather than installed."),
+      H.div().class("download-platforms").holding(panels)
+    ])
+}
+
+/// The commands that check one archive and put its executable on a path,
+/// naming the real file so the block runs as it stands.
+fn steps(download: &Releases.Download) -> Array[Str] {
+  let stem = download.file.take(download.file.length() - ".tar.gz".length())
+  [
+    "```sh",
+    "curl -LO " + download.url,
+    "curl -LO " + download.url + ".sha256",
+    "shasum -a 256 -c " + download.file + ".sha256",
+    "tar -xzf " + download.file,
+    "export PATH=\"$PWD/" + stem + "/bin:$PATH\"",
+    "pudu version",
+    "```"
+  ]
+}
+
+fn checksums(release: &Releases.Release) -> H.Node {
+  var rows: Array[H.Node] = []
+  for download in release.downloads {
+    rows = rows.push(H.tr().holding([
           H.td().says(download.os),
           H.td().says(download.arch),
           H.td().holding([H.a().href(download.url).holding([H.code().says(download.file)])]),
@@ -90,18 +105,33 @@ fn rows(downloads: &Array[Releases.Download]) -> Array[H.Node] {
           H.td().holding([H.code().class("download-checksum").says(download.checksum)])
         ]))
   }
-  built
+  H.section().class("download-archives").holding([
+      H.h2().says("All archives"),
+      H.div().class("table-wrap").holding([
+          H.table().class("download-table").holding([
+              H.thead().holding([H.tr().holding([H.th().says("OS"), H.th().says("Arch"), H.th().says("File"), H.th().says("Size"), H.th().says("SHA-256")])]),
+              H.tbody().holding(rows)
+            ])
+        ])
+    ])
 }
 
-/// The commands that check an archive and put its executable on a path.
-///
-/// One archive is named rather than a placeholder a reader has to substitute,
-/// so the block can be copied and run as it stands.
-fn instructions(release: &Releases.Release) -> Str {
-  let first = release.downloads[0]
-  let stem = first.file.take(first.file.length() - ".tar.gz".length())
-  "shasum -a 256 -c " + first.file + ".sha256\n"
-    + "tar -xzf " + first.file + "\n"
-    + "export PATH=\"$PWD/" + stem + "/bin:$PATH\"\n"
-    + "pudu version"
+fn more(release: &Releases.Release) -> H.Node {
+  H.section().class("download-more").holding([
+      H.div().class("download-more-item").holding([
+          H.h3().says("Another platform"),
+          H.p().says("Windows is not supported yet, and no archive is published for Linux on ARM. Build the compiler from source; the repository's README gives the steps and the versions they need."),
+          H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("Build from source")
+        ]),
+      H.div().class("download-more-item").holding([
+          H.h3().says("What changed"),
+          H.p().says("Every release lists what it adds, changes, and fixes, with its archives and checksums."),
+          H.a().href(release.releasesUrl).at("rel", "external noopener noreferrer").says("Release notes")
+        ]),
+      H.div().class("download-more-item").holding([
+          H.h3().says("Next"),
+          H.p().says("Write and run a first program, then start a project with its own manifest and tests."),
+          H.a().href("/docs/getting-started").says("Get started")
+        ])
+    ])
 }

@@ -38,6 +38,11 @@ rows; tickets and contributions are ledgers with state dots, and a detail reads 
 tab is a light file column beside a file with a monospace header bar, a plain line-number gutter,
 and a ruled declarations outline; the pane fades only while a slow file request is outstanding.
 
+**Download page.** The download hero is the home hero's banner with a row of download buttons, one
+per archive, each naming its system and, beneath, its architecture and size; on a phone they fill the
+row. Install steps are bordered sections that become tabs with a raised selected tab when the script
+runs. A three-column row of next steps closes the page and stacks on a phone.
+
 **Code blocks.** Painted Pudu and shell share the playground's `tok-*` colours. A block's copy
 button sits in its top-left corner, across from the language label, and stays hidden until the
 script enables it.

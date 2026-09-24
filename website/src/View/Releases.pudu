@@ -15,7 +15,7 @@ export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
         H.h2().class("release-version").says("Pudu " + release.version),
         H.p().class("release-meta").holding(meta(release)),
         H.p().class("release-links").holding([
-            H.a().class("download-link").href("/download").says("Download " + release.version),
+            H.a().class("button").href("/download").says("Download " + release.version),
             H.a().class("release-forge").href(release.url).at("rel", "external noopener noreferrer").says("On GitHub")
           ])
       ])

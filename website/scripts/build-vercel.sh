@@ -203,6 +203,7 @@ done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.ht
     '    { "src": "/api/playground/(run|assist)", "dest": "/dynamic" },' \
     '    { "src": "/assets/playground/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
     '    { "src": "/assets/docs/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
+    '    { "src": "/assets/download/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
     '    { "src": "/packages/avatars/(.*)", "headers": { "cache-control": "public, max-age=86400, stale-while-revalidate=604800" }, "continue": true },' \
     '    { "src": "/packages/search", "dest": "/dynamic" },' \
     '    { "src": "/packages/suggest", "dest": "/dynamic" },' \

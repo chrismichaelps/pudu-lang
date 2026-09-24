@@ -17,6 +17,13 @@ tags: [changelog]
   project's files, completion, hover, and definition reach into `deps/`, and a server already running
   reads a package installed after it started on the next edit.
 
+## 2026-09-24 — Download page around its buttons (#312)
+
+- `/download` opens with the home page's hero, carrying a release pill and a download button per
+  archive; [[Download platform script]] makes the reader's platform the primary button and turns the
+  per-archive install steps into tabs. Each archive's steps name its real files, and are painted and
+  copyable. Without script every button and every section is shown ([[website View Download]]).
+
 ## 2026-09-24 — Painted, copyable code and steady avatars (#310)
 
 - Documentation and package Markdown paint `pudu` blocks on the server with the playground's `tok-*`
