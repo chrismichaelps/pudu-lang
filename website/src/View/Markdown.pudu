@@ -4,6 +4,7 @@ import Std.Html.Build as H
 import Std.List as List
 import Std.Map as Map
 import Std.Text as Text
+import View.MarkdownHtml as Html
 import View.MarkdownInline as Inline
 
 /// A heading a page holds, for the list of contents beside it.
@@ -31,15 +32,22 @@ type Pending = { paragraph: Array[Str], items: Array[Str], ordered: Bool, quote:
 /// everything else. Every other heading gets an anchor made from its words, so
 /// a link to a section keeps working when the page around it changes.
 export fn parse(source: &Array[Str]) -> Document {
-  parseWithTitle(source, true)
+  parseWithTitle(source, true, false, &Html.none())
 }
 
 /// Safe Markdown blocks for an embedded body whose headings remain visible.
 export fn parseBody(source: &Array[Str]) -> Document {
-  parseWithTitle(source, false)
+  parseWithTitle(source, false, false, &Html.none())
 }
 
-fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
+/// A package's Markdown file, as GitHub shows it: the documentation's subset,
+/// HTML blocks rebuilt from an allowlist, and relative links and images
+/// resolved against `targets`.
+export fn parseReadme(source: &Array[Str], targets: &Html.Targets) -> Document {
+  parseWithTitle(source, true, true, targets)
+}
+
+fn parseWithTitle(source: &Array[Str], extractTitle: Bool, readsHtml: Bool, targets: &Html.Targets) -> Document {
   var blocks: Array[H.Node] = []
   var headings: Array[Heading] = []
   var anchors: Map[Str, Int] = Map.empty()
@@ -51,7 +59,7 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
   while index < count {
     let bare = Text.trimEnd(source[index]).trim()
     if bare.startsWith("```") {
-      blocks = flush(blocks, &held)
+      blocks = flush(blocks, &held, targets)
       held = nothingPending()
       let language = bare.drop(3).trim()
       var code: Array[Str] = []
@@ -62,10 +70,20 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
       }
       blocks = blocks.push(codeBlock(language, &code))
     } else if bare.isEmpty() {
-      blocks = flush(blocks, &held)
+      blocks = flush(blocks, &held, targets)
       held = nothingPending()
+    } else if readsHtml && Html.opensBlock(bare) {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      var block: Array[Str] = []
+      while index < count && !source[index].trim().isEmpty() {
+        block = block.push(source[index])
+        index = index + 1
+      }
+      blocks = blocks.concat(Html.render(block.join("\n"), targets))
+      continue
     } else if let Some(heading) = headingOf(bare) {
-      blocks = flush(blocks, &held)
+      blocks = flush(blocks, &held, targets)
       held = nothingPending()
       if extractTitle && heading[0] == 1 && title.isEmpty() {
         title = plainText(heading[1])
@@ -73,14 +91,14 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
         let anchor = uniqueAnchor(&anchors, heading[1])
         anchors = anchors.insert(anchor, 1)
         headings = headings.push(Heading{level: heading[0], text: plainText(heading[1]), anchor: anchor})
-        blocks = blocks.push(headingNode(heading[0], anchor, heading[1]))
+        blocks = blocks.push(headingNode(heading[0], anchor, heading[1], targets))
       }
     } else if bare == "---" {
-      blocks = flush(blocks, &held)
+      blocks = flush(blocks, &held, targets)
       held = nothingPending()
       blocks = blocks.push(H.hr())
     } else if bare.startsWith("|") && index + 1 < count && separatorRow(source[index + 1]) {
-      blocks = flush(blocks, &held)
+      blocks = flush(blocks, &held, targets)
       held = nothingPending()
       let header = cellsOf(bare)
       index = index + 2
@@ -89,18 +107,18 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
         rows = rows.push(cellsOf(source[index].trim()))
         index = index + 1
       }
-      blocks = blocks.push(table(&header, &rows))
+      blocks = blocks.push(table(&header, &rows, targets))
       continue
     } else if bare.startsWith(">") {
       if held.paragraph.length() > 0 || held.items.length() > 0 {
-        blocks = flush(blocks, &held)
+        blocks = flush(blocks, &held, targets)
         held = nothingPending()
       }
       held = Pending{..held, quote: held.quote.push(bare.drop(1).trim())}
     } else if let Some(item) = listItem(bare) {
       let switching = held.items.length() > 0 && held.ordered != item[0]
       if held.paragraph.length() > 0 || held.quote.length() > 0 || switching {
-        blocks = flush(blocks, &held)
+        blocks = flush(blocks, &held, targets)
         held = nothingPending()
       }
       held = Pending{..held, items: held.items.push(item[1]), ordered: item[0]}
@@ -112,7 +130,7 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
       held = Pending{..held, items: List.set(&held.items, last, held.items[last] + " " + bare)}
     } else {
       if held.items.length() > 0 || held.quote.length() > 0 {
-        blocks = flush(blocks, &held)
+        blocks = flush(blocks, &held, targets)
         held = nothingPending()
       }
       if summary.isEmpty() { summary = plainText(bare) }
@@ -120,7 +138,7 @@ fn parseWithTitle(source: &Array[Str], extractTitle: Bool) -> Document {
     }
     index = index + 1
   }
-  blocks = flush(blocks, &held)
+  blocks = flush(blocks, &held, targets)
   Document{title: title, summary: summary, blocks: blocks, headings: headings}
 }
 
@@ -133,18 +151,18 @@ export fn plainText(text: Str) -> Str {
 fn nothingPending() -> Pending { Pending{paragraph: [], items: [], ordered: false, quote: []} }
 
 /// The blocks with whatever was still being built closed onto them.
-fn flush(out: Array[H.Node], held: &Pending) -> Array[H.Node] {
+fn flush(out: Array[H.Node], held: &Pending, targets: &Html.Targets) -> Array[H.Node] {
   var blocks = out
   if held.paragraph.length() > 0 {
-    blocks = blocks.push(H.p().holding(Inline.render(held.paragraph.join(" "))))
+    blocks = blocks.push(H.p().holding(Inline.renderWith(held.paragraph.join(" "), targets)))
   }
   if held.items.length() > 0 {
     var rendered: Array[H.Node] = []
-    for item in held.items { rendered = rendered.push(H.li().holding(Inline.render(item))) }
+    for item in held.items { rendered = rendered.push(H.li().holding(Inline.renderWith(item, targets))) }
     blocks = blocks.push(if held.ordered { H.ol().holding(rendered) } else { H.ul().holding(rendered) })
   }
   if held.quote.length() > 0 {
-    blocks = blocks.push(H.blockquote().holding([H.p().holding(Inline.render(held.quote.join(" ")))]))
+    blocks = blocks.push(H.blockquote().holding([H.p().holding(Inline.renderWith(held.quote.join(" "), targets))]))
   }
   blocks
 }
@@ -161,8 +179,8 @@ fn headingOf(bare: Str) -> Option[(Int, Str)] {
   Some((level, rest.trim()))
 }
 
-fn headingNode(level: Int, anchor: Str, text: Str) -> H.Node {
-  let content = Inline.render(text)
+fn headingNode(level: Int, anchor: Str, text: Str, targets: &Html.Targets) -> H.Node {
+  let content = Inline.renderWith(text, targets)
   if level == 2 {
     H.h2().id(anchor).holding(content)
   } else if level == 3 {
@@ -255,13 +273,13 @@ fn cellsOf(bare: Str) -> Array[Str] {
   cells.push(cell.trim())
 }
 
-fn table(header: &Array[Str], rows: &Array[Array[Str]]) -> H.Node {
+fn table(header: &Array[Str], rows: &Array[Array[Str]], targets: &Html.Targets) -> H.Node {
   var headCells: Array[H.Node] = []
-  for cell in *header { headCells = headCells.push(H.th().holding(Inline.render(cell))) }
+  for cell in *header { headCells = headCells.push(H.th().holding(Inline.renderWith(cell, targets))) }
   var body: Array[H.Node] = []
   for row in *rows {
     var cells: Array[H.Node] = []
-    for cell in row { cells = cells.push(H.td().holding(Inline.render(cell))) }
+    for cell in row { cells = cells.push(H.td().holding(Inline.renderWith(cell, targets))) }
     body = body.push(H.tr().holding(cells))
   }
   H.div().class("table-wrap").holding([

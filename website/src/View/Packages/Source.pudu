@@ -52,6 +52,11 @@ fn nameOf(path: Str) -> Str {
   parts[parts.length() - 1]
 }
 
+/// The directory a file is in, ending in `/`, or the empty text at the top.
+fn directoryOf(path: Str) -> Str {
+  path.take(path.length() - nameOf(path).length())
+}
+
 /// The module a `.pudu` file under `src/` declares: `src/JsonKit/Parse.pudu` is `JsonKit.Parse`.
 export fn moduleOf(path: Str) -> Str {
   if extensionOf(path) != "pudu" { return "" }
@@ -176,7 +181,7 @@ fn card(packages: &Packages.Packages, project: &Packages.Project, path: Str) -> 
   let bytes = Packages.fileBytes(packages, project, path) ?
   let body = match text {
     case Some(held) => if extension == "md" {
-      let read = Markdown.parse(&held.split("\n"))
+      let read = Markdown.parseReadme(&held.split("\n"), &Frame.fileTargets(project, directoryOf(path)))
       H.div().class("code-preview doc").holding((if read.title.isEmpty() { [] } else { [H.h1().says(read.title)] }).concat(read.blocks))
     } else { listing(held, extension == "pudu") }
     case None => H.p().class("code-binary").says("This release includes a binary file. There is no text preview.")

@@ -30,5 +30,6 @@ See [[architecture/PACKAGES]] · [[website Service Packages]].
 
 - **Q:** Highlight in the browser? **A:** On the server, per line. _Rationale:_ pages are prerendered and must read the same without script. _Rejected:_ a client highlighter.
 - **Q:** Render Markdown files as source? **A:** As the rendered document. _Rationale:_ a README is read, not reviewed. The raw text stays one click away on GitHub.
+- **Q:** Where do a Markdown file's relative links and images point? **A:** Relative to the file's own directory: links to the package's source pages, images to the release's tag on `raw.githubusercontent.com`, both through `Markdown.parseReadme` ([[website View MarkdownHtml]]). _Rationale:_ the same file reads the same on the overview and in the source tab.
 
 Resolved Grill Log: source browsing uses registry-mirrored release bytes, so moved or deleted GitHub tags cannot change the page's content until a new snapshot.
