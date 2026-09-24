@@ -2,13 +2,16 @@ module Test.Markdown
 
 import Std.Html.Build as H
 import Std.Io as Io
+import Std.Json as Json
 import Std.Option as Option
+import Std.Result as Result
 import Std.Test as Test
 import Service.Packages as Packages
 import View.Markdown as Markdown
 import View.MarkdownHtml as MarkdownHtml
 import View.MarkdownInline as Inline
 import View.Packages.Frame as Frame
+import View.Syntax as Syntax
 
 /// Targets a fixture package file resolves against.
 const TARGETS: MarkdownHtml.Targets = MarkdownHtml.Targets{pages: "/@alice/json-kit/source/", files: "https://raw.githubusercontent.com/alice/json-kit/abc123/"}
@@ -32,6 +35,30 @@ fn readme() -> Array[Str] {
     "",
     "Written as an address, <https://example.com/> stays prose."
   ]
+}
+
+/// How many fixture cases the painter paints exactly as the playground does.
+///
+/// `syntax.js` leaves an apostrophe bare where `Std.Html` writes `&#39;`; the
+/// two are the same HTML, so the comparison reads them alike.
+fn paintedAlike(fixture: Str) -> (Int, Int) {
+  let cases = match Json.decode(fixture) {
+    case Ok(held) => held
+    case Err(_) => Json.Null
+  }
+  var total = 0
+  var alike = 0
+  var index = 0
+  while let Some(item) = Json.at(&cases, index) {
+    let input = Option.unwrapOr(Option.andThen(Json.field(&item, "input"), |held: Json.Json| Json.asText(&held)), "")
+    let wanted = Option.unwrapOr(Option.andThen(Json.field(&item, "html"), |held: Json.Json| Json.asText(&held)), "")
+    let rendered = H.render(&H.span().holding(Syntax.pudu(input)))
+    let inner = rendered.drop(6).take(rendered.length() - 13).replace("&#39;", "'")
+    total = total + 1
+    if inner == wanted { alike = alike + 1 }
+    index = index + 1
+  }
+  (total, alike)
 }
 
 /// Runs the suite.
@@ -66,7 +93,24 @@ fn main() -> Int {
     case Some(project) => Frame.fileTargets(&Packages.Project{..project, repository: "https://gitlab.example/alice/json-kit"}, "")
     case None => MarkdownHtml.none()
   }
+  let parity = paintedAlike(Result.unwrapOr(Io.read("website/test/fixtures/syntax.json"), ""))
+  let shellHtml = H.render(&H.span().holding(Syntax.shell("# build it\ncabal install exe:pudu --installdir=\"$HOME/.local/bin\" && pudu version | tee $\{LOG\}")))
+  let fenced = H.render(&H.div().holding(Markdown.parse(&["```pudu", "fn main() -> Int { 0 }", "```", "", "```", "plain <b>", "```", "", "```toml", "name = \"x\"", "```"]).blocks))
+  let owner = Some(Packages.Profile{handle: "@alice", name: "Alice", avatar: "/packages/avatars/alice.png", avatarUrl: "", githubUrl: "", kind: "User"})
+  let banner = H.render(&Frame.bannerAvatar(&owner, "@alice", "48"))
+  let row = H.render(&Frame.avatar(&owner, "@alice", "32"))
   let checks = Test.suite("Website.Markdown", &[
+      Test.that("the painter reads every parity case", parity[0] >= 12),
+      Test.equals("Pudu is painted exactly as the playground paints it", &parity[1], &parity[0]),
+      Test.that("a shell comment, command, option, and operator are painted", shellHtml.contains("<span class=\"tok-comment\"># build it</span>") && shellHtml.contains("<span class=\"tok-function\">cabal</span>") && shellHtml.contains("<span class=\"tok-type\">--installdir=</span>") && shellHtml.contains("<span class=\"tok-operator\">&amp;&amp;</span>")),
+      Test.that("a shell string, variable, and piped command are painted", shellHtml.contains("<span class=\"tok-string\">&quot;$HOME/.local/bin&quot;</span>") && shellHtml.contains("<span class=\"tok-interpolation\">$\{LOG\}</span>") && shellHtml.contains("<span class=\"tok-function\">tee</span>")),
+      Test.that("a Pudu block is painted with the playground's classes", fenced.contains("<code class=\"language-pudu\"><span class=\"tok-keyword\">fn</span>")),
+      Test.that("a block in another language stays plain and escaped", fenced.contains("<code>plain &lt;b&gt;</code>") && fenced.contains("<code class=\"language-toml\">name = &quot;x&quot;</code>")),
+      Test.that("every block carries a hidden copy button", fenced.split("class=\"code-copy\" type=\"button\" hidden=\"hidden\"").length() == 4),
+      Test.that("a banner avatar loads at once and first", banner.contains("loading=\"eager\"") && banner.contains("fetchpriority=\"high\"")),
+      Test.that("a row's avatar waits until it scrolls near", row.contains("loading=\"lazy\"") && !row.contains("fetchpriority")),
+      Test.that("an avatar with an image hides the mark while it loads", stylesheet.contains(".package-avatar:has(.package-avatar-image)\{background:var(--soft)\}") && stylesheet.contains(".package-avatar:has(.package-avatar-image):before\{content:none\}")),
+      Test.that("a copy button stays hidden until its script shows it", stylesheet.contains(".code-copy[hidden]\{display:none\}")),
       Test.equals("the README's title is taken from its first heading", &read.title, &"Json Kit"),
       Test.that("a centred HTML block keeps its alignment as a class", html.contains("<p class=\"md-align-center\">")),
       Test.that("an alignment is read whatever its case", html.contains("<p class=\"md-align-center\"><a")),

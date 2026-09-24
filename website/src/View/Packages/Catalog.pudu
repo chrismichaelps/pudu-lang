@@ -219,7 +219,7 @@ export fn profilePage(siteUrl: Str, packages: &Packages.Packages, owner: Str, pa
   Some(Layout.page(siteUrl, owner, "Pudu packages published by " + owner + ".", path, true, None, H.article().class("doc package-catalog").holding([
           Layout.banner("page-banner package-profile-banner", "Owner", shown, "", [
               H.div().class("package-profile-meta").holding([
-                  Frame.avatar(&found, owner, "56"),
+                  Frame.bannerAvatar(&found, owner, "56"),
                   H.p().holding([H.span().class("package-profile-handle").says(owner), H.span().says(" · " + plural(projects.length(), "project", "projects") + " · "), github])
                 ])
             ]),

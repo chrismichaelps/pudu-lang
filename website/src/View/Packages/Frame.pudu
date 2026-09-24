@@ -9,7 +9,7 @@ import View.Layout as Layout
 import View.MarkdownHtml as MarkdownHtml
 
 /// The address of the script that adds the version picker and copy buttons.
-export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=6"
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=8"
 
 /// The address of a project, and of one of its tabs.
 export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }
@@ -61,11 +61,23 @@ export fn tone(handle: Str) -> Int {
   (hash / 7) % 4
 }
 
-/// A handle's GitHub avatar over its two-tone mark; the mark shows when the
-/// image is absent or fails to load.
+/// A handle's GitHub avatar over its two-tone mark, loaded when it scrolls
+/// near, for a row; the mark shows when the image is absent or fails to load.
 export fn avatar(profile: &Option[Packages.Profile], handle: Str, size: Str) -> H.Node {
+  avatarLoading(profile, handle, size, false)
+}
+
+/// The avatar a page opens with, in a banner or a profile header: fetched at
+/// once and first, so the page never shows the mark before the image.
+export fn bannerAvatar(profile: &Option[Packages.Profile], handle: Str, size: Str) -> H.Node {
+  avatarLoading(profile, handle, size, true)
+}
+
+fn avatarLoading(profile: &Option[Packages.Profile], handle: Str, size: Str, eager: Bool) -> H.Node {
   let source = avatarSource(profile)
-  let image = if source.isEmpty() { [] } else { [H.img().class("package-avatar-image").src(source).alt("").at("width", size).at("height", size).at("loading", "lazy")] }
+  let sized = H.img().class("package-avatar-image").src(source).alt("").at("width", size).at("height", size)
+  let loaded = if eager { sized.at("loading", "eager").at("fetchpriority", "high") } else { sized.at("loading", "lazy") }
+  let image = if source.isEmpty() { [] } else { [loaded.at("decoding", "async")] }
   H.span().class("package-avatar package-avatar-fallback").at("data-tone", show(tone(handle))).at("aria-hidden", "true").at("style", "width:" + size + "px;height:" + size + "px").holding(image)
 }
 
@@ -240,7 +252,7 @@ export fn pageAt(siteUrl: Str, packages: &Packages.Packages, project: &Packages.
       H.header().class("hero-banner page-banner package-project-hero").holding([
           H.span().class("hero-banner-label").says("Package"),
           H.div().class("package-heading").holding([
-              avatar(&profile, project.handle, "48"),
+              bannerAvatar(&profile, project.handle, "48"),
               H.div().class("package-identity").holding([
                   H.p().class("package-name").holding([
                       H.a().class("package-owner").href("/" + project.handle).says(project.handle),

@@ -6,6 +6,7 @@ import Std.Map as Map
 import Std.Text as Text
 import View.MarkdownHtml as Html
 import View.MarkdownInline as Inline
+import View.Syntax as Syntax
 
 /// A heading a page holds, for the list of contents beside it.
 export type Heading = { level: Int, text: Str, anchor: Str }
@@ -218,13 +219,18 @@ fn slugOf(text: Str) -> Str {
   if slug.isEmpty() { "section" } else { slug }
 }
 
+/// A fenced block: a copy button the page's script reveals, the language as a
+/// label, and the code, painted when `View.Syntax` paints its language.
 fn codeBlock(language: Str, code: &Array[Str]) -> H.Node {
-  let body = H.code().says(code.join("\n"))
-  if language.isEmpty() { return H.pre().class("code-block").holding([body]) }
-  H.figure().class("code-figure").holding([
-      H.span().class("code-label").at("aria-hidden", "true").says(language),
-      H.pre().class("code-block").holding([body.class("language-" + language)])
-    ])
+  let text = code.join("\n")
+  let painted = match Syntax.painted(language, text) {
+    case Some(nodes) => H.code().holding(nodes)
+    case None => H.code().says(text)
+  }
+  let body = if language.isEmpty() { painted } else { painted.class("language-" + language) }
+  let copy = H.button().class("code-copy").kind("button").flag("hidden").at("aria-label", "Copy the code").says("Copy")
+  let label = if language.isEmpty() { [] } else { [H.span().class("code-label").at("aria-hidden", "true").says(language)] }
+  H.figure().class("code-figure").holding(label.concat([copy, H.pre().class("code-block").holding([body])]))
 }
 
 /// An item's words and whether its list is numbered, when the line is an item.

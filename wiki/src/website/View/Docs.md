@@ -20,6 +20,10 @@ page in a three-column layout: the list of pages, the article, and the page's ow
   author and version, numbers its chapters, and says that every example runs as written. The index
   and each chapter open with the shared page banner; chapter source metadata sits within it, while
   the chapter summary remains once in the source Markdown below.
+- **Code.** Every page loads `/assets/docs/copy.js`, which reveals each code block's copy button
+  and copies the block's text, saying "Copied" for a moment. Where the asynchronous clipboard is
+  missing or refused, it selects the text in a hidden field and copies it the older way, and asks the
+  reader to select the text only when both fail.
 - **Contents.** The page's second- and third-level headings as links to their anchors, hidden below
   1100px. `/assets/docs/contents.js` marks the section being read with `aria-current="location"`:
   the last heading above a reading line 96px below the top of the window, or the last section once

@@ -17,7 +17,7 @@ index for the function. The complete JSON catalogue remains the source for stati
 not parsed during a serverless cold start. The prerender is given `PUDU_DOCS_PATH` beside
 `PUDU_CATALOG_PATH`, both absolute, so the Markdown documentation pages are found wherever the script
 is run from and become static pages; the function never reads them.
-Unless `PUDU_PACKAGES_FROM_GITHUB=0`, the builder snapshots the packages GitHub lists (with `GITHUB_TOKEN` for its rate limit), prerenders their pages, copies avatars into static output, and sends only `packages.json` to the function for package search and suggestions; `/packages/search` and `/packages/suggest` route to the function before the static filesystem. A failed snapshot fails the build. Nested project, source, ticket, and contribution paths rewrite to their static files.
+Unless `PUDU_PACKAGES_FROM_GITHUB=0`, the builder snapshots the packages GitHub lists (with `GITHUB_TOKEN` for its rate limit), prerenders their pages, copies avatars into static output (served with a one-day cache and a week of stale revalidation, since each build rewrites them), and sends only `packages.json` to the function for package search and suggestions; `/packages/search` and `/packages/suggest` route to the function before the static filesystem. A failed snapshot fails the build. Nested project, source, ticket, and contribution paths rewrite to their static files.
 Numbered package, handle, ticket, and contribution list paths also rewrite to prerendered files.
 
 Resolved Grill Log: dynamic search reaches the same Pudu ranking and result view as local requests

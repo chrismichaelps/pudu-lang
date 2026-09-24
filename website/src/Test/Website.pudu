@@ -408,7 +408,7 @@ export fn main() -> Int {
       Test.that("source files map to local Pudu and Markdown icons", packageSource.body.contains("/assets/packages/files/pudu.png") && packageSource.body.contains("/assets/packages/files/markdown.svg") && Web.render(&site, "/assets/packages/files/pudu.png").status.code == 200 && Web.render(&site, "/assets/packages/files/markdown.svg").status.code == 200),
       Test.that("a Markdown file is shown rendered", Web.render(&site, "/@alice/json-kit/source/README.md").body.contains("code-preview")),
       Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases", "/@alice/json-kit/tickets", "/@alice/json-kit/tickets/42", "/@alice/json-kit/contributions", "/@alice/json-kit/contributions/56"])),
-      Test.that("release notes carry the published notes", releases.body.contains("Install") && releases.body.contains("pudu version")),
+      Test.that("release notes carry the published notes, their commands painted", releases.body.contains("Install") && releases.body.contains("<span class=\"tok-function\">pudu</span> version")),
       Test.that("code of conduct answers", conduct.status.code == 200),
       Test.that("code of conduct names how to report", conduct.body.contains("chrisperezsantiago1@gmail.com")),
       Test.that("contributing answers", contributing.status.code == 200),

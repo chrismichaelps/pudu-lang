@@ -20,6 +20,12 @@ inside a phone's width.
   targets refused when a page gives no `Targets`, as the documentation does.
 - **Targets:** `Frame.fileTargets` points a fixture project's files at its latest release's commit
   on `raw.githubusercontent.com`, and its pages at the source tab, per directory.
+- **Painting:** every case in `website/test/fixtures/syntax.json` is painted by [[website View Syntax]]
+  exactly as the playground's `syntax.js` recorded it; a shell line's comment, command words, option,
+  operators, string, and variables are painted; a Pudu block uses the playground's classes, another
+  language stays plain and escaped, and every block carries a hidden copy button.
+- **Avatars:** a banner avatar loads eagerly with high priority, a row's lazily, and an avatar with an
+  image hides the two-tone mark while it loads.
 - **Stylesheet:** below 900px the overview's columns stretch instead of sizing to their content,
   README images never exceed their column, the alignment classes exist, and the install panel's
   version row wraps with its copy buttons held at their width.
