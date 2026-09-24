@@ -192,9 +192,18 @@ the readiness evidence.
 
 `pudu init` normalizes and validates target directory paths, preventing accidental target escapes. It populates `package.language` with the canonical minor-bounded constraint from `Pudu.Version`. Bundled binary execution (`runBundled`) extracts attached modules into an isolated per-process temporary directory using `withSystemTempDirectory "pudu-bundle"`, and reliably restores environment modifications via `bracket`.
 
+`pudu build` compiles through an in-memory product cache and includes the collected entries in the
+bundle. `runBundled` seeds an in-memory cache from those entries when the bundled compiler version
+matches. An older bundle or mismatched version compiles from the bundled sources. Bundle execution
+never opens or prunes the host product cache ([[Compiler Cache]], [[Pudu Bundle]]).
+
 ### Resolved Grill Log
 
 - **Q:** Cache unpacked bundle modules across runs? **A:** No; isolated temporary directories prevent stale cache poisoning and concurrent collision between different bundle versions.
+- **Q:** Where should a bundle read its compiled products? **A:** From its own payload, verified by
+  the ordinary product-cache reader. _Rationale:_ its executable identity differs from the build
+  executable and must not remove another program's cached products. _Rejected:_ sharing the host
+  cache directory between distinct bundled executables.
 - **Q:** Hardcode project template language constraint? **A:** No; derive it directly from the active Cabal compiler version via `languageConstraint`.
 - **Q:** Why scope watched child processes using `bracket`? **A:** Unhandled watcher exits, signals, or rapid crashes could leave orphaned zombie background processes holding TCP ports or file locks. `bracket` guarantees `terminateProcess` and `waitForProcess` run on every restart and exit.
 - **Q:** Why debounce with a 100ms settling loop in `pudu watch`? **A:** Editors and build tools frequently write temporary files, touch files, or perform multi-stage saves. Checking that timestamps and file sizes remain unchanged across 100ms prevents spurious mid-save recompilation.
