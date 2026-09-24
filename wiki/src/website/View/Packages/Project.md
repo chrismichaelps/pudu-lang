@@ -13,7 +13,10 @@ The overview shows the README as a file (a `README.md` header over the rendered 
 column of sections divided by hairlines: Install (the unversioned command with a copy button),
 Latest release (version in monospace, date, and a link to all releases), Dependencies, Topics, and
 Details (module root, licence, and the repository as `owner/repo ↗`). Below 900px the side column
-follows the README. The project summary belongs in the shared banner.
+follows the README, and both stretch to the page's width rather than to their content, so a wide
+table or command scrolls inside its own box. The README is read with `Markdown.parseReadme`: its
+relative links open the package's source pages, and its relative images load from the release's tag
+on `raw.githubusercontent.com` ([[website View MarkdownHtml]]). The project summary belongs in the shared banner.
 
 The releases tab opens with the shared tab heading ([[website View Packages Frame]]), then the latest
 release as a block: a "Latest" tag, the version in large monospace, the byline with the commit, its
