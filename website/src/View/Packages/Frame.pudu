@@ -9,7 +9,7 @@ import View.Layout as Layout
 import View.MarkdownHtml as MarkdownHtml
 
 /// The address of the script that adds the version picker and copy buttons.
-export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=7"
+export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=8"
 
 /// The address of a project, and of one of its tabs.
 export fn projectPath(project: &Packages.Project) -> Str { "/" + project.name }

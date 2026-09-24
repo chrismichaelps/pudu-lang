@@ -106,7 +106,7 @@ const CONTENTS_SCRIPT_VERSION: Str = "2"
 
 /// The script that reveals each code block's copy button, and its version.
 const COPY_SCRIPT_PATH: Str = "/assets/docs/copy.js"
-const COPY_SCRIPT_VERSION: Str = "1"
+const COPY_SCRIPT_VERSION: Str = "2"
 
 /// The sections of the page being read.
 fn contents(headings: &Array[Markdown.Heading]) -> H.Node {

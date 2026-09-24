@@ -3,7 +3,7 @@ import { bindVersionPickers } from "./install/picker.js";
 import { bindSourceFilter } from "./source/filter.js";
 import { bindSourceNavigation } from "./source/navigate.js";
 import "./pagination.js?v=3";
-import "../docs/copy.js?v=1";
+import "../docs/copy.js?v=2";
 
 bindVersionPickers(document);
 bindCopyButtons(document);
