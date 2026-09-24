@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Collections docs name the Option-answering get (#306)
+
+- The Collections chapter says `items.get(i)` stops the program at a missing position, as `items[i]`
+  does, and names `List.get(&items, i)` for an `Option`. Its arrays example now calls `List.get` past
+  the end, so `test/docs-examples.py` checks the claim.
+
 ## 2026-09-23 — 0.1.1 on the download page (#302)
 
 - v0.1.1 is published as a pre-release with linux-amd64 and darwin-arm64 archives.
