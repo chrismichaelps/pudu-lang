@@ -6,6 +6,7 @@ import Std.Option as Option
 import Std.Url as Url
 import Service.Packages as Packages
 import View.Layout as Layout
+import View.MarkdownHtml as MarkdownHtml
 
 /// The address of the script that adds the version picker and copy buttons.
 export const SCRIPT_PATH: Str = "/assets/packages/main.js?v=6"
@@ -22,6 +23,25 @@ export fn sourcePath(project: &Packages.Project, file: Str) -> Str {
   var encoded: Array[Str] = []
   for segment in file.split("/") { encoded = encoded.push(Url.encodeComponent(segment)) }
   tabPath(project, "source") + "/" + encoded.join("/")
+}
+
+/// Where a Markdown file in `directory` (empty, or ending in `/`) points its
+/// relative targets: links to the source tab, and images to the file at the
+/// latest release on GitHub, so nothing a package ships is served from this
+/// site. A repository not on GitHub, or a project without a release, refuses
+/// relative images.
+export fn fileTargets(project: &Packages.Project, directory: Str) -> MarkdownHtml.Targets {
+  let pages = tabPath(project, "source") + "/" + directory
+  let repository = project.repository.trim()
+  let revision = match Packages.latestRelease(project) {
+    case Some(release) => if release.commit.isEmpty() { release.tag } else { release.commit }
+    case None => ""
+  }
+  if !repository.startsWith("https://github.com/") || revision.isEmpty() {
+    return MarkdownHtml.Targets{pages: pages, files: ""}
+  }
+  let raw = "https://raw.githubusercontent.com/" + repository.drop(19) + "/" + revision + "/"
+  MarkdownHtml.Targets{pages: pages, files: raw + directory}
 }
 
 /// The image shown for a handle: the snapshot's copy, then GitHub's own

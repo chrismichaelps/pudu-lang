@@ -9,6 +9,9 @@ aliases: [website View Markdown]
 
 Turns a documentation page's Markdown lines into a `Document { title, summary, blocks, headings }`.
 Body parsing uses the same safe blocks while retaining the first level-one heading inside the body.
+`parseReadme` reads a package's Markdown file with two more things: HTML blocks through
+[[website View MarkdownHtml]], and relative links and images resolved through its `Targets`. The
+documentation keeps the stricter subset.
 The subset is the one the documentation is written in: `#`–`####` headings, paragraphs, fenced code
 with a language, `-`/`*` and numbered lists, `>` quotations, pipe tables with a separator row, and
 `---` rules. A table cell keeps a pipe written `\|`, even inside code, so a table can show an
@@ -27,7 +30,9 @@ Every piece of text becomes a text node through `Std.Html.Build`, so nothing a p
 markup. The website suite checks that a script written in prose is escaped, that repeated headings
 get distinct anchors, and that tables render.
 
-Resolved Grill Log: a general Markdown engine was rejected; the documentation needs a known subset,
+Resolved Grill Log: README HTML is read only by `parseReadme`, and only through the allowlist in
+[[website View MarkdownHtml]]; the documentation has no HTML to show and keeps refusing it.
+A general Markdown engine was rejected; the documentation needs a known subset,
 and a parser that accepts everything also accepts raw HTML, which would reopen escaping. The parser
 reads each line once and closes pending paragraphs, lists, and quotations when a line of another
 kind arrives.

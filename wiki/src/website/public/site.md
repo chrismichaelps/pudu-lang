@@ -38,6 +38,14 @@ rows; tickets and contributions are ledgers with state dots, and a detail reads 
 tab is a light file column beside a file with a monospace header bar, a plain line-number gutter,
 and a ruled declarations outline; the pane fades only while a slow file request is outstanding.
 
+**Package pages at any width.** Below 900px the overview's two columns stack and stretch to the
+page, so a README's table, code block, or long word scrolls or wraps inside its own box instead of
+widening the page. README images never exceed their column, `md-align-left|center|right` align what
+a README centred in HTML, and long unbroken words wrap. The install panel's command rows keep their
+copy button on screen, and its version row wraps. Nothing on a package page may widen the page from
+280px (a folded phone's cover screen) through phones, unfolded foldables, and tablets; the website
+suite asserts the rules that guarantee it.
+
 **Package search box.** A drawn magnifier, a `/` key hint hidden while focused, a `?` query-forms
 disclosure, a filter chip in ink, and a suggestion box anchored to the form with section headings,
 highlighted matches, a visible selection, key hints on the selected row, and loading, empty, and error
