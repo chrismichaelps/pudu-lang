@@ -7,7 +7,8 @@
     `repo` scope. `logout` forgets it; `whoami` names its account.
 
     `release <version>` requires the manifest's version and a clean working
-    tree, checks the project, runs its tests, creates the annotated tag
+    tree, names every module it would ship outside the package's root, checks
+    the project, runs its tests, creates the annotated tag
     `v<version>`, and pushes it to `origin`. With a token it then creates the
     GitHub release with the notes and adds the `pudu-package` topic, which is
     what makes the package findable. `search <words>` lists packages from
@@ -24,6 +25,7 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, try)
 import Control.Monad (unless, when)
 import qualified Data.ByteString as ByteString
+import Data.List (isPrefixOf, stripPrefix)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -36,7 +38,7 @@ import Pudu.Package.Credentials (Credential (..), loadCredential, removeCredenti
 import Pudu.Package.Digest (treeFiles)
 import Pudu.Package.GitHubIndex (githubBase)
 import Pudu.Package.Http (Request (..), Response (..), send)
-import Pudu.Package.Identity (PackageId (..), parsePackageId, renderPackageId)
+import Pudu.Package.Identity (PackageId (..), defaultRoot, parsePackageId, renderPackageId)
 import Pudu.Package.Version (parseVersion)
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
 import System.Environment (getExecutablePath, lookupEnv)
@@ -224,6 +226,7 @@ release base api root manifest version notesFile = do
     Left problem -> failWith "release" ("the project is not a git repository: " <> problem)
     Right pending -> unless (Text.null pending) (failWith "release" "the working tree has changes not committed; commit them so the release is exactly what is on GitHub")
   notes <- maybe (pure "") (fmap Text.strip . TextIO.readFile) notesFile
+  warnOutsideRoot root manifest package
   verify root manifest
   let tag = "v" <> version
   commit <- either (failWith "release") pure =<< git root ["rev-parse", "HEAD"]
@@ -266,6 +269,39 @@ announce api token owner name tag version notes = do
     case replaced of
       Right response | responseStatus response == 200 -> TextIO.putStrLn ("added the " <> packageTopic <> " topic, which lists the package")
       _ -> hPutStrLn stderr ("pudu release: add the topic " <> Text.unpack packageTopic <> " to the repository on GitHub so the package is listed")
+
+{-| Name on stderr each module the release would ship outside the package's root.
+
+    Such a module is allowed, but a program that installs the package and has a
+    module of the same name shadows it, so the publisher hears about it before
+    the tag exists. -}
+warnOutsideRoot :: FilePath -> Manifest -> PackageId -> IO ()
+warnOutsideRoot root manifest package = do
+  files <- either (const []) id <$> treeFiles root
+  let moduleRoot = fromMaybe (defaultRoot package) (manifestRoot manifest)
+      source = fromMaybe "src" (manifestSource manifest)
+      outside = outsideRoot moduleRoot source files
+  unless (null outside) $
+    hPutStrLn stderr . Text.unpack $
+      "pudu release: warning: modules outside the package root "
+        <> moduleRoot
+        <> ": "
+        <> Text.intercalate ", " (map Text.pack outside)
+        <> "; a program with a module of the same name cannot use them. Move them under "
+        <> Text.pack source
+        <> "/"
+        <> moduleRoot
+        <> "/."
+
+{-| The module files under `source` that are neither the root module, under the
+    root's directory, nor the executable entry `Main.pudu`, which no program
+    imports. -}
+outsideRoot :: Text -> FilePath -> [FilePath] -> [FilePath]
+outsideRoot moduleRoot source files =
+  [file | file <- files, takeExtension file == ".pudu", Just inSource <- [stripPrefix (source <> "/") file], not (owned inSource)]
+ where
+  rootName = Text.unpack moduleRoot
+  owned inSource = inSource == rootName <> ".pudu" || inSource == "Main.pudu" || (rootName <> "/") `isPrefixOf` inSource
 
 {-| Run `pudu check` over the project's modules and `pudu test` over its test directory, stopping at a failure. -}
 verify :: FilePath -> Manifest -> IO ()
