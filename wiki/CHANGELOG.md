@@ -16,6 +16,7 @@ tags: [changelog]
   relative images load from the release's commit on GitHub. The documentation keeps its stricter
   subset.
 - [[website Markdown suite]] covers rendering, refusals, target resolution, and the width rules.
+
 ## 2026-09-24 — Release names modules outside the package root (#304)
 
 - `pudu release` writes a warning naming every module under the manifest's `source` that is neither
