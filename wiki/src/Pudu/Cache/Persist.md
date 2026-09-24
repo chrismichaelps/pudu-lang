@@ -52,6 +52,8 @@ failDecode :: Decode a
   a `Word64` seven bits at a time in at most ten bytes. Every `Int` therefore round-trips — the
   bits of a `Float64` constant and `minBound` included — where shifting the signed number overflowed
   from 2^62 and wrote a value the reader rejected. Below 2^62 the bytes are unchanged.
+- An `Integer` is written as its decimal text through the `Text` encoding, exact at every size; a
+  module the evaluator runs carries resolved literals of any width ([[Compiler Literals]]).
 
 ## Linkage
 

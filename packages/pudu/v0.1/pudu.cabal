@@ -84,6 +84,7 @@ library
     Pudu.Cache.Persist
     Pudu.Compiler
     Pudu.Compiler.Cache
+    Pudu.Compiler.Literals
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program

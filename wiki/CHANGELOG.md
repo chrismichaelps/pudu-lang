@@ -13,13 +13,13 @@ tags: [changelog]
   host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
   which used to erase its products.
 
-## 2026-09-24 — A bundle carries its compiled products (#319)
+## 2026-09-24 — Integer literals resolved once, after checking (#317)
 
-- `pudu build` compiles through a cache held in memory and carries its entries in the bundle; a
-  bundle starts from them and never reads or prunes the host cache ([[Compiler Cache]],
-  [[Bundle]]). A minimal HTTP server's time to `listen`, M1 `-O2`, best of 7: 628 → 40 ms with no
-  host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
-  which used to erase its products.
+- The evaluated module carries each integer literal as `ResolvedInteger kind value`
+  ([[Compiler Literals]]), so an evaluation no longer parses the literal's text or looks its kind up by
+  span. Measured on an M1 with the `-O2` runtime, best of three: a 3M-iteration counting loop
+  5444 → 3344 ms, `fib(27)` 858 → 673 ms, a 100k-entry map 641 → 491 ms, a 200k-element array
+  536 → 458 ms. The loop's allocation fell from 22.8 GB to 16.1 GB.
 
 ## 2026-09-24 — The Pudu mark in search results
 

@@ -64,7 +64,7 @@ import Pudu.Eval.Value
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Literal (IntegerValue)
+  ( Literal (IntegerValue, ResolvedInteger)
   , Block (..)
   , lambdaName
   , FieldInit (..)
@@ -240,6 +240,7 @@ evaluateHere (Located spanValue expression) = case expression of
     IntegerValue _ -> do
       selected <- integerKindAt spanValue
       pure (integerLiteralValue selected literal)
+    ResolvedInteger kind number -> pure (IntValue kind number)
     _ -> pure (literalValue literal)
   NameExpression names -> readPath spanValue names
   UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator

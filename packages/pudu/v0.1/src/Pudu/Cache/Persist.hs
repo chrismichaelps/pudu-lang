@@ -28,6 +28,7 @@ import Data.Char (chr, ord)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Kind (Type)
 import Data.Word (Word64, Word8)
@@ -176,6 +177,15 @@ instance Persist Text where
           Right value -> Step (position + size) value
           Left _ -> Failed
         else Failed
+
+{-| An integer of any size, as its decimal text: exact at every width. -}
+instance Persist Integer where
+  persist source value = persist source (Text.pack (show value))
+  restore = do
+    text <- restore
+    case reads (Text.unpack text) of
+      [(value, "")] -> pure value
+      _ -> Decode $ \_ _ _ -> Failed
 
 instance Persist a => Persist [a] where
   persist source values = putUnsigned (length values) <> foldMap (persist source) values
