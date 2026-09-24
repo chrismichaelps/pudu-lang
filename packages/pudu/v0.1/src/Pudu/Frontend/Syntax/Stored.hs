@@ -9,6 +9,7 @@ module Pudu.Frontend.Syntax.Stored () where
 
 import Pudu.Cache.Persist (Persist (..), persistDeferred, restoreDeferred)
 import Pudu.Frontend.Syntax.Tree
+import Pudu.IntegerLiteral (IntegerKind)
 
 {-| Each declaration is stored as a block of its own, so reading a stored module
     reads its name and imports and leaves every declaration unread until
@@ -98,6 +99,7 @@ instance Persist TypeSyntax
 instance Persist FunctionBody
 instance Persist Block
 instance Persist Statement
+instance Persist IntegerKind
 instance Persist Literal
 instance Persist Pattern
 instance Persist ArrayRest

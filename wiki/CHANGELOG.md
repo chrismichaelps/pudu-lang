@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Integer literals resolved once, after checking (#317)
+
+- The evaluated module carries each integer literal as `ResolvedInteger kind value`
+  ([[Compiler Literals]]), so an evaluation no longer parses the literal's text or looks its kind up by
+  span. Measured on an M1 with the `-O2` runtime, best of three: a 3M-iteration counting loop
+  5444 → 3344 ms, `fib(27)` 858 → 673 ms, a 100k-entry map 641 → 491 ms, a 200k-element array
+  536 → 458 ms. The loop's allocation fell from 22.8 GB to 16.1 GB.
+
 ## 2026-09-24 — The Pudu mark in search results
 
 - Search results showed a globe for the site: its only icon was 64 pixels, and Google shows a favicon

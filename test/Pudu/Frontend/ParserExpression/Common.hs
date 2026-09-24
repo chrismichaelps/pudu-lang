@@ -183,6 +183,7 @@ fieldShape (Located _ field) =
 literalShape :: Literal -> Text
 literalShape literalValue = case literalValue of
   IntegerValue value -> value
+  ResolvedInteger _ number -> Text.pack (show number)
   FloatValue value -> value
   DecimalValue value -> value
   StringValue value -> value

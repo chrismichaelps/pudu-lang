@@ -202,6 +202,7 @@ outlineField (Located _ field) =
 outlineLiteral :: Literal -> Text
 outlineLiteral literal = case literal of
   IntegerValue value -> value
+  ResolvedInteger _ number -> Text.pack (show number)
   FloatValue value -> value
   DecimalValue value -> value
   StringValue value -> "\"" <> value <> "\""

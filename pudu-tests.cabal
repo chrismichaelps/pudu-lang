@@ -54,6 +54,7 @@ test-suite pudu-test
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Lsp.SchedulerSpec
+    Pudu.Compiler.LiteralsSpec
     Pudu.Compiler.ProgramSpec
     Pudu.Compiler.Program.Common
     Pudu.Compiler.Program.CacheSpec

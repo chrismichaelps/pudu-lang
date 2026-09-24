@@ -12,6 +12,7 @@ import Test.QuickCheck (Property, arbitrary, counterexample, elements, forAll, o
 persistProperties :: [(String, IO Property)]
 persistProperties =
   [ ("an integer of any magnitude survives storage", testIntegers)
+  , ("an unbounded integer survives storage digit for digit", testUnbounded)
   , ("a stored float constant reads back bit for bit", testFloats)
   ]
 
@@ -21,6 +22,13 @@ testIntegers = do
   let extremes = [minBound, maxBound, 2 ^ (62 :: Int), negate (2 ^ (62 :: Int)), 2 ^ (62 :: Int) - 1, 0, -1, 1]
   pure $ forAll (oneof [arbitrary, elements extremes]) $ \number ->
     decodeWith source (encodeFor source number) === Just (number :: Int)
+
+testUnbounded :: IO Property
+testUnbounded = do
+  source <- newSource (SourceName "persist") ""
+  let extremes = [0, -1, 2 ^ (64 :: Int), negate (2 ^ (200 :: Int)), 123456789012345678901234567890]
+  pure $ forAll (oneof [(* (2 ^ (70 :: Int))) <$> arbitrary, elements extremes]) $ \number ->
+    decodeWith source (encodeFor source number) === Just (number :: Integer)
 
 testFloats :: IO Property
 testFloats = do

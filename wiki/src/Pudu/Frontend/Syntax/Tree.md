@@ -112,7 +112,8 @@ data MatchArm = MatchArm
   { armPattern :: !(Located Pattern), armGuard :: !(Maybe (Located Expression))
   , armBody :: !(Located Expression) }
 data Literal
-  = IntegerValue !Text | FloatValue !Text | DecimalValue !Text
+  = IntegerValue !Text | ResolvedInteger !IntegerKind !Integer
+  | FloatValue !Text | DecimalValue !Text
   | StringValue !Text | CharValue !Char
   | BoolValue !Bool | NullValue
 data Expression
@@ -201,6 +202,11 @@ No algorithm; strict algebraic representation with derived equality/show for tes
 DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is deliberate data recursion, not monolithic logic.
 
 ## Grill Log
+
+- **Q:** Why does the tree hold a `ResolvedInteger` the parser never builds? **A:** [[Compiler Literals]]
+  writes it into the module the evaluator runs, once checking has fixed each literal's kind, so an
+  evaluation reads a number instead of parsing text. Tooling reads the parser's tree, which never
+  contains one.
 
 - **Q:** Elaborate a Set literal into `setOf([..])` during parsing? **A:** No. _Rationale:_ that
   would fabricate source structure and spans, obscure the literal from formatting and tooling, and

@@ -43,6 +43,7 @@ import GHC.Generics (Generic)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located, locatedValue)
 import Pudu.Frontend.Syntax.Name (ModuleName)
+import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
 {-| @Program.Syntax.Module — groups imports and declarations -}
@@ -314,9 +315,13 @@ data Statement
   | InvalidStatement
   deriving stock (Eq, Show, Generic)
 
-{-| @Program.Syntax.Literal — preserves unresolved literal values -}
+{-| @Program.Syntax.Literal — preserves unresolved literal values
+
+    `ResolvedInteger` is never parsed: [[Compiler Literals]] writes it into the
+    module the evaluator runs, once checking has fixed the literal's kind. -}
 data Literal
   = IntegerValue !Text
+  | ResolvedInteger !IntegerKind !Integer
   | FloatValue !Text
   | DecimalValue !Text
   | StringValue !Text
