@@ -29,6 +29,7 @@ tags: [moc, module]
 - [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the
   repository-only regression package that preserves `cabal test all`.
 - [[Refresh Pudu Installation]] — PATH-aware installed-compiler replacement and behavior proof.
+- [[Bundle End-to-End Gate]] — copied-bundle execution, cache isolation, and build refusal coverage.
 - [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]] — repository test ownership separated from
   the installable compiler archive while preserving the full Cabal gate.
 - [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.

@@ -103,4 +103,4 @@ See [[2026-09-21-product-cache]].
 
 ## Referenced by
 
-[[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Cache Persist]]
+[[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Cache Persist]] · [[Bundle End-to-End Gate]]

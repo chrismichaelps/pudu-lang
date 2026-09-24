@@ -92,4 +92,4 @@ materialise :: FilePath -> Bundle -> IO FilePath
 
 ## Referenced by
 
-[[src/Pudu/_MOC]] · [[Pudu CLI]] · [[pudu-cabal]]
+[[src/Pudu/_MOC]] · [[Pudu CLI]] · [[pudu-cabal]] · [[Bundle End-to-End Gate]]
