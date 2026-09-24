@@ -10,6 +10,7 @@ aliases: [Program Compiler Module Map]
   orchestration.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.
 - [[Compiler Literals]] — integer literals resolved to their kind and value once, after checking.
+- [[Compiler Literals Spec]] — resolved and preserved literal regressions.
 - [[Compiler Cache]] — compiled products kept across runs under content and interface keys.
 - [[Compiler Manifest]] — one-read project snapshots, ordered dependency roots, version diagnostics,
   and setup-operation evidence.
