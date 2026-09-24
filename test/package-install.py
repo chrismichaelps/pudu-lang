@@ -10,6 +10,7 @@ Every case checks the exit status, what was printed, and the project's
 """
 
 import argparse
+import json
 import os
 import pathlib
 import shutil
@@ -82,6 +83,75 @@ def module(name):
     return {f"src/{name.replace('.', '/')}.pudu": f"module {name}\n\n/// One.\nexport fn one() -> Int {{\n  1\n}}\n"}
 
 
+class Editor:
+    """A language-server session over a project's real files, as an editor holds one."""
+
+    def __init__(self, pudu, root, environment):
+        self.root = root
+        self.process = subprocess.Popen([pudu, "lsp"], cwd=root, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.next = 0
+        self.notes = []
+        self.request("initialize", {"processId": None, "rootUri": root.as_uri(), "capabilities": {}})
+        self.notify("initialized", {})
+
+    def send(self, message):
+        body = json.dumps(message).encode()
+        self.process.stdin.write(b"Content-Length: %d\r\n\r\n" % len(body) + body)
+        self.process.stdin.flush()
+
+    def receive(self):
+        length = 0
+        while True:
+            line = self.process.stdout.readline()
+            if line in (b"\r\n", b""):
+                break
+            name, value = line.decode().split(":", 1)
+            if name.strip().lower() == "content-length":
+                length = int(value)
+        return json.loads(self.process.stdout.read(length))
+
+    def request(self, method, params):
+        self.next += 1
+        self.send({"jsonrpc": "2.0", "id": self.next, "method": method, "params": params})
+        while True:
+            message = self.receive()
+            if message.get("id") == self.next:
+                return message.get("result")
+            self.notes.append(message)
+
+    def notify(self, method, params):
+        self.send({"jsonrpc": "2.0", "method": method, "params": params})
+
+    def open(self, relative, text):
+        path = self.root / relative
+        write(path, text)
+        self.notify("textDocument/didOpen", {"textDocument": {"uri": path.as_uri(), "languageId": "pudu", "version": 1, "text": text}})
+        return path.as_uri()
+
+    def change(self, uri, text, version):
+        self.notify("textDocument/didChange", {"textDocument": {"uri": uri, "version": version}, "contentChanges": [{"text": text}]})
+
+    def at(self, method, uri, line, character):
+        return self.request("textDocument/" + method, {"textDocument": {"uri": uri}, "position": {"line": line, "character": character}})
+
+    def completions(self, uri, line, character):
+        answer = self.at("completion", uri, line, character) or []
+        return [item["label"] for item in (answer.get("items", []) if isinstance(answer, dict) else answer)]
+
+    def codes(self, uri):
+        """The codes of the diagnostics last published for a document, once the server has caught up."""
+        self.at("hover", uri, 0, 0)
+        for message in reversed(self.notes):
+            if message.get("method") == "textDocument/publishDiagnostics" and message["params"]["uri"] == uri:
+                return [d.get("code") for d in message["params"]["diagnostics"]]
+        return []
+
+    def close(self):
+        self.request("shutdown", None)
+        self.notify("exit", None)
+        self.process.wait(timeout=30)
+
+
 class Project:
     """A project's files as the test reads them."""
 
@@ -148,6 +218,8 @@ def cases(space, work):
     run = lambda *args: space.run(app.root, *args)
 
     adding(app, run)
+    using(app, run, space)
+    editing(app, space, work)
     workflow(app, run)
     sources(app, run, parser_repo)
     transitive(app, run)
@@ -181,9 +253,85 @@ def adding(app, run):
     check("two packages install in one command", code == 0 and app.requirement("@alice/json-kit") == '"=1.1.0"' and app.requirement("@bob/text") == '"^1.0.0"', app.manifest() + out)
 
 
+PROGRAM = """module Main
+
+import JsonKit.Parse as Parse
+import Std.Io as Io
+import Text.Words as Words
+
+fn main() -> Int {
+  let _written = Io.writeLine(show(Parse.one() + Words.one()))
+  0
+}
+"""
+
+PROGRAM_TEST = """module MainTest
+
+import JsonKit.Parse as Parse
+import Std.Test as Test
+
+fn main() -> Int {
+  Test.report(&Test.run(&Test.suite("installed", &[Test.equals("the package answers", &Parse.one(), &1)])))
+}
+"""
+
+
+def using(app, run, space):
+    write(app.root / "src" / "Main.pudu", PROGRAM)
+    code, out = run("check", "src/Main.pudu")
+    check("a program importing an installed package and its dependency checks clean", code == 0 and "no diagnostics" in out, out)
+    code, out = run("run", "src/Main.pudu")
+    check("it runs, calling into both packages", code == 0 and out.strip() == "2", out)
+    code, out = run("build", "src/Main.pudu", "-o", "app-bin")
+    built = subprocess.run([str(app.root / "app-bin")], capture_output=True, text=True) if code == 0 else None
+    check("it builds into an executable that runs", built is not None and built.stdout.strip() == "2", out)
+    write(app.root / "test" / "MainTest.pudu", PROGRAM_TEST)
+    code, out = run("test", "test")
+    check("a project test importing the package passes", code == 0 and "PASS  MainTest.pudu" in out, out)
+
+
+def editing(app, space, work):
+    editor = Editor(space.pudu, app.root, space.environment)
+    try:
+        partial = PROGRAM.replace("Parse.one() + Words.one()", "Parse.")
+        uri = editor.open("src/Main.pudu", partial)
+        after = partial.splitlines()[7].index("Parse.") + len("Parse.")
+        offered = editor.completions(uri, 7, after)
+        check("completion after a package alias offers its exports", "one" in offered, offered)
+        uri = editor.open("src/Main.pudu", PROGRAM)
+        line = PROGRAM.splitlines()[7]
+        hover = json.dumps(editor.at("hover", uri, 7, line.index("one") + 1))
+        check("hover on a package export shows its signature and doc comment", "one" in hover and "Int" in hover and "One." in hover, hover)
+        found = editor.at("definition", uri, 7, line.index("one") + 1)
+        target = (found[0] if isinstance(found, list) else found or {}).get("uri", "")
+        check("definition opens the export's file under deps/", target.endswith("/deps/%40alice/json-kit/src/JsonKit/Parse.pudu"), found)
+        partial = editor.open("src/Partial.pudu", "module Partial\n\nimport JsonKit.\n")
+        offered = editor.completions(partial, 2, 15)
+        check("completing an import offers the installed packages' modules", "JsonKit.Parse" in offered and "Text.Words" in offered, offered)
+    finally:
+        editor.close()
+    code, out = space.run(work, "init", "late")
+    late = Project(work / "late")
+    editor = Editor(space.pudu, late.root, space.environment)
+    try:
+        text = "module Late\n\nimport JsonKit.Parse as Parse\n\nexport fn two() -> Int { Parse.one() + 1 }\n"
+        uri = editor.open("src/Late.pudu", text)
+        check("an import of a package not installed yet is unreadable in the editor", "E2014" in editor.codes(uri), editor.notes[-3:])
+        code, out = space.run(late.root, "install", "@alice/json-kit@1.0.0")
+        editor.change(uri, text, 2)
+        check("after pudu install the running server reads the package on the next edit", code == 0 and editor.codes(uri) == [], editor.notes[-3:])
+        after = text.splitlines()[4].index("Parse.") + len("Parse.")
+        offered = editor.completions(uri, 4, after)
+        check("and completes from it without a restart", "one" in offered, offered)
+    finally:
+        editor.close()
+
+
 def workflow(app, run):
     shutil.rmtree(app.root / "deps")
     lock = app.lock()
+    code, out = run("check", "src/Main.pudu")
+    check("without deps/ check names the lock entry and says to install", code != 0 and "E7202" in out and "run pudu install" in out, out)
     code, out = run("install")
     check("a clone without deps/ is restored from the lock", code == 0 and app.installed("@alice/json-kit") and app.installed("@bob/text") and app.lock() == lock, out)
     code, out = run("install", "--locked")
@@ -225,6 +373,8 @@ def removal(app, run):
     check("uninstall removes several dependencies at once", code == 0 and app.requirement("@bob/text") is None and app.requirement("parser") is None, app.manifest() + out)
     check("their lock entries and files are gone", app.locked("@bob/text") is None and not app.installed("@bob/text") and app.locked("parser") is None, app.lock())
     check("a package still required stays", app.locked("@alice/json-kit") == "1.1.0" and app.installed("@alice/json-kit"))
+    code, out = run("check", "src/Main.pudu")
+    check("a removed package's import is unreadable again", code != 0 and "E2014" in out and "Text.Words" in out, out)
     before = app.state()
     code, out = run("uninstall", "@bob/text")
     check("uninstalling a name not in pudu.toml is refused", code != 0 and "is not a dependency in pudu.toml" in out and app.state() == before, out)

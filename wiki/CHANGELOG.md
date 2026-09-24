@@ -12,6 +12,10 @@ tags: [changelog]
   pre-release, several at once), repeats, moves, restoring a clone, `--locked`, path and git
   sources, transitive dependencies and their conflicts, removal, and refusals that must leave
   `pudu.toml` and `pudu.lock` byte-identical. It runs in CI and in `test/gates.sh`.
+- The same suite uses what was installed: a program importing a package and its dependency checks,
+  runs, builds, and is tested; without `deps/` check says to install; and through `pudu lsp` on the
+  project's files, completion, hover, and definition reach into `deps/`, and a server already running
+  reads a package installed after it started on the next edit.
 
 ## 2026-09-24 — Painted, copyable code and steady avatars (#310)
 

@@ -24,6 +24,8 @@ a directory `geometry`.
 | Other sources | `install ../geometry` writes `geometry = { path = "../geometry" }`; a `git+file://…#v0.4.0` URL writes `parser = { git = …, rev = "v0.4.0" }` and locks it. |
 | Transitive | Installing `@bob/text` locks and installs `@alice/json-kit` too. Asking for `@alice/json-kit@2.0.0` beside it is refused naming both requirements. |
 | Removal | `uninstall` drops the manifest entry, the lock entry, and the files; two names in one command; a name not in `pudu.toml` is refused. |
+| Using what was installed | A program importing the package and its transitive package checks clean, runs, builds into an executable that runs, and a project test importing it passes. Without `deps/`, `pudu check` names the lock entry and says to run `pudu install`. Removing a package makes its import unreadable again (`E2014`). |
+| Editor | Through `pudu lsp` on the project's real files: completing after `Parse.` offers the package's exports, hover shows an export's signature and doc comment, definition opens the file under `deps/`, and completing an import offers the package's modules. With the server already running, an import of a package not yet installed is `E2014`; after `pudu install` the next edit clears it and completion works, with no restart. |
 | Refusals | A bare word, a trailing `@`, an upper-case handle, `--save-dev`, a version never released (listing those that were), a repository that does not exist, a package owning the project's own module root, and a directory with no `pudu.toml` all exit non-zero, say why, and leave both files as they were. Several packages where one is missing install none. |
 
 See [[architecture/PACKAGES]] · [[Package end-to-end suite]].
@@ -33,6 +35,8 @@ See [[architecture/PACKAGES]] · [[Package end-to-end suite]].
 - **Q:** Why a suite beside [[Package end-to-end suite]]? **A:** That suite follows a package's life
   through publishing and the website; this one follows a project through installing. Each stays under
   the file-size limit and can fail on its own.
+- **Q:** Why drive the language server here rather than in the LSP session test? **A:** Only here does a
+  project have installed packages on disk; what an editor offers from `deps/` is part of installing one.
 - **Q:** Why no stand-in API server? **A:** Installing reads only git; leaving the API out proves it.
 - **Q:** Why assert that a refused command leaves the files byte-identical? **A:** A package manager
   that half-applies a failed command leaves a project that no longer matches its lock; the
