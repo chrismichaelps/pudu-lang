@@ -13,7 +13,7 @@ tags: [website, source, moc]
 [[website Service Packages]] · [[website Service PackageSearch]] ·
 [[website Search Index]] · [[website Seo]] · [[website Config]] · [[website Constants]] · [[website Error]]
 
-Visual system: [[website stylesheet]]. Content: [[website documentation pages]]. Package controls: [[Package install controls]] · [[Package list pagination]] · [[Package live search]] · [[Package source navigation]] · [[Package avatar fallback]] · [[Package file icons]].
+Visual system: [[website stylesheet]]. Content: [[website documentation pages]]. Download controls: [[Download platform script]]. Package controls: [[Package install controls]] · [[Package list pagination]] · [[Package live search]] · [[Package source navigation]] · [[Package avatar fallback]] · [[Package file icons]].
 
 Delivery surfaces: [[Vercel output builder]] · [[Linux Pudu renderer builder]] ·
 [[Musl Runtime Workflow]] · [[Musl Runtime Builder]] · [[website regression suite]] · [[website package search suite]] · [[website Markdown suite]] · [[Syntax parity test]] ·

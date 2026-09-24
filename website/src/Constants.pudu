@@ -34,4 +34,5 @@ export const STYLESHEET_PATH: Str = "website/public/site.css"
 export const PLAYGROUND_SCRIPTS_DIRECTORY: Str = "website/public/assets/playground"
 /// Where the documentation pages' script modules are kept.
 export const DOCS_SCRIPTS_DIRECTORY: Str = "website/public/assets/docs"
+export const DOWNLOAD_SCRIPTS_DIRECTORY: Str = "website/public/assets/download"
 export const PACKAGES_SCRIPTS_DIRECTORY: Str = "website/public/assets/packages"
