@@ -13,3 +13,15 @@ export const END_SLACK_PX = 2;
 
 // What a link to the section being read says it is.
 export const CURRENT = "location";
+
+// A code block's copy button, shipped hidden until this script can copy.
+export const CODE_COPY = ".code-copy";
+
+// The block a copy button belongs to, and the code it copies.
+export const CODE_FIGURE = ".code-figure";
+export const CODE_TEXT = "pre code";
+
+// What the button says after copying, or when the clipboard refused, and for how long.
+export const COPIED_LABEL = "Copied";
+export const COPY_FAILED_LABEL = "Select the text to copy";
+export const COPIED_MILLIS = 1800;

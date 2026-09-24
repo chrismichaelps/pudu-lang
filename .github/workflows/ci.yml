@@ -84,6 +84,8 @@ jobs:
           "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu
       - name: Verify package discovery lists every topic result past the search cap
         run: node --test website/scripts/packages/discover.test.mjs
+      - name: Verify the playground paints Pudu as the documentation does
+        run: node --test website/scripts/syntax-parity.test.mjs
       - name: Verify packages install and publish through git and a stand-in GitHub
         run: python3 test/package-registry.py --pudu "$PUDU"
       # The sandbox fails closed: asked to isolate a program on a host where it

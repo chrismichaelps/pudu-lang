@@ -38,6 +38,13 @@ rows; tickets and contributions are ledgers with state dots, and a detail reads 
 tab is a light file column beside a file with a monospace header bar, a plain line-number gutter,
 and a ruled declarations outline; the pane fades only while a slow file request is outstanding.
 
+**Code blocks.** Painted Pudu and shell share the playground's `tok-*` colours. A block's copy
+button sits in its top-left corner, across from the language label, and stays hidden until the
+script enables it.
+
+**Avatars.** While an owner's image is present, its avatar is a neutral square rather than the
+two-tone mark, so the mark appears only when there is no image or it failed.
+
 **Package pages at any width.** Below 900px the overview's two columns stack and stretch to the
 page, so a README's table, code block, or long word scrolls or wraps inside its own box instead of
 widening the page. README images never exceed their column, `md-align-left|center|right` align what

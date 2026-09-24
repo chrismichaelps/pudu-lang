@@ -28,6 +28,8 @@ name describes the toggle in either state.
 Beneath the image sits a mark drawn from the logo: a square split into one of its four two-tone letter
 pairs with a round counter. `tone` chooses the pair from the handle, so an owner keeps one colour on
 every page and in suggestions. A failed image is removed by the avatar script to expose the mark.
+`avatar` loads lazily, for rows; `bannerAvatar` loads eagerly with high priority, for the project
+banner and a profile header, which are on screen as the page opens.
 
 **Search box.** `searchBox` is the one package search form: a drawn magnifier, the field, a `/` key
 hint, a `?` disclosure listing the query forms and keys, and a submit button. With a filter it

@@ -46,7 +46,8 @@ export fn page(siteUrl: Str, docs: &Docs.Docs, slug: Str, version: Str) -> Optio
     H.p().class("docs-crumb").holding([H.a().href(INDEX_PATH).says("Documentation")]),
     Layout.banner("page-banner", "Guide", found.title, "", [metadata(version, Some(found.file))])
   ]
-  let article = H.article().class("docs-article").holding(opening.concat(read.blocks).concat([pager(Docs.neighbours(docs, slug))]))
+  let copy = H.script().kind("module").src(COPY_SCRIPT_PATH + "?v=" + COPY_SCRIPT_VERSION)
+  let article = H.article().class("docs-article").holding(opening.concat(read.blocks).concat([pager(Docs.neighbours(docs, slug)), copy]))
   let layout = H.div().class("docs-layout").holding([sidebar(docs, slug), article, contents(&read.headings)])
   Some(Layout.page(siteUrl, found.title + " · Pudu documentation", description, pathOf(slug), true, None, layout.html()))
 }
@@ -102,6 +103,10 @@ fn pageLinks(docs: &Docs.Docs, current: Str) -> Array[H.Node] {
 /// version it is addressed with so a deployment that changes it is fetched anew.
 const CONTENTS_SCRIPT_PATH: Str = "/assets/docs/contents.js"
 const CONTENTS_SCRIPT_VERSION: Str = "2"
+
+/// The script that reveals each code block's copy button, and its version.
+const COPY_SCRIPT_PATH: Str = "/assets/docs/copy.js"
+const COPY_SCRIPT_VERSION: Str = "1"
 
 /// The sections of the page being read.
 fn contents(headings: &Array[Markdown.Heading]) -> H.Node {

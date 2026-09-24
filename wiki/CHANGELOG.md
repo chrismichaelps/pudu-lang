@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Painted, copyable code and steady avatars (#310)
+
+- Documentation and package Markdown paint `pudu` blocks on the server with the playground's `tok-*`
+  colours, pinned to the playground's painter by a shared fixture ([[website View Syntax]],
+  [[Syntax parity test]]), and paint shell blocks. Every code block has a copy button, shown by
+  `/assets/docs/copy.js` and hidden without script.
+- A package banner or profile avatar loads eagerly with high priority, `/packages/avatars/` is cached
+  for a day, and the two-tone mark shows only when there is no image, so the mark no longer flashes
+  before the image ([[Package avatar fallback]]).
+
 ## 2026-09-24 — Package pages fit any phone and render README HTML (#308)
 
 - Below 900px a package overview stretches its columns to the page instead of sizing them to their

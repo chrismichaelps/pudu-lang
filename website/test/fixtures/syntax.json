@@ -1,0 +1,50 @@
+[
+  {
+    "input": "module Main\n\nimport Std.Io as Io\n\n/// Doubles a number.\nfn double(value: Int) -> Int { value * 2 }\n",
+    "html": "<span class=\"tok-keyword\">module</span> <span class=\"tok-type\">Main</span>\n\n<span class=\"tok-keyword\">import</span> <span class=\"tok-type\">Std</span><span class=\"tok-operator\">.</span><span class=\"tok-type\">Io</span> <span class=\"tok-keyword\">as</span> <span class=\"tok-type\">Io</span>\n\n<span class=\"tok-doc\">/// Doubles a number.</span>\n<span class=\"tok-keyword\">fn</span> <span class=\"tok-function\">double</span>(value<span class=\"tok-operator\">:</span> <span class=\"tok-type\">Int</span>) <span class=\"tok-operator\">-&gt;</span> <span class=\"tok-type\">Int</span> { value <span class=\"tok-operator\">*</span> <span class=\"tok-number\">2</span> }\n"
+  },
+  {
+    "input": "// a comment\n//// not doc\n/* outer /* inner */ still */ let x = 1",
+    "html": "<span class=\"tok-comment\">// a comment</span>\n<span class=\"tok-comment\">//// not doc</span>\n<span class=\"tok-comment\">/* outer /* inner */ still */</span> <span class=\"tok-keyword\">let</span> x <span class=\"tok-operator\">=</span> <span class=\"tok-number\">1</span>"
+  },
+  {
+    "input": "let greeting = \"Hello, {name}!\\n\" + \"tab\\t and \\u{1F600} end\"",
+    "html": "<span class=\"tok-keyword\">let</span> greeting <span class=\"tok-operator\">=</span> <span class=\"tok-string\">&quot;Hello, </span><span class=\"tok-interpolation\">{name}</span><span class=\"tok-string\">!</span><span class=\"tok-escape\">\\n</span><span class=\"tok-string\">&quot;</span> <span class=\"tok-operator\">+</span> <span class=\"tok-string\">&quot;tab</span><span class=\"tok-escape\">\\t</span><span class=\"tok-string\"> and </span><span class=\"tok-escape\">\\u{1F600}</span><span class=\"tok-string\"> end&quot;</span>"
+  },
+  {
+    "input": "let unterminated = \"runs to the line end\nlet next = 0",
+    "html": "<span class=\"tok-keyword\">let</span> unterminated <span class=\"tok-operator\">=</span> <span class=\"tok-string\">&quot;runs to the line end</span>\n<span class=\"tok-keyword\">let</span> next <span class=\"tok-operator\">=</span> <span class=\"tok-number\">0</span>"
+  },
+  {
+    "input": "let n = 0x1F_A0 + 0b1010 + 0o17 + 1_000 + 3.14 + 2.5e-3 + 7u8 + 9i128 + 1.0f64 + 4d",
+    "html": "<span class=\"tok-keyword\">let</span> n <span class=\"tok-operator\">=</span> <span class=\"tok-number\">0x1F_A0</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">0b1010</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">0o17</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">1_000</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">3.14</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">2.5e-3</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">7u8</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">9i128</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">1.0f64</span> <span class=\"tok-operator\">+</span> <span class=\"tok-number\">4d</span>"
+  },
+  {
+    "input": "const MAX_SIZE: Int = 10\nlet a = MAX_SIZE >= 3 && flag != false || null == x",
+    "html": "<span class=\"tok-keyword\">const</span> <span class=\"tok-constant\">MAX_SIZE</span><span class=\"tok-operator\">:</span> <span class=\"tok-type\">Int</span> <span class=\"tok-operator\">=</span> <span class=\"tok-number\">10</span>\n<span class=\"tok-keyword\">let</span> a <span class=\"tok-operator\">=</span> <span class=\"tok-constant\">MAX_SIZE</span> <span class=\"tok-operator\">&gt;=</span> <span class=\"tok-number\">3</span> <span class=\"tok-operator\">&amp;&amp;</span> flag <span class=\"tok-operator\">!=</span> <span class=\"tok-literal\">false</span> <span class=\"tok-operator\">||</span> <span class=\"tok-literal\">null</span> <span class=\"tok-operator\">==</span> x"
+  },
+  {
+    "input": "match value {\n  case Some(held) => held..=9\n  case None => @outer\n}",
+    "html": "<span class=\"tok-keyword\">match</span> value {\n  <span class=\"tok-keyword\">case</span> <span class=\"tok-type\">Some</span>(held) <span class=\"tok-operator\">=&gt;</span> held<span class=\"tok-operator\">..=</span><span class=\"tok-number\">9</span>\n  <span class=\"tok-keyword\">case</span> <span class=\"tok-type\">None</span> <span class=\"tok-operator\">=&gt;</span> <span class=\"tok-label\">@outer</span>\n}"
+  },
+  {
+    "input": "let c = 'a' + '\\n' + 'x",
+    "html": "<span class=\"tok-keyword\">let</span> c <span class=\"tok-operator\">=</span> <span class=\"tok-string\">'a'</span> <span class=\"tok-operator\">+</span> <span class=\"tok-string\">'\\n'</span> <span class=\"tok-operator\">+</span> 'x"
+  },
+  {
+    "input": "if x <= y { return -> z } else { a.b?.c ^ d % e }",
+    "html": "<span class=\"tok-keyword\">if</span> x <span class=\"tok-operator\">&lt;=</span> y { <span class=\"tok-keyword\">return</span> <span class=\"tok-operator\">-&gt;</span> z } <span class=\"tok-keyword\">else</span> { a<span class=\"tok-operator\">.</span>b<span class=\"tok-operator\">?</span><span class=\"tok-operator\">.</span>c <span class=\"tok-operator\">^</span> d <span class=\"tok-operator\">%</span> e }"
+  },
+  {
+    "input": "trait Shape { fn area(self: &Self) -> Float64 }\nimpl Shape for Circle { fn area(self: &Self) -> Float64 = PI * r }",
+    "html": "<span class=\"tok-keyword\">trait</span> <span class=\"tok-type\">Shape</span> { <span class=\"tok-keyword\">fn</span> <span class=\"tok-function\">area</span>(self<span class=\"tok-operator\">:</span> <span class=\"tok-operator\">&amp;</span><span class=\"tok-type\">Self</span>) <span class=\"tok-operator\">-&gt;</span> <span class=\"tok-type\">Float64</span> }\n<span class=\"tok-keyword\">impl</span> <span class=\"tok-type\">Shape</span> <span class=\"tok-keyword\">for</span> <span class=\"tok-type\">Circle</span> { <span class=\"tok-keyword\">fn</span> <span class=\"tok-function\">area</span>(self<span class=\"tok-operator\">:</span> <span class=\"tok-operator\">&amp;</span><span class=\"tok-type\">Self</span>) <span class=\"tok-operator\">-&gt;</span> <span class=\"tok-type\">Float64</span> <span class=\"tok-operator\">=</span> <span class=\"tok-constant\">PI</span> <span class=\"tok-operator\">*</span> r }"
+  },
+  {
+    "input": "let s = \"brace {open\nnext }\"",
+    "html": "<span class=\"tok-keyword\">let</span> s <span class=\"tok-operator\">=</span> <span class=\"tok-string\">&quot;brace </span><span class=\"tok-interpolation\">{</span><span class=\"tok-string\">open</span>\nnext }<span class=\"tok-string\">&quot;</span>"
+  },
+  {
+    "input": "export fn main() -> Int {\n  let _written = Io.writeLine(\"<b>&\\\"</b>\")\n  0\n}",
+    "html": "<span class=\"tok-keyword\">export</span> <span class=\"tok-keyword\">fn</span> <span class=\"tok-function\">main</span>() <span class=\"tok-operator\">-&gt;</span> <span class=\"tok-type\">Int</span> {\n  <span class=\"tok-keyword\">let</span> _written <span class=\"tok-operator\">=</span> <span class=\"tok-type\">Io</span><span class=\"tok-operator\">.</span><span class=\"tok-function\">writeLine</span>(<span class=\"tok-string\">&quot;&lt;b&gt;&amp;</span><span class=\"tok-escape\">\\&quot;</span><span class=\"tok-string\">&lt;/b&gt;&quot;</span>)\n  <span class=\"tok-number\">0</span>\n}"
+  }
+]
