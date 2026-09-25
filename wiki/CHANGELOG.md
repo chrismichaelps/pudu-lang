@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Live packages: true release dates, removals, and conditional revalidation (#369)
+
+- [[website Service LiveRelease]]: a live release is dated by its GitHub release's publication, or by
+  its tagged commit, instead of the repository's last push; manifests are read at the tag's commit.
+- [[website Service LiveIndex]]: the topic search is read page by page and proven complete from
+  GitHub's own counts; only a complete search hides a snapshot package that left the topic.
+- [[website Service LiveSource]] revalidates with `If-None-Match`; an unchanged `304` renews what is
+  remembered and does not count against GitHub's rate limit.
+- A snapshot release's source and API catalogue are served by the function. [[website live pages suite]]
+  (14) and [[website live packages suite]] (20) run against [[website live stand]]; CI runs both.
+
 ## 2026-09-25 — 0.1.2 pre-release preparation
 
 - Version 0.1.2 in the package and test manifests, the README, the About page, the catalogue, and

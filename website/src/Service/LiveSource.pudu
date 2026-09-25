@@ -5,46 +5,73 @@ import Std.Bytes as ByteSeq
 import Std.Env as Env
 import Std.Http.Client as Client
 import Std.Http as Http
+import Std.Option as Option
 import Std.Sync as Sync
 import Std.Time as Time
 
-/// What one GitHub address answered. `Absent` is a definite 404, which is
-/// remembered like an answer; `Unavailable` is anything that says nothing
-/// about the repository (a refusal, a rate limit, a timeout, a server error).
+/// What one GitHub address says. `Absent` is a definite 404 and is remembered
+/// like an answer; `Unavailable` says nothing about the repository (a refusal,
+/// a rate limit, a timeout, a server error) and never replaces what is known.
 export type Answer
-  = Found(Str)
+  = Found(Bytes)
   | Absent
   | Unavailable
 
-/// Where answers come from and what time it is, in seconds. Both are values so
-/// a test serves a stand-in GitHub and moves its own clock.
-export type Origin = { fetch: fn(Str) -> Answer, clock: fn() -> Int }
+/// What the origin replied to one request. `Unchanged` is a 304 to a request
+/// that named the remembered entity tag; GitHub does not count it against the
+/// rate limit, which is what makes frequent revalidation affordable.
+export type Reply
+  = Fetched(Bytes, Str)
+  | Unchanged
+  | Missing
+  | Failed
+
+/// Where replies come from and what time it is, in seconds. `fetch` is given
+/// the address and the entity tag to revalidate (empty when there is none).
+/// Both are values so a test serves a stand-in GitHub and moves its own clock.
+export type Origin = { fetch: fn(Str, Str) -> Reply, clock: fn() -> Int }
 
 /// How long an answer is served without asking again, then how long it is
 /// still served when asking again fails.
 export type Freshness = { fresh: Int, stale: Int }
 
 /// Answers remembered per address for the life of one function instance.
-/// `quietUntil` is shared by every address: after one failure GitHub is not
-/// asked again for `QUIET_SECONDS`, so a rate limit or an outage costs one slow
-/// request per window rather than one per page view.
+/// `quietUntil` is shared by every store over the same origin: after one
+/// failure GitHub is not asked again for `QUIET_SECONDS`, so a rate limit or an
+/// outage costs one slow request per window rather than one per page view.
 export type Source = { origin: Origin, cache: IsrCache.IsrCache, quietUntil: Sync.Cell[Int] }
 
-const CAPACITY: Int = 512
+const CAPACITY: Int = 1024
 const QUIET_SECONDS: Int = 60
 const ABSENT: Str = "absent"
-const FOUND: Str = "found"
+const FOUND: Str = "found:"
 const DEADLINE_MILLIS: Int = 4000
-const BODY_BYTES: Int = 2097152
+const BODY_BYTES: Int = 4194304
 const API_ORIGIN: Str = "https://api.github.com/"
+
+/// The listing is asked about most; release metadata changes less often.
+export fn listing() -> Freshness { Freshness{fresh: 120, stale: 86400} }
+
+export fn changing() -> Freshness { Freshness{fresh: 300, stale: 86400} }
+
+export fn conversation() -> Freshness { Freshness{fresh: 60, stale: 86400} }
+
+/// Content addressed by a commit never changes; it is kept until evicted.
+export fn immutable() -> Freshness { Freshness{fresh: 604800, stale: 2592000} }
 
 export fn over(origin: Origin) -> Source {
   Source{origin: origin, cache: IsrCache.create(CAPACITY), quietUntil: Sync.cell(0)}
 }
 
+/// A second store over the same origin and quiet window, so large file bodies
+/// evict one another rather than the index.
+export fn beside(source: &Source, capacity: Int) -> Source {
+  Source{origin: source.origin, cache: IsrCache.create(capacity), quietUntil: source.quietUntil}
+}
+
 /// A source that never answers: the snapshot alone.
 export fn offline() -> Source {
-  over(Origin{fetch: fn(_target: Str) -> Answer { Unavailable }, clock: fn() -> Int { 0 }})
+  over(Origin{fetch: fn(_target: Str, _tag: Str) -> Reply { Failed }, clock: fn() -> Int { 0 }})
 }
 
 export fn now(source: &Source) -> Int {
@@ -52,76 +79,88 @@ export fn now(source: &Source) -> Int {
   clock()
 }
 
-/// The answer for an address, from memory while it is fresh, from GitHub once
-/// it is not, and from memory again while it is stale and GitHub fails.
+/// The answer for an address: from memory while fresh; once stale, asked again
+/// with the remembered entity tag; from memory again while GitHub fails.
 export fn read(source: &Source, target: Str, freshness: &Freshness) -> Answer {
   let moment = now(source)
   let remembered = IsrCache.get(&source.cache, target, moment)
-  match remembered {
-    case IsrCache.Fresh(content, kind) => { return decoded(&content, kind) }
-    case _ => ()
+  let (content, mark) = match remembered {
+    case IsrCache.Fresh(held, stamp) => { return decoded(&held, stamp) }
+    case IsrCache.Stale(held, stamp) => (held, stamp)
+    case IsrCache.Miss => (ByteSeq.fromText(""), "")
   }
   let quiet = match Sync.get(&source.quietUntil) {
     case Ok(until) => until
     case Err(_) => 0
   }
-  let asked = if moment < quiet { Unavailable } else {
+  let replied = if moment < quiet { Failed } else {
     let fetch = source.origin.fetch
-    fetch(target)
+    fetch(target, if mark.startsWith(FOUND) { mark.drop(FOUND.length()) } else { "" })
   }
-  match asked {
-    case Found(body) => {
-      IsrCache.put(&source.cache, target, &ByteSeq.fromText(body), FOUND, &[], freshness.fresh, freshness.stale, moment)
+  match replied {
+    case Fetched(body, tag) => {
+      IsrCache.put(&source.cache, target, &body, FOUND + tag, &[], freshness.fresh, freshness.stale, moment)
       Found(body)
     }
-    case Absent => {
+    case Unchanged => {
+      if mark.isEmpty() { return Unavailable }
+      IsrCache.put(&source.cache, target, &content, mark, &[], freshness.fresh, freshness.stale, moment)
+      decoded(&content, mark)
+    }
+    case Missing => {
       IsrCache.put(&source.cache, target, &ByteSeq.fromText(""), ABSENT, &[], freshness.fresh, freshness.stale, moment)
       Absent
     }
-    case Unavailable => {
+    case Failed => {
       if moment >= quiet { let _quiet = Sync.set(&source.quietUntil, moment + QUIET_SECONDS) }
-      match remembered {
-        case IsrCache.Stale(content, kind) => decoded(&content, kind)
-        case _ => Unavailable
-      }
+      if mark.isEmpty() { Unavailable } else { decoded(&content, mark) }
     }
   }
 }
 
-fn decoded(content: &Bytes, kind: Str) -> Answer {
-  if kind == ABSENT { return Absent }
-  match ByteSeq.toText(content) {
-    case Ok(body) => Found(body)
-    case Err(_) => Unavailable
+/// The text at an address, when it answered with text.
+export fn text(source: &Source, target: Str, freshness: &Freshness) -> Option[Str] {
+  match read(source, target, freshness) {
+    case Found(body) => match ByteSeq.toText(&body) {
+      case Ok(held) => Some(held)
+      case Err(_) => None
+    }
+    case _ => None
   }
 }
 
+fn decoded(content: &Bytes, mark: Str) -> Answer {
+  if mark == ABSENT { Absent } else { Found(*content) }
+}
+
 /// GitHub over HTTPS. The token, when the platform provides one, is sent only
-/// to the API origin: raw file reads are public and not rate limited by it.
+/// to the API origin: raw file reads are public and do not spend its limit.
 export fn github(token: Str) -> Origin {
   Origin {
-    fetch: fn(target: Str) -> Answer { ask(target, token) },
+    fetch: fn(target: Str, tag: Str) -> Reply { ask(target, tag, token) },
     clock: fn() -> Int { Time.toSeconds(&Time.currentInstant()) }
   }
 }
 
 export fn fromEnvironment() -> Source { over(github(Env.variableOr("GITHUB_TOKEN", ""))) }
 
-fn ask(target: Str, token: Str) -> Answer {
+fn ask(target: Str, tag: Str, token: Str) -> Reply {
   let bounds = Client.limits().within(DEADLINE_MILLIS).reading(BODY_BYTES).following(2)
   var headers: Array[(Str, Str)] = [("accept", "application/vnd.github+json"), ("user-agent", "pudu-website"), ("x-github-api-version", "2022-11-28")]
   if !token.isEmpty() && target.startsWith(API_ORIGIN) { headers = headers.push(("authorization", "Bearer " + token)) }
+  if !tag.isEmpty() { headers = headers.push(("if-none-match", tag)) }
   let request = Http.Request{method: Http.Get, target: target, headers: headers, body: "", binaryBody: None}
   match Client.send(&request, &bounds) {
-    case Ok(answer) => classify(answer.status.code, answer.body)
-    case Err(_) => Unavailable
+    case Ok(answer) => classify(answer.status.code, &Option.unwrapOr(answer.binaryBody, ByteSeq.fromText(answer.body)), Option.unwrapOr(Http.header(&answer.headers, "etag"), ""))
+    case Err(_) => Failed
   }
 }
 
-/// Only 200 and 404 say something about the repository; every other status is
-/// GitHub being unable to say, and must not replace a remembered answer.
-export fn classify(code: Int, body: Str) -> Answer {
-  if code == 200 { return Found(body) }
-  if code == 404 { return Absent }
-  Unavailable
+/// Only 200, 304, and 404 say something about the repository; every other
+/// status is GitHub being unable to say, and must not replace a remembered answer.
+export fn classify(code: Int, body: &Bytes, tag: Str) -> Reply {
+  if code == 200 { return Fetched(*body, tag) }
+  if code == 304 { return Unchanged }
+  if code == 404 { return Missing }
+  Failed
 }

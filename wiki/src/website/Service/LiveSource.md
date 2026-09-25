@@ -32,3 +32,10 @@ See [[website Service LivePackages]] · [[website Web Dynamic]] · [[src/website
 
 Resolved Grill Log: only `200` and `404` speak for a repository; every other outcome falls back to
 the remembered answer or the snapshot, and the credential never leaves the API origin.
+
+Revalidation is conditional (#369): the entity tag remembered with an answer is sent as
+`If-None-Match`, and a `304` renews the remembered answer without a body. GitHub does not count a
+`304` against the rate limit, which is what makes frequent revalidation affordable.
+
+Resolved Grill Log: 200, 304, and 404 speak for a repository; every other status is GitHub being
+unable to say and never replaces a remembered answer.

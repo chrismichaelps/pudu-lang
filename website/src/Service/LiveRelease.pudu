@@ -1,0 +1,110 @@
+module Service.LiveRelease
+
+import Std.Json as Json
+import Std.List as List
+import Std.Option as Option
+import Std.Result as Result
+import Std.Semver as Semver
+import Std.Toml.Read as TomlRead
+import Std.Toml as Toml
+import Service.LiveIndex as Index
+import Service.LiveJson as J
+import Service.LiveSource as Source
+import Service.Packages as Packages
+
+export const API: Str = "https://api.github.com/repos/"
+export const RAW: Str = "https://raw.githubusercontent.com/"
+
+/// Tags read per repository, newest first. Each costs a manifest read (raw,
+/// immutable, not rate limited) and, without a GitHub release, a commit read.
+const MAX_RELEASES: Int = 10
+
+/// What the newest release's manifest says about the package.
+export type Manifest = { description: Str, keywords: Array[Str], license: Str, root: Str }
+
+/// Releases newest first, and the newest one's manifest.
+export type Releases = { releases: Array[Packages.Release], manifest: Manifest }
+
+type Tag = { version: Semver.Version, text: Str, name: Str, commit: Str }
+
+type Published = { tag: Str, at: Str, author: Str, notes: Str }
+
+/// The repository's releases the build would admit, newer than `after` when
+/// given: each is a version tag whose `pudu.toml`, read at the tag's commit,
+/// names this package and that version. Its date is the GitHub release's
+/// publication when there is one, and the tagged commit's date otherwise.
+/// `None` when GitHub cannot list the tags.
+export fn read(source: &Source.Source, repository: &Index.Repository, after: Option[Str]) -> Option[Releases] {
+  let listed = J.decoded(Source.text(source, API + repository.path + "/tags?per_page=100", &Source.changing())) ?
+  let floor = Option.andThen(after, |text: Str| Result.ok(Semver.parse(text)))
+  var tags: Array[Tag] = []
+  for item in J.items(&listed) {
+    let name = J.text(&item, "name")
+    let text = if name.startsWith("v") { name.drop(1) } else { name }
+    if let Ok(version) = Semver.parse(text) {
+      let newer = match floor {
+        case Some(held) => Semver.after(&version, &held)
+        case None => true
+      }
+      if newer { tags = tags.push(Tag{version: version, text: text, name: name, commit: J.at(&item, &["commit", "sha"])}) }
+    }
+  }
+  let ordered = List.sortBy(&tags, fn(left: Tag, right: Tag) -> Bool { Semver.after(&left.version, &right.version) })
+  let newest = ordered.slice(0, if ordered.length() < MAX_RELEASES { ordered.length() } else { MAX_RELEASES })
+  let name = repository.handle + "/" + repository.project
+  let manifests = newest.map(|tag: Tag| manifestAt(source, repository, &tag, name))
+  let published = publications(source, repository)
+  var releases: Array[Packages.Release] = []
+  var manifest: Option[Manifest] = None
+  var index = 0
+  while index < newest.length() {
+    if let Some(held) = manifests[index] {
+      let tag = newest[index]
+      let found = published.filter(|entry: Published| entry.tag == tag.name)
+      let (at, author, notes) = if found.isEmpty() { (commitDate(source, repository, tag.commit), "", "") } else { (found[0].at, found[0].author, found[0].notes) }
+      releases = releases.push(Packages.Release{version: tag.text, publishedAt: at, publisher: author, checksum: "", size: 0, dependencies: held[1], modules: [], notes: notes, yanked: false, tag: tag.name, commit: tag.commit})
+      if manifest == None { manifest = Some(held[0]) }
+    }
+    index = index + 1
+  }
+  Some(Releases{releases: releases, manifest: Option.unwrapOr(manifest, Manifest{description: "", keywords: [], license: "", root: ""})})
+}
+
+/// The manifest at a tag's commit, when it names this package and the tag's version.
+fn manifestAt(source: &Source.Source, repository: &Index.Repository, tag: &Tag, name: Str) -> Option[(Manifest, Array[(Str, Str)])] {
+  let body = Source.text(source, RAW + repository.path + "/" + tag.commit + "/pudu.toml", &Source.immutable()) ?
+  let document = Result.ok(TomlRead.read(body)) ?
+  if tomlText(&document, "package.name") != name || tomlText(&document, "package.version") != tag.text { return None }
+  var dependencies: Array[(Str, Str)] = []
+  for entry in Option.unwrapOr(Option.andThen(Toml.field(&document, "dependencies"), |held: Toml.Toml| Toml.asTable(&held)), []) {
+    if let Some(requirement) = Toml.asText(&entry[1]) { dependencies = dependencies.push((entry[0], requirement)) }
+  }
+  var keywords: Array[Str] = []
+  for word in Option.unwrapOr(Option.andThen(Toml.path(&document, "package.keywords"), |held: Toml.Toml| Toml.asList(&held)), []) {
+    if let Some(held) = Toml.asText(&word) { keywords = keywords.push(held) }
+  }
+  Some((Manifest{description: tomlText(&document, "package.description"), keywords: keywords, license: tomlText(&document, "package.license"), root: tomlText(&document, "package.root")}, dependencies))
+}
+
+/// The repository's GitHub releases: publication date, author, and notes by tag.
+fn publications(source: &Source.Source, repository: &Index.Repository) -> Array[Published] {
+  let Some(listed) = J.decoded(Source.text(source, API + repository.path + "/releases?per_page=100", &Source.changing())) else { return [] }
+  var found: Array[Published] = []
+  for item in J.items(&listed) {
+    if !J.flag(&item, "draft") {
+      found = found.push(Published{tag: J.text(&item, "tag_name"), at: J.text(&item, "published_at"), author: J.at(&item, &["author", "login"]).toLower(), notes: J.text(&item, "body")})
+    }
+  }
+  found
+}
+
+fn commitDate(source: &Source.Source, repository: &Index.Repository, commit: Str) -> Str {
+  match J.decoded(Source.text(source, API + repository.path + "/commits/" + commit, &Source.immutable())) {
+    case Some(document) => J.at(&document, &["commit", "committer", "date"])
+    case None => ""
+  }
+}
+
+fn tomlText(value: &Toml.Toml, dotted: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Toml.path(value, dotted), |held: Toml.Toml| Toml.asText(&held)), "")
+}

@@ -38,3 +38,7 @@ See [[website Service LiveSource]] · [[website Web Dynamic]] · [[architecture/
 
 Resolved Grill Log: live data only adds to or refreshes the snapshot; it never removes a snapshot
 project, and a failure anywhere yields exactly the snapshot.
+
+Since #369 the index is built from [[website Service LiveIndex]] and [[website Service LiveRelease]]:
+releases carry their GitHub release's publication date, or their tagged commit's, and a complete
+search hides a snapshot package it no longer lists, while a search cut short hides nothing.

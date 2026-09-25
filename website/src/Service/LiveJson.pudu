@@ -1,0 +1,38 @@
+module Service.LiveJson
+
+import Std.Json as Json
+import Std.Option as Option
+
+/// Readers for GitHub's documents that treat a missing or mistyped field as
+/// empty: GitHub adds and omits fields freely, and a page must not fail on one.
+export fn text(value: &Json.Json, key: Str) -> Str {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
+}
+
+export fn whole(value: &Json.Json, key: Str) -> Int {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asInt(&held)), 0)
+}
+
+export fn flag(value: &Json.Json, key: Str) -> Bool {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asBool(&held)), false)
+}
+
+export fn list(value: &Json.Json, key: Str) -> Array[Json.Json] {
+  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asList(&held)), [])
+}
+
+/// The text at a path of fields, such as `commit.committer.date`.
+export fn at(value: &Json.Json, path: &Array[Str]) -> Str {
+  Option.unwrapOr(Option.andThen(Json.path(value, path), |held: Json.Json| Json.asText(&held)), "")
+}
+
+/// A document's items when it is a list, or none.
+export fn items(value: &Json.Json) -> Array[Json.Json] { Option.unwrapOr(Json.asList(value), []) }
+
+export fn decoded(source: Option[Str]) -> Option[Json.Json] {
+  let body = source ?
+  match Json.decode(body) {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+}

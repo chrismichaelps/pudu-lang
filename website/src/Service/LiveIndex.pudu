@@ -1,0 +1,111 @@
+module Service.LiveIndex
+
+import Std.Json as Json
+import Std.Option as Option
+import Service.LiveJson as J
+import Service.LiveSource as Source
+import Service.Packages as Packages
+
+/// The repositories under the package topic, most recently updated first. A
+/// newly published package is the most recent update, so it is on the first page.
+export const SEARCH_URL: Str = "https://api.github.com/search/repositories?q=topic%3Apudu-package&sort=updated&order=desc&per_page=100"
+
+/// GitHub's search answers at most ten pages of a hundred. Past that the
+/// listing is incomplete and nothing may be concluded from an absence.
+const PAGES: Int = 10
+const PAGE_SIZE: Int = 100
+
+/// What one search result says about a repository.
+export type Repository = {
+  handle: Str,
+  project: Str,
+  path: Str,
+  description: Str,
+  url: Str,
+  stars: Int,
+  forks: Int,
+  openIssues: Int,
+  pushedAt: Str,
+  license: Str,
+  topics: Array[Str],
+  owner: Packages.Profile
+}
+
+/// The topic's repositories, and whether they are all of them. Complete means
+/// GitHub marked no page incomplete and the distinct repositories read reach
+/// the total it stated, so a repository missing from it has left the topic
+/// (or was archived, made private, or deleted) rather than been skipped by a
+/// page that moved while it was read. `None` when the first page is unknown.
+export type Listing = { repositories: Array[Repository], complete: Bool }
+
+export fn pageUrl(page: Int) -> Str { if page == 1 { SEARCH_URL } else { SEARCH_URL + "&page=" + show(page) } }
+
+export fn search(source: &Source.Source) -> Option[Listing] {
+  let first = J.decoded(Source.text(source, SEARCH_URL, &Source.listing())) ?
+  let total = J.whole(&first, "total_count")
+  var complete = !J.flag(&first, "incomplete_results")
+  var items = J.list(&first, "items")
+  var page = 1
+  var last = items.length()
+  while last == PAGE_SIZE && page < PAGES && items.length() < total {
+    page = page + 1
+    match J.decoded(Source.text(source, pageUrl(page), &Source.listing())) {
+      case Some(document) => {
+        let more = J.list(&document, "items")
+        if J.flag(&document, "incomplete_results") { complete = false }
+        items = items.concat(more)
+        last = more.length()
+      }
+      case None => {
+        complete = false
+        last = 0
+      }
+    }
+  }
+  var seen: Set[Str] = setOf([])
+  var repositories: Array[Repository] = []
+  for item in items {
+    let name = J.text(&item, "full_name").toLower()
+    if !seen.contains(name) {
+      seen = seen.insert(name)
+      if let Some(held) = repositoryOf(&item) { repositories = repositories.push(held) }
+    }
+  }
+  Some(Listing{repositories: repositories, complete: complete && seen.size() >= total})
+}
+
+fn repositoryOf(item: &Json.Json) -> Option[Repository] {
+  if J.flag(item, "private") || J.flag(item, "archived") { return None }
+  let owner = Json.field(item, "owner") ?
+  let login = J.text(&owner, "login").toLower()
+  let repo = J.text(item, "name").toLower()
+  if !slug(login) || !slug(repo) { return None }
+  var topics: Array[Str] = []
+  for topic in J.list(item, "topics") {
+    if let Some(word) = Json.asText(&topic) { topics = topics.push(word) }
+  }
+  let kind = J.text(&owner, "type").toLower()
+  Some(Repository {
+      handle: "@" + login,
+      project: repo,
+      path: login + "/" + repo,
+      description: J.text(item, "description"),
+      url: J.text(item, "html_url"),
+      stars: J.whole(item, "stargazers_count"),
+      forks: J.whole(item, "forks_count"),
+      openIssues: J.whole(item, "open_issues_count"),
+      pushedAt: J.text(item, "pushed_at"),
+      license: J.at(item, &["license", "spdx_id"]),
+      topics: topics,
+      owner: Packages.Profile{handle: "@" + login, name: "", avatar: "", avatarUrl: J.text(&owner, "avatar_url"), githubUrl: J.text(&owner, "html_url"), kind: if kind == "organization" { "org" } else { "user" }}
+    })
+}
+
+/// The names the build admits: lower-case words joined by single hyphens.
+export fn slug(word: Str) -> Bool {
+  if word.isEmpty() || word.startsWith("-") || word.endsWith("-") || word.contains("--") { return false }
+  for c in word.chars() {
+    if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') { return false }
+  }
+  true
+}

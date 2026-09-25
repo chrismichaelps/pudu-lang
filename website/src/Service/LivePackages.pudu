@@ -1,27 +1,17 @@
 module Service.LivePackages
 
-import Std.Json as Json
 import Std.List as List
 import Std.Option as Option
-import Std.Semver as Semver
 import Std.Sync as Sync
-import Std.Toml.Read as TomlRead
-import Std.Toml as Toml
+import Service.LiveIndex as Index
+import Service.LiveRelease as Release
 import Service.LiveSource as Source
 import Service.Packages as Packages
 
-/// The repositories GitHub most recently updated under the package topic. A
-/// newly published package is by definition among the most recently updated,
-/// so one page of this search finds it; older packages come from the snapshot.
-export const SEARCH_URL: Str = "https://api.github.com/search/repositories?q=topic%3Apudu-package&sort=updated&order=desc&per_page=100"
-
-const API: Str = "https://api.github.com/repos/"
-const RAW: Str = "https://raw.githubusercontent.com/"
-
-/// Repositories whose releases are read on one rebuild. Each costs one API
-/// request when its tags are not remembered, so this bounds both latency and
-/// rate-limit spend however many packages change at once.
-const PROBES: Int = 8
+/// Repositories whose releases are read on one rebuild, new repositories
+/// first. It bounds latency and rate-limit spend however many packages change
+/// at once; the rest are read by the next rebuild.
+const PROBES: Int = 16
 
 /// How long a merged index is reused before it is rebuilt from remembered answers.
 const MEMO_SECONDS: Int = 30
@@ -39,14 +29,6 @@ export type Live = { source: Source.Source, memo: Sync.Cell[Memo] }
 export fn over(source: Source.Source) -> Live { Live{source: source, memo: Sync.cell(Memo{at: 0, view: None})} }
 
 export fn offline() -> Live { over(Source.offline()) }
-
-fn listing() -> Source.Freshness { Source.Freshness{fresh: 120, stale: 86400} }
-
-fn releases() -> Source.Freshness { Source.Freshness{fresh: 300, stale: 86400} }
-
-/// A file at a tag's commit changes only when the tag is moved, which is rare
-/// and is caught once the remembered answer expires.
-fn pinned() -> Source.Freshness { Source.Freshness{fresh: 3600, stale: 604800} }
 
 /// The packages to show now: the snapshot, with what GitHub says laid over it.
 export fn current(live: &Live, snapshot: &Packages.Packages) -> View {
@@ -74,47 +56,46 @@ export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.P
   }
 }
 
-/// The snapshot with every repository GitHub lists laid over it. A repository
-/// the snapshot has keeps its files, API, and discussions, takes GitHub's
-/// counts, and gains a release newer than the snapshot's; a live release's
-/// date is the repository's last push, the nearest date the search states. A repository the
-/// snapshot lacks enters only with a tag whose `pudu.toml` names it and its
-/// version, which is the rule the build applies.
+/// The snapshot with the topic's repositories laid over it.
+///
+/// A repository the snapshot lacks enters with the releases the build would
+/// admit. One the snapshot has takes GitHub's counts and, when it was pushed
+/// after its latest release, any newer release. When the search was complete,
+/// a snapshot project it no longer lists is hidden: it left the topic, or was
+/// archived, made private, or deleted. When the search failed or was cut
+/// short, nothing is hidden, and without a first page the snapshot is served.
 export fn merged(source: &Source.Source, snapshot: &Packages.Packages) -> View {
-  let fallback = View{packages: *snapshot, live: false}
-  let body = match Source.read(source, SEARCH_URL, &listing()) {
-    case Source.Found(held) => held
-    case _ => { return fallback }
-  }
-  let document = match Json.decode(body) {
-    case Ok(held) => held
-    case Err(_) => { return fallback }
-  }
+  let Some(listing) = Index.search(source) else { return View{packages: *snapshot, live: false} }
+  let fresh = listing.repositories.filter(|held: Index.Repository| Packages.find(snapshot, held.handle, held.project) == None)
+  let known = listing.repositories.filter(|held: Index.Repository| Packages.find(snapshot, held.handle, held.project) != None)
   var projects = snapshot.projects
   var handles = snapshot.handles
   var probes = 0
-  for item in list(&document, "items") {
-    let Some(repository) = repositoryOf(&item) else { continue }
-    let known = Packages.find(snapshot, repository.handle, repository.project)
-    let changed = match known {
-      case Some(held) => repository.pushedAt > publishedAt(&held)
-      case None => true
-    }
-    let probed = if changed && probes < PROBES {
+  for repository in fresh {
+    if probes < PROBES {
       probes = probes + 1
-      probe(source, &repository)
-    } else { None }
-    match known {
-      case Some(held) => { projects = replaced(&projects, &refreshed(&held, &repository, &probed)) }
-      case None => {
-        if let Some(found) = probed {
-          projects = projects.push(introduced(source, &repository, &found))
-          if Packages.profile(snapshot, repository.handle) == None && handles.filter(|profile: Packages.Profile| profile.handle == repository.handle).isEmpty() {
-            handles = handles.push(repository.owner)
-          }
+      if let Some(read) = Release.read(source, &repository, None) {
+        if !read.releases.isEmpty() {
+          projects = projects.push(introduced(source, &repository, &read))
+          if handles.filter(|profile: Packages.Profile| profile.handle == repository.handle).isEmpty() { handles = handles.push(repository.owner) }
         }
       }
     }
+  }
+  for repository in known {
+    let Some(held) = Packages.find(snapshot, repository.handle, repository.project) else { continue }
+    let counted = Packages.Project{..held, stars: repository.stars, forks: repository.forks, openIssues: repository.openIssues}
+    let changed = repository.pushedAt > publishedAt(&held)
+    let newer = if changed && probes < PROBES {
+      probes = probes + 1
+      Release.read(source, &repository, held.latest)
+    } else { None }
+    projects = replaced(&projects, &advanced(&counted, &newer))
+  }
+  if listing.complete {
+    var listed: Set[Str] = setOf([])
+    for repository in listing.repositories { listed = listed.insert(repository.handle + "/" + repository.project) }
+    projects = projects.filter(|held: Packages.Project| listed.contains(held.name))
   }
   View {
     packages: Packages.Packages{..*snapshot, projects: List.sortBy(&projects, fn(left: Packages.Project, right: Packages.Project) -> Bool { left.name < right.name }), handles: handles},
@@ -122,143 +103,29 @@ export fn merged(source: &Source.Source, snapshot: &Packages.Packages) -> View {
   }
 }
 
-/// What one search result says about a repository.
-type Repository = {
-  handle: Str,
-  project: Str,
-  path: Str,
-  description: Str,
-  url: Str,
-  stars: Int,
-  forks: Int,
-  openIssues: Int,
-  pushedAt: Str,
-  license: Str,
-  topics: Array[Str],
-  owner: Packages.Profile
+/// A snapshot project with releases newer than its latest put first. `files`
+/// and `catalog` describe the latest release, so they are dropped with it; the
+/// previous release's declarations stay searchable until the next build.
+fn advanced(project: &Packages.Project, newer: &Option[Release.Releases]) -> Packages.Project {
+  let Some(read) = *newer else { return *project }
+  if read.releases.isEmpty() { return *project }
+  Packages.Project{..*project, latest: Some(read.releases[0].version), releases: read.releases.concat(project.releases), files: [], catalog: None}
 }
 
-/// A release read from GitHub and the manifest at its tag.
-type Probed = { release: Packages.Release, description: Str, keywords: Array[Str], license: Str, root: Str }
-
-fn repositoryOf(item: &Json.Json) -> Option[Repository] {
-  if flag(item, "private") || flag(item, "archived") { return None }
-  let owner = Json.field(item, "owner") ?
-  let login = text(&owner, "login").toLower()
-  let repo = text(item, "name").toLower()
-  if !slug(login) || !slug(repo) { return None }
-  var topics: Array[Str] = []
-  for topic in list(item, "topics") {
-    if let Some(word) = Json.asText(&topic) { topics = topics.push(word) }
-  }
-  let kind = text(&owner, "type").toLower()
-  Some(Repository {
-      handle: "@" + login,
-      project: repo,
-      path: login + "/" + repo,
-      description: text(item, "description"),
-      url: text(item, "html_url"),
-      stars: whole(item, "stargazers_count"),
-      forks: whole(item, "forks_count"),
-      openIssues: whole(item, "open_issues_count"),
-      pushedAt: text(item, "pushed_at"),
-      license: Option.unwrapOr(Option.map(Json.field(item, "license"), |held: Json.Json| text(&held, "spdx_id")), ""),
-      topics: topics,
-      owner: Packages.Profile{handle: "@" + login, name: "", avatar: "", avatarUrl: text(&owner, "avatar_url"), githubUrl: text(&owner, "html_url"), kind: if kind == "organization" { "org" } else { "user" }}
-    })
-}
-
-/// The names the build admits: lower-case words joined by single hyphens.
-export fn slug(word: Str) -> Bool {
-  if word.isEmpty() || word.startsWith("-") || word.endsWith("-") || word.contains("--") { return false }
-  for c in word.chars() {
-    if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') { return false }
-  }
-  true
-}
-
-/// The newest version tag, and the manifest at it when that manifest names
-/// this repository and that version.
-fn probe(source: &Source.Source, repository: &Repository) -> Option[Probed] {
-  let tags = match Source.read(source, API + repository.path + "/tags?per_page=100", &releases()) {
-    case Source.Found(body) => match Json.decode(body) {
-      case Ok(held) => held
-      case Err(_) => { return None }
-    }
-    case _ => { return None }
-  }
-  var best: Option[(Semver.Version, Str, Str)] = None
-  for tag in Option.unwrapOr(Json.asList(&tags), []) {
-    let name = text(&tag, "name")
-    let commit = Option.unwrapOr(Option.map(Json.field(&tag, "commit"), |held: Json.Json| text(&held, "sha")), "")
-    if let Ok(version) = Semver.parse(if name.startsWith("v") { name.drop(1) } else { name }) {
-      let newer = match best {
-        case Some(held) => Semver.after(&version, &held[0])
-        case None => true
-      }
-      if newer { best = Some((version, name, commit)) }
-    }
-  }
-  let (version, tag, commit) = best ?
-  let manifest = match Source.read(source, RAW + repository.path + "/" + tag + "/pudu.toml", &pinned()) {
-    case Source.Found(body) => match TomlRead.read(body) {
-      case Ok(held) => held
-      case Err(_) => { return None }
-    }
-    case _ => { return None }
-  }
-  let wanted = Semver.render(&version)
-  if tomlText(&manifest, "package.name") != repository.handle + "/" + repository.project || tomlText(&manifest, "package.version") != wanted { return None }
-  var dependencies: Array[(Str, Str)] = []
-  for entry in Option.unwrapOr(Option.andThen(Toml.field(&manifest, "dependencies"), |held: Toml.Toml| Toml.asTable(&held)), []) {
-    if let Some(requirement) = Toml.asText(&entry[1]) { dependencies = dependencies.push((entry[0], requirement)) }
-  }
-  var keywords: Array[Str] = []
-  for word in Option.unwrapOr(Option.andThen(Toml.path(&manifest, "package.keywords"), |held: Toml.Toml| Toml.asList(&held)), []) {
-    if let Some(held) = Toml.asText(&word) { keywords = keywords.push(held) }
-  }
-  Some(Probed {
-      release: Packages.Release{version: wanted, publishedAt: repository.pushedAt, publisher: "", checksum: "", size: 0, dependencies: dependencies, modules: [], notes: "", yanked: false, tag: tag, commit: commit},
-      description: tomlText(&manifest, "package.description"),
-      keywords: keywords,
-      license: tomlText(&manifest, "package.license"),
-      root: tomlText(&manifest, "package.root")
-    })
-}
-
-/// A snapshot project with GitHub's counts, and the probed release first when
-/// it is newer than every release the snapshot holds.
-fn refreshed(held: &Packages.Project, repository: &Repository, probed: &Option[Probed]) -> Packages.Project {
-  let counted = Packages.Project{..*held, stars: repository.stars, forks: repository.forks, openIssues: repository.openIssues}
-  let Some(found) = *probed else { return counted }
-  let newer = match (Semver.parse(Option.unwrapOr(held.latest, "")), Semver.parse(found.release.version)) {
-    case (Ok(snapshot), Ok(offered)) => Semver.after(&offered, &snapshot)
-    case (Err(_), Ok(_)) => true
-    case _ => false
-  }
-  if !newer { return counted }
-  // `files` and `catalog` describe the latest release, so they are dropped
-  // with it; the previous release's declarations stay searchable until the
-  // next build reads the new ones.
-  Packages.Project{..counted, latest: Some(found.release.version), releases: [found.release].concat(held.releases), files: [], catalog: None}
-}
-
-/// A project the snapshot does not have, from its search result, its release,
-/// and its README at that release.
-fn introduced(source: &Source.Source, repository: &Repository, found: &Probed) -> Packages.Project {
-  let readme = match Source.read(source, RAW + repository.path + "/" + found.release.tag + "/README.md", &pinned()) {
-    case Source.Found(body) => body
-    case _ => ""
-  }
+/// A project the snapshot does not have, from its search result, its releases,
+/// and its README at the newest release's commit.
+fn introduced(source: &Source.Source, repository: &Index.Repository, read: &Release.Releases) -> Packages.Project {
+  let newest = read.releases[0]
+  let manifest = read.manifest
   Packages.Project {
     name: repository.handle + "/" + repository.project,
     handle: repository.handle,
     project: repository.project,
-    description: if found.description.isEmpty() { repository.description } else { found.description },
-    keywords: if found.keywords.isEmpty() { repository.topics.filter(|word: Str| word != "pudu-package") } else { found.keywords },
-    license: if found.license.isEmpty() { repository.license } else { found.license },
-    root: if found.root.isEmpty() { rootOf(repository.project) } else { found.root },
-    readme: readme,
+    description: if manifest.description.isEmpty() { repository.description } else { manifest.description },
+    keywords: if manifest.keywords.isEmpty() { repository.topics.filter(|word: Str| word != "pudu-package") } else { manifest.keywords },
+    license: if manifest.license.isEmpty() { repository.license } else { manifest.license },
+    root: if manifest.root.isEmpty() { rootOf(repository.project) } else { manifest.root },
+    readme: Option.unwrapOr(Source.text(source, Release.RAW + repository.path + "/" + newest.commit + "/README.md", &Source.immutable()), ""),
     repository: repository.url,
     stars: repository.stars,
     forks: repository.forks,
@@ -266,8 +133,8 @@ fn introduced(source: &Source.Source, repository: &Repository, found: &Probed) -
     tickets: [],
     contributions: [],
     searchEntries: [],
-    latest: Some(found.release.version),
-    releases: [found.release],
+    latest: Some(newest.version),
+    releases: read.releases,
     files: [],
     catalog: None
   }
@@ -287,24 +154,4 @@ fn publishedAt(project: &Packages.Project) -> Str {
 
 fn replaced(projects: &Array[Packages.Project], project: &Packages.Project) -> Array[Packages.Project] {
   projects.map(|held: Packages.Project| if held.name == project.name { *project } else { held })
-}
-
-fn tomlText(value: &Toml.Toml, dotted: Str) -> Str {
-  Option.unwrapOr(Option.andThen(Toml.path(value, dotted), |held: Toml.Toml| Toml.asText(&held)), "")
-}
-
-fn text(value: &Json.Json, key: Str) -> Str {
-  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asText(&held)), "")
-}
-
-fn whole(value: &Json.Json, key: Str) -> Int {
-  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asInt(&held)), 0)
-}
-
-fn flag(value: &Json.Json, key: Str) -> Bool {
-  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asBool(&held)), false)
-}
-
-fn list(value: &Json.Json, key: Str) -> Array[Json.Json] {
-  Option.unwrapOr(Option.andThen(Json.field(value, key), |held: Json.Json| Json.asList(&held)), [])
 }

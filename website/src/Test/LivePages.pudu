@@ -1,0 +1,55 @@
+module Test.LivePages
+
+import Std.Http as Http
+import Std.Io as Io
+import Std.Option as Option
+import Std.Test as Test
+import Prerender as Prerender
+import Service.LivePackages as LivePackages
+import Service.Packages as Packages
+import Test.LiveStand as Stand
+import Web.Dynamic as DynamicWeb
+
+fn cacheOf(response: &Http.Response) -> Str { Option.unwrapOr(Http.header(&response.headers, "cache-control"), "") }
+
+export fn main() -> Int {
+  let snapshot = match Packages.loadCompact("website/test/fixtures/packages") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let routed = Stand.edge(&snapshot, &Stand.live(&Stand.stand(&Stand.github())))
+  let page = DynamicWeb.render(&routed, "/@bruno/fresh-pkg")
+  let releasesPage = DynamicWeb.render(&routed, "/@bruno/fresh-pkg/releases")
+  let listing = DynamicWeb.render(&routed, "/packages")
+  let owner = DynamicWeb.render(&routed, "/@bruno")
+  let unknown = DynamicWeb.render(&routed, "/@bruno/not-published")
+  let impostor = DynamicWeb.render(&routed, "/@carol/impostor")
+  let notHandle = DynamicWeb.render(&routed, "/bruno/fresh-pkg")
+  let offline = Stand.edge(&snapshot, &LivePackages.offline())
+  let offlineListing = DynamicWeb.render(&offline, "/packages")
+  let offlinePage = DynamicWeb.render(&offline, "/@bruno/fresh-pkg")
+  let snapshotSource = DynamicWeb.render(&offline, "/@alice/json-kit/source/src/JsonKit/Parse.pudu")
+  let snapshotDocs = DynamicWeb.render(&offline, "/@alice/json-kit/docs")
+  let snapshotTickets = DynamicWeb.render(&offline, "/@alice/json-kit/tickets")
+  let snapshotMissingFile = DynamicWeb.render(&offline, "/@alice/json-kit/source/nothing.pudu")
+
+  let suite = Test.suite("live package pages", &[
+      Test.that("the function renders a new package's page, cached at the edge", page.status.code == 200 && page.body.contains("fresh-pkg") && page.body.contains("Fresh Package") && cacheOf(&page) == DynamicWeb.LIVE_CACHE),
+      Test.that("the function renders a new package's releases with their dates", releasesPage.status.code == 200 && releasesPage.body.contains("0.2.0") && releasesPage.body.contains("0.1.0") && releasesPage.body.contains("2026-09-20")),
+      Test.that("the listing includes the new package", listing.status.code == 200 && listing.body.contains("/@bruno/fresh-pkg") && listing.body.contains("/@alice/json-kit") && cacheOf(&listing) == DynamicWeb.LIVE_CACHE),
+      Test.that("the new owner's profile answers", owner.status.code == 200 && owner.body.contains("/@bruno/fresh-pkg")),
+      Test.that("an unlisted package is missing, briefly cached, and not indexed", unknown.status.code == 404 && cacheOf(&unknown) == DynamicWeb.MISSING_CACHE && Http.header(&unknown.headers, "X-Robots-Tag") == Some("noindex")),
+      Test.equals("an impostor has no page", &impostor.status.code, &404),
+      Test.equals("a path without a handle is no package", &notHandle.status.code, &404),
+      Test.that("without GitHub the listing is the snapshot, cached briefly", offlineListing.status.code == 200 && !offlineListing.body.contains("fresh-pkg") && cacheOf(&offlineListing) == DynamicWeb.SNAPSHOT_CACHE),
+      Test.equals("without GitHub a new package waits for it", &offlinePage.status.code, &404),
+      Test.that("the function serves a snapshot release's source from the snapshot's files", snapshotSource.status.code == 200 && snapshotSource.body.contains("Parse.pudu") && cacheOf(&snapshotSource) == DynamicWeb.SNAPSHOT_CACHE),
+      Test.that("the function serves a snapshot release's API from its catalogue", snapshotDocs.status.code == 200 && snapshotDocs.body.contains("textOf")),
+      Test.equals("the function serves a snapshot project's discussions", &snapshotTickets.status.code, &200),
+      Test.that("a file the release lacks is missing and briefly cached", snapshotMissingFile.status.code == 404 && cacheOf(&snapshotMissingFile) == DynamicWeb.MISSING_CACHE),
+      Test.that("package pages and the listing are answered by the function, not written", Prerender.answeredLive("/@alice/json-kit/source") && Prerender.answeredLive("/@alice") && Prerender.answeredLive("/packages") && Prerender.answeredLive("/packages/page/2") && !Prerender.answeredLive("/packages/avatars/a.png") && !Prerender.answeredLive("/docs"))
+    ])
+  let report = Test.run(&suite)
+  for failure in report.failures { let _shown = Io.writeErrorLine(failure) }
+  Test.report(&report)
+}

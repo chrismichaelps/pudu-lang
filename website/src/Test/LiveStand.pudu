@@ -1,0 +1,135 @@
+module Test.LiveStand
+
+import Std.Adler32 as Adler32
+import Std.Bytes as ByteSeq
+import Std.Result as Result
+import Std.Sync as Sync
+import Domain.Playground as Play
+import Service.Catalog as Catalog
+import Service.LiveIndex as LiveIndex
+import Service.LivePackages as LivePackages
+import Service.LiveSource as LiveSource
+import Service.Packages as Packages
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import Service.Search as Search
+import Web.Dynamic as DynamicWeb
+
+export const API: Str = "https://api.github.com/repos/"
+export const RAW: Str = "https://raw.githubusercontent.com/"
+
+/// A stand-in GitHub: a table of answers the test may change, a switch that
+/// takes it down, a count of every request that reached it and of those
+/// answered `304`, and a clock the test moves. Each answer's entity tag is
+/// derived from its body, so a changed answer is never mistaken for the old one.
+export type Stand = {
+  calls: Sync.Counter,
+  unchanged: Sync.Counter,
+  down: Sync.Cell[Bool],
+  clock: Sync.Cell[Int],
+  table: Sync.Cell[Array[(Str, Str)]]
+}
+
+export fn stand(answers: &Array[(Str, Str)]) -> Stand {
+  Stand{calls: Sync.counter(0), unchanged: Sync.counter(0), down: Sync.cell(false), clock: Sync.cell(1000), table: Sync.cell(*answers)}
+}
+
+export fn tagOf(body: Str) -> Str { "\"" + show(body.length()) + "-" + show(Adler32.checksumText(body)) + "\"" }
+
+export fn origin(held: &Stand) -> LiveSource.Origin {
+  let counter = held.calls
+  let revalidated = held.unchanged
+  let down = held.down
+  let clock = held.clock
+  let table = held.table
+  LiveSource.Origin {
+    fetch: fn(target: Str, tag: Str) -> LiveSource.Reply {
+      let _counted = Sync.increment(&counter, 1)
+      if Result.unwrapOr(Sync.get(&down), false) { return LiveSource.Failed }
+      for pair in Result.unwrapOr(Sync.get(&table), []) {
+        if pair[0] == target {
+          if tagOf(pair[1]) == tag {
+            let _same = Sync.increment(&revalidated, 1)
+            return LiveSource.Unchanged
+          }
+          return LiveSource.Fetched(ByteSeq.fromText(pair[1]), tagOf(pair[1]))
+        }
+      }
+      LiveSource.Missing
+    },
+    clock: fn() -> Int { Result.unwrapOr(Sync.get(&clock), 0) }
+  }
+}
+
+export fn live(held: &Stand) -> LivePackages.Live { LivePackages.over(LiveSource.over(origin(held))) }
+
+export fn calls(held: &Stand) -> Int { Result.unwrapOr(Sync.count(&held.calls), -1) }
+
+export fn unchanged(held: &Stand) -> Int { Result.unwrapOr(Sync.count(&held.unchanged), -1) }
+
+export fn advance(held: &Stand, seconds: Int) -> () {
+  let _moved = Sync.set(&held.clock, Result.unwrapOr(Sync.get(&held.clock), 0) + seconds)
+}
+
+export fn takeDown(held: &Stand) -> () { let _down = Sync.set(&held.down, true) }
+
+/// The same table with one address answering differently, or not at all when `body` is empty.
+export fn answer(held: &Stand, target: Str, body: Str) -> () {
+  let rest = Result.unwrapOr(Sync.get(&held.table), []).filter(|pair: (Str, Str)| pair[0] != target)
+  let _set = Sync.set(&held.table, if body.isEmpty() { rest } else { rest.push((target, body)) })
+}
+
+export fn repository(owner: Str, name: Str, pushed: Str, stars: Int, archived: Str) -> Str {
+  "\{\"full_name\":\"" + owner + "/" + name + "\",\"name\":\"" + name + "\",\"owner\":\{\"login\":\"" + owner + "\",\"type\":\"User\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/1\",\"html_url\":\"https://github.com/" + owner + "\"\},\"description\":\"from search\",\"html_url\":\"https://github.com/" + owner + "/" + name + "\",\"stargazers_count\":" + show(stars) + ",\"forks_count\":3,\"open_issues_count\":1,\"pushed_at\":\"" + pushed + "\",\"private\":false,\"archived\":" + archived + ",\"topics\":[\"pudu-package\",\"fresh\"],\"license\":\{\"spdx_id\":\"MIT\"\}\}"
+}
+
+export fn searchPage(items: &Array[Str], total: Int) -> Str {
+  "\{\"total_count\":" + show(total) + ",\"incomplete_results\":false,\"items\":[" + items.join(",") + "]\}"
+}
+
+export fn manifest(name: Str, version: Str) -> Str {
+  "[package]\nname = \"" + name + "\"\nversion = \"" + version + "\"\ndescription = \"Fresh things\"\nkeywords = [\"fresh\"]\n\n[dependencies]\n\"@alice/json-kit\" = \"^2.0.0\"\n"
+}
+
+export fn listed() -> Array[Str] {
+  [
+    repository("bruno", "fresh-pkg", "2026-09-25T10:00:00Z", 5, "false"),
+    repository("alice", "json-kit", "2026-09-24T00:00:00Z", 2000, "false"),
+    repository("carol", "impostor", "2026-09-25T09:00:00Z", 1, "false"),
+    repository("dora", "shelved", "2026-09-25T08:00:00Z", 1, "true"),
+    repository("Eve", "Bad_Name", "2026-09-25T07:00:00Z", 1, "false")
+  ]
+}
+
+/// The stand-in GitHub the suite reads: a package published after the build
+/// (`@bruno/fresh-pkg`, two releases, one with a GitHub release and one only a
+/// tag), a known package with a newer release, an impostor whose manifest names
+/// another package, an archived repository, and a name the build refuses.
+export fn github() -> Array[(Str, Str)] {
+  [
+    (LiveIndex.SEARCH_URL, searchPage(&listed(), 5)),
+    (API + "bruno/fresh-pkg/tags?per_page=100", "[\{\"name\":\"latest\",\"commit\":\{\"sha\":\"c0\"\}\},\{\"name\":\"v0.1.0\",\"commit\":\{\"sha\":\"c1\"\}\},\{\"name\":\"v0.2.0\",\"commit\":\{\"sha\":\"c2\"\}\}]"),
+    (API + "bruno/fresh-pkg/releases?per_page=100", "[\{\"tag_name\":\"v0.2.0\",\"published_at\":\"2026-09-25T09:30:00Z\",\"draft\":false,\"body\":\"Second release.\",\"author\":\{\"login\":\"Bruno\"\},\"assets\":[]\}]"),
+    (API + "bruno/fresh-pkg/commits/c1", "\{\"commit\":\{\"committer\":\{\"date\":\"2026-09-20T12:00:00Z\"\}\}\}"),
+    (RAW + "bruno/fresh-pkg/c1/pudu.toml", manifest("@bruno/fresh-pkg", "0.1.0")),
+    (RAW + "bruno/fresh-pkg/c2/pudu.toml", manifest("@bruno/fresh-pkg", "0.2.0")),
+    (RAW + "bruno/fresh-pkg/c2/README.md", "# Fresh Package\n\nPublished after the build.\n"),
+    (API + "alice/json-kit/tags?per_page=100", "[\{\"name\":\"v2.1.0\",\"commit\":\{\"sha\":\"a9\"\}\},\{\"name\":\"v2.0.0\",\"commit\":\{\"sha\":\"a8\"\}\}]"),
+    (API + "alice/json-kit/releases?per_page=100", "[\{\"tag_name\":\"v2.1.0\",\"published_at\":\"2026-09-23T08:00:00Z\",\"draft\":false,\"body\":\"Faster.\",\"author\":\{\"login\":\"alice\"\},\"assets\":[]\}]"),
+    (RAW + "alice/json-kit/a9/pudu.toml", manifest("@alice/json-kit", "2.1.0")),
+    (API + "carol/impostor/tags?per_page=100", "[\{\"name\":\"v1.0.0\",\"commit\":\{\"sha\":\"b1\"\}\}]"),
+    (RAW + "carol/impostor/b1/pudu.toml", manifest("@alice/json-kit", "1.0.0"))
+  ]
+}
+
+export fn edge(packages: &Packages.Packages, overlay: &LivePackages.Live) -> DynamicWeb.Dynamic {
+  DynamicWeb.Dynamic {
+    siteUrl: "https://pudu.example",
+    catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: []},
+    search: Search.index(&[]),
+    packages: *packages,
+    live: *overlay,
+    playground: Playground.using(&Playground.disabled("not in this suite"), &Examples.Examples{entries: []}, &Play.defaultLimits()),
+    gates: Playground.openGates()
+  }
+}
