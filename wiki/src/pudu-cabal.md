@@ -150,3 +150,8 @@ Register Pudu.Version in library exposed-modules for Cabal-derived package versi
 
 - **Q:** Hardcode version numbers across tools? **A:** No; derive the language version and constraints directly from Cabal metadata via Pudu.Version.
 - **Q:** Reuse a global bundle cache directory across runs? **A:** No; withSystemTempDirectory ensures isolated per-process extraction without collisions or left-behind artifacts.
+
+## Source digest (#352)
+
+Registers `Pudu.Version.Digest` and adds `template-haskell` (a GHC boot package) to the library so
+the digest is computed while the compiler is compiled.

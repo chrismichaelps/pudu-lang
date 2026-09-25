@@ -34,6 +34,7 @@ module Pudu.Bundle
   , runtimeBytes
   , attachedBundle
   , materialise
+  , sharesSources
   ) where
 
 import Control.Exception (IOException, onException, try)
@@ -50,6 +51,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Source (Source, sourceText)
+import Pudu.Version (digestIn, sourceDigest)
 import System.Directory
   ( createDirectoryIfMissing
   , doesFileExist
@@ -83,6 +85,18 @@ data Bundle = Bundle
   , bundleProducts :: ![(Text, ByteString.ByteString)]
   }
   deriving stock (Eq, Show)
+
+{-| Whether a named runtime was built from the sources this compiler was.
+
+    Read from its bytes rather than by running it: it may be built for a
+    platform this machine cannot run. An unreadable file shares nothing, and
+    saying why it cannot be read is the caller's check to make first. -}
+sharesSources :: FilePath -> IO Bool
+sharesSources path = do
+  bytes <- try (ByteString.readFile path) :: IO (Either IOException ByteString.ByteString)
+  pure $ case bytes of
+    Right contents -> digestIn contents == Just sourceDigest
+    Left _ -> False
 
 {-| The marker that says a bundle is attached.
 

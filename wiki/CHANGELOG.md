@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
+
+- [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time
+  and readable from its bytes; [[Pudu Version]] `identityText` files products under version and digest.
+- [[Pudu Bundle]] `sharesSources` lets `pudu build --runtime` carry products to a runtime from the
+  same sources — including one for another platform — so a cross-built function starts in 37 ms
+  instead of 360 ms (22 modules). A runtime from other sources receives none, and the build says so.
+- [[architecture/DEPLOYMENT-TARGETS]] carries the measured start figures.
+
 ## 2026-09-25 — Quantities people write (#341)
 
 - [[Std Human]]: `parseBytes` in decimal and binary units, `bytes` and `bytesDecimal` to one
