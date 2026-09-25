@@ -21,6 +21,12 @@ enum {
   return YES;
 }
 
+/* The window's first responder, so the window's focused accessibility
+   element is resolved through this view. */
+- (BOOL)acceptsFirstResponder {
+  return YES;
+}
+
 - (id)accessibilityFocusedUIElement {
   return self.focusedElement ?: [super accessibilityFocusedUIElement];
 }
@@ -146,6 +152,7 @@ void *pudu_desktop_open(
       window.title = caption;
       window.releasedWhenClosed = NO;
       window.contentView = view;
+      [window makeFirstResponder:view];
       [window center];
       [window makeKeyAndOrderFront:nil];
       [application activateIgnoringOtherApps:YES];
