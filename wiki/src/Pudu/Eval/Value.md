@@ -127,3 +127,12 @@ includes the claim, so a borrowed handle and an owned one at one address are not
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Text method of every value (#347)
+
+`TextMethodValue receiver` is `value.toText` for a value whose type declares no `toText`: the
+receiver bound, rendered as `display` renders it when called. It is not comparable and has shape
+rank 29.
+
+Resolved Grill Log: one constructor carrying the receiver rather than a method tag per kind, because
+the behaviour is the same for every kind of value.

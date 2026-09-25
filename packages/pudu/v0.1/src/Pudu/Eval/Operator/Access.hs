@@ -117,9 +117,11 @@ readMember spanValue value member = case value of
       failed at run time. -}
   _ -> case nominalNameOf value of
     Just owner -> readMethod spanValue value owner member
-    Nothing ->
-      abortAt (Just spanValue) "E7001"
-        ("cannot read " <> member <> " from a " <> valueKind value) Nothing
+    Nothing
+      | member == textMember -> pure (TextMethodValue value)
+      | otherwise ->
+          abortAt (Just spanValue) "E7001"
+            ("cannot read " <> member <> " from a " <> valueKind value) Nothing
 
 {-| Array accessor methods are built into the evaluator: `length`, `get`,
     `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`,
@@ -170,15 +172,15 @@ readKeyedMember spanValue receiver member table build described =
     everything. -}
 builtinMethodNamesFor :: Text -> [Text]
 builtinMethodNamesFor owner = case owner of
-  "Array" -> map fst arrayMethods
-  "Range" -> map fst rangeMethods
-  "Str" -> map fst stringMethods
-  "Map" -> map fst mapMethods
-  "Set" -> map fst setMethods
+  "Array" -> map fst arrayMethods <> [textMember]
+  "Range" -> map fst rangeMethods <> [textMember]
+  "Str" -> map fst stringMethods <> [textMember]
+  "Map" -> map fst mapMethods <> [textMember]
+  "Set" -> map fst setMethods <> [textMember]
   "Bytes" -> map fst bytesMethods
-  "Buckets" -> map fst bucketsMethods
+  "Buckets" -> map fst bucketsMethods <> [textMember]
   "Char" -> ["code", "toText"]
-  _ -> []
+  _ -> [textMember]
 
 mapMethods :: [(Text, MapMethod)]
 mapMethods =
@@ -282,9 +284,11 @@ nominalNameOf value = case value of
     the type the reader wrote — rather than against whichever was tried last. -}
 readMethodAmong :: Span -> Value -> [Text] -> Text -> Text -> Evaluator Value
 readMethodAmong spanValue receiver owners reported member = case owners of
-  [] ->
-    abortAt (Just spanValue) "E7001"
-      ("no field or method " <> member <> " on a " <> reported) Nothing
+  []
+    | member == textMember -> pure (TextMethodValue receiver)
+    | otherwise ->
+        abortAt (Just spanValue) "E7001"
+          ("no field or method " <> member <> " on a " <> reported) Nothing
   owner : rest -> do
     found <- lookupMethod (owner <> "." <> member)
     case found of
@@ -298,9 +302,17 @@ readMethod spanValue receiver owner member = do
   case found of
     Just (FunctionValue closure) ->
       pure (FunctionValue closure{closureSelf = Just receiver})
-    _ ->
-      abortAt (Just spanValue) "E7001"
-        ("no field or method " <> member <> " on a " <> owner) Nothing
+    _
+      | member == textMember -> pure (TextMethodValue receiver)
+      | otherwise ->
+          abortAt (Just spanValue) "E7001"
+            ("no field or method " <> member <> " on a " <> owner) Nothing
+
+{-| The method every value answers when its type declares none by that name.
+    A type's own implementation is found first, so a program that renders one
+    of its types its own way keeps doing so. -}
+textMember :: Text
+textMember = "toText"
 
 {-| `?` yields the success value, or returns the failure from the enclosing
     function unchanged, which is the elaboration [[architecture/SEMANTICS]]

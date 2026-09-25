@@ -34,6 +34,26 @@ fn main() -> Int {
 
 Text can also be joined with `+`, which is handy when the pieces are already values: `first + " " + last`.
 
+## Turning any value into text
+
+Every value has a `toText()` method that answers it as text, the same text interpolation writes. Numbers, booleans, collections, records, and variants all have one, so building a message never needs to know which kind of value is in hand:
+
+```pudu
+module ToText
+
+type Point = { x: Int, y: Int }
+
+fn main() -> Int {
+  let count = 3
+  let ratio = 0.5
+  let label = count.toText() + " of " + [1, 2, 3].length().toText() + " at " + ratio.toText()
+  let spot = Point{x: 1, y: 2}.toText()
+  if label == "3 of 3 at 0.5" && spot == "Point\{x: 1, y: 2\}" && true.toText() == "true" { 0 } else { 1 }
+}
+```
+
+Text inside a collection or a record keeps its quotes, so `["a"].toText()` is `["a"]`. A type that wants to be written its own way implements a `toText` method, and that implementation is used instead. Bytes are the one exception: `bytes.toText()` answers an `Option`, because not every run of bytes is valid text.
+
 ## Asking questions about text
 
 ```pudu

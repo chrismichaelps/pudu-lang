@@ -80,6 +80,9 @@ testRuntimeEvaluation = do
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
+  written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
+  quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
+  addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
@@ -120,6 +123,19 @@ testRuntimeEvaluation = do
         whole, and a one-bit change moving every one. -}
     , counterexample "checksums match their published values and chain over chunks"
         (checked === Just "15")
+    {-| Every kind of value answers toText with the text interpolation writes,
+        a declared toText wins even through a type parameter, the method binds
+        its receiver as a value, and bytes keep their refusing form. -}
+    , counterexample "every value answers toText, and a declared one wins"
+        (written === Just "12")
+    {-| Byte sizes and durations read and written, with overflow at Int's
+        limits refused rather than stopping the program. -}
+    , counterexample "quantities read strictly and write back to what they read"
+        (quantities === Just "44")
+    {-| Addresses and networks in both families: canonical rendering, every
+        refusal, and a mapped IPv4 peer still held by an IPv4 allowlist. -}
+    , counterexample "addresses parse strictly, render canonically, and match networks"
+        (addressed === Just "55")
     , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}

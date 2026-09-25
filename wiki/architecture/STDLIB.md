@@ -10,7 +10,8 @@ aliases: [Standard Library, Stdlib Design]
 
 A value has methods from exactly two places: the closed sets the compiler wires into `Array`,
 `Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes. Everything else is a
-module function taking the value as an argument.
+module function taking the value as an argument. One method is universal: every value answers
+`toText()` with the text `display` writes, unless its type declares a `toText` of its own.
 
 That is why `text.contains("an")` works and `Option.unwrapOr(value, fallback)` does not become
 `value.unwrapOr(fallback)`: `Str` is a built-in with a method set, and `Option` is an ordinary sum
@@ -192,6 +193,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Net` | addresses, TCP, UDP |
 | `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
+| `Std.Ip` | IPv4 and IPv6 addresses, classification, network prefixes, allowlists |
 
 ### Concurrency
 
@@ -241,6 +243,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Cron` | 7 | five-field schedules, macros, month and weekday names, the next firing minute in UTC |
 | `Std.Stats` | 16 | mean, median, percentiles, variance, deviation, covariance, correlation, histograms, a streaming accumulator |
 | `Std.Checksum` | 9 | CRC-32, CRC-32C, CRC-64, FNV-1a at runtime speed, chained over chunks |
+| `Std.Human` | 10 | byte sizes and durations read and written, ordinals, plurals, relative time |
 | `Std.Dotenv` | 8 | environment files: quoting, escapes, earlier-key expansion, rendering back |
 | `Std.Term` | 21 | terminal colour and styles, stripping sequences, visible width, cursor control |
 | `Std.Mappable` | 3 | a trait over the container itself, so one definition serves several |
@@ -266,6 +269,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
 | `Std.Json` | 21 | a `Json` value, a native-first decoder with positions in its errors, JSON Lines folding, compact and pretty encoding |
 | `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
+| `Std.Ip` | 36 | strict address parsing, RFC 5952 rendering, classification, networks, allowlists |
 | `Std.Order` | 27 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |

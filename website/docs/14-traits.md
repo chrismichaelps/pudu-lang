@@ -35,8 +35,10 @@ Inside an implementation, `Self` is the type being implemented. An implementatio
 
 A value has methods from exactly two places:
 
-- the built-in methods of `Array`, `Str`, `Map`, `Set`, and `Char`, such as `text.trim()` and `items.length()`;
+- the built-in methods of `Array`, `Str`, `Map`, `Set`, and `Char`, such as `text.trim()` and `items.length()`, plus `toText()`, which every value has;
 - the `impl` blocks a program writes.
+
+An `impl` that declares `toText` replaces the built-in one for that type.
 
 Everything else is a module function called with the value as an argument. `Option` is an ordinary sum type that nothing implements methods for, so its helpers read `Option.unwrapOr(value, fallback)`, not `value.unwrapOr(fallback)`.
 

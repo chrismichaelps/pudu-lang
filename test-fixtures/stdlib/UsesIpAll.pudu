@@ -1,0 +1,121 @@
+module UsesIpAll
+
+import Std.Ip as Ip
+
+fn address(text: Str) -> Ip.Address {
+  match Ip.parse(text) {
+    case Ok(found) => found
+    case Err(_) => Ip.v4(0, 0, 0, 0)
+  }
+}
+
+fn network(text: Str) -> Ip.Network {
+  match Ip.parseNetwork(text) {
+    case Ok(found) => found
+    case Err(_) => Ip.Network{base: Ip.v4(0, 0, 0, 0), prefix: 32}
+  }
+}
+
+fn refusal(text: Str) -> Str {
+  match Ip.parse(text) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Ip.explain(&problem)
+  }
+}
+
+fn networkRefusal(text: Str) -> Str {
+  match Ip.parseNetwork(text) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Ip.explain(&problem)
+  }
+}
+
+fn roundTrip(text: Str) -> Str { Ip.render(&address(text)) }
+
+fn main() -> Int {
+  var held = 0
+
+  // Both families parse and render canonically.
+  if roundTrip("192.168.1.20") == "192.168.1.20" { held = held + 1 }
+  if Ip.isV4(&address("8.8.8.8")) && Ip.isV6(&address("::1")) { held = held + 1 }
+  if roundTrip("2001:0DB8:0000:0000:0000:0000:0000:0001") == "2001:db8::1" { held = held + 1 }
+  if roundTrip("2001:db8:0:0:1:0:0:1") == "2001:db8::1:0:0:1" { held = held + 1 }
+  if roundTrip("2001:db8:0:1:1:1:1:1") == "2001:db8:0:1:1:1:1:1" { held = held + 1 }
+  if roundTrip("::") == "::" && roundTrip("fe80::") == "fe80::" { held = held + 1 }
+  if roundTrip("::ffff:10.0.0.1") == "::ffff:10.0.0.1" { held = held + 1 }
+  if roundTrip("64:ff9b::192.0.2.33") == "64:ff9b::c000:221" { held = held + 1 }
+  if address("::1") == address("0:0:0:0:0:0:0:1") { held = held + 1 }
+  if Ip.v4(10, 0, 0, 1) == address("10.0.0.1") && Ip.width(&Ip.v4(1, 2, 3, 4)) == 32 { held = held + 1 }
+
+  // Each malformed shape is refused, and says why.
+  if refusal("") == "no address was given" { held = held + 1 }
+  if refusal("256.1.1.1") == "'256' is not a number from 0 to 255" { held = held + 1 }
+  if refusal("010.0.0.1") == "'010' has a leading zero, which some readers take as octal" { held = held + 1 }
+  if refusal("1.2.3") == "an address needs its full set of parts, found 3" { held = held + 1 }
+  if refusal("1::2::3") == "'::' may appear once and must stand for at least one group" { held = held + 1 }
+  if refusal("1:2:3:4:5:6:7:8::") == "'::' may appear once and must stand for at least one group" { held = held + 1 }
+  if refusal("12345::") == "'12345' is not a group of one to four hex digits" { held = held + 1 }
+  if refusal("fe80::1%eth0") == "'1%eth0' is not a group of one to four hex digits" { held = held + 1 }
+  if refusal("1:2:3:4:5:6:7") == "an address needs its full set of parts, found 7" { held = held + 1 }
+
+  // Bytes in network order, both ways.
+  let loopbackBytes = Ip.toBytes(&address("127.0.0.1"))
+  if loopbackBytes.toArray() == [127u8, 0u8, 0u8, 1u8] { held = held + 1 }
+  if Ip.fromBytes(&loopbackBytes) == Ok(address("127.0.0.1")) { held = held + 1 }
+  if Ip.fromBytes(&Ip.toBytes(&address("2001:db8::7"))) == Ok(address("2001:db8::7")) { held = held + 1 }
+  match Ip.fromBytes(&bytesOf([1u8, 2u8])) {
+    case Err(problem) => { if Ip.explain(&problem) == "an address is 4 or 16 bytes, found 2" { held = held + 1 } }
+    case Ok(_) => {}
+  }
+
+  // A mapped peer is judged by the address it carries.
+  let mapped = address("::ffff:10.1.2.3")
+  if Ip.unmap(&mapped) == Ip.v4(10, 1, 2, 3) && Ip.unmap(&address("::1")) == address("::1") { held = held + 1 }
+  if Ip.mapToV6(&Ip.v4(10, 1, 2, 3)) == mapped && Ip.mapToV6(&mapped) == mapped { held = held + 1 }
+  let allow = [network("10.0.0.0/8"), network("2001:db8::/32")]
+  if Ip.within(&allow, &mapped) && Ip.within(&allow, &address("2001:db8::99")) { held = held + 1 }
+  if !Ip.within(&allow, &address("11.0.0.1")) && !Ip.contains(&allow[0], &mapped) { held = held + 1 }
+
+  // Neighbours stop at the ends of the family.
+  if Ip.next(&address("10.0.0.255")) == Some(address("10.0.1.0")) { held = held + 1 }
+  if Ip.next(&address("255.255.255.255")) == None && Ip.previous(&address("::")) == None { held = held + 1 }
+  if Ip.previous(&address("::1")) == Some(address("::")) { held = held + 1 }
+  if Ip.compare(&address("9.9.9.9"), &address("::")) == -1 && Ip.compare(&address("::2"), &address("::1")) == 1 {
+    held = held + 1
+  }
+  if Ip.compare(&address("1.1.1.1"), &address("1.1.1.1")) == 0 && Ip.compare(&address("::"), &address("1.1.1.1")) == 1 {
+    held = held + 1
+  }
+
+  // Classification, each once holding and once not.
+  if Ip.isLoopback(&address("127.8.0.1")) && Ip.isLoopback(&address("::1")) && !Ip.isLoopback(&address("128.0.0.1")) { held = held + 1 }
+  if Ip.isPrivate(&address("172.31.255.1")) && Ip.isPrivate(&address("fd12::1")) && !Ip.isPrivate(&address("172.32.0.1")) { held = held + 1 }
+  if Ip.isLinkLocal(&address("169.254.3.4")) && Ip.isLinkLocal(&address("fe80::1")) && !Ip.isLinkLocal(&address("fec0::1")) { held = held + 1 }
+  if Ip.isMulticast(&address("239.1.1.1")) && Ip.isMulticast(&address("ff02::1")) && !Ip.isMulticast(&address("223.1.1.1")) { held = held + 1 }
+  if Ip.isUnspecified(&address("0.0.0.0")) && Ip.isUnspecified(&address("::")) && !Ip.isUnspecified(&address("::2")) { held = held + 1 }
+  if Ip.isDocumentation(&address("198.51.100.7")) && Ip.isDocumentation(&address("2001:db8::1")) && !Ip.isDocumentation(&address("198.51.101.7")) { held = held + 1 }
+  if Ip.isShared(&address("100.100.0.1")) && !Ip.isShared(&address("100.128.0.1")) { held = held + 1 }
+  if Ip.isPublic(&address("8.8.8.8")) && Ip.isPublic(&address("2606:4700::1111")) { held = held + 1 }
+  if !Ip.isPublic(&address("::ffff:192.168.0.1")) && !Ip.isPublic(&address("255.255.255.255")) && !Ip.isPublic(&address("fc00::1")) { held = held + 1 }
+
+  // Networks: strict reading, masking, and their edges.
+  let lan = network("192.168.4.0/22")
+  if Ip.renderNetwork(&lan) == "192.168.4.0/22" && Ip.hostBits(&lan) == 10 { held = held + 1 }
+  if Ip.render(&Ip.first(&lan)) == "192.168.4.0" && Ip.render(&Ip.last(&lan)) == "192.168.7.255" { held = held + 1 }
+  if Ip.render(&Ip.netmask(&lan)) == "255.255.252.0" { held = held + 1 }
+  if Ip.contains(&lan, &address("192.168.7.9")) && !Ip.contains(&lan, &address("192.168.8.0")) { held = held + 1 }
+  if Ip.networkOf(&address("10.1.2.3"), 8) == Some(network("10.0.0.0/8")) && Ip.networkOf(&address("10.1.2.3"), 33) == None { held = held + 1 }
+  if Ip.renderNetwork(&network("2001:db8::1")) == "2001:db8::1/128" && Ip.renderNetwork(&network("0.0.0.0/0")) == "0.0.0.0/0" { held = held + 1 }
+  if Ip.render(&Ip.last(&network("2001:db8::/32"))) == "2001:db8:ffff:ffff:ffff:ffff:ffff:ffff" { held = held + 1 }
+  if Ip.overlaps(&network("10.0.0.0/8"), &network("10.20.0.0/16")) && Ip.overlaps(&network("10.20.0.0/16"), &network("10.0.0.0/8")) { held = held + 1 }
+  if !Ip.overlaps(&network("10.0.0.0/8"), &network("11.0.0.0/8")) && !Ip.overlaps(&network("::/0"), &network("0.0.0.0/0")) { held = held + 1 }
+  if networkRefusal("10.1.2.3/8") == "the address has bits set past the prefix; write the network's first address" { held = held + 1 }
+  if networkRefusal("10.0.0.0/33") == "'33' is not a prefix length for this family" { held = held + 1 }
+  if networkRefusal("10.0.0.0/") == "'' is not a prefix length for this family" && networkRefusal("10.0.0.0/08") == "'08' is not a prefix length for this family" { held = held + 1 }
+  let family: Ip.Family = if Ip.isV6(&address("1.1.1.1")) { Ip.V6 } else { Ip.V4 }
+  let problem: Ip.IpError = Ip.WrongPartCount(2)
+  if family == Ip.V4 && Ip.explain(&problem) == "an address needs its full set of parts, found 2" { held = held + 1 }
+  if networkRefusal("x/8") == "an address needs its full set of parts, found 1" { held = held + 1 }
+
+  held
+}
