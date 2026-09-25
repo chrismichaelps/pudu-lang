@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
@@ -118,6 +119,11 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| Pages written where hosts serve them, unsafe paths and failed pages
+        refused, unchanged files left alone, one worker and eight agreeing,
+        and each host's layout and routing. -}
+    , counterexample "a site builds for its host and rewrites only what changed"
+        (built === Just "28")
     {-| Every kind of value answers toText with the text interpolation writes,
         a declared toText wins even through a type parameter, the method binds
         its receiver as a value, and bytes keep their refusing form. -}
