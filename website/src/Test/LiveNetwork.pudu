@@ -1,0 +1,31 @@
+module Test.LiveNetwork
+
+import Std.Io as Io
+import Service.LiveFiles as Files
+import Service.LiveIndex as Index
+import Service.LiveRelease as Release
+import Service.LiveSource as Source
+
+/// The live package index against the real GitHub, for the scheduled
+/// integration workflow: the owner's published package must be found under the
+/// topic, admitted with at least one dated release, and its files listed at the
+/// release's commit. Exits non-zero, naming the step, when any of it fails.
+fn failed(step: Str) -> Int {
+  let _written = Io.writeErrorLine("live packages against GitHub: " + step)
+  1
+}
+
+fn main() -> Int {
+  let source = Source.fromEnvironment()
+  let Some(listing) = Index.search(&source) else { return failed("the topic search did not answer") }
+  let found = listing.repositories.filter(|repository: Index.Repository| repository.path == "chrismichaelps/pudu-lang-mcp")
+  if found.isEmpty() { return failed("chrismichaelps/pudu-lang-mcp is not under the pudu-package topic") }
+  let Some(read) = Release.read(&source, &found[0], None) else { return failed("the tags did not answer") }
+  if read.releases.isEmpty() { return failed("no tag was admitted as a release") }
+  let newest = read.releases[0]
+  if newest.publishedAt.isEmpty() { return failed("release " + newest.version + " has no date") }
+  let Some(files) = Files.listed(&source, found[0].path, newest.commit) else { return failed("the tree at " + newest.commit + " did not answer") }
+  if !files.contains("pudu.toml") { return failed("pudu.toml is not among the release's files") }
+  let _written = Io.writeLine("live packages against GitHub: " + found[0].handle + "/" + found[0].project + " " + newest.version + " (" + newest.publishedAt + "), " + show(files.length()) + " files")
+  0
+}

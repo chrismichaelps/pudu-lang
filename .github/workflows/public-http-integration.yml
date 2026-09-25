@@ -25,3 +25,7 @@ jobs:
       - run: cabal update
       - name: Fetch public HTTP and HTTPS endpoints with Pudu
         run: cabal run -v0 pudu -- run test-fixtures/integration/FetchPublicHttp.pudu
+      - name: Read the live package index from GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cabal run -v0 pudu -- run website/src/Test/LiveNetwork.pudu

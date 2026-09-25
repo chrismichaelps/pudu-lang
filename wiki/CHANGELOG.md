@@ -18,6 +18,8 @@ tags: [changelog]
 - [[website Service LiveFiles]]: a release the build never saw has a Source tab, read from the git
   tree and raw files at its commit and remembered as immutable; dot paths and `deps/` stay out.
   `Packages.Project.bodies` carries the shown file to the Source view.
+- [[website live network check]] runs the live index against the real GitHub for
+  `@chrismichaelps/pudu-lang-mcp` in [[Public HTTP Integration Workflow]].
 - A snapshot release's source and API catalogue are served by the function. [[website live pages suite]]
   (23) and [[website live packages suite]] (20) run against [[website live stand]]; CI runs both.
 
