@@ -1,0 +1,92 @@
+module UsesCronAll
+
+import Std.Cron as Cron
+import Std.Time as Time
+
+/// 2021-01-01T00:00:00Z, a Friday.
+const START: Int = 1609459200000
+
+const MINUTE: Int = 60000
+
+const HOUR: Int = 3600000
+
+const DAY: Int = 86400000
+
+fn schedule(text: Str) -> Cron.Schedule {
+  match Cron.parse(text) {
+    case Ok(parsed) => parsed
+    case Err(_) => {
+      match Cron.parse("0 0 1 1 *") {
+        case Ok(fallback) => fallback
+        case Err(_) => panic("fallback schedule")
+      }
+    }
+  }
+}
+
+fn nextAt(text: Str) -> Int {
+  match Cron.next(&schedule(text), &Time.instantOf(START)) {
+    case Some(moment) => Time.toMillis(&moment) - START
+    case None => -1
+  }
+}
+
+fn upcomingAt(text: Str, count: Int) -> Array[Int] {
+  Cron.upcoming(&schedule(text), &Time.instantOf(START), count).map(|moment| {
+      Time.toMillis(&moment) - START
+    })
+}
+
+fn refusal(text: Str) -> Str {
+  match Cron.parse(text) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Cron.explain(&problem)
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // A step over the whole field fires every fifteen minutes, strictly after the start.
+  if nextAt("*/15 * * * *") == 15 * MINUTE { held = held + 1 }
+
+  // A minute the schedule names matches; the one after it does not.
+  let quarterly = schedule("*/15 * * * *")
+  if Cron.matches(&quarterly, &Time.instantOf(START + 30 * MINUTE)) { held = held + 1 }
+  if !Cron.matches(&quarterly, &Time.instantOf(START + 31 * MINUTE)) { held = held + 1 }
+
+  // Weekday names and ranges skip the weekend.
+  if upcomingAt("0 9 * * MON-FRI", 3) == [9 * HOUR, 3 * DAY + 9 * HOUR, 4 * DAY + 9 * HOUR] {
+    held = held + 1
+  }
+
+  // A macro expands to its five fields.
+  if nextAt("@daily") == DAY { held = held + 1 }
+  if nextAt("@hourly") == HOUR { held = held + 1 }
+
+  // Both day fields restricted: either one firing is enough.
+  if nextAt("0 0 13 * FRI") == 7 * DAY { held = held + 1 }
+
+  // Seven is Sunday.
+  if nextAt("0 0 * * 7") == 2 * DAY { held = held + 1 }
+
+  // Month names.
+  if nextAt("0 0 1 FEB *") == 31 * DAY { held = held + 1 }
+
+  // A stepped range.
+  if upcomingAt("0 8-18/5 * * *", 3) == [8 * HOUR, 13 * HOUR, 18 * HOUR] { held = held + 1 }
+
+  // A date that never occurs never fires, and upcoming stops rather than looping.
+  if nextAt("0 0 30 2 *") == -1 { held = held + 1 }
+  if upcomingAt("0 0 30 2 *", 2).length() == 0 { held = held + 1 }
+
+  // Each refusal names its cause.
+  if refusal("* * *") == "expected 5 fields, found 3" { held = held + 1 }
+  if refusal("60 * * * *") == "minute 60 is outside 0-59" { held = held + 1 }
+  if refusal("*/0 * * * *") == "malformed minute field: */0" { held = held + 1 }
+  if refusal("@never") == "unknown schedule macro: @never" { held = held + 1 }
+  if refusal("5-2 * * * *") == "malformed minute field: 5-2" { held = held + 1 }
+  if refusal("0 0 * * FUNDAY") == "malformed weekday field: FUNDAY" { held = held + 1 }
+
+  held
+}
