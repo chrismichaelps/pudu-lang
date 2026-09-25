@@ -189,7 +189,12 @@ export fn removeTree(path: Str) -> Result[(), FsError] {
   }
 }
 
-/// What a path permits.
+/// What the running program may do with a path.
+///
+/// The operating system is asked on the program's behalf, so the answer is
+/// about this program and not a copy of the flags stored with the file. The
+/// two differ for a program running with administrator rights: it may write a
+/// file marked read-only, and this answers `writable: true` for it.
 ///
 /// ## Examples
 ///
@@ -214,10 +219,11 @@ export fn permissions(path: Str) -> Result[Permissions, FsError] {
 
 /// A path's permissions set to exactly the flags given.
 ///
-/// What a request actually changes is bounded by the filesystem and the user
-/// running the program; a search bit on a system with no such notion, or a
-/// restriction the program's own owner is exempt from, is not an error, just a
-/// flag that made no difference.
+/// Only the owner's flags change; what other users may do is left as it was.
+/// What a request achieves is bounded by the filesystem and the user running
+/// the program: a search flag on a system with no such notion is not an error,
+/// and a program with administrator rights still reads `writable: true` from
+/// `permissions` after clearing it, because it is exempt from the restriction.
 ///
 /// ## Examples
 ///

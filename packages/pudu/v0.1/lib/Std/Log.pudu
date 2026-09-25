@@ -15,6 +15,9 @@ import Std.Text as Text
 export type Level = Debug | Info | Warn | Error | Fatal | Silent
 
 /// One named value carried alongside a message.
+///
+/// What `carrying` and `carryingValue` build. Read back with `fieldsOf`; built
+/// directly only by a format choosing how to render one.
 export type Field = { key: Str, value: Str }
 
 /// Everything one line knows, before anything decides how it should read.
@@ -104,6 +107,14 @@ fn unescapeShown(value: Str) -> Str {
 ///
 /// `Info` rather than `Debug`, because a default that says everything trains a
 /// reader to ignore the output, and the one thing a log must not be is ignored.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout()
+/// Log.leastOf(&logger)  // Log.Info
+/// Log.nameOf(&logger)   // ""
+/// ```
 export fn stdout() -> Logger {
   Logger{least: Info, name: "", fields: [], format: logfmt, printer: Out.stdout()}
 }
@@ -112,6 +123,12 @@ export fn stdout() -> Logger {
 ///
 /// Where a program's diagnostics belong when its answer goes to output, so the
 /// two can be read apart and piped apart.
+///
+/// ## Examples
+///
+/// ```
+/// Log.leastOf(&Log.stderr())  // Log.Info
+/// ```
 export fn stderr() -> Logger {
   Logger{least: Info, name: "", fields: [], format: logfmt, printer: Out.stderr()}
 }
@@ -180,6 +197,13 @@ impl Adjusting for Logger {
 ///
 /// A free function rather than a method, because it is generic in the value it
 /// renders and the trait is not.
+///
+/// ## Examples
+///
+/// ```
+/// let withCount = Log.carryingValue(&Log.stdout(), "count", 3)
+/// Log.fieldsOf(&withCount).length()  // 1
+/// ```
 export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
   value.carrying(key, unshown(show(held)))
 }
@@ -187,15 +211,40 @@ export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
 // Reading a logger back
 
 /// The level a logger keeps from.
+///
+/// ## Examples
+///
+/// ```
+/// Log.leastOf(&Log.stdout().keeping(Log.Debug))  // Log.Debug
+/// ```
 export fn leastOf(value: &Logger) -> Level { value.least }
 
 /// The name a logger speaks under.
+///
+/// ## Examples
+///
+/// ```
+/// Log.nameOf(&Log.stdout().named("checkout"))  // "checkout"
+/// ```
 export fn nameOf(value: &Logger) -> Str { value.name }
 
 /// The fields a logger carries, in the order they were added.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().carrying("order", "A17")
+/// Log.fieldsOf(&logger).length()  // 1
+/// ```
 export fn fieldsOf(value: &Logger) -> Array[Field] { value.fields }
 
 /// How a level is written.
+///
+/// ## Examples
+///
+/// ```
+/// Log.levelName(Log.Warn)  // "WARN"
+/// ```
 export fn levelName(value: Level) -> Str {
   match value {
     case Debug => "DEBUG"
@@ -223,6 +272,14 @@ fn rank(value: Level) -> Int {
 ///
 /// Worth asking before building a line whose message is expensive to produce:
 /// the check is a comparison, and the message is not built if it is not kept.
+///
+/// ## Examples
+///
+/// ```
+/// Log.keeps(&Log.stdout(), Log.Warn)                       // true
+/// Log.keeps(&Log.stdout(), Log.Debug)                       // false
+/// Log.keeps(&Log.stdout().keeping(Log.Silent), Log.Fatal)  // false
+/// ```
 export fn keeps(value: &Logger, level: Level) -> Bool {
   match level {
     case Silent => false
@@ -234,6 +291,14 @@ export fn keeps(value: &Logger, level: Level) -> Bool {
 ///
 /// For a program taking its level from a setting or an argument, where the text
 /// arrived from outside and being unrecognised is an input rather than a defect.
+///
+/// ## Examples
+///
+/// ```
+/// Log.levelFrom("warning")  // Some(Log.Warn)
+/// Log.levelFrom("off")      // Some(Log.Silent)
+/// Log.levelFrom("verbose")  // None
+/// ```
 export fn levelFrom(name: Str) -> Option[Level] {
   match name.toUpper() {
     case "DEBUG" => Some(Debug)
@@ -259,6 +324,14 @@ export fn levelFrom(name: Str) -> Option[Level] {
 /// `note=see below` reads as a field `note` and a stray word. A value carrying a
 /// line break is quoted and the break written as an escape, so one line of
 /// output stays one line of output.
+///
+/// ## Examples
+///
+/// ```
+/// Log.quoted("hello")        // "hello"
+/// Log.quoted("hello there")  // "\"hello there\""
+/// Log.quoted("")             // "\"\""
+/// ```
 export fn quoted(value: Str) -> Str {
   let plain = !value.isEmpty()
     && !value.contains(" ")
@@ -332,10 +405,18 @@ fn withPair(pieces: &Array[Str], key: Str, value: Str) -> Array[Str] {
 /// message left outside the pairs is the one part a reader has to find by
 /// position, and position is what breaks when a field is added:
 ///
-///     timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout order=A17 message=captured
+/// timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout order=A17 message=captured
 ///
 /// Parts that are empty are left out rather than written as nothing, so a line
 /// with no name carries no `logger=`.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().named("checkout").carrying("order", "A17")
+/// let line = Log.lineOf(&logger, "2026-08-31T12:00:00Z", Log.Info, "captured")
+/// Log.logfmt(line)  // "timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout order=A17 message=captured"
+/// ```
 export fn logfmt(line: Line) -> Str {
   var pieces = withPair(&[], "timestamp", line.moment)
   pieces = withPair(&pieces, "level", levelName(line.level))
@@ -351,7 +432,15 @@ export fn logfmt(line: Line) -> Str {
 /// who — because at a terminal the position is the label. The message ends the
 /// line so the eye can run down the right of the output and read what happened:
 ///
-///     2026-08-31T12:00:00Z INFO checkout order=A17 captured
+/// 2026-08-31T12:00:00Z INFO checkout order=A17 captured
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().named("checkout").carrying("order", "A17")
+/// let line = Log.lineOf(&logger, "2026-08-31T12:00:00Z", Log.Info, "captured")
+/// Log.pretty(line)  // "2026-08-31T12:00:00Z INFO checkout order=A17 captured"
+/// ```
 export fn pretty(line: Line) -> Str {
   var pieces = []
   if !line.moment.isEmpty() { pieces = pieces.push(line.moment) }
@@ -369,6 +458,13 @@ export fn pretty(line: Line) -> Str {
 /// Every value is written as a string, including one that looks like a number,
 /// because a field holding `00123` or a version is not a number and a reader
 /// that guesses will eventually guess wrong.
+///
+/// ## Examples
+///
+/// ```
+/// let line = Log.lineOf(&Log.stdout().named("checkout"), "", Log.Info, "captured")
+/// Log.json(line)  // "\{\"level\":\"INFO\",\"logger\":\"checkout\",\"message\":\"captured\"\}"
+/// ```
 export fn json(line: Line) -> Str {
   var pieces = []
   if !line.moment.isEmpty() { pieces = pieces.push(member("timestamp", line.moment)) }
@@ -391,6 +487,15 @@ fn member(key: Str, value: Str) -> Str {
 /// For a program that hands its lines somewhere other than a stream, and for
 /// checking what a logger produces by comparing values rather than by capturing
 /// output — the same reason [[Std Out]] keeps `rendered` apart from `write`.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().carrying("order", "A17")
+/// let line = Log.lineOf(&logger, "", Log.Warn, "low stock")
+/// line.message  // "low stock"
+/// line.level    // Log.Warn
+/// ```
 export fn lineOf(value: &Logger, moment: Str, level: Level, message: Str) -> Line {
   Line {
     moment: moment,
@@ -402,6 +507,13 @@ export fn lineOf(value: &Logger, moment: Str, level: Level, message: Str) -> Lin
 }
 
 /// A line as it would be written, without a timestamp.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().named("checkout")
+/// Log.rendered(&logger, Log.Info, "captured")  // "level=INFO logger=checkout message=captured"
+/// ```
 export fn rendered(value: &Logger, level: Level, message: Str) -> Str {
   (value.format)(lineOf(value, "", level, message))
 }
@@ -412,6 +524,14 @@ export fn rendered(value: &Logger, level: Level, message: Str) -> Str {
 /// of what it was told and two runs of the same program can be compared. A caller
 /// wanting the real clock asks `Std.Time` for it and passes the answer, which is
 /// one line at the edge of the program rather than a clock hidden in every line.
+///
+/// ## Examples
+///
+/// ```
+/// let logger = Log.stdout().named("checkout")
+/// Log.stamped(&logger, "2026-08-31T12:00:00Z", Log.Info, "captured")
+/// // "timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout message=captured"
+/// ```
 export fn stamped(value: &Logger, moment: Str, level: Level, message: Str) -> Str {
   (value.format)(lineOf(value, moment, level, message))
 }
@@ -422,6 +542,18 @@ export fn stamped(value: &Logger, moment: Str, level: Level, message: Str) -> St
 ///
 /// Nothing rather than an empty line: a filtered line that still moved the
 /// cursor would make a quiet log look busy.
+///
+/// A line below the logger's threshold is not built at all, so a message that
+/// would be expensive to assemble is never assembled for a level nobody keeps.
+///
+/// ## Examples
+///
+/// ```
+/// // A logger keeping from Info up, asked to write at Debug, writes nothing.
+/// let quiet = Log.stdout().keeping(Log.Info)
+/// let outcome = Log.at(&quiet, Log.Debug, "detail")
+/// // outcome is Ok(())
+/// ```
 export fn at(value: &Logger, level: Level, message: Str) -> Result[(), Str] {
   if !keeps(value, level) { Ok(()) } else {
     Out.text(&value.printer, rendered(value, level, message))
@@ -429,6 +561,14 @@ export fn at(value: &Logger, level: Level, message: Str) -> Result[(), Str] {
 }
 
 /// Write a stamped line, or nothing when the level is below what is kept.
+///
+/// ## Examples
+///
+/// ```
+/// // With a caller-supplied moment rather than none:
+/// let logger = Log.stdout()
+/// let outcome = Log.atMoment(&logger, "2026-08-31T12:00:00Z", Log.Info, "captured")
+/// ```
 export fn atMoment(
   value: &Logger,
   moment: Str,
@@ -441,26 +581,56 @@ export fn atMoment(
 }
 
 /// Write a line at `Debug`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Log.debug(&Log.stdout().keeping(Log.Debug), "starting up")
+/// ```
 export fn debug(value: &Logger, message: Str) -> Result[(), Str] {
   at(value, Debug, message)
 }
 
 /// Write a line at `Info`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Log.info(&Log.stdout(), "listening on :8080")
+/// ```
 export fn info(value: &Logger, message: Str) -> Result[(), Str] {
   at(value, Info, message)
 }
 
 /// Write a line at `Warn`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Log.warn(&Log.stdout(), "retrying after timeout")
+/// ```
 export fn warn(value: &Logger, message: Str) -> Result[(), Str] {
   at(value, Warn, message)
 }
 
 /// Write a line at `Error`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Log.error(&Log.stdout(), "connection refused")
+/// ```
 export fn error(value: &Logger, message: Str) -> Result[(), Str] {
   at(value, Error, message)
 }
 
 /// Write a line at `Fatal`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Log.fatal(&Log.stdout(), "out of memory")
+/// ```
 export fn fatal(value: &Logger, message: Str) -> Result[(), Str] {
   at(value, Fatal, message)
 }
@@ -469,6 +639,14 @@ export fn fatal(value: &Logger, message: Str) -> Result[(), Str] {
 ///
 /// For the field that belongs to one line rather than to everything after it,
 /// which is most of them.
+///
+/// ## Examples
+///
+/// ```
+/// // A field that belongs to this one line, without changing the logger:
+/// let logger = Log.stdout()
+/// let _ = Log.field(&logger, Log.Info, "duration_ms", "42", "request handled")
+/// ```
 export fn field(
   value: &Logger,
   level: Level,
@@ -483,6 +661,15 @@ export fn field(
 ///
 /// Answering it back means a caller logs on the way past rather than choosing
 /// between reporting a failure and returning it.
+///
+/// ## Examples
+///
+/// ```
+/// // A step that failed, logged on the way past and still returned as Err:
+/// let attempt: Result[Int, Str] = Err("connection refused")
+/// let passed = Log.failure(&Log.stdout(), "could not connect", attempt)
+/// // passed is Err("connection refused"); the logger also wrote an Error line
+/// ```
 export fn failure[T, E](value: &Logger, message: Str, held: Result[T, E]) -> Result[T, E] {
   match held {
     case Ok(found) => Ok(found)

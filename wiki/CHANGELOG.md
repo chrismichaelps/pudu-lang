@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Reference documentation for the next core modules (#359)
+
+- `Std.Path`, `Std.Iter`, `Std.Decimal`, `Std.NonEmpty`, `Std.Env`, `Std.Fs`, `Std.Process`,
+  `Std.Log`, `Std.SortedMap`, `Std.MultiMap`, `Std.LinkedMap`, and `Std.BiMap` state each public
+  declaration's edge cases and carry `## Examples`. Every example with a machine-independent answer
+  was executed and holds; file, process, and environment examples were run against a stated setup.
+- `Std.Fs.permissions` is documented as what the running program may do, which differs from the
+  stored flags for a program with administrator rights; `setPermissions` changes the owner's flags only.
+- The `Std.Iter.take` documentation no longer refers to a sequence the module does not provide.
+
 ## 2026-09-25 — A build step for any Pudu web application (#351)
 
 - [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with
