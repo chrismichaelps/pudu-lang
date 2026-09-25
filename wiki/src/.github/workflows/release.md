@@ -38,3 +38,11 @@ again; the tag check closes that. Naming the package's paths in the trigger was 
 documentation paths after the first release branch showed the 300-file limit: the plan, which reads
 every changed path from `git`, is the gate that cannot be exceeded. The manual `package` workflow remains for building an archive from
 any branch.
+
+## Runtime pack (#355)
+
+`runtime-pack` builds the musl runtime in Alpine from the release commit, strips it, writes the
+Lambda variant (`/var/task` loader and libraries), proves a program attached to it starts from its
+products and runs, gzips each of the seven files, and uploads them with
+`pudu-runtime-linux-musl-x86_64.sha256`. `publish` waits for it, so a release carries the pack that
+`pudu build --target` fetches.

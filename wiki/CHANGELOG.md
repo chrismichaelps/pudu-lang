@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Building for another host without a toolchain (#355)
+
+- [[Cli RuntimePack]]: `pudu build --target linux-musl-x86_64 | lambda-x86_64` fetches the release's
+  musl runtime pack once — HTTPS, redirects followed, every file checked against the SHA-256 manifest
+  and the runtimes against this compiler's source digest — and keeps it by version and digest. The
+  Lambda target writes a ready function directory.
+- The release workflow builds, strips, proves, and publishes the pack beside the compiler archives.
+- [[Runtime Pack Gate]] serves a pack from a stand-in release and covers every refusal; CI runs it.
+
 ## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
 
 - [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time
