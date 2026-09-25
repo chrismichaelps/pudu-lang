@@ -201,3 +201,7 @@ They are available implicitly in the value namespace for standard library module
 Adds tlsUpgradeWithin, gzipCompress and gzipDecompress to the prelude value vocabulary.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Native checksum name (#343)
+
+Adds `checksumOf` to the pure value vocabulary so [[Std Checksum]] resolves it without a capability.

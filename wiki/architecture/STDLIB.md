@@ -240,6 +240,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Tree` | 40 | a value with trees beneath it: three orders, paths, pruning, grafting, and growing |
 | `Std.Cron` | 7 | five-field schedules, macros, month and weekday names, the next firing minute in UTC |
 | `Std.Stats` | 16 | mean, median, percentiles, variance, deviation, covariance, correlation, histograms, a streaming accumulator |
+| `Std.Checksum` | 9 | CRC-32, CRC-32C, CRC-64, FNV-1a at runtime speed, chained over chunks |
 | `Std.Dotenv` | 8 | environment files: quoting, escapes, earlier-key expansion, rendering back |
 | `Std.Term` | 21 | terminal colour and styles, stripping sequences, visible width, cursor control |
 | `Std.Mappable` | 3 | a trait over the container itself, so one definition serves several |

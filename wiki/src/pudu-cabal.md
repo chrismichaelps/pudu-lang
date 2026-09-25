@@ -150,3 +150,7 @@ Register Pudu.Version in library exposed-modules for Cabal-derived package versi
 
 - **Q:** Hardcode version numbers across tools? **A:** No; derive the language version and constraints directly from Cabal metadata via Pudu.Version.
 - **Q:** Reuse a global bundle cache directory across runs? **A:** No; withSystemTempDirectory ensures isolated per-process extraction without collisions or left-behind artifacts.
+
+## Native checksums (#343)
+
+Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new dependency.

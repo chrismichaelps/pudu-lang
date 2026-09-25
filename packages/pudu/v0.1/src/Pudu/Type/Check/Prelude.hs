@@ -148,6 +148,12 @@ declareBuiltinConstructors = do
   bindName "sha3_512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
   bindName "blake2b256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
   bindName "blake2b512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  {-| Checksums, wired in for the reason the digests are: a table step per
+      byte is more than the evaluator can afford over a transfer. The
+      algorithm is a code because a wired-in signature cannot name the sum
+      `Std.Checksum` would declare; that module is the typed surface. -}
+  bindName "checksumOf"
+    (monotype (FunctionTypeValue False [integerType, NominalType "UInt64" [], bytesType] (NominalType "UInt64" [])))
   bindName "hmacSha512Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "constantTimeEqual" (monotype (FunctionTypeValue False [bytesType, bytesType] boolType))
   bindName "verifyRsaSha256"

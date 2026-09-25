@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Checksums at runtime speed (#343)
+
+- [[Eval Checksum]] and the pure built-in `checksumOf`: CRC-32, CRC-32C, CRC-64 (ECMA-182 as xz), and
+  FNV-1a 32/64 as strict folds over bytes. A megabyte's CRC-32 drops from 6.6 s in Pudu to 43 ms.
+- [[Std Checksum]]: a function per algorithm, each with an `Update` form that chains over chunks,
+  and fixed-width hex.
+- [[Std Compress Gzip]] `crc32` delegates, so gzip and zip checks stop paying 11 s a megabyte.
+- [[Uses Checksum All]] asserts the published check values (15 checks).
+
 ## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
 
 - [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the
