@@ -58,6 +58,9 @@ checks, and 18 idempotency checks, the last including the middleware against a s
 
 `UsesUiGestureAll` packs `7020602`: gestures (7), pointer decoding (2), slider (6), clipboard (2).
 
+`UsesAppWiringAll` packs `11160404`: events and outbox (11), API description (16), application
+describing refusals (4), and calendar jobs (4).
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

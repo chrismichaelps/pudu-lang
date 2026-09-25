@@ -1,0 +1,395 @@
+module Std.App.OpenApi
+
+import Std.App.Problem as Problem
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+
+/// The shape of a value in a request or response.
+export type Schema
+  = Text
+  | Whole
+  | Fraction
+  | Truth
+  | OneOf(Array[Str])
+  | ListOf(Schema)
+  | Record(Array[Property])
+  | Named(Str)
+  | Nullable(Schema)
+
+/// A member of a `Record` schema.
+export type Property = { name: Str, schema: Schema, required: Bool, description: Str }
+
+/// Where a parameter is read from.
+export type Location
+  = InPath
+  | InQuery
+  | InHeader
+
+/// A parameter of an operation.
+export type Parameter = {
+  name: Str,
+  location: Location,
+  required: Bool,
+  schema: Schema,
+  description: Str
+}
+
+/// One possible response. A 4xx or 5xx answer with no body is described as
+/// a problem body.
+export type Answer = { status: Int, description: Str, body: Option[Schema] }
+
+/// One route, described. `path` uses the router's `:name` segments.
+export type Operation = {
+  method: Http.Method,
+  path: Str,
+  id: Str,
+  summary: Str,
+  tags: Array[Str],
+  parameters: Array[Parameter],
+  body: Option[Schema],
+  answers: Array[Answer],
+  secured: Bool
+}
+
+/// A whole API description.
+export type Document = {
+  title: Str,
+  version: Str,
+  description: Str,
+  servers: Array[Str],
+  operations: Array[Operation],
+  schemas: Array[(Str, Schema)]
+}
+
+/// The name the problem-body schema is published under.
+export const PROBLEM_SCHEMA: Str = "Problem"
+
+/// The document version this module writes.
+export const SPEC_VERSION: Str = "3.1.0"
+
+const SCALAR_TYPES: Map[Str, Str] = mapOf([
+    ("Text", "string"),
+    ("Whole", "integer"),
+    ("Fraction", "number"),
+    ("Truth", "boolean")
+  ])
+
+const LOCATIONS: Map[Str, Str] = mapOf([
+    ("InPath", "path"),
+    ("InQuery", "query"),
+    ("InHeader", "header")
+  ])
+
+/// An operation whose `:name` path segments are required text parameters
+/// and which answers 200 with no declared body. Fill the rest by record
+/// update.
+export fn operation(method: Http.Method, path: Str, id: Str) -> Operation {
+  let parameters = segmentNames(path).map(|name| parameter(name, InPath, Text))
+  Operation {
+    method: method,
+    path: path,
+    id: id,
+    summary: "",
+    tags: [],
+    parameters: parameters,
+    body: None,
+    answers: [answer(200, "OK", None)],
+    secured: false
+  }
+}
+
+/// A required property.
+export fn field(name: Str, schema: Schema) -> Property {
+  Property{name: name, schema: schema, required: true, description: ""}
+}
+
+/// An optional property.
+export fn optional(name: Str, schema: Schema) -> Property {
+  Property{name: name, schema: schema, required: false, description: ""}
+}
+
+/// A parameter; path parameters are required, others optional.
+export fn parameter(name: Str, location: Location, schema: Schema) -> Parameter {
+  Parameter{name: name, location: location, required: location == InPath, schema: schema, description: ""}
+}
+
+/// A response.
+export fn answer(status: Int, description: Str, body: Option[Schema]) -> Answer {
+  Answer{status: status, description: description, body: body}
+}
+
+/// A document with no operations.
+export fn document(title: Str, version: Str) -> Document {
+  Document{title: title, version: version, description: "", servers: [], operations: [], schemas: []}
+}
+
+/// Building a document reads top to bottom:
+/// `OpenApi.document(...).describe(op).schema("Order", s)`.
+export trait Describing {
+  fn describe(self: &Self, added: Operation) -> Self
+  fn schema(self: &Self, name: Str, shape: Schema) -> Self
+  fn server(self: &Self, url: Str) -> Self
+}
+
+impl Describing for Document {
+  /// The document with one more operation.
+  fn describe(self: &Self, added: Operation) -> Self {
+    Document{..*self, operations: self.operations.push(added)}
+  }
+
+  /// The document with one more named schema.
+  fn schema(self: &Self, name: Str, shape: Schema) -> Self {
+    Document{..*self, schemas: self.schemas.push((name, shape))}
+  }
+
+  /// The document with one more server URL.
+  fn server(self: &Self, url: Str) -> Self {
+    Document{..*self, servers: self.servers.push(url)}
+  }
+}
+
+/// What is inconsistent in a document: repeated operation ids, a `Named`
+/// schema never declared, a path segment without a path parameter, and an
+/// operation with no answers.
+export fn problems(doc: &Document) -> Array[Str] {
+  var found = []
+  var seen: Set[Str] = setOf([])
+  var declared: Set[Str] = setOf([PROBLEM_SCHEMA])
+  for (name, _) in doc.schemas { declared = declared.insert(name) }
+  for one in doc.operations {
+    if seen.contains(one.id) { found = found.push("operation id '{one.id}' is repeated") }
+    seen = seen.insert(one.id)
+    if one.answers.length() == 0 { found = found.push("{one.id} declares no answers") }
+    for name in segmentNames(one.path) {
+      let covered = one.parameters.filter(|given| given.name == name && given.location == InPath)
+      if covered.length() == 0 { found = found.push("{one.id} has no parameter for :{name}") }
+    }
+    for name in referencesOf(&one) {
+      if !declared.contains(name) { found = found.push("{one.id} refers to undeclared schema {name}") }
+    }
+  }
+  found
+}
+
+/// Routes the router serves that the document does not describe, and
+/// operations the router does not serve, each as `METHOD path`.
+export fn undocumented(doc: &Document, router: &Route.Router) -> (Array[Str], Array[Str]) {
+  var described: Set[Str] = setOf([])
+  for one in doc.operations { described = described.insert(signature(&one.method, one.path)) }
+  var served: Set[Str] = setOf([])
+  var missing = []
+  for entry in router.routes {
+    let name = signature(&entry.method, entry.pattern)
+    served = served.insert(name)
+    if !described.contains(name) { missing = missing.push(name) }
+  }
+  var stale = []
+  for one in doc.operations {
+    let name = signature(&one.method, one.path)
+    if !served.contains(name) { stale = stale.push(name) }
+  }
+  (missing, stale)
+}
+
+/// The document as an OpenAPI 3.1 object.
+export fn toJson(doc: &Document) -> Json.Json {
+  var info = [("title", Json.Text(doc.title)), ("version", Json.Text(doc.version))]
+  if doc.description.length() > 0 { info = info.push(("description", Json.Text(doc.description))) }
+  var members = [("openapi", Json.Text(SPEC_VERSION)), ("info", Json.Object(info))]
+  if doc.servers.length() > 0 {
+    let servers = doc.servers.map(|url| Json.Object([("url", Json.Text(url))]))
+    members = members.push(("servers", Json.List(servers)))
+  }
+  members = members.push(("paths", Json.Object(pathsOf(doc))))
+  var schemas = doc.schemas.map(|entry| {
+      let (name, shape) = entry
+      (name, schemaJson(&shape))
+    })
+  if usesProblem(doc) { schemas = schemas.push((PROBLEM_SCHEMA, problemSchema())) }
+  var components = [("schemas", Json.Object(schemas))]
+  if doc.operations.filter(|one| one.secured).length() > 0 {
+    let bearer = Json.Object([("type", Json.Text("http")), ("scheme", Json.Text("bearer"))])
+    components = components.push(("securitySchemes", Json.Object([("bearer", bearer)])))
+  }
+  Json.Object(members.push(("components", Json.Object(components))))
+}
+
+/// A route serving the document as JSON at `path`.
+export fn route(doc: &Document, path: Str) -> Route.Route {
+  let body = Json.encode(&toJson(doc))
+  Route.get(path, |_request| Reply.json(200, body))
+}
+
+fn pathsOf(doc: &Document) -> Array[(Str, Json.Json)] {
+  var order = []
+  var grouped: Map[Str, Array[(Str, Json.Json)]] = mapOf([])
+  for one in doc.operations {
+    let key = openPath(one.path)
+    let existing = match grouped.get(key) {
+      case Some(found) => found
+      case None => {
+        order = order.push(key)
+        []
+      }
+    }
+    let method = Http.methodName(&one.method).toLower()
+    grouped = grouped.insert(key, existing.push((method, operationJson(&one))))
+  }
+  order.map(|key| {
+      let entries = match grouped.get(key) {
+        case Some(found) => found
+        case None => []
+      }
+      (key, Json.Object(entries))
+    })
+}
+
+fn operationJson(one: &Operation) -> Json.Json {
+  var members = [("operationId", Json.Text(one.id))]
+  if one.summary.length() > 0 { members = members.push(("summary", Json.Text(one.summary))) }
+  if one.tags.length() > 0 {
+    members = members.push(("tags", Json.List(one.tags.map(|tag| Json.Text(tag)))))
+  }
+  if one.parameters.length() > 0 {
+    members = members.push(("parameters", Json.List(one.parameters.map(|given| parameterJson(&given)))))
+  }
+  if let Some(shape) = one.body {
+    let content = Json.Object([("application/json", Json.Object([("schema", schemaJson(&shape))]))])
+    members = members.push(("requestBody", Json.Object([("required", Json.Boolean(true)), ("content", content)])))
+  }
+  let answers = one.answers.map(|given| (show(given.status), answerJson(&given)))
+  members = members.push(("responses", Json.Object(answers)))
+  if one.secured {
+    members = members.push(("security", Json.List([Json.Object([("bearer", Json.List([]))])])))
+  }
+  Json.Object(members)
+}
+
+fn parameterJson(given: &Parameter) -> Json.Json {
+  let location = match LOCATIONS.get(show(given.location)) {
+    case Some(found) => found
+    case None => "query"
+  }
+  var members = [
+    ("name", Json.Text(given.name)),
+    ("in", Json.Text(location)),
+    ("required", Json.Boolean(given.required)),
+    ("schema", schemaJson(&given.schema))
+  ]
+  if given.description.length() > 0 { members = members.push(("description", Json.Text(given.description))) }
+  Json.Object(members)
+}
+
+fn answerJson(given: &Answer) -> Json.Json {
+  var members = [("description", Json.Text(given.description))]
+  let described = match given.body {
+    case Some(shape) => Some(("application/json", schemaJson(&shape)))
+    case None => {
+      if given.status >= 400 { Some((Problem.MEDIA_TYPE, reference(PROBLEM_SCHEMA))) } else { None }
+    }
+  }
+  if let Some((media, shape)) = described {
+    members = members.push(("content", Json.Object([(media, Json.Object([("schema", shape)]))])))
+  }
+  Json.Object(members)
+}
+
+fn schemaJson(shape: &Schema) -> Json.Json {
+  match shape {
+    case OneOf(values) => {
+      Json.Object([("type", Json.Text("string")), ("enum", Json.List(values.map(|value| Json.Text(value))))])
+    }
+    case ListOf(inner) => Json.Object([("type", Json.Text("array")), ("items", schemaJson(&inner))])
+    case Record(properties) => recordJson(&properties)
+    case Named(name) => reference(name)
+    case Nullable(inner) => Json.Object([("anyOf", Json.List([schemaJson(&inner), Json.Object([("type", Json.Text("null"))])]))])
+    case _ => {
+      let name = match SCALAR_TYPES.get(show(*shape)) {
+        case Some(found) => found
+        case None => "string"
+      }
+      Json.Object([("type", Json.Text(name))])
+    }
+  }
+}
+
+fn recordJson(properties: &Array[Property]) -> Json.Json {
+  var members = []
+  var required = []
+  for one in properties {
+    var described = schemaJson(&one.schema)
+    if one.description.length() > 0 {
+      described = Json.withField(&described, "description", Json.Text(one.description))
+    }
+    members = members.push((one.name, described))
+    if one.required { required = required.push(Json.Text(one.name)) }
+  }
+  var shape = [("type", Json.Text("object")), ("properties", Json.Object(members))]
+  if required.length() > 0 { shape = shape.push(("required", Json.List(required))) }
+  Json.Object(shape)
+}
+
+fn problemSchema() -> Json.Json {
+  recordJson(&[
+      field("type", Text),
+      field("title", Text),
+      field("status", Whole),
+      optional("detail", Text),
+      optional("instance", Text)
+    ])
+}
+
+fn reference(name: Str) -> Json.Json {
+  Json.Object([("$ref", Json.Text("#/components/schemas/" + name))])
+}
+
+fn usesProblem(doc: &Document) -> Bool {
+  for one in doc.operations {
+    for given in one.answers {
+      if given.status >= 400 && given.body == None { return true }
+    }
+  }
+  false
+}
+
+fn referencesOf(one: &Operation) -> Array[Str] {
+  var shapes = one.parameters.map(|given| given.schema)
+  if let Some(shape) = one.body { shapes = shapes.push(shape) }
+  for given in one.answers {
+    if let Some(shape) = given.body { shapes = shapes.push(shape) }
+  }
+  var names = []
+  for shape in shapes { names = names.concat(namesIn(&shape)) }
+  names
+}
+
+fn namesIn(shape: &Schema) -> Array[Str] {
+  match shape {
+    case Named(name) => [name]
+    case ListOf(inner) => namesIn(&inner)
+    case Nullable(inner) => namesIn(&inner)
+    case Record(properties) => {
+      var names = []
+      for one in properties { names = names.concat(namesIn(&one.schema)) }
+      names
+    }
+    case _ => []
+  }
+}
+
+fn segmentNames(path: Str) -> Array[Str] {
+  path.split("/").filter(|piece| piece.startsWith(":")).map(|piece| piece.drop(1))
+}
+
+fn openPath(path: Str) -> Str {
+  let pieces = path.split("/").map(|piece| {
+      if piece.startsWith(":") { "\{" + piece.drop(1) + "\}" } else { piece }
+    })
+  pieces.join("/")
+}
+
+fn signature(method: &Http.Method, path: Str) -> Str {
+  Http.methodName(method) + " " + path
+}
