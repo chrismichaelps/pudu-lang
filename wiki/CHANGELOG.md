@@ -12,8 +12,11 @@ tags: [changelog]
   take live counts and newer releases. Admission is the build's tag-and-`pudu.toml` rule.
 - [[website Service LiveSource]] remembers GitHub answers in `Std.App.IsrCache` (fresh, then stale on
   failure), goes quiet for a minute after a refusal or timeout, and sends `GITHUB_TOKEN` only to the API.
-- [[website Web Dynamic]] and [[website Prerender]]: `/packages` and its pages route to the function;
-  package answers carry `s-maxage` with `stale-while-revalidate`; a missing package is cached 60 s.
+- [[website Web Dynamic]], [[website Web PackagePages]], and [[website Prerender]]: `/packages`, its
+  pages, and every page under `/@owner` are answered by the function, so a known package's pages show
+  a new release as soon as the listing does. Package answers carry `s-maxage` with
+  `stale-while-revalidate`; a missing package is cached 60 s. The prerender no longer writes package
+  pages, which stay in the sitemap.
 - [[website live packages suite]] covers admission, refresh, outage, stale service, and edge caching
   against a stand-in GitHub; CI runs it.
 
