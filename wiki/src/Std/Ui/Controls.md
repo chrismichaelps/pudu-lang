@@ -17,10 +17,11 @@ Standard controls as [[Std Ui Layout]] views, styled by [[Std Ui Theme]], and th
 that read their [[Std Ui Screen]] events.
 
 Views: `button`, `quietButton`, `toggle`, `stepper` (tags `tag.down` and `tag.up`), `picker` (tags
-`tag.0`, `tag.1`, …), `progress`, `field`, `secureField`, `heading`, `caption`.
+`tag.0`, `tag.1`, …), `slider`, `progress`, `field`, `secureField`, `heading`, `caption`.
 
 Updates: `toggled(on, event, tag)`, `stepped(value, event, tag, low, high, step)`,
-`picked(selected, event, tag, count)`, `edited(value, event, tag, limit)`.
+`picked(selected, event, tag, count)`, `edited(value, event, tag, limit)`, and
+`slid(value, gesture, frame, low, high)`, which maps a tap or drag that began on the track to a value.
 
 ## Semantics
 
@@ -37,8 +38,8 @@ Updates: `toggled(on, event, tag)`, `stepped(value, event, tag, low, high, step)
 - **Q:** Controls that own their state? **A:** No. _Rationale:_ a control holding state is a second
   source of truth the program must synchronise; one state value keeps undo, persistence, and tests
   exact. _Rejected:_ stateful widgets with change callbacks.
-- **Q:** Sliders? **A:** Not yet: a slider is a drag, and the adapter reports presses but not pointer
-  motion. The coverage table in [[architecture/NATIVE-UI]] records it.
+- **Q:** How does a slider move? **A:** From [[Std Ui Gesture]] drags whose start lies on the track;
+  a drag that began elsewhere never moves it, so scrolling past a slider cannot change its value.
 
 ## Dependencies and consumers
 

@@ -80,6 +80,8 @@ tags: [moc, module, stdlib]
 - [[Std Ui Navigation]] — page stacks, tabs, split views, sheets, alerts, and confirmations.
 - [[Std Ui Preferences]] — settings saved atomically in the platform's per-user directory.
 - [[Std Ui Menu]] — menu bars as data, drawn with shortcuts and checked against the keymap.
+- [[Std Ui Gesture]] — taps, long presses, and drags recognized from pointer phases.
+- [[Std Ui Clipboard]] — the system clipboard's text, read and replaced.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std Ui Canvas]] — bounded Pudu-native RGBA software rendering for application UI.
 - [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.

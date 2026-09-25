@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Pointer gestures, sliders, and the clipboard (#322)
+
+- The macOS adapter reports down, move, and up phases with timestamps and reads and replaces the
+  clipboard's text ([[Pudu Desktop Adapter]], [[Eval Desktop]]).
+- [[Std Ui Gesture]] recognizes taps, long presses, and drags; [[Std Ui Controls]] adds `slider` and
+  `slid`; [[Std Ui Clipboard]] reads and writes text with typed failures.
+
 ## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
 
 - [[Std Ui Preferences]] saves typed settings atomically in the platform's per-user directory.

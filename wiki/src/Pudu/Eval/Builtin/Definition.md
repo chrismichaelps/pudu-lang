@@ -76,8 +76,9 @@ digest builtin, preserving total naming and exhaustive dispatch.
 
 ## Desktop capability vocabulary
 
-`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`, and
-`DesktopCloseBuiltin` name the five resource operations beneath [[Std Ui Desktop]]. Separate constructors keep arity and
+`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`,
+`DesktopClipboardReadBuiltin`, `DesktopClipboardWriteBuiltin`, and `DesktopCloseBuiltin` name the
+desktop operations beneath [[Std Ui Desktop]]. Separate constructors keep arity and
 failure attribution exhaustive; no string-selected operation or framework symbol enters the
 language.
 

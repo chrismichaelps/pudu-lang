@@ -100,19 +100,20 @@ A row marked **Absent** is queued work, not an exclusion.
 | Stacks, layers, padding, alignment, scrolling | [[Std Ui Layout]] | **Ready** |
 | Grids | — | **Absent** |
 | Text measure, wrap, draw | [[Std Ui Text]] | **Ready** (bitmap face); shaping, bidirectional text, and input methods absent |
-| Controls: buttons, toggles, steppers, pickers, progress, fields, secure fields | [[Std Ui Controls]] | **Ready**; sliders **Absent** until pointer motion |
+| Controls: buttons, toggles, steppers, pickers, sliders, progress, fields, secure fields | [[Std Ui Controls]] | **Ready** |
 | Long lists | [[Std Ui Virtual]] | **Ready**; selection model **Absent** |
 | Navigation stack, split view, tabs | [[Std Ui Navigation]] | **Ready** |
 | Sheets, alerts, confirmations | [[Std Ui Navigation]] `presenting` | **Ready**: presses blocked, focus trapped |
 | Drawing | [[Std Ui Canvas]] rectangles, clipping, blending | **Partial**: paths, strokes, gradients absent |
 | Animation | [[Std Ui Motion]] curves, springs, retargeting | **Ready** |
-| Gestures | press through `Screen.Pressed` | **Partial**: drag, long press, magnify need pointer move and release |
+| Gestures | [[Std Ui Gesture]] over `Desktop.Pointer` phases | **Ready** for tap, long press, and drag; magnify and rotate **Absent** |
 | Keyboard focus | [[Std Ui Screen]] focus order and ring | **Ready** |
 | Keyboard shortcuts | [[Std Ui Keymap]] | **Ready** |
 | Menus and commands | [[Std Ui Menu]] in-window bar | **Ready**; the platform's native menu bar **Absent** |
 | Undo and redo | [[Std Ui History]] | **Ready** |
 | Persisted preferences | [[Std Ui Preferences]] | **Ready**, atomic replace |
-| Clipboard, drag and drop | — | **Absent** (adapter work) |
+| Clipboard | [[Std Ui Clipboard]] | **Ready** on macOS |
+| Drag and drop between applications | — | **Absent** |
 | Accessibility semantics | [[Std Ui Layout]] semantics, required names | **Partial**: export to the platform accessibility tree absent |
 | Multiple windows, documents, settings window | multiple sessions | **Partial**: no document or settings space yet |
 
