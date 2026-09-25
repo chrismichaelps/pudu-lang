@@ -54,6 +54,7 @@ testServiceEvaluation = do
   spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   cached <- runEntry "test-fixtures/stdlib/UsesCache.pudu"
   contracts <- runEntry "test-fixtures/stdlib/UsesAppContractsAll.pudu"
+  wiring <- runEntry "test-fixtures/stdlib/UsesAppWiringAll.pudu"
   pure $ conjoin
     [ {-| Checked against a server written in the fixture that speaks the wire
           protocol, so what the client sends is observable: that a value is sent
@@ -436,4 +437,11 @@ testServiceEvaluation = do
     , counterexample
         "failures, pages, and repeated requests answer by one contract"
         (contracts === Just "171518")
+    {-| Events with an outbox (11), a router-checked API description (16), an
+        application that refuses to build when its description and routes
+        disagree (4), and calendar jobs on the work schedule (4), in two-digit
+        slots. -}
+    , counterexample
+        "events, the API description, and calendar jobs connect through the application"
+        (wiring === Just "11160404")
     ]

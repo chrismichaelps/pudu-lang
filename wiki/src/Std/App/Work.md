@@ -12,8 +12,9 @@ aliases: [Std App Work]
 The work a service does when nobody asked: what runs, how often, and what happens when one fails.
 ## Interface
 A job: what it is called, what it does, and when it is due. When that is: after a delay, at an
-interval measured from the end of the last run, or at an interval measured from its start. A
-schedule, which is jobs. Which jobs are due at a moment, and the schedule that follows running them.
+interval measured from the end of the last run, at an interval measured from its start, or at the
+minutes a [[Std Cron]] schedule names (`Calendar(schedule, origin)`, where `origin` is the wall-clock
+time the caller's clock counts from, so calendar and interval jobs share one clock). A schedule, which is jobs. Which jobs are due at a moment, and the schedule that follows running them.
 What a schedule has recorded — how many times each job ran, how many times it failed, how long the
 last run took, and what it last said when it failed. Running a schedule once, and the stage that
 runs it until the program stops.
