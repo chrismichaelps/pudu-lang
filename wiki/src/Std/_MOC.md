@@ -98,6 +98,9 @@ tags: [moc, module, stdlib]
 - [[Std App Password]] — a password kept in a form that proves it without holding it.
 - [[Std App Secret]] — secrets protected from unintended disclosure with explicit redaction.
 - [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
+- [[Std App Problem]] — RFC 9457 problem bodies, validation reports as 422, and a uniform failure step.
+- [[Std App Page]] — keyset cursor pagination with bounded sizes and `Link` headers.
+- [[Std App Idempotency]] — replayed answers for repeated `Idempotency-Key` requests.
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
