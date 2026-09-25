@@ -80,6 +80,7 @@ testRuntimeEvaluation = do
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
+  quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
@@ -122,6 +123,10 @@ testRuntimeEvaluation = do
         its receiver as a value, and bytes keep their refusing form. -}
     , counterexample "every value answers toText, and a declared one wins"
         (written === Just "12")
+    {-| Byte sizes and durations read and written, with overflow at Int's
+        limits refused rather than stopping the program. -}
+    , counterexample "quantities read strictly and write back to what they read"
+        (quantities === Just "44")
     {-| Addresses and networks in both families: canonical rendering, every
         refusal, and a mapped IPv4 peer still held by an IPv4 allowlist. -}
     , counterexample "addresses parse strictly, render canonically, and match networks"
