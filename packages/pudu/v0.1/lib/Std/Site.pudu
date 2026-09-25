@@ -1,0 +1,337 @@
+module Std.Site
+
+import Std.Concurrent as Concurrent
+import Std.Env as Env
+import Std.Http as Http
+import Std.Io as Io
+
+/// The host a site is built for. Each lays out and routes files its own way;
+/// the pages are the same for all of them.
+export type Target = Static | Vercel | Netlify | CloudflarePages
+
+/// How a site is built.
+///
+/// `output` is where the build writes; `publicDirectory` holds files copied
+/// as they are (stylesheets, images, fonts), or is empty for none; `workers`
+/// is how many pages render at once; `fallback` names the function a request
+/// no page answers is sent to, on a host that runs one.
+export type Options = {
+  output: Str,
+  publicDirectory: Str,
+  workers: Int,
+  target: Target,
+  fallback: Option[Str]
+}
+
+/// A path that was not written, and why.
+export type Refusal = { path: Str, reason: Str }
+
+/// What a build did: pages rendered, files written because they changed,
+/// files left alone because their bytes were already there, public files
+/// copied, and the paths refused.
+export type Report = {
+  rendered: Int,
+  written: Int,
+  unchanged: Int,
+  copied: Int,
+  refused: Array[Refusal]
+}
+
+/// Why a build could not run at all.
+export type SiteError
+  = BadOptions(Str)
+  | Unwritable(Str, Str)
+  | UnreadablePublic(Str, Str)
+
+/// A sentence saying what stopped the build.
+export fn explain(problem: &SiteError) -> Str {
+  match problem {
+    case BadOptions(reason) => "the build options are not usable: " + reason
+    case Unwritable(path, reason) => "could not write " + path + ": " + reason
+    case UnreadablePublic(path, reason) => "could not read the public file " + path + ": " + reason
+  }
+}
+
+/// The host the build is running on, read from the variables each host's
+/// build environment sets, or `Static` when none of them is present.
+///
+/// The same program then builds correctly wherever it runs: on a laptop it
+/// writes a plain directory, and in the host's own build it writes what that
+/// host reads.
+export fn targetFromEnvironment() -> Target {
+  if Env.isSet("VERCEL") {
+    Vercel
+  } else if Env.isSet("NETLIFY") {
+    Netlify
+  } else if Env.isSet("CF_PAGES") {
+    CloudflarePages
+  } else {
+    Static
+  }
+}
+
+/// Options that suit most sites: the host detected from the environment,
+/// that host's conventional output directory, `public` copied as it is,
+/// eight pages rendering at once, and no fallback function.
+export fn options() -> Options {
+  let target = targetFromEnvironment()
+  Options {
+    output: defaultOutput(target),
+    publicDirectory: "public",
+    workers: 8,
+    target: target,
+    fallback: None
+  }
+}
+
+/// Where a host expects a build to be written.
+export fn defaultOutput(target: Target) -> Str {
+  match target {
+    case Vercel => ".vercel/output"
+    case _ => "dist"
+  }
+}
+
+/// The directory pages and public files are written into for these options:
+/// the output itself, or its `static` directory on a host that keeps
+/// functions beside it.
+export fn pagesDirectory(settings: &Options) -> Str {
+  match settings.target {
+    case Vercel => settings.output + "/static"
+    case _ => settings.output
+  }
+}
+
+/// The file a path is written to, relative to the pages directory, given
+/// the content type its response carries.
+///
+/// A page — an HTML response — is written as a directory's `index.html`,
+/// which every static host serves for the directory: `/` is `index.html`,
+/// and `/docs`, `/docs/`, and `/module/Std.Json` are each a directory with
+/// an `index.html` in it — `/module/Std.Html` included, since a page's name
+/// is its own. `/404` is `404.html`, the name hosts serve for a miss. Any other
+/// response — `/robots.txt`, `/sitemap.xml`, `/logo.png` — is written at
+/// exactly its path. Asking the response rather than the name is what keeps
+/// a page called `Std.Json` from becoming a file with no extension a host
+/// understands. With no content type, a last segment ending in one of
+/// `FILE_EXTENSIONS` is taken to be a file.
+///
+/// A path that could leave the output directory is refused rather than
+/// cleaned: `..` and `.` segments, empty segments, backslashes, and control
+/// characters, as well as `?` and `#`, which name something other than a
+/// file. A name escaped for a URL is written escaped, since that is how the
+/// host will ask for it.
+export fn fileFor(path: Str, contentType: Str) -> Result[Str, Str] {
+  if !path.startsWith("/") { return Err("a path starts with '/'") }
+  if path == "/" { return Ok("index.html") }
+  let directory = path.endsWith("/")
+  let trimmed = if directory { path.drop(1).take(path.length() - 2) } else { path.drop(1) }
+  let segments = trimmed.split("/")
+  for segment in segments {
+    if segment.isEmpty() || segment == "." || segment == ".." { return Err("'" + path + "' has an empty, '.', or '..' segment") }
+    for here in segment.chars() {
+      if here.code() < 32 || here.code() == 127 || here == '\\' || here == '?' || here == '#' {
+        return Err("'" + path + "' contains a character a file name cannot carry")
+      }
+    }
+  }
+  if trimmed == "404" { return Ok("404.html") }
+  let last = segments[segments.length() - 1]
+  let kind = contentType.toLower()
+  let isPage = kind.startsWith("text/html") || kind.startsWith("application/xhtml")
+  let isFile = if directory {
+    false
+  } else if kind.isEmpty() {
+    isFileName(last)
+  } else if isPage {
+    false
+  } else {
+    true
+  }
+  if isFile { Ok(trimmed) } else { Ok(trimmed + "/index.html") }
+}
+
+/// The extensions a path's last segment ends in when it names a file rather
+/// than a page: the ones hosts serve by extension.
+const FILE_EXTENSIONS: Array[Str] = [
+  "txt", "xml", "json", "html", "css", "js", "mjs", "map", "wasm", "png", "jpg", "jpeg", "gif", "svg",
+  "webp", "avif", "ico", "webmanifest", "pdf", "woff", "woff2", "rss", "atom", "csv"
+]
+
+fn isFileName(segment: Str) -> Bool {
+  let dot = segment.split(".")
+  if dot.length() < 2 || dot[0].isEmpty() { return false }
+  FILE_EXTENSIONS.contains(dot[dot.length() - 1].toLower())
+}
+
+/// What rendering and writing one path came to.
+type Outcome = Written | Unchanged | Refused(Str)
+
+fn bodyOf(response: &Http.Response) -> Bytes {
+  match response.binaryBody {
+    case Some(bytes) => bytes
+    case None => response.body.toBytes()
+  }
+}
+
+/// Bytes written only when they differ from what is already there, so a
+/// rebuild changes only the files whose content changed — which is also all a
+/// deployment then has to upload.
+fn writeIfChanged(target: Str, contents: &Bytes) -> Result[Bool, Str] {
+  match Io.readAllBytes(target) {
+    case Ok(existing) => { if existing == *contents { return Ok(false) } }
+    case Err(_) => {}
+  }
+  Io.makeDirectory(Io.directoryOf(target)) ?
+  match Io.writeAllBytes(target, contents) {
+    case Ok(_) => Ok(true)
+    case Err(problem) => Err(show(problem))
+  }
+}
+
+fn renderOne(root: Str, path: Str, render: fn(Str) -> Http.Response) -> Outcome {
+  let response = render(path)
+  if response.status.code != 200 {
+    return Refused("answered " + display(response.status.code))
+  }
+  let contentType = match Http.header(&response.headers, "content-type") {
+    case Some(found) => found
+    case None => ""
+  }
+  let file = match fileFor(path, contentType) {
+    case Ok(found) => found
+    case Err(reason) => { return Refused(reason) }
+  }
+  match writeIfChanged(root + "/" + file, &bodyOf(&response)) {
+    case Ok(true) => Written
+    case Ok(false) => Unchanged
+    case Err(reason) => Refused("could not be written: " + reason)
+  }
+}
+
+/// Every file under a directory, as paths relative to it.
+fn filesUnder(root: Str, relative: Str) -> Result[Array[Str], Str] {
+  let here = if relative.isEmpty() { root } else { root + "/" + relative }
+  var found: Array[Str] = []
+  for name in Io.list(here) ? {
+    let child = if relative.isEmpty() { name } else { relative + "/" + name }
+    if directoryExists(root + "/" + child) {
+      for nested in filesUnder(root, child) ? { found = found.push(nested) }
+    } else {
+      found = found.push(child)
+    }
+  }
+  Ok(found)
+}
+
+fn copyPublic(settings: &Options, root: Str) -> Result[Int, SiteError] {
+  if settings.publicDirectory.isEmpty() || !directoryExists(settings.publicDirectory) { return Ok(0) }
+  let files = match filesUnder(settings.publicDirectory, "") {
+    case Ok(found) => found
+    case Err(reason) => { return Err(UnreadablePublic(settings.publicDirectory, reason)) }
+  }
+  var copied = 0
+  for file in files {
+    let source = settings.publicDirectory + "/" + file
+    let contents = match Io.readAllBytes(source) {
+      case Ok(found) => found
+      case Err(problem) => { return Err(UnreadablePublic(source, show(problem))) }
+    }
+    match writeIfChanged(root + "/" + file, &contents) {
+      case Ok(true) => { copied = copied + 1 }
+      case Ok(false) => {}
+      case Err(reason) => { return Err(Unwritable(root + "/" + file, reason)) }
+    }
+  }
+  Ok(copied)
+}
+
+/// The routing a host that reads a Build Output configuration needs: files
+/// first, then any page by its directory, then the dynamic function or the
+/// site's `404.html`. Derived from the layout rather than from a list of
+/// pages, so a page added later needs no new route.
+export fn vercelConfig(fallback: Option[Str], hasNotFound: Bool) -> Str {
+  var routes = [
+    "\{ \"handle\": \"filesystem\" \}",
+    "\{ \"src\": \"^/(.+?)/?$\", \"dest\": \"/$1/index.html\", \"check\": true \}"
+  ]
+  match fallback {
+    case Some(name) => { routes = routes.push("\{ \"src\": \"/(.*)\", \"dest\": \"/" + name + "\" \}") }
+    case None => {
+      if hasNotFound {
+        routes = routes.push("\{ \"src\": \"/(.*)\", \"status\": 404, \"dest\": \"/404.html\" \}")
+      }
+    }
+  }
+  "\{\n  \"version\": 3,\n  \"routes\": [\n    " + routes.join(",\n    ") + "\n  ]\n\}\n"
+}
+
+fn validate(settings: &Options) -> Result[(), SiteError] {
+  if settings.output.isEmpty() { return Err(BadOptions("the output directory is empty")) }
+  if settings.workers < 1 { return Err(BadOptions("at least one worker is needed")) }
+  match settings.fallback {
+    case Some(name) => {
+      if name.isEmpty() || name.contains("/") || name.contains("\"") || name.contains("\\") {
+        return Err(BadOptions("'" + name + "' is not a function name"))
+      }
+    }
+    case None => {}
+  }
+  Ok(())
+}
+
+/// Build a site: every path rendered by `render` and written where the
+/// target host serves it, the public directory copied, and the host's
+/// routing written.
+///
+/// Pages render `settings.workers` at a time, so a build uses the cores the
+/// machine has. A page that does not answer `200`, or whose path could not
+/// be a file, is reported in `refused` and not written; a file whose bytes
+/// are already on disk is left alone and counted as `unchanged`. The build
+/// fails outright only when it cannot write its output at all.
+export fn build(settings: &Options, paths: &Array[Str], render: fn(Str) -> Http.Response) -> Result[Report, SiteError] {
+  validate(settings) ?
+  let root = pagesDirectory(settings)
+  match Io.makeDirectory(root) {
+    case Ok(_) => {}
+    case Err(reason) => { return Err(Unwritable(root, reason)) }
+  }
+  let outcomes = match Concurrent.mapBounded(paths, settings.workers, |path: Str| renderOne(root, path, render)) {
+    case Ok(found) => found
+    case Err(problem) => { return Err(BadOptions(show(problem))) }
+  }
+  var written = 0
+  var unchanged = 0
+  var refused: Array[Refusal] = []
+  var index = 0
+  for outcome in outcomes {
+    match outcome {
+      case Written => { written = written + 1 }
+      case Unchanged => { unchanged = unchanged + 1 }
+      case Refused(reason) => { refused = refused.push(Refusal{path: paths[index], reason: reason}) }
+    }
+    index = index + 1
+  }
+  let copied = copyPublic(settings, root) ?
+  match settings.target {
+    case Vercel => {
+      let config = vercelConfig(settings.fallback, Io.exists(root + "/404.html"))
+      match writeIfChanged(settings.output + "/config.json", &config.toBytes()) {
+        case Ok(_) => {}
+        case Err(reason) => { return Err(Unwritable(settings.output + "/config.json", reason)) }
+      }
+    }
+    case _ => {}
+  }
+  Ok(Report{rendered: paths.length(), written: written, unchanged: unchanged, copied: copied, refused: refused})
+}
+
+/// Whether every path was written or already current.
+export fn succeeded(report: &Report) -> Bool { report.refused.isEmpty() }
+
+/// One line saying what a build did, for a build log.
+export fn summary(report: &Report) -> Str {
+  display(report.rendered) + " pages: " + display(report.written) + " written, "
+    + display(report.unchanged) + " unchanged, " + display(report.refused.length()) + " refused; "
+    + display(report.copied) + " public files copied"
+}

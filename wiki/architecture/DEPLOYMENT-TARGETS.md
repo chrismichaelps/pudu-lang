@@ -119,6 +119,15 @@ for it and decides, so one build runs in both places.
 Vercel's Build Output API names this runtime `provided.al2023` and starts the artefact as `bootstrap`.
 `website/scripts/build-vercel.sh` emits that.
 
+## The static half of a web application
+
+Pages that do not depend on a request are files, and [[Std Site]] writes them
+([[ADR-0024-building-a-web-application-for-any-host]]). An application names its paths and the
+`render` its server already uses; `Site.build` renders them on a worker pool and writes each where
+the chosen host serves it — `Static`, `Vercel` (with Build Output routes derived from the layout),
+`Netlify`, or `CloudflarePages` — rewriting only files whose bytes changed. The target is read from
+the host's build environment, so one program builds correctly on a laptop and in the host's CI.
+
 ## What this does not yet do
 
 - **There is no WebAssembly target.** It would mean compiling the evaluator through GHC's
