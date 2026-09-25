@@ -18,6 +18,11 @@ Beneath it, for a program that outgrew one call: `web` builds the same applicati
 it, `using` adds a stage, `start`, `stop`, and `run` drive one, and `stagesOf`, `configOf`, and
 `routerOf` read one back. A `Stage` names what to start and how to stop it. A `Report` names the
 stage that failed rather than only saying that one did.
+
+`describing(app, document, path)` publishes an [[Std App OpenApi]] document and refuses to build
+the application when the document is inconsistent, describes an operation the router does not
+serve, or leaves a served route undescribed. The published API therefore cannot drift from the code
+that answers it.
 ## Governance and algorithm
 **One call, then a way down.** `serve` is not a wrapper written for demonstrations; it is the
 default path, and it is composed of exactly the pieces below it, so a program that starts there and
