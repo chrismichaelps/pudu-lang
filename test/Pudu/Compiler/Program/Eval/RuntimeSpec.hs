@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  armored <- runEntry "test-fixtures/stdlib/UsesBase32PemAll.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
@@ -115,6 +116,10 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| The RFC 4648 vectors in three alphabets, and PEM bundles, with every
+        refusal including an encrypted legacy header. -}
+    , counterexample "base32 and PEM read strictly and write what they read"
+        (armored === Just "30")
     , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}

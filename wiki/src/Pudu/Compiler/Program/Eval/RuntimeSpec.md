@@ -35,6 +35,8 @@ modules ([[Std Concurrent Future]], [[Std Concurrent Cancel]], [[Std Concurrent 
 refusals beside the successful paths. Every check is written so its answer does not depend on which
 thread got there first.
 
+[[Uses Base32 Pem All]] (30) registers [[Std Base32]] and [[Std Pem]].
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one
@@ -49,6 +51,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Base32 Pem All]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]

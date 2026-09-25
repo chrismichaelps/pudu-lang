@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Base32 and PEM (#345)
+
+- [[Std Base32]]: RFC 4648 standard (padded or not), extended-hex, and Crockford alphabets; decoding
+  refuses foreign digits, impossible lengths, and altered trailing bits.
+- [[Std Pem]]: armored blocks written at 64 columns and read from bundles in order, with matching END
+  labels required and legacy encrypted headers refused; `withLabel` selects by what a caller expects.
+- [[Uses Base32 Pem All]] reaches every export (30 checks); the API coverage floor rises to 3524.
+
 ## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
 
 - [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the

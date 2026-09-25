@@ -1,0 +1,161 @@
+module Std.Base32
+
+/// Why text does not spell bytes in base32.
+export type Base32Error
+  = InvalidCharacter(Char, Int)
+  | BadLength(Int)
+  | NonZeroTrailingBits
+
+const STANDARD: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+const EXTENDED_HEX: Str = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+const CROCKFORD: Str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+const STANDARD_VALUES: Map[Char, Int] = valuesOf(STANDARD)
+const EXTENDED_HEX_VALUES: Map[Char, Int] = valuesOf(EXTENDED_HEX)
+const CROCKFORD_VALUES: Map[Char, Int] = crockfordValues()
+
+/// Each digit of an alphabet, under both cases, to the value it stands for.
+comptime fn valuesOf(alphabet: Str) -> Map[Char, Int] {
+  var table: Map[Char, Int] = mapOf([])
+  var index = 0
+  for digit in alphabet.chars() {
+    table = table.insert(digit, index)
+    table = table.insert(digit.toText().toLower().charAt(0), index)
+    index = index + 1
+  }
+  table
+}
+
+/// Crockford's alphabet, plus the letters a person misreads for digits:
+/// `I` and `L` are read as one and `O` as zero, which is the point of the
+/// alphabet — a code read aloud or copied by hand still decodes.
+comptime fn crockfordValues() -> Map[Char, Int] {
+  valuesOf(CROCKFORD).insert('I', 1).insert('i', 1).insert('L', 1).insert('l', 1).insert('O', 0).insert('o', 0)
+}
+
+/// A sentence saying what was wrong with the text.
+export fn explain(problem: &Base32Error) -> Str {
+  match problem {
+    case InvalidCharacter(found, at) => "'" + found.toText() + "' at " + display(at) + " is not a base32 digit"
+    case BadLength(count) => display(count) + " digits cannot spell a whole number of bytes"
+    case NonZeroTrailingBits => "the last digit carries bits past the final byte, so the text was altered or cut"
+  }
+}
+
+fn toInt(octet: UInt8) -> Int {
+  match convertInteger[Int](octet) {
+    case Some(held) => held
+    case None => 0
+  }
+}
+
+fn toByte(value: Int) -> UInt8 {
+  match convertInteger[UInt8](value & 255) {
+    case Some(held) => held
+    case None => 0u8
+  }
+}
+
+/// Five bits a digit: the bytes are read as one long run of bits, cut into
+/// fives, with the last cut completed by zeros. Only the undrained bits are
+/// kept between steps, so the accumulator never grows past twelve bits.
+fn encodeWith(source: &Bytes, alphabet: Str, padded: Bool) -> Str {
+  let digits = alphabet.chars()
+  var pieces: Array[Str] = []
+  var accumulator = 0
+  var held = 0
+  for octet in source.toArray() {
+    accumulator = (accumulator << 8) | toInt(octet)
+    held = held + 8
+    while held >= 5 {
+      held = held - 5
+      pieces = pieces.push(digits[(accumulator >> held) & 31].toText())
+    }
+    accumulator = accumulator & ((1 << held) - 1)
+  }
+  if held > 0 {
+    pieces = pieces.push(digits[(accumulator << (5 - held)) & 31].toText())
+  }
+  if padded {
+    while pieces.length() % 8 != 0 { pieces = pieces.push("=") }
+  }
+  pieces.join("")
+}
+
+/// The digits in order, each adding five bits, a byte drained whenever eight
+/// are held. A length no byte count produces is refused rather than
+/// truncated, and so are leftover bits that are not zero: an encoder never
+/// writes them, so their presence means the text is not what was encoded.
+fn decodeWith(digits: Array[Char], values: &Map[Char, Int]) -> Result[Bytes, Base32Error] {
+  let count = digits.length()
+  let tail = count % 8
+  if tail == 1 || tail == 3 || tail == 6 { return Err(BadLength(count)) }
+  var out: Array[UInt8] = []
+  var accumulator = 0
+  var held = 0
+  var index = 0
+  for digit in digits {
+    let value = match values.get(digit) {
+      case Some(found) => found
+      case None => { return Err(InvalidCharacter(digit, index)) }
+    }
+    accumulator = (accumulator << 5) | value
+    held = held + 5
+    if held >= 8 {
+      held = held - 8
+      out = out.push(toByte(accumulator >> held))
+      accumulator = accumulator & ((1 << held) - 1)
+    }
+    index = index + 1
+  }
+  if accumulator != 0 { return Err(NonZeroTrailingBits) }
+  Ok(bytesOf(out))
+}
+
+/// The digits of text with its trailing `=` padding removed. Padding in the
+/// middle is left in place, where it is reported as the character it is.
+fn withoutPadding(text: Str) -> Array[Char] {
+  var digits = text.chars()
+  while digits.length() > 0 && digits[digits.length() - 1] == '=' {
+    digits = digits.pop()
+  }
+  digits
+}
+
+/// Bytes written in the RFC 4648 base32 alphabet, padded with `=` to a
+/// multiple of eight digits.
+///
+/// Base32 costs 60% more room than the bytes and 20% more than base64, and
+/// buys a text of one case with no punctuation: it survives a case-folding
+/// file system, a DNS label, and being read aloud.
+export fn encode(source: &Bytes) -> Str { encodeWith(source, STANDARD, true) }
+
+/// Bytes in the RFC 4648 alphabet with no padding, as secrets for one-time
+/// passwords are usually written.
+export fn encodeUnpadded(source: &Bytes) -> Str { encodeWith(source, STANDARD, false) }
+
+/// The bytes RFC 4648 base32 spells, padded or not, in either case.
+export fn decode(text: Str) -> Result[Bytes, Base32Error] {
+  decodeWith(withoutPadding(text), &STANDARD_VALUES)
+}
+
+/// Bytes in the extended-hex alphabet, padded. Its digits sort in the same
+/// order as the bytes they encode, so encoded keys can be compared as text.
+export fn encodeHex(source: &Bytes) -> Str { encodeWith(source, EXTENDED_HEX, true) }
+
+/// The bytes extended-hex base32 spells, padded or not, in either case.
+export fn decodeHex(text: Str) -> Result[Bytes, Base32Error] {
+  decodeWith(withoutPadding(text), &EXTENDED_HEX_VALUES)
+}
+
+/// Bytes in Crockford's alphabet, unpadded and uppercase. It leaves out `I`,
+/// `L`, `O`, and `U`, so no two digits are easily mistaken for one another,
+/// and it sorts like the bytes; made for identifiers people read and type.
+export fn encodeCrockford(source: &Bytes) -> Str { encodeWith(source, CROCKFORD, false) }
+
+/// The bytes Crockford base32 spells. Case does not matter, hyphens are
+/// ignored so a long code can be grouped for reading, and `I`, `L`, and `O`
+/// are read as the digits they are mistaken for.
+export fn decodeCrockford(text: Str) -> Result[Bytes, Base32Error] {
+  decodeWith(text.replace("-", "").chars(), &CROCKFORD_VALUES)
+}

@@ -153,6 +153,8 @@ tags: [moc, module, stdlib]
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
 - [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
+- [[Std Base32]] — RFC 4648 standard and extended-hex base32, and Crockford's, read strictly.
+- [[Std Pem]] — armored certificate and key blocks, read and written.
 - [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
 - [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
