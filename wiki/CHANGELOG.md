@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Quantities people write (#341)
+
+- [[Std Human]]: `parseBytes` in decimal and binary units, `bytes` and `bytesDecimal` to one
+  decimal place, `parseDuration` and `duration` that round-trip (and read what `Time.describe`
+  writes), `ordinal`, `plural`, and `relative`. Every step of reading is checked against `Int`, and a
+  fraction that does not come to whole bytes or milliseconds is refused.
+- [[Uses Human All]] reaches every export (44 checks); the API coverage floor rises to 3518.
+
 ## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
 
 - [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the
