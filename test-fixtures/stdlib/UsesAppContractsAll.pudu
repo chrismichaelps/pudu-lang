@@ -1,0 +1,236 @@
+module UsesAppContractsAll
+
+import Std.App.Idempotency as Idempotency
+import Std.App.Page as Page
+import Std.App.Problem as Problem
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Sync as Sync
+import Std.Validate as Validate
+
+fn request(method: Http.Method, path: Str, headers: Array[(Str, Str)], body: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: method, target: path, headers: headers, body: body, binaryBody: None},
+    path: path,
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "test"
+  }
+}
+
+fn contentType(response: &Http.Response) -> Str {
+  var found = ""
+  for (name, value) in response.headers {
+    if name.toLower() == "content-type" { found = value }
+  }
+  found
+}
+
+fn parsedBody(response: &Http.Response) -> Problem.Problem {
+  match Problem.parse(response.body) {
+    case Ok(found) => found
+    case Err(_) => Problem.status(0)
+  }
+}
+
+fn refusal(body: Str) -> Str {
+  match Problem.parse(body) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Problem.explain(&problem)
+  }
+}
+
+fn pageRequest(pairs: Array[(Str, Str)]) -> Result[Page.Request, Page.PageError] {
+  Page.request(&mapOf(pairs), 2, 100)
+}
+
+fn pageRefusal(pairs: Array[(Str, Str)]) -> Str {
+  match pageRequest(pairs) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Page.explain(&problem)
+  }
+}
+
+fn identity(key: Str) -> Str { key }
+
+fn problems() -> Int {
+  var held = 0
+
+  // A bare status names its reason phrase; an unlisted one names its class.
+  let missing = Problem.status(404)
+  if missing.title == "Not Found" && missing.kind == "about:blank" { held = held + 1 }
+  if Problem.status(599).title == "Server Error" && Problem.status(499).title == "Client Error" {
+    held = held + 1
+  }
+  let typed = Problem.typed("https://example.test/out-of-stock", 409, "Out of stock")
+  if typed.kind == "https://example.test/out-of-stock" && typed.status == 409 { held = held + 1 }
+
+  // Extensions are appended once; a standard member name is refused.
+  let extended = Problem.withExtension(&typed, "sku", Json.Text("A-1"))
+  let twice = Problem.withExtension(&extended, "sku", Json.Text("B-2"))
+  let standard = Problem.withExtension(&twice, "status", Json.Number(1))
+  if standard.extensions == [("sku", Json.Text("A-1"))] { held = held + 1 }
+
+  // A response carries the status and media type, and reads back whole.
+  let answered = Problem.respond(&Problem.detailed(404, "no such order"))
+  if answered.status.code == 404 && contentType(&answered).startsWith(Problem.MEDIA_TYPE) {
+    held = held + 1
+  }
+  if parsedBody(&answered) == Problem.detailed(404, "no such order") { held = held + 1 }
+  if parsedBody(&Problem.respond(&extended)) == extended { held = held + 1 }
+  if Json.field(&Problem.toJson(&missing), "detail") == None { held = held + 1 }
+
+  // A validation report becomes a 422 naming each field.
+  let report = Validate.Report {
+    failures: [
+      Validate.Failure{field: "email", expected: "an address"},
+      Validate.Failure{field: "email", expected: "at most 80 characters"},
+      Validate.Failure{field: "age", expected: "a whole number"}
+    ]
+  }
+  let invalid = Problem.fromReport(&report)
+  let errors = Json.field(&Problem.toJson(&invalid), "errors")
+  if invalid.status == 422 && invalid.detail == "3 field(s) failed validation" { held = held + 1 }
+  match errors {
+    case Some(found) => {
+      if Json.field(&found, "email") == Some(Json.List([Json.Text("an address"), Json.Text("at most 80 characters")])) {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // Each malformed body is refused by cause.
+  if refusal("nope").startsWith("not JSON") { held = held + 1 }
+  if refusal("[1]") == "a problem body must be a JSON object" { held = held + 1 }
+  if refusal("\{\}") == "a problem body must carry a numeric status" { held = held + 1 }
+
+  // The uniform step rewrites plain failures and leaves the rest alone.
+  let plain = |_request| Reply.text(404, "order 7 not found")
+  let rewritten = Problem.uniform(request(Http.Get, "/orders/7", [], ""), plain)
+  let read = parsedBody(&rewritten)
+  if read.status == 404 && read.detail == "order 7 not found" && read.instance == "/orders/7" {
+    held = held + 1
+  }
+  let crashed = Problem.uniform(request(Http.Get, "/boom", [], ""), |_request| Reply.text(500, "stack trace"))
+  if parsedBody(&crashed).detail == "" && crashed.status.code == 500 { held = held + 1 }
+  let fine = Problem.uniform(request(Http.Get, "/", [], ""), |_request| Reply.text(200, "ok"))
+  if fine.body == "ok" { held = held + 1 }
+  let already = Problem.uniform(request(Http.Get, "/", [], ""), |_request| Problem.respond(&typed))
+  if parsedBody(&already) == typed { held = held + 1 }
+  held
+}
+
+fn pages() -> Int {
+  var held = 0
+  let items = ["a", "b", "c", "d", "e"]
+
+  // A missing limit takes the default; three requests walk every item once.
+  match pageRequest([]) {
+    case Ok(first) => {
+      let one = Page.select(&items, identity, &first)
+      if one.items == ["a", "b"] && one.next == Some(Page.encodeCursor("b")) { held = held + 1 }
+      match pageRequest([("limit", "2"), ("cursor", Page.encodeCursor("b"))]) {
+        case Ok(second) => {
+          if Page.select(&items, identity, &second).items == ["c", "d"] { held = held + 1 }
+        }
+        case Err(_) => {}
+      }
+      let last = Page.select(&items, identity, &Page.Request{size: 2, after: Some("d")})
+      if last.items == ["e"] && last.next == None { held = held + 1 }
+
+      // An item inserted before the cursor does not shift the next page.
+      let grown = ["a", "aa", "b", "c", "d", "e"]
+      let after = Page.select(&grown, identity, &Page.Request{size: 2, after: Some("b")})
+      if after.items == ["c", "d"] { held = held + 1 }
+
+      // A link names the next page and nothing on the last.
+      if Page.linkHeader("/letters", &one, &first) == Some(("Link", "</letters?limit=2&cursor=Yg>; rel=\"next\"")) {
+        held = held + 1
+      }
+      if Page.linkHeader("/letters?x=1", &last, &first) == None { held = held + 1 }
+
+      // The JSON form carries a null cursor on the last page.
+      let rendered = Page.toJson(&last, |item| Json.Text(item))
+      if Json.field(&rendered, "next") == Some(Json.Null) { held = held + 1 }
+      if Json.field(&rendered, "items") == Some(Json.List([Json.Text("e")])) { held = held + 1 }
+
+      // A store fetch of size + 1 proves the next page.
+      let fetched = Page.fromFetched(&["a", "b", "c"], identity, &first)
+      if fetched.items == ["a", "b"] && fetched.next == Some(Page.encodeCursor("b")) { held = held + 1 }
+      if Page.fromFetched(&["a"], identity, &first).next == None { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Cursors round-trip; foreign ones are refused.
+  if Page.decodeCursor(Page.encodeCursor("order:42")) == Ok("order:42") { held = held + 1 }
+  if pageRefusal([("limit", "x")]) == "limit must be a whole number, got 'x'" { held = held + 1 }
+  if pageRefusal([("limit", "0")]) == "limit 0 is outside 1-100" { held = held + 1 }
+  if pageRefusal([("limit", "101")]) == "limit 101 is outside 1-100" { held = held + 1 }
+  if pageRefusal([("cursor", "!!")]) == "cursor is not one this service issued" { held = held + 1 }
+  held
+}
+
+fn idempotency() -> Int {
+  var held = 0
+  let empty = Idempotency.store(1000, 2)
+
+  // A new key proceeds; while running it is pending; reused differently it is refused.
+  if Idempotency.decide(&empty, "k", "f", 0) == Idempotency.Proceed { held = held + 1 }
+  let running = Idempotency.begin(&empty, "k", "f", 0)
+  if Idempotency.decide(&running, "k", "f", 10) == Idempotency.Pending { held = held + 1 }
+  if Idempotency.decide(&running, "k", "other", 10) == Idempotency.Mismatched { held = held + 1 }
+
+  // A finished key replays its answer until it expires.
+  let created = Reply.text(201, "made")
+  let done = Idempotency.finish(&running, "k", &created, 10)
+  if Idempotency.decide(&done, "k", "f", 20) == Idempotency.Replay(created) { held = held + 1 }
+  if Idempotency.decide(&done, "k", "f", 2000) == Idempotency.Proceed { held = held + 1 }
+
+  // A server failure releases the key so a retry runs again.
+  let failed = Idempotency.finish(&running, "k", &Reply.text(503, "down"), 10)
+  if Idempotency.decide(&failed, "k", "f", 20) == Idempotency.Proceed { held = held + 1 }
+
+  // Capacity counts live keys only.
+  let full = Idempotency.begin(&Idempotency.begin(&empty, "a", "f", 0), "b", "f", 0)
+  if Idempotency.decide(&full, "c", "f", 10) == Idempotency.Full { held = held + 1 }
+  if Idempotency.decide(&full, "c", "f", 5000) == Idempotency.Proceed { held = held + 1 }
+  if Idempotency.live(&full, 10) == 2 && Idempotency.live(&Idempotency.prune(&full, 5000), 5000) == 0 {
+    held = held + 1
+  }
+  if Idempotency.live(&Idempotency.release(&full, "a"), 10) == 1 { held = held + 1 }
+
+  // Keys and fingerprints come from the request.
+  let keyed = request(Http.Post, "/orders", [("idempotency-key", " abc ")], "\{\"sku\":1\}")
+  if Idempotency.keyOf(&keyed) == Some("abc") { held = held + 1 }
+  if Idempotency.keyOf(&request(Http.Post, "/orders", [], "")) == None { held = held + 1 }
+  let changed = request(Http.Post, "/orders", [("Idempotency-Key", "abc")], "\{\"sku\":2\}")
+  if Idempotency.fingerprintOf(&keyed) != Idempotency.fingerprintOf(&changed) { held = held + 1 }
+
+  // The step runs the handler once per key and replays after.
+  let calls = Sync.counter(0)
+  let handler = |_request| {
+    let _ = Sync.increment(&calls, 1)
+    Reply.text(201, "order made")
+  }
+  let step = Idempotency.guarded(Idempotency.shared(60000, 10), || 1000)
+  let first = step(keyed, handler)
+  let again = step(keyed, handler)
+  if first.status.code == 201 && again.body == "order made" { held = held + 1 }
+  if again.headers.contains((Idempotency.REPLAYED, "true")) && Sync.count(&calls) == Ok(1) {
+    held = held + 1
+  }
+  if step(changed, handler).status.code == 422 { held = held + 1 }
+  let _ = step(request(Http.Get, "/orders", [("Idempotency-Key", "abc")], ""), handler)
+  let _ = step(request(Http.Post, "/orders", [], "x"), handler)
+  if Sync.count(&calls) == Ok(3) { held = held + 1 }
+  if Idempotency.HEADER == "Idempotency-Key" { held = held + 1 }
+  held
+}
+
+fn main() -> Int {
+  problems() * 10000 + pages() * 100 + idempotency()
+}
