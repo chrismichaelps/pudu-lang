@@ -93,8 +93,8 @@ testStandardLibrary = do
     , counterexample "a program may shadow a standard module" (shadows === [])
     , counterexample "reading a number answers an option and takes nothing"
         (numberMisuse === ["E3001", "E3003"])
-    , counterexample "toText answers text and takes nothing"
-        (textMisuse === ["E3001", "E3003"])
+    , counterexample "toText answers text and takes nothing, and a literal's members are checked"
+        (textMisuse === ["E3001", "E3003", "E3005", "E3001"])
     , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)
