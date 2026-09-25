@@ -53,6 +53,11 @@ tags: [moc, module, stdlib]
 - [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
 - [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
 - [[Std Concurrent]] — joinable host-thread work.
+- [[Std Concurrent Future]] — typed results from other threads, with races, all-settled, and deadlines.
+- [[Std Concurrent Cancel]] — cooperative cancellation tokens with inherited deadlines.
+- [[Std Concurrent Pool]] — a fixed set of workers behind a bounded queue.
+- [[Std Concurrent Coordinate]] — semaphores, latches, wait groups, and run-once values.
+- [[Std Concurrent Retry]] — retries with capped backoff and jitter.
 - [[Std Channel]] — bounded typed queues with closure.
 - [[Std Sync]] — runtime mutexes and atomic cells.
 - [[Std Net]] — streaming-first TCP listeners and connections.

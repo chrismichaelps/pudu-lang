@@ -1,0 +1,99 @@
+module Std.Concurrent.Retry
+
+import Std.Concurrent.Cancel as Cancel
+import Std.Random as Random
+
+/// How a wait is spread below its ceiling. Spreading keeps clients that
+/// failed together from retrying together.
+export type Jitter
+  = NoJitter
+  | FullJitter
+  | EqualJitter
+
+/// How often to try and how long to wait between tries. The wait before
+/// retry `n` is `initialMillis * multiplier^(n - 1)`, capped at `maxMillis`.
+export type Policy = {
+  attempts: Int,
+  initialMillis: Int,
+  maxMillis: Int,
+  multiplier: Int,
+  jitter: Jitter
+}
+
+/// Why retrying ended without a value.
+export type RetryError[E]
+  = GaveUp(Int, E)
+  | Stopped(Cancel.Reason)
+  | Invalid(Str)
+
+/// Five attempts, waiting from 100 ms and doubling up to 10 s, fully jittered.
+export fn standard() -> Policy {
+  Policy{attempts: 5, initialMillis: 100, maxMillis: 10000, multiplier: 2, jitter: FullJitter}
+}
+
+/// Why a policy cannot be followed, checked before any attempt.
+export fn validate(policy: &Policy) -> Result[(), Str] {
+  if policy.attempts < 1 { return Err("attempts must be at least 1") }
+  if policy.initialMillis < 0 { return Err("the initial wait must not be negative") }
+  if policy.maxMillis < policy.initialMillis { return Err("the longest wait must not be below the initial wait") }
+  if policy.multiplier < 1 { return Err("the multiplier must be at least 1") }
+  Ok(())
+}
+
+/// The wait before retry `retry`, before jitter. It multiplies only while the
+/// product stays within `maxMillis`, so it saturates rather than overflowing.
+export fn ceiling(policy: &Policy, retry: Int) -> Int {
+  let cap = if policy.maxMillis < 0 { 0 } else { policy.maxMillis }
+  var wait = if policy.initialMillis < 0 { 0 } else if policy.initialMillis > cap { cap } else { policy.initialMillis }
+  var step = 1
+  while step < retry && wait < cap {
+    if policy.multiplier <= 1 { return wait }
+    if wait > cap / policy.multiplier { return cap }
+    wait = wait * policy.multiplier
+    step = step + 1
+  }
+  if wait > cap { cap } else { wait }
+}
+
+/// The jittered wait before retry `retry`, and the generator to draw from next.
+export fn delay(policy: &Policy, retry: Int, source: &Random.Generator) -> (Random.Generator, Int) {
+  let top = ceiling(policy, retry)
+  match policy.jitter {
+    case NoJitter => (*source, top)
+    case FullJitter => Random.between(source, 0, top + 1)
+    case EqualJitter => Random.between(source, top / 2, top + 1)
+  }
+}
+
+/// Run `action` until it succeeds or the attempts run out, retrying every
+/// failure. `action` is given the attempt number, from 1.
+export fn run[T, E](policy: &Policy, action: fn(Int) -> Result[T, E]) -> Result[T, RetryError[E]] {
+  runCancellable(policy, &Cancel.token(), fn(_problem: E) -> Bool { true }, action)
+}
+
+/// `run`, retrying only the failures `retryable` accepts; any other failure
+/// is answered at once as `GaveUp` with the attempts made.
+export fn runWhen[T, E](policy: &Policy, retryable: fn(E) -> Bool, action: fn(Int) -> Result[T, E]) -> Result[T, RetryError[E]] {
+  runCancellable(policy, &Cancel.token(), retryable, action)
+}
+
+/// `runWhen`, stopping when the token fires: before each attempt and during
+/// each wait.
+export fn runCancellable[T, E](policy: &Policy, stop: &Cancel.Token, retryable: fn(E) -> Bool, action: fn(Int) -> Result[T, E]) -> Result[T, RetryError[E]] {
+  if let Err(problem) = validate(policy) { return Err(Invalid(problem)) }
+  var generator = Random.fromClock()
+  var attempt = 1
+  loop {
+    if let Err(why) = Cancel.check(stop) { return Err(Stopped(why)) }
+    match action(attempt) {
+      case Ok(held) => { return Ok(held) }
+      case Err(problem) => {
+        if attempt >= policy.attempts || !retryable(problem) { return Err(GaveUp(attempt, problem)) }
+        let drawn = delay(policy, attempt, &generator)
+        generator = drawn[0]
+        if let Err(why) = Cancel.pause(stop, drawn[1]) { return Err(Stopped(why)) }
+        attempt = attempt + 1
+      }
+    }
+  }
+}

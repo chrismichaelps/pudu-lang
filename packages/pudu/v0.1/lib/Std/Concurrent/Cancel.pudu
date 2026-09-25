@@ -1,0 +1,127 @@
+module Std.Concurrent.Cancel
+
+import Std.Concurrent as Concurrent
+import Std.Option as Option
+import Std.Sync as Sync
+
+/// Why work was asked to stop.
+export type Reason
+  = Requested(Str)
+  | DeadlineExceeded
+
+/// A request to stop, which work checks between steps.
+///
+/// Stopping is cooperative: a running thread cannot be interrupted, so work
+/// asks `stopped` or `check` between steps and waits through `pause`, which
+/// returns as soon as the token fires. A child stops when any ancestor does;
+/// stopping a child leaves its parent running. The deadline is a reading of
+/// the monotonic clock, or `NO_DEADLINE`.
+export type Token = {
+  own: Sync.Cell[Option[Reason]],
+  guard: Sync.Mutex,
+  ancestors: Array[Sync.Cell[Option[Reason]]],
+  deadline: Int
+}
+
+/// The longest `pause` sleeps before it asks its token again.
+const POLL_MILLIS: Int = 10
+
+const NO_DEADLINE: Int = -1
+
+/// A token that fires only when cancelled.
+export fn token() -> Token { fresh([], NO_DEADLINE) }
+
+/// A token that fires by itself `millis` from now.
+export fn expiring(millis: Int) -> Token { fresh([], clock() + atLeastZero(millis)) }
+
+/// A token that fires when its parent does.
+export fn child(parent: &Token) -> Token { fresh(lineage(parent), parent.deadline) }
+
+/// A child that also fires `millis` from now, or at its parent's deadline if
+/// that comes first.
+export fn childExpiring(parent: &Token, millis: Int) -> Token {
+  let own = clock() + atLeastZero(millis)
+  let deadline = if parent.deadline != NO_DEADLINE && parent.deadline < own { parent.deadline } else { own }
+  fresh(lineage(parent), deadline)
+}
+
+/// Ask the work holding this token, and every child of it, to stop.
+/// The first reason given is kept; a later cancel changes nothing.
+export fn cancel(target: &Token, why: Str) -> Result[(), Sync.SyncError] {
+  Sync.withLock(&target.guard, fn() -> Result[(), Sync.SyncError] {
+      let held = Sync.get(&target.own) ?
+      if Option.isNone(&held) { Sync.set(&target.own, Some(Requested(why))) ? }
+      Ok(())
+    }) ?
+}
+
+/// Why the token fired, or `None` while it has not. An ancestor's reason is
+/// reported before the token's own, and a passed deadline after both.
+export fn reason(source: &Token) -> Option[Reason] {
+  for flag in source.ancestors {
+    let held = read(&flag)
+    if Option.isSome(&held) { return held }
+  }
+  let own = read(&source.own)
+  if Option.isSome(&own) { return own }
+  if source.deadline != NO_DEADLINE && clock() >= source.deadline { return Some(DeadlineExceeded) }
+  None
+}
+
+/// Whether the token has fired.
+export fn stopped(source: &Token) -> Bool { Option.isSome(&reason(source)) }
+
+/// `Ok` while the token has not fired, so work can stop with `?`.
+export fn check(source: &Token) -> Result[(), Reason] {
+  match reason(source) {
+    case Some(why) => Err(why)
+    case None => Ok(())
+  }
+}
+
+/// Milliseconds left before the deadline, never below zero, or `None` for a
+/// token without one.
+export fn remaining(source: &Token) -> Option[Int] {
+  if source.deadline == NO_DEADLINE { None } else { Some(atLeastZero(source.deadline - clock())) }
+}
+
+/// Sleep for `millis`, or until the token fires, whichever comes first.
+export fn pause(source: &Token, millis: Int) -> Result[(), Reason] {
+  let until = clock() + atLeastZero(millis)
+  loop {
+    check(source) ?
+    let left = until - clock()
+    if left <= 0 { return Ok(()) }
+    var slice = if left < POLL_MILLIS { left } else { POLL_MILLIS }
+    if let Some(toDeadline) = remaining(source) {
+      if toDeadline < slice { slice = toDeadline }
+    }
+    if let Err(problem) = Concurrent.sleep(slice) { return Err(Requested("sleep failed: " + show(problem))) }
+  }
+}
+
+/// A sentence saying why work stopped.
+export fn explain(why: &Reason) -> Str {
+  match why {
+    case Requested(text) => "cancelled: " + text
+    case DeadlineExceeded => "the deadline passed"
+  }
+}
+
+fn fresh(ancestors: Array[Sync.Cell[Option[Reason]]], deadline: Int) -> Token {
+  let unset: Option[Reason] = None
+  Token{own: Sync.cell(unset), guard: Sync.mutex(), ancestors: ancestors, deadline: deadline}
+}
+
+fn lineage(parent: &Token) -> Array[Sync.Cell[Option[Reason]]] { parent.ancestors.push(parent.own) }
+
+/// A flag that cannot be read answers as fired: work that cannot tell whether
+/// it should stop, stops.
+fn read(flag: &Sync.Cell[Option[Reason]]) -> Option[Reason] {
+  match Sync.get(flag) {
+    case Ok(held) => held
+    case Err(problem) => Some(Requested("the token could not be read: " + show(problem)))
+  }
+}
+
+fn atLeastZero(value: Int) -> Int { if value < 0 { 0 } else { value } }
