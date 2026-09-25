@@ -47,6 +47,7 @@ test-suite pudu-test
     Pudu.Cli.LintSpec
     Pudu.LintSpec
     Pudu.DecimalLiteralSpec
+    Pudu.VersionSpec
     Pudu.DiagnosticSpec
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec

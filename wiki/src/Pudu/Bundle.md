@@ -46,9 +46,12 @@ materialise :: FilePath -> Bundle -> IO FilePath
   ([[Compiler Cache]]). The runtime starts from them when `bundleCompiler` is its own version and
   ignores them otherwise, compiling from the modules as before. A bundle without the section, as
   older ones are, decodes with none.
-- An explicitly named runtime receives source modules but no checked products: its executable
-  identity cannot be verified by the compiler doing the build. The default build copies its own
-  executable and carries products made by that same executable.
+- `bundleCompiler` is the making compiler's `identityText` (version and source digest). A runtime
+  starts from the products only when that is its own identity.
+- `sharesSources path` reads a named runtime's bytes and answers whether it carries this
+  compiler's source digest ([[Pudu Version]]). `pudu build --runtime` carries products exactly
+  when it does, so a cross-built artefact starts from what was checked (37 ms rather than 360 ms
+  for a 22-module program); a runtime from other sources receives none and the build says so.
 - `materialise` unpacks bundled modules into a target directory, validating module names and structure,
   and returns the entry module's path.
 
@@ -92,9 +95,12 @@ materialise :: FilePath -> Bundle -> IO FilePath
 - **Q:** Why materialise modules to disk instead of evaluating directly from memory?
   **A:** Pudu compiler's module discovery and diagnostic paths expect physical source files and canonical
   paths matching module names; disk materialisation ensures 100% parity with standalone development.
-- **Q:** Carry products when attaching to an explicitly named runtime? **A:** No. _Rationale:_ a
-  version string does not prove its cache format or checked semantics match the compiler that made
-  the products. _Rejected:_ accepting products from a different executable with the same version.
+- **Q:** Carry products when attaching to an explicitly named runtime? **A:** When its source digest
+  is this compiler's (#352). _Rationale:_ a version string does not prove the cache format or
+  checked semantics match, but a digest over the compiler's own sources does, and it is read from
+  bytes so a runtime for another platform can be asked. Dropping them made every cross-built
+  serverless function re-check every module on every cold start. _Rejected:_ accepting products on
+  the version alone; running the runtime to ask it.
 
 ## Referenced by
 

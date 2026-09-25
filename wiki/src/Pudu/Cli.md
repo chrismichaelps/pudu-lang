@@ -210,3 +210,10 @@ cache compatibility cannot be established from its version string.
 - **Q:** Why scope watched child processes using `bracket`? **A:** Unhandled watcher exits, signals, or rapid crashes could leave orphaned zombie background processes holding TCP ports or file locks. `bracket` guarantees `terminateProcess` and `waitForProcess` run on every restart and exit.
 - **Q:** Why debounce with a 100ms settling loop in `pudu watch`? **A:** Editors and build tools frequently write temporary files, touch files, or perform multi-stage saves. Checking that timestamps and file sizes remain unchanged across 100ms prevents spurious mid-save recompilation.
 - **Q:** Why track symlink ancestors during watch directory walks? **A:** Recursive directory symlinks can induce infinite loops and stack exhaustion in tree walkers. Canonicalizing paths and maintaining an ancestor `Set` stops circular traversals immediately.
+
+## Products onto named runtimes (#352)
+
+`pudu build --runtime` asks [[Pudu Bundle]] `sharesSources` and carries the checked products when
+the runtime shares this compiler's source digest; otherwise it carries none and says the program
+will be checked each time it starts. `bundledCache` compares a bundle's products against
+`identityText`, not the bare version.
