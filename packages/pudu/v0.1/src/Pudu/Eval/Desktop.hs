@@ -7,6 +7,8 @@ module Pudu.Eval.Desktop
   , closeDesktop
   , closeDesktopStore
   , inputsDesktop
+  , readClipboard
+  , writeClipboard
   , newDesktopStore
   , openDesktop
   , presentDesktop
@@ -153,6 +155,40 @@ inputsDesktop store token = withWindow store token $ \(NativeWindow pointer) -> 
 inputsDesktop _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
 
+{-| The general pasteboard's text: measured, then copied, as the input queue
+    is. A pasteboard holding no text is a typed failure rather than empty
+    text, so a caller can tell nothing copied from an empty copy. -}
+readClipboard :: IO (IoOutcome Text)
+#ifdef PUDU_DARWIN_DESKTOP
+readClipboard = guarded $ do
+  held <- cDesktopClipboardRead nullPtr 0
+  if held == -5
+    then pure (IoFailed "the clipboard holds no text")
+    else if held < 0
+      then pure (IoFailed (statusMessage "clipboard" (fromIntegral held)))
+      else allocaBytes (max 1 (fromIntegral held)) $ \buffer -> do
+        copied <- cDesktopClipboardRead buffer (fromIntegral held)
+        if copied /= held
+          then pure (IoFailed "the clipboard changed while it was read")
+          else do
+            bytes <- Bytes.packCStringLen (castPtr buffer, fromIntegral copied)
+            pure (IoDone (TextEncoding.decodeUtf8Lenient bytes))
+#else
+readClipboard = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
+{-| Replaces the general pasteboard's contents with text. -}
+writeClipboard :: Text -> IO (IoOutcome ())
+#ifdef PUDU_DARWIN_DESKTOP
+writeClipboard value = guarded $ do
+  let encoded = TextEncoding.encodeUtf8 value
+  status <- Bytes.useAsCStringLen encoded $ \(bytes, count) ->
+    cDesktopClipboardWrite (castBytes bytes) (fromIntegral count)
+  pure (unitStatus "clipboard" status)
+#else
+writeClipboard _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
 closeDesktop :: DesktopStore -> Int -> IO (IoOutcome ())
 #ifdef PUDU_DARWIN_DESKTOP
 closeDesktop store token =
@@ -238,6 +274,12 @@ foreign import ccall safe "pudu_desktop_pump"
 
 foreign import ccall unsafe "pudu_desktop_inputs"
   cDesktopInputs :: Ptr () -> Ptr Word8 -> CSize -> IO Int64
+
+foreign import ccall unsafe "pudu_desktop_clipboard_read"
+  cDesktopClipboardRead :: Ptr Word8 -> CSize -> IO Int64
+
+foreign import ccall unsafe "pudu_desktop_clipboard_write"
+  cDesktopClipboardWrite :: Ptr Word8 -> CSize -> IO CInt
 
 foreign import ccall unsafe "pudu_desktop_close"
   cDesktopClose :: Ptr () -> IO CInt

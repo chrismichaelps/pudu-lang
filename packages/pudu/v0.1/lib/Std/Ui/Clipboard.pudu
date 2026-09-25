@@ -1,0 +1,46 @@
+module Std.Ui.Clipboard
+
+/// Why the clipboard could not be read or written.
+export type ClipboardError
+  = NoText
+  | UnsupportedPlatform
+  | PlatformFailure(Str)
+
+/// The text on the system clipboard.
+///
+/// `NoText` when it holds something that is not text, or nothing.
+export fn read() -> Result[Str, ClipboardError] {
+  match desktopClipboardRead() {
+    case Ok(text) => Ok(text)
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Replaces the system clipboard's contents with `text`.
+export fn write(text: Str) -> Result[(), ClipboardError] {
+  match desktopClipboardWrite(text) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// A one-line description of a failure.
+export fn explain(problem: &ClipboardError) -> Str {
+  match problem {
+    case NoText => "the clipboard holds no text"
+    case UnsupportedPlatform => "this platform has no clipboard adapter"
+    case PlatformFailure(message) => message
+  }
+}
+
+const RUNTIME_ERRORS: Map[Str, ClipboardError] = mapOf([
+    ("the clipboard holds no text", NoText),
+    ("desktop presentation is unsupported on this platform", UnsupportedPlatform)
+  ])
+
+fn classified(message: Str) -> ClipboardError {
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
+  }
+}

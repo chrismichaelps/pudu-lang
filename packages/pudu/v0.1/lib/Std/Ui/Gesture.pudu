@@ -1,0 +1,99 @@
+module Std.Ui.Gesture
+
+import Std.Ui.Canvas as Canvas
+
+/// A stage of one pointer contact.
+export type Phase
+  = Down
+  | Move
+  | Up
+
+/// What a sequence of pointer phases meant.
+///
+/// A tap is a down and up without travelling past the slop; a long press is
+/// a down held past the hold time without travelling; a drag begins once the
+/// contact travels past the slop and reports its start and current point.
+export type Gesture
+  = Tap(Canvas.Point)
+  | LongPress(Canvas.Point)
+  | DragStarted(Canvas.Point)
+  | Dragged(Canvas.Point, Canvas.Point)
+  | DragEnded(Canvas.Point, Canvas.Point)
+
+/// The recognizer's memory between phases: where and when the contact went
+/// down, whether it became a drag or a long press, and its thresholds.
+export type Tracker = {
+  start: Option[(Canvas.Point, Int)],
+  dragging: Bool,
+  held: Bool,
+  slop: Int,
+  holdMillis: Int
+}
+
+/// A recognizer with a 4-pixel slop and a 500-millisecond hold.
+export fn tracker() -> Tracker {
+  Tracker{start: None, dragging: false, held: false, slop: 4, holdMillis: 500}
+}
+
+/// The recognizer after one phase at `point` and `time` milliseconds, and
+/// the gestures that phase completed.
+export fn feed(state: &Tracker, phase: Phase, point: Canvas.Point, time: Int) -> (Tracker, Array[Gesture]) {
+  match phase {
+    case Down => (Tracker{..*state, start: Some((point, time)), dragging: false, held: false}, [])
+    case Move => {
+      let (origin, _) = match state.start {
+        case Some(found) => found
+        case None => { return (*state, []) }
+      }
+      if state.dragging { return (*state, [Dragged(origin, point)]) }
+      if state.held || !travelled(origin, point, state.slop) { return (*state, []) }
+      (Tracker{..*state, dragging: true}, [DragStarted(origin), Dragged(origin, point)])
+    }
+    case Up => {
+      let (origin, _) = match state.start {
+        case Some(found) => found
+        case None => { return (*state, []) }
+      }
+      let cleared = Tracker{..*state, start: None, dragging: false, held: false}
+      if state.dragging { return (cleared, [DragEnded(origin, point)]) }
+      if state.held { return (cleared, []) }
+      if travelled(origin, point, state.slop) { return (cleared, []) }
+      (cleared, [Tap(origin)])
+    }
+  }
+}
+
+/// The recognizer at `time` with no new phase: a contact held still past
+/// the hold time becomes a long press, once.
+export fn tick(state: &Tracker, time: Int) -> (Tracker, Array[Gesture]) {
+  match state.start {
+    case Some((origin, began)) if !state.dragging && !state.held && time - began >= state.holdMillis => {
+      (Tracker{..*state, held: true}, [LongPress(origin)])
+    }
+    case _ => (*state, [])
+  }
+}
+
+/// Every gesture a sequence of phases produced, feeding and ticking in order.
+export fn recognize(phases: &Array[(Phase, Canvas.Point, Int)]) -> Array[Gesture] {
+  var state = tracker()
+  var found = []
+  for (phase, point, time) in phases {
+    let (ticked, held) = tick(&state, time)
+    let (next, gestures) = feed(&ticked, phase, point, time)
+    state = next
+    found = found.concat(held).concat(gestures)
+  }
+  found
+}
+
+/// Whether `point` lies inside `frame`.
+export fn inside(frame: &Canvas.Rect, point: Canvas.Point) -> Bool {
+  point.x >= frame.x && point.y >= frame.y && point.x < frame.x + frame.width && point.y < frame.y + frame.height
+}
+
+fn travelled(from: Canvas.Point, to: Canvas.Point, slop: Int) -> Bool {
+  let dx = to.x - from.x
+  let dy = to.y - from.y
+  dx * dx + dy * dy > slop * slop
+}

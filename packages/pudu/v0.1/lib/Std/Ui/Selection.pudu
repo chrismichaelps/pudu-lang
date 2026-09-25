@@ -1,0 +1,142 @@
+module Std.Ui.Selection
+
+import Std.Ui.Screen as Screen
+
+/// Which rows of a list of `count` are chosen, the row a range extends from
+/// (`anchor`), and the row keyboard movement starts from (`focus`).
+export type Selection = { count: Int, chosen: Set[Int], anchor: Option[Int], focus: Option[Int] }
+
+/// Nothing chosen in a list of `count` rows.
+export fn selection(count: Int) -> Selection {
+  Selection{count: if count < 0 { 0 } else { count }, chosen: setOf([]), anchor: None, focus: None}
+}
+
+/// Only `index` chosen; it becomes the anchor and focus. Out of range clears.
+export fn single(held: &Selection, index: Int) -> Selection {
+  if !inRange(held, index) { return clear(held) }
+  Selection{..*held, chosen: setOf([index]), anchor: Some(index), focus: Some(index)}
+}
+
+/// `index` added or removed, leaving the rest; it becomes the anchor and focus.
+export fn toggle(held: &Selection, index: Int) -> Selection {
+  if !inRange(held, index) { return *held }
+  let chosen = if index in held.chosen { held.chosen.remove(index) } else { held.chosen.insert(index) }
+  Selection{..*held, chosen: chosen, anchor: Some(index), focus: Some(index)}
+}
+
+/// Every row from the anchor through `index` chosen, the anchor kept; with
+/// no anchor this is `single`.
+export fn extend(held: &Selection, index: Int) -> Selection {
+  if !inRange(held, index) { return *held }
+  let anchor = match held.anchor {
+    case Some(found) => found
+    case None => { return single(held, index) }
+  }
+  let low = if anchor < index { anchor } else { index }
+  let high = if anchor < index { index } else { anchor }
+  var chosen: Set[Int] = setOf([])
+  var at = low
+  while at <= high {
+    chosen = chosen.insert(at)
+    at = at + 1
+  }
+  Selection{..*held, chosen: chosen, focus: Some(index)}
+}
+
+/// Every row chosen, focus kept.
+export fn all(held: &Selection) -> Selection {
+  var chosen: Set[Int] = setOf([])
+  var at = 0
+  while at < held.count {
+    chosen = chosen.insert(at)
+    at = at + 1
+  }
+  Selection{..*held, chosen: chosen}
+}
+
+/// Nothing chosen.
+export fn clear(held: &Selection) -> Selection {
+  Selection{..*held, chosen: setOf([]), anchor: None, focus: None}
+}
+
+/// The focus moved by `delta` rows, clamped to the list: `extending` grows
+/// the range from the anchor, otherwise the moved-to row is chosen alone.
+export fn move(held: &Selection, delta: Int, extending: Bool) -> Selection {
+  if held.count == 0 { return *held }
+  let from = match held.focus {
+    case Some(found) => found
+    case None => if delta > 0 { -1 } else { held.count }
+  }
+  let target = clamp(from + delta, 0, held.count - 1)
+  if extending { extend(held, target) } else { single(held, target) }
+}
+
+/// The selection for a list that now has `count` rows: rows past the end
+/// are dropped, and an anchor or focus past the end is cleared.
+export fn resized(held: &Selection, count: Int) -> Selection {
+  let size = if count < 0 { 0 } else { count }
+  var chosen: Set[Int] = setOf([])
+  for index in held.chosen {
+    if index < size { chosen = chosen.insert(index) }
+  }
+  Selection {
+    count: size,
+    chosen: chosen,
+    anchor: within(held.anchor, size),
+    focus: within(held.focus, size)
+  }
+}
+
+/// Whether `index` is chosen.
+export fn isSelected(held: &Selection, index: Int) -> Bool { index in held.chosen }
+
+/// The chosen rows in ascending order.
+export fn selected(held: &Selection) -> Array[Int] {
+  var found = []
+  for index in held.chosen { found = found.push(index) }
+  found
+}
+
+/// The selection after a row activation: rows are controls tagged
+/// `prefix + index`, and activating one chooses it alone.
+export fn activated(held: &Selection, event: &Screen.Event, prefix: Str) -> Selection {
+  match event {
+    case Screen.Activated(tag) if tag.startsWith(prefix) => {
+      let rest = tag.drop(prefix.length())
+      var index = 0
+      while index < held.count {
+        if show(index) == rest { return single(held, index) }
+        index = index + 1
+      }
+      *held
+    }
+    case _ => *held
+  }
+}
+
+/// The selection after a keymap command: `select.all`, `select.none`,
+/// `select.next`, `select.previous`, `select.extendNext`,
+/// `select.extendPrevious`. Other commands leave it.
+export fn commanded(held: &Selection, command: Str) -> Selection {
+  if command == "select.all" { return all(held) }
+  if command == "select.none" { return clear(held) }
+  let index = MOVES.indexOf(command)
+  if index < 0 { return *held }
+  move(held, if index % 2 == 0 { 1 } else { -1 }, index >= 2)
+}
+
+/// Movement commands: even positions move forward, the last two extend.
+const MOVES: Array[Str] = ["select.next", "select.previous", "select.extendNext", "select.extendPrevious"]
+
+fn inRange(held: &Selection, index: Int) -> Bool { index >= 0 && index < held.count }
+
+fn within(index: Option[Int], size: Int) -> Option[Int] {
+  match index {
+    case Some(found) if found < size => Some(found)
+    case _ => None
+  }
+}
+
+fn clamp(value: Int, low: Int, high: Int) -> Int {
+  if value < low { low } else { if value > high { high } else { value } }
+}

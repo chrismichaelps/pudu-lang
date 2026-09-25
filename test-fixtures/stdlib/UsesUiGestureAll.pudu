@@ -1,0 +1,98 @@
+module UsesUiGestureAll
+
+import Std.Env as Env
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Clipboard as Clipboard
+import Std.Ui.Controls as Controls
+import Std.Ui.Desktop as Desktop
+import Std.Ui.Gesture as Gesture
+import Std.Ui.Theme as Theme
+
+fn at(x: Int, y: Int) -> Canvas.Point { Canvas.point(x, y) }
+
+fn gestures() -> Int {
+  var held = 0
+
+  // A down and up in place is a tap at the down point.
+  if Gesture.recognize(&[(Gesture.Down, at(10, 10), 0), (Gesture.Up, at(12, 11), 80)]) == [Gesture.Tap(at(10, 10))] {
+    held = held + 1
+  }
+
+  // Travel past the slop starts a drag, reports every move, and ends it.
+  let dragged = Gesture.recognize(&[
+      (Gesture.Down, at(0, 0), 0),
+      (Gesture.Move, at(2, 0), 10),
+      (Gesture.Move, at(10, 0), 20),
+      (Gesture.Move, at(30, 5), 30),
+      (Gesture.Up, at(40, 5), 40)
+    ])
+  if dragged == [
+    Gesture.DragStarted(at(0, 0)),
+    Gesture.Dragged(at(0, 0), at(10, 0)),
+    Gesture.Dragged(at(0, 0), at(30, 5)),
+    Gesture.DragEnded(at(0, 0), at(40, 5))
+  ] {
+    held = held + 1
+  }
+
+  // Held still past the hold time is one long press, and its release is not a tap.
+  let pressed = Gesture.recognize(&[(Gesture.Down, at(5, 5), 0), (Gesture.Move, at(6, 5), 600), (Gesture.Up, at(6, 5), 900)])
+  if pressed == [Gesture.LongPress(at(5, 5))] { held = held + 1 }
+  let (down, _) = Gesture.feed(&Gesture.tracker(), Gesture.Down, at(1, 1), 0)
+  let (ticked, early) = Gesture.tick(&down, 100)
+  let (_, late) = Gesture.tick(&ticked, 500)
+  if early.length() == 0 && late == [Gesture.LongPress(at(1, 1))] { held = held + 1 }
+
+  // A release far from the press without moving events is neither a tap nor a drag.
+  if Gesture.recognize(&[(Gesture.Down, at(0, 0), 0), (Gesture.Up, at(50, 50), 50)]).length() == 0 { held = held + 1 }
+
+  // Phases without a down are ignored.
+  if Gesture.recognize(&[(Gesture.Move, at(1, 1), 0), (Gesture.Up, at(1, 1), 5)]).length() == 0 { held = held + 1 }
+  let frame = Canvas.rect(10, 10, 100, 20)
+  if Gesture.inside(&frame, at(10, 10)) && !Gesture.inside(&frame, at(110, 10)) { held = held + 1 }
+  held
+}
+
+fn pointer() -> Int {
+  var held = 0
+  let decoded = Desktop.decodeSignals("down\t3\t4\t1000\nmove\t9\t4\t1016\nup\t9\t4\t1032\npress\t3\t4\nup\t1\t2\n")
+  if decoded.length() == 4 { held = held + 1 }
+  if decoded[0] == Desktop.Pointer(Gesture.Down, at(3, 4), 1000) && decoded[2] == Desktop.Pointer(Gesture.Up, at(9, 4), 1032) {
+    held = held + 1
+  }
+  held
+}
+
+fn slider() -> Int {
+  var held = 0
+  let theme = Theme.light()
+  let track = Canvas.rect(0, 0, 200, 16)
+
+  if Controls.slider("volume", "Volume", 150, 0, 100, 200, &theme).name == "Volume 100" { held = held + 1 }
+  if Controls.slid(0, &Gesture.Tap(at(50, 8)), &track, 0, 100) == 25 { held = held + 1 }
+  if Controls.slid(0, &Gesture.Dragged(at(10, 8), at(300, 8)), &track, 0, 100) == 100 { held = held + 1 }
+  if Controls.slid(40, &Gesture.DragEnded(at(10, 8), at(-20, 8)), &track, 0, 100) == 0 { held = held + 1 }
+  if Controls.slid(40, &Gesture.Tap(at(50, 40)), &track, 0, 100) == 40 { held = held + 1 }
+  if Controls.slid(40, &Gesture.LongPress(at(50, 8)), &track, 0, 100) == 40 { held = held + 1 }
+  held
+}
+
+fn clipboard() -> Int {
+  var held = 0
+  if Clipboard.explain(&Clipboard.NoText) == "the clipboard holds no text" { held = held + 1 }
+  if Clipboard.explain(&Clipboard.PlatformFailure("busy")) == "busy" { held = held + 1 }
+
+  // The system clipboard is shared with the person using the machine, so it
+  // is touched only when a run promises it may be.
+  if Env.variableOr("PUDU_DESKTOP_DRIVE", "") == "1" {
+    let before = Clipboard.read()
+    let _ = Clipboard.write("fixture")
+    let _ = Clipboard.read()
+    if let Ok(text) = before { let _ = Clipboard.write(text) }
+  }
+  held
+}
+
+fn main() -> Int {
+  gestures() * 1000000 + pointer() * 10000 + slider() * 100 + clipboard()
+}

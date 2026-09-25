@@ -2,6 +2,7 @@ module Std.Ui.Desktop
 
 import Std.Num {Integer}
 import Std.Ui.Canvas as Canvas
+import Std.Ui.Gesture as Gesture
 import Std.Ui.Screen as Screen
 
 /// Why a desktop session could not do what was requested.
@@ -26,10 +27,13 @@ export type DriveError
 ///
 /// `Shortcut` carries a chord held with Command or Control, written
 /// `cmd+shift+z` with modifiers in the order cmd, ctrl, alt, shift.
+/// `Pointer` carries each phase of the primary button with its time in
+/// milliseconds, for `Std.Ui.Gesture`.
 export type Signal
   = Input(Screen.Input)
   | Shortcut(Str)
   | Resized(Canvas.Size)
+  | Pointer(Gesture.Phase, Canvas.Point, Int)
 
 /// Everything decided before a native window resource is acquired.
 export type WindowPlan = {
@@ -166,6 +170,12 @@ export fn decodeSignals(text: Str) -> Array[Signal] {
     if kind == "resize" && numbers.length() == 2 {
       found = found.push(Resized(Canvas.size(numbers[0], numbers[1])))
     }
+    if numbers.length() == 3 {
+      let at = Canvas.point(numbers[0], numbers[1])
+      if kind == "down" { found = found.push(Pointer(Gesture.Down, at, numbers[2])) }
+      if kind == "move" { found = found.push(Pointer(Gesture.Move, at, numbers[2])) }
+      if kind == "up" { found = found.push(Pointer(Gesture.Up, at, numbers[2])) }
+    }
   }
   found
 }
@@ -207,6 +217,7 @@ export fn drive[S](
           }
         }
         case Resized(_) => Ok(held)
+        case Pointer(_, _, _) => Ok(held)
       }
       held = match next {
         case Ok(found) => found

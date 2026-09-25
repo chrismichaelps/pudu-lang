@@ -24,7 +24,8 @@ calls on the main OS thread.
 `inputsDesktop` drains the adapter's input queue in two native calls: one measures it and one
 copies it. The adapter copies only a queue that fits, so input arriving between the calls waits for
 the next drain rather than being truncated. The bytes are decoded as UTF-8 leniently; the records are
-parsed in `Std.Ui.Desktop`, not here.
+parsed in `Std.Ui.Desktop`, not here. `readClipboard` measures and copies the pasteboard's text the
+same way and reports an empty pasteboard as a typed failure; `writeClipboard` replaces it.
 
 The registry lock remains held while a native present, pump, or close uses a handle. This makes a
 concurrent close wait rather than free a pointer beneath another operation. A failed close retains
