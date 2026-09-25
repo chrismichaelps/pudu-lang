@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Internet addresses and network prefixes (#339)
+
+- [[Std Ip]]: IPv4 and IPv6 addresses in one value, strict parsing (no leading zeros, one `::`,
+  no zone suffix), RFC 5952 rendering, bytes both ways, IPv4-mapped unmapping, neighbours, and
+  classification (loopback, private, link-local, multicast, unspecified, documentation, shared,
+  public).
+- Networks read strictly (host bits past the prefix are refused), masked explicitly with
+  `networkOf`, and asked `contains`, `overlaps`, `first`, `last`, `netmask`, and `within` — the
+  allowlist question, which unmaps a dual-stack peer first.
+- [[Uses Ip All]] reaches every export (55 checks); the API coverage floor rises to 3544.
+
 ## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
 
 - [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the
