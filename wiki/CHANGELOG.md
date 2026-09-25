@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Desktop controls, navigation, and modal presentation (#322)
+
+- [[Std Ui Controls]]: accessible buttons, toggles, steppers, pickers, progress bars, fields, and
+  secure fields, each named with its state, and updates that read only their own events.
+- [[Std Ui Navigation]]: page stacks, tabs, split views, and sheets, alerts, and confirmations over a
+  scrim that blocks presses on the view beneath.
+
 ## 2026-09-24 — A desktop window delivers input, and the ui library themes, animates, and undoes (#322)
 
 - The macOS adapter queues presses, scrolls, named keys, printable text, Command/Control chords, and

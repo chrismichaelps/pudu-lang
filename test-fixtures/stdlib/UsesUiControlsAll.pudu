@@ -1,0 +1,131 @@
+module UsesUiControlsAll
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Controls as Controls
+import Std.Ui.Layout as Layout
+import Std.Ui.Navigation as Navigation
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+
+fn names(view: &Layout.View) -> Array[Str] {
+  match Layout.place(view, Canvas.size(480, 360)) {
+    case Ok(placed) => Layout.semantics(&placed).map(|one| one.name).filter(|name| name.length() > 0)
+    case Err(_) => ["unplaceable"]
+  }
+}
+
+fn controls() -> Int {
+  var held = 0
+  let theme = Theme.light()
+  let form = Layout.column([
+      Controls.heading("Settings", &theme),
+      Controls.caption("Changes save at once", &theme),
+      Controls.button("save", "Save", &theme),
+      Controls.toggle("sync", "Sync", true, &theme),
+      Controls.stepper("size", "Size", 3, &theme),
+      Controls.picker("mode", &["Light", "Dark"], 1, &theme),
+      Controls.progress("Upload", 40, 200, &theme),
+      Controls.field("name", "Name", "", "Your name", &theme),
+      Controls.secureField("pass", "Password", "hunter2", &theme)
+    ])
+  let read = names(&form)
+
+  // Every control places and is read aloud with its state; a secret is never read.
+  if read.contains("Settings") && read.contains("Save") && read.contains("Sync, on") { held = held + 1 }
+  if read.contains("Size 3") && read.contains("Increase Size") && read.contains("Decrease Size") { held = held + 1 }
+  if read.contains("Dark, selected") && read.contains("Light") && read.contains("Upload 40 percent") { held = held + 1 }
+  if read.contains("Name") && read.contains("Password") && !read.contains("hunter2") { held = held + 1 }
+  if Controls.toggle("t", "Wifi", false, &theme).name == "Wifi, off" && Controls.progress("P", 250, 10, &theme).name == "P 100 percent" {
+    held = held + 1
+  }
+  if Controls.quietButton("q", "Later", &theme).role == Layout.Button { held = held + 1 }
+
+  // Updates read only their own control's events.
+  if Controls.toggled(false, &Screen.Activated("sync"), "sync") && !Controls.toggled(false, &Screen.Activated("save"), "sync") {
+    held = held + 1
+  }
+  if Controls.stepped(3, &Screen.Activated("size.up"), "size", 0, 4, 1) == 4 && Controls.stepped(4, &Screen.Activated("size.up"), "size", 0, 4, 1) == 4 {
+    held = held + 1
+  }
+  if Controls.stepped(0, &Screen.Activated("size.down"), "size", 0, 4, 1) == 0 { held = held + 1 }
+  if Controls.picked(0, &Screen.Activated("mode.1"), "mode", 2) == 1 && Controls.picked(0, &Screen.Activated("mode.9"), "mode", 2) == 0 {
+    held = held + 1
+  }
+  if Controls.edited("ab", &Screen.Typed("name", "cd"), "name", 3) == "abc" && Controls.edited("ab", &Screen.Erased("name"), "name", 9) == "a" {
+    held = held + 1
+  }
+  if Controls.edited("", &Screen.Erased("name"), "name", 9) == "" && Controls.edited("x", &Screen.Typed("other", "y"), "name", 9) == "x" {
+    held = held + 1
+  }
+  held
+}
+
+fn navigation() -> Int {
+  var held = 0
+  let theme = Theme.dark()
+
+  // A stack never pops its root.
+  let pages = Navigation.push(&Navigation.push(&Navigation.stack("inbox"), "thread"), "message")
+  if Navigation.top(&pages) == "message" && Navigation.depth(&pages) == 3 && Navigation.canGoBack(&pages) { held = held + 1 }
+  let back = Navigation.navigated(&pages, &Screen.Activated("back"))
+  if Navigation.top(&back) == "thread" && Navigation.top(&Navigation.navigated(&back, &Screen.Dismissed)) == "inbox" {
+    held = held + 1
+  }
+  let root = Navigation.popToRoot(&pages)
+  if Navigation.pop(&root) == root && !Navigation.canGoBack(&root) { held = held + 1 }
+  if names(&Navigation.backButton(&pages, &theme)).contains("Back") && names(&Navigation.backButton(&root, &theme)).length() == 0 {
+    held = held + 1
+  }
+
+  // Tabs select by their control and ignore unknown tabs.
+  let bar = Navigation.tabs(&[("mail", "Mail"), ("files", "Files")])
+  let chosen = Navigation.chose(&bar, &Screen.Activated("tab.files"))
+  if bar.selected == "mail" && chosen.selected == "files" && Navigation.chose(&bar, &Screen.Activated("tab.x")) == bar {
+    held = held + 1
+  }
+  if names(&Navigation.tabbed(&chosen, Layout.box(), &theme)).contains("Files, selected tab") { held = held + 1 }
+  if Navigation.tabs(&[]).selected == "" { held = held + 1 }
+
+  // A split view places a sidebar, a divider, and the detail.
+  match Layout.place(&Navigation.split(Layout.text("Folders"), Layout.text("Body"), 120, &theme), Canvas.size(480, 360)) {
+    case Ok(placed) => { if Layout.nodeCount(&placed) >= 4 { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // Alerts and confirmations close on their choices and on dismissal.
+  let alert = Navigation.Alert("Offline", "Retry?", [Navigation.choice("retry", "Retry")])
+  if Navigation.presentedAfter(&alert, &Screen.Activated("retry")) == Navigation.Nothing { held = held + 1 }
+  if Navigation.presentedAfter(&alert, &Screen.Activated("elsewhere")) == alert { held = held + 1 }
+  let confirm = Navigation.Confirm("Delete?", "This cannot be undone", Navigation.destructive("delete", "Delete"))
+  if Navigation.presentedAfter(&confirm, &Screen.Activated("cancel")) == Navigation.Nothing { held = held + 1 }
+  let sheet = Navigation.Sheet("compose")
+  if Navigation.presentedAfter(&sheet, &Screen.Activated("send")) == sheet && Navigation.presentedAfter(&sheet, &Screen.Dismissed) == Navigation.Nothing {
+    held = held + 1
+  }
+
+  // A presented dialog is drawn over the view, and a press on the dimmed view reaches nothing.
+  let base = Controls.button("under", "Under", &theme).sized(480, 360)
+  let shown = Navigation.presenting(base, &confirm, |_id| Layout.box(), &theme)
+  let read = names(&shown)
+  if read.contains("Delete") && read.contains("Cancel") && read.contains("Delete?") { held = held + 1 }
+  match Screen.start(0, |_state| shown, |state, event| {
+      match event {
+        case Screen.Activated("under") => state + 1
+        case _ => state
+      }
+    }, Canvas.size(480, 360), theme.palette.background) {
+    case Ok(screen) => {
+      match Screen.handle(&screen, Screen.Pressed(Canvas.point(4, 4))) {
+        case Ok(after) => { if Screen.stateOf(&after) == 0 { held = held + 1 } }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+  if Navigation.presenting(base, &Navigation.Nothing, |_id| Layout.box(), &theme) == base { held = held + 1 }
+  held
+}
+
+fn main() -> Int {
+  controls() * 100 + navigation()
+}

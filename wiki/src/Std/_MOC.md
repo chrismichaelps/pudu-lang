@@ -76,6 +76,8 @@ tags: [moc, module, stdlib]
 - [[Std Ui History]] — undo and redo over whole states.
 - [[Std Ui Virtual]] — the rows of a long list a viewport shows.
 - [[Std Ui Keymap]] — shortcut chords to commands, per platform, with menu labels.
+- [[Std Ui Controls]] — accessible buttons, toggles, steppers, pickers, progress, and fields, with their updates.
+- [[Std Ui Navigation]] — page stacks, tabs, split views, sheets, alerts, and confirmations.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std Ui Canvas]] — bounded Pudu-native RGBA software rendering for application UI.
 - [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.
