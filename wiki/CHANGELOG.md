@@ -22,6 +22,20 @@ tags: [changelog]
 - [[Pudu Desktop Access]] builds one AppKit accessibility element per record, with frames that
   follow the window and focus that VoiceOver follows; [[Pudu Desktop Host]] shares the window classes.
 
+## 2026-09-25 — Futures, cancellation, pools, coordination, and retries (#330)
+
+- [[Std Concurrent]] `contain()` runs an action on a thread of its own and answers a crash as
+  `Failed`; the page no longer describes preemptive `cancel`, `scope`, and `withDeadline`, which were
+  never implemented.
+- [[Std Concurrent Future]]: typed results, promises, bounded waits, all-settled, wait-all, races,
+  first success, and deadlines. [[Std Concurrent Cancel]]: cooperative tokens with inherited
+  deadlines and interruptible pauses.
+- [[Std Concurrent Pool]]: fixed workers behind a bounded queue. [[Std Concurrent Coordinate]]:
+  semaphores, latches, wait groups, and run-once values. [[Std Concurrent Retry]]: capped backoff
+  with jitter.
+- [[Uses Concurrent Futures]] and [[Uses Concurrent Coordination]] reach every export, including
+  crashing work, contention, and refusals.
+
 ## 2026-09-25 — A pudu behind the banner
 
 - [[Pudu mascot script]] draws a small two-tone pudu behind a page's banner: it roams the home

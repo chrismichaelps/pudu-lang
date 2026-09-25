@@ -1,0 +1,138 @@
+module UsesConcurrentFutures
+
+import Std.Concurrent.Cancel as Cancel
+import Std.Concurrent as Concurrent
+import Std.Concurrent.Future as Future
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn crash() -> Int { panic("boom") }
+
+fn failed[T](outcome: &Result[T, Concurrent.ConcurrentError]) -> Bool {
+  match outcome {
+    case Err(Concurrent.Failed(_)) => true
+    case _ => false
+  }
+}
+
+fn valueOf(outcome: Result[Int, Concurrent.ConcurrentError]) -> Int { Result.unwrapOr(outcome, -1) }
+
+/// Spins until its token fires, then records that it noticed.
+fn patient(noticed: Sync.Counter) -> fn(Cancel.Token) -> Int {
+  fn(stop: Cancel.Token) -> Int {
+    while !Cancel.stopped(&stop) { let _slept = Concurrent.sleep(1) }
+    let _seen = Sync.increment(&noticed, 1)
+    0
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // A contained crash is answered, not fatal; a clean action is Ok.
+  if failed(&Concurrent.contain(fn() -> () { let _dead = crash() })) { held = held + 1 }
+  if Result.isOk(&Concurrent.contain(fn() -> () { () })) { held = held + 1 }
+
+  // A fresh token has not fired, and a cancelled one keeps its first reason.
+  let root = Cancel.token()
+  if !Cancel.stopped(&root) && Result.isOk(&Cancel.check(&root)) { held = held + 1 }
+  if Cancel.remaining(&root) == None { held = held + 1 }
+  let branch = Cancel.child(&root)
+  let leaf = Cancel.child(&branch)
+  let _first = Cancel.cancel(&branch, "first")
+  let _second = Cancel.cancel(&branch, "second")
+  let inherited: Option[Cancel.Reason] = Cancel.reason(&leaf)
+  if inherited == Some(Cancel.Requested("first")) { held = held + 1 }
+  if !Cancel.stopped(&root) { held = held + 1 }
+  if Cancel.check(&branch) == Err(Cancel.Requested("first")) { held = held + 1 }
+
+  // Deadlines fire by themselves, and a child keeps its parent's earlier one.
+  if Cancel.reason(&Cancel.expiring(0)) == Some(Cancel.DeadlineExceeded) { held = held + 1 }
+  let near = Cancel.expiring(20)
+  let later = Cancel.childExpiring(&near, 100000)
+  if Option.unwrapOr(Cancel.remaining(&later), 999) <= 20 { held = held + 1 }
+  if Cancel.explain(&Cancel.DeadlineExceeded) == "the deadline passed" && Cancel.explain(&Cancel.Requested("x")) == "cancelled: x" {
+    held = held + 1
+  }
+
+  // A pause ends when its time is up, and early when its token fires.
+  if Result.isOk(&Cancel.pause(&Cancel.token(), 5)) { held = held + 1 }
+  let interrupted = Cancel.token()
+  let canceller = Concurrent.start(fn() -> () {
+      let _slept = Concurrent.sleep(20)
+      let _stop = Cancel.cancel(&interrupted, "enough")
+    })
+  let began = clock()
+  let paused = Cancel.pause(&interrupted, 5000)
+  if paused == Err(Cancel.Requested("enough")) && clock() - began < 2000 { held = held + 1 }
+  if let Ok(worker) = canceller { let _joined = Concurrent.join(&worker) }
+
+  // A future answers its value, and a crash in its work still settles it.
+  let answered = Future.start(fn() -> Int { 42 })
+  if let Ok(pending) = answered {
+    if valueOf(Future.wait(&pending)) == 42 && Future.isDone(&pending) { held = held + 1 }
+  }
+  let broken = Future.start(fn() -> Int { crash() })
+  if let Ok(pending) = broken {
+    if failed(&Future.wait(&pending)) { held = held + 1 }
+    // Waiting on a token with no deadline still ends: the crash settled it.
+    if failed(&Future.waitUntil(&pending, &Cancel.token())) { held = held + 1 }
+  }
+
+  // A promise settles once; the first outcome stays.
+  let promised: Future.Future[Int] = Future.promise()
+  if !Future.isDone(&promised) { held = held + 1 }
+  if Future.fulfil(&promised, 7) && !Future.fail(&promised, Concurrent.Other("late")) { held = held + 1 }
+  if valueOf(Future.wait(&promised)) == 7 { held = held + 1 }
+
+  // A bounded wait gives up without disturbing the work.
+  let slow = Future.start(fn() -> Int {
+      let _slept = Concurrent.sleep(150)
+      5
+    })
+  if let Ok(pending) = slow {
+    if Future.waitWithin(&pending, 5) == Ok(None) { held = held + 1 }
+    if Future.waitWithin(&pending, 5000) == Ok(Some(5)) { held = held + 1 }
+  }
+
+  // All-settled keeps every outcome in order; wait-all reports the first failure.
+  var batch: Array[Future.Future[Int]] = []
+  for made in [Future.start(fn() -> Int { 1 }), Future.start(fn() -> Int { crash() }), Future.start(fn() -> Int { 3 })] {
+    if let Ok(pending) = made { batch = batch.push(pending) }
+  }
+  let outcomes = Future.settleAll(&batch)
+  if outcomes.length() == 3 && valueOf(outcomes[0]) == 1 && failed(&outcomes[1]) && valueOf(outcomes[2]) == 3 { held = held + 1 }
+  if failed(&Future.waitAll(&batch)) { held = held + 1 }
+  var clean: Array[Future.Future[Int]] = []
+  for made in [Future.start(fn() -> Int { 1 }), Future.start(fn() -> Int { 2 })] {
+    if let Ok(pending) = made { clean = clean.push(pending) }
+  }
+  if Future.waitAll(&clean) == Ok([1, 2]) { held = held + 1 }
+
+  // A race answers the first to settle and waits for the loser to notice.
+  let noticed = Sync.counter(0)
+  let fast = fn(_stop: Cancel.Token) -> Int { 1 }
+  let won = Future.race(&Cancel.token(), &[patient(noticed), fast])
+  if valueOf(won) == 1 && Sync.count(&noticed) == Ok(1) { held = held + 1 }
+
+  // First success skips a failure that came first; with no success, the
+  // first failure in input order answers.
+  let early = fn(_stop: Cancel.Token) -> Int { crash() }
+  let steady = fn(_stop: Cancel.Token) -> Int {
+    let _slept = Concurrent.sleep(20)
+    9
+  }
+  if valueOf(Future.firstSuccess(&Cancel.token(), &[early, steady])) == 9 { held = held + 1 }
+  if failed(&Future.firstSuccess(&Cancel.token(), &[early, early])) { held = held + 1 }
+  if failed(&Future.race(&Cancel.token(), &[early])) { held = held + 1 }
+  let nothing: Array[fn(Cancel.Token) -> Int] = []
+  if Result.isErr(&Future.race(&Cancel.token(), &nothing)) { held = held + 1 }
+
+  // A deadline answers None once the work has noticed; quick work answers.
+  let overran = Sync.counter(0)
+  if Future.within(20, patient(overran)) == Ok(None) && Sync.count(&overran) == Ok(1) { held = held + 1 }
+  if Future.within(5000, fn(_stop: Cancel.Token) -> Int { 4 }) == Ok(Some(4)) { held = held + 1 }
+
+  held
+}
