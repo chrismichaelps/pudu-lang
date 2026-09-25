@@ -151,6 +151,12 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
 
+## Reading numbers from text (#349)
+
+`stringMethodType` types `toInt`, `toFloat`, and `toDecimal` as `fn() -> Option[Int]`,
+`fn() -> Option[Float]`, and `fn() -> Option[Decimal]`; `builtinMethodNames` lists them so a
+module-qualified misspelling is told to call them on the value.
+
 ## Universal `toText` typing (#347)
 
 `memberType` answers `toText` as `fn() -> Str` for `Array`, `Str`, `Map`, `Set`, `Range`, and

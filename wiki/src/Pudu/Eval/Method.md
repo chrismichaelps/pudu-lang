@@ -72,3 +72,8 @@ charMethodName    :: CharMethod -> Text
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]
+
+## Reading numbers from text (#349)
+
+`StringToInt`, `StringToFloat`, and `StringToDecimal` are the tags of `toInt`, `toFloat`, and
+`toDecimal`.

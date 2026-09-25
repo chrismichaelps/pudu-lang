@@ -23,7 +23,9 @@ import Data.Text.Internal.Encoding.Utf8 (utf8LengthByLeader)
 import Data.Text.Unsafe (Iter (..), iterArray)
 import GHC.Exts (isTrue#, sameByteArray#)
 
+import Pudu.Eval.Builtin.TextNumber (readDecimal, readFloat, readWhole)
 import Pudu.Eval.Bytes (bytesFromText)
+import Pudu.FloatLiteral (FloatWidth (Float64Width))
 import Pudu.Eval.Env (Eval (..), Evaluator (..), abortAt)
 import Pudu.Eval.Value (StringMethod (..), Value (..), boolValue, intOf, stringMethodName)
 import Pudu.Source (Span)
@@ -81,9 +83,14 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringChars, []) -> pure (ArrayValue (Seq.fromList (map CharValue (Text.unpack text))))
     (StringLines, []) -> pure (textArray (Text.lines text))
     (StringReverse, []) -> pure (StrValue (Text.reverse text))
+    (StringToInt, []) -> pure (optional (intOf <$> readWhole text))
+    (StringToFloat, []) -> pure (optional (FloatValue Float64Width <$> readFloat text))
+    (StringToDecimal, []) -> pure (optional (DecimalValue <$> readDecimal text))
     _ -> wrongStringArity (stringMethodName method)
 
   textArray = ArrayValue . Seq.fromList . map StrValue
+
+  optional = maybe (VariantValue "None" []) (\held -> VariantValue "Some" [held])
 
   spanLength holds = intOf . fromIntegral . countPrefix holds
 
@@ -205,6 +212,9 @@ callStringMethodFast spanValue member text arguments = case member of
   "chars" -> direct StringChars
   "lines" -> direct StringLines
   "reverse" -> direct StringReverse
+  "toInt" -> direct StringToInt
+  "toFloat" -> direct StringToFloat
+  "toDecimal" -> direct StringToDecimal
   _ -> Nothing
  where
   direct method = Just (callStringMethod spanValue method (StrValue text) arguments)
