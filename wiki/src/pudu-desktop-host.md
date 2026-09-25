@@ -13,8 +13,9 @@ aliases: [Pudu Desktop Host]
 Declare the two Objective-C classes the macOS desktop adapter's translation units share:
 `PuduFrameView`, the view that draws the presented frame and holds its accessibility children, and
 `PuduWindowHost`, the window delegate an opaque handle points to (window, view, close request, and
-input queue). [[Pudu Desktop Adapter]] implements both; [[Pudu Desktop Access]] reads the view
-through the host.
+input queue, and the target menu items call). The host's `record:` appends one input record.
+[[Pudu Desktop Adapter]] implements both; [[Pudu Desktop Access]] reads the view through the host
+and [[Pudu Desktop Menu]] records chosen commands through it.
 
 ## Grill Log
 
@@ -24,4 +25,4 @@ through the host.
 
 ## Referenced by
 
-[[Pudu Desktop Adapter]] · [[Pudu Desktop Access]] · [[src/cbits/_MOC]]
+[[Pudu Desktop Adapter]] · [[Pudu Desktop Access]] · [[Pudu Desktop Menu]] · [[src/cbits/_MOC]]

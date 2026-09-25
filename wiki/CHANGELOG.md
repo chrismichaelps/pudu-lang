@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Menus in the macOS menu bar (#334)
+
+- [[Std Ui Menu]] `native` writes a bar as records; [[Std Ui Desktop]] `install` makes it the
+  platform's menu bar, `installed` reads it back, chosen commands arrive as `Chosen`, and
+  `driveCommands` routes chords and menu choices to one `apply` by command name.
+- [[Pudu Desktop Menu]] builds the `NSMenu`s behind an application menu with Quit, shows each
+  command's shortcut, and clears the bar when its window closes.
+
 ## 2026-09-25 — A desktop window speaks to assistive technology (#331)
 
 - [[Std Ui Accessible]] encodes a layout's accessibility tree (role, name, frame, parent, focus) as

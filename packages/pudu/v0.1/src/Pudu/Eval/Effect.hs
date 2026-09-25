@@ -38,11 +38,13 @@ import Pudu.Eval.Desktop
   ( closeDesktop
   , exposeDesktop
   , inputsDesktop
+  , installMenu
   , openDesktop
   , presentDesktop
   , pumpDesktop
   , readClipboard
   , reportDesktop
+  , reportMenu
   , writeClipboard
   )
 import Pudu.Eval.Signal (stopRequested, watchForStop)
@@ -230,6 +232,8 @@ effectBuiltins =
   , DesktopClipboardWriteBuiltin
   , DesktopAccessibilityBuiltin
   , DesktopAccessibilityReportBuiltin
+  , DesktopMenuBuiltin
+  , DesktopMenuReportBuiltin
   , DesktopCloseBuiltin
   , AudioDevicePlayBuiltin
   , AudioStreamOpenBuiltin
@@ -446,6 +450,13 @@ callEffect spanValue builtin arguments = do
         desktop <- currentDesktopStore
         resultOf . fmap StrValue
           <$> lift refusal (reportDesktop desktop (fromInteger token))
+      (DesktopMenuBuiltin, [IntValue _ token, StrValue records]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (installMenu desktop (fromInteger token) records)
+      (DesktopMenuReportBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap StrValue
+          <$> lift refusal (reportMenu desktop (fromInteger token))
       (DesktopCloseBuiltin, [IntValue _ token]) -> do
         desktop <- currentDesktopStore
         effectUnit (closeDesktop desktop (fromInteger token))

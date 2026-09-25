@@ -8,7 +8,9 @@ module Pudu.Eval.Desktop
   , closeDesktopStore
   , exposeDesktop
   , inputsDesktop
+  , installMenu
   , readClipboard
+  , reportMenu
   , writeClipboard
   , newDesktopStore
   , openDesktop
@@ -195,33 +197,34 @@ writeClipboard _ = pure (IoFailed "desktop presentation is unsupported on this p
     A snapshot the adapter cannot read leaves the window's tree as it was. -}
 exposeDesktop :: DesktopStore -> Int -> Text -> IO (IoOutcome ())
 #ifdef PUDU_DARWIN_DESKTOP
-exposeDesktop store token records = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
-  status <- Bytes.useAsCStringLen (TextEncoding.encodeUtf8 records) $ \(bytes, count) ->
-    cDesktopAccessibility pointer (castBytes bytes) (fromIntegral count)
-  pure $ case status of
-    -3 -> IoFailed "desktop accessibility snapshot is malformed"
-    _ -> unitStatus "accessibility" status
+exposeDesktop = sendRecords "accessibility snapshot" cDesktopAccessibility
 #else
 exposeDesktop _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
 
-{-| What the platform reports for a window's accessibility tree, as records:
-    measured, then copied, as the input queue is. -}
+{-| What the platform reports for a window's accessibility tree, as records. -}
 reportDesktop :: DesktopStore -> Int -> IO (IoOutcome Text)
 #ifdef PUDU_DARWIN_DESKTOP
-reportDesktop store token = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
-  held <- cDesktopAccessibilityReport pointer nullPtr 0
-  if held < 0
-    then pure (IoFailed (statusMessage "accessibility" (fromIntegral held)))
-    else allocaBytes (max 1 (fromIntegral held)) $ \buffer -> do
-      copied <- cDesktopAccessibilityReport pointer buffer (fromIntegral held)
-      if copied /= held
-        then pure (IoFailed "the accessibility tree changed while it was read")
-        else do
-          bytes <- Bytes.packCStringLen (castPtr buffer, fromIntegral copied)
-          pure (IoDone (TextEncoding.decodeUtf8Lenient bytes))
+reportDesktop = readRecords "accessibility tree" cDesktopAccessibilityReport
 #else
 reportDesktop _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
+{-| Replaces the application's menu bar with the one the records describe.
+    A bar the adapter cannot read leaves the menu bar as it was. -}
+installMenu :: DesktopStore -> Int -> Text -> IO (IoOutcome ())
+#ifdef PUDU_DARWIN_DESKTOP
+installMenu = sendRecords "menu bar" cDesktopMenu
+#else
+installMenu _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
+{-| The records the application's menu bar holds. -}
+reportMenu :: DesktopStore -> Int -> IO (IoOutcome Text)
+#ifdef PUDU_DARWIN_DESKTOP
+reportMenu = readRecords "menu bar" cDesktopMenuReport
+#else
+reportMenu _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
 
 closeDesktop :: DesktopStore -> Int -> IO (IoOutcome ())
@@ -261,6 +264,36 @@ withWindow store token action =
       Just window -> do
         outcome <- action window
         pure (windows, outcome)
+
+{-| Hands a window records for the adapter to read whole; `-3` means it could
+    not, and what the records would have replaced is kept. -}
+sendRecords
+  :: Text
+  -> (Ptr () -> Ptr Word8 -> CSize -> IO CInt)
+  -> DesktopStore -> Int -> Text -> IO (IoOutcome ())
+sendRecords what native store token records = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+  status <- Bytes.useAsCStringLen (TextEncoding.encodeUtf8 records) $ \(bytes, count) ->
+    native pointer (castBytes bytes) (fromIntegral count)
+  pure $ case status of
+    -3 -> IoFailed ("desktop " <> what <> " is malformed")
+    _ -> unitStatus what status
+
+{-| Records the adapter writes: measured, then copied, as the input queue is. -}
+readRecords
+  :: Text
+  -> (Ptr () -> Ptr Word8 -> CSize -> IO Int64)
+  -> DesktopStore -> Int -> IO (IoOutcome Text)
+readRecords what native store token = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+  held <- native pointer nullPtr 0
+  if held < 0
+    then pure (IoFailed (statusMessage what (fromIntegral held)))
+    else allocaBytes (max 1 (fromIntegral held)) $ \buffer -> do
+      copied <- native pointer buffer (fromIntegral held)
+      if copied /= held
+        then pure (IoFailed ("the " <> what <> " changed while it was read"))
+        else do
+          bytes <- Bytes.packCStringLen (castPtr buffer, fromIntegral copied)
+          pure (IoDone (TextEncoding.decodeUtf8Lenient bytes))
 
 {-| A platform failure as a typed outcome.
 
@@ -321,6 +354,12 @@ foreign import ccall unsafe "pudu_desktop_accessibility"
 
 foreign import ccall unsafe "pudu_desktop_accessibility_report"
   cDesktopAccessibilityReport :: Ptr () -> Ptr Word8 -> CSize -> IO Int64
+
+foreign import ccall unsafe "pudu_desktop_menu"
+  cDesktopMenu :: Ptr () -> Ptr Word8 -> CSize -> IO CInt
+
+foreign import ccall unsafe "pudu_desktop_menu_report"
+  cDesktopMenuReport :: Ptr () -> Ptr Word8 -> CSize -> IO Int64
 
 foreign import ccall unsafe "pudu_desktop_close"
   cDesktopClose :: Ptr () -> IO CInt

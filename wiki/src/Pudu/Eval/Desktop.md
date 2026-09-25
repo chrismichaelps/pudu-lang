@@ -28,6 +28,8 @@ parsed in `Std.Ui.Desktop`, not here. `readClipboard` measures and copies the pa
 same way and reports an empty pasteboard as a typed failure; `writeClipboard` replaces it.
 `exposeDesktop` hands a window an accessibility snapshot ([[Std Ui Accessible]] records) for
 [[Pudu Desktop Access]]; `reportDesktop` measures and copies what the platform reports back for it.
+`installMenu` hands a window menu-bar records for [[Pudu Desktop Menu]]; `reportMenu` copies back
+what the platform's bar holds.
 
 The registry lock remains held while a native present, pump, or close uses a handle. This makes a
 concurrent close wait rather than free a pointer beneath another operation. A failed close retains
@@ -65,4 +67,4 @@ the token for retry; only confirmed native release removes it.
 
 ## Referenced by
 
-[[Eval Runtime]] · [[Eval Effect]] · [[Native Application UI]] · [[Pudu Desktop Access]]
+[[Eval Runtime]] · [[Eval Effect]] · [[Native Application UI]] · [[Pudu Desktop Access]] · [[Pudu Desktop Menu]]

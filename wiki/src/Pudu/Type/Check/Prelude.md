@@ -70,6 +70,8 @@ algorithm identity; no unchecked algorithm selector is admitted.
 - `desktopClipboardWrite(Str) -> Result[(), Str]`
 - `desktopAccessibility(Int, Str) -> Result[(), Str]`
 - `desktopAccessibilityReport(Int) -> Result[Str, Str]`
+- `desktopMenu(Int, Str) -> Result[(), Str]`
+- `desktopMenuReport(Int) -> Result[Str, Str]`
 - `desktopClose(Int) -> Result[(), Str]`
 
 Resolved Grill Log: the token is meaningful only to the evaluation-local owner; the public wrapper

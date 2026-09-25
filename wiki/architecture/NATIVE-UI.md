@@ -109,7 +109,7 @@ A row marked **Absent** is queued work, not an exclusion.
 | Gestures | [[Std Ui Gesture]] over `Desktop.Pointer` phases | **Ready** for tap, long press, and drag; magnify and rotate **Absent** |
 | Keyboard focus | [[Std Ui Screen]] focus order and ring | **Ready** |
 | Keyboard shortcuts | [[Std Ui Keymap]] | **Ready** |
-| Menus and commands | [[Std Ui Menu]] in-window bar | **Ready**; the platform's native menu bar **Absent** |
+| Menus and commands | [[Std Ui Menu]] in-window bar; `native` with [[Std Ui Desktop]] `install` and [[Pudu Desktop Menu]] | **Ready**, in the window and as the macOS menu bar |
 | Undo and redo | [[Std Ui History]] | **Ready** |
 | Persisted preferences | [[Std Ui Preferences]] | **Ready**, atomic replace |
 | Clipboard | [[Std Ui Clipboard]] | **Ready** on macOS |

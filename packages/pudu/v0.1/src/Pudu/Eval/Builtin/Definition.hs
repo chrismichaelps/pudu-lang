@@ -105,6 +105,8 @@ data Builtin
   | DesktopClipboardWriteBuiltin
   | DesktopAccessibilityBuiltin
   | DesktopAccessibilityReportBuiltin
+  | DesktopMenuBuiltin
+  | DesktopMenuReportBuiltin
   | DesktopCloseBuiltin
   | AudioDevicePlayBuiltin
   | AudioStreamOpenBuiltin
@@ -310,6 +312,8 @@ builtinName value = case value of
   DesktopClipboardWriteBuiltin -> "desktopClipboardWrite"
   DesktopAccessibilityBuiltin -> "desktopAccessibility"
   DesktopAccessibilityReportBuiltin -> "desktopAccessibilityReport"
+  DesktopMenuBuiltin -> "desktopMenu"
+  DesktopMenuReportBuiltin -> "desktopMenuReport"
   DesktopCloseBuiltin -> "desktopClose"
   AudioDevicePlayBuiltin -> "audioDevicePlay"
   AudioStreamOpenBuiltin -> "audioStreamOpen"
