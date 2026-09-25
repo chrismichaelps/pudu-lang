@@ -125,7 +125,8 @@ if [[ "$playground_runner" == local ]]; then
   chmod -R a+rX "$function_dir/lib"
 fi
 
-# The static half of the site, rendered by the site.
+# The static half of the site, rendered by the site into the Build Output
+# directory, with its routing.
 #
 # `Web.render` answers a response for a path, so producing every page is that
 # many calls: no server is started, no port is taken, and the build makes no
@@ -141,7 +142,7 @@ PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
   PUDU_PLAYGROUND_RUNNER="$playground_runner" \
   PUDU_PLAYGROUND_ISOLATION=confined \
   PUDU_PLAYGROUND_TOKEN="${PUDU_PLAYGROUND_TOKEN:-prerender}" \
-  "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
+  "$compiler" run "$root/website/src/Prerender.pudu" "$output"
 
 # `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and
 # speaks to it over the Lambda runtime interface, which `Std.Http.Server.Lambda`
@@ -166,71 +167,11 @@ printf '%s\n' \
 
 chmod 644 "$function_dir/.vc-config.json" 2>/dev/null || true
 
-# The guide became the documentation. Its old address is answered with a
-# permanent redirect rather than a second rendering, so a link to it keeps
-# working, a crawler is told which address to keep, and the sitemap carries one
-# address for one page.
-#
-# A page reaches the CDN only when a route sends it there. The list used to be
-# written by hand, so every page added after it was written fell through to the
-# catch-all and was answered by the function, which serves only search and the
-# no-index fallback. It is read from what was actually rendered instead: every
-# top-level directory holding an index.html gets the route that serves it.
-page_routes=""
-while IFS= read -r page; do
-  name="$(basename "$(dirname "$page")")"
-  page_routes="$page_routes    { \"src\": \"/$name\", \"dest\": \"/$name/index.html\" },
-"
-done < <(find "$output/static" -mindepth 2 -maxdepth 2 -name index.html | sort)
-
-# Each playground example is a rendered page one level below the playground.
-# Listed by name, like the pages above, so an address that is not an example —
-# the shared-program page among them — reaches the function.
-example_routes=""
-while IFS= read -r page; do
-  name="$(basename "$(dirname "$page")")"
-  example_routes="$example_routes    { \"src\": \"/playground/$name\", \"dest\": \"/playground/$name/index.html\" },
-"
-done < <(find "$output/static/playground" -mindepth 2 -maxdepth 2 -name index.html 2>/dev/null | sort)
-
-{
-  # Running a program is a post, and a post is never a static file: it is sent
-  # to the function before the platform looks for one. Both APIs — running a
-  # program and asking about one — and a shared program are the function's too.
-  # The script modules import one another without a version in their address,
-  # so each is checked again on every load.
-  printf '%s\n' '{' '  "version": 3,' '  "routes": [' \
-    '    { "src": "/playground", "methods": ["POST"], "dest": "/dynamic" },' \
-    '    { "src": "/api/playground/(run|assist)", "dest": "/dynamic" },' \
-    '    { "src": "/assets/playground/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
-    '    { "src": "/assets/docs/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
-    '    { "src": "/assets/download/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
-    '    { "src": "/assets/pudu/(.*)", "headers": { "cache-control": "public, max-age=0, must-revalidate" }, "continue": true },' \
-    '    { "src": "/packages/avatars/(.*)", "headers": { "cache-control": "public, max-age=86400, stale-while-revalidate=604800" }, "continue": true },' \
-    '    { "src": "/packages/search", "dest": "/dynamic" },' \
-    '    { "src": "/packages/suggest", "dest": "/dynamic" },' \
-    '    { "src": "/playground/shared", "dest": "/dynamic" },' \
-    '    { "handle": "filesystem" },'
-  printf '%s' "$page_routes"
-  printf '%s' "$example_routes"
-  printf '%s\n' \
-    '    { "src": "/", "dest": "/index.html" },' \
-    '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
-    '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
-    '    { "src": "/docs/([^/]+)", "dest": "/docs/$1/index.html" },' \
-    '    { "src": "/(packages/page/[0-9]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/page/[0-9]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+/source/.+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/[0-9]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+/(tickets|contributions)/page/[0-9]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+/(source|docs|releases|tickets|contributions))", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+/[^/]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/(@[^/]+)", "dest": "/$1/index.html" },' \
-    '    { "src": "/guide", "status": 308, "headers": { "Location": "/docs" } },' \
-    '    { "src": "/search", "dest": "/dynamic" },' \
-    '    { "src": "/.*", "dest": "/dynamic" }' \
-    '  ]' \
-    '}'
-} > "$output/config.json"
+# The routing is written by the prerender itself (`Std.Site`, Vercel target):
+# the redirect for the old guide address, cache policies for assets, the
+# requests that go to the function before any file, then every rendered page
+# by its directory, and the function for whatever no page answers. It is
+# derived from the files that were written, so a page added later needs no
+# route here.
 
 echo "Built $output"

@@ -66,3 +66,8 @@ characterMember :: Text -> Char -> Bool
 - **Q:** Remember scan positions per text instead of walking from the start? **A:** Yes, in a two-entry cursor. _Rationale:_ dropping the prefix on every `charAt` and counting the whole text for every `length` made any positional loop grow with the square of the text. _Rejected:_ a per-value index (every string would pay memory for scans few make); an ASCII-only fast path (it still needs a full scan to know the text is ASCII).
 - **Q:** Why use `escapeHtmlText` with `Builder` rather than repeated string replaces? **A:** Five sequential `.replace()` calls parse and reallocate intermediate text buffers five times. The builder scans in chunks and writes entities directly to a lazy buffer in a single pass.
 - **Q:** Why use `textCount`? **A:** Converting an arbitrary-precision `Integer` from Pudu source directly to machine `Int` can overflow or cause out-of-range memory faults if unvalidated. Clamping against `textBytes` guarantees safe machine integer conversion.
+
+## Reading numbers from text (#349)
+
+`toInt`, `toFloat`, and `toDecimal` dispatch (and take the direct path) to [[Eval Builtin TextNumber]]
+and answer `Some` or `None`.

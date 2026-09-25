@@ -99,6 +99,7 @@ library
     Pudu.Eval.Builtin.Definition
     Pudu.Eval.Builtin.Array
     Pudu.Eval.Builtin.String
+    Pudu.Eval.Builtin.TextNumber
     Pudu.Eval.Builtin.Collection
     Pudu.Eval.Builtin.Numeric
     Pudu.Eval.Bytes
