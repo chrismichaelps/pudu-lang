@@ -124,7 +124,7 @@ testRuntimeEvaluation = do
         refused, unchanged files left alone, one worker and eight agreeing,
         and each host's layout and routing. -}
     , counterexample "a site builds for its host and rewrites only what changed"
-        (built === Just "28")
+        (built === Just "40")
     {-| Each checksum's published check value, chunked updates equal to the
         whole, and a one-bit change moving every one. -}
     , counterexample "checksums match their published values and chain over chunks"

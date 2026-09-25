@@ -45,7 +45,7 @@ allowlist regression.
 
 [[Uses To Text]] (12) registers the universal `toText()` method across every kind of value.
 
-[[Uses Site All]] (28) registers [[Std Site]] in a temporary directory.
+[[Uses Site All]] (40) registers [[Std Site]] in a temporary directory.
 
 ## Grill Log
 

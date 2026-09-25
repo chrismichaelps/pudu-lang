@@ -23,3 +23,10 @@ the file for each path decided by its response (an HTML response is a directory'
 whose bytes are already current left alone. Measured on 4 cores: 91 s before, 26 s after, with the
 3,705 files byte-identical; a rebuild with nothing changed writes none. Refused paths are reported
 one per line and fail the build.
+
+## Writes the Build Output routing (#357)
+
+The prerender is given the Build Output directory and builds with the `Vercel` target: pages under
+`static/`, and `config.json` from [[Std Site]] — the `/guide` redirect, cache policies for asset
+families, the playground, API, package-search, shared-program, and search routes sent to the
+`dynamic` function, then files, `/`, pages by directory, and the function for the rest.
