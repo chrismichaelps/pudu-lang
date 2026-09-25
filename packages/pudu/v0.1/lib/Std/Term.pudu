@@ -1,0 +1,167 @@
+module Std.Term
+
+import Std.Env as Env
+
+/// A terminal colour: one of the sixteen named colours (0 to 15), a
+/// 256-colour palette index, or a 24-bit value.
+export type Color
+  = Named(Int)
+  | Palette(Int)
+  | Rgb(Int, Int, Int)
+
+/// How text is painted. Build one by updating `plain()`:
+/// `Style{..Term.plain(), bold: true, foreground: Some(Term.RED)}`.
+export type Style = {
+  foreground: Option[Color],
+  background: Option[Color],
+  bold: Bool,
+  dim: Bool,
+  italic: Bool,
+  underline: Bool,
+  inverse: Bool,
+  strike: Bool
+}
+
+/// Named colour 0.
+export const BLACK: Color = Named(0)
+/// Named colour 1.
+export const RED: Color = Named(1)
+/// Named colour 2.
+export const GREEN: Color = Named(2)
+/// Named colour 3.
+export const YELLOW: Color = Named(3)
+/// Named colour 4.
+export const BLUE: Color = Named(4)
+/// Named colour 5.
+export const MAGENTA: Color = Named(5)
+/// Named colour 6.
+export const CYAN: Color = Named(6)
+/// Named colour 7.
+export const WHITE: Color = Named(7)
+/// Named colour 8.
+export const GRAY: Color = Named(8)
+
+const ESCAPE: Str = "\u{1b}["
+
+const RESET: Str = "\u{1b}[0m"
+
+/// A style that changes nothing.
+export fn plain() -> Style {
+  Style {
+    foreground: None,
+    background: None,
+    bold: false,
+    dim: false,
+    italic: false,
+    underline: false,
+    inverse: false,
+    strike: false
+  }
+}
+
+/// `text` wrapped in the escape sequences for `style`, followed by a reset.
+///
+/// Answers `text` unchanged when the style changes nothing.
+export fn paint(text: Str, style: &Style) -> Str {
+  let codes = codesOf(style)
+  if codes.length() == 0 { return text }
+  ESCAPE + codes.join(";") + "m" + text + RESET
+}
+
+/// `paint` when `enabled`, otherwise `text` unchanged.
+export fn paintIf(enabled: Bool, text: Str, style: &Style) -> Str {
+  if enabled { paint(text, style) } else { text }
+}
+
+/// Whether the process should emit colour: `NO_COLOR` is unset or empty and
+/// `TERM` is not `dumb`. `FORCE_COLOR` set to anything but empty or `0`
+/// overrides both.
+export fn colorEnabled() -> Bool {
+  let forced = Env.variableOr("FORCE_COLOR", "")
+  if forced.length() > 0 && forced != "0" { return true }
+  if Env.variableOr("NO_COLOR", "").length() > 0 { return false }
+  Env.variableOr("TERM", "") != "dumb"
+}
+
+/// `text` with every control sequence introduced by `ESC [` removed.
+export fn strip(text: Str) -> Str {
+  var out = ""
+  var inside = false
+  var introduced = false
+  for symbol in text {
+    let code = symbol.code()
+    if inside {
+      if code >= 64 && code <= 126 { inside = false }
+    } else {
+      if introduced {
+        introduced = false
+        if symbol == '[' {
+          inside = true
+        } else {
+          out = out + symbol.toText()
+        }
+      } else {
+        if code == 27 { introduced = true } else { out = out + symbol.toText() }
+      }
+    }
+  }
+  out
+}
+
+/// The number of characters `text` occupies once control sequences are removed.
+export fn visibleLength(text: Str) -> Int {
+  strip(text).length()
+}
+
+/// Erases the current line and returns the cursor to its start.
+export fn clearLine() -> Str {
+  ESCAPE + "2K\r"
+}
+
+/// Moves the cursor up `count` lines; empty for a count below one.
+export fn cursorUp(count: Int) -> Str {
+  if count < 1 { "" } else { ESCAPE + show(count) + "A" }
+}
+
+/// Hides the cursor.
+export fn hideCursor() -> Str {
+  ESCAPE + "?25l"
+}
+
+/// Shows the cursor.
+export fn showCursor() -> Str {
+  ESCAPE + "?25h"
+}
+
+const FLAG_CODES: Array[Str] = ["1", "2", "3", "4", "7", "9"]
+
+fn codesOf(style: &Style) -> Array[Str] {
+  let flags = [style.bold, style.dim, style.italic, style.underline, style.inverse, style.strike]
+  var codes = []
+  var index = 0
+  while index < flags.length() {
+    if flags[index] { codes = codes.push(FLAG_CODES[index]) }
+    index = index + 1
+  }
+  if let Some(color) = style.foreground { codes = codes.push(colorCode(&color, 30, 90, "38")) }
+  if let Some(color) = style.background { codes = codes.push(colorCode(&color, 40, 100, "48")) }
+  codes
+}
+
+fn colorCode(color: &Color, base: Int, bright: Int, extended: Str) -> Str {
+  match color {
+    case Named(index) => {
+      let bounded = clamp(index, 0, 15)
+      if bounded < 8 { show(base + bounded) } else { show(bright + bounded - 8) }
+    }
+    case Palette(index) => extended + ";5;" + show(clamp(index, 0, 255))
+    case Rgb(red, green, blue) => {
+      extended + ";2;" + show(clamp(red, 0, 255)) + ";" + show(clamp(green, 0, 255)) + ";"
+        + show(clamp(blue, 0, 255))
+    }
+  }
+}
+
+fn clamp(value: Int, low: Int, high: Int) -> Int {
+  if value < low { low } else { if value > high { high } else { value } }
+}

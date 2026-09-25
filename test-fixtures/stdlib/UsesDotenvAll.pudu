@@ -1,0 +1,59 @@
+module UsesDotenvAll
+
+import Std.Dotenv as Dotenv
+
+const TEXT: Str = "# settings\nexport A=1\nB = hello world # note\nC='lit $\{A\}'\nD=\"x\\ny $\{A\}\"\nE=\"multi\nline\"\n\nF=$\{B\}!\n"
+
+fn entries(text: Str) -> Array[Dotenv.Entry] {
+  match Dotenv.parse(text) {
+    case Ok(found) => found
+    case Err(_) => []
+  }
+}
+
+fn refusal(text: Str) -> Str {
+  match Dotenv.parse(text) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Dotenv.explain(&problem)
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  let parsed = entries(TEXT)
+
+  // Order is kept; comments and blank lines are not entries.
+  if parsed.length() == 6 && parsed[0].key == "A" && parsed[5].key == "F" { held = held + 1 }
+
+  // Each quoting rule.
+  if Dotenv.lookup(&parsed, "A") == Some("1") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "B") == Some("hello world") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "C") == Some("lit $\{A\}") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "D") == Some("x\ny 1") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "E") == Some("multi\nline") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "F") == Some("hello world!") { held = held + 1 }
+  if Dotenv.lookup(&parsed, "MISSING") == None { held = held + 1 }
+
+  // A later assignment wins.
+  let twice = entries("K=1\nK=2")
+  if Dotenv.toMap(&twice).get("K") == Some("2") && Dotenv.lookup(&twice, "K") == Some("2") {
+    held = held + 1
+  }
+  if Dotenv.toMap(&parsed).size() == 6 { held = held + 1 }
+
+  // Rendering reads back to the same entries.
+  if entries(Dotenv.render(&parsed)) == parsed { held = held + 1 }
+  if Dotenv.render(&entries("P=plain/path:1")) == "P=plain/path:1\n" { held = held + 1 }
+
+  // Each refusal names its line.
+  if refusal("A=1\nNOEQUALS") == "line 2: expected KEY=value" { held = held + 1 }
+  if refusal("1X=2") == "line 1: invalid key '1X'" { held = held + 1 }
+  if refusal("A=\"open\nstill open") == "line 1: quoted value is not closed" { held = held + 1 }
+  if refusal("A='open") == "line 1: quoted value is not closed" { held = held + 1 }
+  match Dotenv.load("/nonexistent/pudu/settings.env") {
+    case Err(Dotenv.Unreadable(path, _)) => { if path == "/nonexistent/pudu/settings.env" { held = held + 1 } }
+    case _ => {}
+  }
+
+  held
+}

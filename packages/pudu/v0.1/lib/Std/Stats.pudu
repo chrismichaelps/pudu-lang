@@ -1,0 +1,214 @@
+module Std.Stats
+
+import Std.List as List
+import Std.Math.Float as Float
+
+/// Count, extremes, mean, and sample deviation of one sample.
+///
+/// `deviation` is `0.0` for a sample of one.
+export type Summary = {
+  count: Int,
+  minimum: Float,
+  maximum: Float,
+  mean: Float,
+  deviation: Float
+}
+
+/// A single-pass accumulator: count, mean, sum of squared differences from
+/// the mean, and extremes. Holds constant state for any input length.
+export type Running = {
+  count: Int,
+  mean: Float,
+  squares: Float,
+  minimum: Float,
+  maximum: Float
+}
+
+/// The arithmetic mean, or `None` for an empty sample.
+export fn mean(values: &Array[Float]) -> Option[Float] {
+  if values.length() == 0 { return None }
+  var total = 0.0
+  var count = 0.0
+  for value in values {
+    total = total + value
+    count = count + 1.0
+  }
+  Some(total / count)
+}
+
+/// The middle value of the sorted sample, averaging the two middle values of
+/// an even-length sample.
+export fn median(values: &Array[Float]) -> Option[Float] {
+  percentile(values, 50.0)
+}
+
+/// The value at percentile `rank` (0 to 100), interpolating linearly between
+/// neighbouring order statistics.
+///
+/// `None` for an empty sample or a rank outside 0 to 100.
+export fn percentile(values: &Array[Float], rank: Float) -> Option[Float] {
+  let size = values.length()
+  if size == 0 || rank < 0.0 || rank > 100.0 || Float.isNan(rank) { return None }
+  let ordered = List.sortBy(values, |left, right| left < right)
+  let position = rank / 100.0 * (counted(size) - 1.0)
+  var index = 0
+  var reached = 0.0
+  while reached + 1.0 <= position {
+    index = index + 1
+    reached = reached + 1.0
+  }
+  let fraction = position - reached
+  if index + 1 >= size {
+    Some(ordered[size - 1])
+  } else {
+    Some(ordered[index] + (ordered[index + 1] - ordered[index]) * fraction)
+  }
+}
+
+/// Sample variance with `n - 1` in the denominator; `None` below two values.
+export fn variance(values: &Array[Float]) -> Option[Float] {
+  let state = observeAll(values)
+  if state.count < 2 { None } else { Some(state.squares / (counted(state.count) - 1.0)) }
+}
+
+/// Population variance with `n` in the denominator; `None` for an empty sample.
+export fn populationVariance(values: &Array[Float]) -> Option[Float] {
+  let state = observeAll(values)
+  if state.count < 1 { None } else { Some(state.squares / counted(state.count)) }
+}
+
+/// Sample standard deviation; `None` below two values.
+export fn deviation(values: &Array[Float]) -> Option[Float] {
+  Float.sqrt(variance(values) ?)
+}
+
+/// Sample covariance of paired values; `None` when the lengths differ or
+/// fewer than two pairs are given.
+export fn covariance(left: &Array[Float], right: &Array[Float]) -> Option[Float] {
+  let size = left.length()
+  if size != right.length() || size < 2 { return None }
+  let leftMean = mean(left) ?
+  let rightMean = mean(right) ?
+  var total = 0.0
+  var index = 0
+  while index < size {
+    total = total + (left[index] - leftMean) * (right[index] - rightMean)
+    index = index + 1
+  }
+  Some(total / (counted(size) - 1.0))
+}
+
+/// Pearson correlation of paired values, from -1 to 1.
+///
+/// `None` when the lengths differ, fewer than two pairs are given, or either
+/// side is constant.
+export fn correlation(left: &Array[Float], right: &Array[Float]) -> Option[Float] {
+  let shared = covariance(left, right) ?
+  let leftSpread = deviation(left) ?
+  let rightSpread = deviation(right) ?
+  if leftSpread == 0.0 || rightSpread == 0.0 { return None }
+  Some(shared / (leftSpread * rightSpread))
+}
+
+/// Counts of values in `buckets` equal-width intervals over `[low, high)`.
+///
+/// Values outside the range are not counted. Empty when `buckets` is not
+/// positive or `high <= low`.
+export fn histogram(values: &Array[Float], low: Float, high: Float, buckets: Int) -> Array[Int] {
+  if buckets <= 0 || !(high > low) { return [] }
+  var counts = []
+  while counts.length() < buckets { counts = counts.push(0) }
+  let width = (high - low) / counted(buckets)
+  for value in values {
+    if value >= low && value < high {
+      var slot = 0
+      var edge = low + width
+      while value >= edge && slot < buckets - 1 {
+        slot = slot + 1
+        edge = edge + width
+      }
+      counts[slot] = counts[slot] + 1
+    }
+  }
+  counts
+}
+
+/// Count, extremes, mean, and sample deviation; `None` for an empty sample.
+export fn summarize(values: &Array[Float]) -> Option[Summary] {
+  let state = observeAll(values)
+  if state.count == 0 { return None }
+  Some(Summary {
+      count: state.count,
+      minimum: state.minimum,
+      maximum: state.maximum,
+      mean: state.mean,
+      deviation: runningDeviation(&state)
+    })
+}
+
+/// An accumulator that has observed nothing.
+export fn running() -> Running {
+  Running{count: 0, mean: 0.0, squares: 0.0, minimum: 0.0, maximum: 0.0}
+}
+
+/// The accumulator after one more value.
+export fn observe(state: &Running, value: Float) -> Running {
+  let count = state.count + 1
+  let delta = value - state.mean
+  let centre = state.mean + delta / counted(count)
+  let first = state.count == 0
+  Running {
+    count: count,
+    mean: centre,
+    squares: state.squares + delta * (value - centre),
+    minimum: if first || value < state.minimum { value } else { state.minimum },
+    maximum: if first || value > state.maximum { value } else { state.maximum }
+  }
+}
+
+/// The mean observed so far; `None` before the first value.
+export fn runningMean(state: &Running) -> Option[Float] {
+  if state.count == 0 { None } else { Some(state.mean) }
+}
+
+/// The sample variance observed so far; `None` below two values.
+export fn runningVariance(state: &Running) -> Option[Float] {
+  if state.count < 2 { None } else { Some(state.squares / (counted(state.count) - 1.0)) }
+}
+
+fn runningDeviation(state: &Running) -> Float {
+  let spread = match runningVariance(state) {
+    case Some(found) => Float.sqrt(found)
+    case None => None
+  }
+  match spread {
+    case Some(found) => found
+    case None => 0.0
+  }
+}
+
+fn observeAll(values: &Array[Float]) -> Running {
+  var state = running()
+  for value in values { state = observe(&state, value) }
+  state
+}
+
+fn counted(size: Int) -> Float {
+  var total = 0.0
+  var remaining = size
+  var unit = 1.0
+  var chunk = 1
+  while chunk * 2 <= remaining {
+    chunk = chunk * 2
+    unit = unit * 2.0
+  }
+  while remaining > 0 {
+    if chunk <= remaining {
+      total = total + unit
+      remaining = remaining - chunk
+    }
+    chunk = chunk / 2
+    unit = unit / 2.0
+  }
+  total
+}
