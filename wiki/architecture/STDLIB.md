@@ -244,6 +244,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Stats` | 16 | mean, median, percentiles, variance, deviation, covariance, correlation, histograms, a streaming accumulator |
 | `Std.Base32` | 9 | standard, extended-hex, and Crockford base32 with strict decoding |
 | `Std.Pem` | 7 | armored blocks: bundles, labels, 64-column bodies, refused legacy headers |
+| `Std.Checksum` | 9 | CRC-32, CRC-32C, CRC-64, FNV-1a at runtime speed, chained over chunks |
 | `Std.Human` | 10 | byte sizes and durations read and written, ordinals, plurals, relative time |
 | `Std.Dotenv` | 8 | environment files: quoting, escapes, earlier-key expansion, rendering back |
 | `Std.Term` | 21 | terminal colour and styles, stripping sequences, visible width, cursor control |

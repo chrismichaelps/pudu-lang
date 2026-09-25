@@ -127,6 +127,7 @@ library
     Pudu.Eval.Foreign.Result
     Pudu.Eval.Method
     Pudu.Eval.Handle
+    Pudu.Eval.Checksum
     Pudu.Eval.Hash
     Pudu.Eval.HashMap
     Pudu.Eval.Io

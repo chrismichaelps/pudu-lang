@@ -30,6 +30,7 @@ data Builtin
   | Sha3_512Builtin
   | Blake2b256Builtin
   | Blake2b512Builtin
+  | ChecksumBuiltin
   | HmacSha512Builtin
   | ConstantTimeEqualBuiltin
   | SpawnBuiltin
@@ -237,6 +238,7 @@ builtinName value = case value of
   Sha3_512Builtin -> "sha3_512Of"
   Blake2b256Builtin -> "blake2b256Of"
   Blake2b512Builtin -> "blake2b512Of"
+  ChecksumBuiltin -> "checksumOf"
   HmacSha512Builtin -> "hmacSha512Of"
   ConstantTimeEqualBuiltin -> "constantTimeEqual"
   SpawnBuiltin -> "spawnProgram"

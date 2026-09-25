@@ -112,6 +112,7 @@ installBuiltinConstructors = do
   bind "sha3_512Of" (BuiltinValue Sha3_512Builtin)
   bind "blake2b256Of" (BuiltinValue Blake2b256Builtin)
   bind "blake2b512Of" (BuiltinValue Blake2b512Builtin)
+  bind "checksumOf" (BuiltinValue ChecksumBuiltin)
   bind "hmacSha512Of" (BuiltinValue HmacSha512Builtin)
   bind "constantTimeEqual" (BuiltinValue ConstantTimeEqualBuiltin)
   bind "verifyRsaSha256" (BuiltinValue VerifyRsaBuiltin)

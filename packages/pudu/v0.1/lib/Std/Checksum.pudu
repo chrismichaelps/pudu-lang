@@ -1,0 +1,94 @@
+module Std.Checksum
+
+// The codes `checksumOf` takes, one per algorithm. A wired-in signature
+// cannot name a sum this module declares, so the typed surface is the set of
+// functions below and the codes never leave this file.
+const CRC32: Int = 0
+const CRC32C: Int = 1
+const CRC64: Int = 2
+const FNV32: Int = 3
+const FNV64: Int = 4
+
+fn narrow(value: UInt64) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(held) => held
+    case None => 0u32
+  }
+}
+
+fn widen(value: UInt32) -> UInt64 {
+  match convertInteger[UInt64](value) {
+    case Some(held) => held
+    case None => 0u64
+  }
+}
+
+/// The CRC-32 of the bytes, as zip, gzip, and PNG compute it.
+///
+/// A checksum catches accidents — a flipped bit, a truncated transfer — and
+/// nothing else. Anyone who can change the data can change the checksum to
+/// match, so a value that must resist tampering is a question for
+/// `Std.Crypto`.
+export fn crc32(source: &Bytes) -> UInt32 { crc32Update(0u32, source) }
+
+/// A CRC-32 carried on over more bytes, so a stream can be checked a chunk
+/// at a time: `crc32Update(crc32(a), b)` is `crc32` of `a` then `b`. Start
+/// from `0u32` for no bytes at all.
+export fn crc32Update(previous: UInt32, source: &Bytes) -> UInt32 {
+  narrow(checksumOf(CRC32, widen(previous), *source))
+}
+
+/// The CRC-32C (Castagnoli) of the bytes, as iSCSI, ext4, and many storage
+/// formats compute it; it catches the errors storage makes better than CRC-32.
+export fn crc32c(source: &Bytes) -> UInt32 { crc32cUpdate(0u32, source) }
+
+/// A CRC-32C carried on over more bytes, as `crc32Update` does for CRC-32.
+export fn crc32cUpdate(previous: UInt32, source: &Bytes) -> UInt32 {
+  narrow(checksumOf(CRC32C, widen(previous), *source))
+}
+
+/// The CRC-64 of the bytes with the ECMA-182 polynomial, reflected and
+/// inverted as the xz format computes it.
+export fn crc64(source: &Bytes) -> UInt64 { crc64Update(0u64, source) }
+
+/// A CRC-64 carried on over more bytes, as `crc32Update` does for CRC-32.
+export fn crc64Update(previous: UInt64, source: &Bytes) -> UInt64 {
+  checksumOf(CRC64, previous, *source)
+}
+
+/// The 32-bit FNV-1a hash of the bytes.
+///
+/// Small, fast, and well spread for short keys such as names and paths —
+/// suited to sharding and bucketing. It is not keyed, so whoever chooses the
+/// keys can choose collisions; a table facing untrusted input wants
+/// `Std.SipHash`.
+export fn fnv1a32(source: &Bytes) -> UInt32 {
+  narrow(checksumOf(FNV32, 0x811c9dc5u64, *source))
+}
+
+/// The 64-bit FNV-1a hash of the bytes.
+export fn fnv1a64(source: &Bytes) -> UInt64 {
+  checksumOf(FNV64, 0xcbf29ce484222325u64, *source)
+}
+
+fn hexOf(value: UInt64, digits: Int) -> Str {
+  let alphabet = "0123456789abcdef"
+  var out = ""
+  var index = digits - 1
+  while index >= 0 {
+    let nibble = match convertInteger[Int]((value >> (index * 4)) & 0xfu64) {
+      case Some(held) => held
+      case None => 0
+    }
+    out = out + alphabet.charAt(nibble).toText()
+    index = index - 1
+  }
+  out
+}
+
+/// A 32-bit checksum as eight lowercase hex digits, leading zeros kept, which
+/// is how checksum files and headers write one.
+export fn hex32(value: UInt32) -> Str { hexOf(widen(value), 8) }
+
+/// A 64-bit checksum as sixteen lowercase hex digits, leading zeros kept.
+export fn hex64(value: UInt64) -> Str { hexOf(value, 16) }

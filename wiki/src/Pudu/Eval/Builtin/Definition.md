@@ -168,3 +168,10 @@ to enable direct O(1) builtin dispatch without runtime string lookups.
 Registers tlsUpgradeWithin(Int,Str,Int), gzipCompress(Bytes,Int,Int), gzipDecompress(Bytes,Int) as named effect primitives returning Result[T,Str].
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Native checksum tag (#343)
+
+Registers `ChecksumBuiltin` with the canonical name `checksumOf`.
+
+Resolved Grill Log: one tag for every algorithm, selected by a code, keeps the wired-in surface one
+name wide.
