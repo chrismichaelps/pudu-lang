@@ -3,6 +3,7 @@ module Service.LivePackages
 import Std.List as List
 import Std.Option as Option
 import Std.Sync as Sync
+import Service.LiveDiscussions as Discussions
 import Service.LiveIndex as Index
 import Service.LiveRelease as Release
 import Service.LiveSource as Source
@@ -50,10 +51,25 @@ export fn current(live: &Live, snapshot: &Packages.Packages) -> View {
 /// from the snapshot's directory; the overview and releases need nothing more.
 export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.Project, tab: Str, file: Str) -> Packages.Project {
   if tab == "overview" || tab == "releases" { return *project }
-  match Packages.find(snapshot, project.handle, project.project) {
+  let filled = match Packages.find(snapshot, project.handle, project.project) {
     case Some(held) => if held.latest == project.latest { Packages.detailed(snapshot, project) } else { *project }
     case None => *project
   }
+  // Conversations change by the minute and belong to no release, so they are
+  // read live for every package; the snapshot's stand in when GitHub cannot say.
+  if tab == "tickets" {
+    match Discussions.read(&live.source, filled.repository, "tickets") {
+      case Some(found) => { return Packages.Project{..filled, tickets: found} }
+      case None => { return filled }
+    }
+  }
+  if tab == "contributions" {
+    match Discussions.read(&live.source, filled.repository, "contributions") {
+      case Some(found) => { return Packages.Project{..filled, contributions: found} }
+      case None => { return filled }
+    }
+  }
+  filled
 }
 
 /// The snapshot with the topic's repositories laid over it.

@@ -5,6 +5,7 @@ import Std.Io as Io
 import Std.Option as Option
 import Std.Test as Test
 import Prerender as Prerender
+import Service.LiveDiscussions as LiveDiscussions
 import Service.LivePackages as LivePackages
 import Service.Packages as Packages
 import Test.LiveStand as Stand
@@ -32,6 +33,16 @@ export fn main() -> Int {
   let snapshotDocs = DynamicWeb.render(&offline, "/@alice/json-kit/docs")
   let snapshotTickets = DynamicWeb.render(&offline, "/@alice/json-kit/tickets")
   let snapshotMissingFile = DynamicWeb.render(&offline, "/@alice/json-kit/source/nothing.pudu")
+  // Conversations are read live for every package, known ones included.
+  let talking = Stand.stand(&Stand.github())
+  let repos = "https://api.github.com/repos/alice/json-kit/"
+  let listed = "?state=all&sort=updated&direction=desc&per_page=100"
+  Stand.answer(&talking, repos + "issues" + listed, "[\{\"number\":7,\"title\":\"Live ticket\",\"body\":\"Opened today.\",\"state\":\"open\",\"user\":\{\"login\":\"dana\"\},\"labels\":[\{\"name\":\"bug\"\}],\"comments\":2,\"created_at\":\"2026-09-25T10:00:00Z\",\"updated_at\":\"2026-09-25T11:00:00Z\"\},\{\"number\":8,\"title\":\"A pull, not a ticket\",\"state\":\"open\",\"pull_request\":\{\"url\":\"x\"\},\"user\":\{\"login\":\"eve\"\}\}]")
+  Stand.answer(&talking, repos + "pulls" + listed, "[\{\"number\":9,\"title\":\"Merged work\",\"state\":\"closed\",\"merged_at\":\"2026-09-25T12:00:00Z\",\"draft\":false,\"user\":\{\"login\":\"eve\"\},\"created_at\":\"2026-09-24T09:00:00Z\",\"updated_at\":\"2026-09-25T12:00:00Z\"\}]")
+  let talked = Stand.edge(&snapshot, &Stand.live(&talking))
+  let liveTickets = DynamicWeb.render(&talked, "/@alice/json-kit/tickets")
+  let liveTicket = DynamicWeb.render(&talked, "/@alice/json-kit/tickets/7")
+  let liveContributions = DynamicWeb.render(&talked, "/@alice/json-kit/contributions")
 
   let suite = Test.suite("live package pages", &[
       Test.that("the function renders a new package's page, cached at the edge", page.status.code == 200 && page.body.contains("fresh-pkg") && page.body.contains("Fresh Package") && cacheOf(&page) == DynamicWeb.LIVE_CACHE),
@@ -46,6 +57,11 @@ export fn main() -> Int {
       Test.that("the function serves a snapshot release's source from the snapshot's files", snapshotSource.status.code == 200 && snapshotSource.body.contains("Parse.pudu") && cacheOf(&snapshotSource) == DynamicWeb.SNAPSHOT_CACHE),
       Test.that("the function serves a snapshot release's API from its catalogue", snapshotDocs.status.code == 200 && snapshotDocs.body.contains("textOf")),
       Test.equals("the function serves a snapshot project's discussions", &snapshotTickets.status.code, &200),
+      Test.that("a known package's tickets are GitHub's current ones, pull requests left out", liveTickets.status.code == 200 && liveTickets.body.contains("Live ticket") && !liveTickets.body.contains("A pull, not a ticket")),
+      Test.that("a live ticket has its own page", liveTicket.status.code == 200 && liveTicket.body.contains("Opened today.") && liveTicket.body.contains("dana")),
+      Test.that("a merged pull request is a merged contribution", liveContributions.status.code == 200 && liveContributions.body.contains("Merged work") && liveContributions.body.contains("erged")),
+      Test.equals("a repository address reads as its owner and name", &LiveDiscussions.pathOf("https://github.com/alice/json-kit"), &"alice/json-kit"),
+      Test.equals("an address outside GitHub has no path", &LiveDiscussions.pathOf("https://example.com/a/b"), &""),
       Test.that("a file the release lacks is missing and briefly cached", snapshotMissingFile.status.code == 404 && cacheOf(&snapshotMissingFile) == DynamicWeb.MISSING_CACHE),
       Test.that("package pages and the listing are answered by the function, not written", Prerender.answeredLive("/@alice/json-kit/source") && Prerender.answeredLive("/@alice") && Prerender.answeredLive("/packages") && Prerender.answeredLive("/packages/page/2") && !Prerender.answeredLive("/packages/avatars/a.png") && !Prerender.answeredLive("/docs"))
     ])

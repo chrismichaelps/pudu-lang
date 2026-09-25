@@ -1,0 +1,67 @@
+module Service.LiveDiscussions
+
+import Std.Json as Json
+import Service.LiveJson as J
+import Service.LiveSource as Source
+import Service.Packages as Packages
+
+const API: Str = "https://api.github.com/repos/"
+const GITHUB: Str = "https://github.com/"
+/// The most recently updated conversations a tab lists, as the build keeps.
+const LIMIT: Int = 100
+const TITLE_CHARACTERS: Int = 500
+const BODY_CHARACTERS: Int = 50000
+const LABELS: Int = 12
+
+/// The repository's `owner/name` path from its GitHub address, or empty when
+/// the address is not a GitHub repository's.
+export fn pathOf(repository: Str) -> Str {
+  if !repository.startsWith(GITHUB) { return "" }
+  let rest = repository.slice(GITHUB.length(), repository.length())
+  let parts = rest.split("/").filter(|part: Str| !part.isEmpty())
+  if parts.length() < 2 { "" } else { parts[0] + "/" + parts[1] }
+}
+
+/// A tab's conversations as GitHub has them now, most recently updated first:
+/// `tickets` are issues that are not pull requests, `contributions` are pull
+/// requests. `None` when GitHub cannot answer, so the caller keeps what the
+/// snapshot holds rather than showing an empty tab.
+export fn read(source: &Source.Source, repository: Str, kind: Str) -> Option[Array[Packages.Discussion]] {
+  let path = pathOf(repository)
+  if path.isEmpty() { return None }
+  let endpoint = if kind == "tickets" { "issues" } else { "pulls" }
+  let address = API + path + "/" + endpoint + "?state=all&sort=updated&direction=desc&per_page=" + show(LIMIT)
+  let listed = J.decoded(Source.text(source, address, &Source.conversation())) ?
+  let webPath = if kind == "tickets" { "issues" } else { "pull" }
+  var found: Array[Packages.Discussion] = []
+  for item in J.items(&listed) {
+    if kind == "tickets" && !J.at(&item, &["pull_request", "url"]).isEmpty() { continue }
+    let number = J.whole(&item, "number")
+    if number <= 0 { continue }
+    found = found.push(discussion(&item, number, GITHUB + path + "/" + webPath + "/" + show(number), kind))
+  }
+  Some(found)
+}
+
+fn discussion(item: &Json.Json, number: Int, url: Str, kind: Str) -> Packages.Discussion {
+  var labels: Array[Str] = []
+  for label in J.list(item, "labels") {
+    if labels.length() < LABELS { labels = labels.push(J.text(&label, "name")) }
+  }
+  let merged = !J.text(item, "merged_at").isEmpty()
+  Packages.Discussion {
+    number: number,
+    title: clipped(J.text(item, "title"), TITLE_CHARACTERS),
+    body: clipped(J.text(item, "body"), BODY_CHARACTERS),
+    author: J.at(item, &["user", "login"]),
+    state: if merged { "merged" } else { if J.text(item, "state") == "open" { "open" } else { "closed" } },
+    createdAt: J.text(item, "created_at"),
+    updatedAt: J.text(item, "updated_at"),
+    comments: J.whole(item, "comments"),
+    labels: labels,
+    url: url,
+    draft: kind == "contributions" && J.flag(item, "draft")
+  }
+}
+
+fn clipped(value: Str, most: Int) -> Str { if value.length() > most { value.slice(0, most) } else { value } }

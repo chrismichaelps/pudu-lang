@@ -13,6 +13,8 @@ tags: [changelog]
   GitHub's own counts; only a complete search hides a snapshot package that left the topic.
 - [[website Service LiveSource]] revalidates with `If-None-Match`; an unchanged `304` renews what is
   remembered and does not count against GitHub's rate limit.
+- [[website Service LiveDiscussions]]: every package's Tickets and Contributions tabs are GitHub's
+  current conversations, the snapshot's standing in when GitHub cannot answer.
 - A snapshot release's source and API catalogue are served by the function. [[website live pages suite]]
   (14) and [[website live packages suite]] (20) run against [[website live stand]]; CI runs both.
 
