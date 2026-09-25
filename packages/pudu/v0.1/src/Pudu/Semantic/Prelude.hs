@@ -86,7 +86,7 @@ effectValueNames =
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "secureRandomBytes"
-  , "desktopOpen", "desktopPresent", "desktopPump", "desktopClose", "audioDevicePlay"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClose", "audioDevicePlay"
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
   , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"

@@ -10,7 +10,7 @@ aliases: [Desktop Capability Conformance]
 ## Purpose
 
 Define the behavioral surface a serious Pudu desktop application needs and attach executable
-evidence to every claim. Apple's public AppKit and SwiftUI documentation are the primary maturity
+evidence to every claim. Apple's public AppKit and declarative UI documentation are the primary maturity
 references, not APIs to reproduce. Pudu covers user capabilities and operating-system obligations;
 it does not copy class names, protocol graphs, delegates, selectors, builders, or deprecated
 compatibility layers.

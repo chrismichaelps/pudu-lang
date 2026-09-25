@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — A desktop window delivers input, and the ui library themes, animates, and undoes (#322)
+
+- The macOS adapter queues presses, scrolls, named keys, printable text, Command/Control chords, and
+  resizes while pumping; `desktopInputs` drains them ([[Eval Desktop]], [[Pudu Desktop Adapter]]).
+  Key presses no longer reach the responder chain, so an unhandled key is silent.
+- [[Std Ui Desktop]] adds `signals`, the pure `decodeSignals`, and `drive`, which runs a screen until
+  the window closes and presents only damaged turns. [[Std Ui Screen]] adds `restated` for state
+  changes that did not come from an input.
+- New [[Std Ui Theme]], [[Std Ui Motion]], [[Std Ui History]], [[Std Ui Virtual]], and
+  [[Std Ui Keymap]].
+- [[architecture/NATIVE-UI]] gains a desktop concept-coverage table naming every remaining gap, and
+  the UI pages describe the reference framework in neutral terms.
 ## 2026-09-24 — Events, an outbox, calendar jobs, and a router-checked API description (#323)
 
 - [[Std App Events]] publishes in order to topic patterns and holds an outbox that is drained after
@@ -1502,11 +1514,11 @@ tags: [changelog]
   against close, failed close remains retryable, malformed surfaces and unsafe dimensions are typed,
   and runtime teardown closes leaks.
 - Added the first real macOS presenter as private language-runtime plumbing over public AppKit and
-  CoreGraphics entry points. No platform object or pointer crosses into Pudu, and no SwiftUI,
-  raylib, SDL, or foreign UI toolkit is linked. A Pudu launch fixture displayed its exact 480×280
+  CoreGraphics entry points. No platform object or pointer crosses into Pudu, and no platform UI
+  framework or third-party toolkit is linked. A Pudu launch fixture displayed its exact 480×280
   Canvas surface in a titled desktop window, pumped the event loop for 1.8 seconds, and returned
   `Ok(1)` after closing. Headless validation remains separate.
-- Made SwiftUI the primary behavioral benchmark while defining Pudu's distinct model: applications
+- Made the platform's declarative UI framework the primary behavioral benchmark while defining Pudu's distinct model: applications
   will own typed models and named spaces rather than copy protocols, property wrappers, builders,
   delegates, or one-for-one renamed framework declarations. Added official application, scene,
   window, document, settings, focus, AppKit event, and Metal presentation references.
@@ -1516,7 +1528,7 @@ tags: [changelog]
 - Corrected the serious-release table against the standard library that actually ships, separating
   missing lifecycle, package, large-input, HTTP-client, filesystem, and concurrency evidence from
   optional ecosystem breadth.
-- Established the Pudu-only UI, audio, and video boundary: raylib and Apple publications inform
+- Established the Pudu-only UI, audio, and video boundary: small media libraries and Apple publications inform
   explicit frame/resource lifetimes, accessibility, real-time audio, and timestamped media, but no
   foreign toolkit or platform framework enters the portable packages.
 - Added a bounded RGBA conformance canvas with overflow-safe clipping, exact painter ordering,
@@ -1527,8 +1539,8 @@ tags: [changelog]
   including byte equality between repaint and full render.
 - `Std.Bytes.join` joins neighbours in pairs and `repeat` doubles, instead of carrying every octet
   through an array: joining 262,144 four-byte parts fell from 1.71 s to 1.06 s at -O2.
-- Limited Apple references to the developer documentation archive and read OpenSwiftUI only for
-  declarative size negotiation; no API names or code are carried over.
+- Limited Apple references to the developer documentation archive and read open declarative UI
+  implementations only for size negotiation; no API names or code are carried over.
 - Added `Std.Ui.Layout`: declarative `View` values whose modifiers are fields rather than wrapper
   nodes, two-pass placement with exact cumulative grow distribution, a semantics tree that refuses
   unnamed meaningful roles, focus order, hit testing, painting into the canvas, and damage regions

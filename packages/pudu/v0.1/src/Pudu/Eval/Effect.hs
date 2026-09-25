@@ -34,7 +34,7 @@ import Pudu.Eval.AudioStream
   , writeAudioStream
   )
 import Pudu.Eval.Clock
-import Pudu.Eval.Desktop (closeDesktop, openDesktop, presentDesktop, pumpDesktop)
+import Pudu.Eval.Desktop (closeDesktop, inputsDesktop, openDesktop, presentDesktop, pumpDesktop)
 import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
   ( closeHandleAt
@@ -215,6 +215,7 @@ effectBuiltins =
   , DesktopOpenBuiltin
   , DesktopPresentBuiltin
   , DesktopPumpBuiltin
+  , DesktopInputsBuiltin
   , DesktopCloseBuiltin
   , AudioDevicePlayBuiltin
   , AudioStreamOpenBuiltin
@@ -416,6 +417,10 @@ callEffect spanValue builtin arguments = do
         desktop <- currentDesktopStore
         resultOf . fmap BoolValue
           <$> lift refusal (pumpDesktop desktop (fromInteger token) (fromInteger milliseconds))
+      (DesktopInputsBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap StrValue
+          <$> lift refusal (inputsDesktop desktop (fromInteger token))
       (DesktopCloseBuiltin, [IntValue _ token]) -> do
         desktop <- currentDesktopStore
         effectUnit (closeDesktop desktop (fromInteger token))

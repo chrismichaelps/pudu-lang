@@ -11,7 +11,7 @@ aliases: [Native Application UI]
 
 Provide a Pudu-native, performance-conscious application-media stack whose portable rendering,
 layout, event, accessibility, audio, and video logic is written in Pudu. It is not a game engine and
-does not bind raylib, Apple frameworks, or another foreign UI/media toolkit.
+does not bind platform UI frameworks or another foreign UI/media toolkit.
 
 “Better than Apple” is a verification target, not a marketing claim. Pudu must match the mature
 properties visible in Apple's public design—stable frame pacing, short-lived presentable resources,
@@ -24,9 +24,9 @@ coherent ownership model across UI, audio, and video.
 in that ledger is an implementation obligation unless it is explicitly excluded as framework
 machinery rather than an application capability.
 
-## Lessons taken from raylib
+## Lessons taken from small media libraries
 
-Raylib is a reference for small explicit layers rather than a dependency. Its useful decisions are a
+Small explicit media libraries are a reference for layering rather than a dependency. Their useful decisions are a
 clear frame boundary, a flat drawing API, clipping as explicit state, batched rendering, input polled
 at a known point, and device resources with visible open/close lifetimes. Pudu keeps those properties
 but rejects the game-shaped surface, ambient global window/audio state, and APIs whose success cannot
@@ -58,13 +58,13 @@ layer so its lifetime, failure, and pixel transfer can be tested directly.
 On macOS the language-owned runtime adapter may call the operating system's public AppKit and
 CoreGraphics entry points. That is platform plumbing, not a foreign integration exposed by the UI
 package: no AppKit value, callback, selector, memory rule, or framework type crosses into Pudu.
-Raylib, SDL, SwiftUI, and other third-party or foreign UI toolkits are not linked. Other targets
+Third-party and foreign UI toolkits are not linked. Other targets
 must implement the same presenter contract or answer `UnsupportedPlatform`; a successful no-op is
 forbidden.
 
-## SwiftUI benchmark, Pudu contract
+## Declarative desktop benchmark, Pudu contract
 
-SwiftUI is the primary behavioral reference for the application layer. Pudu keeps the useful
+The platform's own declarative UI framework is the primary behavioral reference for the application layer. Pudu keeps the useful
 human model while making ownership, cost, and failure more explicit:
 
 | Reference capability | Pudu-native contract | Required improvement |
@@ -78,11 +78,42 @@ human model while making ownership, cost, and failure more explicit:
 | Platform rendering | bounded surface presenter below a portable display list | exact CPU reference output, damage information, and measured transfer cost |
 | Lifecycle phases | explicit transitions delivered as input | transition order and shutdown ownership are fixture-testable |
 
-The similarity ends at the problem model. Pudu will not reproduce SwiftUI spellings, generic
+The similarity ends at the problem model. Pudu will not reproduce that framework's spellings, generic
 signatures, protocol conformances, property-wrapper conventions, builder syntax, or AppKit's
 responder/delegate hierarchy. Public documentation supplies expected desktop behavior; Pudu's API
 is independently designed from the language's values, `Result`, exhaustive sums, capabilities,
 and structured resource lifetimes.
+
+## Desktop concept coverage
+
+Every concept a complete desktop application needs, where it lives, and whether it is usable today.
+A row marked **Absent** is queued work, not an exclusion.
+
+| Concept | Pudu module | Status |
+| --- | --- | --- |
+| Window lifetime and presentation | [[Std Ui Desktop]] `plan`, `open`, `present`, `close` | **Ready** on macOS; other targets answer `UnsupportedPlatform` |
+| Live input: presses, keys, text, scroll, chords, resize | [[Std Ui Desktop]] `signals`, adapter queue | **Ready** on macOS |
+| Run loop | [[Std Ui Desktop]] `drive` | **Ready**: presents only damaged turns |
+| One source of truth, view derived from state | [[Std Ui Screen]] `start`, `handle`, `restated` | **Ready** |
+| Shared settings and appearance | explicit values ([[Std Ui Theme]]) passed to views | **Ready** by design; no ambient environment |
+| Light and dark appearance, design tokens | [[Std Ui Theme]] | **Ready**, contrast audited |
+| Stacks, layers, padding, alignment, scrolling | [[Std Ui Layout]] | **Ready** |
+| Grids | — | **Absent** |
+| Text measure, wrap, draw | [[Std Ui Text]] | **Ready** (bitmap face); shaping, bidirectional text, and input methods absent |
+| Buttons, fields, toggles as roles | [[Std Ui Layout]] roles | **Ready**; sliders, steppers, pickers, progress, secure fields **Absent** |
+| Long lists | [[Std Ui Virtual]] | **Ready**; selection model **Absent** |
+| Navigation stack, split view, tabs | — | **Absent** |
+| Sheets, alerts, confirmations | — | **Absent** |
+| Drawing | [[Std Ui Canvas]] rectangles, clipping, blending | **Partial**: paths, strokes, gradients absent |
+| Animation | [[Std Ui Motion]] curves, springs, retargeting | **Ready** |
+| Gestures | press through `Screen.Pressed` | **Partial**: drag, long press, magnify need pointer move and release |
+| Keyboard focus | [[Std Ui Screen]] focus order and ring | **Ready** |
+| Keyboard shortcuts | [[Std Ui Keymap]] | **Ready**; menu bar **Absent** |
+| Undo and redo | [[Std Ui History]] | **Ready** |
+| Persisted preferences | — | **Absent** |
+| Clipboard, drag and drop | — | **Absent** (adapter work) |
+| Accessibility semantics | [[Std Ui Layout]] semantics, required names | **Partial**: export to the platform accessibility tree absent |
+| Multiple windows, documents, settings window | multiple sessions | **Partial**: no document or settings space yet |
 
 ## Performance and quality constitution
 
@@ -156,8 +187,6 @@ release gates, not deferred aspirations.
 
 ## Public references
 
-- [raylib source and public API](https://github.com/raysan5/raylib) — explicit frame and resource
-  organization, used only as architectural evidence.
 - [Apple Metal frame-rate guidance](https://developer.apple.com/library/archive/documentation/3DDrawing/Conceptual/MTLBestPracticesGuide/FrameRate.html)
   and [drawable lifetime guidance](https://developer.apple.com/library/archive/documentation/3DDrawing/Conceptual/MTLBestPracticesGuide/Drawables.html)
   — stable presentation and late acquisition of scarce presentable resources.
@@ -175,27 +204,10 @@ release gates, not deferred aspirations.
 - [Apple Core Audio overview](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/CoreAudioOverview/WhatisCoreAudio/WhatisCoreAudio.html)
   and [Audio Unit fundamentals](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/AudioUnitProgrammingGuide/AudioUnitDevelopmentFundamentals/AudioUnitDevelopmentFundamentals.html)
   — sample/frame/packet vocabulary, pull-model render slices, and real-time processing rules.
-- [OpenSwiftUI](https://github.com/OpenSwiftUIProject/OpenSwiftUI) (MIT) — read for the shape of
-  declarative parent/child size negotiation and dependency-driven invalidation; no code is used.
 
-- [SwiftUI user interface state](https://developer.apple.com/documentation/swiftui/managing-user-interface-state)
-  — one source of truth and views derived from it; here a screen's state is the only input to its view.
 - [Metal tile-based deferred rendering](https://developer.apple.com/documentation/metal/tailor-your-apps-for-apple-gpus-and-tile-based-deferred-rendering)
   — never read back what will be covered, and avoid redundant opaque overdraw; guidance for the canvas
   rasterizer and any later accelerated backend, not for the declarative layer.
-- [OpenAttributeGraph](https://github.com/OpenSwiftUIProject/OpenAttributeGraph) (MIT) — dependency
-  propagation that stops when a recomputed value equals the old one; screens skip an update whose view
-  is unchanged. No code is used.
-- [SwiftUI App](https://developer.apple.com/documentation/swiftui/app),
-  [Scene](https://developer.apple.com/documentation/swiftui/scene), and
-  [WindowGroup](https://developer.apple.com/documentation/swiftui/windowgroup) — application
-  composition, system-managed lifecycle, and repeatable per-window state. Pudu restates these as
-  model-driven spaces and owned sessions rather than protocols and property wrappers.
-- [SwiftUI DocumentGroup](https://developer.apple.com/documentation/swiftui/documentgroup) and
-  [Settings](https://developer.apple.com/documentation/swiftui/settings) — the minimum specialized
-  desktop spaces a complete application layer must eventually cover.
-- [SwiftUI AccessibilityFocusState](https://developer.apple.com/documentation/swiftui/accessibilityfocusstate)
-  — keyboard focus and assistive focus are separate channels, both derived from semantics.
 - [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication),
   [NSWindow](https://developer.apple.com/documentation/appkit/nswindow), and
   [AppKit input](https://developer.apple.com/documentation/appkit/mouse-keyboard-and-trackpad) —
@@ -205,13 +217,13 @@ release gates, not deferred aspirations.
   — later accelerated presentation must track the window's display, synchronize with it, and keep
   the portable render contract independent of the GPU API.
 
-Apple references are the developer documentation archive and the public SwiftUI and Metal
+Apple references are the developer documentation archive and the public platform UI and Metal
 documentation. Every contract above is restated
 in Pudu's own terms; no API names, type hierarchies, or code are carried over.
 
 ## Grill Log
 
-- **Q:** Copy raylib's immediate global API? **A:** No. _Rationale:_ a global drawing context hides
+- **Q:** Copy an immediate-mode global drawing API? **A:** No. _Rationale:_ a global drawing context hides
   ownership and makes concurrent or headless rendering difficult to test. _Rejected:_ ambient
   `BeginDrawing`/`EndDrawing` state.
 - **Q:** Start with widgets? **A:** No. _Rationale:_ widgets depend on stable geometry, rendering,
@@ -229,14 +241,14 @@ in Pudu's own terms; no API names, type hierarchies, or code are carried over.
 - **Q:** Promise superiority before benchmarks and accessibility trials? **A:** No. _Rationale:_ the
   comparison is useful only as a falsifiable bar. _Rejected:_ branding without percentile latency,
   correctness, recovery, and assistive-technology evidence.
-- **Q:** Reproduce SwiftUI's public declaration graph with renamed identifiers? **A:** No.
+- **Q:** Reproduce the reference framework's public declaration graph with renamed identifiers? **A:** No.
   _Rationale:_ cosmetic renaming would retain hidden lifetime and composition constraints while
   creating unnecessary intellectual-property risk. _Rejected:_ one-for-one renamed protocols,
   property wrappers, builders, and modifiers.
 - **Q:** Can a Pudu desktop application avoid every operating-system call? **A:** No. _Rationale:_ a
   real window must join the target's window server and event loop. _Accepted boundary:_ a private,
   language-owned adapter to public OS entry points whose handles and types never cross into Pudu.
-  _Rejected:_ binding a foreign UI toolkit or exposing AppKit/SwiftUI types as the Pudu API.
+  _Rejected:_ binding a foreign UI toolkit or exposing platform UI framework types as the Pudu API.
 
 ## Referenced by
 

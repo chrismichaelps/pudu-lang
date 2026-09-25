@@ -1,0 +1,200 @@
+module Std.Ui.Theme
+
+import Std.Math.Float as Float
+import Std.Num {Integer}
+import Std.Ui.Canvas as Canvas
+
+/// Which appearance a theme is for.
+export type Mode
+  = Light
+  | Dark
+
+/// Colors named by role rather than by hue, so a view asks for `danger`
+/// and a theme decides what danger looks like.
+export type Palette = {
+  background: Canvas.Color,
+  surface: Canvas.Color,
+  text: Canvas.Color,
+  mutedText: Canvas.Color,
+  accent: Canvas.Color,
+  onAccent: Canvas.Color,
+  border: Canvas.Color,
+  danger: Canvas.Color,
+  success: Canvas.Color,
+  focus: Canvas.Color
+}
+
+/// Font sizes in pixels, smallest to largest.
+export type TypeScale = { caption: Int, body: Int, title: Int, headline: Int, display: Int }
+
+/// Everything a view reads to look consistent.
+export type Theme = {
+  mode: Mode,
+  palette: Palette,
+  spacing: Int,
+  radius: Int,
+  sizes: TypeScale
+}
+
+/// The light theme.
+export fn light() -> Theme {
+  Theme {
+    mode: Light,
+    palette: Palette {
+      background: Canvas.rgb(250u8, 250u8, 252u8),
+      surface: Canvas.rgb(255u8, 255u8, 255u8),
+      text: Canvas.rgb(20u8, 22u8, 28u8),
+      mutedText: Canvas.rgb(92u8, 97u8, 110u8),
+      accent: Canvas.rgb(0u8, 102u8, 214u8),
+      onAccent: Canvas.rgb(255u8, 255u8, 255u8),
+      border: Canvas.rgb(214u8, 217u8, 224u8),
+      danger: Canvas.rgb(196u8, 32u8, 38u8),
+      success: Canvas.rgb(22u8, 128u8, 60u8),
+      focus: Canvas.rgb(0u8, 90u8, 200u8)
+    },
+    spacing: 8,
+    radius: 8,
+    sizes: TypeScale{caption: 12, body: 15, title: 20, headline: 28, display: 40}
+  }
+}
+
+/// The dark theme.
+export fn dark() -> Theme {
+  Theme {
+    mode: Dark,
+    palette: Palette {
+      background: Canvas.rgb(18u8, 19u8, 23u8),
+      surface: Canvas.rgb(30u8, 32u8, 38u8),
+      text: Canvas.rgb(236u8, 237u8, 241u8),
+      mutedText: Canvas.rgb(160u8, 165u8, 178u8),
+      accent: Canvas.rgb(90u8, 164u8, 255u8),
+      onAccent: Canvas.rgb(10u8, 16u8, 28u8),
+      border: Canvas.rgb(58u8, 61u8, 72u8),
+      danger: Canvas.rgb(255u8, 105u8, 97u8),
+      success: Canvas.rgb(74u8, 214u8, 125u8),
+      focus: Canvas.rgb(120u8, 180u8, 255u8)
+    },
+    spacing: 8,
+    radius: 8,
+    sizes: TypeScale{caption: 12, body: 15, title: 20, headline: 28, display: 40}
+  }
+}
+
+/// The theme for `mode`.
+export fn forMode(mode: Mode) -> Theme {
+  match mode {
+    case Light => light()
+    case Dark => dark()
+  }
+}
+
+/// The theme with another accent; `onAccent` becomes whichever of black or
+/// white reads better on it.
+export fn withAccent(base: &Theme, accent: Canvas.Color) -> Theme {
+  let palette = Palette{..base.palette, accent: accent, onAccent: readableOn(accent)}
+  Theme{..*base, palette: palette}
+}
+
+/// `steps` spacing units in pixels.
+export fn space(theme: &Theme, steps: Int) -> Int {
+  theme.spacing * steps
+}
+
+/// Relative luminance (WCAG 2), from 0 for black to 1 for white.
+export fn luminance(color: Canvas.Color) -> Float {
+  0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
+}
+
+/// Contrast ratio between two colors (WCAG 2), from 1 to 21.
+export fn contrast(first: Canvas.Color, second: Canvas.Color) -> Float {
+  let a = luminance(first)
+  let b = luminance(second)
+  let lighter = if a > b { a } else { b }
+  let darker = if a > b { b } else { a }
+  (lighter + 0.05) / (darker + 0.05)
+}
+
+/// Whether text in `foreground` on `background` meets level AA: 4.5:1, or
+/// 3:1 for large text.
+export fn meetsContrast(foreground: Canvas.Color, background: Canvas.Color, large: Bool) -> Bool {
+  let needed = if large { 3.0 } else { 4.5 }
+  contrast(foreground, background) >= needed
+}
+
+/// Black or white, whichever contrasts more with `background`.
+export fn readableOn(background: Canvas.Color) -> Canvas.Color {
+  let black = Canvas.rgb(0u8, 0u8, 0u8)
+  let white = Canvas.rgb(255u8, 255u8, 255u8)
+  if contrast(black, background) >= contrast(white, background) { black } else { white }
+}
+
+/// `first` blended toward `second` by `percent` (0 to 100, clamped).
+export fn mix(first: Canvas.Color, second: Canvas.Color, percent: Int) -> Canvas.Color {
+  let weight = if percent < 0 { 0 } else { if percent > 100 { 100 } else { percent } }
+  Canvas.rgba(
+    blended(first.red, second.red, weight),
+    blended(first.green, second.green, weight),
+    blended(first.blue, second.blue, weight),
+    blended(first.alpha, second.alpha, weight)
+  )
+}
+
+/// Palette pairings that fail level AA, by name: text and muted text on
+/// background and surface, onAccent on accent, and danger on background.
+export fn contrastFailures(theme: &Theme) -> Array[Str] {
+  let p = theme.palette
+  let pairs = [
+    ("text on background", p.text, p.background),
+    ("text on surface", p.text, p.surface),
+    ("mutedText on background", p.mutedText, p.background),
+    ("mutedText on surface", p.mutedText, p.surface),
+    ("onAccent on accent", p.onAccent, p.accent),
+    ("danger on background", p.danger, p.background)
+  ]
+  var failing = []
+  for (name, foreground, background) in pairs {
+    if !meetsContrast(foreground, background, false) { failing = failing.push(name) }
+  }
+  failing
+}
+
+fn channel(value: UInt8) -> Int {
+  match (0).fromBigInt(value.toBigInt()) {
+    case Some(found) => found
+    case None => 0
+  }
+}
+
+fn byte(value: Int) -> UInt8 {
+  match 0u8.fromBigInt(value.toBigInt()) {
+    case Some(found) => found
+    case None => if value < 0 { 0u8 } else { 255u8 }
+  }
+}
+
+fn linear(value: UInt8) -> Float {
+  let unit = floated(channel(value)) / 255.0
+  if unit <= 0.04045 { return unit / 12.92 }
+  match Float.powf((unit + 0.055) / 1.055, 2.4) {
+    case Some(found) => found
+    case None => unit
+  }
+}
+
+fn blended(first: UInt8, second: UInt8, weight: Int) -> UInt8 {
+  let a = channel(first)
+  let b = channel(second)
+  let moved = (b - a) * weight
+  let step = if moved < 0 { 0 - ((0 - moved + 50) / 100) } else { (moved + 50) / 100 }
+  byte(a + step)
+}
+
+fn floated(value: Int) -> Float {
+  var total = 0.0
+  var count = 0
+  while count < value {
+    total = total + 1.0
+    count = count + 1
+  }
+  total
+}

@@ -13,10 +13,13 @@ aliases: [Pudu Desktop Adapter]
 Implement the private macOS side of [[Eval Desktop]] using public AppKit and CoreGraphics entry
 points. It creates one ordinary titled window with a custom bitmap view, copies an admitted opaque
 RGBA frame for drawing, pumps the application event queue for a bounded interval, reports a close
-request, and releases the window. The adapter is compiled only for macOS.
+request, and releases the window. While pumping it records presses, scrolls, named keys (next,
+previous, activate, dismiss, erase), printable text, Command/Control chords, and resizes as
+tab-separated lines in a bounded queue that `pudu_desktop_inputs` drains. Key presses are consumed
+rather than forwarded, so an unhandled key never plays the system alert. The adapter is compiled only for macOS.
 
 The adapter is not a Pudu foreign-library integration: application source cannot import it, name
-its symbols, hold Objective-C values, or select its ABI. It is target runtime plumbing analogous to
+its symbols, hold platform object values, or select its ABI. It is target runtime plumbing analogous to
 the process and filesystem implementations.
 
 ## Invariants
@@ -25,11 +28,12 @@ the process and filesystem implementations.
 - Frame length equals width times height times four before any platform object reads it.
 - The view owns a copy of frame bytes across asynchronous drawing.
 - Close detaches the delegate and orders the window out before release.
-- Objective-C exceptions are contained and returned as failure status.
+- Queued input stops growing past one mebibyte until drained.
+- Platform exceptions are contained and returned as failure status.
 
 ## Grill Log
 
-- **Q:** Use SwiftUI, MetalKit, SDL, or raylib for the first window? **A:** No. _Rationale:_ the
+- **Q:** Use a declarative platform framework, a GPU view kit, or a third-party media library for the first window? **A:** No. _Rationale:_ the
   requirement is a minimal language-owned native presenter and those would introduce a framework
   model or third-party toolkit above the OS boundary. _Accepted:_ AppKit window/event services plus
   CoreGraphics bitmap presentation.

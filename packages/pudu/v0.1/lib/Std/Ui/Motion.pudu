@@ -1,0 +1,170 @@
+module Std.Ui.Motion
+
+import Std.Math.Float as Float
+
+/// How progress through a transition maps to progress of its value.
+///
+/// `Bezier` is a CSS-style cubic curve through (0, 0), its two control
+/// points, and (1, 1). `Spring(stiffness, damping)` is a unit-mass damped
+/// spring run over ten time units across the duration; with damping
+/// below `2 * sqrt(stiffness)` it overshoots before settling.
+export type Easing
+  = Linear
+  | EaseIn
+  | EaseOut
+  | EaseInOut
+  | Bezier(Float, Float, Float, Float)
+  | Spring(Float, Float)
+
+/// A value moving from `from` to `to` over `duration` milliseconds starting
+/// at `start`.
+export type Transition = {
+  from: Float,
+  to: Float,
+  start: Int,
+  duration: Int,
+  easing: Easing
+}
+
+/// A transition. A duration below 1 arrives immediately.
+export fn transition(from: Float, to: Float, start: Int, duration: Int, easing: Easing) -> Transition {
+  Transition{from: from, to: to, start: start, duration: duration, easing: easing}
+}
+
+/// A value already at rest.
+export fn still(value: Float) -> Transition {
+  transition(value, value, 0, 0, Linear)
+}
+
+/// The eased progress for linear progress `t`, clamped to 0 to 1 on input.
+///
+/// Every curve answers 0 at 0 and 1 at 1; a spring may pass 1 between.
+export fn eased(easing: &Easing, t: Float) -> Float {
+  let x = if t < 0.0 { 0.0 } else { if t > 1.0 { 1.0 } else { t } }
+  match easing {
+    case Linear => x
+    case EaseIn => bezierAt(0.42, 0.0, 1.0, 1.0, x)
+    case EaseOut => bezierAt(0.0, 0.0, 0.58, 1.0, x)
+    case EaseInOut => bezierAt(0.42, 0.0, 0.58, 1.0, x)
+    case Bezier(x1, y1, x2, y2) => bezierAt(x1, y1, x2, y2, x)
+    case Spring(stiffness, damping) => springAt(stiffness, damping, x)
+  }
+}
+
+/// The value at time `now`.
+export fn valueAt(moving: &Transition, now: Int) -> Float {
+  if moving.duration < 1 || now >= moving.start + moving.duration { return moving.to }
+  if now <= moving.start { return moving.from }
+  let t = fraction(now - moving.start, moving.duration)
+  moving.from + (moving.to - moving.from) * eased(&moving.easing, t)
+}
+
+/// The value at `now` rounded to a whole pixel.
+export fn pixelAt(moving: &Transition, now: Int) -> Int {
+  whole(Float.round(valueAt(moving, now)))
+}
+
+/// Whether the transition has arrived by `now`.
+export fn finished(moving: &Transition, now: Int) -> Bool {
+  now >= moving.start + moving.duration
+}
+
+/// A transition toward `to` starting from wherever `moving` is at `now`, so
+/// an interrupted animation continues rather than jumping.
+export fn retarget(moving: &Transition, to: Float, now: Int) -> Transition {
+  Transition{..*moving, from: valueAt(moving, now), to: to, start: now}
+}
+
+/// Values sampled every `frameMillis` from the start through arrival.
+export fn frames(moving: &Transition, frameMillis: Int) -> Array[Float] {
+  if frameMillis < 1 { return [moving.to] }
+  var found = []
+  var now = moving.start
+  while now < moving.start + moving.duration {
+    found = found.push(valueAt(moving, now))
+    now = now + frameMillis
+  }
+  found.push(moving.to)
+}
+
+fn bezierAt(x1: Float, y1: Float, x2: Float, y2: Float, x: Float) -> Float {
+  var low = 0.0
+  var high = 1.0
+  var step = 0
+  while step < 40 {
+    let middle = (low + high) / 2.0
+    if cubic(x1, x2, middle) < x { low = middle } else { high = middle }
+    step = step + 1
+  }
+  cubic(y1, y2, (low + high) / 2.0)
+}
+
+fn cubic(first: Float, second: Float, t: Float) -> Float {
+  let rest = 1.0 - t
+  3.0 * rest * rest * t * first + 3.0 * rest * t * t * second + t * t * t
+}
+
+fn springAt(stiffness: Float, damping: Float, t: Float) -> Float {
+  if t >= 1.0 { return 1.0 }
+  let natural = match Float.sqrt(if stiffness > 0.0 { stiffness } else { 1.0 }) {
+    case Some(found) => found
+    case None => 1.0
+  }
+  let ratio = damping / (2.0 * natural)
+  let time = t * 10.0
+  if ratio >= 1.0 {
+    return 1.0 - Float.exp(0.0 - natural * time) * (1.0 + natural * time)
+  }
+  let damped = match Float.sqrt(1.0 - ratio * ratio) {
+    case Some(found) => natural * found
+    case None => natural
+  }
+  let decay = Float.exp(0.0 - ratio * natural * time)
+  1.0 - decay * (Float.cos(damped * time) + ratio * natural / damped * Float.sin(damped * time))
+}
+
+fn fraction(part: Int, total: Int) -> Float {
+  floated(part) / floated(total)
+}
+
+fn floated(value: Int) -> Float {
+  let negative = value < 0
+  var remaining = if negative { 0 - value } else { value }
+  var chunk = 1
+  var unit = 1.0
+  while chunk * 2 <= remaining {
+    chunk = chunk * 2
+    unit = unit * 2.0
+  }
+  var total = 0.0
+  while remaining > 0 {
+    if chunk <= remaining {
+      total = total + unit
+      remaining = remaining - chunk
+    }
+    chunk = chunk / 2
+    unit = unit / 2.0
+  }
+  if negative { 0.0 - total } else { total }
+}
+
+fn whole(value: Float) -> Int {
+  let negative = value < 0.0
+  var remaining = if negative { 0.0 - value } else { value }
+  var chunk = 1
+  var unit = 1.0
+  while unit * 2.0 <= remaining {
+    chunk = chunk * 2
+    unit = unit * 2.0
+  }
+  var total = 0
+  while unit >= 1.0 {
+    if unit <= remaining {
+      total = total + chunk
+      remaining = remaining - unit
+    }
+    chunk = chunk / 2
+    unit = unit / 2.0
+  }
+  if negative { 0 - total } else { total }
+}

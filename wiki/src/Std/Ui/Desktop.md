@@ -16,6 +16,14 @@ opaque runtime token paired with the admitted extent. `open`, `present`, `pump`,
 the complete first resource lifetime; `showFor` is a bounded launch smoke built from those four
 operations rather than a second presenter.
 
+`signals(session)` drains what the person did since the last drain as `Signal` values:
+`Input(Screen.Input)`, `Shortcut(chord)` for Command/Control chords written `cmd+shift+z`, and
+`Resized(size)`. `decodeSignals(text)` is the pure parser beneath it, so input mapping is tested
+without a window. `drive(session, screen, frameMillis, onShortcut)` runs a screen until the person
+closes the window: inputs go to `Screen.handle`, shortcuts to `onShortcut` (a returned state
+re-renders through `Screen.restated`), and a frame is presented only when a turn damaged it.
+`DriveError` separates window failures from frame failures.
+
 Every operation returns `Result`. Invalid dimensions, titles, durations, malformed surfaces,
 closed or invented tokens, wrong-thread access, unsupported targets, and platform failures remain
 distinguishable `DesktopError` variants. Closing twice is a typed `SessionClosed` outcome. Runtime
@@ -38,7 +46,7 @@ session ownership.
 
 ## Negative logic
 
-- No SwiftUI, AppKit, raylib, SDL, or other toolkit value enters the Pudu type graph.
+- No platform framework or third-party toolkit value enters the Pudu type graph.
 - No global public window and no successful headless fallback.
 - No unbounded event wait, silent resize, implicit pixel conversion, or use-after-close.
 - No claim that this static first presenter completes menus, documents, IME, accessibility, audio,
@@ -52,9 +60,9 @@ session ownership.
 - **Q:** Expose native pointers to Pudu? **A:** No. _Rationale:_ integers can be forged and native
   ownership cannot be copied safely. _Accepted:_ runtime-issued tokens checked against an
   evaluation-local store.
-- **Q:** Name the declarative layer after SwiftUI scenes? **A:** No. _Rationale:_ Pudu will use
+- **Q:** Name the declarative layer after the reference framework's scenes? **A:** No. _Rationale:_ Pudu will use
   independently designed spaces and window plans; this low-level session has no framework-shaped
-  protocol surface. _Rejected:_ renamed one-for-one SwiftUI declarations.
+  protocol surface. _Rejected:_ renamed one-for-one declarations from another framework.
 - **Q:** Treat an unavailable display server as success in tests? **A:** No. _Rationale:_ the
   acceptance requirement is an actual window. _Rejected:_ framebuffer-only launch claims.
 

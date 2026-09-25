@@ -1,0 +1,64 @@
+module Std.Ui.History
+
+/// Undo and redo over whole states.
+///
+/// `past` holds earlier states nearest last, `future` holds undone states
+/// nearest last, and at most `limit` earlier states are kept.
+export type History[S] = { past: Array[S], present: S, future: Array[S], limit: Int }
+
+/// A history holding only `present`, keeping at most `limit` earlier states.
+export fn start[S](present: S, limit: Int) -> History[S] {
+  History{past: [], present: present, future: [], limit: if limit < 0 { 0 } else { limit }}
+}
+
+/// The history after a change to `next`: the present becomes undoable and
+/// anything undone can no longer be redone. A change to an equal state
+/// records nothing.
+export fn record[S](held: &History[S], next: S) -> History[S] {
+  if next == held.present { return *held }
+  var past = held.past.push(held.present)
+  if past.length() > held.limit { past = past.slice(past.length() - held.limit, past.length()) }
+  History{..*held, past: past, present: next, future: []}
+}
+
+/// The history with the present replaced and nothing recorded, for a change
+/// that continues the last one, such as the next keystroke of a word.
+export fn amend[S](held: &History[S], next: S) -> History[S] {
+  History{..*held, present: next, future: []}
+}
+
+/// The history one step back, or unchanged when nothing can be undone.
+export fn undo[S](held: &History[S]) -> History[S] {
+  let count = held.past.length()
+  if count == 0 { return *held }
+  History {
+    ..*held,
+    past: held.past.slice(0, count - 1),
+    present: held.past[count - 1],
+    future: held.future.push(held.present)
+  }
+}
+
+/// The history one step forward, or unchanged when nothing can be redone.
+export fn redo[S](held: &History[S]) -> History[S] {
+  let count = held.future.length()
+  if count == 0 { return *held }
+  History {
+    ..*held,
+    past: held.past.push(held.present),
+    present: held.future[count - 1],
+    future: held.future.slice(0, count - 1)
+  }
+}
+
+/// The current state.
+export fn presentOf[S](held: &History[S]) -> S { held.present }
+
+/// Whether a step back exists.
+export fn canUndo[S](held: &History[S]) -> Bool { held.past.length() > 0 }
+
+/// Whether a step forward exists.
+export fn canRedo[S](held: &History[S]) -> Bool { held.future.length() > 0 }
+
+/// How many steps back and forward exist.
+export fn depth[S](held: &History[S]) -> (Int, Int) { (held.past.length(), held.future.length()) }

@@ -45,6 +45,10 @@ acceptance gates; the latter must also prove controls, telemetry, and a progress
 The Media Studio configuration fixture is also evaluated here with an exact count of eight, so the
 example's device-queue fields cannot drift from its decoder or admitted bounds unnoticed.
 
+`UsesUiToolkitAll` packs six two-digit counts into `100808060709`: desktop signal decoding and
+restating (10), theme (8), motion (8), history (6), list windowing (7), and keymap (9). Driving a real
+window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
+
 `UsesAppContractsAll` packs three counts into `171518`: 17 problem-body checks, 15 cursor-page
 checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
 
