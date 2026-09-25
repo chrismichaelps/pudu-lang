@@ -14,6 +14,14 @@ tags: [changelog]
 - The release workflow builds, strips, proves, and publishes the pack beside the compiler archives.
 - [[Runtime Pack Gate]] serves a pack from a stand-in release and covers every refusal; CI runs it.
 
+## 2026-09-25 — A smaller compiler download (#360)
+
+- [[Pudu Package Project]]: the release plan builds every package with split sections, so linking
+  keeps only the code the compiler reaches.
+- [[Package Binary]] strips the packaged executable and refuses to package without `strip`.
+- linux-amd64: executable 58 MB → 27.8 MB, archive 10.4 MB → 7.3 MB. The archive's compiler runs a
+  program from an empty environment, and a bundle built from it passes the bundle gate.
+
 ## 2026-09-25 — Base32 and PEM (#345)
 
 - [[Std Base32]]: RFC 4648 standard (padded or not), extended-hex, and Crockford alphabets; decoding

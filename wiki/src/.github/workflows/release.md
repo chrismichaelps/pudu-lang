@@ -19,8 +19,8 @@ Publishes a release of the compiler, and proves one before it is merged.
   existing tags, and the paths the push changed. It releases only from `main`, only for a compiler
   change, and only at a version with no tag; a `release/` branch builds without publishing.
 - **Archives.** On `ubuntu-24.04` (`linux-amd64`) and `macos-14` (`darwin-arm64`), the package is built
-  at `-O2` by `scripts/build-package.py` and packed by `scripts/package-binary.py`, which checks the
-  binary's version and the API lifecycle. The checksum is verified, the archive is unpacked into a
+  at `-O2` with split sections by `scripts/build-package.py` ([[Pudu Package Project]]) and packed by
+  [[Package Binary]], which checks the binary's version and the API lifecycle and strips it. The checksum is verified, the archive is unpacked into a
   temporary directory, and its `bin/pudu` must report the version and run a program there with an
   empty environment, so the standard library is found beside the executable and not in the checkout.
 - **Publish.** Only when the plan says release: the commit receives an annotated `vX.Y.Z` tag from

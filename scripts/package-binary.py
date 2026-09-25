@@ -14,6 +14,26 @@ import tarfile
 import tempfile
 
 
+def strip(executable, parser):
+  """Remove the symbol tables from the packaged executable.
+
+  Nothing reads them at run time, and they are close to half the executable.
+  A bundle appends its modules after the executable's last byte, so a stripped
+  runtime carries them exactly as an unstripped one does. Packaging without
+  the tool is refused rather than silently shipping the larger file.
+  """
+  if executable.suffix == ".exe":
+    return
+  tool = shutil.which("strip")
+  if tool is None:
+    parser.error("strip is required to package the executable")
+  # The macOS tool removes every symbol by default, including ones the dynamic
+  # loader resolves, so it is limited to local symbols there; the GNU tool's
+  # default removes the symbol tables an executable never consults.
+  flags = ["-x"] if sys.platform == "darwin" else []
+  subprocess.run([tool, *flags, str(executable)], check=True)
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--binary", required=True)
@@ -71,6 +91,7 @@ def main():
     executable.parent.mkdir(parents=True)
     shutil.copyfile(binary, executable)
     executable.chmod(0o755)
+    strip(executable, parser)
     for source in sources:
       if source.is_symlink() or not source.resolve().is_relative_to(package):
         parser.error("standard library must contain package-owned regular files")
