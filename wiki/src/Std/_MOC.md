@@ -58,6 +58,7 @@ tags: [moc, module, stdlib]
 - [[Std Concurrent Pool]] — a fixed set of workers behind a bounded queue.
 - [[Std Concurrent Coordinate]] — semaphores, latches, wait groups, and run-once values.
 - [[Std Concurrent Retry]] — retries with capped backoff and jitter.
+- [[Std Concurrent Scope]] — sibling tasks that succeed together, cancel together, and never outlive the call.
 - [[Std Channel]] — bounded typed queues with closure.
 - [[Std Sync]] — runtime mutexes and atomic cells.
 - [[Std Net]] — streaming-first TCP listeners and connections.

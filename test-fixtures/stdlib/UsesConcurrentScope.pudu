@@ -1,0 +1,78 @@
+module UsesConcurrentScope
+
+import Std.Concurrent.Cancel as Cancel
+import Std.Concurrent as Concurrent
+import Std.Concurrent.Scope as Scope
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn crash() -> Result[Int, Str] { panic("boom") }
+
+fn value(held: Int) -> fn(Cancel.Token) -> Result[Int, Str] { fn(_stop: Cancel.Token) -> Result[Int, Str] { Ok(held) } }
+
+fn refusing(why: Str) -> fn(Cancel.Token) -> Result[Int, Str] { fn(_stop: Cancel.Token) -> Result[Int, Str] { Err(why) } }
+
+/// Waits on its token with no deadline, so it finishes only if something
+/// cancels it, then records that it noticed and answers `answer`.
+fn patient(noticed: Sync.Counter, answer: Result[Int, Str]) -> fn(Cancel.Token) -> Result[Int, Str] {
+  fn(stop: Cancel.Token) -> Result[Int, Str] {
+    while !Cancel.stopped(&stop) { let _slept = Concurrent.sleep(1) }
+    let _seen = Sync.increment(&noticed, 1)
+    answer
+  }
+}
+
+fn count(target: &Sync.Counter) -> Int { Result.unwrapOr(Sync.count(target), -1) }
+
+fn main() -> Int {
+  var held = 0
+  let root = Cancel.token()
+
+  // Values come back in input order.
+  if Scope.all(&root, &[value(1), value(2), value(3)]) == Ok([1, 2, 3]) { held = held + 1 }
+
+  // An empty scope answers at once.
+  let none: Array[fn(Cancel.Token) -> Result[Int, Str]] = []
+  if Scope.all(&root, &none) == Ok([]) { held = held + 1 }
+
+  // A typed failure cancels a sibling that would otherwise wait forever.
+  let noticedFailure = Sync.counter(0)
+  if Scope.all(&root, &[patient(noticedFailure, Ok(0)), refusing("bad")]) == Err(Scope.Failed("bad")) &&
+  count(&noticedFailure) == 1 {
+    held = held + 1
+  }
+
+  // A crash does the same, answered as a crash.
+  let noticedCrash = Sync.counter(0)
+  match Scope.all(&root, &[patient(noticedCrash, Ok(0)), fn(_stop: Cancel.Token) -> Result[Int, Str] { crash() }]) {
+    case Err(Scope.Crashed(_)) => { if count(&noticedCrash) == 1 { held = held + 1 } }
+    case _ => {}
+  }
+
+  // A cancelled parent reaches every action through the shared token.
+  let parent = Cancel.token()
+  let _cancelled = Cancel.cancel(&parent, "shutting down")
+  let noticedParent = Sync.counter(0)
+  if Scope.all(&parent, &[patient(noticedParent, Ok(1)), patient(noticedParent, Ok(2))]) == Ok([1, 2]) &&
+  count(&noticedParent) == 2 {
+    held = held + 1
+  }
+
+  // Every action has finished when the scope answers.
+  let finished = Sync.counter(0)
+  let slow = fn(_stop: Cancel.Token) -> Result[Int, Str] {
+    let _slept = Concurrent.sleep(20)
+    let _done = Sync.increment(&finished, 1)
+    Ok(0)
+  }
+  if Result.isOk(&Scope.all(&root, &[slow, slow, slow])) && count(&finished) == 3 { held = held + 1 }
+
+  // A failure that follows the cancellation does not replace the failure
+  // that caused it, even from an earlier action.
+  let noticedLate = Sync.counter(0)
+  if Scope.all(&root, &[patient(noticedLate, Err("late")), refusing("early")]) == Err(Scope.Failed("early")) {
+    held = held + 1
+  }
+
+  held
+}

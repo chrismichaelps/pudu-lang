@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
+
+- [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the
+  first failure (typed or a crash), and answers only after every action has finished.
+  [[Uses Concurrent Scope]] proves cancellation with siblings that would otherwise wait forever.
+
 ## 2026-09-25 — Menus in the macOS menu bar (#334)
 
 - [[Std Ui Menu]] `native` writes a bar as records; [[Std Ui Desktop]] `install` makes it the
