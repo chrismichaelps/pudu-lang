@@ -80,6 +80,7 @@ testRuntimeEvaluation = do
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
@@ -124,6 +125,10 @@ testRuntimeEvaluation = do
         and each host's layout and routing. -}
     , counterexample "a site builds for its host and rewrites only what changed"
         (built === Just "28")
+    {-| Each checksum's published check value, chunked updates equal to the
+        whole, and a one-bit change moving every one. -}
+    , counterexample "checksums match their published values and chain over chunks"
+        (checked === Just "15")
     {-| Every kind of value answers toText with the text interpolation writes,
         a declared toText wins even through a type parameter, the method binds
         its receiver as a value, and bytes keep their refusing form. -}

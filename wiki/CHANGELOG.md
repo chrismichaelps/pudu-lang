@@ -15,6 +15,24 @@ tags: [changelog]
 - [[website Prerender]] builds through it: 91 s → 26 s on four cores for 3,705 byte-identical pages,
   and a rebuild with nothing changed writes nothing. [[Uses Site All]] (28 checks).
 
+## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
+
+- [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time
+  and readable from its bytes; [[Pudu Version]] `identityText` files products under version and digest.
+- [[Pudu Bundle]] `sharesSources` lets `pudu build --runtime` carry products to a runtime from the
+  same sources — including one for another platform — so a cross-built function starts in 37 ms
+  instead of 360 ms (22 modules). A runtime from other sources receives none, and the build says so.
+- [[architecture/DEPLOYMENT-TARGETS]] carries the measured start figures.
+
+## 2026-09-25 — Checksums at runtime speed (#343)
+
+- [[Eval Checksum]] and the pure built-in `checksumOf`: CRC-32, CRC-32C, CRC-64 (ECMA-182 as xz), and
+  FNV-1a 32/64 as strict folds over bytes. A megabyte's CRC-32 drops from 6.6 s in Pudu to 43 ms.
+- [[Std Checksum]]: a function per algorithm, each with an `Update` form that chains over chunks,
+  and fixed-width hex.
+- [[Std Compress Gzip]] `crc32` delegates, so gzip and zip checks stop paying 11 s a megabyte.
+- [[Uses Checksum All]] asserts the published check values (15 checks).
+
 ## 2026-09-25 — Every value answers `toText()` (#347)
 
 - [[grammar/pudu]]: every value answers `toText()` with the text `display` writes; a `toText` its

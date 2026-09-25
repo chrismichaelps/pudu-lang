@@ -185,4 +185,6 @@ Each name maps directly to its `BuiltinValue` in the runtime environment.
 - **Q:** Require manual import of columnar and hardware memory builtins? **A:** No; install them directly in the runtime environment matching existing buffer builtins for zero-cost primitive execution.
 - **Q:** How are permutation sort and binary search installed? **A:** Registered in `builtinValues` with their direct names (`columnSortIndicesU64`, etc.) so `Std.Column` delegates without intermediate shims.
 
+## Native checksum installation (#343)
 
+Installs `checksumOf` as a pure built-in value beside the digests, under its canonical name.

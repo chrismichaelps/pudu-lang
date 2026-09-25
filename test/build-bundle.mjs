@@ -8,7 +8,7 @@
 //
 // Usage: node test/build-bundle.mjs [path-to-pudu]
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -314,8 +314,49 @@ const ontoSaid = run(onto);
 if (ontoSaid !== "Bundled true") {
   failures.push(`built onto a named runtime it printed ${JSON.stringify(ontoSaid)}`);
 }
-if (productCount(onto) !== 0) {
-  failures.push("a named runtime received products from a different compiler executable");
+// A runtime built from the same sources reads the products exactly as this
+// compiler wrote them, so it is sent them: a cross-built artefact then starts
+// from what was checked instead of checking every module on every start.
+if (productCount(onto) < 1) {
+  failures.push("a runtime built from the same sources received no compiled products");
+}
+
+// A runtime built from other sources would discard the products, so it is sent
+// none, and the build says why. The stand-in is this compiler with one digit of
+// its source digest changed, which is what a runtime from another checkout is
+// to the check: the same file shape, a different digest.
+{
+  const foreignRuntime = join(directory, "foreign-runtime");
+  const bytes = readFileSync(executable);
+  const needle = Buffer.from("PUDU-SOURCE-DIGEST:");
+  let at = bytes.indexOf(needle);
+  while (at >= 0 && !/^[0-9a-f]{64};$/.test(bytes.subarray(at + needle.length, at + needle.length + 65).toString("latin1"))) {
+    at = bytes.indexOf(needle, at + 1);
+  }
+  if (at < 0) {
+    failures.push("the compiler carries no source digest to compare runtimes by");
+  } else {
+    const digit = at + needle.length;
+    bytes[digit] = bytes[digit] === 0x30 ? 0x31 : 0x30;
+    writeFileSync(foreignRuntime, bytes, { mode: 0o755 });
+    const foreignOut = join(directory, "onto-foreign-runtime");
+    const built = spawnSync(executable, ["build", source, "-o", foreignOut, "--runtime", foreignRuntime], { encoding: "utf8" });
+    if (built.status !== 0) {
+      failures.push(`a build onto a runtime from other sources failed: ${built.stderr}`);
+    } else {
+      if (!built.stderr.includes("built from other sources")) {
+        failures.push("a build onto a runtime from other sources did not say it carries no products");
+      }
+      if (productCount(foreignOut) !== 0) {
+        failures.push("a runtime built from other sources received products it would discard");
+      }
+      if (run(foreignOut) !== "Bundled true") {
+        failures.push("a program attached to a runtime from other sources did not run");
+      }
+    }
+    forget(foreignRuntime);
+    forget(foreignOut);
+  }
 }
 
 // Naming a runtime that already carries a program replaces that program rather
