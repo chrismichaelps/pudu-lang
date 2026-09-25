@@ -1,0 +1,51 @@
+module Service.LiveFiles
+
+import Std.List as List
+import Std.Url as Url
+import Service.LiveJson as J
+import Service.LiveRelease as Release
+import Service.LiveSource as Source
+
+const API: Str = "https://api.github.com/repos/"
+/// What one release's Source tab lists and previews, as the build bounds it.
+const MOST_FILES: Int = 2000
+const MOST_BYTES: Int = 1048576
+
+/// Whether a release file is one a package ships: nothing under a dot
+/// directory or named with a leading dot, and nothing under a top-level `deps/`,
+/// which holds installed dependencies rather than the package's own code.
+export fn shipped(path: Str) -> Bool {
+  if path.isEmpty() || path == "deps" || path.startsWith("deps/") { return false }
+  for part in path.split("/") {
+    if part.isEmpty() || part.startsWith(".") { return false }
+  }
+  true
+}
+
+/// The files at a release's commit, sorted, at most `MOST_FILES` of them and
+/// none larger than `MOST_BYTES`. The tree is addressed by the commit, so what
+/// it lists never changes and is remembered for as long as the cache holds it.
+/// `None` when GitHub cannot list the tree.
+export fn listed(source: &Source.Source, path: Str, commit: Str) -> Option[Array[Str]] {
+  if path.isEmpty() || commit.isEmpty() { return None }
+  let tree = J.decoded(Source.text(source, API + path + "/git/trees/" + commit + "?recursive=1", &Source.immutable())) ?
+  var found: Array[Str] = []
+  for item in J.list(&tree, "tree") {
+    let name = J.text(&item, "path")
+    if J.text(&item, "type") == "blob" && J.whole(&item, "size") <= MOST_BYTES && shipped(name) && found.length() < MOST_FILES {
+      found = found.push(name)
+    }
+  }
+  Some(List.sorted(&found))
+}
+
+/// One file's bytes at a release's commit, read from the raw host, which
+/// does not spend the API's rate limit. Immutable for the same reason the tree is.
+export fn body(source: &Source.Source, path: Str, commit: Str, file: Str) -> Option[Bytes] {
+  if !shipped(file) { return None }
+  let encoded = file.split("/").map(|part: Str| Url.encodeComponent(part)).join("/")
+  match Source.read(source, Release.RAW + path + "/" + commit + "/" + encoded, &Source.immutable()) {
+    case Source.Found(held) => Some(held)
+    case _ => None
+  }
+}

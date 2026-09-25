@@ -15,8 +15,11 @@ tags: [changelog]
   remembered and does not count against GitHub's rate limit.
 - [[website Service LiveDiscussions]]: every package's Tickets and Contributions tabs are GitHub's
   current conversations, the snapshot's standing in when GitHub cannot answer.
+- [[website Service LiveFiles]]: a release the build never saw has a Source tab, read from the git
+  tree and raw files at its commit and remembered as immutable; dot paths and `deps/` stay out.
+  `Packages.Project.bodies` carries the shown file to the Source view.
 - A snapshot release's source and API catalogue are served by the function. [[website live pages suite]]
-  (14) and [[website live packages suite]] (20) run against [[website live stand]]; CI runs both.
+  (23) and [[website live packages suite]] (20) run against [[website live stand]]; CI runs both.
 
 ## 2026-09-25 — 0.1.2 pre-release preparation
 

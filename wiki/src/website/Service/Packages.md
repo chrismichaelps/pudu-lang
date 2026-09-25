@@ -37,3 +37,6 @@ same helpers and still fails on a missing release tree.
 
 Resolved Grill Log: the function loads the compact index at start and reads one project's detail when
 one of its pages is asked for, so cold starts do not grow with the number of packages.
+
+`Project.bodies` holds file bodies read live for a release the snapshot does not hold; `fileText` and
+`fileBytes` answer from it before reading the snapshot's directory (#369).

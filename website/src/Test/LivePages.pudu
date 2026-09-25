@@ -6,6 +6,7 @@ import Std.Option as Option
 import Std.Test as Test
 import Prerender as Prerender
 import Service.LiveDiscussions as LiveDiscussions
+import Service.LiveFiles as LiveFiles
 import Service.LivePackages as LivePackages
 import Service.Packages as Packages
 import Test.LiveStand as Stand
@@ -40,6 +41,14 @@ export fn main() -> Int {
   Stand.answer(&talking, repos + "issues" + listed, "[\{\"number\":7,\"title\":\"Live ticket\",\"body\":\"Opened today.\",\"state\":\"open\",\"user\":\{\"login\":\"dana\"\},\"labels\":[\{\"name\":\"bug\"\}],\"comments\":2,\"created_at\":\"2026-09-25T10:00:00Z\",\"updated_at\":\"2026-09-25T11:00:00Z\"\},\{\"number\":8,\"title\":\"A pull, not a ticket\",\"state\":\"open\",\"pull_request\":\{\"url\":\"x\"\},\"user\":\{\"login\":\"eve\"\}\}]")
   Stand.answer(&talking, repos + "pulls" + listed, "[\{\"number\":9,\"title\":\"Merged work\",\"state\":\"closed\",\"merged_at\":\"2026-09-25T12:00:00Z\",\"draft\":false,\"user\":\{\"login\":\"eve\"\},\"created_at\":\"2026-09-24T09:00:00Z\",\"updated_at\":\"2026-09-25T12:00:00Z\"\}]")
   let talked = Stand.edge(&snapshot, &Stand.live(&talking))
+  // A release the build never saw has its files read at its commit.
+  let reading = Stand.stand(&Stand.github())
+  Stand.answer(&reading, "https://api.github.com/repos/bruno/fresh-pkg/git/trees/c2?recursive=1", "\{\"tree\":[\{\"path\":\"src\",\"type\":\"tree\"\},\{\"path\":\"src/FreshPkg.pudu\",\"type\":\"blob\",\"size\":48\},\{\"path\":\"pudu.toml\",\"type\":\"blob\",\"size\":90\},\{\"path\":\".github/ci.yml\",\"type\":\"blob\",\"size\":10\},\{\"path\":\"deps/x/Y.pudu\",\"type\":\"blob\",\"size\":10\}]\}")
+  Stand.answer(&reading, "https://raw.githubusercontent.com/bruno/fresh-pkg/c2/src/FreshPkg.pudu", "module FreshPkg\n\nexport fn freshness() -> Int \{ 1 \}\n")
+  let read = Stand.edge(&snapshot, &Stand.live(&reading))
+  let liveFile = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source/src/FreshPkg.pudu")
+  let liveSource = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source")
+  let liveHidden = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source/.github/ci.yml")
   let liveTickets = DynamicWeb.render(&talked, "/@alice/json-kit/tickets")
   let liveTicket = DynamicWeb.render(&talked, "/@alice/json-kit/tickets/7")
   let liveContributions = DynamicWeb.render(&talked, "/@alice/json-kit/contributions")
@@ -60,6 +69,10 @@ export fn main() -> Int {
       Test.that("a known package's tickets are GitHub's current ones, pull requests left out", liveTickets.status.code == 200 && liveTickets.body.contains("Live ticket") && !liveTickets.body.contains("A pull, not a ticket")),
       Test.that("a live ticket has its own page", liveTicket.status.code == 200 && liveTicket.body.contains("Opened today.") && liveTicket.body.contains("dana")),
       Test.that("a merged pull request is a merged contribution", liveContributions.status.code == 200 && liveContributions.body.contains("Merged work") && liveContributions.body.contains("erged")),
+      Test.that("a new release's file is read at its commit", liveFile.status.code == 200 && liveFile.body.contains("freshness") && liveFile.body.contains("src/FreshPkg.pudu")),
+      Test.that("a new release's file list leaves out dot paths and installed dependencies", liveSource.status.code == 200 && liveSource.body.contains("pudu.toml") && !liveSource.body.contains(".github/ci.yml") && !liveSource.body.contains("deps/x")),
+      Test.equals("a dot path is not one of its files", &liveHidden.status.code, &404),
+      Test.that("only a package's own files are shipped", LiveFiles.shipped("src/A.pudu") && !LiveFiles.shipped(".env") && !LiveFiles.shipped("src/.cache/a") && !LiveFiles.shipped("deps/a/B.pudu") && !LiveFiles.shipped("")),
       Test.equals("a repository address reads as its owner and name", &LiveDiscussions.pathOf("https://github.com/alice/json-kit"), &"alice/json-kit"),
       Test.equals("an address outside GitHub has no path", &LiveDiscussions.pathOf("https://example.com/a/b"), &""),
       Test.that("a file the release lacks is missing and briefly cached", snapshotMissingFile.status.code == 404 && cacheOf(&snapshotMissingFile) == DynamicWeb.MISSING_CACHE),

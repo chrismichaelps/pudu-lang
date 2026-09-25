@@ -67,7 +67,9 @@ export type Project = {
   latest: Option[Str],
   releases: Array[Release],
   files: Array[Str],
-  catalog: Option[Catalog.Catalog]
+  catalog: Option[Catalog.Catalog],
+  /// Bodies read live for a release the snapshot does not hold, by path.
+  bodies: Map[Str, Bytes]
 }
 
 /// Everything the package pages show, read once before the first request.
@@ -223,7 +225,8 @@ fn projectFrom(directory: Str, value: &Json.Json, compact: Bool) -> Result[Proje
     latest: latest,
     releases: releases,
     files: [],
-    catalog: None
+    catalog: None,
+    bodies: mapOf([])
   }
   if compact { Ok(record) } else { Ok(Project{..record, files: releaseFiles(directory, &record) ?, catalog: catalogOf(directory, name)}) }
 }
@@ -396,6 +399,7 @@ export fn search(packages: &Packages, query: Str) -> Array[Project] {
 export fn fileText(packages: &Packages, project: &Project, path: Str) -> Option[Str] {
   let Some(version) = project.latest else { return None }
   if !project.files.contains(path) { return None }
+  if let Some(held) = project.bodies.get(path) { return held.toText() }
   match Io.read(packages.directory + "/files/" + project.name + "/" + version + "/" + path) {
     case Ok(held) => Some(held)
     case Err(_) => None
@@ -406,6 +410,7 @@ export fn fileText(packages: &Packages, project: &Project, path: Str) -> Option[
 export fn fileBytes(packages: &Packages, project: &Project, path: Str) -> Option[Bytes] {
   let Some(version) = project.latest else { return None }
   if !project.files.contains(path) { return None }
+  if let Some(held) = project.bodies.get(path) { return Some(held) }
   match Io.readAllBytes(packages.directory + "/files/" + project.name + "/" + version + "/" + path) {
     case Ok(held) => Some(held)
     case Err(_) => None

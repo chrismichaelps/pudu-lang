@@ -4,6 +4,7 @@ import Std.List as List
 import Std.Option as Option
 import Std.Sync as Sync
 import Service.LiveDiscussions as Discussions
+import Service.LiveFiles as Files
 import Service.LiveIndex as Index
 import Service.LiveRelease as Release
 import Service.LiveSource as Source
@@ -54,6 +55,11 @@ export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.P
   let filled = match Packages.find(snapshot, project.handle, project.project) {
     case Some(held) => if held.latest == project.latest { Packages.detailed(snapshot, project) } else { *project }
     case None => *project
+  }
+  // A release the snapshot does not hold is read at its commit: the file list,
+  // and the one file the page shows, which is the asked one or else the first.
+  if tab == "source" && filled.files.isEmpty() {
+    return withLiveFiles(&live.source, &filled, file)
   }
   // Conversations change by the minute and belong to no release, so they are
   // read live for every package; the snapshot's stand in when GitHub cannot say.
@@ -152,7 +158,8 @@ fn introduced(source: &Source.Source, repository: &Index.Repository, read: &Rele
     latest: Some(newest.version),
     releases: read.releases,
     files: [],
-    catalog: None
+    catalog: None,
+    bodies: mapOf([])
   }
 }
 
@@ -170,4 +177,19 @@ fn publishedAt(project: &Packages.Project) -> Str {
 
 fn replaced(projects: &Array[Packages.Project], project: &Packages.Project) -> Array[Packages.Project] {
   projects.map(|held: Packages.Project| if held.name == project.name { *project } else { held })
+}
+
+fn withLiveFiles(source: &Source.Source, project: &Packages.Project, file: Str) -> Packages.Project {
+  let Some(version) = project.latest else { return *project }
+  let found = project.releases.filter(|release: Packages.Release| release.version == version)
+  if found.isEmpty() { return *project }
+  let commit = found[0].commit
+  let path = Discussions.pathOf(project.repository)
+  let Some(files) = Files.listed(source, path, commit) else { return *project }
+  if files.isEmpty() { return Packages.Project{..*project, files: files} }
+  let shown = if files.contains(file) { file } else { files[0] }
+  match Files.body(source, path, commit, shown) {
+    case Some(held) => Packages.Project{..*project, files: files, bodies: mapOf([(shown, held)])}
+    case None => Packages.Project{..*project, files: files}
+  }
 }
