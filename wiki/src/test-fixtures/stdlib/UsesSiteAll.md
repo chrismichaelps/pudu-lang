@@ -12,7 +12,7 @@ aliases: [Uses Site All]
 
 ## Purpose and interface
 
-Executable fixture for [[Std Site]] in a temporary directory. Its `main` returns 28 held assertions:
+Executable fixture for [[Std Site]] in a temporary directory. Its `main` returns 40 held assertions:
 path-to-file mapping with and without a content type (pages named like files included), every unsafe
 path refused; a static build with a non-200 page and an escaping path refused, public files copied,
 binary bodies written byte for byte; a rebuild writing nothing, then exactly the one changed page; one
