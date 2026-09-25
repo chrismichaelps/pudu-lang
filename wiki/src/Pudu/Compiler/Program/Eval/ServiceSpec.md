@@ -61,7 +61,8 @@ checks, and 18 idempotency checks, the last including the middleware against a s
 `UsesAppWiringAll` packs `11160404`: events and outbox (11), API description (16), application
 describing refusals (4), and calendar jobs (4).
 
-`UsesUiSelectionAll` holds 15 list-selection checks and `UsesUiGridAll` 5 grid checks.
+`UsesUiSelectionAll` holds 15 list-selection checks `UsesUiGridAll` 5 grid checks, and `UsesUiDrawAll`
+15 exact-pixel stroke, gradient, and polygon checks.
 
 ## Grill Log
 

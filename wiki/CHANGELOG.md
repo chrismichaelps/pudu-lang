@@ -14,6 +14,9 @@ tags: [changelog]
 - [[Std Ui Selection]] chooses list rows singly, by range from an anchor, and by toggle, and follows
   keyboard movement and keymap commands.
 - [[Std Ui Grid]] places cells in equal flexible columns and lines up a short last row.
+- [[Std Ui Draw]] strokes lines, polylines, and outlines, painting exactly the pixels whose centres lie
+  within half the width, computed in integers, and fills linear gradients that end exactly on their
+  colors and polygons by the even-odd rule.
 
 ## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
 

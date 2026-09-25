@@ -1,0 +1,210 @@
+module Std.Ui.Draw
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Theme as Theme
+
+/// Why a drawing was refused.
+export type DrawError
+  = InvalidWidth(Int)
+  | TooFewPoints(Int)
+  | Painting(Canvas.CanvasError)
+
+/// The canvas with a straight stroke from `from` to `to`, `width` pixels
+/// across, with round ends.
+///
+/// A pixel is painted when its centre lies within half the width of the
+/// segment, measured exactly in integers, so a stroke's pixels do not
+/// depend on floating-point rounding. Each covered row becomes one fill.
+export fn line(target: &Canvas.Canvas, from: Canvas.Point, to: Canvas.Point, width: Int, color: Canvas.Color) -> Result[Canvas.Canvas, DrawError] {
+  if width < 1 { return Err(InvalidWidth(width)) }
+  let reach = (width + 1) / 2
+  let top = min(from.y, to.y) - reach
+  let bottom = max(from.y, to.y) + reach
+  let left = min(from.x, to.x) - reach
+  let right = max(from.x, to.x) + reach
+  var held = *target
+  var y = top
+  while y <= bottom {
+    var first = -1
+    var last = -1
+    var x = left
+    while x <= right {
+      if covered(from, to, width, x, y) {
+        if first < 0 { first = x }
+        last = x
+      }
+      x = x + 1
+    }
+    if first >= 0 {
+      held = match Canvas.fill(&held, Canvas.rect(first, y, last - first + 1, 1), color) {
+        case Ok(next) => next
+        case Err(problem) => { return Err(Painting(problem)) }
+      }
+    }
+    y = y + 1
+  }
+  Ok(held)
+}
+
+/// The canvas with strokes joining consecutive `points`.
+export fn polyline(target: &Canvas.Canvas, points: &Array[Canvas.Point], width: Int, color: Canvas.Color) -> Result[Canvas.Canvas, DrawError] {
+  if points.length() < 2 { return Err(TooFewPoints(points.length())) }
+  var held = *target
+  var index = 1
+  while index < points.length() {
+    held = line(&held, points[index - 1], points[index], width, color) ?
+    index = index + 1
+  }
+  Ok(held)
+}
+
+/// The canvas with the edges of `area` stroked `width` pixels inward.
+export fn outline(target: &Canvas.Canvas, area: Canvas.Rect, width: Int, color: Canvas.Color) -> Result[Canvas.Canvas, DrawError] {
+  if width < 1 { return Err(InvalidWidth(width)) }
+  let edge = min(width, min(area.width, area.height))
+  let sides = [
+    Canvas.rect(area.x, area.y, area.width, edge),
+    Canvas.rect(area.x, area.y + area.height - edge, area.width, edge),
+    Canvas.rect(area.x, area.y + edge, edge, area.height - 2 * edge),
+    Canvas.rect(area.x + area.width - edge, area.y + edge, edge, area.height - 2 * edge)
+  ]
+  var held = *target
+  for side in sides {
+    if side.width > 0 && side.height > 0 {
+      held = match Canvas.fill(&held, side, color) {
+        case Ok(next) => next
+        case Err(problem) => { return Err(Painting(problem)) }
+      }
+    }
+  }
+  Ok(held)
+}
+
+/// The canvas with `area` filled from `from` to `to`: left to right when
+/// `horizontal`, otherwise top to bottom. The first line is exactly `from`
+/// and the last exactly `to`; each line between is blended in whole percent.
+export fn linearGradient(target: &Canvas.Canvas, area: Canvas.Rect, from: Canvas.Color, to: Canvas.Color, horizontal: Bool) -> Result[Canvas.Canvas, DrawError] {
+  let lines = if horizontal { area.width } else { area.height }
+  var held = *target
+  var index = 0
+  while index < lines {
+    let percent = if lines == 1 { 0 } else { index * 100 / (lines - 1) }
+    let strip = if horizontal {
+      Canvas.rect(area.x + index, area.y, 1, area.height)
+    } else {
+      Canvas.rect(area.x, area.y + index, area.width, 1)
+    }
+    held = match Canvas.fill(&held, strip, Theme.mix(from, to, percent)) {
+      case Ok(next) => next
+      case Err(problem) => { return Err(Painting(problem)) }
+    }
+    index = index + 1
+  }
+  Ok(held)
+}
+
+/// The canvas with the polygon through `points` filled by the even-odd
+/// rule: a pixel is painted when a ray from its centre crosses the outline
+/// an odd number of times. Crossings are rounded up on doubled coordinates,
+/// which decides an odd pixel centre against them exactly; one fill per span.
+export fn polygon(target: &Canvas.Canvas, points: &Array[Canvas.Point], color: Canvas.Color) -> Result[Canvas.Canvas, DrawError] {
+  let count = points.length()
+  if count < 3 { return Err(TooFewPoints(count)) }
+  var top = points[0].y
+  var bottom = points[0].y
+  for point in points {
+    top = min(top, point.y)
+    bottom = max(bottom, point.y)
+  }
+  var held = *target
+  var y = top
+  while y <= bottom {
+    let centre = 2 * y + 1
+    var crossings = []
+    var index = 0
+    while index < count {
+      let a = points[index]
+      let b = points[(index + 1) % count]
+      let ay = 2 * a.y
+      let by = 2 * b.y
+      if (ay <= centre && centre < by) || (by <= centre && centre < ay) {
+        let ax = 2 * a.x
+        let bx = 2 * b.x
+        crossings = crossings.push(ax + ceilDiv((centre - ay) * (bx - ax), by - ay))
+      }
+      index = index + 1
+    }
+    let ordered = sortedInts(&crossings)
+    var pair = 0
+    while pair + 1 < ordered.length() {
+      let first = ceilDiv(ordered[pair] - 1, 2)
+      let last = ceilDiv(ordered[pair + 1] - 1, 2) - 1
+      if last >= first {
+        held = match Canvas.fill(&held, Canvas.rect(first, y, last - first + 1, 1), color) {
+          case Ok(next) => next
+          case Err(problem) => { return Err(Painting(problem)) }
+        }
+      }
+      pair = pair + 2
+    }
+    y = y + 1
+  }
+  Ok(held)
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &DrawError) -> Str {
+  match problem {
+    case InvalidWidth(width) => "stroke width {width} is below 1"
+    case TooFewPoints(count) => "too few points: {count}"
+    case Painting(_) => "the canvas refused a stroke"
+  }
+}
+
+/// Whether pixel (x, y)'s centre lies within half of `width` of the segment.
+/// Coordinates are doubled so centres fall on integers.
+fn covered(from: Canvas.Point, to: Canvas.Point, width: Int, x: Int, y: Int) -> Bool {
+  let ax = 2 * from.x + 1
+  let ay = 2 * from.y + 1
+  let bx = 2 * to.x + 1
+  let by = 2 * to.y + 1
+  let px = 2 * x + 1
+  let py = 2 * y + 1
+  let dx = bx - ax
+  let dy = by - ay
+  let length = dx * dx + dy * dy
+  let wx = px - ax
+  let wy = py - ay
+  let along = wx * dx + wy * dy
+  let limit = width * width
+  if length == 0 || along <= 0 { return wx * wx + wy * wy <= limit }
+  if along >= length {
+    let ex = px - bx
+    let ey = py - by
+    return ex * ex + ey * ey <= limit
+  }
+  (wx * wx + wy * wy) * length - along * along <= limit * length
+}
+
+fn floorDiv(numerator: Int, denominator: Int) -> Int {
+  let quotient = numerator / denominator
+  if numerator % denominator != 0 && (numerator < 0) != (denominator < 0) { quotient - 1 } else { quotient }
+}
+
+fn ceilDiv(numerator: Int, denominator: Int) -> Int {
+  0 - floorDiv(0 - numerator, denominator)
+}
+
+fn sortedInts(values: &Array[Int]) -> Array[Int] {
+  var ordered = []
+  for value in values {
+    var index = 0
+    while index < ordered.length() && ordered[index] <= value { index = index + 1 }
+    ordered = ordered.insert(index, value)
+  }
+  ordered
+}
+
+fn min(first: Int, second: Int) -> Int { if first < second { first } else { second } }
+
+fn max(first: Int, second: Int) -> Int { if first > second { first } else { second } }

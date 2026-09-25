@@ -104,7 +104,7 @@ A row marked **Absent** is queued work, not an exclusion.
 | Long lists and selection | [[Std Ui Virtual]], [[Std Ui Selection]] | **Ready** |
 | Navigation stack, split view, tabs | [[Std Ui Navigation]] | **Ready** |
 | Sheets, alerts, confirmations | [[Std Ui Navigation]] `presenting` | **Ready**: presses blocked, focus trapped |
-| Drawing | [[Std Ui Canvas]] rectangles, clipping, blending | **Partial**: paths, strokes, gradients absent |
+| Drawing | [[Std Ui Canvas]] rectangles, clipping, blending; [[Std Ui Draw]] strokes, polylines, outlines, linear gradients, even-odd polygons | **Ready**; curves and antialiasing **Absent** |
 | Animation | [[Std Ui Motion]] curves, springs, retargeting | **Ready** |
 | Gestures | [[Std Ui Gesture]] over `Desktop.Pointer` phases | **Ready** for tap, long press, and drag; magnify and rotate **Absent** |
 | Keyboard focus | [[Std Ui Screen]] focus order and ring | **Ready** |

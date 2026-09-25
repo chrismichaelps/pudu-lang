@@ -15,7 +15,7 @@ Issues #321, #322, and #323 fill standard-library gaps by dependency layer: core
 [[Std App OpenApi]], calendar jobs in [[Std App Work]]), then the desktop toolkit over live input
 ([[Std Ui Desktop]], [[Std Ui Theme]], [[Std Ui Motion]], [[Std Ui History]], [[Std Ui Virtual]],
 [[Std Ui Keymap]], [[Std Ui Controls]], [[Std Ui Navigation]], [[Std Ui Preferences]],
-[[Std Ui Menu]], [[Std Ui Gesture]], [[Std Ui Clipboard]], [[Std Ui Selection]], [[Std Ui Grid]]).
+[[Std Ui Menu]], [[Std Ui Gesture]], [[Std Ui Clipboard]], [[Std Ui Selection]], [[Std Ui Grid]], [[Std Ui Draw]]).
 
 Roles: **Standard Library Engineer** for the Pudu modules and fixtures; **Runtime Engineer** for the
 desktop adapter and effect primitives ([[Pudu Desktop Adapter]], [[Eval Desktop]]). Review is a
@@ -41,15 +41,16 @@ module changed in another checkout reads stale. Set `PUDU_LIB=<checkout>/package
 
 ## Remaining desktop gaps
 
-Content-sized grid columns, stroked paths and gradients, magnify and rotate gestures, drag and drop
+Content-sized grid columns, curves and antialiasing, magnify and rotate gestures, drag and drop
 between applications, the native menu bar, export to the platform accessibility tree, text shaping
 and input methods, and document and settings spaces.
 
 ## Exact next action
 
-Add a stroked line command to [[Std Ui Canvas]] (start, end, width, color) rasterized into the
-existing band-and-span painter with exact-pixel fixtures, then mark the drawing row's strokes
-**Ready** in [[architecture/NATIVE-UI]].
+Export `Layout.semantics` to the platform accessibility tree: the adapter answers the window's
+accessibility children from a semantics snapshot the program presents with each frame (role, name,
+frame, focus), with a VoiceOver-driven probe, then mark accessibility **Ready** in
+[[architecture/NATIVE-UI]].
 
 ## Referenced by
 

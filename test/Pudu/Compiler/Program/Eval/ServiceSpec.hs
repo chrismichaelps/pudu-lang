@@ -29,6 +29,7 @@ testServiceEvaluation = do
   pointing <- runEntry "test-fixtures/stdlib/UsesUiGestureAll.pudu"
   selecting <- runEntry "test-fixtures/stdlib/UsesUiSelectionAll.pudu"
   gridded <- runEntry "test-fixtures/stdlib/UsesUiGridAll.pudu"
+  stroked <- runEntry "test-fixtures/stdlib/UsesUiDrawAll.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -460,6 +461,9 @@ testServiceEvaluation = do
     , counterexample
         "a grid places equal columns and lines up a short last row"
         (gridded === Just "5")
+    , counterexample
+        "strokes, gradients, and polygons paint exactly the pixels they describe"
+        (stroked === Just "15")
     {-| Problem bodies, cursor pages, and idempotency keys, read as three
         counts packed into one number: 17 problem checks, 15 page checks, and
         18 idempotency checks, including a middleware run against a shared store
