@@ -1,0 +1,232 @@
+module Std.Concurrent.Future
+
+import Std.Channel as Channel
+import Std.Concurrent.Cancel as Cancel
+import Std.Concurrent as Concurrent
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// A value another thread is producing.
+///
+/// A future settles exactly once, with a value or with why its work failed.
+/// It settles even when the work crashes: `start` runs the work on a thread of
+/// its own inside `Concurrent.contain`, on a supervising thread that runs no
+/// caller code, and only the supervisor writes the outcome. Settling closes
+/// `settled`, which is what an untimed `wait` blocks on.
+export type Future[T] = {
+  value: Sync.Cell[Option[T]],
+  failure: Sync.Cell[Option[Concurrent.ConcurrentError]],
+  settled: Channel.Channel[()],
+  guard: Sync.Mutex
+}
+
+/// The longest a timed wait sleeps before it looks again.
+const POLL_MILLIS: Int = 10
+
+/// Run an action on a thread and answer the future of its value.
+export fn start[T](action: fn() -> T) -> Result[Future[T], Concurrent.ConcurrentError] {
+  let pending: Future[T] = promise()
+  launch(pending, action, fn() -> () { () }) ?
+  Ok(pending)
+}
+
+/// A future nothing settles yet; `fulfil` or `fail` settles it.
+export fn promise[T]() -> Future[T] {
+  let noValue: Option[T] = None
+  let noFailure: Option[Concurrent.ConcurrentError] = None
+  Future{value: Sync.cell(noValue), failure: Sync.cell(noFailure), settled: Channel.channel(1), guard: Sync.mutex()}
+}
+
+/// Settle a future with a value. Answers whether this call settled it: a
+/// future already settled keeps its first outcome.
+export fn fulfil[T](target: &Future[T], value: T) -> Bool { settle(target, Ok(value)) }
+
+/// Settle a future with a failure. Answers whether this call settled it.
+export fn fail[T](target: &Future[T], problem: Concurrent.ConcurrentError) -> Bool { settle(target, Err(problem)) }
+
+/// Whether the future has settled.
+export fn isDone[T](source: &Future[T]) -> Bool {
+  match (Sync.get(&source.value), Sync.get(&source.failure)) {
+    case (Ok(Some(_)), _) => true
+    case (_, Ok(Some(_))) => true
+    case _ => false
+  }
+}
+
+/// Wait until the future settles and answer its outcome.
+export fn wait[T](source: &Future[T]) -> Result[T, Concurrent.ConcurrentError] {
+  if let Err(problem) = Channel.receive(&source.settled) { return Err(Concurrent.Other(show(problem))) }
+  outcome(source)
+}
+
+/// Wait at most `millis`; `None` when the future had not settled by then.
+export fn waitWithin[T](source: &Future[T], millis: Int) -> Result[Option[T], Concurrent.ConcurrentError] {
+  waitUntil(source, &Cancel.expiring(millis))
+}
+
+/// Wait until the future settles or the token fires; `None` for the token.
+export fn waitUntil[T](source: &Future[T], stop: &Cancel.Token) -> Result[Option[T], Concurrent.ConcurrentError] {
+  loop {
+    if isDone(source) { return Result.map(outcome(source), fn(held: T) -> Option[T] { Some(held) }) }
+    if Cancel.stopped(stop) { return Ok(None) }
+    let _slept = Concurrent.sleep(POLL_MILLIS)
+  }
+}
+
+/// Wait for every future and answer their values in order, or the first
+/// failure in input order once all have settled.
+export fn waitAll[T](futures: &Array[Future[T]]) -> Result[Array[T], Concurrent.ConcurrentError] {
+  var values: Array[T] = []
+  var failure: Option[Concurrent.ConcurrentError] = None
+  for pending in settleAll(futures) {
+    match pending {
+      case Ok(held) => { values = values.push(held) }
+      case Err(problem) => {
+        if Option.isNone(&failure) { failure = Some(problem) }
+      }
+    }
+  }
+  match failure {
+    case Some(problem) => Err(problem)
+    case None => Ok(values)
+  }
+}
+
+/// Every future's outcome, in input order, once all have settled.
+export fn settleAll[T](futures: &Array[Future[T]]) -> Array[Result[T, Concurrent.ConcurrentError]] {
+  var outcomes: Array[Result[T, Concurrent.ConcurrentError]] = []
+  for pending in futures {
+    outcomes = outcomes.push(wait(&pending))
+  }
+  outcomes
+}
+
+/// Run every action and answer the first to settle, value or failure. The
+/// others are cancelled through their tokens and waited for before this
+/// answers, so no thread outlives the race.
+export fn race[T](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> T]) -> Result[T, Concurrent.ConcurrentError] {
+  compete(parent, actions, false)
+}
+
+/// Run every action and answer the first to succeed; when none does, the
+/// first failure in input order.
+export fn firstSuccess[T](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> T]) -> Result[T, Concurrent.ConcurrentError] {
+  compete(parent, actions, true)
+}
+
+/// Run an action with a token that fires after `millis`; `None` when the
+/// deadline passed before the action was seen to finish. The token is asked
+/// before the action, so what work answers after noticing its deadline is
+/// never mistaken for a result. The action is waited for either way, so this
+/// answers once the work has stopped.
+export fn within[T](millis: Int, action: fn(Cancel.Token) -> T) -> Result[Option[T], Concurrent.ConcurrentError] {
+  let stop = Cancel.expiring(millis)
+  let pending = start(fn() -> T { action(stop) }) ?
+  loop {
+    if Cancel.stopped(&stop) {
+      let _finished = wait(&pending)
+      return Ok(None)
+    }
+    if isDone(&pending) { return Result.map(wait(&pending), fn(held: T) -> Option[T] { Some(held) }) }
+    let _slept = Concurrent.sleep(POLL_MILLIS)
+  }
+}
+
+/// Every entrant settles and notifies `finished` exactly once, whether it
+/// returned, crashed, or could not be started, so reading `finished` never
+/// waits for a notification no thread will send.
+fn compete[T](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> T], successOnly: Bool) -> Result[T, Concurrent.ConcurrentError] {
+  let total = actions.length()
+  if total == 0 { return Err(Concurrent.Other("a race needs at least one action")) }
+  let stop = Cancel.child(parent)
+  let finished: Channel.Channel[Int] = Channel.channel(total)
+  var entrants: Array[Future[T]] = []
+  var index = 0
+  for action in actions {
+    let pending: Future[T] = promise()
+    let position = index
+    let _launched = launch(pending, fn() -> T { action(stop) }, fn() -> () {
+        let _sent = Channel.send(&finished, position)
+      })
+    entrants = entrants.push(pending)
+    index = index + 1
+  }
+  var answer: Option[Result[T, Concurrent.ConcurrentError]] = None
+  var heard = 0
+  while heard < total && Option.isNone(&answer) {
+    match Channel.receive(&finished) {
+      case Ok(Some(position)) => {
+        let settledWith = outcome(&entrants[position])
+        if !successOnly || Result.isOk(&settledWith) { answer = Some(settledWith) }
+      }
+      case _ => { answer = Some(Err(Concurrent.Other("a race lost track of its entrants"))) }
+    }
+    heard = heard + 1
+  }
+  let _stopped = Cancel.cancel(&stop, "the race was decided")
+  let outcomes = settleAll(&entrants)
+  match answer {
+    case Some(decided) => decided
+    case None => firstFailure(&outcomes)
+  }
+}
+
+fn firstFailure[T](outcomes: &Array[Result[T, Concurrent.ConcurrentError]]) -> Result[T, Concurrent.ConcurrentError] {
+  for settled in outcomes {
+    if let Err(problem) = settled { return Err(problem) }
+  }
+  Err(Concurrent.Other("no entrant failed or succeeded"))
+}
+
+/// Start the supervisor that settles `target` from `action` and then calls
+/// `notify`. When the supervisor itself cannot start, this thread settles
+/// and notifies instead, so both happen exactly once on every path.
+fn launch[T](target: Future[T], action: fn() -> T, notify: fn() -> ()) -> Result[(), Concurrent.ConcurrentError] {
+  let supervisor = Concurrent.start(fn() -> () {
+      let ran = Concurrent.contain(fn() -> () {
+          let _kept = fulfil(&target, action())
+        })
+      if let Err(problem) = ran { let _failed = fail(&target, problem) }
+      if !isDone(&target) { let _lost = fail(&target, Concurrent.Other("the work finished without settling")) }
+      notify()
+    })
+  match supervisor {
+    case Ok(_) => Ok(())
+    case Err(problem) => {
+      let _failed = fail(&target, problem)
+      notify()
+      Err(problem)
+    }
+  }
+}
+
+fn settle[T](target: &Future[T], result: Result[T, Concurrent.ConcurrentError]) -> Bool {
+  let decided = Sync.withLock(&target.guard, fn() -> Bool {
+      if isDone(target) { return false }
+      match result {
+        case Ok(held) => { let _stored = Sync.set(&target.value, Some(held)) }
+        case Err(problem) => { let _stored = Sync.set(&target.failure, Some(problem)) }
+      }
+      true
+    })
+  match decided {
+    case Ok(true) => {
+      let _closed = Channel.close(&target.settled)
+      true
+    }
+    case _ => false
+  }
+}
+
+fn outcome[T](source: &Future[T]) -> Result[T, Concurrent.ConcurrentError] {
+  match Sync.get(&source.value) {
+    case Ok(Some(held)) => Ok(held)
+    case _ => {
+      match Sync.get(&source.failure) {
+        case Ok(Some(problem)) => Err(problem)
+        case _ => Err(Concurrent.Other("the future has not settled"))
+      }
+    }
+  }
+}

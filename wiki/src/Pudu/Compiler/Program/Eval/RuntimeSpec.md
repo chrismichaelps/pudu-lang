@@ -29,6 +29,12 @@ secure key/nonce lengths, and authenticated-encryption round trips.
 schedule, statistics, environment-file, and terminal-styling modules, each reaching every export and
 its refusals.
 
+[[Uses Concurrent Futures]] (30) and [[Uses Concurrent Coordination]] (39) register the concurrency
+modules ([[Std Concurrent Future]], [[Std Concurrent Cancel]], [[Std Concurrent Pool]],
+[[Std Concurrent Coordinate]], [[Std Concurrent Retry]]), with crashing work, contention, and
+refusals beside the successful paths. Every check is written so its answer does not depend on which
+thread got there first.
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one
@@ -43,6 +49,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]

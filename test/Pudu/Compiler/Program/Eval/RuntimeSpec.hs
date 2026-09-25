@@ -76,6 +76,8 @@ testRuntimeEvaluation = do
   statistics <- runEntry "test-fixtures/stdlib/UsesStatsAll.pudu"
   settings <- runEntry "test-fixtures/stdlib/UsesDotenvAll.pudu"
   styled <- runEntry "test-fixtures/stdlib/UsesTermAll.pudu"
+  awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
+  coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
@@ -94,6 +96,17 @@ testRuntimeEvaluation = do
         (settings === Just "17")
     , counterexample "terminal styles write the sequences they name and strip back to text"
         (styled === Just "13")
+    {-| Futures, cancellation, races, and deadlines, including work that
+        crashes, a race entrant that crashes first, and a wait on a token
+        with no deadline for a future whose work crashed. -}
+    , counterexample "a future settles once, even when its work crashes"
+        (awaited === Just "30")
+    {-| Pools, semaphores, latches, wait groups, run-once values, and retry
+        policies, including crashing jobs and guarded actions, an extra
+        release, a full queue holding a producer back, and backoff that
+        saturates instead of overflowing. -}
+    , counterexample "coordination survives crashes, over-release, and contention"
+        (coordinated === Just "39")
     , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}

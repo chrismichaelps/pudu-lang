@@ -1,0 +1,253 @@
+module Std.Concurrent.Coordinate
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Sync as Sync
+
+/// Why a coordination step did not do what it was asked.
+export type CoordinateError
+  = Closed
+  | Overreleased
+  | Finished
+  | Failed(Concurrent.ConcurrentError)
+  | Other(Str)
+
+/// A count of permits. The free ones wait in `permits`; `out` counts those
+/// taken, and a release lowers it before returning a permit, so a release
+/// with nothing out is refused instead of blocking on a full channel.
+export type Semaphore = { permits: Channel.Channel[()], out: Sync.Counter }
+
+/// A gate that opens once its count reaches zero, waking every waiter.
+export type Latch = { remaining: Sync.Counter, opened: Channel.Channel[()] }
+
+/// A count of outstanding work that can be waited on until it returns to
+/// zero. It is used once: after it has been idle, `add` answers `Finished`.
+export type WaitGroup = {
+  outstanding: Sync.Counter,
+  idle: Channel.Channel[()],
+  finished: Sync.Cell[Bool],
+  guard: Sync.Mutex
+}
+
+/// A value computed at most once, by whichever caller asks first.
+export type Once[T] = { guard: Sync.Mutex, value: Sync.Cell[Option[T]] }
+
+/// The longest a timed latch wait sleeps before it looks again.
+const POLL_MILLIS: Int = 10
+
+/// A semaphore holding `count` permits; a count below one is taken as one.
+export fn semaphore(count: Int) -> Semaphore {
+  let size = if count < 1 { 1 } else { count }
+  let permits: Channel.Channel[()] = Channel.channel(size)
+  var index = 0
+  while index < size {
+    let _added = Channel.send(&permits, ())
+    index = index + 1
+  }
+  Semaphore{permits: permits, out: Sync.counter(0)}
+}
+
+/// Take a permit, waiting until one is free.
+export fn acquire(target: &Semaphore) -> Result[(), CoordinateError] {
+  match Channel.receive(&target.permits) {
+    case Ok(Some(_)) => {
+      synced(Sync.increment(&target.out, 1)) ?
+      Ok(())
+    }
+    case Ok(None) => Err(Closed)
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+/// Return a permit. Answers `Overreleased` when no permit is out.
+export fn release(target: &Semaphore) -> Result[(), CoordinateError] {
+  let left = synced(Sync.increment(&target.out, -1)) ?
+  if left < 0 {
+    synced(Sync.increment(&target.out, 1)) ?
+    return Err(Overreleased)
+  }
+  channelled(Channel.send(&target.permits, ()))
+}
+
+/// How many permits are free right now.
+export fn available(source: &Semaphore) -> Result[Int, CoordinateError] {
+  match Channel.pending(&source.permits) {
+    case Ok(count) => Ok(count)
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+/// Run an action holding a permit. The action runs on a thread of its own,
+/// so the permit is returned whether it returned or crashed; a crash answers
+/// `Failed`.
+export fn withPermit[T](target: &Semaphore, action: fn() -> T) -> Result[T, CoordinateError] {
+  acquire(target) ?
+  let noValue: Option[T] = None
+  let slot = Sync.cell(noValue)
+  let ran = Concurrent.contain(fn() -> () {
+      let _kept = Sync.set(&slot, Some(action()))
+    })
+  release(target) ?
+  if let Err(problem) = ran { return Err(Failed(problem)) }
+  match Sync.get(&slot) {
+    case Ok(Some(held)) => Ok(held)
+    case _ => Err(Other("the action left no value"))
+  }
+}
+
+/// A latch opening after `count` count-downs; a count below one opens at once.
+export fn latch(count: Int) -> Latch {
+  let opened: Channel.Channel[()] = Channel.channel(1)
+  if count < 1 { let _open = Channel.close(&opened) }
+  Latch{remaining: Sync.counter(count), opened: opened}
+}
+
+/// Count down once; the count-down reaching zero opens the latch. Counting
+/// down an open latch changes nothing.
+export fn countDown(target: &Latch) -> Result[(), CoordinateError] {
+  let left = synced(Sync.increment(&target.remaining, -1)) ?
+  if left == 0 { channelled(Channel.close(&target.opened)) ? }
+  Ok(())
+}
+
+/// Whether the latch has opened.
+export fn isOpen(source: &Latch) -> Bool {
+  match Sync.count(&source.remaining) {
+    case Ok(left) => left <= 0
+    case Err(_) => false
+  }
+}
+
+/// Wait until the latch opens.
+export fn waitLatch(source: &Latch) -> Result[(), CoordinateError] {
+  match Channel.receive(&source.opened) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+/// Wait at most `millis` for the latch; answers whether it opened.
+export fn waitLatchWithin(source: &Latch, millis: Int) -> Result[Bool, CoordinateError] {
+  let until = clock() + millis
+  loop {
+    if isOpen(source) { return Ok(true) }
+    let left = until - clock()
+    if left <= 0 { return Ok(false) }
+    let _slept = Concurrent.sleep(if left < POLL_MILLIS { left } else { POLL_MILLIS })
+  }
+}
+
+/// A wait group with nothing outstanding.
+export fn waitGroup() -> WaitGroup {
+  WaitGroup{outstanding: Sync.counter(0), idle: Channel.channel(1), finished: Sync.cell(false), guard: Sync.mutex()}
+}
+
+/// Add outstanding work. Answers `Finished` once the group has been idle.
+export fn add(target: &WaitGroup, count: Int) -> Result[(), CoordinateError] {
+  guarded(&target.guard, fn() -> Result[(), CoordinateError] {
+      if synced(Sync.get(&target.finished)) ? { return Err(Finished) }
+      synced(Sync.increment(&target.outstanding, count)) ?
+      Ok(())
+    })
+}
+
+/// Mark one piece of outstanding work done. The last one makes the group
+/// idle; one more than was added answers `Overreleased`.
+export fn done(target: &WaitGroup) -> Result[(), CoordinateError] {
+  guarded(&target.guard, fn() -> Result[(), CoordinateError] {
+      let left = synced(Sync.increment(&target.outstanding, -1)) ?
+      if left < 0 {
+        synced(Sync.increment(&target.outstanding, 1)) ?
+        return Err(Overreleased)
+      }
+      if left == 0 { finish(target) ? }
+      Ok(())
+    })
+}
+
+/// Wait until nothing is outstanding. A group waited on with nothing added
+/// is idle at once.
+export fn waitGroupIdle(target: &WaitGroup) -> Result[(), CoordinateError] {
+  guarded(&target.guard, fn() -> Result[(), CoordinateError] {
+      let left = synced(Sync.count(&target.outstanding)) ?
+      if left == 0 { finish(target) ? }
+      Ok(())
+    }) ?
+  match Channel.receive(&target.idle) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+/// A value not yet computed.
+export fn once[T]() -> Once[T] {
+  let unset: Option[T] = None
+  Once{guard: Sync.mutex(), value: Sync.cell(unset)}
+}
+
+/// The value, computing it with `init` if no caller has yet. `init` runs on a
+/// thread of its own under the lock: a crash answers `Failed`, releases the
+/// lock, and leaves the value unset for the next caller.
+export fn resolve[T](target: &Once[T], init: fn() -> T) -> Result[T, CoordinateError] {
+  let slot = target.value
+  guarded(&target.guard, fn() -> Result[T, CoordinateError] {
+      if let Some(held) = synced(Sync.get(&slot)) ? { return Ok(held) }
+      let ran = Concurrent.contain(fn() -> () {
+          let _kept = Sync.set(&slot, Some(init()))
+        })
+      if let Err(problem) = ran { return Err(Failed(problem)) }
+      match synced(Sync.get(&slot)) ? {
+        case Some(held) => Ok(held)
+        case None => Err(Other("the initialiser left no value"))
+      }
+    })
+}
+
+/// The value if it has been computed.
+export fn peek[T](source: &Once[T]) -> Option[T] {
+  match Sync.get(&source.value) {
+    case Ok(held) => held
+    case Err(_) => None
+  }
+}
+
+/// A sentence saying what went wrong.
+export fn explain(problem: &CoordinateError) -> Str {
+  match problem {
+    case Closed => "the coordination channel is closed"
+    case Overreleased => "released more than was taken"
+    case Finished => "the wait group has already finished"
+    case Failed(cause) => "the guarded action failed: " + show(cause)
+    case Other(text) => text
+  }
+}
+
+fn finish(target: &WaitGroup) -> Result[(), CoordinateError] {
+  if synced(Sync.get(&target.finished)) ? { return Ok(()) }
+  synced(Sync.set(&target.finished, true)) ?
+  channelled(Channel.close(&target.idle))
+}
+
+/// Run `action` holding `guard`; the action returns a result rather than
+/// crashing, so the lock is always released.
+fn guarded[T](guard: &Sync.Mutex, action: fn() -> Result[T, CoordinateError]) -> Result[T, CoordinateError] {
+  match Sync.withLock(guard, action) {
+    case Ok(answered) => answered
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+fn synced[T](result: Result[T, Sync.SyncError]) -> Result[T, CoordinateError] {
+  match result {
+    case Ok(held) => Ok(held)
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
+
+fn channelled(result: Result[(), Channel.ChannelError]) -> Result[(), CoordinateError] {
+  match result {
+    case Ok(_) => Ok(())
+    case Err(Channel.Closed) => Err(Closed)
+    case Err(problem) => Err(Other(show(problem)))
+  }
+}
