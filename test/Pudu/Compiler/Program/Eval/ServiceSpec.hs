@@ -28,6 +28,7 @@ testServiceEvaluation = do
   shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
   pointing <- runEntry "test-fixtures/stdlib/UsesUiGestureAll.pudu"
   exposing <- runEntry "test-fixtures/stdlib/UsesUiAccessible.pudu"
+  menuBar <- runEntry "test-fixtures/stdlib/UsesUiMenuBar.pudu"
   selecting <- runEntry "test-fixtures/stdlib/UsesUiSelectionAll.pudu"
   gridded <- runEntry "test-fixtures/stdlib/UsesUiGridAll.pudu"
   stroked <- runEntry "test-fixtures/stdlib/UsesUiDrawAll.pudu"
@@ -463,6 +464,12 @@ testServiceEvaluation = do
     , counterexample
         "a layout's accessibility tree crosses to the window and back"
         (exposing === Just "1872")
+    {-| Menu-bar records for a bar with a separator, a submenu, and bound and
+        unbound commands (2); chosen commands decoded as signals (3); and a
+        forged session refused by install and installed (2). -}
+    , counterexample
+        "a menu bar crosses to the platform and its choices come back"
+        (menuBar === Just "232")
     , counterexample
         "list selection chooses single rows, ranges, toggles, and follows the keyboard"
         (selecting === Just "15")

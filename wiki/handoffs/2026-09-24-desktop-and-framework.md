@@ -27,6 +27,7 @@ separate pass over source and mirror parity before each merge.
 - #331 exports the accessibility tree ([[Std Ui Accessible]], [[Pudu Desktop Access]]), stacked on #329.
   AppKit's in-process report matches the exposed roles, names, frames, and focus; a read from
   another process (the way VoiceOver reads) is pending assistive access for the shell that runs it.
+- #334 installs [[Std Ui Menu]] bars as the macOS menu bar ([[Pudu Desktop Menu]]), stacked on #331.
 - [[architecture/WEB]] lists every application capability with its joint into `Std.App`;
   [[architecture/NATIVE-UI]] lists every desktop concept with its module and status.
 
@@ -45,15 +46,13 @@ module changed in another checkout reads stale. Set `PUDU_LIB=<checkout>/package
 ## Remaining desktop gaps
 
 Content-sized grid columns, curves and antialiasing, magnify and rotate gestures, drag and drop
-between applications, the native menu bar, text shaping and input methods, and document and
-settings spaces.
+between applications, text shaping and input methods, and document and settings spaces.
 
 ## Exact next action
 
-Install [[Std Ui Menu]] bars as the application's native menu bar: the adapter builds an `NSMenu`
-from the bar a program presents, queues a `menu` record naming the chosen command, and
-`Std.Ui.Desktop` decodes it as a `Signal`; then mark the native menu bar **Ready** in
-[[architecture/NATIVE-UI]].
+Deliver text input methods: the frame view adopts `NSTextInputClient`, marked (composing) text
+arrives as a `Composing` record and committed text as `text`, and [[Std Ui Controls]] fields show the
+composition underlined; then mark input methods **Ready** in [[architecture/NATIVE-UI]].
 
 ## Referenced by
 

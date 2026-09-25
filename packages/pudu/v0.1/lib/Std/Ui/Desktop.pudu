@@ -4,7 +4,9 @@ import Std.Num {Integer}
 import Std.Ui.Accessible as Accessible
 import Std.Ui.Canvas as Canvas
 import Std.Ui.Gesture as Gesture
+import Std.Ui.Keymap as Keymap
 import Std.Ui.Layout as Layout
+import Std.Ui.Menu as Menu
 import Std.Ui.Screen as Screen
 
 /// Why a desktop session could not do what was requested.
@@ -30,12 +32,14 @@ export type DriveError
 /// `Shortcut` carries a chord held with Command or Control, written
 /// `cmd+shift+z` with modifiers in the order cmd, ctrl, alt, shift.
 /// `Pointer` carries each phase of the primary button with its time in
-/// milliseconds, for `Std.Ui.Gesture`.
+/// milliseconds, for `Std.Ui.Gesture`. `Chosen` names a command chosen from
+/// the menu bar `install` put in place.
 export type Signal
   = Input(Screen.Input)
   | Shortcut(Str)
   | Resized(Canvas.Size)
   | Pointer(Gesture.Phase, Canvas.Point, Int)
+  | Chosen(Str)
 
 /// Everything decided before a native window resource is acquired.
 export type WindowPlan = {
@@ -158,6 +162,10 @@ export fn decodeSignals(text: Str) -> Array[Signal] {
       found = found.push(Shortcut(fields[1]))
       continue
     }
+    if kind == "menu" {
+      if fields[1].length() > 0 { found = found.push(Chosen(fields[1])) }
+      continue
+    }
     if kind == "key" {
       if let Some(key) = keyNamed(fields[1]) { found = found.push(Input(Screen.KeyPressed(key))) }
       continue
@@ -208,12 +216,31 @@ export fn exposed(target: &Session) -> Result[Array[Accessible.Exposed], Desktop
   }
 }
 
+/// Make `bar` the platform's menu bar, behind an application menu holding
+/// Quit, with each command's shortcut from `keys` shown. A chosen command
+/// arrives as `Chosen`; Quit as a close request.
+export fn install(target: &Session, bar: &Array[Menu.Menu], keys: &Keymap.Keymap) -> Result[(), DesktopError] {
+  match desktopMenu(target.token, Menu.native(bar, keys)) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// The records the platform's menu bar holds, in `Menu.native`'s form.
+export fn installed(target: &Session) -> Result[Str, DesktopError] {
+  match desktopMenuReport(target.token) {
+    case Ok(found) => Ok(found)
+    case Err(message) => Err(classified(message))
+  }
+}
+
 /// Runs `screen` in the window until the person closes it.
 ///
 /// Each turn pumps for at most `frameMillis`, hands every input to the
 /// screen, offers every shortcut to `onShortcut` (a new state re-renders,
 /// `None` ignores it), and presents only when a frame changed. Every frame
-/// presented is exposed to assistive clients with its layout and focus. Answers the
+/// presented is exposed to assistive clients with its layout and focus.
+/// Chosen menu commands are ignored; `driveCommands` routes them. Answers the
 /// screen as it was when the window closed; the caller still closes the
 /// session.
 export fn drive[S](
@@ -221,6 +248,34 @@ export fn drive[S](
   screen: &Screen.Screen[S],
   frameMillis: Int,
   onShortcut: fn(S, Str) -> Option[S]
+) -> Result[Screen.Screen[S], DriveError] {
+  running(target, screen, frameMillis, onShortcut, fn(_state: S, _name: Str) -> Option[S] { None })
+}
+
+/// Installs `bar` and runs `screen` as `drive` does, sending every bound
+/// chord and every chosen menu command to `apply` by command name.
+export fn driveCommands[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  bar: &Array[Menu.Menu],
+  keys: &Keymap.Keymap,
+  apply: fn(S, Str) -> S
+) -> Result[Screen.Screen[S], DriveError] {
+  let resolved = Keymap.forPlatform(keys, true)
+  match install(target, bar, &resolved) {
+    case Ok(_) => {}
+    case Err(problem) => { return Err(Window(problem)) }
+  }
+  running(target, screen, frameMillis, Keymap.handler(&resolved, apply), fn(state: S, name: Str) -> Option[S] { Some(apply(state, name)) })
+}
+
+fn running[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  onShortcut: fn(S, Str) -> Option[S],
+  onCommand: fn(S, Str) -> Option[S]
 ) -> Result[Screen.Screen[S], DriveError] {
   if frameMillis < 0 { return Err(Window(InvalidPumpDuration(frameMillis))) }
   shown(target, screen) ?
@@ -241,6 +296,12 @@ export fn drive[S](
         case Input(input) => Screen.handle(&held, input)
         case Shortcut(chord) => {
           match onShortcut(Screen.stateOf(&held), chord) {
+            case Some(state) => Screen.restated(&held, state)
+            case None => Ok(held)
+          }
+        }
+        case Chosen(name) => {
+          match onCommand(Screen.stateOf(&held), name) {
             case Some(state) => Screen.restated(&held, state)
             case None => Ok(held)
           }

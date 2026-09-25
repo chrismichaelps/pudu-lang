@@ -398,6 +398,10 @@ int32_t pudu_desktop_close(void *handle) {
   @autoreleasepool {
     @try {
       PuduWindowHost *host = (__bridge_transfer PuduWindowHost *)handle;
+      if (host.menuTarget != nil) {
+        [NSApp setMainMenu:nil];
+        host.menuTarget = nil;
+      }
       host.window.delegate = nil;
       [host.window orderOut:nil];
       [host.window close];

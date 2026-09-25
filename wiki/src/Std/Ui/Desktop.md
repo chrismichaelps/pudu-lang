@@ -31,6 +31,13 @@ assistive clients read each meaningful node's role, name, frame, and focus; `dri
 screen's layout and focus with every frame it presents. `exposed(session)` answers what the platform
 itself reports for the window, decoded, so a program can check what a screen reader is told.
 
+`install(session, bar, keys)` makes a [[Std Ui Menu]] bar the platform's menu bar, behind an
+application menu holding Quit, with each command's shortcut shown; choosing a command arrives as
+`Chosen(name)`, and Quit as a close request. `installed(session)` answers the records the platform's
+bar holds, in `Menu.native`'s form. `driveCommands(session, screen, frameMillis, bar, keys, apply)`
+installs the bar and runs the screen as `drive` does, sending both bound chords and chosen commands
+to `apply` by command name; `drive` ignores `Chosen`.
+
 Every operation returns `Result`. Invalid dimensions, titles, durations, malformed surfaces,
 closed or invented tokens, wrong-thread access, unsupported targets, and platform failures remain
 distinguishable `DesktopError` variants. Closing twice is a typed `SessionClosed` outcome. Runtime
@@ -74,6 +81,8 @@ session ownership.
 - **Q:** Treat an unavailable display server as success in tests? **A:** No. _Rationale:_ the
   acceptance requirement is an actual window. _Rejected:_ framebuffer-only launch claims.
 
+- **Q:** Give `drive` a command callback? **A:** No. _Rationale:_ it would change every caller's
+  signature. _Accepted:_ `driveCommands`, which takes the bar and keymap it needs to route by name.
 - **Q:** Leave exposing the tree to the caller of `drive`? **A:** No. _Rationale:_ a frame and its
   accessibility tree come from the same layout, and a program that forgets one call would be
   silently unusable without sight. _Rejected:_ opt-in export.

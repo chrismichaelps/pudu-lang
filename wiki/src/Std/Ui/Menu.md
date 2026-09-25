@@ -17,7 +17,13 @@ A menu bar as data: menus of commands, separators, and submenus, drawn in the wi
 command's shortcut from [[Std Ui Keymap]], and checked against that keymap.
 
 Exports: `type Item = Command(title, name) | Separator | Submenu(Menu)`, `type Menu`, `menu`,
-`command`, `commandsOf`, `problems`, `view`, `opened`, `commandOf`.
+`command`, `commandsOf`, `problems`, `view`, `opened`, `commandOf`, `native`.
+
+`native(bar, keys)` writes the bar as the records the desktop adapter builds the platform's menu bar
+from, one per line, depth first: `menu`, depth, title; `command`, depth, name, chord, title; and
+`separator`, depth. A top-level menu is at depth 0 and its items at depth 1; a submenu at depth `d`
+holds items at `d + 1`. The chord is the command's first binding with `mod` resolved to `cmd`, or
+empty. Tabs and line breaks in titles become spaces.
 
 ## Semantics
 
@@ -30,9 +36,12 @@ Exports: `type Item = Command(title, name) | Separator | Submenu(Menu)`, `type M
 
 ## Grill Log
 
-- **Q:** Drive the platform's native menu bar? **A:** Not yet: that needs adapter support and is
-  recorded as absent in [[architecture/NATIVE-UI]]. The data model is the one a native presenter
-  will read, so programs do not change when it arrives.
+- **Q:** Drive the platform's native menu bar? **A:** Yes, through `native` and
+  [[Std Ui Desktop]] `install`. _Rationale:_ the data model is the one the native presenter reads,
+  so a program that drew its bar in the window installs the same value. _Rejected:_ a second,
+  native-only menu type.
+- **Q:** Resolve `mod` in `native` rather than asking the caller? **A:** Yes. _Rationale:_ the only
+  native menu bar is Apple's, where `mod` is always Command.
 - **Q:** Why commands by name rather than closures? **A:** The same names flow from menus,
   shortcuts, and command palettes into one `apply` function.
 
@@ -40,8 +49,8 @@ Exports: `type Item = Command(title, name) | Separator | Submenu(Menu)`, `type M
 
 - Depends on [[Std Ui Controls]], [[Std Ui Keymap]], [[Std Ui Layout]], [[Std Ui Screen]],
   [[Std Ui Theme]].
-- Consumed by desktop applications.
+- Consumed by desktop applications and [[Std Ui Desktop]] `install`.
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[architecture/NATIVE-UI]]
+[[src/Std/_MOC]] · [[architecture/NATIVE-UI]] · [[Std Ui Desktop]] · [[Pudu Desktop Menu]] · [[Uses Ui Menu Bar]]

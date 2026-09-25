@@ -46,4 +46,14 @@ int32_t pudu_desktop_accessibility(void *handle, const uint8_t *records, size_t 
    Answers the byte count and copies only when it fits in capacity. */
 int64_t pudu_desktop_accessibility_report(void *handle, uint8_t *buffer, size_t capacity);
 
+/* Replaces the application's menu bar with newline-terminated records, depth
+   first: menu depth title; command depth name chord title; separator depth.
+   Choosing a command queues a menu name input record. -3 when a record cannot
+   be read, leaving the previous bar in place. */
+int32_t pudu_desktop_menu(void *handle, const uint8_t *records, size_t length);
+
+/* The installed bar as records of the same form, without the application
+   menu. Answers the byte count and copies only when it fits in capacity. */
+int64_t pudu_desktop_menu_report(void *handle, uint8_t *buffer, size_t capacity);
+
 #endif
