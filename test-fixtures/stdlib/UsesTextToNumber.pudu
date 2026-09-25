@@ -1,0 +1,34 @@
+module UsesTextToNumber
+
+fn main() -> Int {
+  var held = 0
+
+  // Whole numbers: a sign, digits, and nothing else, fitting an Int.
+  if "42".toInt() == Some(42) && "-7".toInt() == Some(-7) && "+3".toInt() == Some(3) && "007".toInt() == Some(7) { held = held + 1 }
+  if "9223372036854775807".toInt() == Some(9223372036854775807) && "-9223372036854775808".toInt() == Some(-9223372036854775807 - 1) { held = held + 1 }
+  if "9223372036854775808".toInt() == None && "-9223372036854775809".toInt() == None { held = held + 1 }
+  if "".toInt() == None && "-".toInt() == None && " 42".toInt() == None && "42 ".toInt() == None { held = held + 1 }
+  if "4_2".toInt() == None && "4.0".toInt() == None && "0x10".toInt() == None && "٤٢".toInt() == None { held = held + 1 }
+
+  // Floats: digits on at least one side of the point, an optional exponent.
+  if "1.5".toFloat() == Some(1.5) && "-0.25".toFloat() == Some(-0.25) && "3".toFloat() == Some(3.0) { held = held + 1 }
+  if ".5".toFloat() == Some(0.5) && "5.".toFloat() == Some(5.0) && "1e3".toFloat() == Some(1000.0) && "2.5E-2".toFloat() == Some(0.025) { held = held + 1 }
+  if "0.1".toFloat() == Some(0.1) && "1e-320".toFloat() != None { held = held + 1 }
+  if "1e309".toFloat() == None && "inf".toFloat() == None && "nan".toFloat() == None && "Infinity".toFloat() == None { held = held + 1 }
+  if ".".toFloat() == None && "1e".toFloat() == None && "1.2.3".toFloat() == None && " 1.5".toFloat() == None && "1,5".toFloat() == None { held = held + 1 }
+
+  // Decimals keep the digits written, scale included.
+  if "1.50".toDecimal() == Some(1.50d) && "-12".toDecimal() == Some(-12d) { held = held + 1 }
+  match "1.50".toDecimal() {
+    case Some(amount) => { if display(amount) == "1.50" { held = held + 1 } }
+    case None => {}
+  }
+  if "1_000".toDecimal() == None && " 1".toDecimal() == None && "abc".toDecimal() == None && "".toDecimal() == None { held = held + 1 }
+
+  // Writing and reading agree.
+  let count = 1234
+  let ratio = 0.125
+  if display(count).toInt() == Some(count) && display(ratio).toFloat() == Some(ratio) { held = held + 1 }
+
+  held
+}

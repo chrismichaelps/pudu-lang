@@ -225,6 +225,9 @@ data StringMethod
   | StringChars
   | StringLines
   | StringReverse
+  | StringToInt
+  | StringToFloat
+  | StringToDecimal
   deriving stock (Eq, Show)
 
 data ArrayMethod
@@ -278,6 +281,9 @@ stringMethodName method = case method of
   StringChars -> "chars"
   StringLines -> "lines"
   StringReverse -> "reverse"
+  StringToInt -> "toInt"
+  StringToFloat -> "toFloat"
+  StringToDecimal -> "toDecimal"
 
 arrayMethodName :: ArrayMethod -> Text
 arrayMethodName method = case method of
