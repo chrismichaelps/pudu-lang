@@ -12,7 +12,8 @@ aliases: [Pudu Desktop Header]
 
 Declare the private C-compatible ABI between [[Eval Desktop]] and [[Pudu Desktop Adapter]]. The ABI
 opens and closes an opaque host pointer, replaces its owned RGBA frame, and pumps events for a
-bounded number of milliseconds. Integer statuses are translated immediately by the Haskell owner;
+bounded number of milliseconds. It also replaces a window's accessibility snapshot and reports
+what the platform exposes for it ([[Pudu Desktop Access]]). Integer statuses are translated immediately by the Haskell owner;
 they are not public Pudu values.
 
 ## Grill Log
@@ -24,4 +25,4 @@ they are not public Pudu values.
 
 ## Referenced by
 
-[[Eval Desktop]] · [[Pudu Desktop Adapter]]
+[[Eval Desktop]] · [[Pudu Desktop Adapter]] · [[Pudu Desktop Access]]

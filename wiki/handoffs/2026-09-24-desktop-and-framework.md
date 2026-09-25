@@ -24,6 +24,9 @@ separate pass over source and mirror parity before each merge.
 ## State
 
 - #321 and #323 are merged and closed. #322 lands through #326, #328, and #329, stacked in that order.
+- #331 exports the accessibility tree ([[Std Ui Accessible]], [[Pudu Desktop Access]]), stacked on #329.
+  AppKit's in-process report matches the exposed roles, names, frames, and focus; a read from
+  another process (the way VoiceOver reads) is pending assistive access for the shell that runs it.
 - [[architecture/WEB]] lists every application capability with its joint into `Std.App`;
   [[architecture/NATIVE-UI]] lists every desktop concept with its module and status.
 
@@ -42,14 +45,14 @@ module changed in another checkout reads stale. Set `PUDU_LIB=<checkout>/package
 ## Remaining desktop gaps
 
 Content-sized grid columns, curves and antialiasing, magnify and rotate gestures, drag and drop
-between applications, the native menu bar, export to the platform accessibility tree, text shaping
-and input methods, and document and settings spaces.
+between applications, the native menu bar, text shaping and input methods, and document and
+settings spaces.
 
 ## Exact next action
 
-Export `Layout.semantics` to the platform accessibility tree: the adapter answers the window's
-accessibility children from a semantics snapshot the program presents with each frame (role, name,
-frame, focus), with a VoiceOver-driven probe, then mark accessibility **Ready** in
+Install [[Std Ui Menu]] bars as the application's native menu bar: the adapter builds an `NSMenu`
+from the bar a program presents, queues a `menu` record naming the chosen command, and
+`Std.Ui.Desktop` decodes it as a `Signal`; then mark the native menu bar **Ready** in
 [[architecture/NATIVE-UI]].
 
 ## Referenced by

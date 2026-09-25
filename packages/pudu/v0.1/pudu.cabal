@@ -13,6 +13,7 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_desktop.h
+                    cbits/pudu_desktop_host.h
                     cbits/pudu_audio.h
                     cbits/pudu_audio_stream.h
 data-files:         lib/Std/*.pudu
@@ -310,6 +311,7 @@ library
     cpp-options:    -DPUDU_POSIX_SIGNALS
   if os(osx)
     c-sources:      cbits/pudu_desktop.m
+                    cbits/pudu_desktop_access.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
     cc-options:     -fobjc-arc

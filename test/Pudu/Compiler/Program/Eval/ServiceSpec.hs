@@ -27,6 +27,7 @@ testServiceEvaluation = do
   controls <- runEntry "test-fixtures/stdlib/UsesUiControlsAll.pudu"
   shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
   pointing <- runEntry "test-fixtures/stdlib/UsesUiGestureAll.pudu"
+  exposing <- runEntry "test-fixtures/stdlib/UsesUiAccessible.pudu"
   selecting <- runEntry "test-fixtures/stdlib/UsesUiSelectionAll.pudu"
   gridded <- runEntry "test-fixtures/stdlib/UsesUiGridAll.pudu"
   stroked <- runEntry "test-fixtures/stdlib/UsesUiDrawAll.pudu"
@@ -455,6 +456,13 @@ testServiceEvaluation = do
     , counterexample
         "pointer gestures drive sliders and the clipboard reports what it holds"
         (pointing === Just "7020602")
+    {-| Every role named (1); snapshots that keep reading order, parents,
+        frames, focus, and names, and mark nothing for a non-control or
+        missing focus (8); each refusal decode makes (7); and a forged
+        session refused by expose and exposed (2). -}
+    , counterexample
+        "a layout's accessibility tree crosses to the window and back"
+        (exposing === Just "1872")
     , counterexample
         "list selection chooses single rows, ranges, toggles, and follows the keyboard"
         (selecting === Just "15")

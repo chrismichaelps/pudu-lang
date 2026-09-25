@@ -1,0 +1,124 @@
+module Std.Ui.Accessible
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Layout as Layout
+
+/// One node as an assistive client is told of it.
+///
+/// `parent` is the node of the nearest meaningful ancestor, or `-1` at the top.
+/// `role` is a `roleName` in a snapshot and the platform's own role in a report.
+export type Exposed = {
+  node: Int,
+  parent: Int,
+  role: Str,
+  name: Str,
+  frame: Canvas.Rect,
+  focused: Bool
+}
+
+/// Why accessibility records could not be read, naming the zero-based record.
+///
+/// `OrphanedRecord` names a parent that no earlier record introduced.
+export type AccessibleError
+  = MalformedRecord(Int)
+  | OrphanedRecord(Int)
+
+/// Role names, in the order of `roleName`'s roles.
+const ROLE_NAMES: Array[Str] = ["decoration", "group", "heading", "label", "image", "button", "toggle", "field"]
+
+/// A record's fields: node, parent, role, focused, x, y, width, height, name.
+const FIELDS: Int = 9
+
+/// The name a role crosses the boundary as.
+export fn roleName(role: Layout.Role) -> Str {
+  let roles = [
+    Layout.Decoration,
+    Layout.Group,
+    Layout.Heading,
+    Layout.Label,
+    Layout.Image,
+    Layout.Button,
+    Layout.Toggle,
+    Layout.Field
+  ]
+  ROLE_NAMES[roles.indexOf(role)]
+}
+
+/// Every meaningful node of a layout as one record, in reading order.
+///
+/// Only a control whose tag is `focus` is marked focused.
+export fn snapshot(layout: &Layout.Layout, focus: Option[Str]) -> Str {
+  let focused = match focus {
+    case Some(tag) => match Layout.nodeTagged(layout, tag) {
+      case Some(node) => if Layout.isControlAt(layout, node) { node } else { -1 }
+      case None => -1
+    }
+    case None => -1
+  }
+  var records: Array[Str] = []
+  for entry in Layout.semantics(layout) {
+    records = records.push([
+        show(entry.node),
+        show(entry.parent),
+        roleName(entry.role),
+        if entry.node == focused { "1" } else { "0" },
+        show(entry.frame.x),
+        show(entry.frame.y),
+        show(entry.frame.width),
+        show(entry.frame.height),
+        spoken(entry.name)
+      ].join("\t") + "\n")
+  }
+  records.join("")
+}
+
+/// Records back into values, refusing the first that cannot be read.
+export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
+  var found: Array[Exposed] = []
+  var seen: Array[Int] = []
+  var index = 0
+  for line in text.lines() {
+    if line.isEmpty() { continue }
+    let fields = line.split("\t")
+    if fields.length() != FIELDS { return Err(MalformedRecord(index)) }
+    var numbers: Array[Int] = []
+    for position in [0, 1, 4, 5, 6, 7] {
+      match integer(fields[position]) {
+        case Some(value) => { numbers = numbers.push(value) }
+        case None => { return Err(MalformedRecord(index)) }
+      }
+    }
+    let flag = fields[3]
+    if flag != "0" && flag != "1" { return Err(MalformedRecord(index)) }
+    let parent = numbers[1]
+    if parent != -1 && seen.indexOf(parent) < 0 { return Err(OrphanedRecord(index)) }
+    found = found.push(Exposed {
+        node: numbers[0],
+        parent: parent,
+        role: fields[2],
+        name: fields[8],
+        frame: Canvas.rect(numbers[2], numbers[3], numbers[4], numbers[5]),
+        focused: flag == "1"
+      })
+    seen = seen.push(numbers[0])
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// A name with the characters that would end its record or shift a field
+/// turned into spaces.
+fn spoken(name: Str) -> Str { name.replace("\t", " ").replace("\r", " ").replace("\n", " ") }
+
+fn integer(text: Str) -> Option[Int] {
+  let negative = text.startsWith("-")
+  let digits = if negative { text.drop(1) } else { text }
+  if digits.length() == 0 || digits.length() > 9 { return None }
+  var total = 0
+  for symbol in digits {
+    let code = symbol.code()
+    if code < 48 || code > 57 { return None }
+    total = total * 10 + code - 48
+  }
+  Some(if negative { 0 - total } else { total })
+}

@@ -114,7 +114,7 @@ A row marked **Absent** is queued work, not an exclusion.
 | Persisted preferences | [[Std Ui Preferences]] | **Ready**, atomic replace |
 | Clipboard | [[Std Ui Clipboard]] | **Ready** on macOS |
 | Drag and drop between applications | — | **Absent** |
-| Accessibility semantics | [[Std Ui Layout]] semantics, required names | **Partial**: export to the platform accessibility tree absent |
+| Accessibility semantics | [[Std Ui Layout]] semantics, required names; [[Std Ui Accessible]] and [[Pudu Desktop Access]] export them | **Ready** on macOS: roles, names, frames, parents, and focus reach the platform tree with every driven frame |
 | Multiple windows, documents, settings window | multiple sessions | **Partial**: no document or settings space yet |
 
 ## Performance and quality constitution

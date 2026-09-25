@@ -26,6 +26,11 @@ re-renders through `Screen.restated`), and a frame is presented only when a turn
 each down, move, and up of the primary button for [[Std Ui Gesture]]; `drive` passes presses to the
 screen and leaves pointer phases to programs that recognize gestures.
 
+`expose(session, layout, focus)` hands the window a [[Std Ui Accessible]] snapshot of a layout, so
+assistive clients read each meaningful node's role, name, frame, and focus; `drive` exposes the
+screen's layout and focus with every frame it presents. `exposed(session)` answers what the platform
+itself reports for the window, decoded, so a program can check what a screen reader is told.
+
 Every operation returns `Result`. Invalid dimensions, titles, durations, malformed surfaces,
 closed or invented tokens, wrong-thread access, unsupported targets, and platform failures remain
 distinguishable `DesktopError` variants. Closing twice is a typed `SessionClosed` outcome. Runtime
@@ -51,8 +56,9 @@ session ownership.
 - No platform framework or third-party toolkit value enters the Pudu type graph.
 - No global public window and no successful headless fallback.
 - No unbounded event wait, silent resize, implicit pixel conversion, or use-after-close.
-- No claim that this static first presenter completes menus, documents, IME, accessibility, audio,
-  video, or accelerated composition.
+- No claim that this presenter completes menus, documents, IME, audio, video, or accelerated
+  composition.
+- No frame presented by `drive` without the accessibility tree of the same layout.
 
 ## Grill Log
 
@@ -68,6 +74,10 @@ session ownership.
 - **Q:** Treat an unavailable display server as success in tests? **A:** No. _Rationale:_ the
   acceptance requirement is an actual window. _Rejected:_ framebuffer-only launch claims.
 
+- **Q:** Leave exposing the tree to the caller of `drive`? **A:** No. _Rationale:_ a frame and its
+  accessibility tree come from the same layout, and a program that forgets one call would be
+  silently unusable without sight. _Rejected:_ opt-in export.
+
 ## Referenced by
 
-[[Native Application UI]] · [[Std Ui Canvas]] · [[Stdlib MOC]] · [[Uses Ui Desktop]] · [[Launch Ui Desktop]]
+[[Native Application UI]] · [[Std Ui Canvas]] · [[Stdlib MOC]] · [[Uses Ui Desktop]] · [[Launch Ui Desktop]] · [[Std Ui Accessible]]

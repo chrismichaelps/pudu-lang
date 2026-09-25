@@ -11,6 +11,15 @@ tags: [changelog]
   first failure (typed or a crash), and answers only after every action has finished.
   [[Uses Concurrent Scope]] proves cancellation with siblings that would otherwise wait forever.
 
+## 2026-09-25 — A desktop window speaks to assistive technology (#331)
+
+- [[Std Ui Accessible]] encodes a layout's accessibility tree (role, name, frame, parent, focus) as
+  records and decodes the platform's report of it.
+- [[Std Ui Desktop]] `expose` hands a window that tree and `exposed` reads back what the platform
+  reports; `drive` exposes every frame it presents.
+- [[Pudu Desktop Access]] builds one AppKit accessibility element per record, with frames that
+  follow the window and focus that VoiceOver follows; [[Pudu Desktop Host]] shares the window classes.
+
 ## 2026-09-25 — Futures, cancellation, pools, coordination, and retries (#330)
 
 - [[Std Concurrent]] `contain()` runs an action on a thread of its own and answers a crash as
