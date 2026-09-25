@@ -1,74 +1,224 @@
 module Std.Char
 
 /// Whether a character is an ASCII decimal digit.
+///
+/// `'0'` through `'9'` only. Digits from other scripts answer false, which is what
+/// parsing a number written in source or a wire format wants.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isDigit('7')  // true
+/// Char.isDigit('a')  // false
+/// ```
 export fn isDigit(value: Char) -> Bool { value >= '0' && value <= '9' }
 
 /// Whether a character is an ASCII letter.
+///
+/// `'a'` to `'z'` and `'A'` to `'Z'`. Accented and non-Latin letters answer false;
+/// `isAscii` is how a caller learns whether these answers apply at all.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isLetter('a')  // true
+/// Char.isLetter('1')  // false
+/// ```
 export fn isLetter(value: Char) -> Bool {
   (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
 
 /// Whether a character is an ASCII letter or decimal digit.
+///
+/// `isLetter` or `isDigit`, which is the set an identifier is usually allowed to
+/// contain after its first character.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isAlphanumeric('a')  // true
+/// Char.isAlphanumeric('_')  // false
+/// ```
 export fn isAlphanumeric(value: Char) -> Bool { isLetter(value) || isDigit(value) }
 
 /// Whether a character is a space, tab, carriage return, or newline.
+///
 /// The set is the ASCII one: recognising every Unicode space needs a table the
 /// compiler does not yet carry, and claiming to without one would be worse than
 /// saying so.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isWhitespace(' ')   // true
+/// Char.isWhitespace('\n')  // true
+/// ```
 export fn isWhitespace(value: Char) -> Bool {
   value == ' ' || value == '\t' || value == '\r' || value == '\n'
 }
 
 /// Whether an ASCII letter is lower case. A non-letter is not.
+///
+/// A digit or a symbol answers false rather than being treated as caseless in a way
+/// that could make `isLower` and `isUpper` both true or both meaningful.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isLower('a')  // true
+/// Char.isLower('1')  // false
+/// ```
 export fn isLower(value: Char) -> Bool { value >= 'a' && value <= 'z' }
 
 /// Whether an ASCII letter is upper case. A non-letter is not.
+///
+/// The mirror of `isLower`, with the same treatment of non-letters.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isUpper('A')  // true
+/// ```
 export fn isUpper(value: Char) -> Bool { value >= 'A' && value <= 'Z' }
 
 /// The decimal value of a digit, or `None` for anything else.
+///
+/// Absent rather than a sentinel, so a caller cannot mistake "not a digit" for the
+/// value nought.
+///
+/// ## Examples
+///
+/// ```
+/// Char.toDigit('7')  // Some(7)
+/// Char.toDigit('a')  // None
+/// ```
 export fn toDigit(value: Char) -> Option[Int] {
   if isDigit(value) { Some(value.code() - '0'.code()) } else { None }
 }
 
 /// The upper-case form of an ASCII letter; anything else is unchanged.
+///
+/// Unchanged rather than absent, so it can be applied across text without checking
+/// each character. ASCII only: this performs no locale-aware case folding.
+///
+/// ## Examples
+///
+/// ```
+/// Char.toUpper('a')  // 'A'
+/// Char.toUpper('1')  // '1'
+/// ```
 export fn toUpper(value: Char) -> Char {
   if isLower(value) { shift(value, 0 - 32) } else { value }
 }
 
 /// The lower-case form of an ASCII letter; anything else is unchanged.
+///
+/// The mirror of `toUpper`, with the same ASCII-only scope.
+///
+/// ## Examples
+///
+/// ```
+/// Char.toLower('A')  // 'a'
+/// ```
 export fn toLower(value: Char) -> Char {
   if isUpper(value) { shift(value, 32) } else { value }
 }
 
 /// Whether a character is an ASCII hexadecimal digit.
+///
+/// Digits and the letters `a` to `f` in either case. `toHexDigit` gives the value.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isHexDigit('f')  // true
+/// Char.isHexDigit('g')  // false
+/// ```
 export fn isHexDigit(value: Char) -> Bool {
   isDigit(value) || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')
 }
 
 /// Whether a character is an ASCII octal digit.
+///
+/// `'0'` through `'7'`, so `'8'` and `'9'` answer false even though `isDigit`
+/// accepts them.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isOctDigit('7')  // true
+/// Char.isOctDigit('8')  // false
+/// ```
 export fn isOctDigit(value: Char) -> Bool { value >= '0' && value <= '7' }
 
 /// Whether a character is an ASCII punctuation mark.
+///
+/// The printable characters that are neither letters, digits, nor the space.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isPunctuation(',')  // true
+/// Char.isPunctuation('a')  // false
+/// ```
 export fn isPunctuation(value: Char) -> Bool {
   isPrintable(value) && !isAlphanumeric(value) && value != ' '
 }
 
 /// Whether a character is a printable ASCII character.
+///
+/// Space through tilde: everything that occupies a column when shown. The exact
+/// complement of `isControl` within ASCII.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isPrintable(' ')   // true
+/// Char.isPrintable('\n')  // false
+/// ```
 export fn isPrintable(value: Char) -> Bool {
   value.code() >= 32 && value.code() < 127
 }
 
 /// Whether a character is an ASCII control character.
+///
+/// The codes below space, plus delete. Useful for rejecting characters that would
+/// otherwise disturb a terminal or a wire format.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isControl('\n')  // true
+/// Char.isControl('a')   // false
+/// ```
 export fn isControl(value: Char) -> Bool {
   value.code() < 32 || value.code() == 127
 }
 
 /// Whether a character is in the ASCII range at all.
+///
 /// Everything else in this module answers about ASCII, so this is how a caller
 /// learns whether the answers apply.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isAscii('a')  // true
+/// Char.isAscii('é')  // false
+/// ```
 export fn isAscii(value: Char) -> Bool { value.code() < 128 }
 
 /// The value of a hexadecimal digit, or `None` for anything else.
+///
+/// Accepts either case. Absent rather than a sentinel, matching `toDigit`.
+///
+/// ## Examples
+///
+/// ```
+/// Char.toHexDigit('f')  // Some(15)
+/// Char.toHexDigit('F')  // Some(15)
+/// Char.toHexDigit('g')  // None
+/// ```
 export fn toHexDigit(value: Char) -> Option[Int] {
   if isDigit(value) { Some(value.code() - '0'.code()) }
     else {
@@ -80,13 +230,31 @@ export fn toHexDigit(value: Char) -> Option[Int] {
 }
 
 /// The digit character for a value from 0 to 9, or `None` for anything else.
+///
+/// The inverse of `toDigit`. Values outside the range answer `None` rather than
+/// wrapping to some other character.
+///
+/// ## Examples
+///
+/// ```
+/// Char.fromDigit(7)   // Some('7')
+/// Char.fromDigit(11)  // None
+/// ```
 export fn fromDigit(value: Int) -> Option[Char] {
   if value >= 0 && value <= 9 { charFromCode('0'.code() + value) } else { None }
 }
 
 /// The character with a given scalar value, or `None` when there is none.
-/// Re-exported from the prelude so a caller reaching for character conversion
-/// finds it beside everything else about characters.
+///
+/// Re-exported from the prelude so a caller reaching for character conversion finds
+/// it beside everything else about characters. Values that are not scalar values
+/// answer `None`.
+///
+/// ## Examples
+///
+/// ```
+/// Char.fromCode(97)  // Some('a')
+/// ```
 export fn fromCode(value: Int) -> Option[Char] { charFromCode(value) }
 
 /// A character moved by a scalar offset, unchanged when the result is not a
@@ -99,29 +267,93 @@ fn shift(value: Char, offset: Int) -> Char {
 }
 
 /// Whether a character is a space or a separator.
+///
+/// The space only, in the ASCII set this module covers. `isWhitespace` is the wider
+/// test that also accepts tabs and newlines.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isSeparator(' ')   // true
+/// Char.isSeparator('\t')  // false
+/// ```
 export fn isSeparator(value: Char) -> Bool { value == ' ' }
 
 /// Whether a character is an upper-case ASCII letter.
+///
+/// The same answer as `isUpper`, named for callers that want the ASCII scope stated
+/// at the call site.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isAsciiUpper('A')  // true
+/// ```
 export fn isAsciiUpper(value: Char) -> Bool { isUpper(value) }
 
 /// Whether a character is a lower-case ASCII letter.
+///
+/// The mirror of `isAsciiUpper`, and the same answer as `isLower`.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isAsciiLower('a')  // true
+/// ```
 export fn isAsciiLower(value: Char) -> Bool { isLower(value) }
 
 /// Whether a character is in the Latin-1 range.
+///
+/// A wider range than ASCII, but the classification functions here still answer
+/// about ASCII only, so a Latin-1 letter is not reported as a letter.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isLatin1('é')  // true
+/// Char.isLetter('é')  // false
+/// ```
 export fn isLatin1(value: Char) -> Bool { value.code() < 256 }
 
 /// Whether a character is one of the ASCII symbols used in arithmetic and
 /// comparison: the set a reader means by "an operator character".
+///
+/// Narrower than `isPunctuation`, which also accepts brackets and separators.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isSymbol('+')  // true
+/// Char.isSymbol(',')  // false
+/// ```
 export fn isSymbol(value: Char) -> Bool {
   value == '+' || value == '<' || value == '=' || value == '>' ||
   value == '|' || value == '~' || value == '^' || value == '$'
 }
 
-/// Whether a character is a decimal digit, which is the only kind of number
-/// this module recognises.
+/// Whether a character is a decimal digit, which is the only kind of number this
+/// module recognises.
+///
+/// The same answer as `isDigit`. Numerals from other scripts are not recognised,
+/// for the same reason the whitespace set is ASCII.
+///
+/// ## Examples
+///
+/// ```
+/// Char.isNumber('7')  // true
+/// ```
 export fn isNumber(value: Char) -> Bool { isDigit(value) }
 
 /// The title-case form of a character, which for ASCII is its upper case.
+///
+/// The two differ in scripts with a distinct title-case form; within ASCII they do
+/// not, so this is `toUpper` under the name a caller means.
+///
+/// ## Examples
+///
+/// ```
+/// Char.toTitle('a')  // 'A'
+/// ```
 export fn toTitle(value: Char) -> Char { toUpper(value) }
 
 /// A character's scalar value, named for what it is.

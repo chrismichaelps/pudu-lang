@@ -17,7 +17,9 @@ A section lists families, not files. `childrenOf` answers the catalogue modules 
 listed module and are not listed themselves, so `Std.Http.Server.Route` appears beneath `Std.Http`.
 `unplaced` answers catalogue modules no section reaches, which [[website View Documentation]] shows
 under Other and the website suite requires to be empty, so a module added to the library without a
-place is caught.
+place is caught. `Std.Human` sits with text, `Std.Stats` with numbers, `Std.Term` and `Std.Cron`
+with the machine and time, `Std.Dotenv` with data formats, `Std.Checksum` with the byte-level hashes,
+and `Std.Site` and `Std.Ip` with the web.
 
 Values hold names and sentences only; no HTML.
 

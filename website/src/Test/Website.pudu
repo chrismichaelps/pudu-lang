@@ -167,6 +167,20 @@ fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   true
 }
 
+fn rankingAgrees(full: &Array[Domain.Entry], compact: &Array[Domain.Entry], query: Str) -> Bool {
+  let left = Search.find(full, query, 20)
+  let right = Search.find(compact, query, 20)
+  if left.length() != right.length() { return false }
+  var index = 0
+  while index < left.length() {
+    if Domain.qualifiedName(&left[index].entry) != Domain.qualifiedName(&right[index].entry) {
+      return false
+    }
+    index = index + 1
+  }
+  true
+}
+
 export fn main() -> Int {
   let loaded = Catalog.load("website/data/api.json")
   let catalog = match loaded {
@@ -249,6 +263,7 @@ export fn main() -> Int {
   let donation = Web.render(&site, "/donate")
   let about = Web.render(&site, "/about")
   let overloads = Web.render(&site, "/docs/Std.Bits/fn/width")
+  let prose = Web.render(&site, "/docs/Std.List/fn/any")
   let download = Web.render(&site, "/download")
   let releases = Web.render(&site, "/releases")
   let conduct = Web.render(&site, "/conduct")
@@ -332,13 +347,13 @@ export fn main() -> Int {
   let packageContributions = Web.render(&site, "/@alice/json-kit/contributions")
   let packageContribution = Web.render(&site, "/@alice/json-kit/contributions/56")
   let packageContributionMissing = Web.render(&site, "/@alice/json-kit/contributions/999")
-  let hits = Search.find(&catalog.entries, "checksum", 10)
+  let hits = Search.find(&catalog.entries, "crc32", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
     case Ok(value) => value
     case Err(_) => { return 0 }
   }
-  let compactHits = Search.find(&searchCatalog.entries, "checksum", 10)
+  let compactHits = Search.find(&searchCatalog.entries, "crc32", 10)
   let listIntent = Search.find(&catalog.entries, "List", 200)
   let listScope = Search.find(&catalog.entries, "module:Std.List", 200)
   let scopedMap = Search.find(&catalog.entries, "map module:Std.List is:exact", 10)
@@ -456,9 +471,10 @@ export fn main() -> Int {
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
       Test.that("every public declaration has documentation", everyEntryHasDocumentation(&catalog.entries)),
       Test.that("ranked search returns a result", hits.length() > 0),
-      Test.that("exact name ranks first", hits[0].entry.name == "checksum"),
+      Test.that("exact name ranks first", hits[0].entry.name == "crc32"),
       Test.that("compact catalogue keeps every searchable declaration", searchCatalog.entries.length() == catalog.entries.length()),
       Test.that("compact catalogue keeps the language version", searchCatalog.languageVersion == catalog.languageVersion),
+      Test.that("the compact index ranks exactly as the full catalogue does", rankingAgrees(&catalog.entries, &searchCatalog.entries, "checksum") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "list") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "bits") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "encode")),
       Test.that("compact catalogue preserves ranked results", compactHits.length() == hits.length() && compactHits[0].entry.name == hits[0].entry.name),
       Test.that("module leaf intent keeps the complete List module first", firstResultsBelongTo(&listIntent, "Std.List", 97)),
       Test.that("module-only scope returns every List declaration", listScope.length() == 97 && firstResultsBelongTo(&listScope, "Std.List", 97)),
@@ -555,8 +571,12 @@ export fn main() -> Int {
       Test.that("module page renders", modulePage.status.code == 200),
       Test.that("symbol page renders", symbol.status.code == 200),
       Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
+      Test.that("documentation renders examples as a code block", prose.body.contains("<pre class=\"code-block\"><code>List.any(&amp;[1, 2, 3]")),
+      Test.that("documentation renders its own section headings", prose.body.contains("<h2 id=\"examples\">Examples</h2>") && prose.body.contains("<h2 id=\"see-also\">See also</h2><ul><li><code>find</code>")),
+      Test.that("documentation renders cross-reference lists", prose.body.contains("<ul><li><code>find</code>")),
+      Test.that("a blank doc line starts a new paragraph", prose.body.contains("</p><p>")),
+      Test.that("symbol page carries no boilerplate notation guide", !symbol.body.contains("Read the signature") && !symbol.body.contains("The text after the name is the type checked by Pudu")),
       Test.that("symbol documentation renders its code spans", symbol.body.contains("checksum of <code>bytes</code>.</p>") && symbol.body.contains("content=\"Computes the RFC 1950 Adler-32 checksum of bytes.\"")),
-      Test.that("symbol explains its signature notation", symbol.body.contains("Read the signature") && symbol.body.contains("Read arrows from left to right") && symbol.body.contains("borrows a value")),
       Test.that("missing page is 404", missing.status.code == 404),
       Test.that("missing page is not indexed", missing.body.contains("noindex,follow")),
       Test.that("robots names the sitemap", robots.body.contains("https://pudu.example/sitemap.xml")),
@@ -576,7 +596,7 @@ export fn main() -> Int {
       Test.not("sitemap no longer lists the old guide address", sitemap.body.contains("https://pudu.example/guide")),
       Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
       Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
-      Test.that("method pages explain trait and concrete providers", overloads.body.contains("required by a trait") && overloads.body.contains("for one concrete type")),
+      Test.that("method pages name where the method comes from", overloads.body.contains("Required by this trait") && overloads.body.contains("One implementation of a trait method")),
       Test.that("same-name sitemap paths are unique", sitemap.body.split("https://pudu.example/docs/Std.Bits/fn/width").length() == 2),
       Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage")),
 

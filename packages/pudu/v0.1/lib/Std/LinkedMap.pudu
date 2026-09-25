@@ -23,22 +23,60 @@ import Std.List as List
 export type LinkedMap[K, V] = { order: Array[K], entries: Map[K, V] }
 
 /// A map with no entries.
+///
+/// ## Examples
+///
+/// ```
+/// let m: LinkedMap[Int, Str] = LinkedMap.empty()
+/// LinkedMap.isEmpty(&m)  // true
+/// ```
 export fn empty[K, V]() -> LinkedMap[K, V] {
   LinkedMap{order: [], entries: mapOf([])}
 }
 
 /// How many entries the map holds.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.size(&m)  // 2
+/// ```
 export fn size[K, V](map: &LinkedMap[K, V]) -> Int { map.entries.size() }
 
 /// Whether the map holds nothing.
+///
+/// ## Examples
+///
+/// ```
+/// let m: LinkedMap[Int, Str] = LinkedMap.empty()
+/// LinkedMap.isEmpty(&m)  // true
+/// LinkedMap.isEmpty(&LinkedMap.insert(&m, 1, "a"))  // false
+/// ```
 export fn isEmpty[K, V](map: &LinkedMap[K, V]) -> Bool { map.entries.isEmpty() }
 
 /// The value stored under a key, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a")])
+/// LinkedMap.get(&m, 1)  // Some("a")
+/// LinkedMap.get(&m, 9)  // None
+/// ```
 export fn get[K, V](map: &LinkedMap[K, V], key: K) -> Option[V] {
   map.entries.get(key)
 }
 
 /// The value stored under a key, or a fallback.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a")])
+/// LinkedMap.getOr(&m, 1, "z")  // "a"
+/// LinkedMap.getOr(&m, 9, "z")  // "z"
+/// ```
 export fn getOr[K, V](map: &LinkedMap[K, V], key: K, fallback: V) -> V {
   match map.entries.get(key) {
     case Some(found) => found
@@ -47,6 +85,14 @@ export fn getOr[K, V](map: &LinkedMap[K, V], key: K, fallback: V) -> V {
 }
 
 /// Whether a key has an entry.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a")])
+/// LinkedMap.containsKey(&m, 1)  // true
+/// LinkedMap.containsKey(&m, 9)  // false
+/// ```
 export fn containsKey[K, V](map: &LinkedMap[K, V], key: K) -> Bool {
   map.entries.containsKey(key)
 }
@@ -56,6 +102,16 @@ export fn containsKey[K, V](map: &LinkedMap[K, V], key: K) -> Bool {
 /// A key already here keeps its place. Only a key that is new joins the end of
 /// the order, so the order stays a record of when each key first appeared
 /// rather than of when it was last written.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.insert(&LinkedMap.insert(&LinkedMap.empty(), 2, "b"), 1, "a")
+/// LinkedMap.keys(&m)  // [2, 1]
+/// let reinserted = LinkedMap.insert(&m, 2, "z")
+/// LinkedMap.keys(&reinserted)  // [2, 1]
+/// LinkedMap.get(&reinserted, 2)  // Some("z")
+/// ```
 export fn insert[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
   if map.entries.containsKey(key) {
     LinkedMap{order: map.order, entries: map.entries.insert(key, held)}
@@ -70,12 +126,28 @@ export fn insert[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V
 /// to discard, or a list of recently opened files, wants the key it just
 /// touched to be last; both are asking a different question from "when did this
 /// first appear", so both are spelled differently.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.insert(&LinkedMap.insert(&LinkedMap.empty(), 1, "a"), 2, "b")
+/// LinkedMap.keys(&LinkedMap.touch(&m, 1, "a"))  // [2, 1]
+/// LinkedMap.keys(&LinkedMap.touch(&m, 3, "c"))  // [1, 2, 3]
+/// ```
 export fn touch[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
   let without = List.filter(&map.order, fn(existing: K) -> Bool => existing != key)
   LinkedMap{order: without.push(key), entries: map.entries.insert(key, held)}
 }
 
 /// The map with a key's entry removed, or unchanged when there is none.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a"), (2, "b")])
+/// LinkedMap.keys(&LinkedMap.remove(&m, 1))  // [2]
+/// LinkedMap.size(&LinkedMap.remove(&m, 9))  // 2
+/// ```
 export fn remove[K, V](map: &LinkedMap[K, V], key: K) -> LinkedMap[K, V] {
   if !map.entries.containsKey(key) { *map } else {
     LinkedMap {
@@ -86,9 +158,23 @@ export fn remove[K, V](map: &LinkedMap[K, V], key: K) -> LinkedMap[K, V] {
 }
 
 /// Every key, in insertion order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.keys(&m)  // [2, 1]
+/// ```
 export fn keys[K, V](map: &LinkedMap[K, V]) -> Array[K] { map.order }
 
 /// Every value, in the insertion order of its key.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.values(&m)  // ["b", "a"]
+/// ```
 export fn values[K, V](map: &LinkedMap[K, V]) -> Array[V] {
   var out = []
   for key in map.order {
@@ -101,6 +187,13 @@ export fn values[K, V](map: &LinkedMap[K, V]) -> Array[V] {
 }
 
 /// Every entry as a pair, in insertion order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.pairs(&m)  // [(2, "b"), (1, "a")]
+/// ```
 export fn pairs[K, V](map: &LinkedMap[K, V]) -> Array[(K, V)] {
   var out = []
   for key in map.order {
@@ -113,6 +206,14 @@ export fn pairs[K, V](map: &LinkedMap[K, V]) -> Array[(K, V)] {
 }
 
 /// The first entry put in that is still here, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// let m: LinkedMap[Int, Str] = LinkedMap.empty()
+/// LinkedMap.oldest(&m)  // None
+/// LinkedMap.oldest(&LinkedMap.fromPairs(&[(2, "b"), (1, "a")]))  // Some((2, "b"))
+/// ```
 export fn oldest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
   if map.order.length() == 0 { None } else {
     let key = map.order[0]
@@ -121,6 +222,13 @@ export fn oldest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
 }
 
 /// The most recently added entry, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.newest(&m)  // Some((1, "a"))
+/// ```
 export fn newest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
   let total = map.order.length()
   if total == 0 { None } else {
@@ -130,6 +238,15 @@ export fn newest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
 }
 
 /// The map without its oldest entry, unchanged when it is empty.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
+/// LinkedMap.keys(&LinkedMap.removeOldest(&m))  // [1]
+/// let empty: LinkedMap[Int, Str] = LinkedMap.empty()
+/// LinkedMap.isEmpty(&LinkedMap.removeOldest(&empty))  // true
+/// ```
 export fn removeOldest[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
   match oldest(map) {
     case Some(pair) => remove(map, pair[0])
@@ -139,6 +256,14 @@ export fn removeOldest[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
 
 /// A map built from pairs, in the order they are given.
 /// A later pair replaces an earlier one's value and keeps its position.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a"), (2, "z")])
+/// LinkedMap.keys(&m)  // [2, 1]
+/// LinkedMap.get(&m, 2)  // Some("z")
+/// ```
 export fn fromPairs[K, V](entries: &Array[(K, V)]) -> LinkedMap[K, V] {
   var out = empty()
   for pair in entries { out = insert(&out, pair[0], pair[1]) }
@@ -146,11 +271,27 @@ export fn fromPairs[K, V](entries: &Array[(K, V)]) -> LinkedMap[K, V] {
 }
 
 /// An entry added only when its key has none.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a")])
+/// LinkedMap.get(&LinkedMap.insertIfAbsent(&m, 1, "z"), 1)  // Some("a")
+/// LinkedMap.get(&LinkedMap.insertIfAbsent(&m, 2, "b"), 2)  // Some("b")
+/// ```
 export fn insertIfAbsent[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
   if containsKey(map, key) { *map } else { insert(map, key, held) }
 }
 
 /// An entry's value transformed, inserting a starting value when it is absent.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, 5)])
+/// LinkedMap.get(&LinkedMap.upsert(&m, 1, 0, fn(n: Int) -> Int => n + 1), 1)  // Some(6)
+/// LinkedMap.get(&LinkedMap.upsert(&m, 9, 0, fn(n: Int) -> Int => n + 1), 9)  // Some(0)
+/// ```
 export fn upsert[K, V](
   map: &LinkedMap[K, V],
   key: K,
@@ -164,6 +305,13 @@ export fn upsert[K, V](
 }
 
 /// Every value transformed, keeping the keys and their order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, 2), (1, 3)])
+/// LinkedMap.values(&LinkedMap.mapValues(&m, fn(n: Int) -> Int => n * 10))  // [20, 30]
+/// ```
 export fn mapValues[K, A, B](
   map: &LinkedMap[K, A],
   transform: fn(A) -> B
@@ -174,6 +322,13 @@ export fn mapValues[K, A, B](
 }
 
 /// Only the entries the predicate accepts, in the order they were put in.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, 2), (1, 3)])
+/// LinkedMap.keys(&LinkedMap.filter(&m, fn(k: Int, v: Int) -> Bool => v > 2))  // [1]
+/// ```
 export fn filter[K, V](
   map: &LinkedMap[K, V],
   keep: fn(K, V) -> Bool
@@ -186,6 +341,13 @@ export fn filter[K, V](
 }
 
 /// Every entry combined into one value, in insertion order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(2, 2), (1, 3)])
+/// LinkedMap.fold(&m, fn(acc: Int, k: Int, v: Int) -> Int => acc + v, 0)  // 5
+/// ```
 export fn fold[K, V, A](
   map: &LinkedMap[K, V],
   combine: fn(A, K, V) -> A,
@@ -198,6 +360,15 @@ export fn fold[K, V, A](
 
 /// Two maps combined, with the second map's entries winning.
 /// Keys the second map introduces join the end of the order in its order.
+///
+/// ## Examples
+///
+/// ```
+/// let left = LinkedMap.fromPairs(&[(1, "a")])
+/// let right = LinkedMap.fromPairs(&[(1, "z"), (2, "b")])
+/// LinkedMap.keys(&LinkedMap.merge(&left, &right))  // [1, 2]
+/// LinkedMap.get(&LinkedMap.merge(&left, &right), 1)  // Some("z")
+/// ```
 export fn merge[K, V](
   left: &LinkedMap[K, V],
   right: &LinkedMap[K, V]
@@ -208,6 +379,13 @@ export fn merge[K, V](
 }
 
 /// The entries in the reverse of the order they were put in.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a"), (2, "b")])
+/// LinkedMap.keys(&LinkedMap.reversed(&m))  // [2, 1]
+/// ```
 export fn reversed[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
   LinkedMap{order: List.reversed(&map.order), entries: map.entries}
 }
@@ -217,9 +395,23 @@ export fn reversed[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
 /// Named rather than automatic, because the entries are the same and only the
 /// promise about their order differs; a conversion a reader cannot see is a
 /// promise dropped silently.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, "a")])
+/// LinkedMap.toMap(&m).get(1)  // Some("a")
+/// ```
 export fn toMap[K, V](map: &LinkedMap[K, V]) -> Map[K, V] { map.entries }
 
 /// Whether every entry satisfies the predicate. True for an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, 2), (2, 4)])
+/// LinkedMap.all(&m, fn(k: Int, v: Int) -> Bool => v % 2 == 0)  // true
+/// ```
 export fn all[K, V](map: &LinkedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
   for pair in pairs(map) {
     if !holds(pair[0], pair[1]) { return false }
@@ -228,6 +420,13 @@ export fn all[K, V](map: &LinkedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
 }
 
 /// Whether any entry satisfies the predicate. False for an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// let m = LinkedMap.fromPairs(&[(1, 2), (2, 3)])
+/// LinkedMap.any(&m, fn(k: Int, v: Int) -> Bool => v > 2)  // true
+/// ```
 export fn any[K, V](map: &LinkedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
   for pair in pairs(map) {
     if holds(pair[0], pair[1]) { return true }

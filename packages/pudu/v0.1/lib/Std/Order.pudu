@@ -1,14 +1,45 @@
 module Std.Order
 
 /// How one value stands to another.
+///
+/// Three answers rather than a number, so a comparison cannot be confused with a
+/// difference and every case has to be handled. `toInt` and `before` convert to the
+/// forms other interfaces want.
+///
+/// ## Examples
+///
+/// ```
+/// Order.compareInt(1, 2)  // Less
+/// ```
 export type Ordering = Less | Equal | Greater
 
 /// Two whole numbers compared.
+///
+/// The ordering their values have, with no wrapping or truncation on the way.
+///
+/// ## Examples
+///
+/// ```
+/// Order.compareInt(1, 2)  // Less
+/// Order.compareInt(2, 2)  // Equal
+/// ```
 export fn compareInt(left: Int, right: Int) -> Ordering {
   if left < right { Less } else { if left > right { Greater } else { Equal } }
 }
 
 /// Two texts compared by their characters, in scalar order.
+///
+/// Scalar order, not any locale's collation: `"Z"` sorts before `"a"`. That makes
+/// the ordering stable across machines, which is what an index or a reproducible
+/// listing needs; a human-facing sort in a particular language needs more than
+/// this.
+///
+/// ## Examples
+///
+/// ```
+/// Order.compareText("a", "b")  // Less
+/// Order.compareText("Z", "a")  // Less
+/// ```
 export fn compareText(left: Str, right: Str) -> Ordering {
   var index = 0
   let shorter = if left.length() < right.length() { left.length() } else { right.length() }
@@ -24,17 +55,44 @@ export fn compareText(left: Str, right: Str) -> Ordering {
 }
 
 /// Two characters compared by scalar value.
+///
+/// The same rule `compareText` applies character by character.
+///
+/// ## Examples
+///
+/// ```
+/// Order.compareChar('a', 'b')  // Less
+/// ```
 export fn compareChar(left: Char, right: Char) -> Ordering {
   compareInt(left.code(), right.code())
 }
 
 /// Two truth values compared, with false before true.
+///
+/// False first, which is the convention that makes sorting by a flag put the
+/// unflagged values first.
+///
+/// ## Examples
+///
+/// ```
+/// Order.compareBool(false, true)  // Less
+/// ```
 export fn compareBool(left: Bool, right: Bool) -> Ordering {
   compareInt(toRank(left), toRank(right))
 }
 
 /// The opposite ordering, which is how a descending sort is written from an
 /// ascending comparison.
+///
+/// `Equal` reverses to itself, so a stable sort stays stable when reversed this way
+/// rather than by reversing the result array.
+///
+/// ## Examples
+///
+/// ```
+/// Order.reverse(Less)   // Greater
+/// Order.reverse(Equal)  // Equal
+/// ```
 export fn reverse(value: Ordering) -> Ordering {
   match value {
     case Less => Greater
@@ -44,7 +102,16 @@ export fn reverse(value: Ordering) -> Ordering {
 }
 
 /// The first ordering unless it is `Equal`, in which case the second.
-/// This is how a comparison on one field falls through to the next.
+///
+/// This is how a comparison on one field falls through to the next. Chained, it
+/// expresses a compound ordering in the order a reader states it: by surname, then
+/// by forename.
+///
+/// ## Examples
+///
+/// ```
+/// Order.thenBy(Order.compareText(a.last, b.last), Order.compareText(a.first, b.first))
+/// ```
 export fn thenBy(first: Ordering, second: Ordering) -> Ordering {
   match first {
     case Equal => second
@@ -53,6 +120,13 @@ export fn thenBy(first: Ordering, second: Ordering) -> Ordering {
 }
 
 /// Whether an ordering says the first value comes first.
+///
+/// ## Examples
+///
+/// ```
+/// Order.isLess(&Less)   // true
+/// Order.isLess(&Equal)  // false
+/// ```
 export fn isLess(value: &Ordering) -> Bool {
   match value {
     case Less => true
@@ -61,6 +135,15 @@ export fn isLess(value: &Ordering) -> Bool {
 }
 
 /// Whether an ordering says the two values are equivalent.
+///
+/// Equivalent under this ordering, which is not always the same as equal: see
+/// `equivalent`.
+///
+/// ## Examples
+///
+/// ```
+/// Order.isEqual(&Equal)  // true
+/// ```
 export fn isEqual(value: &Ordering) -> Bool {
   match value {
     case Equal => true
@@ -69,6 +152,12 @@ export fn isEqual(value: &Ordering) -> Bool {
 }
 
 /// Whether an ordering says the second value comes first.
+///
+/// ## Examples
+///
+/// ```
+/// Order.isGreater(&Greater)  // true
+/// ```
 export fn isGreater(value: &Ordering) -> Bool {
   match value {
     case Greater => true
@@ -77,11 +166,30 @@ export fn isGreater(value: &Ordering) -> Bool {
 }
 
 /// An ordering as the "sorts before" predicate the sorting functions take.
+///
 /// A sort needs one answer, not three, and this is the honest conversion:
-/// equivalent values do not sort before one another.
+/// equivalent values do not sort before one another. That is what keeps a sort
+/// stable rather than arbitrarily reordering equal elements.
+///
+/// ## Examples
+///
+/// ```
+/// Order.before(Less)   // true
+/// Order.before(Equal)  // false
+/// ```
 export fn before(value: Ordering) -> Bool { isLess(&value) }
 
 /// An ordering as a whole number: -1, 0, or 1.
+///
+/// The shape other languages' comparison functions use, for crossing a boundary
+/// that expects one. Within Pudu the three-case value is the clearer form.
+///
+/// ## Examples
+///
+/// ```
+/// Order.toInt(Less)   // -1
+/// Order.toInt(Equal)  // 0
+/// ```
 export fn toInt(value: Ordering) -> Int {
   match value {
     case Less => 0 - 1
@@ -91,21 +199,55 @@ export fn toInt(value: Ordering) -> Int {
 }
 
 /// The smaller of two values under a comparison.
+///
+/// Equivalent values answer the left one, so repeated application is stable.
+///
+/// ## Examples
+///
+/// ```
+/// Order.min(3, 7, Order.compareInt)  // 3
+/// ```
 export fn min[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
   if isGreater(&compare(left, right)) { right } else { left }
 }
 
 /// The larger of two values under a comparison.
+///
+/// The mirror of `min`, and equally stable on equivalent values.
+///
+/// ## Examples
+///
+/// ```
+/// Order.max(3, 7, Order.compareInt)  // 7
+/// ```
 export fn max[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
   if isLess(&compare(left, right)) { right } else { left }
 }
 
 /// A comparison turned into the predicate the sorting functions take.
+///
+/// The adapter between a three-case comparison and the two-case predicate a sort
+/// wants, so a type needs only one definition of its ordering.
+///
+/// ## Examples
+///
+/// ```
+/// List.sortBy(&items, fn(a: Int, b: Int) -> Bool => Order.ascending(Order.compareInt, a, b))
+/// ```
 export fn ascending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
   isLess(&compare(left, right))
 }
 
 /// A comparison turned into a descending predicate.
+///
+/// `ascending` with the comparison reversed, which is how one ordering serves both
+/// directions without a second definition that could drift.
+///
+/// ## Examples
+///
+/// ```
+/// List.sortBy(&items, fn(a: Int, b: Int) -> Bool => Order.descending(Order.compareInt, a, b))
+/// ```
 export fn descending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
   isGreater(&compare(left, right))
 }
@@ -114,14 +256,36 @@ export fn descending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Boo
 fn toRank(value: Bool) -> Int { if value { 1 } else { 0 } }
 
 /// A type whose values can be compared for equality.
+///
 /// Structural equality already works for every value; this trait exists so a
-/// generic function can *say* that it compares, and so a type can give equality
-/// a meaning of its own where structure is not it.
+/// generic function can *say* that it compares, and so a type can give equality a
+/// meaning of its own where structure is not it — a case-insensitive name, or a
+/// record whose cached field should not count.
+///
+/// Equality must be reflexive, symmetric, and transitive, and it must agree with
+/// `Hash`: values that are equal have to hash the same.
+///
+/// ## Examples
+///
+/// ```
+/// fn distinct[T: Eq](items: &Array[T]) -> Array[T] { ... }
+/// ```
 export trait Eq { fn equals(self: &Self, other: &Self) -> Bool }
 
 /// A type whose values are ordered.
-/// One method rather than three, because `before` is what a sort needs and the
-/// rest follow from it without a type having to keep them in step.
+///
+/// One method rather than three, because `before` is what a sort needs and the rest
+/// follow from it without a type having to keep them in step.
+///
+/// The relation must be a strict order: never true for a value against itself, and
+/// transitive. A relation that is not gives an unspecified order from a sort rather
+/// than a failure.
+///
+/// ## Examples
+///
+/// ```
+/// fn sorted[T: Ord](items: &Array[T]) -> Array[T] { ... }
+/// ```
 export trait Ord {
   /// Return true when this value belongs strictly before `other` in the type's order.
   fn before(self: &Self, other: &Self) -> Bool
@@ -129,59 +293,151 @@ export trait Ord {
 
 /// A value's number, for a collection that reaches its entries by one.
 ///
-/// The law is one direction only: two values that are equal must hash the
-/// same, and two values that hash the same need not be equal. A collection
-/// built on this settles identity with `Eq` and uses the number only to decide
-/// where to look, so a collision costs a comparison rather than an answer.
+/// The law is one direction only: two values that are equal must hash the same, and
+/// two values that hash the same need not be equal. A collection built on this
+/// settles identity with `Eq` and uses the number only to decide where to look, so
+/// a collision costs a comparison rather than an answer.
 ///
 /// This is not a digest. A value hashed here is not hidden, and two runs of a
-/// program are not promised the same number for the same value — a hash map
-/// mixes the result against a value chosen when the process started, so that a
-/// caller who can choose keys cannot choose which of them collide. Anything
-/// that must be secret or repeatable across runs wants `Std.Crypto`.
+/// program are not promised the same number for the same value — a hash map mixes
+/// the result against a value chosen when the process started, so that a caller who
+/// can choose keys cannot choose which of them collide. Anything that must be
+/// secret or repeatable across runs wants `Std.Crypto`.
+///
+/// ## Examples
+///
+/// ```
+/// fn hashed[T: Hash](value: &T) -> Int { value.hash() }
+/// ```
 export trait Hash { fn hash(self: &Self) -> Int }
 
 /// The number a value hashes to, for a caller writing their own container.
+///
+/// The same warnings apply as for the trait: not secret, and not stable across
+/// runs. Do not store it.
+///
+/// ## Examples
+///
+/// ```
+/// Order.hashed(&key)  // an Int, for this run only
+/// ```
 export fn hashed[T: Hash](value: &T) -> Int { value.hash() }
 
 /// Whether two values are equal under their own rule.
+///
+/// The function form of `Eq`, for a generic caller that would rather write a call
+/// than a method.
+///
+/// ## Examples
+///
+/// ```
+/// Order.same(&left, &right)  // true when equal
+/// ```
 export fn same[T: Eq](left: &T, right: &T) -> Bool { left.equals(right) }
 
 /// Whether two values differ under their own rule.
+///
+/// `same` negated, written out because a negated call reads poorly inside a larger
+/// condition.
+///
+/// ## Examples
+///
+/// ```
+/// Order.different(&left, &right)
+/// ```
 export fn different[T: Eq](left: &T, right: &T) -> Bool { !left.equals(right) }
 
 /// Whether the first value sorts before the second.
+///
+/// The function form of `Ord.before`. Strict, so a value does not precede itself.
+///
+/// ## Examples
+///
+/// ```
+/// Order.precedes(&1, &2)  // true
+/// ```
 export fn precedes[T: Ord](left: &T, right: &T) -> Bool { left.before(right) }
 
 /// Whether the first value sorts after the second.
+///
+/// `precedes` with the arguments exchanged, which keeps one definition of the
+/// ordering rather than two that must agree.
+///
+/// ## Examples
+///
+/// ```
+/// Order.follows(&2, &1)  // true
+/// ```
 export fn follows[T: Ord](left: &T, right: &T) -> Bool { right.before(left) }
 
 /// Whether two values are equivalent under the ordering.
-/// Distinct from equality: an ordering may call two values equivalent that a
-/// type's own equality separates, which is why sorting is stable rather than
-/// deduplicating.
+///
+/// Distinct from equality: an ordering may call two values equivalent that a type's
+/// own equality separates, which is why sorting is stable rather than
+/// deduplicating. Two people of the same age are equivalent by age and not equal.
+///
+/// ## Examples
+///
+/// ```
+/// Order.equivalent(&left, &right)  // neither precedes the other
+/// ```
 export fn equivalent[T: Ord](left: &T, right: &T) -> Bool {
   !left.before(right) && !right.before(left)
 }
 
-/// How one value stands to another, under its own ordering.
+/// The three-case ordering of two values, from the type's own `before`.
+///
+/// Built from the one method the trait requires, so a type that defines `before`
+/// gets this for free and the two cannot disagree.
+///
+/// ## Examples
+///
+/// ```
+/// Order.ordering(&1, &2)  // Less
+/// ```
 export fn ordering[T: Ord](left: &T, right: &T) -> Ordering {
   if left.before(right) { Less } else {
     if right.before(left) { Greater } else { Equal }
   }
 }
 
-/// The smaller of two values under their own ordering.
+/// The smaller of two values under the type's own ordering.
+///
+/// Equivalent values answer the left one, matching `min`.
+///
+/// ## Examples
+///
+/// ```
+/// Order.smaller(&3, &7)  // 3
+/// ```
 export fn smaller[T: Ord](left: &T, right: &T) -> T {
   if right.before(left) { *right } else { *left }
 }
 
-/// The larger of two values under their own ordering.
+/// The larger of two values under the type's own ordering.
+///
+/// The mirror of `smaller`.
+///
+/// ## Examples
+///
+/// ```
+/// Order.larger(&3, &7)  // 7
+/// ```
 export fn larger[T: Ord](left: &T, right: &T) -> T {
   if left.before(right) { *right } else { *left }
 }
 
-/// A value confined to a range, under its own ordering.
+/// A value confined to a range under the type's own ordering.
+///
+/// Inclusive at both ends. As with `Math.clamp`, a range whose lower bound exceeds
+/// its upper answers the lower bound rather than choosing silently between two
+/// wrong answers.
+///
+/// ## Examples
+///
+/// ```
+/// Order.clamped(&9, &0, &5)  // 5
+/// ```
 export fn clamped[T: Ord](value: &T, lower: &T, upper: &T) -> T {
   if value.before(lower) { *lower } else {
     if upper.before(value) { *upper } else { *value }

@@ -10,12 +10,41 @@ import Std.Order {Eq, Ord}
 /// already knows its data is not empty pays for that everywhere: an `Option`
 /// unwrapped at each step, or a fallback invented for a case that cannot
 /// happen. Stating it once, here, removes the question from every call after.
+///
+/// Build one with `one` or `make` when the first element is in hand, or ask
+/// `fromArray` once at the edge where ordinary data arrives. Most operations
+/// that keep every element answer a `NonEmpty` again; `filter` and `rest` answer
+/// a plain `Array`, because they can remove everything.
+///
+/// ## Examples
+///
+/// ```
+/// let scores = NonEmpty.make(7, [3, 9])
+/// NonEmpty.maximum(&scores)  // 9
+/// ```
 export type NonEmpty[T] = { head: T, tail: Array[T] }
 
 /// A sequence of one.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.one("only"))  // ["only"]
+/// NonEmpty.length(&NonEmpty.one(42))        // 1
+/// ```
 export fn one[T](value: T) -> NonEmpty[T] { NonEmpty{head: value, tail: []} }
 
 /// A head and the rest.
+///
+/// The head is required by the signature, so the result cannot be empty however
+/// the tail was built.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.make(1, [2, 3]))  // [1, 2, 3]
+/// NonEmpty.toArray(&NonEmpty.make(1, []))      // [1]
+/// ```
 export fn make[T](head: T, tail: Array[T]) -> NonEmpty[T] {
   NonEmpty{head: head, tail: tail}
 }
@@ -24,6 +53,14 @@ export fn make[T](head: T, tail: Array[T]) -> NonEmpty[T] {
 ///
 /// The only way in from ordinary data, and the one place the question is
 /// asked. Everything after it may assume the answer.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.fromArray(&[4, 5])        // Some(NonEmpty.make(4, [5]))
+/// let nothing: Array[Int] = []
+/// NonEmpty.fromArray(&nothing)    // None
+/// ```
 export fn fromArray[T](values: &Array[T]) -> Option[NonEmpty[T]] {
   if values.length() == 0 { None } else {
     Some(NonEmpty{head: values[0], tail: List.rest(values)})
@@ -31,14 +68,36 @@ export fn fromArray[T](values: &Array[T]) -> Option[NonEmpty[T]] {
 }
 
 /// Every element, as an ordinary array.
+///
+/// The way back to every function that takes an ordinary array. The head comes
+/// first, then the tail in its order.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.make("a", ["b"]))  // ["a", "b"]
+/// ```
 export fn toArray[T](values: &NonEmpty[T]) -> Array[T] {
   [values.head].concat(values.tail)
 }
 
 /// The first element. There is always one.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.first(&NonEmpty.make("a", ["b", "c"]))  // "a"
+/// ```
 export fn first[T](values: &NonEmpty[T]) -> T { values.head }
 
 /// The last element. There is always one.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.last(&NonEmpty.make("a", ["b", "c"]))  // "c"
+/// NonEmpty.last(&NonEmpty.one("a"))                // "a"
+/// ```
 export fn last[T](values: &NonEmpty[T]) -> T {
   if values.tail.length() == 0 { values.head } else {
     values.tail[values.tail.length() - 1]
@@ -46,32 +105,79 @@ export fn last[T](values: &NonEmpty[T]) -> T {
 }
 
 /// Everything after the first element, which may be empty.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.rest(&NonEmpty.make(1, [2, 3]))  // [2, 3]
+/// NonEmpty.rest(&NonEmpty.one(1))           // []
+/// ```
 export fn rest[T](values: &NonEmpty[T]) -> Array[T] { values.tail }
 
 /// How many elements there are, which is never fewer than one.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.length(&NonEmpty.make(1, [2, 3]))  // 3
+/// NonEmpty.length(&NonEmpty.one(1))           // 1
+/// ```
 export fn length[T](values: &NonEmpty[T]) -> Int { 1 + values.tail.length() }
 
 /// Every element transformed. A sequence that had one still has one.
+///
+/// ## Examples
+///
+/// ```
+/// let doubled = NonEmpty.map(&NonEmpty.make(1, [2, 3]), fn(n: Int) -> Int => n * 2)
+/// NonEmpty.toArray(&doubled)  // [2, 4, 6]
+/// ```
 export fn map[A, B](values: &NonEmpty[A], transform: fn(A) -> B) -> NonEmpty[B] {
   NonEmpty{head: transform(values.head), tail: values.tail.map(transform)}
 }
 
 /// An element added to the front.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.prepend(&NonEmpty.make(2, [3]), 1))  // [1, 2, 3]
+/// ```
 export fn prepend[T](values: &NonEmpty[T], value: T) -> NonEmpty[T] {
   NonEmpty{head: value, tail: toArray(values)}
 }
 
 /// An element added to the end.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.append(&NonEmpty.make(1, [2]), 3))  // [1, 2, 3]
+/// ```
 export fn append[T](values: &NonEmpty[T], value: T) -> NonEmpty[T] {
   NonEmpty{head: values.head, tail: values.tail.push(value)}
 }
 
 /// Two sequences joined.
+///
+/// The left sequence comes first, then the right.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.concat(&NonEmpty.one(1), &NonEmpty.make(2, [3])))  // [1, 2, 3]
+/// ```
 export fn concat[T](left: &NonEmpty[T], right: &NonEmpty[T]) -> NonEmpty[T] {
   NonEmpty{head: left.head, tail: left.tail.concat(toArray(right))}
 }
 
 /// The elements in the opposite order.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.reversed(&NonEmpty.make(1, [2, 3])))  // [3, 2, 1]
+/// ```
 export fn reversed[T](values: &NonEmpty[T]) -> NonEmpty[T] {
   let backwards = List.reversed(&toArray(values))
   NonEmpty{head: backwards[0], tail: List.rest(&backwards)}
@@ -81,6 +187,13 @@ export fn reversed[T](values: &NonEmpty[T]) -> NonEmpty[T] {
 ///
 /// No initial value is asked for, because the first element is one. This is
 /// the fold that cannot be given the wrong starting point.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.reduce(&NonEmpty.make(1, [2, 3]), fn(a: Int, b: Int) -> Int => a + b)  // 6
+/// NonEmpty.reduce(&NonEmpty.one(5), fn(a: Int, b: Int) -> Int => a * b)          // 5
+/// ```
 export fn reduce[T](values: &NonEmpty[T], combine: fn(T, T) -> T) -> T {
   var total = values.head
   for item in values.tail { total = combine(total, item) }
@@ -88,6 +201,15 @@ export fn reduce[T](values: &NonEmpty[T], combine: fn(T, T) -> T) -> T {
 }
 
 /// The elements combined from the left, starting from a value of your own.
+///
+/// Use this rather than `reduce` when the answer has a different type from the
+/// elements, such as counting characters across words.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.fold(&NonEmpty.make("ab", ["cde"]), 0, fn(n: Int, word: Str) -> Int => n + word.length())  // 5
+/// ```
 export fn fold[T, A](values: &NonEmpty[T], start: A, combine: fn(A, T) -> A) -> A {
   var total = combine(start, values.head)
   for item in values.tail { total = combine(total, item) }
@@ -95,6 +217,15 @@ export fn fold[T, A](values: &NonEmpty[T], start: A, combine: fn(A, T) -> A) -> 
 }
 
 /// The smallest element under an ordering. There is always one.
+///
+/// `before(a, b)` answers whether `a` belongs before `b`. When several elements
+/// tie for smallest, the earliest one is kept.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.minimumBy(&NonEmpty.make("pear", ["fig", "kiwi"]), fn(a: Str, b: Str) -> Bool => a.length() < b.length())  // "fig"
+/// ```
 export fn minimumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
   var best = values.head
   for item in values.tail { if before(item, best) { best = item } }
@@ -102,6 +233,15 @@ export fn minimumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
 }
 
 /// The largest element under an ordering. There is always one.
+///
+/// `before(a, b)` answers whether `a` belongs before `b`. When several elements
+/// tie for largest, the earliest one is kept.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.maximumBy(&NonEmpty.make("fig", ["pear", "kiwi"]), fn(a: Str, b: Str) -> Bool => a.length() < b.length())  // "pear"
+/// ```
 export fn maximumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
   var best = values.head
   for item in values.tail { if before(best, item) { best = item } }
@@ -110,6 +250,12 @@ export fn maximumBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> T {
 
 /// The smallest element. There is always one, so this answers a value rather
 /// than an `Option`.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.minimum(&NonEmpty.make(7, [3, 9]))  // 3
+/// ```
 export fn minimum[T: Ord](values: &NonEmpty[T]) -> T {
   var best = values.head
   for item in values.tail { if item.before(&best) { best = item } }
@@ -117,6 +263,15 @@ export fn minimum[T: Ord](values: &NonEmpty[T]) -> T {
 }
 
 /// The largest element. There is always one.
+///
+/// When several elements tie, the earliest one is kept.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.maximum(&NonEmpty.make(7, [3, 9]))  // 9
+/// NonEmpty.maximum(&NonEmpty.make("b", ["a"]))  // "b"
+/// ```
 export fn maximum[T: Ord](values: &NonEmpty[T]) -> T {
   var best = values.head
   for item in values.tail { if best.before(&item) { best = item } }
@@ -124,39 +279,89 @@ export fn maximum[T: Ord](values: &NonEmpty[T]) -> T {
 }
 
 /// The elements in order under an ordering of your own.
+///
+/// The sort is stable: elements the ordering does not separate keep the order
+/// they arrived in.
+///
+/// ## Examples
+///
+/// ```
+/// let byLength = NonEmpty.sortBy(&NonEmpty.make("pear", ["fig", "kiwi"]), fn(a: Str, b: Str) -> Bool => a.length() < b.length())
+/// NonEmpty.toArray(&byLength)  // ["fig", "pear", "kiwi"]
+/// ```
 export fn sortBy[T](values: &NonEmpty[T], before: fn(T, T) -> Bool) -> NonEmpty[T] {
   let ordered = List.sortBy(&toArray(values), before)
   NonEmpty{head: ordered[0], tail: List.rest(&ordered)}
 }
 
 /// The elements in order.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.toArray(&NonEmpty.sorted(&NonEmpty.make(3, [1, 2])))  // [1, 2, 3]
+/// ```
 export fn sorted[T: Ord](values: &NonEmpty[T]) -> NonEmpty[T] {
   let ordered = List.sorted(&toArray(values))
   NonEmpty{head: ordered[0], tail: List.rest(&ordered)}
 }
 
 /// Whether an element is present.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.contains(&NonEmpty.make(1, [2, 3]), 2)  // true
+/// NonEmpty.contains(&NonEmpty.make(1, [2, 3]), 9)  // false
+/// ```
 export fn contains[T: Eq](values: &NonEmpty[T], wanted: T) -> Bool {
   toArray(values).contains(wanted)
 }
 
 /// Whether every element satisfies a test.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.all(&NonEmpty.make(2, [4, 6]), fn(n: Int) -> Bool => n % 2 == 0)  // true
+/// ```
 export fn all[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Bool {
   List.all(&toArray(values), test)
 }
 
 /// Whether any element satisfies a test.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.any(&NonEmpty.make(1, [3, 4]), fn(n: Int) -> Bool => n % 2 == 0)  // true
+/// NonEmpty.any(&NonEmpty.one(1), fn(n: Int) -> Bool => n > 5)                // false
+/// ```
 export fn any[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Bool {
   List.any(&toArray(values), test)
 }
 
 /// The elements that satisfy a test, as an ordinary array — filtering can
 /// remove every element, so what comes back may be empty.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.filter(&NonEmpty.make(1, [2, 3, 4]), fn(n: Int) -> Bool => n % 2 == 0)  // [2, 4]
+/// NonEmpty.filter(&NonEmpty.one(1), fn(n: Int) -> Bool => n > 5)                   // []
+/// ```
 export fn filter[T](values: &NonEmpty[T], keep: fn(T) -> Bool) -> Array[T] {
   toArray(values).filter(keep)
 }
 
 /// The first element satisfying a test, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// NonEmpty.find(&NonEmpty.make(1, [2, 3]), fn(n: Int) -> Bool => n > 1)  // Some(2)
+/// NonEmpty.find(&NonEmpty.make(1, [2, 3]), fn(n: Int) -> Bool => n > 9)  // None
+/// ```
 export fn find[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Option[T] {
   List.find(&toArray(values), test)
 }
@@ -165,6 +370,18 @@ export fn find[T](values: &NonEmpty[T], test: fn(T) -> Bool) -> Option[T] {
 ///
 /// This is what the type is for: `List.group` answers arrays that are known to
 /// hold at least one element, and had no way to say so.
+///
+/// Only neighbours are compared, so equal elements that are not adjacent land in
+/// separate groups; sort first to gather every equal element together. An empty
+/// array has no groups.
+///
+/// ## Examples
+///
+/// ```
+/// let runs = NonEmpty.groupBy(&[1, 3, 2, 4, 5], fn(a: Int, b: Int) -> Bool => a % 2 == b % 2)
+/// runs.length()                    // 3
+/// NonEmpty.toArray(&runs[1])       // [2, 4]
+/// ```
 export fn groupBy[T](values: &Array[T], same: fn(T, T) -> Bool) -> Array[NonEmpty[T]] {
   var groups = []
   for chunk in List.groupBy(values, same) {
@@ -177,6 +394,16 @@ export fn groupBy[T](values: &Array[T], same: fn(T, T) -> Bool) -> Array[NonEmpt
 }
 
 /// Adjacent equal elements gathered.
+///
+/// Each group's `first` is the value the whole group shares.
+///
+/// ## Examples
+///
+/// ```
+/// let runs = NonEmpty.group(&["a", "a", "b", "a"])
+/// runs.length()               // 3
+/// NonEmpty.length(&runs[0])   // 2
+/// ```
 export fn group[T: Eq](values: &Array[T]) -> Array[NonEmpty[T]] {
   groupBy(values, fn(left: T, right: T) -> Bool => left == right)
 }

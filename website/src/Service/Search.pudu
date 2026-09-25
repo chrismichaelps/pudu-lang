@@ -40,8 +40,13 @@ export fn index(entries: &Array[Domain.Entry]) -> Index {
         qualified: qualifiedName.toLower(),
         signature: entry.signature.toLower(),
         typeShape: Query.normalizeType(entry.signature),
-        // A term never holds a line break, so one text finds it in any line.
-        prose: entry.documentation.join("\n").toLower()
+        // Documentation is matched on its summary line alone. A declaration's
+        // full reference text names the types and neighbours it discusses, so
+        // matching any line of it would rank a page that merely mentions a term
+        // alongside the page that defines it; the summary is also all the
+        // compact runtime index carries, so a deployed search and a local one
+        // answer alike.
+        prose: if entry.documentation.isEmpty() { "" } else { entry.documentation[0].toLower() }
       })
   }
   Index{entries: List.sortBy(&prepared, fn(left: Indexed, right: Indexed) -> Bool { left.qualifiedName < right.qualifiedName })}

@@ -16,6 +16,22 @@ import Std.Order {Ord}
 /// `for item in value` uses this. A type implementing it is iterable with no
 /// further ceremony, and a type that is not says so at the `for` rather than
 /// part way through one.
+///
+/// ## Examples
+///
+/// ```
+/// type Countdown = { from: Int }
+///
+/// impl Sequence[Int, Int] for Countdown {
+///   fn begin(self: &Self) -> Int { self.from }
+///   fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {
+///     if state > 0 { Some((state - 1, state)) } else { None }
+///   }
+/// }
+///
+/// let launch = Countdown{from: 3}
+/// for n in launch { print(n.toText()) }  // 3, 2, 1
+/// ```
 export trait Sequence[S, T] {
   fn begin(self: &Self) -> S
   fn advance(self: &Self, state: S) -> Option[(S, T)]
@@ -30,9 +46,26 @@ export trait Sequence[S, T] {
 /// cannot serve — it is generic over the integer family, so a caller counting
 /// in `UInt8` indices does not have to leave that width to count, where the
 /// written range counts in `Int`.
+///
+/// ## Examples
+///
+/// ```
+/// let small = Iter.range(0u8, 3u8)
+/// Iter.toArray(&small)  // [0u8, 1u8, 2u8]
+/// ```
 export type Range[N] = { first: N, last: N }
 
 /// The numbers from `first` up to but not including `last`.
+///
+/// A range whose `last` is not after its `first` yields nothing, rather than
+/// counting down.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.range(2, 5))  // [2, 3, 4]
+/// Iter.count(&Iter.range(5, 2))    // 0
+/// ```
 export fn range[N](first: N, last: N) -> Range[N] {
   Range{first: first, last: last}
 }
@@ -53,9 +86,24 @@ impl [N: Integer + Ord + Add + One] Sequence[N, N] for Range[N] {
 /// The element type is the array's own. Fixing it to one type would make the
 /// whole module useless for every array that is not of that type, which is the
 /// mistake this type exists to avoid.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.count(&Iter.items(["a", "b"]))  // 2
+/// ```
 export type Items[T] = { values: Array[T] }
 
 /// Walk an array's items.
+///
+/// The starting point for building a lazy pipeline over data already in an
+/// array. The array is held, not copied.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.items([1, 2, 3]))  // [1, 2, 3]
+/// ```
 export fn items[T](values: Array[T]) -> Items[T] { Items{values: values} }
 
 impl [T] Sequence[Int, T] for Items[T] {
@@ -70,9 +118,23 @@ impl [T] Sequence[Int, T] for Items[T] {
 }
 
 /// A walk over an array's items paired with their positions.
+///
+/// Each item is a `(position, value)` pair, counting from nought.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.indexed(["a", "b"]))  // [(0, "a"), (1, "b")]
+/// ```
 export type Indexed[T] = { values: Array[T] }
 
 /// Pair each of an array's items with its position.
+///
+/// ## Examples
+///
+/// ```
+/// for pair in Iter.indexed(["x", "y"]) { print(pair[0].toText() + " " + pair[1]) }  // 0 x, 1 y
+/// ```
 export fn indexed[T](values: Array[T]) -> Indexed[T] { Indexed{values: values} }
 
 impl [T] Sequence[Int, (Int, T)] for Indexed[T] {
@@ -87,9 +149,24 @@ impl [T] Sequence[Int, (Int, T)] for Indexed[T] {
 }
 
 /// A walk that yields the same item a fixed number of times.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.count(&Iter.repeat("-", 4))  // 4
+/// ```
 export type Repeated[T] = { item: T, times: Int }
 
-/// The same value, `count` times.
+/// The same value, `times` times.
+///
+/// A count of nought or less yields nothing.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.repeat("ab", 3))  // ["ab", "ab", "ab"]
+/// Iter.count(&Iter.repeat(1, -2))        // 0
+/// ```
 export fn repeat[T](item: T, times: Int) -> Repeated[T] {
   Repeated{item: item, times: times}
 }
@@ -102,9 +179,24 @@ impl [T] Sequence[Int, T] for Repeated[T] {
 }
 
 /// A walk that yields nothing.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.isEmpty(&Iter.empty[Int]())  // true
+/// ```
 export type Empty[T] = { unused: () }
 
 /// The sequence with no items.
+///
+/// Useful as the neutral case for a function that returns a sequence: a caller
+/// iterates it like any other and simply sees no items.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.count(&Iter.empty[Str]())  // 0
+/// ```
 export fn empty[T]() -> Empty[T] { Empty{unused: ()} }
 
 impl [T] Sequence[Int, T] for Empty[T] {
@@ -116,6 +208,15 @@ impl [T] Sequence[Int, T] for Empty[T] {
 ///
 /// Bounded by `Sequence` rather than written for one type, so it works for any
 /// sequence a program declares as well as for the ones here.
+///
+/// This is where a lazy pipeline does its work: every item is produced now, in
+/// order, and kept. Do not call it on a sequence that never ends.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.range(1, 4))  // [1, 2, 3]
+/// ```
 export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
   var out = []
   var state = Sequence.begin(source)
@@ -132,6 +233,14 @@ export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
 }
 
 /// How many items a sequence yields.
+///
+/// The sequence is walked to its end to count it; nothing is kept.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.count(&Iter.filter(Iter.range(0, 10), fn(n: Int) -> Bool => n % 3 == 0))  // 4
+/// ```
 export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
   var total = 0
   var state = Sequence.begin(source)
@@ -148,6 +257,15 @@ export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
 }
 
 /// Whether a sequence yields nothing.
+///
+/// Asks for one item at most, so it is cheap even for a long sequence.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.isEmpty(&Iter.range(3, 3))  // true
+/// Iter.isEmpty(&Iter.range(0, 9))  // false
+/// ```
 export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
   match Sequence.advance(source, Sequence.begin(source)) {
     case Some(_) => false
@@ -156,6 +274,16 @@ export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
 }
 
 /// The sum of a sequence's items, or `None` when it has no first value.
+///
+/// `None` rather than nought for an empty sequence, because the item type need not
+/// have a nought: anything that can be added can be summed.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.sum(&Iter.range(1, 5))   // Some(10)
+/// Iter.sum(&Iter.range(1, 1))   // None
+/// ```
 export fn sum[S, N: Add, Q: Sequence[S, N]](source: &Q) -> Option[N] {
   var state = Sequence.begin(source)
   let first = Sequence.advance(source, state) ?
@@ -178,9 +306,22 @@ export fn sum[S, N: Add, Q: Sequence[S, N]](source: &Q) -> Option[N] {
 /// Nothing is computed until the walk asks for it: `advance` transforms one
 /// item and returns. Building a `Mapped` over a sequence of a million does no
 /// work at all, which is what "lazy" has to mean to be worth having.
+///
+/// ## Examples
+///
+/// ```
+/// let squares = Iter.map(Iter.range(1, 4), fn(n: Int) -> Int => n * n)
+/// Iter.toArray(&squares)  // [1, 4, 9]
+/// ```
 export type Mapped[Q, A, B] = { source: Q, transform: fn(A) -> B }
 
 /// Transform each item of a sequence as it is produced.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.map(Iter.items(["a", "bc"]), fn(s: Str) -> Int => s.length()))  // [1, 2]
+/// ```
 export fn map[Q, A, B](source: Q, transform: fn(A) -> B) -> Mapped[Q, A, B] {
   Mapped{source: source, transform: transform}
 }
@@ -196,9 +337,24 @@ impl [S, A, B, Q: Sequence[S, A]] Sequence[S, B] for Mapped[Q, A, B] {
 }
 
 /// A sequence of another's items that satisfy a test.
+///
+/// ## Examples
+///
+/// ```
+/// let evens = Iter.filter(Iter.range(0, 7), fn(n: Int) -> Bool => n % 2 == 0)
+/// Iter.toArray(&evens)  // [0, 2, 4, 6]
+/// ```
 export type Filtered[Q, T] = { source: Q, keep: fn(T) -> Bool }
 
 /// Keep only the items a test accepts.
+///
+/// Items keep their order. The test runs once per item, as the walk reaches it.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.filter(Iter.items(["", "a", ""]), fn(s: Str) -> Bool => !s.isEmpty()))  // ["a"]
+/// ```
 export fn filter[Q, T](source: Q, keep: fn(T) -> Bool) -> Filtered[Q, T] {
   Filtered{source: source, keep: keep}
 }
@@ -226,12 +382,26 @@ impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Filtered[Q, T] {
 }
 
 /// A sequence of at most the first `limit` items of another.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.take(Iter.range(0, 100), 3))  // [0, 1, 2]
+/// ```
 export type Taken[Q, T] = { source: Q, limit: Int }
 
 /// The first `limit` items, or all of them if there are fewer.
 ///
-/// This is what makes an endless sequence usable: the source is never asked
-/// for an item past the limit, so a walk of `take(naturals(), 5)` ends.
+/// The source is never asked for an item past the limit, so taking from a
+/// sequence that would run for a long time, or forever, still ends. A limit of
+/// nought or less yields nothing.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.take(Iter.repeat("x", 1000000), 2))  // ["x", "x"]
+/// Iter.toArray(&Iter.take(Iter.range(0, 2), 5))            // [0, 1]
+/// ```
 export fn take[Q, T](source: Q, limit: Int) -> Taken[Q, T] {
   Taken{source: source, limit: limit}
 }
@@ -249,9 +419,24 @@ impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), T] for Taken[Q, T] {
 }
 
 /// A sequence of another's items past the first `skip`.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.drop(Iter.range(0, 5), 3))  // [3, 4]
+/// ```
 export type Dropped[Q, T] = { source: Q, skip: Int }
 
 /// Everything after the first `skip` items.
+///
+/// Dropping more items than there are leaves an empty sequence.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.drop(Iter.items(["a", "b", "c"]), 1))  // ["b", "c"]
+/// Iter.count(&Iter.drop(Iter.range(0, 2), 5))                // 0
+/// ```
 export fn drop[Q, T](source: Q, skip: Int) -> Dropped[Q, T] {
   Dropped{source: source, skip: skip}
 }
@@ -283,9 +468,23 @@ impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Dropped[Q, T] {
 }
 
 /// A sequence pairing two others item by item.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.toArray(&Iter.zip(Iter.range(1, 3), Iter.items(["a", "b"])))  // [(1, "a"), (2, "b")]
+/// ```
 export type Zipped[P, Q, A, B] = { left: P, right: Q }
 
 /// Pair two sequences, ending when either does.
+///
+/// Items beyond the shorter sequence's end are never asked for.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.count(&Iter.zip(Iter.range(0, 100), Iter.items(["a", "b"])))  // 2
+/// ```
 export fn zip[P, Q, A, B](left: P, right: Q) -> Zipped[P, Q, A, B] {
   Zipped{left: left, right: right}
 }
