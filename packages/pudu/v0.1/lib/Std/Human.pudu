@@ -1,0 +1,305 @@
+module Std.Human
+
+import Std.Time as Time
+
+/// Why text does not name a quantity.
+export type HumanError
+  = Empty
+  | NotANumber(Str)
+  | UnknownUnit(Str)
+  | NotWhole(Str)
+  | TooLarge(Str)
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
+
+/// The most digits a fraction may carry. Past this a written quantity claims
+/// a precision no unit here can use, and the arithmetic would stop fitting.
+const MAX_FRACTION_DIGITS: Int = 9
+
+/// A sentence saying what was wrong with the text.
+export fn explain(problem: &HumanError) -> Str {
+  match problem {
+    case Empty => "no quantity was given"
+    case NotANumber(part) => "'" + part + "' is not a number"
+    case UnknownUnit(part) => "'" + part + "' is not a unit this reads"
+    case NotWhole(part) => "'" + part + "' does not come to a whole number of the smallest unit"
+    case TooLarge(part) => "'" + part + "' is more than can be held"
+  }
+}
+
+fn times(left: Int, right: Int) -> Option[Int] {
+  if left == 0 || right == 0 { return Some(0) }
+  if left > INT_MAX / right { None } else { Some(left * right) }
+}
+
+fn plus(left: Int, right: Int) -> Option[Int] {
+  if left > INT_MAX - right { None } else { Some(left + right) }
+}
+
+/// A number as written — whole digits, an optional point, and at most nine
+/// fraction digits — as a numerator over a power of ten.
+fn numberOf(text: Str) -> Result[(Int, Int), HumanError] {
+  let point = text.indexOf(".")
+  let whole = if point >= 0 { text.take(point) } else { text }
+  let fraction = if point >= 0 { text.drop(point + 1) } else { "" }
+  if whole.isEmpty() && fraction.isEmpty() { return Err(NotANumber(text)) }
+  if point >= 0 && fraction.isEmpty() { return Err(NotANumber(text)) }
+  if fraction.length() > MAX_FRACTION_DIGITS { return Err(NotANumber(text)) }
+  var numerator = 0
+  var scale = 1
+  for here in (whole + fraction).chars() {
+    if here < '0' || here > '9' { return Err(NotANumber(text)) }
+    let digit = here.code() - '0'.code()
+    let shifted = match times(numerator, 10) {
+      case Some(value) => value
+      case None => { return Err(TooLarge(text)) }
+    }
+    numerator = match plus(shifted, digit) {
+      case Some(value) => value
+      case None => { return Err(TooLarge(text)) }
+    }
+  }
+  for _ in fraction.chars() { scale = scale * 10 }
+  Ok((numerator, scale))
+}
+
+/// A written number times a unit, which must come out whole.
+fn scaled(written: Str, number: (Int, Int), unit: Int) -> Result[Int, HumanError] {
+  let product = match times(number[0], unit) {
+    case Some(value) => value
+    case None => { return Err(TooLarge(written)) }
+  }
+  if product % number[1] != 0 { return Err(NotWhole(written)) }
+  Ok(product / number[1])
+}
+
+/// Where the digits of a quantity end and its unit begins.
+fn digitsEnd(text: Str) -> Int {
+  text.spanOf("0123456789.")
+}
+
+fn byteUnit(unit: Str) -> Option[Int] {
+  match unit.toLower() {
+    case "" | "b" => Some(1)
+    case "k" | "kb" => Some(1000)
+    case "m" | "mb" => Some(1000000)
+    case "g" | "gb" => Some(1000000000)
+    case "t" | "tb" => Some(1000000000000)
+    case "p" | "pb" => Some(1000000000000000)
+    case "ki" | "kib" => Some(1024)
+    case "mi" | "mib" => Some(1048576)
+    case "gi" | "gib" => Some(1073741824)
+    case "ti" | "tib" => Some(1099511627776)
+    case "pi" | "pib" => Some(1125899906842624)
+    case _ => None
+  }
+}
+
+/// A byte count read from text such as `512`, `1.5 KiB`, `10MB`, or `2gib`.
+///
+/// Letters are read without regard to case. The two families of unit are
+/// kept apart because they differ by seven percent at a gigabyte: `k`, `kb`,
+/// `m`, `mb` and the rest count in thousands, `ki`, `kib`, `mi`, `mib` and
+/// the rest in powers of 1024. A fraction is admitted when it comes to a whole
+/// number of bytes, so `1.5KiB` is 1536 while `1.1B` is refused.
+export fn parseBytes(text: Str) -> Result[Int, HumanError] {
+  let trimmed = text.trim()
+  if trimmed.isEmpty() { return Err(Empty) }
+  let end = digitsEnd(trimmed)
+  let unitText = trimmed.drop(end).trim()
+  let number = numberOf(trimmed.take(end)) ?
+  let unit = match byteUnit(unitText) {
+    case Some(value) => value
+    case None => { return Err(UnknownUnit(unitText)) }
+  }
+  scaled(trimmed, number, unit)
+}
+
+/// Tenths of a unit in a remainder, rounded half up. Worked in 128 bits
+/// because ten times the remainder of an exbibyte does not fit an `Int`.
+fn roundedTenths(remainder: Int, size: Int) -> Int {
+  let wide = match convertInteger[Int128](remainder) {
+    case Some(value) => value
+    case None => 0i128
+  }
+  let unit = match convertInteger[Int128](size) {
+    case Some(value) => value
+    case None => 1i128
+  }
+  match convertInteger[Int]((wide * 10i128 + unit / 2i128) / unit) {
+    case Some(value) => value
+    case None => 0
+  }
+}
+
+/// A count of something in a unit, to one decimal place, rounded half up; a
+/// value that rounds to the next unit's size moves to that unit, so the answer
+/// is never `1024.0 KiB`.
+fn inUnits(amount: Int, base: Int, names: &Array[Str]) -> Str {
+  let sign = if amount < 0 { "-" } else { "" }
+  // The magnitude of the most negative Int does not fit an Int, so the
+  // smallest value is widened by one unit first; the text differs by nothing
+  // that one decimal place can show.
+  let magnitude = if amount < 0 { if amount == -INT_MAX - 1 { INT_MAX } else { -amount } } else { amount }
+  if magnitude < base { return sign + display(magnitude) + " " + names[0] }
+  var index = 0
+  var size = 1
+  while index + 1 < names.length() && magnitude / size >= base {
+    size = size * base
+    index = index + 1
+  }
+  var tenths = (magnitude / size) * 10 + roundedTenths(magnitude % size, size)
+  if tenths >= base * 10 && index + 1 < names.length() {
+    index = index + 1
+    tenths = tenths / base
+  }
+  let whole = tenths / 10
+  let part = tenths % 10
+  let figure = if part == 0 { display(whole) } else { display(whole) + "." + display(part) }
+  sign + figure + " " + names[index]
+}
+
+/// A byte count in powers of 1024, such as `1.5 KiB` or `3 GiB`, to one
+/// decimal place. What a person reads for memory and file sizes on disk.
+export fn bytes(amount: Int) -> Str {
+  inUnits(amount, 1024, &["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"])
+}
+
+/// A byte count in powers of 1000, such as `1.5 kB` or `3 GB`, to one decimal
+/// place. What storage vendors and network rates use.
+export fn bytesDecimal(amount: Int) -> Str {
+  inUnits(amount, 1000, &["B", "kB", "MB", "GB", "TB", "PB", "EB"])
+}
+
+fn durationUnit(unit: Str) -> Option[Int] {
+  match unit {
+    case "ms" => Some(1)
+    case "s" => Some(1000)
+    case "m" => Some(60000)
+    case "h" => Some(3600000)
+    case "d" => Some(86400000)
+    case "w" => Some(604800000)
+    case _ => None
+  }
+}
+
+/// A duration read from text such as `90s`, `1h30m`, `1.5h`, `2d 4h`, or
+/// `-250ms`.
+///
+/// It is a run of number-and-unit pairs, with spaces admitted between and
+/// within them, optionally preceded by one sign; the units are `ms`, `s`, `m`, `h`, `d` (24 hours),
+/// and `w` (7 days). Each pair must come to whole milliseconds. `m` is
+/// minutes: a month has no fixed length, so no unit here claims one. The text
+/// `describe` in `Std.Time` writes reads back to the same duration.
+export fn parseDuration(text: Str) -> Result[Time.Duration, HumanError] {
+  var rest = text.trim()
+  if rest.isEmpty() { return Err(Empty) }
+  var negative = false
+  if rest.startsWith("-") || rest.startsWith("+") {
+    negative = rest.startsWith("-")
+    rest = rest.drop(1).trim()
+  }
+  if rest.isEmpty() { return Err(NotANumber(text)) }
+  var total = 0
+  while !rest.isEmpty() {
+    let end = digitsEnd(rest)
+    let number = numberOf(rest.take(end)) ?
+    rest = rest.drop(end)
+    rest = rest.drop(rest.spanOf(" "))
+    let unitEnd = rest.spanNotOf("0123456789. ")
+    let unitText = rest.take(unitEnd)
+    let unit = match durationUnit(unitText) {
+      case Some(value) => value
+      case None => { return Err(UnknownUnit(unitText)) }
+    }
+    let part = scaled(text, number, unit) ?
+    total = match plus(total, part) {
+      case Some(value) => value
+      case None => { return Err(TooLarge(text)) }
+    }
+    rest = rest.drop(unitEnd).trim()
+  }
+  Ok(Time.millis(if negative { -total } else { total }))
+}
+
+/// A duration written compactly, such as `1h30m`, `2d4h`, `45s`, or `250ms`.
+///
+/// Every unit from weeks down to milliseconds that is not zero appears, so
+/// the text is exact and `parseDuration` reads it back to the same duration.
+/// Use `describe` in `Std.Time` for a reading that drops milliseconds.
+export fn duration(value: &Time.Duration) -> Str {
+  let whole = Time.durationMillis(value)
+  if whole == 0 { return "0s" }
+  let sign = if whole < 0 { "-" } else { "" }
+  var rest = if whole < 0 { -whole } else { whole }
+  let names = ["w", "d", "h", "m", "s", "ms"]
+  let sizes = [604800000, 86400000, 3600000, 60000, 1000, 1]
+  var out = ""
+  var index = 0
+  while index < sizes.length() {
+    let units = rest / sizes[index]
+    if units > 0 {
+      out = out + display(units) + names[index]
+      rest = rest % sizes[index]
+    }
+    index = index + 1
+  }
+  sign + out
+}
+
+/// A whole number with its English ordinal suffix: `1st`, `2nd`, `3rd`,
+/// `4th`, `11th`, `12th`, `13th`, `21st`, `112th`.
+export fn ordinal(value: Int) -> Str {
+  let magnitude = if value < 0 { 0 - (value % 100) } else { value % 100 }
+  let suffix = if magnitude >= 11 && magnitude <= 13 {
+    "th"
+  } else if magnitude % 10 == 1 {
+    "st"
+  } else if magnitude % 10 == 2 {
+    "nd"
+  } else if magnitude % 10 == 3 {
+    "rd"
+  } else {
+    "th"
+  }
+  display(value) + suffix
+}
+
+/// A count with the noun that agrees with it: `1 file`, `0 files`,
+/// `3 files`. The plural is given rather than guessed, because English
+/// plurals are not a rule a library can apply (`1 child`, `2 children`).
+export fn plural(amount: Int, singular: Str, many: Str) -> Str {
+  display(amount) + " " + (if amount == 1 || amount == -1 { singular } else { many })
+}
+
+/// How far one instant is from another, the way a person says it: `just now`,
+/// `3 minutes ago`, `in 2 hours`, `yesterday`, `in 5 days`.
+///
+/// The figure is the largest whole unit that fits, truncated rather than
+/// rounded, so something 59 minutes old is never announced as an hour old.
+/// Anything within ten seconds either way is `just now`.
+export fn relative(moment: &Time.Instant, reference: &Time.Instant) -> Str {
+  let difference = Time.toMillis(moment) - Time.toMillis(reference)
+  let span = if difference < 0 { -difference } else { difference }
+  if span < 10000 { return "just now" }
+  let past = difference < 0
+  let days = span / 86400000
+  if days == 1 { return if past { "yesterday" } else { "tomorrow" } }
+  let phrase = if days >= 365 {
+    plural(days / 365, "year", "years")
+  } else if days >= 30 {
+    plural(days / 30, "month", "months")
+  } else if days >= 7 {
+    plural(days / 7, "week", "weeks")
+  } else if days >= 2 {
+    plural(days, "day", "days")
+  } else if span >= 3600000 {
+    plural(span / 3600000, "hour", "hours")
+  } else if span >= 60000 {
+    plural(span / 60000, "minute", "minutes")
+  } else {
+    plural(span / 1000, "second", "seconds")
+  }
+  if past { phrase + " ago" } else { "in " + phrase }
+}

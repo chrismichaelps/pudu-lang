@@ -153,6 +153,7 @@ tags: [moc, module, stdlib]
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
 - [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
+- [[Std Human]] — byte sizes and durations read and written, ordinals, plurals, and relative time.
 - [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
 - [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
