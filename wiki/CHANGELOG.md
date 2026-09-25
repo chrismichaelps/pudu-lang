@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — 0.1.2 published
+
+- `v0.1.2` is published as a pre-release with the smaller archives: linux-amd64 5.4 MB (from 10.4 MB)
+  and darwin-arm64 14.5 MB (from 17.1 MB), beside the runtime pack `pudu build --target` fetches.
+- `website/data/releases.json` offers it on the download page.
+
 ## 2026-09-25 — Live packages: true release dates, removals, and conditional revalidation (#369)
 
 - [[website Service LiveRelease]]: a live release is dated by its GitHub release's publication, or by
