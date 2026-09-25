@@ -2,7 +2,7 @@
   "name": "pudu",
   "displayName": "Pudu",
   "description": "Language support for Pudu: diagnostics, hover, go to definition across modules, references, rename, semantic tokens, inlay hints, signature help, outline, workspace symbols, completion of members, imports, match arms and record fields, code actions, and formatting.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "pudu-lang",
   "license": "MIT",
   "icon": "icon.png",

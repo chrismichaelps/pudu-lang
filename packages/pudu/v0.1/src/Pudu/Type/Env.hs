@@ -57,6 +57,7 @@ module Pudu.Type.Env
   , report
   , reportedAt
   , negateIntegerLiteral
+  , settleIntegerLiteral
   , rigidBoundsOf
   , rigidSatisfies
   , takeObligations
@@ -412,6 +413,25 @@ constrainIntegerLiteral spanValue value selectedType =
             , stateIntegerLiterals = constraint : stateIntegerLiterals state
             }
         )
+
+{-| Settle a pending integer literal to `Int` when something needs its type now.
+
+    A literal's type stays open until its constraints are finalized, so that
+    `let small: UInt8 = 3` can choose the width. A method call cannot wait: the
+    member it names has to be looked up on a type, and looking it up on an open
+    variable would accept any name and answer an unchecked result. `Int` is the
+    type finalization would choose for a literal nothing else constrained, so
+    settling early changes no program that checked before except the ones whose
+    member did not exist. Answers whether the variable was such a literal. -}
+settleIntegerLiteral :: TypeVar -> Checker Bool
+settleIntegerLiteral variable = do
+  constraints <- Checker $ \state -> (stateIntegerLiterals state, state)
+  -- A literal's variable may already stand for another open variable, as it
+  -- does once `let n = 3` has unified the binding with the literal.
+  resolved <- mapM (resolveRemembering . integerConstraintVariable) constraints
+  if VariableType variable `elem` resolved
+    then setVariable variable integerType >> pure True
+    else pure False
 
 negateIntegerLiteral :: Type -> Checker Bool
 negateIntegerLiteral typeValue = case typeValue of

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — A solid language server and editor extension (#366)
+
+- [[Type Env]] `settleIntegerLiteral`: a method call on an integer literal is checked as a
+  method on `Int`. `let n = 3` then `n.bogus()` is now `E3005`, and `42.toText()` is `Str`, so
+  `let wrong: Int = 42.toText()` is refused where it used to check and fail only when run.
+  Hover shows `Str` where it showed an unknown type.
+- [[Lsp Completion]] offers every keyword a program can write, including `module`, `as`, `async`,
+  `await`, `with`, `scope`, `comptime`, `macro`, and `null`; the reserved `task` and `spawn` stay out.
+- [[VS Code Grammar]] colours interpolations as embedded Pudu; the extension is 0.5.0.
+- Compiler object and interface files are no longer tracked, and `.gitignore` keeps them out.
+
 ## 2026-09-25 — Standard library documentation written for readers (#228)
 
 - Fourteen core modules (`Std.List`, `Std.Map`, `Std.Set`, `Std.Text`, `Std.Option`, `Std.Result`,

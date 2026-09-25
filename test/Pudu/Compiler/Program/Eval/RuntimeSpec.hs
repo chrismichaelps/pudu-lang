@@ -142,9 +142,10 @@ testRuntimeEvaluation = do
         (checked === Just "15")
     {-| Every kind of value answers toText with the text interpolation writes,
         a declared toText wins even through a type parameter, the method binds
-        its receiver as a value, and bytes keep their refusing form. -}
+        its receiver as a value, an integer literal answers before it settles
+        on a type, and bytes keep their refusing form. -}
     , counterexample "every value answers toText, and a declared one wins"
-        (written === Just "12")
+        (written === Just "13")
     {-| Byte sizes and durations read and written, with overflow at Int's
         limits refused rather than stopping the program. -}
     , counterexample "quantities read strictly and write back to what they read"

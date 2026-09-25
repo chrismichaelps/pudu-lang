@@ -14,6 +14,11 @@ dist-newstyle/
 dist-o2/
 dist-prof
 dist-prof-*
+# Object and interface files a direct compiler run leaves beside the sources
+*.o
+*.hi
+*.dyn_o
+*.dyn_hi
 docs/superpowers/
 fmcf.md
 fmfc.md

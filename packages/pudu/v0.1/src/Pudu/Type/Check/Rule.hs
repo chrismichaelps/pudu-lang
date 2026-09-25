@@ -53,6 +53,7 @@ import Pudu.Type.Env
   , lookupTypeParams
   , negateIntegerLiteral
   , report
+  , settleIntegerLiteral
   , rigidBoundsOf
   )
 import Pudu.Type.Unify (unify, zonk)
@@ -641,7 +642,14 @@ memberType spanValue targetType member = do
   resolved <- zonk targetType
   case resolved of
     ErrorType -> pure ErrorType
-    VariableType _ -> freshVariable
+    {-| An integer literal is settled before its member is looked up, so the
+        member is checked against `Int` rather than accepted unseen. Every
+        value answers `toText` with `Str`, whatever its type turns out to be. -}
+    VariableType variable -> do
+      settled <- settleIntegerLiteral variable
+      if settled
+        then memberType spanValue integerType member
+        else if member == textMember then pure textMethodType else freshVariable
     {-| Every value answers `toText`. The built-in collections and text have
         closed method tables with no such entry, so it is answered here, before
         them; `Char` and `Bytes` keep their own, and `Bytes` answers `Option`

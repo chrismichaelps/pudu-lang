@@ -37,6 +37,9 @@ it, a constant from a control keyword, and — because this is the difference th
 language exists to make explicit — checked arithmetic from its wrapping and
 saturating forms, which are three different operators and read as three.
 
+Inside a string, an interpolation's `{expression}` is coloured as the code it
+is, braces and all, while `\{` and `\}` stay escapes of the text around it.
+
 ## Installing
 
 1. Build the compiler and put it on your `PATH`:

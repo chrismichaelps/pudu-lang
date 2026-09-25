@@ -385,12 +385,16 @@ preludeItems =
   , ("Err", 20, "Result[T, E]")
   ]
 
+{-| Every keyword a program can write. `task` and `spawn` are lexed as keywords
+    only so the parser can refuse them with a way forward; offering them would
+    suggest code that never checks. -}
 keywords :: [Text]
 keywords =
-  [ "fn", "let", "var", "const", "mut", "if", "else", "match", "case", "for"
+  [ "module", "import", "as", "export", "fn", "let", "var", "const", "mut", "if", "else", "match", "case", "for"
   , "in", "while", "loop", "break", "continue", "return", "type", "enum"
-  , "struct", "trait", "impl", "where", "export", "import", "unsafe", "foreign", "dynamic"
-  , "true", "false"
+  , "struct", "trait", "impl", "where", "unsafe", "foreign", "dynamic"
+  , "async", "await", "with", "scope", "comptime", "macro"
+  , "true", "false", "null"
   ]
 
 {-| What may follow a value of the type the checker gave the receiver: the

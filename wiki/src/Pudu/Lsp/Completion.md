@@ -115,6 +115,7 @@ source root; the catalog is run only when the cursor is at an import site.
 ## Grill Log
 
 - **Q:** Why include keywords and primitive types in completions? **A:** Editor completion lists without language keywords feel incomplete and force users to type keywords manually.
+- **Q:** Which keywords are offered? **A:** Every keyword a program can write, from `module` and `as` to `async`, `await`, `with`, `scope`, `comptime`, `macro`, and `null`. _Rationale:_ the list had fallen behind the lexer, so completion never suggested half the language. `task` and `spawn` stay out: they are lexed only so the parser can refuse them with a way forward (#366). _Rejected:_ deriving the list from every lexer keyword, which would offer the reserved ones.
 - **Q:** Why does pattern completion depend on checked types rather than constructor spelling?
   **A:** Different sums may use the same variant name, imports may qualify it, and generic subjects
   preserve their nominal owner. _Rationale:_ the type checker already resolved the exact subject;

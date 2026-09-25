@@ -26,6 +26,7 @@ tags: [moc, module]
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
+- [[VS Code Grammar]] — the editor extension's TextMate grammar, interpolations included.
 - [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the
   repository-only regression package that preserves `cabal test all`.
 - [[Refresh Pudu Installation]] — PATH-aware installed-compiler replacement and behavior proof.

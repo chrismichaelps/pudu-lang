@@ -164,5 +164,9 @@ module-qualified misspelling is told to call them on the value.
 field or method; `rigidMethod` answers it when no bound provides one; and any other type (tuple,
 function, unit) answers it rather than `E3005`. `Char` and `Bytes` keep their own entries.
 
+An open receiver is resolved first (#366): an unsettled integer literal is settled to `Int` through
+`settleIntegerLiteral` and its member looked up there, and any other open variable answers `toText`
+as `fn() -> Str` rather than an unchecked fresh variable.
+
 Resolved Grill Log: typed as the universal method only where nothing declared answers, so an
 implementation's own signature governs its calls; the evaluator makes the same choice at run time.

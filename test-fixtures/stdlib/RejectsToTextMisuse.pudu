@@ -4,5 +4,10 @@ fn main() -> Int {
   let count: Int = 3
   let wrong: Int = count.toText()
   let extra = count.toText(1)
+
+  // An integer literal answers members as the `Int` it becomes, not unseen.
+  let literal = 3
+  let unseen = literal.bogus()
+  let typed: Int = 42.toText()
   0
 }

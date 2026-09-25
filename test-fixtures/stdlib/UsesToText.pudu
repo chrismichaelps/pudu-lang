@@ -44,6 +44,10 @@ fn main() -> Int {
   // A declared toText wins; a generic parameter answers too.
   if price.toText() == "$12" && generic(9) == "9" && generic(dollar) == "$1" { held = held + 1 }
 
+  // A literal's text is `Str` before the literal has settled on a type.
+  let literal = 5
+  if literal.toText() == "5" && 42.toText().length() == 2 && (literal + 1).toText() == "6" { held = held + 1 }
+
   // The method is a value that carries its receiver.
   let render = count.toText
   if render() == "42" { held = held + 1 }
