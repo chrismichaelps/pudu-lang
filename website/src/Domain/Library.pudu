@@ -13,25 +13,25 @@ export const SECTIONS: Array[Section] = [
       "Std.Option", "Std.Result", "Std.Bool", "Std.Char", "Std.Tuple", "Std.Function", "Std.Order", "Std.Show", "Std.Num", "Std.Mappable"
     ] },
   Section{id: "text", title: "Text", lead: "Searching, building, parsing, and formatting text.", modules: [
-      "Std.Text", "Std.Fmt", "Std.Regex", "Std.Glob", "Std.Diff", "Std.Intern", "Std.Semver", "Std.Uuid", "Std.Validate"
+      "Std.Text", "Std.Fmt", "Std.Regex", "Std.Glob", "Std.Diff", "Std.Intern", "Std.Semver", "Std.Uuid", "Std.Validate", "Std.Human"
     ] },
   Section{id: "numbers", title: "Numbers", lead: "Arithmetic past the operators: exact decimals, bit manipulation, randomness, and numeric columns.", modules: [
-      "Std.Math", "Std.Decimal", "Std.Bits", "Std.Random", "Std.Column"
+      "Std.Math", "Std.Decimal", "Std.Bits", "Std.Random", "Std.Column", "Std.Stats"
     ] },
   Section{id: "collections", title: "Collections", lead: "Arrays, maps, sets, and the specialised structures for when the ordinary ones are not the right shape. Collections never change in place: every operation answers a new value.", modules: [
       "Std.List", "Std.Map", "Std.Set", "Std.Iter", "Std.NonEmpty", "Std.Deque", "Std.Heap", "Std.HashMap", "Std.SortedMap", "Std.LinkedMap", "Std.FlatMap", "Std.IntMap", "Std.IntSet", "Std.EnumMap", "Std.BiMap", "Std.MultiMap", "Std.MultiKeyMap", "Std.Tree", "Std.PrefixTrie", "Std.Graph", "Std.DisjointSet", "Std.FenwickTree", "Std.IntervalTree", "Std.RingBuffer", "Std.LruCache", "Std.BitSet", "Std.BitVector", "Std.BloomFilter", "Std.RadixSort"
     ] },
   Section{id: "system", title: "Files, processes, and time", lead: "Everything that talks to the machine a program runs on.", modules: [
-      "Std.Io", "Std.Fs", "Std.Path", "Std.Env", "Std.Args", "Std.Process", "Std.Signal", "Std.Time", "Std.Log", "Std.Out"
+      "Std.Io", "Std.Fs", "Std.Path", "Std.Env", "Std.Args", "Std.Process", "Std.Signal", "Std.Time", "Std.Log", "Std.Out", "Std.Term", "Std.Cron"
     ] },
   Section{id: "formats", title: "Data formats", lead: "Reading and writing the formats programs exchange.", modules: [
-      "Std.Json", "Std.Csv", "Std.Toml", "Std.Yaml", "Std.Xml", "Std.Mime"
+      "Std.Json", "Std.Csv", "Std.Toml", "Std.Yaml", "Std.Xml", "Std.Mime", "Std.Dotenv"
     ] },
   Section{id: "bytes", title: "Bytes, hashing, and compression", lead: "Binary data, encodings, non-cryptographic hashes, and archives.", modules: [
-      "Std.Bytes", "Std.Buffer", "Std.ByteOrder", "Std.Hex", "Std.Varint", "Std.Adler32", "Std.Murmur3", "Std.SipHash", "Std.Compress.Gzip", "Std.Archive.Tar", "Std.Archive.Zip"
+      "Std.Bytes", "Std.Buffer", "Std.ByteOrder", "Std.Hex", "Std.Varint", "Std.Adler32", "Std.Murmur3", "Std.SipHash", "Std.Checksum", "Std.Compress.Gzip", "Std.Archive.Tar", "Std.Archive.Zip"
     ] },
   Section{id: "web", title: "Networking and the web", lead: "Sockets, TLS, HTTP clients and servers, HTML, and mail.", modules: [
-      "Std.Net", "Std.Tls", "Std.Url", "Std.Http", "Std.Html", "Std.Mail"
+      "Std.Net", "Std.Tls", "Std.Url", "Std.Http", "Std.Html", "Std.Site", "Std.Ip", "Std.Mail"
     ] },
   Section{id: "applications", title: "Applications and databases", lead: "The pieces a service is assembled from: configuration, health, sessions, jobs, and SQL databases.", modules: [
       "Std.App", "Std.Db", "Std.Crypto", "Std.RateLimiter"
@@ -124,6 +124,14 @@ export const SUMMARIES: Map[Str, Str] = mapOf([
     ("Std.Hex", "Hexadecimal digits and bytes."),
     ("Std.Varint", "LEB128 variable-length integers."),
     ("Std.Adler32", "The Adler-32 checksum."),
+    ("Std.Checksum", "CRC-32, CRC-32C, CRC-64, and FNV-1a checksums, computed incrementally."),
+    ("Std.Cron", "Cron schedules: parsing them and finding the next time they fire."),
+    ("Std.Dotenv", "Reading environment files of KEY=value assignments."),
+    ("Std.Human", "Sizes, durations, ordinals, and relative times as people write them."),
+    ("Std.Ip", "IP addresses and networks: parsing, rendering, and membership."),
+    ("Std.Site", "Building a static site, with its routing, for the host that serves it."),
+    ("Std.Stats", "Summary statistics of numeric samples."),
+    ("Std.Term", "Colours and styles for terminal output."),
     ("Std.Murmur3", "The MurmurHash3 hash."),
     ("Std.SipHash", "The SipHash keyed hash."),
     ("Std.Compress.Gzip", "Gzip compression and decompression."),

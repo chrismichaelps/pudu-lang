@@ -48,7 +48,11 @@ cover the two-tone mark beneath a missing image.
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.
 Search checks assert rank position and exclusion for module intent, explicit scope, exact names,
-multi-term text, and generic-renamed Pudu type shapes.
+multi-term text, and generic-renamed Pudu type shapes. The exact-name check queries `crc32`, a name
+no module shares: a query that is also a module's last name segment ranks that module's declarations
+first by design, so such a query cannot isolate the exact-name rule.
+Documentation prose is checked on `Std.List.any`, whose `## Examples` and `## See also` sections must
+render through the shared Markdown pipeline as anchored headings, a code block, and a list.
 The rendered result page must expose the query syntax it accepts.
 The catalogue gate also requires every public declaration to carry at least one documentation line,
 including implementation members whose text is inherited from their trait contract.

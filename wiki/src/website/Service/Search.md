@@ -28,3 +28,10 @@ Resolved Grill Log: an index per catalogue, not per request. _Rationale:_ loweri
 names, signatures, and documentation blocks for every query was nearly all a search cost; on the
 local server a query with no hits went from 113 to 63 ms and a broad one from 574 to 176 ms, with
 every ranking unchanged. _Rejected:_ sorting all hits by score and name per query.
+
+Documentation contributes to a term's score through its summary line alone: the index's `prose`
+is the first documentation line, lowered. A declaration's full reference text names the types,
+neighbours, and examples it discusses, so scoring every line would rank a page that merely mentions
+a term beside the page that defines it. The summary is also the only documentation the compact
+runtime index carries, so ranking on it keeps the deployed search and the local one from answering
+differently.

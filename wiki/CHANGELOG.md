@@ -5,6 +5,29 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Standard library documentation written for readers (#228)
+
+- Fourteen core modules (`Std.List`, `Std.Map`, `Std.Set`, `Std.Text`, `Std.Option`, `Std.Result`,
+  `Std.Order`, `Std.Math`, `Std.Bits`, `Std.Char`, `Std.Bytes`, `Std.Io`, `Std.Json`, `Std.Time`)
+  document each public declaration with its reasoning, `## Examples`, and `## See also` where a
+  neighbour answers a nearby question.
+- [[website View Documentation]] renders that prose through the shared Markdown pipeline, so
+  examples are copyable code blocks and sections are anchored headings on every declaration page.
+- [[website Service Search]] ranks documentation by its summary line only, so a long reference text
+  that mentions a term does not outrank the declaration that defines it.
+- [[website Domain Library]] places `Std.Checksum`, `Std.Cron`, `Std.Dotenv`, `Std.Human`, `Std.Ip`,
+  `Std.Site`, `Std.Stats`, and `Std.Term` in their sections.
+
+## 2026-09-25 — Reference documentation for the next core modules (#359)
+
+- `Std.Path`, `Std.Iter`, `Std.Decimal`, `Std.NonEmpty`, `Std.Env`, `Std.Fs`, `Std.Process`,
+  `Std.Log`, `Std.SortedMap`, `Std.MultiMap`, `Std.LinkedMap`, and `Std.BiMap` state each public
+  declaration's edge cases and carry `## Examples`. Every example with a machine-independent answer
+  was executed and holds; file, process, and environment examples were run against a stated setup.
+- `Std.Fs.permissions` is documented as what the running program may do, which differs from the
+  stored flags for a program with administrator rights; `setPermissions` changes the owner's flags only.
+- The `Std.Iter.take` documentation no longer refers to a sequence the module does not provide.
+
 ## 2026-09-25 — Base32 and PEM (#345)
 
 - [[Std Base32]]: RFC 4648 standard (padded or not), extended-hex, and Crockford alphabets; decoding
@@ -1776,6 +1799,11 @@ tags: [changelog]
   undocumented public declarations across 3,243 entries.
 - Expanded symbol-family pages with declaration-provider explanations and conditional guides for
   arrows, references, mutable references, type arguments, `Option`, `Result`, and `Self`.
+
+- Replaced the per-declaration notation guide with rendered documentation structure: a doc comment's
+  paragraphs, fenced examples, section headings, and cross-reference lists now survive to the page.
+- Rewrote the `Std.List` core as full reference documentation, each declaration carrying its
+  behaviour, its edge cases, worked examples, and the neighbours worth reaching for instead.
 
 ## 2026-09-11 — Adapter-free Vercel runtime build
 

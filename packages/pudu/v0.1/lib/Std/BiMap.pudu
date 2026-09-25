@@ -19,32 +19,86 @@ module Std.BiMap
 export type BiMap[L, R] = { forward: Map[L, R], backward: Map[R, L] }
 
 /// A map with no pairs.
+///
+/// ## Examples
+///
+/// ```
+/// let m: BiMap[Str, Int] = BiMap.empty()
+/// BiMap.isEmpty(&m)  // true
+/// ```
 export fn empty[L, R]() -> BiMap[L, R] {
   BiMap{forward: mapOf([]), backward: mapOf([])}
 }
 
 /// How many pairs the map holds.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.size(&m)  // 2
+/// ```
 export fn size[L, R](map: &BiMap[L, R]) -> Int { map.forward.size() }
 
 /// Whether the map holds nothing.
+///
+/// ## Examples
+///
+/// ```
+/// let m: BiMap[Str, Int] = BiMap.empty()
+/// BiMap.isEmpty(&m)  // true
+/// BiMap.isEmpty(&BiMap.insert(&m, "a", 1))  // false
+/// ```
 export fn isEmpty[L, R](map: &BiMap[L, R]) -> Bool { map.forward.isEmpty() }
 
 /// The right value paired with a left one, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.getRight(&m, "a")  // Some(1)
+/// BiMap.getRight(&m, "z")  // None
+/// ```
 export fn getRight[L, R](map: &BiMap[L, R], left: L) -> Option[R] {
   map.forward.get(left)
 }
 
 /// The left value paired with a right one, or `None`.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.getLeft(&m, 1)  // Some("a")
+/// BiMap.getLeft(&m, 9)  // None
+/// ```
 export fn getLeft[L, R](map: &BiMap[L, R], right: R) -> Option[L] {
   map.backward.get(right)
 }
 
 /// Whether a left value is paired with anything.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.containsLeft(&m, "a")  // true
+/// BiMap.containsLeft(&m, "z")  // false
+/// ```
 export fn containsLeft[L, R](map: &BiMap[L, R], left: L) -> Bool {
   map.forward.containsKey(left)
 }
 
 /// Whether a right value is paired with anything.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.containsRight(&m, 1)  // true
+/// BiMap.containsRight(&m, 9)  // false
+/// ```
 export fn containsRight[L, R](map: &BiMap[L, R], right: R) -> Bool {
   map.backward.containsKey(right)
 }
@@ -55,6 +109,15 @@ export fn containsRight[L, R](map: &BiMap[L, R], right: R) -> Bool {
 /// cannot end up disagreeing. Adding `b -> 1` to a map already holding `a -> 1`
 /// leaves only `b -> 1`: the map has the same number of pairs it started with
 /// rather than one more.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.insert(&BiMap.fromPairs(&[("a", 1)]), "b", 1)
+/// BiMap.size(&m)              // 1
+/// BiMap.containsLeft(&m, "a")  // false
+/// BiMap.getLeft(&m, 1)         // Some("b")
+/// ```
 export fn insert[L, R](map: &BiMap[L, R], left: L, right: R) -> BiMap[L, R] {
   let cleared = removeRight(&removeLeft(map, left), right)
   BiMap {
@@ -69,6 +132,16 @@ export fn insert[L, R](map: &BiMap[L, R], left: L, right: R) -> BiMap[L, R] {
 /// table of unique codes, a registry of names — where a collision means the
 /// input was wrong rather than that the caller meant to replace something.
 /// `insert` silently displaces; this reports.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// let ok = BiMap.insertChecked(&m, "b", 2)
+/// ok == None  // false
+/// let clash = BiMap.insertChecked(&m, "b", 1)
+/// clash == None  // true
+/// ```
 export fn insertChecked[L, R](map: &BiMap[L, R], left: L, right: R) -> Option[BiMap[L, R]] {
   if containsLeft(map, left) || containsRight(map, right) { None } else {
     Some(insert(map, left, right))
@@ -76,6 +149,14 @@ export fn insertChecked[L, R](map: &BiMap[L, R], left: L, right: R) -> Option[Bi
 }
 
 /// The map with a left value's pair removed, or unchanged when it has none.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.containsRight(&BiMap.removeLeft(&m, "a"), 1)  // false
+/// BiMap.size(&BiMap.removeLeft(&m, "z"))  // 2
+/// ```
 export fn removeLeft[L, R](map: &BiMap[L, R], left: L) -> BiMap[L, R] {
   match map.forward.get(left) {
     case Some(right) => BiMap {
@@ -87,6 +168,14 @@ export fn removeLeft[L, R](map: &BiMap[L, R], left: L) -> BiMap[L, R] {
 }
 
 /// The map with a right value's pair removed, or unchanged when it has none.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.containsLeft(&BiMap.removeRight(&m, 1), "a")  // false
+/// BiMap.size(&BiMap.removeRight(&m, 9))  // 2
+/// ```
 export fn removeRight[L, R](map: &BiMap[L, R], right: R) -> BiMap[L, R] {
   match map.backward.get(right) {
     case Some(left) => BiMap {
@@ -98,12 +187,33 @@ export fn removeRight[L, R](map: &BiMap[L, R], right: R) -> BiMap[L, R] {
 }
 
 /// Every left value, in order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.lefts(&m)  // ["a", "b"]
+/// ```
 export fn lefts[L, R](map: &BiMap[L, R]) -> Array[L] { map.forward.keys() }
 
 /// Every right value, in order.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.rights(&m)  // [1, 2]
+/// ```
 export fn rights[L, R](map: &BiMap[L, R]) -> Array[R] { map.backward.keys() }
 
 /// Every pair, in the order of its left value.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.pairs(&m)  // [("a", 1), ("b", 2)]
+/// ```
 export fn pairs[L, R](map: &BiMap[L, R]) -> Array[(L, R)] { map.forward.entries() }
 
 /// The map with its two sides exchanged.
@@ -111,17 +221,40 @@ export fn pairs[L, R](map: &BiMap[L, R]) -> Array[(L, R)] { map.forward.entries(
 /// Free, because both directions are already held. This is the operation an
 /// ordinary map cannot offer without rebuilding, and the reason to reach for
 /// this type when a program reads a pairing both ways.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.getRight(&BiMap.flipped(&m), 1)  // Some("a")
+/// ```
 export fn flipped[L, R](map: &BiMap[L, R]) -> BiMap[R, L] {
   BiMap{forward: map.backward, backward: map.forward}
 }
 
 /// The left-to-right direction as an ordinary map.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1)])
+/// BiMap.toMap(&m).get("a")  // Some(1)
+/// ```
 export fn toMap[L, R](map: &BiMap[L, R]) -> Map[L, R] { map.forward }
 
 /// A map built from pairs.
 ///
 /// A later pair displaces any earlier one sharing either side, so the result is
 /// always a bijection and may hold fewer pairs than it was given.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 1)])
+/// BiMap.size(&m)                // 1
+/// BiMap.containsLeft(&m, "a")   // false
+/// BiMap.getLeft(&m, 1)          // Some("b")
+/// ```
 export fn fromPairs[L, R](entries: &Array[(L, R)]) -> BiMap[L, R] {
   var out = empty()
   for pair in entries { out = insert(&out, pair[0], pair[1]) }
@@ -132,6 +265,15 @@ export fn fromPairs[L, R](entries: &Array[(L, R)]) -> BiMap[L, R] {
 ///
 /// The form to use when the input is meant to already be a bijection and a
 /// repeat means the data is wrong.
+///
+/// ## Examples
+///
+/// ```
+/// let ok = BiMap.fromPairsChecked(&[("a", 1), ("b", 2)])
+/// ok == None  // false
+/// let clashing = BiMap.fromPairsChecked(&[("a", 1), ("b", 1)])
+/// clashing == None  // true
+/// ```
 export fn fromPairsChecked[L, R](entries: &Array[(L, R)]) -> Option[BiMap[L, R]] {
   var out = empty()
   for pair in entries { out = insertChecked(&out, pair[0], pair[1]) ? }
@@ -139,6 +281,14 @@ export fn fromPairsChecked[L, R](entries: &Array[(L, R)]) -> Option[BiMap[L, R]]
 }
 
 /// Two maps combined, with the second map's pairs displacing the first's.
+///
+/// ## Examples
+///
+/// ```
+/// let left = BiMap.fromPairs(&[("a", 1)])
+/// let right = BiMap.fromPairs(&[("b", 2)])
+/// BiMap.lefts(&BiMap.merge(&left, &right))  // ["a", "b"]
+/// ```
 export fn merge[L, R](left: &BiMap[L, R], right: &BiMap[L, R]) -> BiMap[L, R] {
   var out = *left
   for pair in pairs(right) { out = insert(&out, pair[0], pair[1]) }
@@ -146,6 +296,13 @@ export fn merge[L, R](left: &BiMap[L, R], right: &BiMap[L, R]) -> BiMap[L, R] {
 }
 
 /// Only the pairs the predicate accepts.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.lefts(&BiMap.filter(&m, fn(l: Str, r: Int) -> Bool => r > 1))  // ["b"]
+/// ```
 export fn filter[L, R](map: &BiMap[L, R], keep: fn(L, R) -> Bool) -> BiMap[L, R] {
   var out = empty()
   for pair in pairs(map) {
@@ -155,6 +312,13 @@ export fn filter[L, R](map: &BiMap[L, R], keep: fn(L, R) -> Bool) -> BiMap[L, R]
 }
 
 /// Every pair combined into one value, in the order of the left values.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.fold(&m, fn(acc: Int, l: Str, r: Int) -> Int => acc + r, 0)  // 3
+/// ```
 export fn fold[L, R, A](map: &BiMap[L, R], combine: fn(A, L, R) -> A, start: A) -> A {
   var accumulated = start
   for pair in pairs(map) { accumulated = combine(accumulated, pair[0], pair[1]) }
@@ -162,6 +326,13 @@ export fn fold[L, R, A](map: &BiMap[L, R], combine: fn(A, L, R) -> A, start: A) 
 }
 
 /// Whether every pair satisfies the predicate. True for an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 2), ("b", 4)])
+/// BiMap.all(&m, fn(l: Str, r: Int) -> Bool => r % 2 == 0)  // true
+/// ```
 export fn all[L, R](map: &BiMap[L, R], holds: fn(L, R) -> Bool) -> Bool {
   for pair in pairs(map) {
     if !holds(pair[0], pair[1]) { return false }
@@ -170,6 +341,13 @@ export fn all[L, R](map: &BiMap[L, R], holds: fn(L, R) -> Bool) -> Bool {
 }
 
 /// Whether any pair satisfies the predicate. False for an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// let m = BiMap.fromPairs(&[("a", 1), ("b", 2)])
+/// BiMap.any(&m, fn(l: Str, r: Int) -> Bool => r > 1)  // true
+/// ```
 export fn any[L, R](map: &BiMap[L, R], holds: fn(L, R) -> Bool) -> Bool {
   for pair in pairs(map) {
     if holds(pair[0], pair[1]) { return true }

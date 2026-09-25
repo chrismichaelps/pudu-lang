@@ -1,126 +1,364 @@
 module Std.Set
 
 /// A set with no members.
+///
+/// The starting point for building a set up by insertion. A set keeps its members
+/// in order, so every listing of it is reproducible rather than incidental.
+///
+/// ## Examples
+///
+/// ```
+/// Set.size(&Set.empty())  // 0
+/// ```
 export fn empty[T]() -> Set[T] { setOf([]) }
 
 /// A set with one member.
+///
+/// Shorter than inserting into `empty`, and the form to reach for when folding
+/// values together with `union`.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.singleton(1))  // [1]
+/// ```
 export fn singleton[T](value: T) -> Set[T] { setOf([value]) }
 
 /// A set built from an array, with duplicates dropped.
+///
+/// The bridge from a sequence to a collection of distinct values. The array's order
+/// is not kept: a set orders its members itself, which is what makes membership
+/// tests and merges cheap.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.fromArray(&[3, 1, 3]))  // [1, 3]
+/// ```
 export fn fromArray[T](items: &Array[T]) -> Set[T] { setOf(*items) }
 
 /// The number of members.
+///
+/// Counts distinct values, so it is at most the length of the array a set was
+/// built from.
+///
+/// ## Examples
+///
+/// ```
+/// Set.size(&Set.fromArray(&[1, 1, 2]))  // 2
+/// ```
 export fn size[T](value: &Set[T]) -> Int { value.size() }
 
 /// Whether the set has no members.
+///
+/// Asks directly rather than comparing `size` against nought, which says at the
+/// call site what is being tested.
+///
+/// ## Examples
+///
+/// ```
+/// Set.isEmpty(&Set.empty())        // true
+/// Set.isEmpty(&Set.singleton(1))   // false
+/// ```
 export fn isEmpty[T](value: &Set[T]) -> Bool { value.isEmpty() }
 
 /// Whether a value is a member.
+///
+/// The question a set exists to answer. Membership is decided by the value itself,
+/// so two equal values are the same member however they were built.
+///
+/// ## Examples
+///
+/// ```
+/// Set.contains(&Set.fromArray(&[1, 2]), 2)  // true
+/// Set.contains(&Set.fromArray(&[1, 2]), 9)  // false
+/// ```
 export fn contains[T](value: &Set[T], wanted: T) -> Bool { value.contains(wanted) }
 
 /// The set with a member added, or unchanged when it is already there.
+///
+/// A new set is returned; the original is left as it was. Adding a member that is
+/// already present is not an error and does not grow the set, so insertion can be
+/// repeated safely.
+///
+/// ## Examples
+///
+/// ```
+/// Set.size(&Set.insert(&Set.fromArray(&[1]), 2))  // 2
+/// Set.size(&Set.insert(&Set.fromArray(&[1]), 1))  // 1
+/// ```
+///
+/// ## See also
+///
+/// - `insertAll` — many members in one pass.
 export fn insert[T](value: &Set[T], wanted: T) -> Set[T] { value.insert(wanted) }
 
 /// The set with a member removed, or unchanged when it is not there.
+///
+/// Removing an absent member is not an error, which keeps the operation safe to
+/// repeat and removes the need to check first.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.remove(&Set.fromArray(&[1, 2]), 2))  // [1]
+/// Set.toArray(&Set.remove(&Set.fromArray(&[1]), 9))     // [1]
+/// ```
 export fn remove[T](value: &Set[T], wanted: T) -> Set[T] { value.remove(wanted) }
 
 /// Every member, in order.
+///
+/// The order is the set's own, not the order members were inserted, so the result
+/// is the same for two sets holding the same members however they were built.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.fromArray(&[3, 1, 2]))  // [1, 2, 3]
+/// ```
 export fn toArray[T](value: &Set[T]) -> Array[T] { value.toArray() }
 
 /// Every member of either set.
+///
+/// One merge of two ordered runs rather than an insertion per member. Neither
+/// argument is changed.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.union(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 3])))  // [1, 2, 3]
+/// ```
 export fn union[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.union(*right) }
 
 /// Every member of both sets.
+///
+/// The members the two sets agree on. An empty result means they share nothing,
+/// which `isDisjointFrom` answers without building a set.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.intersection(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 3])))  // [2]
+/// ```
 export fn intersection[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.intersect(*right) }
 
 /// Every member of the first set that is not in the second.
+///
+/// Not symmetric: swapping the arguments answers a different set. `symmetricDifference`
+/// is the form that treats both sides alike.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.difference(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 3])))  // [1]
+/// ```
 export fn difference[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.difference(*right) }
 
 /// Every member of exactly one of the two sets.
+///
+/// The members the two sets disagree on, which is the union with the intersection
+/// taken out. Symmetric, so the argument order does not matter.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.symmetricDifference(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 3])))
+/// // [1, 3]
+/// ```
 export fn symmetricDifference[T](left: &Set[T], right: &Set[T]) -> Set[T] {
   left.difference(*right).union(right.difference(*left))
 }
 
 /// Whether every member of the first set is in the second.
+///
 /// One merge of two ordered runs. A size comparison would reject an oversized
 /// candidate without walking either set, but `size` here counts the members it
-/// walks, so asking costs what it saves; that guard belongs with a set that
-/// carries its own count.
+/// walks, so asking costs what it saves; that guard belongs with a set that carries
+/// its own count.
+///
+/// A set is a subset of itself, and the empty set is a subset of everything.
+///
+/// ## Examples
+///
+/// ```
+/// Set.isSubsetOf(&Set.fromArray(&[1]), &Set.fromArray(&[1, 2]))  // true
+/// Set.isSubsetOf(&Set.empty(), &Set.fromArray(&[1]))             // true
+/// ```
 export fn isSubsetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
   left.difference(*right).isEmpty()
 }
 
 /// Whether every member of the second set is in the first.
+///
 /// Containment read from the other side, which is all a superset is. Stating it
 /// that way keeps one definition of the rule rather than two that must agree.
+///
+/// ## Examples
+///
+/// ```
+/// Set.isSupersetOf(&Set.fromArray(&[1, 2]), &Set.fromArray(&[1]))  // true
+/// ```
 export fn isSupersetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
   isSubsetOf(right, left)
 }
 
 /// Whether every given member is in the set.
-/// The question `isSubsetOf` asks, for a caller holding members rather than a
-/// set: one merge of two ordered runs, not one lookup per member.
+///
+/// The question `isSubsetOf` asks, for a caller holding members rather than a set:
+/// one merge of two ordered runs, not one lookup per member.
+///
+/// ## Examples
+///
+/// ```
+/// Set.containsAll(&Set.fromArray(&[1, 2, 3]), &[1, 3])  // true
+/// Set.containsAll(&Set.fromArray(&[1]), &[1, 9])        // false
+/// ```
 export fn containsAll[T](value: &Set[T], items: &Array[T]) -> Bool {
   isSubsetOf(&setOf(*items), value)
 }
 
 /// Whether the two sets share no members.
+///
+/// Answers without building the intersection, so reach for it when the shared
+/// members themselves are not wanted. Two empty sets are disjoint.
+///
+/// ## Examples
+///
+/// ```
+/// Set.isDisjointFrom(&Set.fromArray(&[1]), &Set.fromArray(&[2]))  // true
+/// ```
 export fn isDisjointFrom[T](left: &Set[T], right: &Set[T]) -> Bool {
   left.intersect(*right).isEmpty()
 }
 
 /// Whether two sets hold the same members.
-/// Sizes are compared first: two sets of different size cannot be equal, and
-/// asking costs nothing next to walking them.
+///
+/// Sizes are compared first: two sets of different size cannot be equal, and asking
+/// costs nothing next to walking them. Insertion order never matters, since a set
+/// keeps its own order.
+///
+/// ## Examples
+///
+/// ```
+/// Set.equals(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 1]))  // true
+/// ```
 export fn equals[T](left: &Set[T], right: &Set[T]) -> Bool {
   left.size() == right.size() && left.difference(*right).isEmpty()
 }
 
-/// Whether the two sets share any member. The complement of `isDisjointFrom`,
-/// named because a reader asking "do these overlap" should not have to negate.
+/// Whether the two sets share any member.
+///
+/// The complement of `isDisjointFrom`, named because a reader asking "do these
+/// overlap" should not have to negate.
+///
+/// ## Examples
+///
+/// ```
+/// Set.intersects(&Set.fromArray(&[1, 2]), &Set.fromArray(&[2, 3]))  // true
+/// ```
 export fn intersects[T](left: &Set[T], right: &Set[T]) -> Bool {
   !isDisjointFrom(left, right)
 }
 
 /// Every given member added.
-/// One merge of two ordered runs rather than one insertion per member, which is
-/// the difference between walking the set once and walking it for each item.
+///
+/// One merge of two ordered runs rather than one insertion per member, which is the
+/// difference between walking the set once and walking it for each item. Duplicates
+/// among the items are dropped, as they are anywhere else.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.insertAll(&Set.fromArray(&[1]), &[2, 2, 3]))  // [1, 2, 3]
+/// ```
 export fn insertAll[T](value: &Set[T], items: &Array[T]) -> Set[T] {
   value.union(setOf(*items))
 }
 
 /// Every given member taken away, in one pass for the same reason.
+///
+/// Items that are not members are ignored rather than reported, matching `remove`.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.removeAll(&Set.fromArray(&[1, 2, 3]), &[2, 9]))  // [1, 3]
+/// ```
 export fn removeAll[T](value: &Set[T], items: &Array[T]) -> Set[T] {
   value.difference(setOf(*items))
 }
 
 /// Only the members the predicate rejects.
-/// The complement of `filter`, so a caller states the condition the way they
-/// think of it rather than negating a predicate at the call site.
+///
+/// The complement of `filter`, so a caller states the condition the way they think
+/// of it rather than negating a predicate at the call site.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.removeIf(&Set.fromArray(&[1, 2, 3]), fn(n: Int) -> Bool => n < 3))  // [3]
+/// ```
 export fn removeIf[T](value: &Set[T], reject: fn(T) -> Bool) -> Set[T] {
   setOf(value.toArray().filter(fn(member: T) -> Bool => !reject(member)))
 }
 
 /// Only the members the predicate accepts.
+///
+/// The result is a set, so it stays ordered and distinct. A predicate that accepts
+/// nothing gives an empty set rather than a failure.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.filter(&Set.fromArray(&[1, 2, 3]), fn(n: Int) -> Bool => n < 3))  // [1, 2]
+/// ```
 export fn filter[T](value: &Set[T], keep: fn(T) -> Bool) -> Set[T] {
   setOf(value.toArray().filter(keep))
 }
 
-/// Every member transformed. The result may be smaller when the
-/// transformation sends two members to the same value.
+/// Every member transformed.
+///
+/// The result may be smaller when the transformation sends two members to the same
+/// value, which is the one real difference from mapping an array. The result is
+/// reordered by the new values rather than keeping the old order.
+///
+/// ## Examples
+///
+/// ```
+/// Set.size(&Set.map(&Set.fromArray(&[1, 2]), fn(n: Int) -> Int => n % 2))  // 2
+/// Set.size(&Set.map(&Set.fromArray(&[1, 3]), fn(n: Int) -> Int => n % 2))  // 1
+/// ```
 export fn map[A, B](value: &Set[A], transform: fn(A) -> B) -> Set[B] {
   setOf(value.toArray().map(transform))
 }
 
 /// Every member combined into one value, in order.
+///
+/// The order is the set's own, so a fold over two equal sets answers the same value
+/// even when they were built differently — which a fold over an array cannot
+/// promise.
+///
+/// ## Examples
+///
+/// ```
+/// Set.fold(&Set.fromArray(&[1, 2, 3]), fn(total: Int, n: Int) -> Int => total + n, 0)  // 6
+/// ```
 export fn fold[T, A](value: &Set[T], combine: fn(A, T) -> A, start: A) -> A {
   value.toArray().reduce(combine, start)
 }
 
 /// Whether every member satisfies the predicate. True for an empty set.
-/// Stops at the first member that fails. Counting the members that pass answers
-/// the same question, but it runs the predicate on every one of them and builds
-/// an array to hold the answer — work that cannot change the result.
+///
+/// Stops at the first member that fails. Counting the members that pass answers the
+/// same question, but it runs the predicate on every one of them and builds an
+/// array to hold the answer — work that cannot change the result.
+///
+/// ## Examples
+///
+/// ```
+/// Set.all(&Set.fromArray(&[2, 4]), fn(n: Int) -> Bool => n % 2 == 0)  // true
+/// Set.all(&Set.empty(), fn(n: Int) -> Bool => n % 2 == 0)             // true
+/// ```
 export fn all[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
   for member in value {
     if !holds(member) { return false }
@@ -129,7 +367,15 @@ export fn all[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
 }
 
 /// Whether any member satisfies the predicate. False for an empty set.
+///
 /// Stops at the first member that passes, for the same reason.
+///
+/// ## Examples
+///
+/// ```
+/// Set.any(&Set.fromArray(&[1, 2]), fn(n: Int) -> Bool => n % 2 == 0)  // true
+/// Set.any(&Set.empty(), fn(n: Int) -> Bool => n % 2 == 0)             // false
+/// ```
 export fn any[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
   for member in value {
     if holds(member) { return true }
@@ -138,6 +384,15 @@ export fn any[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
 }
 
 /// Every set combined.
+///
+/// Folding `union` over the array, and the form to reach for when the sets are
+/// already gathered. An empty array answers an empty set.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.unionAll(&[Set.fromArray(&[1]), Set.fromArray(&[2])]))  // [1, 2]
+/// ```
 export fn unionAll[T](sets: &Array[Set[T]]) -> Set[T] {
   var out = setOf([])
   for value in sets { out = out.union(value) }
@@ -145,8 +400,16 @@ export fn unionAll[T](sets: &Array[Set[T]]) -> Set[T] {
 }
 
 /// Every member of every set that is in all of them.
-/// An empty array of sets answers with an empty set, since there is nothing for
-/// a member to be in.
+///
+/// An empty array of sets answers with an empty set, since there is nothing for a
+/// member to be in.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.intersectAll(&[Set.fromArray(&[1, 2]), Set.fromArray(&[2, 3])]))  // [2]
+/// Set.toArray(&Set.intersectAll(&[]))                                               // []
+/// ```
 export fn intersectAll[T](sets: &Array[Set[T]]) -> Set[T] {
   if sets.length() == 0 { setOf([]) } else {
     var out = sets[0]
@@ -156,6 +419,16 @@ export fn intersectAll[T](sets: &Array[Set[T]]) -> Set[T] {
 }
 
 /// The members the predicate accepts, and the members it rejects.
+///
+/// Every member lands in exactly one side, so the two rejoin by `union` to the
+/// original. One pass where `filter` and `removeIf` would be two.
+///
+/// ## Examples
+///
+/// ```
+/// Set.partition(&Set.fromArray(&[1, 2, 3]), fn(n: Int) -> Bool => n < 3)
+/// // ({1, 2}, {3})
+/// ```
 export fn partition[T](value: &Set[T], keep: fn(T) -> Bool) -> (Set[T], Set[T]) {
   var kept = []
   var rejected = []
@@ -166,12 +439,30 @@ export fn partition[T](value: &Set[T], keep: fn(T) -> Bool) -> (Set[T], Set[T]) 
 }
 
 /// The smallest member, or `None` for an empty set.
+///
+/// The first member in the set's own order, which a set can answer without
+/// searching.
+///
+/// ## Examples
+///
+/// ```
+/// Set.least(&Set.fromArray(&[3, 1, 2]))  // Some(1)
+/// Set.least(&Set.empty())                // None
+/// ```
 export fn least[T](value: &Set[T]) -> Option[T] {
   let members = value.toArray()
   if members.length() == 0 { None } else { Some(members[0]) }
 }
 
 /// The largest member, or `None` for an empty set.
+///
+/// The mirror of `least`, and the last member in the set's own order.
+///
+/// ## Examples
+///
+/// ```
+/// Set.greatest(&Set.fromArray(&[3, 1, 2]))  // Some(3)
+/// ```
 export fn greatest[T](value: &Set[T]) -> Option[T] {
   let members = value.toArray()
   let total = members.length()
@@ -179,6 +470,15 @@ export fn greatest[T](value: &Set[T]) -> Option[T] {
 }
 
 /// The set without its smallest member.
+///
+/// An empty set comes back empty rather than failing, so repeated use drains a set
+/// safely. Pair it with `least` to take the member and the remainder.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.removeLeast(&Set.fromArray(&[1, 2, 3])))  // [2, 3]
+/// ```
 export fn removeLeast[T](value: &Set[T]) -> Set[T] {
   match least(value) {
     case Some(found) => value.remove(found)
@@ -187,6 +487,14 @@ export fn removeLeast[T](value: &Set[T]) -> Set[T] {
 }
 
 /// The set without its largest member.
+///
+/// The mirror of `removeLeast`, and equally safe on an empty set.
+///
+/// ## Examples
+///
+/// ```
+/// Set.toArray(&Set.removeGreatest(&Set.fromArray(&[1, 2, 3])))  // [1, 2]
+/// ```
 export fn removeGreatest[T](value: &Set[T]) -> Set[T] {
   match greatest(value) {
     case Some(found) => value.remove(found)
@@ -195,15 +503,33 @@ export fn removeGreatest[T](value: &Set[T]) -> Set[T] {
 }
 
 /// The member at a position in order, or `None` when there is none.
+///
+/// Positions count from nought against the set's own order, not insertion order.
+/// Out-of-range positions answer `None` rather than failing.
+///
+/// ## Examples
+///
+/// ```
+/// Set.at(&Set.fromArray(&[3, 1, 2]), 0)  // Some(1)
+/// Set.at(&Set.fromArray(&[1]), 9)        // None
+/// ```
 export fn at[T](value: &Set[T], position: Int) -> Option[T] {
   let members = value.toArray()
   if position < 0 || position >= members.length() { None } else { Some(members[position]) }
 }
 
 /// The members a comparison places before a value, and those it places after.
-/// The value itself is in neither, which is what makes this a split rather than
-/// a partition. The comparison is supplied because a set is generic and the
-/// language has no ordering bound to write yet.
+///
+/// The value itself is in neither, which is what makes this a split rather than a
+/// partition. The comparison is supplied because a set is generic and the language
+/// has no ordering bound to write yet.
+///
+/// ## Examples
+///
+/// ```
+/// Set.split(&Set.fromArray(&[1, 2, 3]), 2, fn(a: Int, b: Int) -> Bool => a < b)
+/// // ({1}, {3})
+/// ```
 export fn split[T](value: &Set[T], pivot: T, before: fn(T, T) -> Bool) -> (Set[T], Set[T]) {
   var below = []
   var above = []
@@ -216,6 +542,15 @@ export fn split[T](value: &Set[T], pivot: T, before: fn(T, T) -> Bool) -> (Set[T
 }
 
 /// Every pairing of one set's members with the other's.
+///
+/// The result's size is the two sizes multiplied, since pairs of distinct members
+/// are themselves distinct. Either set being empty makes the result empty.
+///
+/// ## Examples
+///
+/// ```
+/// Set.size(&Set.cartesian(&Set.fromArray(&[1, 2]), &Set.fromArray(&[3, 4])))  // 4
+/// ```
 export fn cartesian[A, B](left: &Set[A], right: &Set[B]) -> Set[(A, B)] {
   var out = []
   for first in left.toArray() {
@@ -225,6 +560,15 @@ export fn cartesian[A, B](left: &Set[A], right: &Set[B]) -> Set[(A, B)] {
 }
 
 /// The first member the predicate accepts, or `None`.
+///
+/// First in the set's own order, so the answer is reproducible for equal sets.
+/// Stops at the first match.
+///
+/// ## Examples
+///
+/// ```
+/// Set.find(&Set.fromArray(&[1, 2, 3]), fn(n: Int) -> Bool => n > 1)  // Some(2)
+/// ```
 export fn find[T](value: &Set[T], holds: fn(T) -> Bool) -> Option[T] {
   for member in value {
     if holds(member) { return Some(member) }
@@ -233,6 +577,14 @@ export fn find[T](value: &Set[T], holds: fn(T) -> Bool) -> Option[T] {
 }
 
 /// How many members the predicate accepts.
+///
+/// The size `filter` would have produced, without building the filtered set.
+///
+/// ## Examples
+///
+/// ```
+/// Set.count(&Set.fromArray(&[1, 2, 3]), fn(n: Int) -> Bool => n > 1)  // 2
+/// ```
 export fn count[T](value: &Set[T], holds: fn(T) -> Bool) -> Int {
   var total = 0
   for member in value {
