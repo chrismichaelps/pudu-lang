@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
@@ -119,6 +120,11 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| Pages written where hosts serve them, unsafe paths and failed pages
+        refused, unchanged files left alone, one worker and eight agreeing,
+        and each host's layout and routing. -}
+    , counterexample "a site builds for its host and rewrites only what changed"
+        (built === Just "28")
     {-| Each checksum's published check value, chunked updates equal to the
         whole, and a one-bit change moving every one. -}
     , counterexample "checksums match their published values and chain over chunks"
