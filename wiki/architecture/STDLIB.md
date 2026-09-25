@@ -10,6 +10,8 @@ aliases: [Standard Library, Stdlib Design]
 
 A value has methods from exactly two places: the closed sets the compiler wires into `Array`,
 `Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes. Everything else is a
+module function taking the value as an argument. Text reads itself as a number with the built-in
+`toInt()`, `toFloat()`, and `toDecimal()`, each answering an `Option` for the whole text.
 module function taking the value as an argument. One method is universal: every value answers
 `toText()` with the text `display` writes, unless its type declares a `toText` of its own.
 
