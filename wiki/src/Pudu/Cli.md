@@ -217,3 +217,11 @@ cache compatibility cannot be established from its version string.
 the runtime shares this compiler's source digest; otherwise it carries none and says the program
 will be checked each time it starts. `bundledCache` compares a bundle's products against
 `identityText`, not the bare version.
+
+## Building for another host (#355)
+
+`pudu build <file> --target linux-musl-x86_64 | lambda-x86_64` resolves the release's runtime pack
+through [[Cli RuntimePack]]. `linux-musl-x86_64` attaches the program to the portable runtime;
+`lambda-x86_64` writes `-o` (default `<name>-lambda`) as a directory holding `bootstrap` and the
+packaged loader and libraries, each executable. `--target` and `--runtime` together, or an unknown
+target, are refused before anything is fetched.

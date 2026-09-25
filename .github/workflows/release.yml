@@ -108,8 +108,89 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # The runtime a program is attached to for a Linux server or a serverless
+  # function, published beside the compiler so `pudu build --target` fetches it
+  # instead of a developer building a toolchain for hours. Built in Alpine,
+  # which is musl, from this same commit: the runtime carries the compiler's
+  # source digest, which `pudu build --target` requires before using it.
+  runtime-pack:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: alpine:3.20
+    steps:
+      - name: Install the toolchain musl needs
+        run: |
+          apk add --no-cache \
+            bash binutils build-base coreutils curl git gmp-dev gnupg \
+            libffi-dev ncurses-dev patchelf perl tar xz zlib-dev gzip
+      - uses: actions/checkout@v7
+      - name: Install GHC and cabal
+        env:
+          BOOTSTRAP_HASKELL_NONINTERACTIVE: 1
+          BOOTSTRAP_HASKELL_MINIMAL: 1
+          GHCUP_INSTALL_BASE_PREFIX: /opt
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+          /opt/.ghcup/bin/ghcup install ghc 9.10.1 --set
+          /opt/.ghcup/bin/ghcup install cabal 3.12.1.0 --set
+          echo "/opt/.ghcup/bin" >> "$GITHUB_PATH"
+      - name: Build the runtimes
+        shell: bash
+        working-directory: packages/pudu/v0.1
+        run: |
+          set -euo pipefail
+          cabal update
+          cabal build exe:pudu --disable-tests --enable-optimization=2
+          out="$GITHUB_WORKSPACE/dist/runtime"
+          mkdir -p "$out"
+          built="$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          strip -o "$out/pudu-musl-x86_64" "$built"
+          cp "$out/pudu-musl-x86_64" "$out/pudu-musl-lambda-x86_64"
+          cp /lib/ld-musl-x86_64.so.1 "$out/ld-musl-x86_64.so.1"
+          patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 "$out/pudu-musl-lambda-x86_64"
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+            resolved="$(ldd "$out/pudu-musl-x86_64" | awk -v wanted="$dependency" '$1 == wanted { print $3 }')"
+            test -n "$resolved"
+            cp -L "$resolved" "$out/$dependency"
+            patchelf --replace-needed "$dependency" "/var/task/$dependency" "$out/pudu-musl-lambda-x86_64"
+          done
+          if ldd "$out/pudu-musl-x86_64" 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
+            echo "the runtime still needs glibc" >&2
+            exit 1
+          fi
+          grep -c "PUDU-SOURCE-DIGEST:" "$out/pudu-musl-x86_64"
+      - name: Attach a program to the stripped runtime and run it
+        shell: bash
+        run: |
+          set -euo pipefail
+          PUDU="$(cd packages/pudu/v0.1 && cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          mkdir -p dist/probe
+          printf 'module Probe\n\nimport Std.Io as Io\n\nfn main() -> Int {\n  let _said = Io.writeLine("probe on musl")\n  0\n}\n' > dist/probe/Probe.pudu
+          "$PUDU" build dist/probe/Probe.pudu -o dist/probe/probe --runtime dist/runtime/pudu-musl-x86_64 2> dist/probe/said
+          ! grep -q "other sources" dist/probe/said
+          test "$(env -i dist/probe/probe)" = "probe on musl"
+      - name: Compress and list the pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/runtime-pack
+          cd dist/runtime
+          sha256sum pudu-musl-x86_64 pudu-musl-lambda-x86_64 ld-musl-x86_64.so.1 libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10 \
+            > ../runtime-pack/pudu-runtime-linux-musl-x86_64.sha256
+          for file in *; do gzip -9 -n -c "$file" > "../runtime-pack/$file.gz"; done
+          ls -l ../runtime-pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-${{ needs.plan.outputs.version }}-runtime-linux-musl-x86_64
+          path: dist/runtime-pack/*
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
-    needs: [plan, archives]
+    needs: [plan, archives, runtime-pack]
     if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15

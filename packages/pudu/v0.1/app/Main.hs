@@ -1,13 +1,14 @@
 {-| @Program.Cli.Module — the pudu command line entry point -}
 module Main (main) where
 
-import Control.Monad (filterM, unless, when)
+import Control.Monad (filterM, forM_, unless, when)
 import Control.Exception (IOException, bracket, try)
 import System.IO.Temp (withSystemTempDirectory)
-import Data.List (isSuffixOf, sort, sortOn)
+import Data.List (intercalate, isSuffixOf, sort, sortOn)
 import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Eval.Confinement (confine)
+import qualified Pudu.Cli.RuntimePack as Pack
 import Pudu.Version (identityText, versionText)
 import Pudu.Cli.Init (createProjectWith, renderInitError)
 import Pudu.Cli.Package (packageCommands, runPackageCommand)
@@ -21,6 +22,11 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import System.Directory
   ( canonicalizePath
+  , copyFile
+  , createDirectoryIfMissing
+  , getPermissions
+  , setOwnerExecutable
+  , setPermissions
   , getFileSize
   , getModificationTime
   , doesDirectoryExist
@@ -435,7 +441,11 @@ runCommand = do
       Left problem -> do
         hPutStrLn stderr ("pudu build: " <> problem)
         exitFailure
-      Right (path, target, runtime) -> buildProgram style path target runtime
+      Right (path, output, runtime, Nothing) -> buildProgram style path (maybe (defaultTargetName path) id output) runtime
+      Right (path, output, Nothing, Just host) -> buildForHost style path output host
+      Right _ -> do
+        hPutStrLn stderr "pudu build: --runtime and --target both name a runtime; give one"
+        exitFailure
     ("test" : paths) -> testPaths style paths
     {-| `search` names two commands. Source paths after the query select the
         declaration search; words alone search published packages. -}
@@ -628,30 +638,37 @@ runProgramWith cache style path = do
     skipped silently would produce a plausible artefact built to different
     settings than the ones asked for — and the place that is discovered is the
     platform it was deployed to. -}
-buildArguments :: [String] -> Either String (FilePath, FilePath, Maybe FilePath)
-buildArguments = go Nothing Nothing Nothing
+buildArguments :: [String] -> Either String (FilePath, Maybe FilePath, Maybe FilePath, Maybe Pack.Target)
+buildArguments = go Nothing Nothing Nothing Nothing
  where
-  go path target runtime arguments = case arguments of
+  go path target runtime host arguments = case arguments of
     [] -> case path of
       Nothing -> Left "no file given"
-      Just found -> Right (found, maybe (defaultTargetName found) id target, runtime)
+      Just found -> Right (found, target, runtime, host)
     ("-o" : rest) -> case rest of
       (value : remaining)
         | not (isFlag value) ->
             if target == Nothing
-              then go path (Just value) runtime remaining
+              then go path (Just value) runtime host remaining
               else Left "-o given more than once"
       _ -> Left "-o needs a name to write to"
     ("--runtime" : rest) -> case rest of
       (value : remaining)
         | not (isFlag value) ->
             if runtime == Nothing
-              then go path target (Just value) remaining
+              then go path target (Just value) host remaining
               else Left "--runtime given more than once"
       _ -> Left "--runtime needs the path of a runtime to attach the program to"
+    ("--target" : rest) -> case rest of
+      (value : remaining)
+        | Just named <- Pack.targetNamed value ->
+            if host == Nothing
+              then go path target runtime (Just named) remaining
+              else Left "--target given more than once"
+      _ -> Left ("--target needs one of: " <> intercalate ", " Pack.targetNames)
     (value : remaining)
       | isFlag value -> Left ("unknown option '" <> value <> "'")
-      | path == Nothing -> go (Just value) target runtime remaining
+      | path == Nothing -> go (Just value) target runtime host remaining
       | otherwise -> Left ("more than one file given: '" <> value <> "'")
 
   isFlag value = case value of
@@ -723,6 +740,33 @@ buildProgram style path target runtime = do
                   <> Text.pack (show (length (bundleModules bundle)))
                   <> " modules)"
               )
+
+{-| Build for a host other than this machine, from the runtime pack the
+    release of this compiler published.
+
+    `linux-musl-x86_64` writes one executable. `lambda-x86_64` writes a
+    directory a platform starting `bootstrap` over the Lambda runtime interface
+    runs as it is: the program as `bootstrap`, and beside it the musl loader and
+    the libraries the runtime names at `/var/task`. -}
+buildForHost :: RenderStyle -> FilePath -> Maybe FilePath -> Pack.Target -> IO ()
+buildForHost style path output host = do
+  resolved <- Pack.resolvePack
+  pack <- case resolved of
+    Left problem -> do
+      TextIO.hPutStrLn stderr ("pudu build: " <> Pack.renderPackProblem problem)
+      exitFailure
+    Right directory -> pure directory
+  let runtime = pack </> Pack.runtimeFileFor host
+  case host of
+    Pack.LinuxMusl -> buildProgram style path (maybe (defaultTargetName path) id output) (Just runtime)
+    Pack.Lambda -> do
+      let directory = maybe (defaultTargetName path <> "-lambda") id output
+      createDirectoryIfMissing True directory
+      buildProgram style path (directory </> "bootstrap") (Just runtime)
+      forM_ Pack.sharedFiles $ \name -> do
+        copyFile (pack </> name) (directory </> name)
+        setPermissions (directory </> name) . setOwnerExecutable True =<< getPermissions (directory </> name)
+      TextIO.putStrLn (Text.pack directory <> ": a function directory with bootstrap, the musl loader, and its libraries")
 
 {-| Why a runtime cannot be attached to, or nothing when it can.
 

@@ -29,6 +29,8 @@ tags: [moc, module]
 - [[VS Code Grammar]] — the editor extension's TextMate grammar, interpolations included.
 - [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the
   repository-only regression package that preserves `cabal test all`.
+- [[Pudu Package Project]] · [[Package Binary]] — the release build plan (split sections) and the
+  stripped, reproducible archive it becomes.
 - [[Refresh Pudu Installation]] — PATH-aware installed-compiler replacement and behavior proof.
 - [[Bundle End-to-End Gate]] — copied-bundle execution, cache isolation, and build refusal coverage.
 - [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]] — repository test ownership separated from

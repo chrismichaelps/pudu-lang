@@ -16,6 +16,31 @@ tags: [changelog]
 - [[VS Code Grammar]] colours interpolations as embedded Pudu; the extension is 0.5.0.
 - Compiler object and interface files are no longer tracked, and `.gitignore` keeps them out.
 
+## 2026-09-25 — The reference shows the new documentation, and the book covers deploying (#364)
+
+- `website/data/api.json` is regenerated from the current library, so the reference renders the
+  documentation from #228 and #359 and lists the modules added since.
+- [[website Domain Library]] places `Std.Base32` and `Std.Pem` with the byte-level encodings.
+- `website/docs/25-deploying.md`: pages as files with `Std.Site`, routes declared once for every
+  host, and servers or functions built for Linux with `pudu build --target`. Both examples run.
+
+## 2026-09-25 — Building for another host without a toolchain (#355)
+
+- [[Cli RuntimePack]]: `pudu build --target linux-musl-x86_64 | lambda-x86_64` fetches the release's
+  musl runtime pack once — HTTPS, redirects followed, every file checked against the SHA-256 manifest
+  and the runtimes against this compiler's source digest — and keeps it by version and digest. The
+  Lambda target writes a ready function directory.
+- The release workflow builds, strips, proves, and publishes the pack beside the compiler archives.
+- [[Runtime Pack Gate]] serves a pack from a stand-in release and covers every refusal; CI runs it.
+
+## 2026-09-25 — A smaller compiler download (#360)
+
+- [[Pudu Package Project]]: the release plan builds every package with split sections, so linking
+  keeps only the code the compiler reaches.
+- [[Package Binary]] strips the packaged executable and refuses to package without `strip`.
+- linux-amd64: executable 58 MB → 27.8 MB, archive 10.4 MB → 7.3 MB. The archive's compiler runs a
+  program from an empty environment, and a bundle built from it passes the bundle gate.
+
 ## 2026-09-25 — Standard library documentation written for readers (#228)
 
 - Fourteen core modules (`Std.List`, `Std.Map`, `Std.Set`, `Std.Text`, `Std.Option`, `Std.Result`,
