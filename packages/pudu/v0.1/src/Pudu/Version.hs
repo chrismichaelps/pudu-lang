@@ -1,5 +1,10 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Pudu.Version
   ( versionText
+  , sourceDigest
+  , identityText
+  , digestIn
   , languageConstraint
   , acceptsLanguage
   ) where
@@ -7,10 +12,51 @@ module Pudu.Version
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Version (showVersion, versionBranch)
+import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Char8 as Char8
 import qualified Paths_pudu as Package
+import Pudu.Version.Digest (sourceDigestLiteral)
 
 versionText :: Text
 versionText = Text.pack (showVersion Package.version)
+
+{-| The literal the build spliced in, kept whole so its bytes stand in the
+    executable exactly as `digestIn` looks for them. -}
+digestLiteral :: String
+digestLiteral = $(sourceDigestLiteral)
+
+{-| The SHA-256 of the sources this compiler was built from, in hex. -}
+sourceDigest :: Text
+sourceDigest = Text.pack (take 64 (drop (length prefix) digestLiteral))
+ where
+  prefix = "PUDU-SOURCE-DIGEST:" :: String
+
+{-| What a compiler that made checked products is called, so a runtime can
+    tell whether they are its own: the version a reader sees and the digest
+    that decides. -}
+identityText :: Text
+identityText = versionText <> "+" <> sourceDigest
+
+{-| The source digest an executable's bytes carry, when they carry exactly one
+    well-formed digest literal. Read from bytes rather than by running the file,
+    since the file may be built for another platform. The prefix is assembled
+    here from two pieces so this function's own needle is never itself a match. -}
+digestIn :: ByteString.ByteString -> Maybe Text
+digestIn bytes = go bytes
+ where
+  needle = Char8.pack ("PUDU-SOURCE" <> "-DIGEST:")
+  go rest =
+    let (_, found) = ByteString.breakSubstring needle rest
+     in if ByteString.null found
+          then Nothing
+          else
+            let candidate = ByteString.take 65 (ByteString.drop (ByteString.length needle) found)
+                hex = ByteString.take 64 candidate
+             in if ByteString.length candidate == 65
+                  && Char8.last candidate == ';'
+                  && Char8.all (\c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) hex
+                  then Just (Text.pack (Char8.unpack hex))
+                  else go (ByteString.drop 1 found)
 
 languageConstraint :: Text
 languageConstraint = ">=" <> versionText <> " <" <> nextMinor

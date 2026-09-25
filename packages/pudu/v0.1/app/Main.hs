@@ -8,7 +8,7 @@ import Data.List (isSuffixOf, sort, sortOn)
 import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Eval.Confinement (confine)
-import Pudu.Version (versionText)
+import Pudu.Version (identityText, versionText)
 import Pudu.Cli.Init (createProjectWith, renderInitError)
 import Pudu.Cli.Package (packageCommands, runPackageCommand)
 import Pudu.Cli.Publish (publishCommands, runPublishCommand)
@@ -44,6 +44,7 @@ import Pudu.Bundle
   , materialise
   , writeBundled
   , writeBundledOnto
+  , sharesSources
   )
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Cache (ProductCache, collectedEntries, openCollectingCache, openProductCache)
@@ -390,7 +391,7 @@ runBundled bundle = withSystemTempDirectory "pudu-bundle" $ \root -> do
 bundledCache :: Bundle -> IO ProductCache
 bundledCache bundle =
   openCollectingCache $
-    if bundleCompiler bundle == versionText
+    if bundleCompiler bundle == identityText
       then Map.fromList [(Text.unpack name, bytes) | (name, bytes) <- bundleProducts bundle]
       else Map.empty
 
@@ -672,10 +673,23 @@ buildProgram style path target runtime = do
         hPutStrLn stderr "pudu build: the program produced no module"
         exitFailure
       Just entry -> do
-        let carried = case runtime of
-              Nothing -> [(Text.pack name, bytes) | (name, bytes) <- Map.toList products]
-              Just _ -> []
-            bundle = bundleOf entry (programNamedSources program) versionText carried
+        -- Products go wherever they will be read as they were written: onto
+        -- this compiler, or onto a named runtime built from the same sources.
+        -- A runtime from other sources would have to discard them, so it is
+        -- sent none and told why rather than left to discover it at start.
+        sameSources <- maybe (pure True) sharesSources runtime
+        unless sameSources $
+          hPutStrLn stderr
+            ( "pudu build: " <> maybe "" id runtime
+                <> " was built from other sources than this compiler, so the program"
+                <> " will be checked each time it starts; build the runtime from the same"
+                <> " checkout or release to start from what was checked here"
+            )
+        let carried =
+              if sameSources
+                then [(Text.pack name, bytes) | (name, bytes) <- Map.toList products]
+                else []
+            bundle = bundleOf entry (programNamedSources program) identityText carried
         -- A build writes a file the size of the compiler, so the write is the
         -- step most likely to fail for a reason that has nothing to do with
         -- the program: a full disk, a directory that is not there, a path
