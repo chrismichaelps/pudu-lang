@@ -64,3 +64,23 @@ The build step a Pudu web application calls to become files a host serves
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[ADR-0024-building-a-web-application-for-any-host]]
+
+## Routes before pages (#357)
+
+- `type Route = ToFunction{pattern, methods} | Header{pattern, name, value} |
+  Redirect{pattern, location, permanent}`, carried by `Options.routes` (default empty).
+- One pattern language for every host: a path starting `/`, with at most a trailing `*` matching the
+  rest. `patternRegex` gives the anchored regular expression Build Output matches (every other
+  character literal).
+- `vercelConfig(fallback, hasNotFound, routes)` emits redirects (308/307 with `Location`), headers
+  (`continue: true`), function routes (with `methods` when listed; left out without a fallback),
+  then `filesystem`, `/` → `index.html`, pages by directory, and the fallback or `404.html`.
+- `headersFile(routes)` and `redirectsFile(routes)` give the `_headers` and `_redirects` files that
+  Netlify and Cloudflare Pages read; they are written into the pages directory when not empty.
+- Validation refuses a pattern that does not start with `/`, holds a space, or has `*` anywhere but
+  the end; a header name that is empty or holds `:`, a space, or a line break, or a value with a
+  line break; a method that is not upper case; and an empty or spaced redirect location.
+
+Resolved Grill Log: one pattern language rather than each host's own, so an application's routes
+are written once; function routes apply only where a function runs, and are omitted rather than
+pointed at nothing elsewhere.
