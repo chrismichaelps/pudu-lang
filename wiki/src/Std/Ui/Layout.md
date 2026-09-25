@@ -104,6 +104,9 @@ required properties becomes a refusal at placement time. The parent-proposes, ch
 negotiation seen in declarative UI frameworks is simplified to proposal-independent intrinsic measurement so each
 node is measured exactly once.
 
+`trapping()` marks a view that holds keyboard focus while shown: `focusOrder` then visits only the
+controls inside the last trapping view, which is how a presented dialog keeps Tab inside itself.
+
 ## Grill Log
 
 - **Q:** Wrap each modifier in its own node? **A:** No. _Rationale:_ it makes meaning depend on call

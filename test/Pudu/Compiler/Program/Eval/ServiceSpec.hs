@@ -25,6 +25,7 @@ testServiceEvaluation = do
   desktop <- runEntry "test-fixtures/stdlib/UsesUiDesktop.pudu"
   toolkit <- runEntry "test-fixtures/stdlib/UsesUiToolkitAll.pudu"
   controls <- runEntry "test-fixtures/stdlib/UsesUiControlsAll.pudu"
+  shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -435,4 +436,10 @@ testServiceEvaluation = do
     , counterexample
         "desktop controls, navigation, and modals behave and are read aloud"
         (controls === Just "1215")
+    {-| Settings saved and read back through nested directories (9), a menu
+        bar validated against the keymap and read aloud with shortcuts (8),
+        and focus held inside a presented dialog (4). -}
+    , counterexample
+        "an application saves settings, offers menus, and traps focus in dialogs"
+        (shell === Just "90804")
     ]

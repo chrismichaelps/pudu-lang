@@ -158,7 +158,7 @@ export fn presenting(base: Layout.View, current: &Presented, sheet: fn(Str) -> L
     .means(Layout.Group)
   let centered = Layout.column([
       Layout.spacer(),
-      Layout.row([Layout.spacer(), card.filled(theme.palette.surface).padded(theme.spacing * 2), Layout.spacer()]),
+      Layout.row([Layout.spacer(), card.filled(theme.palette.surface).padded(theme.spacing * 2).trapping(), Layout.spacer()]),
       Layout.spacer()
     ])
   Layout.layer([base, scrim, centered]).aligned(Layout.Stretch)

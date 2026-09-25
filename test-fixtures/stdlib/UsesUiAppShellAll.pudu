@@ -1,0 +1,149 @@
+module UsesUiAppShellAll
+
+import Std.Env as Env
+import Std.Json as Json
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Controls as Controls
+import Std.Ui.Keymap as Keymap
+import Std.Ui.Layout as Layout
+import Std.Ui.Menu as Menu
+import Std.Ui.Navigation as Navigation
+import Std.Ui.Preferences as Preferences
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+
+fn preferences() -> Int {
+  var held = 0
+  let base = Env.temporaryDirectory() + "/pudu-preferences-fixture"
+  let path = base + "/nested/app/preferences.json"
+
+  // Typed values with fallbacks for absent or mistyped keys.
+  let set = Preferences.setFlag(&Preferences.setWhole(&Preferences.setText(&Preferences.empty("notes"), "theme", "dark"), "size", 14), "sync", true)
+  if Preferences.text(&set, "theme", "light") == "dark" && Preferences.whole(&set, "size", 12) == 14 && Preferences.flag(&set, "sync", false) {
+    held = held + 1
+  }
+  if Preferences.text(&set, "size", "none") == "none" && Preferences.whole(&set, "missing", 7) == 7 { held = held + 1 }
+  if Preferences.keys(&set) == ["size", "sync", "theme"] && Preferences.keys(&Preferences.remove(&set, "size")) == ["sync", "theme"] {
+    held = held + 1
+  }
+
+  // Saved settings read back whole; nested directories are created.
+  match Preferences.saveTo(&set, path) {
+    case Ok(_) => {
+      match Preferences.loadFrom("notes", path) {
+        case Ok(loaded) => { if loaded == set { held = held + 1 } }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Absent settings are empty; malformed ones are refused.
+  match Preferences.loadFrom("notes", base + "/absent.json") {
+    case Ok(found) => { if found == Preferences.empty("notes") { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let _ = writeFile(base + "/bad.json", "[1, 2]")
+  match Preferences.loadFrom("notes", base + "/bad.json") {
+    case Err(problem) => { if Preferences.explain(&problem).endsWith("settings must be a JSON object") { held = held + 1 } }
+    case Ok(_) => {}
+  }
+
+  // An application name cannot escape its directory.
+  if Preferences.pathFor("../evil") == Err(Preferences.InvalidApp("../evil")) { held = held + 1 }
+  match Preferences.pathFor("notes") {
+    case Ok(found) => { if found.endsWith("/notes/preferences.json") { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if Json.field(&Preferences.toJson(&set), "size") == Some(Json.Number(14)) { held = held + 1 }
+  if Env.variable("PUDU_PREFERENCES_SAVE") == Some("1") {
+    let _ = Preferences.save(&set)
+    let _ = Preferences.load("notes")
+  }
+  held
+}
+
+fn bar() -> Array[Menu.Menu] {
+  [
+    Menu.menu("File", [Menu.command("New", "new"), Menu.Separator, Menu.command("Save", "save")]),
+    Menu.menu("Edit", [Menu.command("Undo", "undo"), Menu.Submenu(Menu.menu("Find", [Menu.command("Find…", "find")]))])
+  ]
+}
+
+fn menus() -> Int {
+  var held = 0
+  let theme = Theme.light()
+  let keys = Keymap.forPlatform(&Keymap.keymap().bind("mod+s", "save", "Save").bind("mod+z", "undo", "Undo"), true)
+
+  if Menu.commandsOf(&bar()) == ["new", "save", "undo", "find"] { held = held + 1 }
+  if Menu.problems(&bar(), &keys).length() == 0 { held = held + 1 }
+  let broken = bar().push(Menu.menu("Empty", [])).push(Menu.menu("More", [Menu.command("Save again", "save")]))
+  if Menu.problems(&broken, &keys.bind("cmd+q", "quit", "Quit")) == [
+    "menu 'Empty' is empty",
+    "command 'save' appears twice",
+    "cmd+q runs 'quit', which no menu offers"
+  ] {
+    held = held + 1
+  }
+
+  // Opening, toggling, and closing.
+  let file = Menu.opened(&None, &Screen.Activated("menu.File"))
+  if file == Some("File") && Menu.opened(&file, &Screen.Activated("menu.File")) == None { held = held + 1 }
+  if Menu.opened(&file, &Screen.Activated("command.save")) == None && Menu.opened(&file, &Screen.Dismissed) == None {
+    held = held + 1
+  }
+  if Menu.opened(&file, &Screen.Activated("other")) == file { held = held + 1 }
+  if Menu.commandOf(&Screen.Activated("command.save")) == Some("save") && Menu.commandOf(&Screen.Activated("menu.File")) == None {
+    held = held + 1
+  }
+
+  // The open menu is drawn with shortcuts read aloud.
+  match Layout.place(&Menu.view(&bar(), &file, &keys, true, &theme), Canvas.size(480, 360)) {
+    case Ok(placed) => {
+      let names = Layout.semantics(&placed).map(|one| one.name)
+      if names.contains("File menu, open") && names.contains("Edit menu") && names.contains("Save, \u{2318}S") && names.contains("New") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  held
+}
+
+fn trapping() -> Int {
+  var held = 0
+  let theme = Theme.light()
+  let base = Layout.column([Controls.button("a", "A", &theme), Controls.button("b", "B", &theme)])
+  let confirm = Navigation.Confirm("Quit?", "Unsaved work", Navigation.destructive("quit", "Quit"))
+  let shown = Navigation.presenting(base, &confirm, |_id| Layout.box(), &theme)
+
+  // Focus visits only the dialog's controls while it is shown.
+  match Layout.place(&shown, Canvas.size(480, 360)) {
+    case Ok(placed) => {
+      let tags = Layout.focusOrder(&placed).map(|node| Layout.tagOf(&placed, node))
+      if tags == [Some("quit"), Some("cancel")] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Layout.place(&base, Canvas.size(480, 360)) {
+    case Ok(placed) => { if Layout.focusOrder(&placed).length() == 2 { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // Tabbing from nothing lands inside the dialog and wraps inside it.
+  match Screen.start(0, |_state| shown, |state, _event| state, Canvas.size(480, 360), theme.palette.background) {
+    case Ok(screen) => {
+      match Screen.handleAll(&screen, &[Screen.KeyPressed(Screen.Next), Screen.KeyPressed(Screen.Next), Screen.KeyPressed(Screen.Next)]) {
+        case Ok(after) => { if Screen.focusOf(&after) == Some("quit") { held = held + 1 } }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+  if Layout.box().trapping().traps { held = held + 1 }
+  held
+}
+
+fn main() -> Int {
+  preferences() * 10000 + menus() * 100 + trapping()
+}

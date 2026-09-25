@@ -72,7 +72,8 @@ export type View = {
   tag: Str,
   ink: Canvas.Color,
   scale: Int,
-  offset: Int
+  offset: Int,
+  traps: Bool
 }
 
 /// One node after placement, in reading and painting order.
@@ -92,7 +93,8 @@ export type Placed = {
   clip: Canvas.Rect,
   scrolls: Bool,
   offset: Int,
-  range: Int
+  range: Int,
+  traps: Bool
 }
 
 /// A placed screen: every node's frame, flat, in pre-order.
@@ -177,7 +179,8 @@ export fn box() -> View {
     tag: "",
     ink: Canvas.Color{red: 0u8, green: 0u8, blue: 0u8, alpha: 255u8},
     scale: 1,
-    offset: 0
+    offset: 0,
+    traps: false
   }
 }
 
@@ -252,6 +255,7 @@ export trait Composing {
   fn inked(self: &Self, color: Canvas.Color) -> Self
   fn scaled(self: &Self, scale: Int) -> Self
   fn scrolledTo(self: &Self, offset: Int) -> Self
+  fn trapping(self: &Self) -> Self
 }
 
 impl Composing for View {
@@ -307,6 +311,10 @@ impl Composing for View {
   /// The same scrolling view shifted by `offset` along its axis, clamped to how
   /// far its content reaches past its window.
   fn scrolledTo(self: &Self, offset: Int) -> Self { View{..*self, offset: offset} }
+
+  /// The view holding keyboard focus while it is shown: focus order visits
+  /// only the controls inside the last trapping view, as a modal requires.
+  fn trapping(self: &Self) -> Self { View{..*self, traps: true} }
 }
 
 /// Place a view into a viewport with default node and depth budgets.
@@ -419,14 +427,32 @@ export fn semantics(target: &Layout) -> Array[Semantic] {
 }
 
 /// The nodes keyboard focus visits, in reading order.
+///
+/// When a trapping view is shown, only the controls inside the last one are
+/// visited.
 export fn focusOrder(target: &Layout) -> Array[Int] {
-  var found: Array[Int] = []
+  var trap = -1
   var index = 0
   for placed in target.nodes {
-    if isControl(placed.role) { found = found.push(index) }
+    if placed.traps { trap = index }
+    index = index + 1
+  }
+  var found: Array[Int] = []
+  index = 0
+  for placed in target.nodes {
+    if isControl(placed.role) && (trap < 0 || within(target, index, trap)) { found = found.push(index) }
     index = index + 1
   }
   found
+}
+
+fn within(target: &Layout, node: Int, ancestor: Int) -> Bool {
+  var current = node
+  while current >= 0 {
+    if current == ancestor { return true }
+    current = target.nodes[current].parent
+  }
+  false
 }
 
 /// The frontmost meaningful node under a point.
@@ -647,7 +673,8 @@ fn arranged(
       clip: *clip,
       scrolls: if let Scroll(_) = view.kind { true } else { false },
       offset: 0,
-      range: 0
+      range: 0,
+      traps: view.traps
     })
   match view.kind {
     case Box => held

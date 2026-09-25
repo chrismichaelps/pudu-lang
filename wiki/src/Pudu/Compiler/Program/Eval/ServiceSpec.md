@@ -51,6 +51,8 @@ window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
 
 `UsesUiControlsAll` packs `1215`: controls (12) and navigation with modal presentation (15).
 
+`UsesUiAppShellAll` packs `90804`: preferences (9), menus (8), and focus trapping (4).
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

@@ -1,0 +1,181 @@
+module Std.Ui.Preferences
+
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Json as Json
+
+/// An application's saved settings: typed values by key.
+export type Preferences = { app: Str, values: Map[Str, Json.Json] }
+
+/// Why settings could not be found, read, or saved.
+export type PreferencesError
+  = NoHome
+  | InvalidApp(Str)
+  | Unreadable(Str, Str)
+  | Malformed(Str, Str)
+  | Unwritable(Str, Str)
+
+/// Settings holding nothing.
+export fn empty(app: Str) -> Preferences {
+  Preferences{app: app, values: mapOf([])}
+}
+
+/// Where settings for `app` live on this machine.
+///
+/// `%APPDATA%` when set (Windows); `~/Library/Application Support` when it
+/// exists (macOS); otherwise `$XDG_CONFIG_HOME` or `~/.config`. The file is
+/// `<app>/preferences.json` beneath it.
+export fn pathFor(app: Str) -> Result[Str, PreferencesError] {
+  if !validApp(app) { return Err(InvalidApp(app)) }
+  let base = baseDirectory() ?
+  Ok(base + "/" + app + "/preferences.json")
+}
+
+/// The settings saved for `app`, or empty settings when none are saved yet.
+export fn load(app: Str) -> Result[Preferences, PreferencesError] {
+  loadFrom(app, pathFor(app) ?)
+}
+
+/// The settings saved at `path`, or empty settings when the file is absent.
+export fn loadFrom(app: Str, path: Str) -> Result[Preferences, PreferencesError] {
+  if !fileExists(path) { return Ok(empty(app)) }
+  let contents = match readFile(path) {
+    case Ok(found) => found
+    case Err(reason) => { return Err(Unreadable(path, reason)) }
+  }
+  match Json.decode(contents) {
+    case Ok(Json.Object(members)) => {
+      var values: Map[Str, Json.Json] = mapOf([])
+      for (key, value) in members { values = values.insert(key, value) }
+      Ok(Preferences{app: app, values: values})
+    }
+    case Ok(_) => Err(Malformed(path, "settings must be a JSON object"))
+    case Err(reason) => Err(Malformed(path, Json.explain(&reason)))
+  }
+}
+
+/// Saves the settings where `load` finds them.
+export fn save(held: &Preferences) -> Result[(), PreferencesError] {
+  saveTo(held, pathFor(held.app) ?)
+}
+
+/// Saves the settings at `path`, creating its directories. The file is
+/// replaced in one step, so a crash leaves the old settings or the new ones.
+export fn saveTo(held: &Preferences, path: Str) -> Result[(), PreferencesError] {
+  let cut = lastSlash(path)
+  if cut > 0 { directories(path.take(cut)) ? }
+  let body = Json.encodePretty(&toJson(held))
+  match Fs.writeTextAtomically(path, body + "\n") {
+    case Ok(_) => Ok(())
+    case Err(_) => Err(Unwritable(path, "the file could not be replaced"))
+  }
+}
+
+/// The settings as one JSON object, keys in order.
+export fn toJson(held: &Preferences) -> Json.Json {
+  var members = []
+  for (key, value) in held.values { members = members.push((key, value)) }
+  Json.Object(members)
+}
+
+/// The text at `key`, or `fallback` when absent or not text.
+export fn text(held: &Preferences, key: Str, fallback: Str) -> Str {
+  match held.values.get(key) {
+    case Some(Json.Text(found)) => found
+    case _ => fallback
+  }
+}
+
+/// The whole number at `key`, or `fallback`.
+export fn whole(held: &Preferences, key: Str, fallback: Int) -> Int {
+  match held.values.get(key) {
+    case Some(Json.Number(found)) => found
+    case _ => fallback
+  }
+}
+
+/// The flag at `key`, or `fallback`.
+export fn flag(held: &Preferences, key: Str, fallback: Bool) -> Bool {
+  match held.values.get(key) {
+    case Some(Json.Boolean(found)) => found
+    case _ => fallback
+  }
+}
+
+/// The settings with `key` holding `value`.
+export fn setText(held: &Preferences, key: Str, value: Str) -> Preferences {
+  Preferences{..*held, values: held.values.insert(key, Json.Text(value))}
+}
+
+/// The settings with `key` holding `value`.
+export fn setWhole(held: &Preferences, key: Str, value: Int) -> Preferences {
+  Preferences{..*held, values: held.values.insert(key, Json.Number(value))}
+}
+
+/// The settings with `key` holding `value`.
+export fn setFlag(held: &Preferences, key: Str, value: Bool) -> Preferences {
+  Preferences{..*held, values: held.values.insert(key, Json.Boolean(value))}
+}
+
+/// The settings without `key`.
+export fn remove(held: &Preferences, key: Str) -> Preferences {
+  Preferences{..*held, values: held.values.remove(key)}
+}
+
+/// Every key held, in order.
+export fn keys(held: &Preferences) -> Array[Str] {
+  held.values.keys()
+}
+
+/// A one-line description of a failure.
+export fn explain(problem: &PreferencesError) -> Str {
+  match problem {
+    case NoHome => "no home or settings directory is known"
+    case InvalidApp(app) => "'{app}' is not a usable application name"
+    case Unreadable(path, reason) => "cannot read {path}: {reason}"
+    case Malformed(path, reason) => "{path} is not settings: {reason}"
+    case Unwritable(path, reason) => "cannot save {path}: {reason}"
+  }
+}
+
+fn validApp(app: Str) -> Bool {
+  if app.length() == 0 || app.startsWith(".") { return false }
+  for symbol in app {
+    if symbol == '/' || symbol == '\\' || symbol == ':' { return false }
+  }
+  true
+}
+
+fn baseDirectory() -> Result[Str, PreferencesError] {
+  if let Some(found) = Env.variable("APPDATA") { if found.length() > 0 { return Ok(found) } }
+  let home = match Env.homeDirectory() {
+    case Some(found) => found
+    case None => { return Err(NoHome) }
+  }
+  let library = home + "/Library/Application Support"
+  if directoryExists(library) { return Ok(library) }
+  if let Some(found) = Env.variable("XDG_CONFIG_HOME") { if found.length() > 0 { return Ok(found) } }
+  Ok(home + "/.config")
+}
+
+fn directories(path: Str) -> Result[(), PreferencesError] {
+  if path.length() == 0 || directoryExists(path) { return Ok(()) }
+  let cut = lastSlash(path)
+  if cut > 0 { directories(path.take(cut)) ? }
+  match createDirectory(path) {
+    case Ok(_) => Ok(())
+    case Err(reason) => {
+      if directoryExists(path) { Ok(()) } else { Err(Unwritable(path, reason)) }
+    }
+  }
+}
+
+fn lastSlash(path: Str) -> Int {
+  var found = -1
+  var index = 0
+  for symbol in path {
+    if symbol == '/' { found = index }
+    index = index + 1
+  }
+  found
+}

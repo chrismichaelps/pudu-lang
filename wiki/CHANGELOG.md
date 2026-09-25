@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
+
+- [[Std Ui Preferences]] saves typed settings atomically in the platform's per-user directory.
+- [[Std Ui Menu]] describes menu bars as data, draws them with shortcut labels, and reports commands
+  and shortcuts that disagree.
+- [[Std Ui Layout]] `trapping()` keeps focus inside a view; presented dialogs use it.
+
 ## 2026-09-24 — Desktop controls, navigation, and modal presentation (#322)
 
 - [[Std Ui Controls]]: accessible buttons, toggles, steppers, pickers, progress bars, fields, and
