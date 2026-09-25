@@ -8,7 +8,8 @@ aliases: [website View Home]
 # Website View Home
 
 Renders the home page and the ranked result list. The page opens with the shared `hero-banner`
-(the component the package catalogue opens with): the release pill, one sentence on what Pudu is,
+(the component the package catalogue opens with), with a roaming pudu behind its top edge
+([[website View Pudu]]): the release pill, one sentence on what Pudu is,
 Start learning and Download actions, the API search box, and concrete example queries. Below it, the
 type-shape example sits beside its explanation and the module panel follows on its own row. When the
 package snapshot holds projects, up to six appear as cards (name, description, latest release, stars)

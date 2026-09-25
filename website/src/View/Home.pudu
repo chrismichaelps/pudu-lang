@@ -11,6 +11,7 @@ import Service.Releases as Releases
 import Service.Search as Search
 import View.Dynamic as Dynamic
 import View.Layout as Layout
+import View.Pudu as Pudu
 
 /// The home page: the banner with the release, the language's promise, and
 /// API search; then how Pudu reads, its packages when there are any, and its
@@ -32,7 +33,7 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
     ])
   let modules = modulePanel(&catalog.modules, catalog.languageVersion)
   Layout.page(siteUrl, "Pudu: a statically typed programming language", "Pudu is a statically typed programming language where a signature tells you what a function takes, gives back, can fail with, and changes. Learn it, download it, and search its standard library.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
-        intro,
+        Pudu.around(Pudu.ROAM, false, intro),
         // The shape example sits beside its explanation, and the modules have a
         // row of their own below. Side by side, a two-line example next to a
         // tall list of modules left the example's column mostly empty, and a
