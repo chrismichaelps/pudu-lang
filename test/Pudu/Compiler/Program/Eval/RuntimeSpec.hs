@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
@@ -118,6 +119,10 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| Each checksum's published check value, chunked updates equal to the
+        whole, and a one-bit change moving every one. -}
+    , counterexample "checksums match their published values and chain over chunks"
+        (checked === Just "15")
     {-| Every kind of value answers toText with the text interpolation writes,
         a declared toText wins even through a type parameter, the method binds
         its receiver as a value, and bytes keep their refusing form. -}

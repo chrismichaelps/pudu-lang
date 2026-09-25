@@ -19,7 +19,8 @@ Compress bytes with zlib DEFLATE, decode bounded gzip payloads, and negotiate HT
 - `compressChecked(data, config)` returns `Result[Bytes,GzipError]` for callers handling codec failure.
 - `compress` and `compressText` retain Bytes results and panic on unexpected codec failure.
 - `decompressWithin(stream, maxBytes)` decodes one member with an output budget; `decompress` uses 64 MiB.
-- `decompressText` additionally requires valid UTF-8. `crc32` remains a public checksum utility.
+- `decompressText` additionally requires valid UTF-8. `crc32` remains a public checksum utility and answers [[Std Checksum]]'s `crc32` widened to
+  `Int`, so archive checks run at runtime speed rather than one evaluator step per table lookup.
 - `middleware(config)` negotiates gzip and returns binary responses when compression reduces size.
 
 ## Algorithm and boundaries
