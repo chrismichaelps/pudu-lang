@@ -53,3 +53,14 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 - **Q:** Why extract access and method lookup into `Eval.Operator.Access`? **A:** `readIndex`, `readMember`, `unwrapTry`, and the built-in method lookup tables form a cohesive access and inspection boundary (~240 lines) distinct from arithmetic and comparison operators, bringing `Eval.Operator` well below the 500-line limit.
 - **Q:** Why include `escapeHtml` in `stringMethods`? **A:** Mapping `escapeHtml` in the static `stringMethods` table ensures it is discovered during member evaluation and included in `builtinMethodNamesFor` suggestions.
+
+## Universal `toText` (#347)
+
+Member reads fall back to `TextMethodValue` for the member `toText` wherever a lookup would
+otherwise fail: on a record or scalar with no such method, on a variant whose owners declare none,
+on a built-in collection or text whose table has no entry, and on a tuple, function, or other value
+without a nominal name. A field or declared method of that name is always found first.
+`builtinMethodNamesFor` lists `toText` for every owner, so completion offers it.
+
+Resolved Grill Log: fall back only after the declared lookup, so a type's own rendering is never
+shadowed; `Char` and `Bytes` keep their own entries, the latter answering `Option`.

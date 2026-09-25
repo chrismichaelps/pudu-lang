@@ -86,9 +86,12 @@ testStandardLibrary = do
   unqualifiedHelp <- helps "test-fixtures/stdlib/RejectsUnqualifiedMember.pudu"
   unknownHelp <- helps "test-fixtures/stdlib/RejectsUnknownMember.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
+  textMisuse <- codes "test-fixtures/stdlib/RejectsToTextMisuse.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
     , counterexample "a program may shadow a standard module" (shadows === [])
+    , counterexample "toText answers text and takes nothing"
+        (textMisuse === ["E3001", "E3003"])
     , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)

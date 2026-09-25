@@ -53,6 +53,9 @@ import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
 import Pudu.Eval.Aead (openBytes, sealBytes)
 import Pudu.Eval.Verify (verifyEcdsaP256Sha256, verifyRsaSha256)
+import Pudu.Eval.Checksum (checksumKindOf, checksumUpdate)
+import Data.Word (Word64)
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
 import Pudu.Eval.Hash
   ( blake2b256
   , blake2b512
@@ -148,6 +151,11 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha3_512Builtin, [BytesValue message]) -> pure (BytesValue (sha3_512 message))
   (Blake2b256Builtin, [BytesValue message]) -> pure (BytesValue (blake2b256 message))
   (Blake2b512Builtin, [BytesValue message]) -> pure (BytesValue (blake2b512 message))
+  (ChecksumBuiltin, [IntValue _ code, IntValue _ previous, BytesValue message])
+    | Just kind <- checksumKindOf code, previous >= 0, previous <= toInteger (maxBound :: Word64) ->
+        pure (IntValue (UnsignedKind 64) (toInteger (checksumUpdate kind (fromInteger previous) message)))
+    | otherwise ->
+        abortAt (Just spanValue) "E7001" "checksumOf expects a known algorithm and an unsigned previous value" Nothing
   (HmacSha512Builtin, [BytesValue key, BytesValue message]) ->
     pure (BytesValue (hmacSha512 key message))
   (ConstantTimeEqualBuiltin, [BytesValue left, BytesValue right]) ->
@@ -265,6 +273,7 @@ isHashingBuiltin builtin = case builtin of
   Sha3_512Builtin -> True
   Blake2b256Builtin -> True
   Blake2b512Builtin -> True
+  ChecksumBuiltin -> True
   HmacSha512Builtin -> True
   ConstantTimeEqualBuiltin -> True
   VerifyRsaBuiltin -> True

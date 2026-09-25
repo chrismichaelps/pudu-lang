@@ -1,0 +1,8 @@
+module RejectsToTextMisuse
+
+fn main() -> Int {
+  let count: Int = 3
+  let wrong: Int = count.toText()
+  let extra = count.toText(1)
+  0
+}

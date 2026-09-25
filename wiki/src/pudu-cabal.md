@@ -155,3 +155,7 @@ Register Pudu.Version in library exposed-modules for Cabal-derived package versi
 
 Registers `Pudu.Version.Digest` and adds `template-haskell` (a GHC boot package) to the library so
 the digest is computed while the compiler is compiled.
+
+## Native checksums (#343)
+
+Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new dependency.
