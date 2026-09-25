@@ -150,3 +150,13 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Universal `toText` typing (#347)
+
+`memberType` answers `toText` as `fn() -> Str` for `Array`, `Str`, `Map`, `Set`, `Range`, and
+`Buckets` before their closed tables; `methodType` answers it when a nominal type declares no such
+field or method; `rigidMethod` answers it when no bound provides one; and any other type (tuple,
+function, unit) answers it rather than `E3005`. `Char` and `Bytes` keep their own entries.
+
+Resolved Grill Log: typed as the universal method only where nothing declared answers, so an
+implementation's own signature governs its calls; the evaluator makes the same choice at run time.

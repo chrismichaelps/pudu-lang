@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
@@ -117,6 +118,11 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| Every kind of value answers toText with the text interpolation writes,
+        a declared toText wins even through a type parameter, the method binds
+        its receiver as a value, and bytes keep their refusing form. -}
+    , counterexample "every value answers toText, and a declared one wins"
+        (written === Just "12")
     {-| Byte sizes and durations read and written, with overflow at Int's
         limits refused rather than stopping the program. -}
     , counterexample "quantities read strictly and write back to what they read"

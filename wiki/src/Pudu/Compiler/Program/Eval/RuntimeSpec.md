@@ -41,6 +41,8 @@ time, with overflow refused.
 [[Uses Ip All]] (55) registers [[Std Ip]]: canonical rendering, each refusal, and the mapped-peer
 allowlist regression.
 
+[[Uses To Text]] (12) registers the universal `toText()` method across every kind of value.
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one
@@ -55,6 +57,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Human All]], [[Uses Ip All]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], [[Uses To Text]], [[Uses Human All]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]

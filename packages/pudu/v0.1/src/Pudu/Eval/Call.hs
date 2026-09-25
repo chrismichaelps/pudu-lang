@@ -243,6 +243,7 @@ dispatchCall needs spanValue lent target values =
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
     BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
+    TextMethodValue receiver -> callDisplay spanValue (receiver : values)
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -391,6 +392,7 @@ applyFunction needs spanValue function arguments = case function of
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
   BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments
+  TextMethodValue receiver -> callDisplay spanValue (receiver : arguments)
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.

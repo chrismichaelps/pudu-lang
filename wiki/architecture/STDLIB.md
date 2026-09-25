@@ -10,7 +10,8 @@ aliases: [Standard Library, Stdlib Design]
 
 A value has methods from exactly two places: the closed sets the compiler wires into `Array`,
 `Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes. Everything else is a
-module function taking the value as an argument.
+module function taking the value as an argument. One method is universal: every value answers
+`toText()` with the text `display` writes, unless its type declares a `toText` of its own.
 
 That is why `text.contains("an")` works and `Option.unwrapOr(value, fallback)` does not become
 `value.unwrapOr(fallback)`: `Str` is a built-in with a method set, and `Option` is an ordinary sum

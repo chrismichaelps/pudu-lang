@@ -193,8 +193,10 @@ testMemberCompletion = do
         (all (`elem` builtinMethodNamesFor "Str") ["toUpper", "trim", "split", "length"] === True)
     , counterexample "and the two sets are not the same"
         (("toUpper" `elem` builtinMethodNamesFor "Array") === False)
-    , counterexample "a type with no built-in methods offers none"
-        (builtinMethodNamesFor "Int" === [])
+    , counterexample "a type with no table of its own offers only what every value answers"
+        (builtinMethodNamesFor "Int" === ["toText"])
+    , counterexample "every table offers toText beside its own"
+        (all (elem "toText" . builtinMethodNamesFor) ["Array", "Str", "Map", "Set", "Range"] === True)
     ]
 
 testTriviaOnly :: IO Property

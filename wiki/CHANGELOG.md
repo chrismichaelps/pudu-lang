@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Every value answers `toText()` (#347)
+
+- [[grammar/pudu]]: every value answers `toText()` with the text `display` writes; a `toText` its
+  type declares wins, also through an unbounded type parameter; `Bytes.toText()` keeps `Option`.
+- [[Type Check Rule]] types the universal method where nothing declared answers;
+  [[Eval Operator Access]] falls back to a bound [[Eval Value]] `TextMethodValue` that [[Eval Call]]
+  renders through `display`; completion offers it for every owner.
+- The book's text and traits chapters say so, with a runnable example. [[Uses To Text]] (12 checks)
+  and [[Rejects To Text Misuse]] cover it.
+
 ## 2026-09-25 — Quantities people write (#341)
 
 - [[Std Human]]: `parseBytes` in decimal and binary units, `bytes` and `bytesDecimal` to one
