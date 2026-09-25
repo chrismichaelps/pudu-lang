@@ -19,8 +19,8 @@ Publishes a release of the compiler, and proves one before it is merged.
   existing tags, and the paths the push changed. It releases only from `main`, only for a compiler
   change, and only at a version with no tag; a `release/` branch builds without publishing.
 - **Archives.** On `ubuntu-24.04` (`linux-amd64`) and `macos-14` (`darwin-arm64`), the package is built
-  at `-O2` by `scripts/build-package.py` and packed by `scripts/package-binary.py`, which checks the
-  binary's version and the API lifecycle. The checksum is verified, the archive is unpacked into a
+  at `-O2` with split sections by `scripts/build-package.py` ([[Pudu Package Project]]) and packed by
+  [[Package Binary]], which checks the binary's version and the API lifecycle and strips it. The checksum is verified, the archive is unpacked into a
   temporary directory, and its `bin/pudu` must report the version and run a program there with an
   empty environment, so the standard library is found beside the executable and not in the checkout.
 - **Publish.** Only when the plan says release: the commit receives an annotated `vX.Y.Z` tag from
@@ -38,3 +38,11 @@ again; the tag check closes that. Naming the package's paths in the trigger was 
 documentation paths after the first release branch showed the 300-file limit: the plan, which reads
 every changed path from `git`, is the gate that cannot be exceeded. The manual `package` workflow remains for building an archive from
 any branch.
+
+## Runtime pack (#355)
+
+`runtime-pack` builds the musl runtime in Alpine from the release commit, strips it, writes the
+Lambda variant (`/var/task` loader and libraries), proves a program attached to it starts from its
+products and runs, gzips each of the seven files, and uploads them with
+`pudu-runtime-linux-musl-x86_64.sha256`. `publish` waits for it, so a release carries the pack that
+`pudu build --target` fetches.

@@ -134,6 +134,11 @@ jobs:
       # Against libraries nobody here wrote, in the shapes their own headers
       # declare. Every other foreign fixture calls a shim from `cbits`, which
       # can be given whatever signature the boundary happens to admit.
+      # A pack served by a stand-in release: fetched through a redirect,
+      # verified file by file and by source digest, kept, and refused in each
+      # way a pack can be wrong.
+      - name: Verify building for another host from a published runtime pack
+        run: node test/runtime-pack.mjs "$PUDU"
       - name: Verify the foreign boundary reaches third-party libraries
         run: node test/foreign-third-party.mjs "$PUDU"
       # A service that answers, measured end to end. The figures are not

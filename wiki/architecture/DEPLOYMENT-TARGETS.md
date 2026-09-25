@@ -46,6 +46,13 @@ without selecting same-named glibc libraries from the host.
 
 ## Building for a platform from a machine that is not it
 
+`pudu build --target linux-musl-x86_64` or `--target lambda-x86_64` needs no toolchain: each release
+publishes the musl runtime its CI built, and the compiler fetches the one for its own version and
+source digest once, checks every file against the release's SHA-256 manifest, and keeps it. The
+Lambda target writes a function directory — `bootstrap`, the musl loader, and its libraries — that a
+`provided.al2023` runtime starts as it is. The rest of this section is the manual path, for a
+compiler built from a checkout.
+
 `pudu build --runtime <path>` attaches the program to a named runtime instead of to the compiler
 doing the building. That is what lets a developer on macOS produce a Linux artefact:
 
