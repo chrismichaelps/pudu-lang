@@ -1,0 +1,94 @@
+module UsesHumanAll
+
+import Std.Human as Human
+import Std.Time as Time
+
+fn refusal(read: Result[Int, Human.HumanError]) -> Str {
+  match read {
+    case Ok(_) => "accepted"
+    case Err(problem) => Human.explain(&problem)
+  }
+}
+
+fn durationRefusal(text: Str) -> Str {
+  match Human.parseDuration(text) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Human.explain(&problem)
+  }
+}
+
+fn millisOf(text: Str) -> Int {
+  match Human.parseDuration(text) {
+    case Ok(found) => Time.durationMillis(&found)
+    case Err(_) => -1
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // Byte counts read in both families of unit, without regard to case.
+  if Human.parseBytes("512") == Ok(512) && Human.parseBytes("512 B") == Ok(512) { held = held + 1 }
+  if Human.parseBytes("1.5KiB") == Ok(1536) && Human.parseBytes("1.5 kib") == Ok(1536) { held = held + 1 }
+  if Human.parseBytes("10MB") == Ok(10000000) && Human.parseBytes("10 mib") == Ok(10485760) { held = held + 1 }
+  if Human.parseBytes(" 2G ") == Ok(2000000000) && Human.parseBytes("2GiB") == Ok(2147483648) { held = held + 1 }
+  if Human.parseBytes("1 TiB") == Ok(1099511627776) && Human.parseBytes("1pb") == Ok(1000000000000000) { held = held + 1 }
+  if Human.parseBytes("0.5k") == Ok(500) && Human.parseBytes(".5k") == Ok(500) { held = held + 1 }
+
+  // Each refusal names what was wrong.
+  if refusal(Human.parseBytes("")) == "no quantity was given" { held = held + 1 }
+  if refusal(Human.parseBytes("1.1B")) == "'1.1B' does not come to a whole number of the smallest unit" { held = held + 1 }
+  if refusal(Human.parseBytes("5 bits")) == "'bits' is not a unit this reads" { held = held + 1 }
+  if refusal(Human.parseBytes("KiB")) == "'' is not a number" && refusal(Human.parseBytes("1.KiB")) == "'1.' is not a number" { held = held + 1 }
+  if refusal(Human.parseBytes("1.2.3k")) == "'1.2.3' is not a number" { held = held + 1 }
+  if refusal(Human.parseBytes("99999999999 PiB")) == "'99999999999 PiB' is more than can be held" { held = held + 1 }
+  if refusal(Human.parseBytes("99999999999999999999")) == "'99999999999999999999' is more than can be held" { held = held + 1 }
+  if refusal(Human.parseBytes("1.0000000001k")) == "'1.0000000001' is not a number" { held = held + 1 }
+
+  // Byte counts written for a reader, never reaching the next unit's size.
+  if Human.bytes(0) == "0 B" && Human.bytes(1023) == "1023 B" { held = held + 1 }
+  if Human.bytes(1024) == "1 KiB" && Human.bytes(1536) == "1.5 KiB" { held = held + 1 }
+  if Human.bytes(1048575) == "1 MiB" && Human.bytes(1073741824) == "1 GiB" { held = held + 1 }
+  if Human.bytes(-2048) == "-2 KiB" && Human.bytes(9223372036854775807) == "8 EiB" { held = held + 1 }
+  if Human.bytes(-9223372036854775807 - 1) == "-8 EiB" { held = held + 1 }
+  if Human.bytesDecimal(999) == "999 B" && Human.bytesDecimal(1500) == "1.5 kB" { held = held + 1 }
+  if Human.bytesDecimal(999950) == "1 MB" && Human.bytesDecimal(123456789) == "123.5 MB" { held = held + 1 }
+
+  // Durations read from compact and spaced forms, and from what Time writes.
+  if millisOf("90s") == 90000 && millisOf("1h30m") == 5400000 { held = held + 1 }
+  if millisOf("1.5h") == 5400000 && millisOf("2d 4h") == 187200000 { held = held + 1 }
+  if millisOf("-250ms") == -250 && millisOf("5 s 2 ms") == 5002 && millisOf("+1w") == 604800000 { held = held + 1 }
+  if millisOf(Time.describe(&Time.millis(3723000))) == 3723000 { held = held + 1 }
+  if durationRefusal("") == "no quantity was given" && durationRefusal("-") == "'-' is not a number" { held = held + 1 }
+  if durationRefusal("5 years") == "'years' is not a unit this reads" && durationRefusal("10") == "'' is not a unit this reads" { held = held + 1 }
+  if durationRefusal("1.0005s") == "'1.0005s' does not come to a whole number of the smallest unit" { held = held + 1 }
+  if durationRefusal("9999999999999w") == "'9999999999999w' is more than can be held" { held = held + 1 }
+  if durationRefusal("5000000000000000000ms 5000000000000000000ms") == "'5000000000000000000ms 5000000000000000000ms' is more than can be held" { held = held + 1 }
+
+  // Durations written exactly, and read back to the same value.
+  if Human.duration(&Time.millis(0)) == "0s" && Human.duration(&Time.millis(250)) == "250ms" { held = held + 1 }
+  if Human.duration(&Time.millis(5400000)) == "1h30m" && Human.duration(&Time.millis(-45000)) == "-45s" { held = held + 1 }
+  let odd = Time.millis(694861001)
+  if Human.duration(&odd) == "1w1d1h1m1s1ms" && millisOf(Human.duration(&odd)) == 694861001 { held = held + 1 }
+
+  // Ordinals, including the teens and negatives.
+  if Human.ordinal(1) == "1st" && Human.ordinal(2) == "2nd" && Human.ordinal(3) == "3rd" && Human.ordinal(4) == "4th" { held = held + 1 }
+  if Human.ordinal(11) == "11th" && Human.ordinal(12) == "12th" && Human.ordinal(13) == "13th" && Human.ordinal(112) == "112th" { held = held + 1 }
+  if Human.ordinal(21) == "21st" && Human.ordinal(0) == "0th" && Human.ordinal(-1) == "-1st" && Human.ordinal(-11) == "-11th" { held = held + 1 }
+
+  // Counts agree with their noun.
+  if Human.plural(1, "file", "files") == "1 file" && Human.plural(0, "file", "files") == "0 files" { held = held + 1 }
+  if Human.plural(2, "child", "children") == "2 children" && Human.plural(-1, "degree", "degrees") == "-1 degree" { held = held + 1 }
+
+  // Relative time, truncated rather than rounded.
+  let now = Time.instantOf(1700000000000)
+  let at = |offset: Int| Time.instantOf(1700000000000 + offset)
+  if Human.relative(&at(-5000), &now) == "just now" && Human.relative(&at(9000), &now) == "just now" { held = held + 1 }
+  if Human.relative(&at(-45000), &now) == "45 seconds ago" && Human.relative(&at(60000), &now) == "in 1 minute" { held = held + 1 }
+  if Human.relative(&at(-3599000), &now) == "59 minutes ago" && Human.relative(&at(7200000), &now) == "in 2 hours" { held = held + 1 }
+  if Human.relative(&at(-86400000), &now) == "yesterday" && Human.relative(&at(90000000), &now) == "tomorrow" { held = held + 1 }
+  if Human.relative(&at(-3 * 86400000), &now) == "3 days ago" && Human.relative(&at(15 * 86400000), &now) == "in 2 weeks" { held = held + 1 }
+  if Human.relative(&at(-65 * 86400000), &now) == "2 months ago" && Human.relative(&at(800 * 86400000), &now) == "in 2 years" { held = held + 1 }
+
+  held
+}
