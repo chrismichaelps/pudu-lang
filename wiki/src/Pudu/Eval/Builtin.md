@@ -208,3 +208,13 @@ Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`
 the same way to [[Eval Csv]], [[Eval Json]], and [[Eval Xml]].
 
 Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.
+
+## Native checksum dispatch (#343)
+
+`checksumOf(kind: Int, previous: UInt64, source: Bytes) -> UInt64` is a pure built-in: codes 0–4
+select CRC-32 (IEEE), CRC-32C, CRC-64/ECMA-182 as xz uses it, FNV-1a 32, and FNV-1a 64 in
+[[Eval Checksum]]. [[Std Checksum]] is its only caller and the typed surface.
+
+Resolved Grill Log: a code rather than a named sum because a wired-in signature cannot name a type a
+library declares; an unknown code or a `previous` outside `UInt64` aborts with `E7001` rather than
+answering a checksum of nothing.

@@ -58,3 +58,14 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 `stringMethods` maps `toInt`, `toFloat`, and `toDecimal` to their tags, so dispatch and completion
 list them.
+
+## Universal `toText` (#347)
+
+Member reads fall back to `TextMethodValue` for the member `toText` wherever a lookup would
+otherwise fail: on a record or scalar with no such method, on a variant whose owners declare none,
+on a built-in collection or text whose table has no entry, and on a tuple, function, or other value
+without a nominal name. A field or declared method of that name is always found first.
+`builtinMethodNamesFor` lists `toText` for every owner, so completion offers it.
+
+Resolved Grill Log: fall back only after the declared lookup, so a type's own rendering is never
+shadowed; `Char` and `Bytes` keep their own entries, the latter answering `Option`.

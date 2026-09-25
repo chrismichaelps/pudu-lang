@@ -642,6 +642,13 @@ memberType spanValue targetType member = do
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
+    {-| Every value answers `toText`. The built-in collections and text have
+        closed method tables with no such entry, so it is answered here, before
+        them; `Char` and `Bytes` keep their own, and `Bytes` answers `Option`
+        because not every byte sequence is text. -}
+    NominalType owner _
+      | member == textMember, owner `elem` ["Array", "Str", "Map", "Set", "Range", "Buckets"] ->
+          pure textMethodType
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
     NominalType "Bytes" [] -> bytesMethodType spanValue member
@@ -674,6 +681,7 @@ memberType spanValue targetType member = do
       bounds <- rigidBoundsOf name
       rigidMethod spanValue name bounds member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
+    _ | member == textMember -> pure textMethodType
     _ -> do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
@@ -982,6 +990,15 @@ nullLiteralType spanValue = do
         (Just "open unsafe(null) { ... }; null is a foreign-interface value, not an ordinary one")
       pure ErrorType
 
+{-| The method every value answers when its type declares none by that name:
+    the value rendered as `display` renders it. A declared `toText` — a field,
+    an implementation, or a bound's — is found first and wins. -}
+textMember :: Text
+textMember = "toText"
+
+textMethodType :: Type
+textMethodType = FunctionTypeValue False [] stringType
+
 {-| A method reached through a bound: the receiver is a parameter, and the trait
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
@@ -990,6 +1007,7 @@ rigidMethod :: Span -> Text -> [NominalId] -> Text -> Checker Type
 rigidMethod spanValue name bounds member = do
   providers <- filterM provides bounds
   case providers of
+    [] | member == textMember -> pure textMethodType
     [] -> do
       report "E3005" spanValue (name <> " has no method " <> member)
         (Just "add a trait bound that declares the method")
@@ -1024,6 +1042,8 @@ methodType spanValue owner member = do
   found <- lookupName key
   case (providers, found) of
     (_ : _, _) -> ambiguous spanValue owner member providers
+    (_, Nothing)
+      | member == textMember -> pure textMethodType
     (_, Nothing) -> do
       report "E3005" spanValue (nominalName owner <> " has no field or method " <> member)
         (Just "check the name against the type declaration and its implementations")

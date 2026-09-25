@@ -14,6 +14,25 @@ tags: [changelog]
 - The book's text chapter shows them. [[Uses Text To Number]] (14 checks) and
   [[Rejects Text To Number Misuse]] cover them.
 
+## 2026-09-25 — Checksums at runtime speed (#343)
+
+- [[Eval Checksum]] and the pure built-in `checksumOf`: CRC-32, CRC-32C, CRC-64 (ECMA-182 as xz), and
+  FNV-1a 32/64 as strict folds over bytes. A megabyte's CRC-32 drops from 6.6 s in Pudu to 43 ms.
+- [[Std Checksum]]: a function per algorithm, each with an `Update` form that chains over chunks,
+  and fixed-width hex.
+- [[Std Compress Gzip]] `crc32` delegates, so gzip and zip checks stop paying 11 s a megabyte.
+- [[Uses Checksum All]] asserts the published check values (15 checks).
+
+## 2026-09-25 — Every value answers `toText()` (#347)
+
+- [[grammar/pudu]]: every value answers `toText()` with the text `display` writes; a `toText` its
+  type declares wins, also through an unbounded type parameter; `Bytes.toText()` keeps `Option`.
+- [[Type Check Rule]] types the universal method where nothing declared answers;
+  [[Eval Operator Access]] falls back to a bound [[Eval Value]] `TextMethodValue` that [[Eval Call]]
+  renders through `display`; completion offers it for every owner.
+- The book's text and traits chapters say so, with a runnable example. [[Uses To Text]] (12 checks)
+  and [[Rejects To Text Misuse]] cover it.
+
 ## 2026-09-25 — Quantities people write (#341)
 
 - [[Std Human]]: `parseBytes` in decimal and binary units, `bytes` and `bytesDecimal` to one

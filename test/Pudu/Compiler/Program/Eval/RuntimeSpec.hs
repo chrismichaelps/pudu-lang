@@ -80,6 +80,8 @@ testRuntimeEvaluation = do
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   numbersRead <- runEntry "test-fixtures/stdlib/UsesTextToNumber.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
+  written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
@@ -123,6 +125,15 @@ testRuntimeEvaluation = do
         number, and writing then reading answering the value written. -}
     , counterexample "text reads back as the number it spells, or as nothing"
         (numbersRead === Just "14")
+    {-| Each checksum's published check value, chunked updates equal to the
+        whole, and a one-bit change moving every one. -}
+    , counterexample "checksums match their published values and chain over chunks"
+        (checked === Just "15")
+    {-| Every kind of value answers toText with the text interpolation writes,
+        a declared toText wins even through a type parameter, the method binds
+        its receiver as a value, and bytes keep their refusing form. -}
+    , counterexample "every value answers toText, and a declared one wins"
+        (written === Just "12")
     {-| Byte sizes and durations read and written, with overflow at Int's
         limits refused rather than stopping the program. -}
     , counterexample "quantities read strictly and write back to what they read"

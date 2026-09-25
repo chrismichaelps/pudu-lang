@@ -35,6 +35,8 @@ modules ([[Std Concurrent Future]], [[Std Concurrent Cancel]], [[Std Concurrent 
 refusals beside the successful paths. Every check is written so its answer does not depend on which
 thread got there first.
 
+[[Uses Checksum All]] (15) registers [[Std Checksum]] against published check values.
+
 [[Uses Human All]] (44) registers [[Std Human]]: byte sizes, durations, ordinals, plurals, and relative
 time, with overflow refused.
 
@@ -42,6 +44,8 @@ time, with overflow refused.
 allowlist regression.
 
 [[Uses Text To Number]] (14) registers `toInt`, `toFloat`, and `toDecimal` on text.
+
+[[Uses To Text]] (12) registers the universal `toText()` method across every kind of value.
 
 ## Grill Log
 
@@ -57,6 +61,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], [[Uses Text To Number]], [[Uses Human All]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], [[Uses Text To Number]], [[Uses Human All]], [[Uses Checksum All]], [[Uses To Text]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]

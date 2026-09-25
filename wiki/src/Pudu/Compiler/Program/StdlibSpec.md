@@ -56,3 +56,8 @@ DEPTH 0.62 (DEEP). It crosses source discovery, interfaces, resolution, and type
 
 `RejectsTextToNumberMisuse` asserts `["E3001", "E3003"]`: the result is an `Option`, and the
 methods take no arguments.
+
+## Universal `toText` refusals (#347)
+
+`RejectsToTextMisuse` asserts `["E3001", "E3003"]`: the result is text, and the method takes no
+arguments.

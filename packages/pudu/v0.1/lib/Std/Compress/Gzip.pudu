@@ -1,6 +1,7 @@
 module Std.Compress.Gzip
 
 import Std.Bytes as ByteSeq
+import Std.Checksum as Checksum
 import Std.Http as Http
 import Std.Http.Server.Route as Route
 import Std.Math {min}
@@ -81,10 +82,11 @@ impl Configuring for GzipConfig {
 }
 
 /// Calculates the standard IEEE 802.3 32-bit Cyclic Redundancy Check (CRC-32) over input bytes.
+///
+/// The same value `Std.Checksum.crc32` answers, widened to an `Int`; kept for
+/// the archive readers that compare it against a stored field.
 export fn crc32(data: &Bytes) -> Int {
-  let table = buildCrcTable()
-  let sum = calcCrc(&table, data)
-  uint32ToInt(sum)
+  uint32ToInt(Checksum.crc32(data))
 }
 
 /// Compress bytes using the configured zlib level; checked form exposes host failure.
@@ -199,41 +201,6 @@ fn vary(headers: &Array[(Str, Str)]) -> Array[(Str, Str)] {
     }
   }
   headers.push(("Vary", "Accept-Encoding"))
-}
-
-fn buildCrcTable() -> Array[UInt32] {
-  var table: Array[UInt32] = []
-  var i = 0
-  while i < 256 {
-    var c = Option.unwrapOr(convertInteger[UInt32](i), 0u32)
-    var j = 0
-    while j < 8 {
-      if (c & 1u32) != 0u32 {
-        c = 0xedb88320u32 ^ (c >> 1)
-      } else {
-        c = c >> 1
-      }
-      j = j + 1
-    }
-    table = table.push(c)
-    i = i + 1
-  }
-  return table
-}
-
-fn calcCrc(table: &Array[UInt32], data: &Bytes) -> UInt32 {
-  var crc = 0xffffffffu32
-  var i = 0
-  let len = data.length()
-  while i < len {
-    let octet = Option.unwrapOr(data.at(i), 0u8)
-    let octet32 = Option.unwrapOr(convertInteger[UInt32](octet), 0u32)
-    let idx = Option.unwrapOr(convertInteger[Int]((crc ^ octet32) & 0xffu32), 0)
-    let entry = (*table)[idx]
-    crc = entry ^ (crc >> 8)
-    i = i + 1
-  }
-  return crc ^ 0xffffffffu32
 }
 
 fn uint32ToInt(val: UInt32) -> Int {

@@ -1,0 +1,38 @@
+module UsesChecksumAll
+
+import Std.Checksum as Checksum
+
+fn main() -> Int {
+  var held = 0
+  let check = "123456789".toBytes()
+  let empty = "".toBytes()
+  let fox = "The quick brown fox jumps over the lazy dog".toBytes()
+
+  // The published check values for each algorithm.
+  if Checksum.crc32(&check) == 0xcbf43926u32 && Checksum.crc32(&empty) == 0u32 { held = held + 1 }
+  if Checksum.crc32(&fox) == 0x414fa339u32 { held = held + 1 }
+  if Checksum.crc32c(&check) == 0xe3069283u32 && Checksum.crc32c(&empty) == 0u32 { held = held + 1 }
+  if Checksum.crc64(&check) == 0x995dc9bbdf1939fau64 && Checksum.crc64(&empty) == 0u64 { held = held + 1 }
+  if Checksum.fnv1a32(&empty) == 0x811c9dc5u32 && Checksum.fnv1a32(&"a".toBytes()) == 0xe40c292cu32 { held = held + 1 }
+  if Checksum.fnv1a64(&empty) == 0xcbf29ce484222325u64 && Checksum.fnv1a64(&"a".toBytes()) == 0xaf63dc4c8601ec8cu64 { held = held + 1 }
+
+  // Carried on a chunk at a time, each answers what it answers for the whole.
+  let front = "12345".toBytes()
+  let back = "6789".toBytes()
+  if Checksum.crc32Update(Checksum.crc32(&front), &back) == Checksum.crc32(&check) { held = held + 1 }
+  if Checksum.crc32Update(0u32, &check) == Checksum.crc32(&check) { held = held + 1 }
+  if Checksum.crc32cUpdate(Checksum.crc32c(&front), &back) == Checksum.crc32c(&check) { held = held + 1 }
+  if Checksum.crc64Update(Checksum.crc64(&front), &back) == Checksum.crc64(&check) { held = held + 1 }
+
+  // A single changed bit changes every checksum.
+  let flipped = "123456788".toBytes()
+  if Checksum.crc32(&flipped) != Checksum.crc32(&check) && Checksum.crc32c(&flipped) != Checksum.crc32c(&check) { held = held + 1 }
+  if Checksum.crc64(&flipped) != Checksum.crc64(&check) && Checksum.fnv1a64(&flipped) != Checksum.fnv1a64(&check) { held = held + 1 }
+  if Checksum.fnv1a32(&flipped) != Checksum.fnv1a32(&check) { held = held + 1 }
+
+  // Hex keeps leading zeros.
+  if Checksum.hex32(0xcbf43926u32) == "cbf43926" && Checksum.hex32(0x1au32) == "0000001a" { held = held + 1 }
+  if Checksum.hex64(0x995dc9bbdf1939fau64) == "995dc9bbdf1939fa" && Checksum.hex64(0u64) == "0000000000000000" { held = held + 1 }
+
+  held
+}

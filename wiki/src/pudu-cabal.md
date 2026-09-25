@@ -154,3 +154,7 @@ Register Pudu.Version in library exposed-modules for Cabal-derived package versi
 ## Reading numbers from text (#349)
 
 Registers `Pudu.Eval.Builtin.TextNumber` in the library's exposed modules; no new dependency.
+
+## Native checksums (#343)
+
+Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new dependency.
