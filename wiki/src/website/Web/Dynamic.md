@@ -31,3 +31,13 @@ missing package is cached 60 s so a new publication is not hidden for long.
 Resolved Grill Log: the CDN absorbs reader traffic and revalidates in the background, so a function
 instance asks GitHub at most once per freshness window; an arbitrary `@owner/repo` never causes a
 GitHub request because only the merged index is consulted.
+
+## Every package page (#367, step 1)
+
+Requests under `/@` reach `packagePage`, which consults the merged index once, then dispatches
+[[website Web PackagePages]] with `LivePackages.detail` as the tab filler. A `200` carries the live
+(`s-maxage=300, stale-while-revalidate=86400`) or snapshot (`s-maxage=60, stale-while-revalidate=600`)
+policy; any refusal carries `MISSING_CACHE` (`s-maxage=60`) and `noindex`.
+
+Resolved Grill Log: the index is consulted only after a request is known to be a package page, so
+playground and search requests never wait on GitHub.

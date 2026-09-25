@@ -46,7 +46,10 @@ fn main() -> Int {
   // The pages, and the two files that are not pages: a crawler asks for both
   // before it asks for anything else, and neither belongs in the sitemap that
   // one of them points at.
-  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples, &site.packages)
+  // Package pages stay in the sitemap but are not written: the function
+  // answers every one of them from the snapshot with GitHub laid over it, so
+  // a file here would only be a stale copy nobody is sent to.
+  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples, &site.packages).filter(|path: Str| !answeredLive(path))
   routes = routes.push("/robots.txt")
   routes = routes.push("/sitemap.xml")
 
@@ -73,12 +76,12 @@ fn main() -> Int {
       Build.ToFunction{pattern: "/playground", methods: ["POST"]},
       Build.ToFunction{pattern: "/api/playground/run", methods: []},
       Build.ToFunction{pattern: "/api/playground/assist", methods: []},
-      // The listing is answered by the function, which lays GitHub over the
-      // snapshot, so a package published since this build is listed. A new
-      // package's own pages have no file here and reach the function as the
-      // fallback; a known package's pages stay static.
+      // The listing and every page under `/@owner` are answered by the
+      // function, which lays GitHub over the snapshot and states how long the
+      // edge may keep each answer.
       Build.ToFunction{pattern: "/packages", methods: []},
       Build.ToFunction{pattern: "/packages/page/*", methods: []},
+      Build.ToFunction{pattern: "/@*", methods: []},
       Build.ToFunction{pattern: "/packages/search", methods: []},
       Build.ToFunction{pattern: "/packages/suggest", methods: []},
       Build.ToFunction{pattern: "/playground/shared", methods: []},
@@ -102,6 +105,9 @@ fn main() -> Int {
   let _reported = Io.writeLine("prerendered into " + into + ": " + Build.summary(&report))
   if Build.succeeded(&report) { 0 } else { 1 }
 }
+
+/// The package paths the function answers instead of a written file.
+export fn answeredLive(path: Str) -> Bool { path.startsWith("/@") || path == "/packages" || path.startsWith("/packages/page/") }
 
 fn failed(problem: &SiteError.SiteError) -> Int {
   let _said = Io.writeErrorLine(SiteError.explain(problem))

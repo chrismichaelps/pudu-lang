@@ -28,3 +28,12 @@ See [[architecture/PACKAGES]] · [[website Site]] · [[src/website/_MOC]].
 
 Resolved Grill Log: only public GitHub documents enter the snapshot; the service admits files by its generated listing and serves no unlisted path.
 Discussion records are read-only and bounded; a requested number must match a record in that project's snapshot.
+
+## Detail on demand (#367)
+
+`detailed` fills a compactly loaded project with its latest release's files, API catalogue, and
+discussions from the snapshot directory, tolerating any that are absent. The full loader uses the
+same helpers and still fails on a missing release tree.
+
+Resolved Grill Log: the function loads the compact index at start and reads one project's detail when
+one of its pages is asked for, so cold starts do not grow with the number of packages.

@@ -63,6 +63,17 @@ export fn current(live: &Live, snapshot: &Packages.Packages) -> View {
   view
 }
 
+/// A project from the merged index, filled with what one tab shows. While the
+/// latest release is the snapshot's, its files, API, and discussions are read
+/// from the snapshot's directory; the overview and releases need nothing more.
+export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.Project, tab: Str, file: Str) -> Packages.Project {
+  if tab == "overview" || tab == "releases" { return *project }
+  match Packages.find(snapshot, project.handle, project.project) {
+    case Some(held) => if held.latest == project.latest { Packages.detailed(snapshot, project) } else { *project }
+    case None => *project
+  }
+}
+
 /// The snapshot with every repository GitHub lists laid over it. A repository
 /// the snapshot has keeps its files, API, and discussions, takes GitHub's
 /// counts, and gains a release newer than the snapshot's; a live release's
