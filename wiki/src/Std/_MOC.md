@@ -105,6 +105,8 @@ tags: [moc, module, stdlib]
 - [[Std App Problem]] — RFC 9457 problem bodies, validation reports as 422, and a uniform failure step.
 - [[Std App Page]] — keyset cursor pagination with bounded sizes and `Link` headers.
 - [[Std App Idempotency]] — replayed answers for repeated `Idempotency-Key` requests.
+- [[Std App Events]] — ordered in-process publish/subscribe and an outbox drained after commit.
+- [[Std App OpenApi]] — OpenAPI 3.1 descriptions checked against the router that serves them.
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.

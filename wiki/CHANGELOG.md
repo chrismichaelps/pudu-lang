@@ -31,6 +31,14 @@ tags: [changelog]
   [[Std Ui Keymap]].
 - [[architecture/NATIVE-UI]] gains a desktop concept-coverage table naming every remaining gap, and
   the UI pages describe the reference framework in neutral terms.
+## 2026-09-24 — Events, an outbox, calendar jobs, and a router-checked API description (#323)
+
+- [[Std App Events]] publishes in order to topic patterns and holds an outbox that is drained after
+  commit, retried, and buried after a limit.
+- [[Std App OpenApi]] writes OpenAPI 3.1 from values, publishes failures as problem bodies, and
+  reports routes and operations that disagree; [[Std App]] `describing` refuses to build when they do.
+- [[Std App Work]] gains `Calendar`, running a [[Std Cron]] schedule on the same clock as interval jobs.
+
 ## 2026-09-24 — Problem bodies, cursor pages, and idempotent retries (#323)
 
 - [[Std App Problem]] gives every refusal one RFC 9457 body; `uniform` rewrites plain failures and
