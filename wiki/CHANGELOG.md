@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — A smaller compiler download (#360)
+
+- [[Pudu Package Project]]: the release plan builds every package with split sections, so linking
+  keeps only the code the compiler reaches.
+- [[Package Binary]] strips the packaged executable and refuses to package without `strip`.
+- linux-amd64: executable 58 MB → 27.8 MB, archive 10.4 MB → 7.3 MB. The archive's compiler runs a
+  program from an empty environment, and a bundle built from it passes the bundle gate.
+
 ## 2026-09-25 — Routes before pages, for every host (#357)
 
 - [[Std Site]] `Route`: function routes (optionally by method), headers, and redirects in one
