@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — The reference shows the new documentation, and the book covers deploying (#364)
+
+- `website/data/api.json` is regenerated from the current library, so the reference renders the
+  documentation from #228 and #359 and lists the modules added since.
+- [[website Domain Library]] places `Std.Base32` and `Std.Pem` with the byte-level encodings.
+- `website/docs/25-deploying.md`: pages as files with `Std.Site`, routes declared once for every
+  host, and servers or functions built for Linux with `pudu build --target`. Both examples run.
+
 ## 2026-09-25 — Building for another host without a toolchain (#355)
 
 - [[Cli RuntimePack]]: `pudu build --target linux-musl-x86_64 | lambda-x86_64` fetches the release's

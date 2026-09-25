@@ -28,7 +28,7 @@ export const SECTIONS: Array[Section] = [
       "Std.Json", "Std.Csv", "Std.Toml", "Std.Yaml", "Std.Xml", "Std.Mime", "Std.Dotenv"
     ] },
   Section{id: "bytes", title: "Bytes, hashing, and compression", lead: "Binary data, encodings, non-cryptographic hashes, and archives.", modules: [
-      "Std.Bytes", "Std.Buffer", "Std.ByteOrder", "Std.Hex", "Std.Varint", "Std.Adler32", "Std.Murmur3", "Std.SipHash", "Std.Checksum", "Std.Compress.Gzip", "Std.Archive.Tar", "Std.Archive.Zip"
+      "Std.Bytes", "Std.Buffer", "Std.ByteOrder", "Std.Hex", "Std.Base32", "Std.Pem", "Std.Varint", "Std.Adler32", "Std.Murmur3", "Std.SipHash", "Std.Checksum", "Std.Compress.Gzip", "Std.Archive.Tar", "Std.Archive.Zip"
     ] },
   Section{id: "web", title: "Networking and the web", lead: "Sockets, TLS, HTTP clients and servers, HTML, and mail.", modules: [
       "Std.Net", "Std.Tls", "Std.Url", "Std.Http", "Std.Html", "Std.Site", "Std.Ip", "Std.Mail"
@@ -124,6 +124,8 @@ export const SUMMARIES: Map[Str, Str] = mapOf([
     ("Std.Hex", "Hexadecimal digits and bytes."),
     ("Std.Varint", "LEB128 variable-length integers."),
     ("Std.Adler32", "The Adler-32 checksum."),
+    ("Std.Base32", "Base32 text for bytes: standard, extended-hex, and Crockford alphabets."),
+    ("Std.Pem", "PEM armor: labelled base64 blocks for keys and certificates."),
     ("Std.Checksum", "CRC-32, CRC-32C, CRC-64, and FNV-1a checksums, computed incrementally."),
     ("Std.Cron", "Cron schedules: parsing them and finding the next time they fire."),
     ("Std.Dotenv", "Reading environment files of KEY=value assignments."),
