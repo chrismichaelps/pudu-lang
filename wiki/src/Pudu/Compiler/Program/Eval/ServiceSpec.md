@@ -57,6 +57,8 @@ window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
 checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
 
 `UsesUiGestureAll` packs `7020602`: gestures (7), pointer decoding (2), slider (6), clipboard (2).
+[[Uses Ui Accessible]] packs `1872`: role names (1), snapshots (8), decode refusals (7), forged
+sessions refused (2).
 
 `UsesAppWiringAll` packs `11160404`: events and outbox (11), API description (16), application
 describing refusals (4), and calendar jobs (4).

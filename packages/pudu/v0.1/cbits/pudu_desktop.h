@@ -35,4 +35,15 @@ int64_t pudu_desktop_clipboard_read(uint8_t *buffer, size_t capacity);
 /* Replaces the general pasteboard's contents with UTF-8 text. */
 int32_t pudu_desktop_clipboard_write(const uint8_t *text, size_t length);
 
+/* Replaces the window's accessibility tree with newline-terminated records:
+   node parent role focused x y width height name, tab-separated, frames in
+   top-left content pixels, each parent -1 or an earlier record's node.
+   -3 when a record cannot be read, leaving the previous tree in place. */
+int32_t pudu_desktop_accessibility(void *handle, const uint8_t *records, size_t length);
+
+/* What AppKit reports for the window's accessibility tree, as records of the
+   same form in preorder, numbered from zero, with the platform's roles.
+   Answers the byte count and copies only when it fits in capacity. */
+int64_t pudu_desktop_accessibility_report(void *handle, uint8_t *buffer, size_t capacity);
+
 #endif

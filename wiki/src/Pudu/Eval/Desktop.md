@@ -26,6 +26,8 @@ copies it. The adapter copies only a queue that fits, so input arriving between 
 the next drain rather than being truncated. The bytes are decoded as UTF-8 leniently; the records are
 parsed in `Std.Ui.Desktop`, not here. `readClipboard` measures and copies the pasteboard's text the
 same way and reports an empty pasteboard as a typed failure; `writeClipboard` replaces it.
+`exposeDesktop` hands a window an accessibility snapshot ([[Std Ui Accessible]] records) for
+[[Pudu Desktop Access]]; `reportDesktop` measures and copies what the platform reports back for it.
 
 The registry lock remains held while a native present, pump, or close uses a handle. This makes a
 concurrent close wait rather than free a pointer beneath another operation. A failed close retains
@@ -63,4 +65,4 @@ the token for retry; only confirmed native release removes it.
 
 ## Referenced by
 
-[[Eval Runtime]] · [[Eval Effect]] · [[Native Application UI]]
+[[Eval Runtime]] · [[Eval Effect]] · [[Native Application UI]] · [[Pudu Desktop Access]]

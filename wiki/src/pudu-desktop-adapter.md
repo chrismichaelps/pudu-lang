@@ -18,7 +18,7 @@ previous, activate, dismiss, erase), printable text, Command/Control chords, and
 tab-separated lines in a bounded queue that `pudu_desktop_inputs` drains, plus `down`, `move`, and
 `up` records with millisecond timestamps for the primary button. `pudu_desktop_clipboard_read` and
 `pudu_desktop_clipboard_write` read and replace the general pasteboard's plain text. Key presses are consumed
-rather than forwarded, so an unhandled key never plays the system alert. The adapter is compiled only for macOS.
+rather than forwarded, so an unhandled key never plays the system alert. The frame view answers assistive clients with the children [[Pudu Desktop Access]] builds. The adapter is compiled only for macOS.
 
 The adapter is not a Pudu foreign-library integration: application source cannot import it, name
 its symbols, hold platform object values, or select its ABI. It is target runtime plumbing analogous to
@@ -46,4 +46,4 @@ the process and filesystem implementations.
 
 ## Referenced by
 
-[[Eval Desktop]] · [[Native Application UI]]
+[[Eval Desktop]] · [[Native Application UI]] · [[Pudu Desktop Access]] · [[Pudu Desktop Host]]

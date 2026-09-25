@@ -1,6 +1,6 @@
 #import "pudu_desktop.h"
+#import "pudu_desktop_host.h"
 
-#import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 
 /* Queued input past this many bytes is dropped until the program drains. */
@@ -15,16 +15,20 @@ enum {
   PuduKeyEnter = 76
 };
 
-@interface PuduFrameView : NSView
-@property(nonatomic, strong) NSData *rgba;
-@property(nonatomic) NSInteger pixelWidth;
-@property(nonatomic) NSInteger pixelHeight;
-@end
-
 @implementation PuduFrameView
 
 - (BOOL)isOpaque {
   return YES;
+}
+
+/* The window's first responder, so the window's focused accessibility
+   element is resolved through this view. */
+- (BOOL)acceptsFirstResponder {
+  return YES;
+}
+
+- (id)accessibilityFocusedUIElement {
+  return self.focusedElement ?: [super accessibilityFocusedUIElement];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -64,13 +68,6 @@ enum {
   CGColorSpaceRelease(colorSpace);
 }
 
-@end
-
-@interface PuduWindowHost : NSObject <NSWindowDelegate>
-@property(nonatomic, strong) NSWindow *window;
-@property(nonatomic, strong) PuduFrameView *frameView;
-@property(nonatomic) BOOL closeRequested;
-@property(nonatomic, strong) NSMutableData *inputs;
 @end
 
 @implementation PuduWindowHost
@@ -155,6 +152,7 @@ void *pudu_desktop_open(
       window.title = caption;
       window.releasedWhenClosed = NO;
       window.contentView = view;
+      [window makeFirstResponder:view];
       [window center];
       [window makeKeyAndOrderFront:nil];
       [application activateIgnoringOtherApps:YES];
