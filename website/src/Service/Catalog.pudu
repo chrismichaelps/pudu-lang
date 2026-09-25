@@ -16,6 +16,12 @@ export fn load(path: Str) -> Result[Catalog, SiteError.SiteError] {
     case Ok(content) => content
     case Err(_) => { return Err(SiteError.CatalogueUnreadable(path)) }
   }
+  parse(source)
+}
+
+/// A catalogue from its text, as `pudu release` attaches it to a GitHub
+/// release and the build writes it: schema 1, a language version, and entries.
+export fn parse(source: Str) -> Result[Catalog, SiteError.SiteError] {
   let document = match Json.decode(source) {
     case Ok(value) => value
     case Err(_) => { return Err(SiteError.CatalogueInvalid) }

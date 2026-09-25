@@ -26,6 +26,9 @@ tags: [changelog]
   `Packages.Project.bodies` carries the shown file to the Source view.
 - [[website Service LivePackages]] reads releases four at a time, so a cold instance waits for the
   slowest GitHub answer rather than their sum.
+- The Docs tab of a release the build never saw reads the `pudu-api.json` catalogue attached to the
+  GitHub release; without one it keeps its own note rather than a 404. `Catalog.parse` reads a
+  catalogue from text.
 - [[website live network check]] runs the live index against the real GitHub for
   `@chrismichaelps/pudu-lang-mcp` in [[Public HTTP Integration Workflow]].
 - A snapshot release's source and API catalogue are served by the function. [[website live pages suite]]

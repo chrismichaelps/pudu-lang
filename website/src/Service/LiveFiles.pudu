@@ -2,6 +2,7 @@ module Service.LiveFiles
 
 import Std.List as List
 import Std.Url as Url
+import Service.Catalog as Catalog
 import Service.LiveJson as J
 import Service.LiveRelease as Release
 import Service.LiveSource as Source
@@ -47,5 +48,19 @@ export fn body(source: &Source.Source, path: Str, commit: Str, file: Str) -> Opt
   match Source.read(source, Release.RAW + path + "/" + commit + "/" + encoded, &Source.immutable()) {
     case Source.Found(held) => Some(held)
     case _ => None
+  }
+}
+
+/// The API catalogue `pudu release` attached to a release as `pudu-api.json`.
+/// Remembered with the `changing` freshness rather than as immutable: a
+/// release published without one answers 404, and a catalogue attached later,
+/// by a release run again, must appear within minutes. `None` when there is
+/// none, and the Docs tab then says it has no reference for the release.
+export fn catalogue(source: &Source.Source, path: Str, tag: Str) -> Option[Catalog.Catalog] {
+  if path.isEmpty() || tag.isEmpty() { return None }
+  let text = Source.text(source, "https://github.com/" + path + "/releases/download/" + Url.encodeComponent(tag) + "/pudu-api.json", &Source.changing()) ?
+  match Catalog.parse(text) {
+    case Ok(found) => Some(found)
+    case Err(_) => None
   }
 }

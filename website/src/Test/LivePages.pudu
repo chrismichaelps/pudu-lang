@@ -49,6 +49,11 @@ export fn main() -> Int {
   let liveFile = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source/src/FreshPkg.pudu")
   let liveSource = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source")
   let liveHidden = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source/.github/ci.yml")
+  // A release's API reference is the catalogue `pudu release` attached to it.
+  let documented = Stand.stand(&Stand.github())
+  Stand.answer(&documented, "https://github.com/bruno/fresh-pkg/releases/download/v0.2.0/pudu-api.json", "\{\"schemaVersion\":1,\"languageVersion\":\"0.1.2\",\"entries\":[\{\"module\":\"FreshPkg\",\"kind\":\"fn\",\"name\":\"freshness\",\"signature\":\"() -> Int\",\"doc\":[\"How fresh it is.\"]\}]\}")
+  let liveDocs = DynamicWeb.render(&Stand.edge(&snapshot, &Stand.live(&documented)), "/@bruno/fresh-pkg/docs")
+  let undocumented = DynamicWeb.render(&Stand.edge(&snapshot, &Stand.live(&Stand.stand(&Stand.github()))), "/@bruno/fresh-pkg/docs")
   let liveTickets = DynamicWeb.render(&talked, "/@alice/json-kit/tickets")
   let liveTicket = DynamicWeb.render(&talked, "/@alice/json-kit/tickets/7")
   let liveContributions = DynamicWeb.render(&talked, "/@alice/json-kit/contributions")
@@ -72,6 +77,8 @@ export fn main() -> Int {
       Test.that("a new release's file is read at its commit", liveFile.status.code == 200 && liveFile.body.contains("freshness") && liveFile.body.contains("src/FreshPkg.pudu")),
       Test.that("a new release's file list leaves out dot paths and installed dependencies", liveSource.status.code == 200 && liveSource.body.contains("pudu.toml") && !liveSource.body.contains(".github/ci.yml") && !liveSource.body.contains("deps/x")),
       Test.equals("a dot path is not one of its files", &liveHidden.status.code, &404),
+      Test.that("a new release's API reference is the catalogue attached to it", liveDocs.status.code == 200 && liveDocs.body.contains("freshness") && liveDocs.body.contains("How fresh it is.")),
+      Test.that("a release published without a catalogue says so rather than missing", undocumented.status.code == 200 && undocumented.body.contains("No API reference has been generated")),
       Test.that("only a package's own files are shipped", LiveFiles.shipped("src/A.pudu") && !LiveFiles.shipped(".env") && !LiveFiles.shipped("src/.cache/a") && !LiveFiles.shipped("deps/a/B.pudu") && !LiveFiles.shipped("")),
       Test.equals("a repository address reads as its owner and name", &LiveDiscussions.pathOf("https://github.com/alice/json-kit"), &"alice/json-kit"),
       Test.equals("an address outside GitHub has no path", &LiveDiscussions.pathOf("https://example.com/a/b"), &""),

@@ -65,6 +65,14 @@ export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.P
   if tab == "source" && filled.files.isEmpty() {
     return withLiveFiles(&live.source, &filled, file)
   }
+  if tab == "docs" && filled.catalog == None {
+    let path = Discussions.pathOf(filled.repository)
+    let tag = Option.map(newestRelease(&filled), |release: Packages.Release| release.tag)
+    return match Files.catalogue(&live.source, path, Option.unwrapOr(tag, "")) {
+      case Some(found) => Packages.Project{..filled, catalog: Some(found)}
+      case None => filled
+    }
+  }
   // Conversations change by the minute and belong to no release, so they are
   // read live for every package; the snapshot's stand in when GitHub cannot say.
   if tab == "tickets" {
@@ -175,10 +183,8 @@ fn replaced(projects: &Array[Packages.Project], project: &Packages.Project) -> A
 }
 
 fn withLiveFiles(source: &Source.Source, project: &Packages.Project, file: Str) -> Packages.Project {
-  let Some(version) = project.latest else { return *project }
-  let found = project.releases.filter(|release: Packages.Release| release.version == version)
-  if found.isEmpty() { return *project }
-  let commit = found[0].commit
+  let Some(release) = newestRelease(project) else { return *project }
+  let commit = release.commit
   let path = Discussions.pathOf(project.repository)
   let Some(files) = Files.listed(source, path, commit) else { return *project }
   if files.isEmpty() { return Packages.Project{..*project, files: files} }
@@ -224,4 +230,11 @@ fn answerFor(answers: &Array[(Str, Option[Release.Releases])], path: Str) -> Opt
     if answer[0] == path { return answer[1] }
   }
   None
+}
+
+/// The release the project's pages describe: its latest.
+fn newestRelease(project: &Packages.Project) -> Option[Packages.Release] {
+  let version = project.latest ?
+  let found = project.releases.filter(|release: Packages.Release| release.version == version)
+  if found.isEmpty() { None } else { Some(found[0]) }
 }

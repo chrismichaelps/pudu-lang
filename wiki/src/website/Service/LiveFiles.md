@@ -22,6 +22,10 @@ shows, the asked one or else the first, and hands its bytes to the Source view t
 Resolved Grill Log: files are addressed by commit rather than tag, because a tag can be moved and a
 commit cannot. _Rejected:_ downloading the release archive, which reads every file to show one.
 
+`catalogue` reads the API reference `pudu release` attaches to a release as `pudu-api.json`, parsed by
+`Catalog.parse`. It uses the `changing` freshness, not the immutable one, so a catalogue attached by a
+release run again appears within minutes; a release without one keeps the Docs tab's own note.
+
 ## Referenced by
 
 [[website Service LivePackages]] · [[website live pages suite]] · [[website/_MOC]]
