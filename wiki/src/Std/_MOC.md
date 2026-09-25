@@ -128,6 +128,10 @@ tags: [moc, module, stdlib]
 - [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
+- [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
+- [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
+- [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
+- [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.

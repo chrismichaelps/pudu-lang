@@ -25,6 +25,10 @@ count after inspecting that semantic delta. `UsesCryptoAll` is registered at 59 
 independent SHA-3/BLAKE2b vectors, RFC 4231 HMAC-SHA512 vectors, constant-time comparison behavior,
 secure key/nonce lengths, and authenticated-encryption round trips.
 
+`UsesCronAll` (18), `UsesStatsAll` (27), `UsesDotenvAll` (17), and `UsesTermAll` (13) register the
+schedule, statistics, environment-file, and terminal-styling modules, each reaching every export and
+its refusals.
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one
