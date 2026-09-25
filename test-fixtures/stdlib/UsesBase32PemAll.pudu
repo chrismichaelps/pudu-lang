@@ -1,0 +1,90 @@
+module UsesBase32PemAll
+
+import Std.Base32 as Base32
+import Std.Pem as Pem
+
+fn text(value: Str) -> Bytes { value.toBytes() }
+
+fn refusal(read: Result[Bytes, Base32.Base32Error]) -> Str {
+  match read {
+    case Ok(_) => "accepted"
+    case Err(problem) => Base32.explain(&problem)
+  }
+}
+
+fn pemRefusal(source: Str) -> Str {
+  match Pem.decodeAll(source) {
+    case Ok(_) => "accepted"
+    case Err(problem) => Pem.explain(&problem)
+  }
+}
+
+const BUNDLE: Str = "issued by the test authority\n-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----\nnotes between blocks\n-----BEGIN PRIVATE KEY-----\nYmFy\nYmF6\n-----END PRIVATE KEY-----\n-----BEGIN CERTIFICATE-----\n  cXV4\n-----END CERTIFICATE-----\n"
+
+fn main() -> Int {
+  var held = 0
+
+  // The RFC 4648 test vectors, both alphabets, padded.
+  if Base32.encode(&text("")) == "" && Base32.encode(&text("f")) == "MY======" { held = held + 1 }
+  if Base32.encode(&text("fo")) == "MZXQ====" && Base32.encode(&text("foo")) == "MZXW6===" { held = held + 1 }
+  if Base32.encode(&text("foob")) == "MZXW6YQ=" && Base32.encode(&text("fooba")) == "MZXW6YTB" { held = held + 1 }
+  if Base32.encode(&text("foobar")) == "MZXW6YTBOI======" { held = held + 1 }
+  if Base32.encodeHex(&text("f")) == "CO======" && Base32.encodeHex(&text("foobar")) == "CPNMUOJ1E8======" { held = held + 1 }
+  if Base32.encodeUnpadded(&text("foobar")) == "MZXW6YTBOI" { held = held + 1 }
+
+  // Every encoding reads back, padded or not, in either case.
+  if Base32.decode("MZXW6YTBOI======") == Ok(text("foobar")) && Base32.decode("mzxw6ytboi") == Ok(text("foobar")) { held = held + 1 }
+  if Base32.decode("") == Ok(text("")) && Base32.decodeHex("CPNMUOJ1E8") == Ok(text("foobar")) { held = held + 1 }
+  let binary = bytesOf([0u8, 255u8, 16u8, 128u8, 1u8])
+  if Base32.decode(Base32.encode(&binary)) == Ok(binary) && Base32.decodeHex(Base32.encodeHex(&binary)) == Ok(binary) { held = held + 1 }
+
+  // Crockford: its own alphabet, hyphens ignored, misread letters forgiven.
+  if Base32.encodeCrockford(&text("foobar")) == "CSQPYRK1E8" && Base32.encodeCrockford(&bytesOf([255u8, 0u8, 16u8])) == "ZW010" { held = held + 1 }
+  if Base32.decodeCrockford("csqp-yrk1-e8") == Ok(text("foobar")) { held = held + 1 }
+  if Base32.decodeCrockford("ZWOlO") == Ok(bytesOf([255u8, 0u8, 16u8])) && Base32.decodeCrockford("ZWOIO") == Ok(bytesOf([255u8, 0u8, 16u8])) { held = held + 1 }
+
+  // Refusals: foreign digits, impossible lengths, and altered final digits.
+  if refusal(Base32.decode("MZ1W6===")) == "'1' at 2 is not a base32 digit" { held = held + 1 }
+  if refusal(Base32.decode("MZX")) == "3 digits cannot spell a whole number of bytes" { held = held + 1 }
+  if refusal(Base32.decode("M=YQ")) == "'=' at 1 is not a base32 digit" { held = held + 1 }
+  if refusal(Base32.decode("MZ======")) == "the last digit carries bits past the final byte, so the text was altered or cut" { held = held + 1 }
+  if refusal(Base32.decodeHex("W0======")) == "'W' at 0 is not a base32 digit" && refusal(Base32.decodeCrockford("U0")) == "'U' at 0 is not a base32 digit" { held = held + 1 }
+  let problem: Base32.Base32Error = Base32.BadLength(9)
+  if Base32.explain(&problem) == "9 digits cannot spell a whole number of bytes" { held = held + 1 }
+
+  // Armor written at sixty-four columns and read back.
+  let long = Pem.Block{label: "PUBLIC KEY", content: text("a".repeat(60))}
+  match Pem.encode(&long) {
+    case Ok(armored) => {
+      let lines = armored.lines()
+      if lines.length() == 4 && lines[0] == "-----BEGIN PUBLIC KEY-----" && lines[1].length() == 64 && lines[2].length() == 16 && lines[3] == "-----END PUBLIC KEY-----" { held = held + 1 }
+      if Pem.decode(armored) == Ok(long) { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Pem.encode(&Pem.Block{label: "-BAD", content: text("x")}) {
+    case Err(problem) => { if Pem.explain(&problem).startsWith("'-BAD' is not a label") { held = held + 1 } }
+    case Ok(_) => {}
+  }
+
+  // A bundle: comments skipped, blocks in order, picked by label.
+  match Pem.decodeAll(BUNDLE) {
+    case Ok(blocks) => {
+      if blocks.length() == 3 && blocks[1].label == "PRIVATE KEY" && blocks[1].content == text("barbaz") { held = held + 1 }
+      if Pem.withLabel(&blocks, "CERTIFICATE") == [text("foo"), text("qux")] && Pem.withLabel(&blocks, "CRL") == [] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Refusals name the block.
+  let missing: Pem.PemError = Pem.Unterminated("CERTIFICATE")
+  if Pem.explain(&missing) == "the CERTIFICATE block has no END line" { held = held + 1 }
+  if pemRefusal("just text") == "no '-----BEGIN' line was found" { held = held + 1 }
+  if pemRefusal("-----BEGIN KEY-----\nZm9v\n") == "the KEY block has no END line" { held = held + 1 }
+  if pemRefusal("-----BEGIN KEY-----\nZm9v\n-----END CERT-----\n") == "a KEY block ends as CERT" { held = held + 1 }
+  if pemRefusal("-----BEGIN KEY-----\nZm9v!\n-----END KEY-----\n") == "the KEY block's body is not base64" { held = held + 1 }
+  if pemRefusal("-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nZm9v\n-----END RSA PRIVATE KEY-----\n") == "the RSA PRIVATE KEY block's body is not base64" { held = held + 1 }
+  if pemRefusal("-----BEGIN TWO  SPACES-----\n-----END TWO  SPACES-----\n").startsWith("'TWO  SPACES' is not a label") { held = held + 1 }
+
+  held
+}
