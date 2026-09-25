@@ -8,6 +8,13 @@ import Std.Option as Option
 /// of operating system and a backslash on the other, and a path built with the
 /// wrong one is not a path there. A separator spelled into the source would be
 /// a claim about somebody else's computer.
+///
+/// ## Examples
+///
+/// ```
+/// // On a machine whose paths look like /home/ada:
+/// Path.separator()  // "/"
+/// ```
 export fn separator() -> Str { pathSeparators()[0] }
 
 /// Whether a character ends a piece of a path on this machine.
@@ -15,6 +22,13 @@ export fn separator() -> Str { pathSeparators()[0] }
 /// Every separator this machine accepts, not only the one it writes: a path
 /// that arrived from somewhere else still has to come apart correctly, and one
 /// family of operating system reads the other's separator as its own.
+///
+/// ## Examples
+///
+/// ```
+/// Path.isSeparator("/")  // true
+/// Path.isSeparator("a")  // false
+/// ```
 export fn isSeparator(character: Str) -> Bool { pathSeparators().contains(character) }
 
 /// The position of the last separator in a path, or `-1` when it has none.
@@ -40,6 +54,19 @@ fn withoutTrailingSeparator(path: Str) -> Str {
 }
 
 /// Two path pieces joined with a separator, without doubling one.
+///
+/// An empty side gives the other side back unchanged, and an absolute right side
+/// replaces the left one: joining onto a root is how a caller says "start again
+/// from here", and gluing the two together would name a place that does not exist.
+///
+/// ## Examples
+///
+/// ```
+/// Path.join("src", "Main.pudu")    // "src/Main.pudu"
+/// Path.join("src/", "Main.pudu")   // "src/Main.pudu"
+/// Path.join("src", "/etc/hosts")   // "/etc/hosts"
+/// Path.join("", "Main.pudu")       // "Main.pudu"
+/// ```
 export fn join(left: Str, right: Str) -> Str {
   if left.isEmpty() {
     right
@@ -60,6 +87,14 @@ export fn join(left: Str, right: Str) -> Str {
 /// Every piece joined in order, left to right.
 /// A piece that is itself absolute begins the path again, which is what a
 /// caller joining a root onto a relative fragment means.
+///
+/// ## Examples
+///
+/// ```
+/// Path.joinAll(&["site", "docs", "index.html"])  // "site/docs/index.html"
+/// Path.joinAll(&["cache", "/tmp", "x"])          // "/tmp/x"
+/// Path.joinAll(&[])                                 // ""
+/// ```
 export fn joinAll(parts: &Array[Str]) -> Str {
   var built = ""
   for part in parts { built = join(built, part) }
@@ -67,6 +102,18 @@ export fn joinAll(parts: &Array[Str]) -> Str {
 }
 
 /// A path without its last piece, or `.` when it has only one.
+///
+/// A trailing separator is ignored, so `docs/` and `docs` have the same directory.
+/// The root's directory is the root itself; use `parentOf` to be told when there
+/// is nothing above.
+///
+/// ## Examples
+///
+/// ```
+/// Path.directoryOf("src/Std/Path.pudu")  // "src/Std"
+/// Path.directoryOf("Main.pudu")          // "."
+/// Path.directoryOf("/etc")               // "/"
+/// ```
 export fn directoryOf(path: Str) -> Str {
   let trimmed = withoutTrailingSeparator(path)
   let at = lastSeparator(trimmed)
@@ -78,6 +125,17 @@ export fn directoryOf(path: Str) -> Str {
 }
 
 /// The last piece of a path.
+///
+/// A trailing separator is ignored, so a directory written with one still has a
+/// name. The extension stays on; `stemOf` removes it.
+///
+/// ## Examples
+///
+/// ```
+/// Path.nameOf("src/Std/Path.pudu")  // "Path.pudu"
+/// Path.nameOf("site/docs/")         // "docs"
+/// Path.nameOf("Main.pudu")          // "Main.pudu"
+/// ```
 export fn nameOf(path: Str) -> Str {
   let trimmed = withoutTrailingSeparator(path)
   let at = lastSeparator(trimmed)
@@ -97,6 +155,18 @@ fn extensionDot(name: Str) -> Int {
 }
 
 /// A path's extension, without its dot, or nothing when it has none.
+///
+/// Only the last dot counts, so `archive.tar.gz` has the extension `gz`. A name
+/// whose only dot is its first character is hidden, not extended, and has none.
+///
+/// ## Examples
+///
+/// ```
+/// Path.extensionOf("notes/today.md")     // Some("md")
+/// Path.extensionOf("archive.tar.gz")     // Some("gz")
+/// Path.extensionOf(".gitignore")         // None
+/// Path.extensionOf("Makefile")           // None
+/// ```
 export fn extensionOf(path: Str) -> Option[Str] {
   let name = nameOf(path)
   let at = extensionDot(name)
@@ -104,6 +174,17 @@ export fn extensionOf(path: Str) -> Option[Str] {
 }
 
 /// A path with its extension removed.
+///
+/// The directory part is kept. Only the last extension is removed, and a path
+/// without one is returned unchanged.
+///
+/// ## Examples
+///
+/// ```
+/// Path.withoutExtension("notes/today.md")  // "notes/today"
+/// Path.withoutExtension("archive.tar.gz")  // "archive.tar"
+/// Path.withoutExtension(".gitignore")      // ".gitignore"
+/// ```
 export fn withoutExtension(path: Str) -> Str {
   let name = nameOf(path)
   let at = extensionDot(name)
@@ -115,17 +196,44 @@ export fn withoutExtension(path: Str) -> Str {
 }
 
 /// The last piece of a path with its extension removed.
+///
+/// The name a caller usually shows for a file: no directory, no extension.
+///
+/// ## Examples
+///
+/// ```
+/// Path.stemOf("src/Std/Path.pudu")  // "Path"
+/// Path.stemOf("archive.tar.gz")     // "archive.tar"
+/// ```
 export fn stemOf(path: Str) -> Str { nameOf(withoutExtension(path)) }
 
 /// A path carrying the given extension, replacing any it had.
 /// The dot is supplied here, so a caller writes `txt` rather than `.txt` and
 /// the two spellings cannot produce two different names.
+///
+/// ## Examples
+///
+/// ```
+/// Path.withExtension("notes/today.md", "html")  // "notes/today.html"
+/// Path.withExtension("README", "txt")           // "README.txt"
+/// Path.withExtension("page.html", "")           // "page"
+/// ```
 export fn withExtension(path: Str, extension: Str) -> Str {
   let base = withoutExtension(path)
   if extension.isEmpty() { base } else { base + "." + extension }
 }
 
 /// A path split into the part before its extension and the extension itself.
+///
+/// The two halves put back together give the original path, so this is the form
+/// to use when a caller changes one half and keeps the other.
+///
+/// ## Examples
+///
+/// ```
+/// Path.splitExtension("notes/today.md")  // ("notes/today", Some("md"))
+/// Path.splitExtension("Makefile")        // ("Makefile", None)
+/// ```
 export fn splitExtension(path: Str) -> (Str, Option[Str]) {
   (withoutExtension(path), extensionOf(path))
 }
@@ -133,6 +241,14 @@ export fn splitExtension(path: Str) -> (Str, Option[Str]) {
 /// Whether a path carries the given extension, compared without regard to case.
 /// File systems disagree about whether a name's case matters, and a caller
 /// asking whether something is a text file means the question either way.
+///
+/// ## Examples
+///
+/// ```
+/// Path.hasExtension("photo.JPG", "jpg")  // true
+/// Path.hasExtension("photo.jpg", "png")  // false
+/// Path.hasExtension("README", "")        // false
+/// ```
 export fn hasExtension(path: Str, extension: Str) -> Bool {
   Option.unwrapOr(Option.map(extensionOf(path), fn(found: Str) -> Bool {
         found.toLower() == extension.toLower()
@@ -140,6 +256,17 @@ export fn hasExtension(path: Str, extension: Str) -> Bool {
 }
 
 /// Whether a name is one this machine's shell hides by default.
+///
+/// Only the last piece is asked, so a visible file inside a hidden directory is
+/// not itself hidden.
+///
+/// ## Examples
+///
+/// ```
+/// Path.isHidden(".env")            // true
+/// Path.isHidden(".git/config")     // false
+/// Path.isHidden("src/Main.pudu")   // false
+/// ```
 export fn isHidden(path: Str) -> Bool { nameOf(path).startsWith(".") }
 
 /// Whether a path names a place from the root rather than from somewhere else.
@@ -147,6 +274,15 @@ export fn isHidden(path: Str) -> Bool { nameOf(path).startsWith(".") }
 /// Two shapes count. One family of operating system writes a leading
 /// separator; the other writes a drive letter, a colon, and a separator, and
 /// also admits the leading separator alone.
+///
+/// ## Examples
+///
+/// ```
+/// Path.isAbsolute("/var/log")    // true
+/// Path.isAbsolute("C:/Users")    // true
+/// Path.isAbsolute("src/Main")    // false
+/// Path.isAbsolute("")            // false
+/// ```
 export fn isAbsolute(path: Str) -> Bool {
   if path.isEmpty() {
     false
@@ -160,11 +296,31 @@ export fn isAbsolute(path: Str) -> Bool {
 }
 
 /// Whether a path names a place from wherever the program happens to be.
+///
+/// Exactly the paths `isAbsolute` refuses, the empty path among them.
+///
+/// ## Examples
+///
+/// ```
+/// Path.isRelative("src/Main.pudu")  // true
+/// Path.isRelative("/var/log")       // false
+/// ```
 export fn isRelative(path: Str) -> Bool { !isAbsolute(path) }
 
 /// The pieces of a path, with the separators removed.
 /// An absolute path keeps its root as its first piece, so the components of a
 /// path and the path itself say the same thing about where it starts.
+///
+/// Doubled and trailing separators produce no empty pieces. `.` and `..` are
+/// kept as they are written; `normalize` is what interprets them.
+///
+/// ## Examples
+///
+/// ```
+/// Path.components("src//Std/Path.pudu")  // ["src", "Std", "Path.pudu"]
+/// Path.components("/var/log/")           // ["/", "var", "log"]
+/// Path.components("")                    // []
+/// ```
 export fn components(path: Str) -> Array[Str] {
   var pieces: Array[Str] = []
   var current = ""
@@ -185,6 +341,15 @@ export fn components(path: Str) -> Array[Str] {
 }
 
 /// The path a sequence of pieces names.
+///
+/// The inverse of `components` for any path already in normal form.
+///
+/// ## Examples
+///
+/// ```
+/// Path.fromComponents(&["/", "var", "log"])  // "/var/log"
+/// Path.fromComponents(&["src", "Main.pudu"])  // "src/Main.pudu"
+/// ```
 export fn fromComponents(pieces: &Array[Str]) -> Str { joinAll(pieces) }
 
 /// A path with `.` removed and each `..` applied to the piece before it.
@@ -198,6 +363,15 @@ export fn fromComponents(pieces: &Array[Str]) -> Str { joinAll(pieces) }
 /// nothing above it; a `..` at the front of a relative path is kept, because
 /// what it climbs to is not known until the path is resolved against
 /// somewhere.
+///
+/// ## Examples
+///
+/// ```
+/// Path.normalize("src/./Std/../Main.pudu")  // "src/Main.pudu"
+/// Path.normalize("/../etc")                 // "/etc"
+/// Path.normalize("../shared/x")             // "../shared/x"
+/// Path.normalize("a/..")                    // "."
+/// ```
 export fn normalize(path: Str) -> Str {
   if path.isEmpty() {
     "."
@@ -237,6 +411,15 @@ fn climb(kept: Array[Str], rooted: Bool) -> Array[Str] {
 /// Where `directoryOf` answers `.` for a bare name, this answers nothing for a
 /// path that has nowhere above it, so a caller walking upwards is told when to
 /// stop rather than looping on a root that is its own parent.
+///
+/// ## Examples
+///
+/// ```
+/// Path.parentOf("/var/log/app")  // Some("/var/log")
+/// Path.parentOf("src/Main")      // Some("src")
+/// Path.parentOf("/")             // None
+/// Path.parentOf("Main.pudu")     // Some(".")
+/// ```
 export fn parentOf(path: Str) -> Option[Str] {
   let trimmed = withoutTrailingSeparator(normalize(path))
   if trimmed == "." || trimmed == ".." {
@@ -248,6 +431,16 @@ export fn parentOf(path: Str) -> Option[Str] {
 }
 
 /// Every directory above a path, nearest first.
+///
+/// Useful for looking upwards for a marker file, such as the directory that holds
+/// a project's manifest. The walk ends at the root or at `.`, so it always stops.
+///
+/// ## Examples
+///
+/// ```
+/// Path.ancestors("/srv/site/docs")  // ["/srv/site", "/srv", "/"]
+/// Path.ancestors("/")               // []
+/// ```
 export fn ancestors(path: Str) -> Array[Str] {
   var found: Array[Str] = []
   var current = parentOf(path)
@@ -269,6 +462,15 @@ export fn ancestors(path: Str) -> Array[Str] {
 /// A relative path and an absolute one have no answer between them: reaching
 /// one from the other depends on where the program happens to be, and that is
 /// not something reading two strings can tell.
+///
+/// ## Examples
+///
+/// ```
+/// Path.relativeTo("/srv/site", "/srv/site/docs/a.html")  // Some("docs/a.html")
+/// Path.relativeTo("/srv/site/docs", "/srv/assets")       // Some("../../assets")
+/// Path.relativeTo("/srv", "/srv")                        // Some(".")
+/// Path.relativeTo("src", "/srv")                         // None
+/// ```
 export fn relativeTo(base: Str, path: Str) -> Option[Str] {
   if isAbsolute(base) != isAbsolute(path) {
     None
@@ -297,12 +499,30 @@ export fn relativeTo(base: Str, path: Str) -> Option[Str] {
 /// A path resolved against a directory, and normalized.
 /// An absolute path answers for itself, which is what makes this safe to apply
 /// to a path a caller may already have made absolute.
+///
+/// ## Examples
+///
+/// ```
+/// Path.resolve("/srv/site", "docs/../index.html")  // "/srv/site/index.html"
+/// Path.resolve("/srv/site", "/etc/hosts")          // "/etc/hosts"
+/// ```
 export fn resolve(base: Str, path: Str) -> Str { normalize(join(base, path)) }
 
 /// Whether one path is inside another, once both are normalized.
 /// The question a program asks before writing somewhere a caller named: a
 /// relative path holding `..` can leave the directory it looked like it was
 /// under, and reading the text without normalizing first would not notice.
+///
+/// A path is inside itself. Neither path is looked up on disk, so a link that
+/// leads elsewhere is not detected; resolve links first when they matter.
+///
+/// ## Examples
+///
+/// ```
+/// Path.isInside("/srv/site", "/srv/site/docs/a.html")     // true
+/// Path.isInside("/srv/site", "/srv/site/../secrets")      // false
+/// Path.isInside("uploads", "uploads/../../etc/passwd")    // false
+/// ```
 export fn isInside(base: Str, path: Str) -> Bool {
   Option.unwrapOr(Option.map(relativeTo(base, path), fn(relative: Str) -> Bool {
         relative != ".." && !relative.startsWith(".." + separator())

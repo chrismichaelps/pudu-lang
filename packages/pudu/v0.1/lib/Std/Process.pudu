@@ -6,16 +6,45 @@ import Std.Result as Result
 import Std.Sync as Sync
 
 /// What a program left behind when it finished.
+///
+/// `status` is the number the program itself chose to end with; nought means it
+/// reported success, and what any other number means beyond "not that" is the
+/// program's own to document. `output` and `errors` are its two streams kept
+/// apart, so a caller reading `output` as data never finds a warning in the
+/// middle of it.
 export type Finished = { status: Int, output: Str, errors: Str }
 
 /// Run a program with arguments and no input, and collect what it produced.
 /// A non-zero status is not a failure of this call: the program ran, and what
 /// it decided is the answer. Only being unable to run it at all fails.
+///
+/// ## Examples
+///
+/// ```
+/// // Running "echo hello":
+/// match Process.run("echo", &["hello"]) {
+///   case Ok(finished) => {
+///     print(finished.output)   // "hello\n"
+///     print(show(finished.status))  // 0
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn run(program: Str, arguments: &Array[Str]) -> Result[Finished, Str] {
   withInput(program, arguments, "")
 }
 
 /// Run a program with arguments and text on its input.
+///
+/// ## Examples
+///
+/// ```
+/// // Running "cat" with text on its input answers that text back.
+/// match Process.withInput("cat", &[], "fed in") {
+///   case Ok(finished) => print(finished.output)  // "fed in"
+///   case Err(_) => {}
+/// }
+/// ```
 export fn withInput(
   program: Str,
   arguments: &Array[Str],
@@ -34,11 +63,31 @@ export fn output(program: Str, arguments: &Array[Str]) -> Result[Str, Str] {
 }
 
 /// Run a program and answer with its output in lines.
+///
+/// ## Examples
+///
+/// ```
+/// // A program whose output has three lines answers an array of three.
+/// match Process.lines("printf", &["a\nb\nc\n"]) {
+///   case Ok(ls) => print(show(ls.length()))  // 3
+///   case Err(_) => {}
+/// }
+/// ```
 export fn lines(program: Str, arguments: &Array[Str]) -> Result[Array[Str], Str] {
   Ok(output(program, arguments) ?.lines())
 }
 
 /// Run a program only for its status.
+///
+/// ## Examples
+///
+/// ```
+/// // "false" always exits 1.
+/// match Process.status("false", &[]) {
+///   case Ok(code) => print(show(code))  // 1
+///   case Err(_) => {}
+/// }
+/// ```
 export fn status(program: Str, arguments: &Array[Str]) -> Result[Int, Str] {
   Ok(run(program, arguments) ?.status)
 }
@@ -62,6 +111,15 @@ export fn isAvailable(program: Str) -> Bool {
 }
 
 /// A finished program described the way an error message should say it.
+///
+/// ## Examples
+///
+/// ```
+/// let failed = Process.Finished{status: 1, output: "", errors: "boom\n"}
+/// let quiet = Process.Finished{status: 2, output: "", errors: ""}
+/// Process.describe(&failed)  // "the program exited with status 1: boom"
+/// Process.describe(&quiet)  // "the program exited with status 2"
+/// ```
 export fn describe(value: &Finished) -> Str {
   var out = "the program exited with status " + show(value.status)
   if !value.errors.trim().isEmpty() { out = out + ": " + value.errors.trim() }
@@ -69,10 +127,26 @@ export fn describe(value: &Finished) -> Str {
 }
 
 /// Whether a program reported success.
+///
+/// ## Examples
+///
+/// ```
+/// let ok = Process.Finished{status: 0, output: "", errors: ""}
+/// let bad = Process.Finished{status: 1, output: "", errors: ""}
+/// Process.isSuccess(&ok)  // true
+/// Process.isSuccess(&bad)  // false
+/// ```
 export fn isSuccess(value: &Finished) -> Bool { value.status == 0 }
 
 /// The output with trailing whitespace removed, which is what a program that
 /// wrote one line meant to say.
+///
+/// ## Examples
+///
+/// ```
+/// let f = Process.Finished{status: 0, output: "hi  \n", errors: ""}
+/// Process.trimmedOutput(&f)  // "hi"
+/// ```
 export fn trimmedOutput(value: &Finished) -> Str { value.output.trim() }
 
 /// A program that was started and has not been waited for.
@@ -94,9 +168,30 @@ export type Started = { token: Int }
 /// Large enough that reading a program's whole output does not cost a call
 /// per line, small enough that a caller watching output sees it while it is
 /// still being produced rather than in one piece at the end.
+///
+/// ## Examples
+///
+/// ```
+/// Process.chunkSize()  // 65536
+/// ```
 export fn chunkSize() -> Int { 65536 }
 
 /// Start a program and answer without waiting for it.
+///
+/// ## Examples
+///
+/// ```
+/// // Starting "cat" without waiting for it, then feeding and reading it:
+/// match Process.start("cat", &[]) {
+///   case Ok(running) => {
+///     let _written = Process.writeText(&running, "line\n")
+///     let _closed = Process.closeInput(&running)
+///     let drained = Process.drain(&running)
+///     // drained is Ok("line\n")
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn start(program: Str, arguments: &Array[Str]) -> Result[Started, Str] {
   let token = spawnProgram(program, *arguments) ?
   Ok(Started{token: token})
@@ -121,11 +216,37 @@ export fn readErrors(running: &Started) -> Result[Option[Bytes], Str] {
 }
 
 /// Write to a program's input.
+///
+/// The bytes form of `writeText`, for a program whose input is not text.
+///
+/// ## Examples
+///
+/// ```
+/// match Process.start("cat", &[]) {
+///   case Ok(running) => {
+///     let _written = Process.write(&running, &"abc".toBytes())
+///     let _closed = Process.closeInput(&running)
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn write(running: &Started, payload: &Bytes) -> Result[(), Str] {
   childWriteChunk(running.token, *payload)
 }
 
 /// Write text to a program's input.
+///
+/// ## Examples
+///
+/// ```
+/// match Process.start("cat", &[]) {
+///   case Ok(running) => {
+///     let _written = Process.writeText(&running, "hello\n")
+///     let _closed = Process.closeInput(&running)
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn writeText(running: &Started, text: Str) -> Result[(), Str] {
   childWriteChunk(running.token, text.toBytes())
 }
@@ -140,6 +261,11 @@ export fn closeInput(running: &Started) -> Result[(), Str] {
 }
 
 /// Wait for a program to finish, and answer the status it left.
+///
+/// For a program left running without its output being read; if anything reads
+/// `drain` or the stream directly, wait for that instead, since a program
+/// writing more than its pipe holds stops until someone reads and `wait` alone
+/// would then wait forever.
 export fn wait(running: &Started) -> Result[Int, Str] {
   childWait(running.token)
 }
@@ -159,6 +285,23 @@ export fn waitWithin(running: &Started, millis: Int) -> Result[Option[Int], Str]
 /// stopped a program and moved on would leave it being cleaned up at some
 /// later moment, and anything checking it had stopped would be right only
 /// sometimes.
+///
+/// The status this answers is the platform's, and a program that was signalled
+/// rather than left to exit on its own is typically reported as a negative
+/// number naming the signal, not as whatever status it would have chosen.
+///
+/// ## Examples
+///
+/// ```
+/// // Stopping a program that would otherwise run for a while:
+/// match Process.start("sleep", &["5"]) {
+///   case Ok(running) => {
+///     let stopped = Process.stop(&running)
+///     // stopped is Ok of a negative number, the signal that ended it
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn stop(running: &Started) -> Result[Int, Str] {
   childStop(running.token)
 }
@@ -390,6 +533,13 @@ export type Launch = {
 
 /// A launch of a program with arguments, inheriting this program's environment
 /// and directory.
+///
+/// ## Examples
+///
+/// ```
+/// let plan = Process.launch("echo", &["hi"])
+/// // plan.inherits is true and plan.directory is "", so it runs like `run`
+/// ```
 export fn launch(program: Str, arguments: &Array[Str]) -> Launch {
   Launch{program: program, arguments: *arguments, variables: [], inherits: true, directory: ""}
 }
@@ -420,6 +570,17 @@ impl Launching for Launch {
 ///
 /// A variable name that is empty or holds `=` is refused before anything
 /// starts, because the operating system would split or drop it silently.
+///
+/// ## Examples
+///
+/// ```
+/// // Starting a launch built with the fluent methods below:
+/// let plan = Process.launch("cat", &[]).isolated()
+/// match Process.begin(&plan) {
+///   case Ok(running) => { let _closed = Process.closeInput(&running) }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn begin(plan: &Launch) -> Result[Started, Str] {
   for pair in plan.variables {
     if pair[0].isEmpty() || pair[0].contains("=") {
@@ -435,6 +596,19 @@ export fn begin(plan: &Launch) -> Result[Started, Str] {
 ///
 /// The error stream is read on its own worker while output is read here, so a
 /// program writing a lot to both cannot stall on a full pipe nobody is reading.
+///
+/// ## Examples
+///
+/// ```
+/// // A launch with a variable set and the rest of the environment hidden:
+/// let plan = Process.launch("env", &[]).withVariable("GREETING", "hi").isolated()
+/// match Process.runLaunch(&plan, "") {
+///   case Ok(finished) => {
+///     // finished.output contains "GREETING=hi" and nothing else the shell held
+///   }
+///   case Err(_) => {}
+/// }
+/// ```
 export fn runLaunch(plan: &Launch, standardInput: Str) -> Result[Finished, Str] {
   let running = begin(plan) ?
   if !standardInput.isEmpty() { writeText(&running, standardInput) ? }
@@ -455,6 +629,19 @@ export fn runLaunch(plan: &Launch, standardInput: Str) -> Result[Finished, Str] 
 /// Stopped whether the action succeeded or failed and whether or not the
 /// program had already finished, so a program cannot outlive the code that
 /// started it. The action's own answer is what is returned.
+///
+/// ## Examples
+///
+/// ```
+/// // A program stopped automatically once the action is done with it:
+/// let plan = Process.launch("cat", &[])
+/// let read = Process.withStarted[Str](&plan, fn(running: &Process.Started) -> Result[Str, Str] {
+///   Process.writeText(running, "abc") ?
+///   Process.closeInput(running) ?
+///   Process.drain(running)
+/// })
+/// // read is Ok("abc"), and the program is already stopped by the time it returns
+/// ```
 export fn withStarted[T](plan: &Launch, action: fn(&Started) -> Result[T, Str]) -> Result[T, Str] {
   let running = begin(plan) ?
   let outcome = action(&running)

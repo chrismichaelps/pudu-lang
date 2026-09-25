@@ -4,6 +4,23 @@ module Std.Decimal
 ///
 /// All seven modes every base-ten standard converges on. Offering a subset
 /// would only push programs into writing worse versions of the missing ones.
+///
+/// - `Up` and `Down` move away from and towards nought.
+/// - `Ceiling` and `Floor` move towards positive and negative infinity.
+/// - `HalfUp`, `HalfDown`, and `HalfEven` go to the nearer neighbour, and differ only
+///   on an exact tie: away from nought, towards nought, or to the even digit.
+///
+/// The modes differ only for the digits being dropped. A value that already fits
+/// is returned unchanged whichever mode is named.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.round(2.5d, 0, Decimal.HalfUp).toText()    // "3"
+/// Decimal.round(2.5d, 0, Decimal.HalfEven).toText()  // "2"
+/// Decimal.round(-2.1d, 0, Decimal.Floor).toText()    // "-3"
+/// Decimal.round(-2.1d, 0, Decimal.Down).toText()     // "-2"
+/// ```
 export type Rounding = Up | Down | Ceiling | Floor | HalfUp | HalfDown | HalfEven
 
 /// The code the compiler's rounding primitives take.
@@ -26,16 +43,45 @@ fn code(mode: Rounding) -> Int {
 /// Half-even is the mode that does not accumulate bias across many roundings,
 /// which is the whole reason a total computed one way matches the same total
 /// computed another way.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.defaultRounding() == Decimal.HalfEven  // true
+/// ```
 export fn defaultRounding() -> Rounding { HalfEven }
 
 /// Nought.
+///
+/// The same value as the literal `0d`, for code that reads better with a name.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.zero() == 0d  // true
+/// ```
 export fn zero() -> Decimal { 0d }
 
 /// One.
+///
+/// The same value as the literal `1d`.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.one() == 1d  // true
+/// ```
 export fn one() -> Decimal { 1d }
 
 /// The decimal a whole number names. Every integer is exactly representable,
 /// so this cannot fail.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.fromInt(42).toText()   // "42"
+/// Decimal.fromInt(-7) == -7d     // true
+/// ```
 export fn fromInt(value: Int) -> Decimal { decimalFromInt(value) }
 
 /// Read a decimal from text, answering `None` when the text is not one.
@@ -43,9 +89,31 @@ export fn fromInt(value: Int) -> Decimal { decimalFromInt(value) }
 /// There is deliberately no conversion from `Float64`. A binary float that
 /// prints as `0.1` is not the number `0.1`, and letting it become `0.1d`
 /// silently would import exactly the error this type exists to avoid.
+///
+/// The text may carry a leading sign and a fractional part. The scale written is
+/// kept, so `"1.50"` reads as a value with two fractional digits.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.parse("19.99")              // Some(19.99d)
+/// Decimal.parse("-0.5")               // Some(-0.5d)
+/// Decimal.parse("abc")                // None
+/// Decimal.parseOr("1.50", 0d).toText()  // "1.50"
+/// ```
 export fn parse(text: Str) -> Option[Decimal] { decimalOf(text) }
 
 /// Read a decimal from text, falling back when the text is not one.
+///
+/// For configuration and form input where a sensible default exists. When the
+/// caller must learn that the text was wrong, use `parse` and match.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.parseOr("2.5", 0d)   // 2.5d
+/// Decimal.parseOr("n/a", 0d)   // 0d
+/// ```
 export fn parseOr(text: Str, fallback: Decimal) -> Decimal {
   match decimalOf(text) {
     case Some(value) => value
@@ -57,10 +125,26 @@ export fn parseOr(text: Str, fallback: Decimal) -> Decimal {
 ///
 /// This is the one place a trailing zero is visible: `scale(1.50d)` is 2 and
 /// `scale(1.5d)` is 1, even though the two compare equal.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.scale(1.50d)  // 2
+/// Decimal.scale(1.5d)   // 1
+/// Decimal.scale(42d)    // 0
+/// ```
 export fn scale(value: Decimal) -> Int { decimalScale(value) }
 
 /// The whole number a decimal names, when it names one exactly.
 /// Answers `None` for a value with a fractional part.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.toInt(12d)     // Some(12)
+/// Decimal.toInt(12.00d)  // Some(12)
+/// Decimal.toInt(12.5d)   // None
+/// ```
 export fn toInt(value: Decimal) -> Option[Int] { decimalToInt(value) }
 
 /// The nearest binary floating value.
@@ -69,37 +153,108 @@ export fn toInt(value: Decimal) -> Option[Int] { decimalToInt(value) }
 /// digits than `Float64` holds, and a terminating base-ten fraction is usually
 /// not one in base two. Use it to hand a number to something that needs a
 /// float, never to compute with.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.toFloat64(0.25d)  // 0.25
+/// ```
 export fn toFloat64(value: Decimal) -> Float64 { decimalToFloat(value) }
 
 /// The text a decimal renders as, keeping exactly the fractional digits its
 /// scale claims.
+///
+/// The same text `value.toText()` and interpolation produce. The scale is part of
+/// the answer, which is what makes this the right way to print money.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.toText(1.50d)   // "1.50"
+/// Decimal.toText(-0.5d)   // "-0.5"
+/// Decimal.toText(100d)    // "100"
+/// ```
 export fn toText(value: Decimal) -> Str { display(value) }
 
 /// Whether a value is nought, whatever scale it carries.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.isZero(0.00d)  // true
+/// Decimal.isZero(0.01d)  // false
+/// ```
 export fn isZero(value: Decimal) -> Bool { value == 0d }
 
 /// Whether a value is below nought.
+///
+/// Nought is not negative, whatever sign it was written with.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.isNegative(-0.01d)  // true
+/// Decimal.isNegative(0d)      // false
+/// ```
 export fn isNegative(value: Decimal) -> Bool { value < 0d }
 
 /// The value with its sign removed.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.abs(-3.25d)  // 3.25d
+/// Decimal.abs(3.25d)   // 3.25d
+/// ```
 export fn abs(value: Decimal) -> Decimal {
   if value < 0d { 0d - value } else { value }
 }
 
 /// The value with its sign flipped.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.negate(3.25d)   // -3.25d
+/// Decimal.negate(-1d)     // 1d
+/// ```
 export fn negate(value: Decimal) -> Decimal { 0d - value }
 
 /// Which of two values is larger.
+///
+/// When the two compare equal, the right one is answered.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.max(1.5d, 2d)  // 2d
+/// ```
 export fn max(left: Decimal, right: Decimal) -> Decimal {
   if left > right { left } else { right }
 }
 
 /// Which of two values is smaller.
+///
+/// When the two compare equal, the right one is answered.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.min(1.5d, 2d)  // 1.5d
+/// ```
 export fn min(left: Decimal, right: Decimal) -> Decimal {
   if left < right { left } else { right }
 }
 
 /// `-1`, `0`, or `1` as the value is below, at, or above nought.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.signum(-0.5d)  // -1
+/// Decimal.signum(0d)     // 0
+/// Decimal.signum(7d)     // 1
+/// ```
 export fn signum(value: Decimal) -> Int {
   if value > 0d { 1 } else { if value < 0d { 0 - 1 } else { 0 } }
 }
@@ -110,11 +265,28 @@ export fn signum(value: Decimal) -> Int {
 /// exact quotient does not terminate. It answers `None` only for a divisor of
 /// nought, because the caller has already said what to do about a quotient
 /// that runs on.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.divide(10d, 3d, 2, Decimal.HalfEven)       // Some(3.33d)
+/// Decimal.divide(2d, 3d, 2, Decimal.Down)            // Some(0.66d)
+/// Decimal.divide(1d, 0d, 2, Decimal.HalfEven)        // None
+/// ```
 export fn divide(left: Decimal, right: Decimal, digits: Int, mode: Rounding) -> Option[Decimal] {
   decimalDivide(left, right, digits, code(mode))
 }
 
 /// Divide half-even to a stated number of fractional digits.
+///
+/// `divide` with the mode that does not accumulate bias.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.divideHalfEven(100d, 3d, 2)  // Some(33.33d)
+/// Decimal.divideHalfEven(1d, 8d, 2)    // Some(0.12d)
+/// ```
 export fn divideHalfEven(left: Decimal, right: Decimal, digits: Int) -> Option[Decimal] {
   divide(left, right, digits, HalfEven)
 }
@@ -123,33 +295,90 @@ export fn divideHalfEven(left: Decimal, right: Decimal, digits: Int) -> Option[D
 ///
 /// Asking for more digits than the value carries is exact: the value is
 /// rescaled and nothing is decided. Asking for fewer is where the mode acts.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.round(2.345d, 2, Decimal.HalfUp).toText()    // "2.35"
+/// Decimal.round(2.345d, 2, Decimal.HalfEven).toText()  // "2.34"
+/// Decimal.round(2.5d, 3, Decimal.Down).toText()        // "2.500"
+/// ```
 export fn round(value: Decimal, digits: Int, mode: Rounding) -> Decimal {
   decimalRound(value, digits, code(mode))
 }
 
 /// Round half-even to a number of fractional digits.
+///
+/// A tie goes to the neighbour whose last digit is even, so over many values the
+/// ties round up as often as they round down.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.roundHalfEven(0.125d, 2).toText()  // "0.12"
+/// Decimal.roundHalfEven(0.135d, 2).toText()  // "0.14"
+/// ```
 export fn roundHalfEven(value: Decimal, digits: Int) -> Decimal {
   round(value, digits, HalfEven)
 }
 
 /// Round to a whole number, keeping the decimal type.
+///
+/// The fractional part is dropped, moving towards nought.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.truncate(2.9d)   // 2d
+/// Decimal.truncate(-2.9d)  // -2d
+/// ```
 export fn truncate(value: Decimal) -> Decimal { round(value, 0, Down) }
 
 /// The largest whole value at or below this one.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.floor(2.9d)   // 2d
+/// Decimal.floor(-2.1d)  // -3d
+/// ```
 export fn floor(value: Decimal) -> Decimal { round(value, 0, Floor) }
 
 /// The smallest whole value at or above this one.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.ceiling(2.1d)   // 3d
+/// Decimal.ceiling(-2.9d)  // -2d
+/// ```
 export fn ceiling(value: Decimal) -> Decimal { round(value, 0, Ceiling) }
 
 /// Give a value a stated scale, rounding half-even if digits must be dropped.
 ///
 /// This is what a monetary amount is normalised through: `rescale(total, 2)`
 /// says the answer is in cents and means it.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.rescale(19.9d, 2).toText()    // "19.90"
+/// Decimal.rescale(0.125d, 2).toText()   // "0.12"
+/// ```
 export fn rescale(value: Decimal, digits: Int) -> Decimal {
   round(value, digits, HalfEven)
 }
 
 /// The sum of an array, nought when it is empty.
+///
+/// Exact: no rounding happens, however many values are added.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.sum([0.1d, 0.2d])  // 0.3d
+/// Decimal.sum([])            // 0d
+/// ```
 export fn sum(values: Array[Decimal]) -> Decimal {
   var total = 0d
   for value in values {
@@ -159,6 +388,15 @@ export fn sum(values: Array[Decimal]) -> Decimal {
 }
 
 /// The product of an array, one when it is empty.
+///
+/// Exact. The scale of the answer is the sum of the scales multiplied.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.product([1.5d, 2d])  // 3d
+/// Decimal.product([])          // 1d
+/// ```
 export fn product(values: Array[Decimal]) -> Decimal {
   var total = 1d
   for value in values {
@@ -168,6 +406,15 @@ export fn product(values: Array[Decimal]) -> Decimal {
 }
 
 /// The mean of an array to a stated number of digits, `None` when it is empty.
+///
+/// Rounded half-even, since a mean rarely terminates.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.mean([1d, 2d, 2d], 2)  // Some(1.67d)
+/// Decimal.mean([], 2)            // None
+/// ```
 export fn mean(values: Array[Decimal], digits: Int) -> Option[Decimal] {
   if values.length() == 0 {
     None
@@ -177,6 +424,17 @@ export fn mean(values: Array[Decimal], digits: Int) -> Option[Decimal] {
 }
 
 /// A percentage of a value, to a stated number of digits.
+///
+/// Rounded half-even. The answer is `None` only in the way `divide` is, which
+/// cannot happen here since the divisor is a hundred; it stays an `Option` so
+/// that the result composes with the other dividing operations.
+///
+/// ## Examples
+///
+/// ```
+/// Decimal.percentOf(80d, 15d, 2)      // Some(12.00d)
+/// Decimal.percentOf(19.99d, 7d, 2)    // Some(1.40d)
+/// ```
 export fn percentOf(value: Decimal, percent: Decimal, digits: Int) -> Option[Decimal] {
   divide(value * percent, 100d, digits, HalfEven)
 }
