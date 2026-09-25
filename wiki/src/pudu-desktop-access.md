@@ -36,8 +36,9 @@ measured and then copied like the input queue.
 - A parent must be a record already read, so every element is built under an existing one and no
   cycle can be expressed. A node read twice, an unknown role, or a negative width or height is
   refused the same way.
-- The frame view names the focused element as its focused accessibility element, so VoiceOver's
-  cursor follows keyboard focus.
+- The frame view is the window's first responder and names the focused element as its focused
+  accessibility element, so the application's focused element, which VoiceOver's cursor follows, is
+  the focused control rather than the window.
 - The report walks what AppKit answers (`accessibilityChildren`, `accessibilityRole`,
   `accessibilityLabel`, `accessibilityFrame`, `isAccessibilityFocused`), not the stored records, and
   converts screen frames back to top-left content coordinates.
@@ -57,7 +58,9 @@ measured and then copied like the input queue.
 - **Q:** Prove the export with a screen reader driven from outside? **A:** Not as the gate.
   _Rationale:_ reading another process's accessibility tree needs the assistive-access permission,
   which a test cannot grant itself. _Accepted:_ the report reads AppKit's own answers in-process;
-  a VoiceOver check stays a manual step.
+  an out-of-process read through the system accessibility API is a manual check on a machine that
+  grants it. That check found the application's focused element was the window, because the view
+  was never first responder.
 
 ## Referenced by
 
