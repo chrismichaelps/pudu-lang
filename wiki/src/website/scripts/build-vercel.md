@@ -28,3 +28,10 @@ The emitted function uses Vercel's current custom-runtime target, `provided.al20
 The function is named `dynamic.func`, avoiding the root-path shadowing caused by `index.func`.
 Its function configuration carries the build's validated canonical `PUDU_SITE_URL`, so dynamic
 no-index pages and social metadata never fall back to a local-development origin.
+
+## Routing comes from the prerender (#357)
+
+The script no longer writes `config.json`. It passes the Build Output directory to
+[[website Prerender]], which writes the pages and the routing through [[Std Site]]: the same
+redirect, asset cache policies, function routes, and page rewrites as the table this script used to
+print, derived from the rendered files rather than listed.

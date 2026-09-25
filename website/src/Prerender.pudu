@@ -32,7 +32,7 @@ import Web.Routes as Web
 fn main() -> Int {
   let into = Option.unwrapOr(Env.at(0), "")
   if into.isEmpty() {
-    let _said = Io.writeErrorLine("usage: prerender <output directory>")
+    let _said = Io.writeErrorLine("usage: prerender <Build Output directory>")
     return 1
   }
   let settings = match Config.load() {
@@ -53,7 +53,32 @@ fn main() -> Int {
   // Rendered on every core through the one build step any Pudu site uses.
   // Files whose bytes are already there are left alone, so a rebuild writes,
   // and a deployment uploads, only what changed.
-  let layout = Build.Options{output: into, publicDirectory: "", workers: 8, target: Build.Static, fallback: None}
+  // The routes a request takes before a page is looked for. Everything else
+  // — the pages, the directories they live in, and the function that answers
+  // what no page does — is derived by the build from what it wrote.
+  let revalidated = "public, max-age=0, must-revalidate"
+  let layout = Build.Options {
+    output: into,
+    publicDirectory: "",
+    workers: 8,
+    target: Build.Vercel,
+    fallback: Some("dynamic"),
+    routes: [
+      Build.Redirect{pattern: "/guide", location: "/docs", permanent: true},
+      Build.Header{pattern: "/assets/playground/*", name: "cache-control", value: revalidated},
+      Build.Header{pattern: "/assets/docs/*", name: "cache-control", value: revalidated},
+      Build.Header{pattern: "/assets/download/*", name: "cache-control", value: revalidated},
+      Build.Header{pattern: "/assets/pudu/*", name: "cache-control", value: revalidated},
+      Build.Header{pattern: "/packages/avatars/*", name: "cache-control", value: "public, max-age=86400, stale-while-revalidate=604800"},
+      Build.ToFunction{pattern: "/playground", methods: ["POST"]},
+      Build.ToFunction{pattern: "/api/playground/run", methods: []},
+      Build.ToFunction{pattern: "/api/playground/assist", methods: []},
+      Build.ToFunction{pattern: "/packages/search", methods: []},
+      Build.ToFunction{pattern: "/packages/suggest", methods: []},
+      Build.ToFunction{pattern: "/playground/shared", methods: []},
+      Build.ToFunction{pattern: "/search", methods: []}
+    ]
+  }
   let report = match Build.build(&layout, &routes, |route: Str| Web.render(&site, route)) {
     case Ok(done) => done
     case Err(problem) => {

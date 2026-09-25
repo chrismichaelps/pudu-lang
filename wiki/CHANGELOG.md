@@ -13,6 +13,14 @@ tags: [changelog]
   labels required and legacy encrypted headers refused; `withLabel` selects by what a caller expects.
 - [[Uses Base32 Pem All]] reaches every export (30 checks); the API coverage floor rises to 3524.
 
+## 2026-09-25 — Routes before pages, for every host (#357)
+
+- [[Std Site]] `Route`: function routes (optionally by method), headers, and redirects in one
+  pattern language, written as Build Output routes for Vercel and as `_headers` and `_redirects`
+  for Netlify and Cloudflare Pages, each validated first.
+- [[website Prerender]] declares the site's routes and writes the Build Output routing itself;
+  `build-vercel.sh` no longer writes a route table by hand. [[Uses Site All]] grows to 40 checks.
+
 ## 2026-09-25 — A build step for any Pudu web application (#351)
 
 - [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with

@@ -25,7 +25,7 @@ fn renderChanged(path: Str) -> Http.Response {
 }
 
 fn settingsFor(root: Str, target: Site.Target, workers: Int) -> Site.Options {
-  Site.Options{output: root, publicDirectory: root + "-public", workers: workers, target: target, fallback: None}
+  Site.Options{output: root, publicDirectory: root + "-public", workers: workers, target: target, fallback: None, routes: []}
 }
 
 fn text(path: Str) -> Str {
@@ -123,12 +123,12 @@ fn main() -> Int {
   }
   let config = text(hosted + "/config.json")
   if text(hosted + "/static/docs/index.html") == "<p>/docs</p>" && config.contains("\"handle\": \"filesystem\"") && config.contains("\"dest\": \"/dynamic\"") { held = held + 1 }
-  if Site.vercelConfig(None, true).contains("\"status\": 404, \"dest\": \"/404.html\"") && !Site.vercelConfig(None, false).contains("404") { held = held + 1 }
-  if Site.vercelConfig(None, false).contains("\"version\": 3") && Site.vercelConfig(Some("api"), true).contains("\"dest\": \"/api\"") { held = held + 1 }
+  if Site.vercelConfig(None, true, &[]).contains("\"status\": 404, \"dest\": \"/404.html\"") && !Site.vercelConfig(None, false, &[]).contains("404") { held = held + 1 }
+  if Site.vercelConfig(None, false, &[]).contains("\"version\": 3") && Site.vercelConfig(Some("api"), true, &[]).contains("\"dest\": \"/api\"") { held = held + 1 }
 
   // Defaults, host detection, and options that cannot work.
   let defaults = Site.options()
-  if defaults.workers == 8 && defaults.publicDirectory == "public" && defaults.fallback == None && defaults.target == Site.targetFromEnvironment() { held = held + 1 }
+  if defaults.workers == 8 && defaults.publicDirectory == "public" && defaults.fallback == None && defaults.routes.isEmpty() && defaults.target == Site.targetFromEnvironment() { held = held + 1 }
   if Site.defaultOutput(Site.Vercel) == ".vercel/output" && Site.defaultOutput(Site.Netlify) == "dist" && Site.defaultOutput(Site.CloudflarePages) == "dist" && Site.defaultOutput(Site.Static) == "dist" { held = held + 1 }
   if Site.pagesDirectory(&settingsFor("out", Site.Netlify, 1)) == "out" && Site.pagesDirectory(&settingsFor("out", Site.CloudflarePages, 1)) == "out" { held = held + 1 }
   if refusal(&settingsFor(scratch + "/x", Site.Static, 0)) == "the build options are not usable: at least one worker is needed" { held = held + 1 }
@@ -139,6 +139,32 @@ fn main() -> Int {
   let refusedPage: Site.Refusal = Site.Refusal{path: "/x", reason: "answered 500"}
   let empty: Site.Report = Site.Report{rendered: 1, written: 0, unchanged: 0, copied: 0, refused: [refusedPage]}
   if !Site.succeeded(&empty) { held = held + 1 }
+
+  // Routes in one pattern language, written in each host's own form.
+  if Site.patternRegex("/api/*") == "^/api/(.*)$" && Site.patternRegex("/a.b+c") == "^/a\\.b\\+c$" && Site.patternRegex("/x*y") == "^/x\\*y$" { held = held + 1 }
+  let rules = [
+    Site.ToFunction{pattern: "/api/*", methods: []},
+    Site.Header{pattern: "/assets/*", name: "cache-control", value: "public, max-age=0"},
+    Site.Redirect{pattern: "/guide", location: "/docs", permanent: true},
+    Site.ToFunction{pattern: "/form", methods: ["POST"]}
+  ]
+  let routed = Site.vercelConfig(Some("dynamic"), false, &rules)
+  let redirectAt = routed.indexOf("\"status\": 308")
+  let headerAt = routed.indexOf("\"cache-control\"")
+  let functionAt = routed.indexOf("^/api/(.*)$")
+  if redirectAt > 0 && headerAt > redirectAt && functionAt > headerAt && routed.indexOf("filesystem") > functionAt { held = held + 1 }
+  if routed.contains("\"methods\": [\"POST\"], \"dest\": \"/dynamic\"") && routed.contains("\"Location\": \"/docs\"") && routed.contains("\"continue\": true") && routed.contains("\"src\": \"^/$\", \"dest\": \"/index.html\"") { held = held + 1 }
+  if !Site.vercelConfig(None, false, &rules).contains("^/api/(.*)$") && Site.vercelConfig(None, false, &rules).contains("\"status\": 308") { held = held + 1 }
+  if Site.headersFile(&rules) == "/assets/*\n  cache-control: public, max-age=0\n" && Site.redirectsFile(&rules) == "/guide /docs 308\n" { held = held + 1 }
+  if Site.headersFile(&[]) == "" && Site.redirectsFile(&[Site.Redirect{pattern: "/old", location: "/new", permanent: false}]) == "/old /new 307\n" { held = held + 1 }
+  let netlify = scratch + "/netlify"
+  let _built = Site.build(&Site.Options{..settingsFor(netlify, Site.Netlify, 2), routes: rules}, &["/"], render)
+  if text(netlify + "/_headers") == Site.headersFile(&rules) && text(netlify + "/_redirects") == Site.redirectsFile(&rules) && !Io.exists(scratch + "/static/_headers") { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), routes: [Site.Header{pattern: "assets/*", name: "a", value: "b"}]}) == "the build options are not usable: 'assets/*' is not a route pattern: a path, with at most a trailing '*'" { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), routes: [Site.Header{pattern: "/a/*/b", name: "a", value: "b"}]}).contains("is not a route pattern") { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), routes: [Site.Header{pattern: "/a", name: "bad name", value: "b"}]}) == "the build options are not usable: 'bad name' is not a header a host can be told to add" { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), routes: [Site.ToFunction{pattern: "/a", methods: ["post"]}]}) == "the build options are not usable: 'post' is not a request method" { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), routes: [Site.Redirect{pattern: "/a", location: "", permanent: true}]}) == "the build options are not usable: '' is not a redirect location" { held = held + 1 }
 
   let _cleaned = Fs.removeTree(scratch)
   held
