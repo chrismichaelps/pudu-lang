@@ -101,7 +101,7 @@ Apple's archived view-drawing guidance coalesces invalidated regions and discour
 heavyweight view objects in favor of lightweight elements managed by one owner; here every node is a
 record in one flat array. The archived accessibility guide's element hierarchy with role-specific
 required properties becomes a refusal at placement time. The parent-proposes, child-chooses size
-negotiation seen in OpenSwiftUI is simplified to proposal-independent intrinsic measurement so each
+negotiation seen in declarative UI frameworks is simplified to proposal-independent intrinsic measurement so each
 node is measured exactly once.
 
 ## Grill Log

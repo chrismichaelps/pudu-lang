@@ -1,0 +1,171 @@
+module Std.Ui.Keymap
+
+/// A chord bound to a command, with the words a menu shows for it.
+export type Binding = { chord: Str, command: Str, title: Str }
+
+/// Bindings in the order they were added.
+export type Keymap = { bindings: Array[Binding] }
+
+/// Why a chord was refused.
+export type KeymapError
+  = EmptyChord
+  | UnknownModifier(Str)
+  | MissingKey(Str)
+
+/// Modifier names in the order a normalized chord writes them. `mod` is the
+/// platform's primary modifier and is resolved by `forPlatform`.
+const MODIFIERS: Array[Str] = ["mod", "cmd", "ctrl", "alt", "shift"]
+
+const ALIASES: Map[Str, Str] = mapOf([
+    ("command", "cmd"),
+    ("meta", "cmd"),
+    ("control", "ctrl"),
+    ("option", "alt"),
+    ("opt", "alt")
+  ])
+
+const APPLE_SYMBOLS: Map[Str, Str] = mapOf([
+    ("cmd", "\u{2318}"),
+    ("ctrl", "\u{2303}"),
+    ("alt", "\u{2325}"),
+    ("shift", "\u{21e7}")
+  ])
+
+const WORDS: Map[Str, Str] = mapOf([("cmd", "Cmd"), ("ctrl", "Ctrl"), ("alt", "Alt"), ("shift", "Shift")])
+
+/// A keymap with no bindings.
+export fn keymap() -> Keymap { Keymap{bindings: []} }
+
+/// Adding bindings reads top to bottom: `Keymap.keymap().bind(...).bind(...)`.
+export trait Binds {
+  fn bind(self: &Self, chord: Str, command: Str, title: Str) -> Self
+}
+
+impl Binds for Keymap {
+  /// The keymap with one more binding; the chord is normalized, and one that
+  /// cannot be is kept as written so `problems` reports it.
+  fn bind(self: &Self, chord: Str, command: Str, title: Str) -> Self {
+    let written = match normalize(chord) {
+      case Ok(found) => found
+      case Err(_) => chord
+    }
+    Keymap{bindings: self.bindings.push(Binding{chord: written, command: command, title: title})}
+  }
+}
+
+/// A chord in canonical form: lower case, aliases resolved, modifiers in the
+/// order mod, cmd, ctrl, alt, shift, each once, then the key.
+export fn normalize(chord: Str) -> Result[Str, KeymapError] {
+  let pieces = chord.trim().toLower().split("+").map(|piece| piece.trim())
+  if chord.trim().length() == 0 { return Err(EmptyChord) }
+  let key = pieces[pieces.length() - 1]
+  if key.length() == 0 || MODIFIERS.contains(key) || ALIASES.containsKey(key) {
+    return Err(MissingKey(chord))
+  }
+  var held: Set[Str] = setOf([])
+  for piece in pieces.slice(0, pieces.length() - 1) {
+    let name = match ALIASES.get(piece) {
+      case Some(found) => found
+      case None => piece
+    }
+    if !MODIFIERS.contains(name) { return Err(UnknownModifier(piece)) }
+    held = held.insert(name)
+  }
+  var out = ""
+  for name in MODIFIERS {
+    if held.contains(name) { out = out + name + "+" }
+  }
+  Ok(out + key)
+}
+
+/// The keymap with `mod` resolved to `cmd` on Apple platforms and `ctrl`
+/// elsewhere.
+export fn forPlatform(map: &Keymap, apple: Bool) -> Keymap {
+  let primary = if apple { "cmd+" } else { "ctrl+" }
+  let bindings = map.bindings.map(|binding| {
+      let resolved = if binding.chord.startsWith("mod+") { primary + binding.chord.drop(4) } else { binding.chord }
+      let chord = match normalize(resolved) {
+        case Ok(found) => found
+        case Err(_) => resolved
+      }
+      Binding{..binding, chord: chord}
+    })
+  Keymap{bindings: bindings}
+}
+
+/// The command a chord runs; the first binding wins.
+export fn commandFor(map: &Keymap, chord: Str) -> Option[Str] {
+  let wanted = match normalize(chord) {
+    case Ok(found) => found
+    case Err(_) => { return None }
+  }
+  for binding in map.bindings {
+    if binding.chord == wanted { return Some(binding.command) }
+  }
+  None
+}
+
+/// Every chord bound to a command.
+export fn chordsFor(map: &Keymap, command: Str) -> Array[Str] {
+  map.bindings.filter(|binding| binding.command == command).map(|binding| binding.chord)
+}
+
+/// Bindings that cannot be normalized, and chords bound to more than one
+/// command.
+export fn problems(map: &Keymap) -> Array[Str] {
+  var found = []
+  var owners: Map[Str, Str] = mapOf([])
+  for binding in map.bindings {
+    match normalize(binding.chord) {
+      case Err(_) => { found = found.push("'{binding.chord}' is not a chord") }
+      case Ok(chord) => {
+        match owners.get(chord) {
+          case Some(owner) if owner != binding.command => {
+            found = found.push("{chord} runs both {owner} and {binding.command}")
+          }
+          case Some(_) => {}
+          case None => { owners = owners.insert(chord, binding.command) }
+        }
+      }
+    }
+  }
+  found
+}
+
+/// How a menu shows a chord: symbols run together on Apple platforms
+/// (`⌘⇧Z`), words joined by `+` elsewhere (`Ctrl+Shift+Z`).
+export fn label(chord: Str, apple: Bool) -> Str {
+  let pieces = chord.split("+")
+  let key = pieces[pieces.length() - 1].toUpper()
+  var out = ""
+  for name in pieces.slice(0, pieces.length() - 1) {
+    let table = if apple { APPLE_SYMBOLS } else { WORDS }
+    let shown = match table.get(name) {
+      case Some(found) => found
+      case None => name
+    }
+    out = out + shown + (if apple { "" } else { "+" })
+  }
+  out + key
+}
+
+/// A shortcut handler for `Desktop.drive`: a bound chord applies its command
+/// to the state, and an unbound one is ignored.
+export fn handler[S](map: &Keymap, apply: fn(S, Str) -> S) -> fn(S, Str) -> Option[S] {
+  let held = *map
+  |state, chord| {
+    match commandFor(&held, chord) {
+      case Some(command) => Some(apply(state, command))
+      case None => None
+    }
+  }
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &KeymapError) -> Str {
+  match problem {
+    case EmptyChord => "a chord needs a key"
+    case UnknownModifier(name) => "unknown modifier '{name}'"
+    case MissingKey(chord) => "'{chord}' names no key"
+  }
+}

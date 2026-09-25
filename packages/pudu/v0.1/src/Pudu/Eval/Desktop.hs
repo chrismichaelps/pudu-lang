@@ -6,6 +6,7 @@ module Pudu.Eval.Desktop
   ( DesktopStore
   , closeDesktop
   , closeDesktopStore
+  , inputsDesktop
   , newDesktopStore
   , openDesktop
   , presentDesktop
@@ -19,13 +20,14 @@ import Pudu.Eval.Io (IoOutcome (..))
 #ifdef PUDU_DARWIN_DESKTOP
 import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
 import Control.Exception (displayException)
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word64, Word8)
 import Foreign.C.Types (CInt (..), CSize (..))
+import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import GHC.Clock (getMonotonicTimeNSec)
 import Pudu.Eval.Io (trySynchronous)
@@ -128,6 +130,29 @@ pumpDesktop store token milliseconds
 pumpDesktop _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
 
+{-| Drains the input the window queued while it was pumped, as the adapter's
+    newline-terminated records. The first call measures the queue and the
+    second copies it; input queued between the two only lengthens the next
+    drain, because the adapter copies nothing that does not fit. -}
+inputsDesktop :: DesktopStore -> Int -> IO (IoOutcome Text)
+#ifdef PUDU_DARWIN_DESKTOP
+inputsDesktop store token = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+  held <- cDesktopInputs pointer nullPtr 0
+  if held < 0
+    then pure (IoFailed (statusMessage "input" (fromIntegral held)))
+    else if held == 0
+      then pure (IoDone Text.empty)
+      else allocaBytes (fromIntegral held) $ \buffer -> do
+        copied <- cDesktopInputs pointer buffer (fromIntegral held)
+        if copied /= held
+          then pure (IoDone Text.empty)
+          else do
+            bytes <- Bytes.packCStringLen (castPtr buffer, fromIntegral copied)
+            pure (IoDone (TextEncoding.decodeUtf8Lenient bytes))
+#else
+inputsDesktop _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
 closeDesktop :: DesktopStore -> Int -> IO (IoOutcome ())
 #ifdef PUDU_DARWIN_DESKTOP
 closeDesktop store token =
@@ -210,6 +235,9 @@ foreign import ccall unsafe "pudu_desktop_present"
 -- for that whole wait. A bound main thread keeps its OS thread either way.
 foreign import ccall safe "pudu_desktop_pump"
   cDesktopPump :: Ptr () -> CInt -> IO CInt
+
+foreign import ccall unsafe "pudu_desktop_inputs"
+  cDesktopInputs :: Ptr () -> Ptr Word8 -> CSize -> IO Int64
 
 foreign import ccall unsafe "pudu_desktop_close"
   cDesktopClose :: Ptr () -> IO CInt

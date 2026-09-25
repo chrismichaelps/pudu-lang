@@ -2,6 +2,7 @@ module Std.Ui.Desktop
 
 import Std.Num {Integer}
 import Std.Ui.Canvas as Canvas
+import Std.Ui.Screen as Screen
 
 /// Why a desktop session could not do what was requested.
 export type DesktopError
@@ -15,6 +16,20 @@ export type DesktopError
   | UnsupportedPlatform
   | SessionClosed
   | PlatformFailure(Str)
+
+/// Why a driven window stopped before the person closed it.
+export type DriveError
+  = Window(DesktopError)
+  | Frame(Screen.ScreenError)
+
+/// Something the window reported since the last drain.
+///
+/// `Shortcut` carries a chord held with Command or Control, written
+/// `cmd+shift+z` with modifiers in the order cmd, ctrl, alt, shift.
+export type Signal
+  = Input(Screen.Input)
+  | Shortcut(Str)
+  | Resized(Canvas.Size)
 
 /// Everything decided before a native window resource is acquired.
 export type WindowPlan = {
@@ -113,6 +128,97 @@ export fn pump(target: &Session, milliseconds: Int) -> Result[Bool, DesktopError
   }
 }
 
+/// Everything the window reported since the last drain, in order.
+export fn signals(target: &Session) -> Result[Array[Signal], DesktopError] {
+  match desktopInputs(target.token) {
+    case Ok(text) => Ok(decodeSignals(text))
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Signals from the adapter's records: tab-separated fields, one record per
+/// line. A record that is unknown or malformed is skipped.
+export fn decodeSignals(text: Str) -> Array[Signal] {
+  var found = []
+  for line in text.lines() {
+    let fields = line.split("\t")
+    if fields.length() < 2 { continue }
+    let kind = fields[0]
+    if kind == "text" {
+      found = found.push(Input(Screen.TypedText(line.drop(5))))
+      continue
+    }
+    if kind == "chord" {
+      found = found.push(Shortcut(fields[1]))
+      continue
+    }
+    if kind == "key" {
+      if let Some(key) = keyNamed(fields[1]) { found = found.push(Input(Screen.KeyPressed(key))) }
+      continue
+    }
+    let numbers = numbersOf(&fields)
+    if kind == "press" && numbers.length() == 2 {
+      found = found.push(Input(Screen.Pressed(Canvas.point(numbers[0], numbers[1]))))
+    }
+    if kind == "scroll" && numbers.length() == 3 {
+      found = found.push(Input(Screen.Scrolled(Canvas.point(numbers[0], numbers[1]), numbers[2])))
+    }
+    if kind == "resize" && numbers.length() == 2 {
+      found = found.push(Resized(Canvas.size(numbers[0], numbers[1])))
+    }
+  }
+  found
+}
+
+/// Runs `screen` in the window until the person closes it.
+///
+/// Each turn pumps for at most `frameMillis`, hands every input to the
+/// screen, offers every shortcut to `onShortcut` (a new state re-renders,
+/// `None` ignores it), and presents only when a frame changed. Answers the
+/// screen as it was when the window closed; the caller still closes the
+/// session.
+export fn drive[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  onShortcut: fn(S, Str) -> Option[S]
+) -> Result[Screen.Screen[S], DriveError] {
+  if frameMillis < 0 { return Err(Window(InvalidPumpDuration(frameMillis))) }
+  shown(target, screen) ?
+  var held = *screen
+  loop {
+    let closing = match pump(target, frameMillis) {
+      case Ok(requested) => requested
+      case Err(problem) => { return Err(Window(problem)) }
+    }
+    if closing { break }
+    let arrived = match signals(target) {
+      case Ok(found) => found
+      case Err(problem) => { return Err(Window(problem)) }
+    }
+    var changed = false
+    for signal in arrived {
+      let next = match signal {
+        case Input(input) => Screen.handle(&held, input)
+        case Shortcut(chord) => {
+          match onShortcut(Screen.stateOf(&held), chord) {
+            case Some(state) => Screen.restated(&held, state)
+            case None => Ok(held)
+          }
+        }
+        case Resized(_) => Ok(held)
+      }
+      held = match next {
+        case Ok(found) => found
+        case Err(problem) => { return Err(Frame(problem)) }
+      }
+      if Screen.damagedOf(&held).length() > 0 { changed = true }
+    }
+    if changed { shown(target, &held) ? }
+  }
+  Ok(held)
+}
+
 /// Release a desktop session. A second close is reported as `SessionClosed`.
 export fn close(target: &Session) -> Result[(), DesktopError] {
   match desktopClose(target.token) {
@@ -147,6 +253,48 @@ export fn showFor(
         Ok(requested)
       }
     }
+  }
+}
+
+/// Adapter key names, in the order of `keyNamed`'s keys.
+const KEY_NAMES: Array[Str] = ["next", "previous", "activate", "dismiss", "erase"]
+
+fn keyNamed(name: Str) -> Option[Screen.Key] {
+  let keys = [Screen.Next, Screen.Previous, Screen.Activate, Screen.Dismiss, Screen.Erase]
+  let index = KEY_NAMES.indexOf(name)
+  if index < 0 { None } else { Some(keys[index]) }
+}
+
+fn numbersOf(fields: &Array[Str]) -> Array[Int] {
+  var found = []
+  var index = 1
+  while index < fields.length() {
+    match integer(fields[index]) {
+      case Some(value) => { found = found.push(value) }
+      case None => { return [] }
+    }
+    index = index + 1
+  }
+  found
+}
+
+fn integer(text: Str) -> Option[Int] {
+  let negative = text.startsWith("-")
+  let digits = if negative { text.drop(1) } else { text }
+  if digits.length() == 0 || digits.length() > 9 { return None }
+  var total = 0
+  for symbol in digits {
+    let code = symbol.code()
+    if code < 48 || code > 57 { return None }
+    total = total * 10 + code - 48
+  }
+  Some(if negative { 0 - total } else { total })
+}
+
+fn shown[S](target: &Session, screen: &Screen.Screen[S]) -> Result[(), DriveError] {
+  match present(target, &Screen.surfaceOf(screen)) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(Window(problem))
   }
 }
 

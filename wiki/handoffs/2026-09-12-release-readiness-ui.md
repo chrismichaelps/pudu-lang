@@ -264,7 +264,7 @@ Implementer** for the persistent native media stream named above.
 - **Q:** Does avoiding foreign UI integration forbid calling the operating system? **A:** No.
   _Rationale:_ a real window must connect to a window server. _Accepted:_ a private target adapter
   whose pointers and framework types never cross the Pudu boundary. _Rejected:_ raylib, SDL,
-  SwiftUI, AppKit-shaped public APIs, and program-authored foreign declarations.
+  platform-framework-shaped public APIs, and program-authored foreign declarations.
 
 ## Referenced by
 

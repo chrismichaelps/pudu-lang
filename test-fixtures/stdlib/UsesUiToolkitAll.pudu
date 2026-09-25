@@ -1,0 +1,263 @@
+module UsesUiToolkitAll
+
+import Std.Env as Env
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Desktop as Desktop
+import Std.Ui.History as History
+import Std.Ui.Keymap as Keymap
+import Std.Ui.Layout as Layout
+import Std.Ui.Motion as Motion
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+import Std.Ui.Virtual as Virtual
+
+const GRAY: Canvas.Color = Canvas.Color{red: 128u8, green: 128u8, blue: 128u8, alpha: 255u8}
+const BLUE: Canvas.Color = Canvas.Color{red: 0u8, green: 0u8, blue: 255u8, alpha: 255u8}
+const RED: Canvas.Color = Canvas.Color{red: 255u8, green: 0u8, blue: 0u8, alpha: 255u8}
+
+fn counter(count: Int) -> Layout.View {
+  Layout.column([
+      Layout.box().tall(2).filled(GRAY).means(Layout.Button).named("Increment").tagged("inc"),
+      Layout.box().tall(2).filled(if count % 2 == 0 { BLUE } else { RED })
+    ])
+}
+
+fn counted(count: Int, event: Screen.Event) -> Int {
+  match event {
+    case Screen.Activated("inc") => count + 1
+    case _ => count
+  }
+}
+
+fn near(found: Float, wanted: Float) -> Bool {
+  found - wanted < 0.001 && wanted - found < 0.001
+}
+
+fn desktop() -> Int {
+  var held = 0
+
+  // Every record kind decodes; unknown and malformed ones are skipped.
+  let decoded = Desktop.decodeSignals("press\t10\t20\nkey\tnext\nkey\tprevious\nkey\tactivate\nkey\tdismiss\nkey\terase\ntext\thi there\nscroll\t1\t2\t-3\nchord\tcmd+s\nresize\t640\t480\nbogus\t1\npress\tx\t2\nkey\tspace\n")
+  if decoded.length() == 10 { held = held + 1 }
+  if decoded[0] == Desktop.Input(Screen.Pressed(Canvas.point(10, 20))) { held = held + 1 }
+  if decoded[1] == Desktop.Input(Screen.KeyPressed(Screen.Next)) && decoded[5] == Desktop.Input(Screen.KeyPressed(Screen.Erase)) {
+    held = held + 1
+  }
+  if decoded[6] == Desktop.Input(Screen.TypedText("hi there")) { held = held + 1 }
+  if decoded[7] == Desktop.Input(Screen.Scrolled(Canvas.point(1, 2), -3)) { held = held + 1 }
+  if decoded[8] == Desktop.Shortcut("cmd+s") && decoded[9] == Desktop.Resized(Canvas.size(640, 480)) {
+    held = held + 1
+  }
+  if Desktop.decodeSignals("").length() == 0 { held = held + 1 }
+
+  // A state from outside an input re-renders and damages only what changed.
+  match Screen.start(0, counter, counted, Canvas.size(4, 4), GRAY) {
+    case Ok(first) => {
+      match Screen.restated(&first, 1) {
+        case Ok(next) => {
+          if Screen.stateOf(&next) == 1 && Screen.damagedOf(&next).length() > 0 { held = held + 1 }
+          match Screen.restated(&next, 3) {
+            case Ok(same) => { if Screen.damagedOf(&same).length() == 0 { held = held + 1 } }
+            case Err(_) => {}
+          }
+        }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Driving needs a display; asked for only when one is promised.
+  if Env.variableOr("PUDU_DESKTOP_DRIVE", "") == "1" {
+    match Desktop.plan("drive", 4, 4, false, 64) {
+      case Ok(plan) => {
+        match Desktop.open(&plan) {
+          case Ok(session) => {
+            let _ = Desktop.signals(&session)
+            match Screen.start(0, counter, counted, Canvas.size(4, 4), GRAY) {
+              case Ok(screen) => {
+                let _ = Desktop.drive(&session, &screen, 16, |state, _chord| Some(state))
+              }
+              case Err(_) => {}
+            }
+            let _ = Desktop.close(&session)
+          }
+          case Err(_) => {}
+        }
+      }
+      case Err(_) => {}
+    }
+  }
+  match Desktop.drive(&Desktop.Session{token: 0, extent: Canvas.size(4, 4)}, &placeholder(), -1, |state, _chord| Some(state)) {
+    case Err(Desktop.Window(Desktop.InvalidPumpDuration(-1))) => { held = held + 1 }
+    case _ => {}
+  }
+  held
+}
+
+fn placeholder() -> Screen.Screen[Int] {
+  match Screen.start(0, counter, counted, Canvas.size(4, 4), GRAY) {
+    case Ok(found) => found
+    case Err(_) => panic("screen")
+  }
+}
+
+fn theme() -> Int {
+  var held = 0
+  let black = Canvas.rgb(0u8, 0u8, 0u8)
+  let white = Canvas.rgb(255u8, 255u8, 255u8)
+
+  // Contrast is 21 between black and white and 1 between a color and itself.
+  if near(Theme.contrast(black, white), 21.0) && near(Theme.contrast(white, white), 1.0) { held = held + 1 }
+  if near(Theme.luminance(white), 1.0) && near(Theme.luminance(black), 0.0) { held = held + 1 }
+  if Theme.meetsContrast(black, white, false) && !Theme.meetsContrast(GRAY, Canvas.rgb(140u8, 140u8, 140u8), true) {
+    held = held + 1
+  }
+
+  // Both shipped themes pass their own contrast audit.
+  if Theme.contrastFailures(&Theme.light()).length() == 0 && Theme.contrastFailures(&Theme.dark()).length() == 0 {
+    held = held + 1
+  }
+  if Theme.forMode(Theme.Dark).mode == Theme.Dark && Theme.forMode(Theme.Light) == Theme.light() { held = held + 1 }
+
+  // A new accent brings a readable foreground with it.
+  let yellow = Theme.withAccent(&Theme.light(), Canvas.rgb(255u8, 214u8, 0u8))
+  if yellow.palette.onAccent == black && Theme.readableOn(Canvas.rgb(20u8, 20u8, 90u8)) == white { held = held + 1 }
+
+  // Mixing moves each channel by the given share, rounding both ways.
+  if Theme.mix(black, white, 50) == Canvas.rgb(128u8, 128u8, 128u8) && Theme.mix(white, black, 50) == Canvas.rgb(127u8, 127u8, 127u8) {
+    held = held + 1
+  }
+  if Theme.mix(black, white, 150) == white && Theme.space(&Theme.light(), 3) == 24 { held = held + 1 }
+  held
+}
+
+fn motion() -> Int {
+  var held = 0
+  let slide = Motion.transition(0.0, 100.0, 1000, 200, Motion.Linear)
+
+  // Before, halfway, and after.
+  if Motion.valueAt(&slide, 900) == 0.0 && near(Motion.valueAt(&slide, 1100), 50.0) && Motion.valueAt(&slide, 1300) == 100.0 {
+    held = held + 1
+  }
+  if Motion.pixelAt(&slide, 1101) == 51 && Motion.finished(&slide, 1200) && !Motion.finished(&slide, 1199) {
+    held = held + 1
+  }
+
+  // Every curve starts at 0 and ends at 1; easing in starts slow, out starts fast.
+  let curves = [Motion.Linear, Motion.EaseIn, Motion.EaseOut, Motion.EaseInOut, Motion.Bezier(0.2, 0.8, 0.2, 1.0), Motion.Spring(170.0, 26.0)]
+  var anchored = true
+  for curve in curves {
+    if !near(Motion.eased(&curve, 0.0), 0.0) || !near(Motion.eased(&curve, 1.0), 1.0) { anchored = false }
+  }
+  if anchored { held = held + 1 }
+  if Motion.eased(&Motion.EaseIn, 0.25) < 0.25 && Motion.eased(&Motion.EaseOut, 0.25) > 0.25 { held = held + 1 }
+  if near(Motion.eased(&Motion.EaseInOut, 0.5), 0.5) { held = held + 1 }
+
+  // An underdamped spring overshoots; a critically damped one does not.
+  var peak = 0.0
+  for sample in Motion.frames(&Motion.transition(0.0, 1.0, 0, 1000, Motion.Spring(170.0, 8.0)), 10) {
+    if sample > peak { peak = sample }
+  }
+  var calmPeak = 0.0
+  for sample in Motion.frames(&Motion.transition(0.0, 1.0, 0, 1000, Motion.Spring(100.0, 20.0)), 10) {
+    if sample > calmPeak { calmPeak = sample }
+  }
+  if peak > 1.0 && calmPeak <= 1.0 { held = held + 1 }
+
+  // Retargeting continues from where the value is.
+  let turned = Motion.retarget(&slide, 0.0, 1100)
+  if near(turned.from, 50.0) && turned.to == 0.0 && turned.start == 1100 { held = held + 1 }
+  if Motion.frames(&slide, 100) == [0.0, 50.0, 100.0] && Motion.valueAt(&Motion.still(4.0), 0) == 4.0 { held = held + 1 }
+  held
+}
+
+fn history() -> Int {
+  var held = 0
+  let begun = History.start("", 2)
+  let typed = History.record(&History.record(&History.record(&begun, "a"), "ab"), "abc")
+
+  // The limit keeps the latest earlier states.
+  if History.depth(&typed) == (2, 0) && History.presentOf(&typed) == "abc" { held = held + 1 }
+  let back = History.undo(&History.undo(&typed))
+  if History.presentOf(&back) == "a" && !History.canUndo(&back) && History.canRedo(&back) { held = held + 1 }
+  let forward = History.redo(&back)
+  if History.presentOf(&forward) == "ab" && History.depth(&forward) == (1, 1) { held = held + 1 }
+
+  // A new change drops what was undone; an amend records nothing.
+  let branched = History.record(&back, "x")
+  if !History.canRedo(&branched) && History.presentOf(&History.undo(&branched)) == "a" { held = held + 1 }
+  let amended = History.amend(&branched, "xy")
+  if History.depth(&amended) == History.depth(&branched) && History.presentOf(&amended) == "xy" { held = held + 1 }
+
+  // Nothing to undo or redo leaves the history alone; an equal state is not a step.
+  if History.undo(&begun) == begun && History.redo(&begun) == begun && History.record(&begun, "") == begun {
+    held = held + 1
+  }
+  held
+}
+
+fn virtual() -> Int {
+  var held = 0
+
+  // A thousand rows of 20 through a 100-pixel viewport place a handful.
+  let window = Virtual.visible(1000, 20, 100, 410, 1)
+  if window == (Virtual.Window{first: 19, last: 27, top: 380, height: 20000}) { held = held + 1 }
+  if Virtual.visible(1000, 20, 100, 999999, 0).last == 1000 && Virtual.visible(0, 20, 100, 0, 0).last == 0 {
+    held = held + 1
+  }
+
+  // Varying heights use their offsets.
+  let tops = Virtual.offsets(&[10, 30, 20, 40])
+  if tops == [0, 10, 40, 60, 100] { held = held + 1 }
+  if Virtual.visibleOf(&tops, 25, 12, 0) == (Virtual.Window{first: 1, last: 2, top: 10, height: 100}) { held = held + 1 }
+  if Virtual.indexAt(&tops, 45) == Some(2) && Virtual.indexAt(&tops, 100) == None { held = held + 1 }
+
+  // Scrolling to show a row moves as little as possible.
+  if Virtual.scrollToShow(&tops, 3, 30, 0) == 70 && Virtual.scrollToShow(&tops, 0, 30, 50) == 0 { held = held + 1 }
+  if Virtual.scrollToShow(&tops, 1, 50, 5) == 5 && Virtual.clampScroll(100, 30, -5) == 0 { held = held + 1 }
+  held
+}
+
+fn keymap() -> Int {
+  var held = 0
+  let map = Keymap.keymap().bind("mod+z", "undo", "Undo").bind("Mod+Shift+Z", "redo", "Redo")
+    .bind("cmd+s", "save", "Save")
+
+  // Chords normalize: case, aliases, and modifier order.
+  if Keymap.normalize("Shift+Command+z") == Ok("cmd+shift+z") && Keymap.normalize("option+ctrl+K") == Ok("ctrl+alt+k") {
+    held = held + 1
+  }
+  if Keymap.normalize("") == Err(Keymap.EmptyChord) && Keymap.normalize("hyper+x") == Err(Keymap.UnknownModifier("hyper")) {
+    held = held + 1
+  }
+  if Keymap.normalize("cmd+shift") == Err(Keymap.MissingKey("cmd+shift")) { held = held + 1 }
+
+  // `mod` resolves per platform, and lookups normalize what they are given.
+  let apple = Keymap.forPlatform(&map, true)
+  let other = Keymap.forPlatform(&map, false)
+  if Keymap.commandFor(&apple, "Cmd+Shift+Z") == Some("redo") && Keymap.commandFor(&other, "ctrl+z") == Some("undo") {
+    held = held + 1
+  }
+  if Keymap.commandFor(&apple, "ctrl+z") == None && Keymap.chordsFor(&apple, "save") == ["cmd+s"] { held = held + 1 }
+
+  // Menus show symbols on Apple platforms and words elsewhere.
+  if Keymap.label("cmd+shift+z", true) == "\u{2318}\u{21e7}Z" && Keymap.label("ctrl+shift+z", false) == "Ctrl+Shift+Z" {
+    held = held + 1
+  }
+
+  // Conflicts and malformed chords are named.
+  let clashing = map.bind("cmd+s", "share", "Share").bind("hyper+q", "quit", "Quit")
+  if Keymap.problems(&clashing) == ["cmd+s runs both save and share", "'hyper+q' is not a chord"] { held = held + 1 }
+
+  // The handler plugs a keymap into a driven screen.
+  let onShortcut = Keymap.handler(&apple, |state, command| state + ":" + command)
+  if onShortcut("doc", "cmd+z") == Some("doc:undo") && onShortcut("doc", "cmd+k") == None { held = held + 1 }
+  if Keymap.explain(&Keymap.UnknownModifier("hyper")) == "unknown modifier 'hyper'" { held = held + 1 }
+  held
+}
+
+fn main() -> Int {
+  desktop() * 10000000000 + theme() * 100000000 + motion() * 1000000 + history() * 10000 + virtual() * 100
+    + keymap()
+}

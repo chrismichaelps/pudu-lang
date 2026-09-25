@@ -116,6 +116,15 @@ export fn handle[S](target: &Screen[S], input: Input) -> Result[Screen[S], Scree
   }
 }
 
+/// The screen showing `state`, for a change that did not come from an input:
+/// a shortcut, a timer, or a finished background task.
+///
+/// Focus is kept when the new frame still holds the focused control, and
+/// only changed regions are damaged.
+export fn restated[S](target: &Screen[S], state: S) -> Result[Screen[S], ScreenError] {
+  rendered(target, state, target.focus)
+}
+
 /// The screen after several inputs, in order.
 ///
 /// The damage is every region any of the inputs changed, in order.
@@ -269,7 +278,14 @@ fn updated[S](
   event: Event,
   focus: Option[Str]
 ) -> Result[Screen[S], ScreenError] {
-  let state = (target.update)(target.state, event)
+  rendered(target, (target.update)(target.state, event), focus)
+}
+
+fn rendered[S](
+  target: &Screen[S],
+  state: S,
+  focus: Option[Str]
+) -> Result[Screen[S], ScreenError] {
   let shown = (target.view)(state)
   if shown == target.shown && focus == target.focus {
     return Ok(Screen{..*target, state: state, damaged: []})

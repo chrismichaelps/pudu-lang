@@ -11,8 +11,8 @@ aliases: [Eval Desktop]
 ## Purpose and interface
 
 Own desktop window resources for one evaluator lifetime. `newDesktopStore` creates an empty token
-registry; `openDesktop`, `presentDesktop`, `pumpDesktop`, and `closeDesktop` validate each operation
-against it; `closeDesktopStore` releases every remaining native window during runtime teardown.
+registry; `openDesktop`, `presentDesktop`, `pumpDesktop`, `inputsDesktop`, and `closeDesktop` validate each
+operation against it; `closeDesktopStore` releases every remaining native window during runtime teardown.
 
 On macOS, a private adapter calls public window-server APIs. On other targets every open answers
 the stable `unsupported platform` failure without manufacturing a token. There the store is an
@@ -20,6 +20,11 @@ empty constructor: it owns no registry, teardown does nothing, and every import 
 only the adapter uses sits inside the platform guard, so a target without the adapter builds with
 warnings as errors. Platform handles never become Pudu values. The runtime copies presented bytes before returning and performs all adapter
 calls on the main OS thread.
+
+`inputsDesktop` drains the adapter's input queue in two native calls: one measures it and one
+copies it. The adapter copies only a queue that fits, so input arriving between the calls waits for
+the next drain rather than being truncated. The bytes are decoded as UTF-8 leniently; the records are
+parsed in `Std.Ui.Desktop`, not here.
 
 The registry lock remains held while a native present, pump, or close uses a handle. This makes a
 concurrent close wait rather than free a pointer beneath another operation. A failed close retains

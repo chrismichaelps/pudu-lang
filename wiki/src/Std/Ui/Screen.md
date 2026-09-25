@@ -18,7 +18,8 @@ A running application screen as a value. `Screen[S]` holds a state, a view funct
 produced: its layout, its pixels, the tag holding focus, and the regions that changed.
 
 `start` places, paints, and renders the first frame. `handle` applies one `Input` and `handleAll`
-applies several in order. `stateOf`, `layoutOf`, `surfaceOf`, `damagedOf`, and `focusOf` observe the
+applies several in order. `restated` shows a new state that did not come from an input — a
+shortcut, a timer, a finished task — keeping focus and damaging only what changed. `stateOf`, `layoutOf`, `surfaceOf`, `damagedOf`, and `focusOf` observe the
 current frame. `Input` is `Pressed(point)` or `KeyPressed(key)`; `Key` is `Next`, `Previous`,
 `Activate`, or `Dismiss`. `Event` is `Activated(tag)` or `Dismissed`. `ScreenError` carries either a
 placement refusal or a drawing refusal unchanged.

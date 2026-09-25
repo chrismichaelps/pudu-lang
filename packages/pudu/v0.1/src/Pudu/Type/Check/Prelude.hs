@@ -439,6 +439,7 @@ effectSignatures =
   , ("desktopOpen", monotype (FunctionTypeValue False [stringType, integerType, integerType, boolType] (resultOf integerType)))
   , ("desktopPresent", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType] (resultOf unitTypeValue)))
   , ("desktopPump", monotype (FunctionTypeValue False [integerType, integerType] (resultOf boolType)))
+  , ("desktopInputs", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
   , ("desktopClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("audioDevicePlay", monotype (FunctionTypeValue False [integerType, integerType, bytesType, integerType, integerType, integerType] (resultOf integerType)))
   , ("audioStreamOpen", monotype (FunctionTypeValue False [integerType, integerType, integerType, integerType] (resultOf (arrayOf integerType))))

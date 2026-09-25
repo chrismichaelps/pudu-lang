@@ -71,6 +71,11 @@ tags: [moc, module, stdlib]
 - [[Std Html Bounded]] — iterative HTML rendering that stops at an exact UTF-8 output budget.
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
+- [[Std Ui Theme]] — color roles, spacing, type scale, light and dark, and contrast audits.
+- [[Std Ui Motion]] — transitions with easing curves and springs, retargetable mid-flight.
+- [[Std Ui History]] — undo and redo over whole states.
+- [[Std Ui Virtual]] — the rows of a long list a viewport shows.
+- [[Std Ui Keymap]] — shortcut chords to commands, per platform, with menu labels.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std Ui Canvas]] — bounded Pudu-native RGBA software rendering for application UI.
 - [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.

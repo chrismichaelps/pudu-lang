@@ -23,6 +23,7 @@ testServiceEvaluation = do
   layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
   desktop <- runEntry "test-fixtures/stdlib/UsesUiDesktop.pudu"
+  toolkit <- runEntry "test-fixtures/stdlib/UsesUiToolkitAll.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -420,4 +421,11 @@ testServiceEvaluation = do
     , counterexample
         "a lookup says whether what it found is still fresh"
         (cached === Just "50")
+    {-| Six counts in two-digit slots: 10 desktop checks (every adapter record
+        kind decoded, a screen restated from outside an input, a refused frame
+        duration), 8 theme, 8 motion, 6 history, 7 list-windowing, and 9 keymap
+        checks. Driving a real window runs only when a display is promised. -}
+    , counterexample
+        "a desktop app decodes input, themes, animates, undoes, windows lists, and binds shortcuts"
+        (toolkit === Just "100808060709")
     ]
