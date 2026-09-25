@@ -11,6 +11,9 @@ tags: [changelog]
   clipboard's text ([[Pudu Desktop Adapter]], [[Eval Desktop]]).
 - [[Std Ui Gesture]] recognizes taps, long presses, and drags; [[Std Ui Controls]] adds `slider` and
   `slid`; [[Std Ui Clipboard]] reads and writes text with typed failures.
+- [[Std Ui Selection]] chooses list rows singly, by range from an anchor, and by toggle, and follows
+  keyboard movement and keymap commands.
+- [[Std Ui Grid]] places cells in equal flexible columns and lines up a short last row.
 
 ## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
 

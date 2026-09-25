@@ -61,6 +61,8 @@ checks, and 18 idempotency checks, the last including the middleware against a s
 `UsesAppWiringAll` packs `11160404`: events and outbox (11), API description (16), application
 describing refusals (4), and calendar jobs (4).
 
+`UsesUiSelectionAll` holds 15 list-selection checks and `UsesUiGridAll` 5 grid checks.
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

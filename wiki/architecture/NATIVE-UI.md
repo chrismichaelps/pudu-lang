@@ -98,10 +98,10 @@ A row marked **Absent** is queued work, not an exclusion.
 | Shared settings and appearance | explicit values ([[Std Ui Theme]]) passed to views | **Ready** by design; no ambient environment |
 | Light and dark appearance, design tokens | [[Std Ui Theme]] | **Ready**, contrast audited |
 | Stacks, layers, padding, alignment, scrolling | [[Std Ui Layout]] | **Ready** |
-| Grids | — | **Absent** |
+| Grids | [[Std Ui Grid]] equal flexible columns | **Ready**; content-sized columns **Absent** |
 | Text measure, wrap, draw | [[Std Ui Text]] | **Ready** (bitmap face); shaping, bidirectional text, and input methods absent |
 | Controls: buttons, toggles, steppers, pickers, sliders, progress, fields, secure fields | [[Std Ui Controls]] | **Ready** |
-| Long lists | [[Std Ui Virtual]] | **Ready**; selection model **Absent** |
+| Long lists and selection | [[Std Ui Virtual]], [[Std Ui Selection]] | **Ready** |
 | Navigation stack, split view, tabs | [[Std Ui Navigation]] | **Ready** |
 | Sheets, alerts, confirmations | [[Std Ui Navigation]] `presenting` | **Ready**: presses blocked, focus trapped |
 | Drawing | [[Std Ui Canvas]] rectangles, clipping, blending | **Partial**: paths, strokes, gradients absent |

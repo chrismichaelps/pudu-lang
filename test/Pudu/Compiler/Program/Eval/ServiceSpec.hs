@@ -27,6 +27,8 @@ testServiceEvaluation = do
   controls <- runEntry "test-fixtures/stdlib/UsesUiControlsAll.pudu"
   shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
   pointing <- runEntry "test-fixtures/stdlib/UsesUiGestureAll.pudu"
+  selecting <- runEntry "test-fixtures/stdlib/UsesUiSelectionAll.pudu"
+  gridded <- runEntry "test-fixtures/stdlib/UsesUiGridAll.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -452,6 +454,12 @@ testServiceEvaluation = do
     , counterexample
         "pointer gestures drive sliders and the clipboard reports what it holds"
         (pointing === Just "7020602")
+    , counterexample
+        "list selection chooses single rows, ranges, toggles, and follows the keyboard"
+        (selecting === Just "15")
+    , counterexample
+        "a grid places equal columns and lines up a short last row"
+        (gridded === Just "5")
     {-| Problem bodies, cursor pages, and idempotency keys, read as three
         counts packed into one number: 17 problem checks, 15 page checks, and
         18 idempotency checks, including a middleware run against a shared store
