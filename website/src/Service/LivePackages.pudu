@@ -1,5 +1,6 @@
 module Service.LivePackages
 
+import Std.Concurrent as Concurrent
 import Std.List as List
 import Std.Option as Option
 import Std.Sync as Sync
@@ -14,6 +15,9 @@ import Service.Packages as Packages
 /// first. It bounds latency and rate-limit spend however many packages change
 /// at once; the rest are read by the next rebuild.
 const PROBES: Int = 16
+/// Release reads in flight at once. GitHub serves a handful of concurrent
+/// requests from one client well; more only reaches its secondary rate limit.
+const WORKERS: Int = 4
 
 /// How long a merged index is reused before it is rebuilt from remembered answers.
 const MEMO_SECONDS: Int = 30
@@ -90,29 +94,20 @@ export fn merged(source: &Source.Source, snapshot: &Packages.Packages) -> View {
   let Some(listing) = Index.search(source) else { return View{packages: *snapshot, live: false} }
   let fresh = listing.repositories.filter(|held: Index.Repository| Packages.find(snapshot, held.handle, held.project) == None)
   let known = listing.repositories.filter(|held: Index.Repository| Packages.find(snapshot, held.handle, held.project) != None)
+  let answers = probed(source, &plan(snapshot, &fresh, &known))
   var projects = snapshot.projects
   var handles = snapshot.handles
-  var probes = 0
   for repository in fresh {
-    if probes < PROBES {
-      probes = probes + 1
-      if let Some(read) = Release.read(source, &repository, None) {
-        if !read.releases.isEmpty() {
-          projects = projects.push(introduced(source, &repository, &read))
-          if handles.filter(|profile: Packages.Profile| profile.handle == repository.handle).isEmpty() { handles = handles.push(repository.owner) }
-        }
-      }
+    let Some(read) = answerFor(&answers, repository.path) else { continue }
+    if !read.releases.isEmpty() {
+      projects = projects.push(introduced(source, &repository, &read))
+      if handles.filter(|profile: Packages.Profile| profile.handle == repository.handle).isEmpty() { handles = handles.push(repository.owner) }
     }
   }
   for repository in known {
     let Some(held) = Packages.find(snapshot, repository.handle, repository.project) else { continue }
     let counted = Packages.Project{..held, stars: repository.stars, forks: repository.forks, openIssues: repository.openIssues}
-    let changed = repository.pushedAt > publishedAt(&held)
-    let newer = if changed && probes < PROBES {
-      probes = probes + 1
-      Release.read(source, &repository, held.latest)
-    } else { None }
-    projects = replaced(&projects, &advanced(&counted, &newer))
+    projects = replaced(&projects, &advanced(&counted, &answerFor(&answers, repository.path)))
   }
   if listing.complete {
     var listed: Set[Str] = setOf([])
@@ -192,4 +187,41 @@ fn withLiveFiles(source: &Source.Source, project: &Packages.Project, file: Str) 
     case Some(held) => Packages.Project{..*project, files: files, bodies: mapOf([(shown, held)])}
     case None => Packages.Project{..*project, files: files}
   }
+}
+
+/// One repository whose releases are read, and the release to read past.
+type Probe = { repository: Index.Repository, after: Option[Str] }
+
+/// The repositories worth a release read, at most `PROBES` of them: every
+/// repository the snapshot lacks, then each known one pushed since its latest
+/// release, in the order the search ranked them.
+fn plan(snapshot: &Packages.Packages, fresh: &Array[Index.Repository], known: &Array[Index.Repository]) -> Array[Probe] {
+  var probes: Array[Probe] = []
+  for repository in fresh {
+    if probes.length() < PROBES { probes = probes.push(Probe{repository: repository, after: None}) }
+  }
+  for repository in known {
+    let Some(held) = Packages.find(snapshot, repository.handle, repository.project) else { continue }
+    if repository.pushedAt > publishedAt(&held) && probes.length() < PROBES { probes = probes.push(Probe{repository: repository, after: held.latest}) }
+  }
+  probes
+}
+
+/// Each probe's releases, read `WORKERS` at a time: the reads are independent
+/// and each waits on GitHub, so a cold instance pays for the slowest rather
+/// than the sum. Read one after another when workers cannot be started.
+fn probed(source: &Source.Source, probes: &Array[Probe]) -> Array[(Str, Option[Release.Releases])] {
+  let shared = *source
+  let read = fn(probe: Probe) -> (Str, Option[Release.Releases]) { (probe.repository.path, Release.read(&shared, &probe.repository, probe.after)) }
+  match Concurrent.mapBounded(probes, WORKERS, read) {
+    case Ok(found) => found
+    case Err(_) => probes.map(read)
+  }
+}
+
+fn answerFor(answers: &Array[(Str, Option[Release.Releases])], path: Str) -> Option[Release.Releases] {
+  for answer in answers {
+    if answer[0] == path { return answer[1] }
+  }
+  None
 }

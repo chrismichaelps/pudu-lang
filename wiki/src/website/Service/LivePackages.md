@@ -42,3 +42,11 @@ project, and a failure anywhere yields exactly the snapshot.
 Since #369 the index is built from [[website Service LiveIndex]] and [[website Service LiveRelease]]:
 releases carry their GitHub release's publication date, or their tagged commit's, and a complete
 search hides a snapshot package it no longer lists, while a search cut short hides nothing.
+
+Release reads are planned first — every repository the snapshot lacks, then each known one pushed
+since its latest release, at most 16 — and run four at a time with `Concurrent.mapBounded`, so a cold
+instance waits for the slowest read rather than their sum. They run one after another when workers
+cannot be started (#369).
+
+Resolved Grill Log: four workers, because GitHub serves a few concurrent requests from one client
+well and more only reaches its secondary rate limit.
