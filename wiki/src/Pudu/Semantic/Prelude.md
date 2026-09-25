@@ -90,7 +90,7 @@ public wrappers while these remain language-runtime primitives.
 
 ## Desktop capability names
 
-`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopClipboardRead`, `desktopClipboardWrite`, and `desktopClose` are discoverable effect values.
+`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, and `desktopClose` are discoverable effect values.
 Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
 standard-library wrapper is the public contract.
 

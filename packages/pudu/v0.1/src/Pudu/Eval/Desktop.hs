@@ -6,6 +6,7 @@ module Pudu.Eval.Desktop
   ( DesktopStore
   , closeDesktop
   , closeDesktopStore
+  , exposeDesktop
   , inputsDesktop
   , readClipboard
   , writeClipboard
@@ -13,6 +14,7 @@ module Pudu.Eval.Desktop
   , openDesktop
   , presentDesktop
   , pumpDesktop
+  , reportDesktop
   ) where
 
 import qualified Data.ByteString as Bytes
@@ -189,6 +191,39 @@ writeClipboard value = guarded $ do
 writeClipboard _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
 
+{-| Replaces a window's accessibility tree with the one the records describe.
+    A snapshot the adapter cannot read leaves the window's tree as it was. -}
+exposeDesktop :: DesktopStore -> Int -> Text -> IO (IoOutcome ())
+#ifdef PUDU_DARWIN_DESKTOP
+exposeDesktop store token records = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+  status <- Bytes.useAsCStringLen (TextEncoding.encodeUtf8 records) $ \(bytes, count) ->
+    cDesktopAccessibility pointer (castBytes bytes) (fromIntegral count)
+  pure $ case status of
+    -3 -> IoFailed "desktop accessibility snapshot is malformed"
+    _ -> unitStatus "accessibility" status
+#else
+exposeDesktop _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
+{-| What the platform reports for a window's accessibility tree, as records:
+    measured, then copied, as the input queue is. -}
+reportDesktop :: DesktopStore -> Int -> IO (IoOutcome Text)
+#ifdef PUDU_DARWIN_DESKTOP
+reportDesktop store token = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
+  held <- cDesktopAccessibilityReport pointer nullPtr 0
+  if held < 0
+    then pure (IoFailed (statusMessage "accessibility" (fromIntegral held)))
+    else allocaBytes (max 1 (fromIntegral held)) $ \buffer -> do
+      copied <- cDesktopAccessibilityReport pointer buffer (fromIntegral held)
+      if copied /= held
+        then pure (IoFailed "the accessibility tree changed while it was read")
+        else do
+          bytes <- Bytes.packCStringLen (castPtr buffer, fromIntegral copied)
+          pure (IoDone (TextEncoding.decodeUtf8Lenient bytes))
+#else
+reportDesktop _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
+#endif
+
 closeDesktop :: DesktopStore -> Int -> IO (IoOutcome ())
 #ifdef PUDU_DARWIN_DESKTOP
 closeDesktop store token =
@@ -280,6 +315,12 @@ foreign import ccall unsafe "pudu_desktop_clipboard_read"
 
 foreign import ccall unsafe "pudu_desktop_clipboard_write"
   cDesktopClipboardWrite :: Ptr Word8 -> CSize -> IO CInt
+
+foreign import ccall unsafe "pudu_desktop_accessibility"
+  cDesktopAccessibility :: Ptr () -> Ptr Word8 -> CSize -> IO CInt
+
+foreign import ccall unsafe "pudu_desktop_accessibility_report"
+  cDesktopAccessibilityReport :: Ptr () -> Ptr Word8 -> CSize -> IO Int64
 
 foreign import ccall unsafe "pudu_desktop_close"
   cDesktopClose :: Ptr () -> IO CInt

@@ -1,8 +1,10 @@
 module Std.Ui.Desktop
 
 import Std.Num {Integer}
+import Std.Ui.Accessible as Accessible
 import Std.Ui.Canvas as Canvas
 import Std.Ui.Gesture as Gesture
+import Std.Ui.Layout as Layout
 import Std.Ui.Screen as Screen
 
 /// Why a desktop session could not do what was requested.
@@ -180,11 +182,38 @@ export fn decodeSignals(text: Str) -> Array[Signal] {
   found
 }
 
+/// Tell assistive clients what the window shows: every meaningful node of
+/// `layout`, with the control tagged `focus` focused.
+///
+/// Replaces the tree the window had; a person using a screen reader hears
+/// the new one at once.
+export fn expose(target: &Session, layout: &Layout.Layout, focus: Option[Str]) -> Result[(), DesktopError] {
+  match desktopAccessibility(target.token, Accessible.snapshot(layout, focus)) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// What the platform itself reports for the window's accessibility tree, in
+/// reading order, with the platform's roles.
+export fn exposed(target: &Session) -> Result[Array[Accessible.Exposed], DesktopError] {
+  let text = match desktopAccessibilityReport(target.token) {
+    case Ok(found) => found
+    case Err(message) => { return Err(classified(message)) }
+  }
+  match Accessible.decode(text) {
+    case Ok(found) => Ok(found)
+    case Err(Accessible.MalformedRecord(index)) => Err(PlatformFailure("the platform reported a malformed accessibility record " + show(index)))
+    case Err(Accessible.OrphanedRecord(index)) => Err(PlatformFailure("the platform reported an accessibility record without its parent " + show(index)))
+  }
+}
+
 /// Runs `screen` in the window until the person closes it.
 ///
 /// Each turn pumps for at most `frameMillis`, hands every input to the
 /// screen, offers every shortcut to `onShortcut` (a new state re-renders,
-/// `None` ignores it), and presents only when a frame changed. Answers the
+/// `None` ignores it), and presents only when a frame changed. Every frame
+/// presented is exposed to assistive clients with its layout and focus. Answers the
 /// screen as it was when the window closed; the caller still closes the
 /// session.
 export fn drive[S](
@@ -304,6 +333,10 @@ fn integer(text: Str) -> Option[Int] {
 
 fn shown[S](target: &Session, screen: &Screen.Screen[S]) -> Result[(), DriveError] {
   match present(target, &Screen.surfaceOf(screen)) {
+    case Ok(_) => {}
+    case Err(problem) => { return Err(Window(problem)) }
+  }
+  match expose(target, &Screen.layoutOf(screen), Screen.focusOf(screen)) {
     case Ok(_) => Ok(())
     case Err(problem) => Err(Window(problem))
   }

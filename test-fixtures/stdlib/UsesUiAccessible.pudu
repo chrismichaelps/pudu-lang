@@ -1,0 +1,193 @@
+module UsesUiAccessible
+
+import Std.Env as Env
+import Std.Result as Result
+import Std.Ui.Accessible as Accessible
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Desktop as Desktop
+import Std.Ui.Layout as Layout
+
+/// Platform roles the adapter reports for the layout roles in `form`, in reading order.
+const PLATFORM_ROLES: Array[Str] = ["AXHeading", "AXGroup", "AXTextField", "AXCheckBox", "AXButton"]
+
+fn sized(role: Layout.Role, name: Str, tag: Str, width: Int, height: Int) -> Layout.View {
+  Layout.View{..Layout.box(), role: role, name: name, tag: tag, width: Some(width), height: Some(height)}
+}
+
+/// A heading, then a group holding a field, a toggle, and a button, above a
+/// decorative strip that no assistive client hears.
+fn form() -> Layout.View {
+  Layout.column([
+      sized(Layout.Heading, "Sign in", "title", 200, 30),
+      Layout.View {
+        ..Layout.column([
+            sized(Layout.Field, "User\tname", "user", 200, 24),
+            sized(Layout.Toggle, "Remember\nme", "remember", 200, 20),
+            sized(Layout.Button, "Go ✓", "go", 80, 24)
+          ]),
+        role: Layout.Group,
+        name: "Account",
+        tag: "account"
+      },
+      sized(Layout.Decoration, "", "", 200, 6)
+    ])
+}
+
+fn focusedCount(found: &Array[Accessible.Exposed]) -> Int {
+  var count = 0
+  for entry in found { if entry.focused { count = count + 1 } }
+  count
+}
+
+fn decoded(layout: &Layout.Layout, focus: Option[Str]) -> Array[Accessible.Exposed] {
+  match Accessible.decode(Accessible.snapshot(layout, focus)) {
+    case Ok(found) => found
+    case Err(_) => []
+  }
+}
+
+fn roles() -> Int {
+  let names = [
+    Accessible.roleName(Layout.Decoration),
+    Accessible.roleName(Layout.Group),
+    Accessible.roleName(Layout.Heading),
+    Accessible.roleName(Layout.Label),
+    Accessible.roleName(Layout.Image),
+    Accessible.roleName(Layout.Button),
+    Accessible.roleName(Layout.Toggle),
+    Accessible.roleName(Layout.Field)
+  ]
+  if names == ["decoration", "group", "heading", "label", "image", "button", "toggle", "field"] { 1 } else { 0 }
+}
+
+fn snapshots(layout: &Layout.Layout) -> Int {
+  var held = 0
+  let found = decoded(layout, Some("go"))
+
+  // Decoration is left out; the rest keep reading order and their roles.
+  var kinds: Array[Str] = []
+  for entry in found { kinds = kinds.push(entry.role) }
+  if kinds == ["heading", "group", "field", "toggle", "button"] { held = held + 1 }
+
+  // The heading and group sit at the top, beneath the decorative column; the
+  // controls sit under the group.
+  if found.length() == 5 && found[0].parent == -1 && found[1].parent == -1 &&
+  found[2].parent == found[1].node && found[3].parent == found[1].node && found[4].parent == found[1].node {
+    held = held + 1
+  }
+
+  // Each frame is the frame the node was placed at.
+  var framed = found.length() == 5
+  for entry in found {
+    if Layout.frameOf(layout, entry.node) != Some(entry.frame) { framed = false }
+  }
+  if framed { held = held + 1 }
+
+  // Only the focused control is marked.
+  if focusedCount(&found) == 1 && found.length() == 5 && found[4].focused { held = held + 1 }
+
+  // A tab or newline in a name becomes a space; multi-byte text is kept.
+  if found.length() == 5 && found[2].name == "User name" && found[3].name == "Remember me" && found[4].name == "Go ✓" {
+    held = held + 1
+  }
+
+  // Focus on a group, on a tag no node has, or on nothing marks no node.
+  if focusedCount(&decoded(layout, Some("account"))) == 0 { held = held + 1 }
+  if focusedCount(&decoded(layout, Some("missing"))) == 0 { held = held + 1 }
+  if focusedCount(&decoded(layout, None)) == 0 { held = held + 1 }
+  held
+}
+
+fn refusals() -> Int {
+  var held = 0
+  let good = "0\t-1\tbutton\t0\t0\t0\t10\t10\tGo\n"
+  if Accessible.decode("") == Ok([]) { held = held + 1 }
+  match Accessible.decode("\n" + good + "\n") {
+    case Ok(found) => { if found.length() == 1 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  // An empty name is the last field, so it still makes nine.
+  if Result.isOk(&Accessible.decode("0\t-1\tgroup\t0\t0\t0\t1\t1\t\n")) { held = held + 1 }
+  if Accessible.decode("0\t-1\tbutton\t0\t0\t0\t10\t10\n") == Err(Accessible.MalformedRecord(0)) { held = held + 1 }
+  if Accessible.decode(good + "1\t0\tbutton\t2\t0\t0\t10\t10\tGo\n") == Err(Accessible.MalformedRecord(1)) {
+    held = held + 1
+  }
+  if Accessible.decode("0\t-1\tbutton\t0\tleft\t0\t10\t10\tGo\n") == Err(Accessible.MalformedRecord(0)) { held = held + 1 }
+  if Accessible.decode(good + "1\t5\tbutton\t0\t0\t0\t10\t10\tGo\n") == Err(Accessible.OrphanedRecord(1)) {
+    held = held + 1
+  }
+  held
+}
+
+/// A session the runtime never issued is refused, on every target.
+fn forged() -> Int {
+  let fake = Desktop.Session{token: -1, extent: Canvas.size(20, 10)}
+  let layout = match Layout.place(&form(), Canvas.size(200, 104)) {
+    case Ok(placed) => placed
+    case Err(_) => { return 0 }
+  }
+  var held = 0
+  match Desktop.expose(&fake, &layout, None) {
+    case Err(Desktop.SessionClosed) => { held = held + 1 }
+    case Err(Desktop.UnsupportedPlatform) => { held = held + 1 }
+    case _ => {}
+  }
+  match Desktop.exposed(&fake) {
+    case Err(Desktop.SessionClosed) => { held = held + 1 }
+    case Err(Desktop.UnsupportedPlatform) => { held = held + 1 }
+    case _ => {}
+  }
+  held
+}
+
+fn blank() -> Result[Canvas.Surface, Canvas.CanvasError] {
+  let drawing = Canvas.canvas(200, 104, Canvas.rgb(240u8, 240u8, 240u8)) ?
+  Canvas.render(&drawing)
+}
+
+/// Opens a real window, exposes the form, and reads back what the platform
+/// reports: the same nodes with the platform's roles, names, frames, and focus.
+fn live(layout: &Layout.Layout) -> Result[Int, Desktop.DesktopError] {
+  let plan = Desktop.plan("Pudu Accessibility", 200, 104, false, 20800) ?
+  let session = Desktop.open(&plan) ?
+  var held = 0
+  if let Ok(frame) = blank() {
+    let _shown = Desktop.present(&session, &frame)
+    let _exposed = Desktop.expose(&session, layout, Some("go"))
+    let _pumped = Desktop.pump(&session, 50)
+    let sent = decoded(layout, Some("go"))
+    if let Ok(reported) = Desktop.exposed(&session) {
+      var kinds: Array[Str] = []
+      for entry in reported { kinds = kinds.push(entry.role) }
+      if kinds == PLATFORM_ROLES { held = held + 1 }
+      var same = reported.length() == sent.length()
+      var index = 0
+      while same && index < sent.length() {
+        let here = reported[index]
+        let there = sent[index]
+        if here.name != there.name || here.frame != there.frame || here.focused != there.focused { same = false }
+        if (here.parent == -1) != (there.parent == -1) { same = false }
+        index = index + 1
+      }
+      if same { held = held + 1 }
+    }
+  }
+  Desktop.close(&session) ?
+  Ok(held)
+}
+
+fn main() -> Int {
+  let layout = match Layout.place(&form(), Canvas.size(200, 104)) {
+    case Ok(placed) => placed
+    case Err(_) => { return -1 }
+  }
+  var held = roles() * 1000 + snapshots(&layout) * 100 + refusals() * 10 + forged()
+  // A window is opened only when a run promises one may be.
+  if Env.variableOr("PUDU_DESKTOP_DRIVE", "") == "1" {
+    held = match live(&layout) {
+      case Ok(count) => held * 10 + count
+      case Err(_) => -2
+    }
+  }
+  held
+}

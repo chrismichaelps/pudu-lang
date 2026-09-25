@@ -91,6 +91,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui Screen]] — state, view, and update driven by routed input with damage-only repaint.
 - [[Std Ui Text]] — an original bitmap face: measuring, wrapping, and drawing into the canvas.
 - [[Std Ui Desktop]] — bounded plans and explicit sessions for real desktop window presentation.
+- [[Std Ui Accessible]] — the accessibility snapshot a window is given, and the platform's report of it.
 - [[Std Audio]] — exact 16-bit PCM, rational time, Q15 gain, saturating mix, and bounded WAV.
 - [[Std Audio Graph]] — a stateless pull-model render graph over bounded, slice-independent renders.
 - [[Std Audio Device]] — bounded PCM playback plans with exact completion and typed target failures.
