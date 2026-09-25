@@ -64,7 +64,7 @@ fn document(
           H.link().rel("apple-touch-icon").at("sizes", "180x180").href(Constants.TOUCH_ICON_PATH),
           H.link().rel("manifest").href(Constants.MANIFEST_PATH),
           H.meta().name("theme-color").at("content", Constants.THEME_COLOR),
-          H.link().rel("stylesheet").href("/assets/site.css?v=59")
+          H.link().rel("stylesheet").href("/assets/site.css?v=60")
         ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       body.holding(parts)
     ]).html()

@@ -1,6 +1,9 @@
 // The pudu, drawn in the logo's language: round shapes split at the centre
 // into a darker left half and a lighter right half. Classes name the parts
 // the moves address and the colour tokens the stylesheet fills them with.
+// The drawing sits in an HTML `pudu-body`, which is what rises and ducks:
+// an HTML transform runs on the compositor, where moving an SVG group
+// repaints the drawing on every frame.
 
 const RIGHT_HALF = 'clip-path="url(#pudu-right-half)"';
 
@@ -19,7 +22,7 @@ const twoTone = (shape, dark, light) => `${shape.replace("/>", ` class="${dark}"
 export const DRAWING = `<svg viewBox="0 0 200 150" focusable="false">
 <defs><clipPath id="pudu-right-half"><rect x="100" y="-60" width="160" height="280"/></clipPath></defs>
 <g class="pudu-heart"><path class="pudu-heart-fill" d="${HEART}"/></g>
-<g class="pudu-body"><g class="pudu-head">
+<g class="pudu-head">
   ${twoTone('<rect x="77.5" y="107.5" width="45" height="88" rx="20"/>', "pudu-fur", "pudu-fur-light")}
   <g class="pudu-ear pudu-ear-left">
     <ellipse class="pudu-fur" cx="57.5" cy="75" rx="21" ry="12.5" transform="rotate(-28 57.5 75)"/>
@@ -47,7 +50,7 @@ export const DRAWING = `<svg viewBox="0 0 200 150" focusable="false">
     </g>
     <path class="pudu-mouth" d="M95 119.4Q100 123.1 105 119.4"/>
   </g>
-</g></g>
+</g>
 </svg>`;
 
 const hoof = (leg, tone) => `<g class="pudu-hoof">
@@ -66,7 +69,7 @@ export const FRONT = `<svg viewBox="0 0 200 150" focusable="false">
 /// Draws the pudu into `actor` and its hooves into `front`, and returns the
 /// parts the moves address.
 export function draw(actor, front) {
-  actor.innerHTML = DRAWING;
+  actor.innerHTML = `<div class="pudu-body">${DRAWING}</div>`;
   front.innerHTML = FRONT;
   const part = (name) => actor.querySelector(`.pudu-${name}`);
   return {

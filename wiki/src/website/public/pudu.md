@@ -71,6 +71,14 @@ decorative either way (`aria-hidden`).
 - **Q:** Why a front layer only for the hooves? **A:** Contact. _Rationale:_ with everything behind
   the banner, the head sat on the edge like a sticker; hooves over the edge and their shadow on the
   banner place the pudu in the same space as the banner, for two small shapes.
+- **Q:** What moves on the compositor? **A:** The rise, the duck, and the hop move an HTML box
+  holding the drawing, in percentages of its own height. _Rationale:_ WebKit, which every iPhone
+  browser uses, repaints an SVG group's transform on every frame, and the stutter showed on
+  phones; parts inside the drawing only turn, tilt, blink, and twitch.
+- **Q:** Smooth the pointer-follow with a CSS transition? **A:** No. _Rationale:_ when an animation
+  commits its end pose to a part that has a transition, WebKit may start the transition again from
+  the old pose, which reads as a hitch. Following is a short animation that replaces the previous
+  one, and a look commits where the follow got to before starting.
 - **Q:** Why pause off screen? **A:** A choreography waits before each act while the tab is hidden or
   the banner is scrolled away, so the page spends nothing on a pudu no one sees.
 - **Q:** Why a larger gap above page banners that carry one? **A:** The pudu needs about 55px above

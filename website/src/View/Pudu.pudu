@@ -10,7 +10,7 @@ export const SHY: Str = "shy"
 export const ASK: Str = "ask"
 
 /// The script that draws the pudu and performs the stage's mode.
-const SCRIPT_PATH: Str = "/assets/pudu/main.js?v=1"
+const SCRIPT_PATH: Str = "/assets/pudu/main.js?v=2"
 
 /// `banner` with a pudu behind it. The stage precedes the banner one layer
 /// below it, so the opaque banner covers whatever of the pudu is under its

@@ -28,6 +28,7 @@ for (const stage of document.querySelectorAll(SELECTOR.stage)) {
     front,
     x: 0,
     gripping: false,
+    following: [],
     parts: draw(actor, front),
     visible: watchVisibility(host),
   };

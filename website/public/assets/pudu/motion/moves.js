@@ -11,10 +11,13 @@ import {
   LOOK_TILT,
   POSE,
   TIMING,
+  VIEW_HEIGHT,
 } from "../config/constants.js";
 import { play, to, wait } from "./timing.js";
 
-const lift = (offset) => `translateY(${offset}px)`;
+// The body is an HTML box one drawing tall, so an offset in drawing units is
+// a percentage of its own height.
+const lift = (offset) => `translateY(${(offset * 100) / VIEW_HEIGHT}%)`;
 const ears = (pudu, left, duration, easing) =>
   Promise.all([
     to(pudu.parts.earLeft, `rotate(${left}deg)`, duration, easing),
@@ -90,16 +93,32 @@ export function nod(pudu, tilt = 0) {
 
 /// Turns the face toward `direction`, from -1 (left) to 1 (right).
 export function look(pudu, direction, duration = TIMING.look) {
+  stopFollowing(pudu);
   return Promise.all([
     to(pudu.parts.face, `translateX(${direction * FACE_TURN}px)`, duration, EASE.inOut),
     to(pudu.parts.head, `rotate(${direction * LOOK_TILT}deg)`, duration, EASE.inOut),
   ]);
 }
 
-/// Follows a direction at once; the stylesheet's transition smooths it.
+/// Eases toward a direction, replacing the previous follow rather than
+/// queueing behind it, so a stream of pointer moves stays one motion.
 export function follow(pudu, direction) {
-  pudu.parts.face.style.transform = `translateX(${direction * FACE_TURN}px)`;
-  pudu.parts.head.style.transform = `rotate(${direction * LOOK_TILT}deg)`;
+  stopFollowing(pudu);
+  const options = { duration: TIMING.follow, easing: EASE.out, fill: "forwards" };
+  pudu.following = [
+    pudu.parts.face.animate([{ transform: `translateX(${direction * FACE_TURN}px)` }], options),
+    pudu.parts.head.animate([{ transform: `rotate(${direction * LOOK_TILT}deg)` }], options),
+  ];
+}
+
+/// Keeps where a follow has got to and ends it, so a later move starts from
+/// that pose instead of being overridden by a lingering fill.
+function stopFollowing(pudu) {
+  for (const running of pudu.following ?? []) {
+    running.commitStyles();
+    running.cancel();
+  }
+  pudu.following = [];
 }
 
 /// Tilts the head, the way an animal listens.
