@@ -24,12 +24,20 @@ Run a program, fold a module's constants, and link what either depends on.
 ```haskell
 evaluateEntryPoint     :: Map Span Text -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry   :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Int)
+evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Map Text Int)
 evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
 evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module -> Located Block -> Evaluator Value
 ```
 
 ### Governance
+
+- **Folding answers with its values.** `foldModule` evaluates a module's constants with effects
+  denied and answers with its diagnostics and every constant that froze ([[Eval Frozen]]).
+  `evaluateProgramEntryFolded` and `evaluateProgramTalliedFolded` link with those values, by module
+  path, bound in place of evaluating the initializers again.
+- **One entry action, two runners.** Linking, scoping the root, and calling (and awaiting) the entry
+  point are one action. An ordinary run executes it with no counters, so no tally site does more
+  than a comparison; only the tallied entry allocates counters and reads them back.
 
 - **This depends on the evaluator rather than the other way round**, so nothing
   here needs a capability record. The recursion the rest of the evaluator
@@ -41,6 +49,14 @@ evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module 
   shadowed every earlier one for everybody.
 - The root gets a frame of its own, so its declarations shadow a dependency's
   rather than sharing the last one linked.
+- **One published frame is the registry of what has been linked.** Every linked
+  module's declarations are in it under their canonical paths. A module is
+  linked in an environment of its own — its declarations, its import aliases,
+  the builtins, and the published frame as it stood — so a lookup inside it
+  walks five frames however many modules the program has. Leaving every
+  module's frames on the stack made a lookup that missed, which every field
+  access does once, walk three frames per module linked before it; an import
+  read every frame for its path where it now reads one ordered range.
 - What inference settled on for each integer literal is a required argument, not
   a default. A caller that forgot it would get a program whose declared widths
   are not enforced, and nothing would say so.
@@ -101,6 +117,13 @@ find.
 `evaluateInteractiveBlock` rebuilds module frames around a retained local frame,
 resets method/variant registries, merges checked integer-kind maps to preserve
 captured closure spans, links dependencies and runs only the supplied new block.
+It marks the rebuilt declarations as module scope before pushing retained locals,
+so literals created by later REPL entries narrow those locals instead of treating
+the whole retained session as durable module state.
 Resolved Grill Log: declaration evaluation remains separate from local statement
 execution; callers must check compatibility before retaining values across source
 changes. Module constants may be folded again; prior local effects never replay.
+
+Resolved Grill Log: Mark module scope before restoring retained locals. Reversing
+that order classifies every previous REPL binding as module state and defeats
+selective capture for long-running sessions.

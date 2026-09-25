@@ -28,12 +28,19 @@ data Resolution = Resolution
   { resolutionSymbols :: ![Symbol]
   , resolutionReferences :: ![Reference]
   , resolutionExports :: ![Symbol]
+  , resolutionScopes :: !ScopeIndex   -- the frames the walk opened; see [[Scope Index]]
   }
 resolveModule :: Module -> (Resolution, [Diagnostic])
 resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 ```
 
 ### Governance
+
+- Every frame the walk opens is recorded with the source extent a cursor may stand in while inside
+  it: a function or closure from its span, a braced block inside its braces, a match arm from its
+  span, an `if let` / `while let` / `for` from its pattern through its body, and a type, trait, or
+  impl declaration from its span. A `let`, `let … else`, or destructuring `let` becomes visible
+  after its statement ends, matching the rule that an initializer sees the outer binding.
 
 - Resolution is lexical, deterministic, and independent of declaration and import order: every module-scope declaration is collected before any body is walked, so a function may call one declared later without a forward declaration.
 - Value and type namespaces are separate. A type name and a value name may spell the same word in one scope without conflict.
@@ -86,6 +93,11 @@ Push the builtin frame, collect module declarations and imports into the module 
 DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, scope construction for six declaration forms, pattern binding, shadow classification, and reference recording.
 
 ## Grill Log
+
+- **Q:** Why does resolution publish its frames instead of tooling rebuilding scope from spans?
+  **A:** Resolution is where scope is decided. _Rationale:_ an editor asking what is visible must
+  get the answer resolution gives, including shadowing and activation. _Rejected:_ selecting locals
+  by declaration offset, which offered a sibling block's `let` and another arm's pattern names.
 
 - **Q:** One pass or two? **A:** Two: collect module declarations, then walk bodies. _Rationale:_ [[architecture/SEMANTICS]] requires order independence at module scope, which a single forward pass cannot provide. _Rejected:_ single-pass with forward declarations; lazy fixpoint resolution.
 - **Q:** Should an unqualified variant resolve to a locally declared variant? **A:** No. _Rationale:_ variants live in their type's namespace, and inventing a local re-export would make resolution disagree with the normative rule and with cross-module behavior. _Rejected:_ implicit variant import; ambiguity-tolerant lookup.

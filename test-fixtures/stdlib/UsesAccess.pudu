@@ -204,7 +204,7 @@ export fn main() -> Int {
 fn answer(_request: Route.Request) -> Http.Response { Reply.text(200, "reached") }
 
 fn requestFor(method: Http.Method, path: Str) -> Route.Request {
-  let message = Http.Request{method: method, target: path, headers: [], body: ""}
+  let message = Http.Request{method: method, target: path, headers: [], body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: path,

@@ -25,6 +25,12 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- `recordDeclaredMethod` collects the methods this module's own declarations provide — each impl
+  method, each trait default an impl inherits, and each member of a trait the module declares —
+  beside the owner the checker binds them under. `runChecker` publishes them as `producedMethods`.
+  Interface methods are installed from the graph and are not recorded here: each module reports its
+  own, and a program's methods are the union of its modules'.
+
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
@@ -49,6 +55,17 @@ The exported signatures are the module header's export list.
   how a qualifier or an alias keeps what the declaration asked for: the tables are keyed by the
   spelling a call resolves against, so a value bound under two names needs its restrictions recorded
   under both or the second one is unguarded.
+
+- **Installed names are a snapshot a module starts from.** `installedNames` captures the frame,
+  restriction tables, and next variable after [[Type Interface Graph]] installs a graph's shared
+  declarations once; `installNames` begins a module from it. The frame is a persistent map shared
+  by every module, and carrying the variable counter keeps installation variables distinct from the
+  module's own. `evalChecker` runs work whose only product is its value, such as that
+  installation, discarding what it recorded.
+
+- **`qualifiesSomething` finds a qualifier with one ordered lookup.** A frame's keys are sorted, so
+  every name under `Q.` starts at the first key not below it; listing every key of every frame per
+  question was a quarter of all compile allocation.
 
 - **What is known about folding is a map, not a list of the compile-time ones.** The call site asks a
   three-way question and a list can only answer two of them; the map also turns the lookup from a
@@ -93,3 +110,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Places
+
+`DeclaredTypes` records `declaredMutableFields`. The state holds the resolver's `var` use spans, the spans of `&mut` expressions a call admitted as its arguments, and the untyped function literal parameters awaiting judgement, with small accessors for [[Check Place]]. See [[ADR-0022-lending-a-place]].

@@ -143,6 +143,29 @@ export fn main() -> Int {
   // and filter checks above are exercised with something of the caller's own.
   if !vowel('z') && vowel('a') { held = held + 1 }
 
+  // Padding adds whole copies of the filler, and filler that is empty cannot
+  // widen anything, so it answers the text rather than looping forever.
+  if Text.padLeft("7", 3, "") == "7" && Text.padRight("7", 3, "") == "7" && Text.center("7", 3, "") == "7" {
+    held = held + 1
+  }
+  if Text.padLeft("7", 3, "0") == "007" && Text.padRight("ab", 5, "xy") == "abxyxy" { held = held + 1 }
+  if Text.center("ab", 7, "*") == "***ab**" { held = held + 1 }
+
+  // Scans read characters, not bytes, and agree at the ends of the text.
+  if Text.breakOnEnd("a/b/c", "/") == ("a/b/", "c") && Text.breakOnEnd("aaa", "aa") == ("aaa", "") &&
+  Text.breakOnEnd("xyz", "/") == ("", "xyz")
+  {
+    held = held + 1
+  }
+  if Text.groupChars("\u{E9}\u{E9}ab") == ["\u{E9}\u{E9}", "a", "b"] { held = held + 1 }
+  if Text.commonPrefix("h\u{E9}llo", "h\u{E9}lp") == ("h\u{E9}l", "lo", "p") { held = held + 1 }
+  if Text.trimEnd("x \t\n") == "x" && Text.dropWhileEnd("abc123", Char.isDigit) == "abc" { held = held + 1 }
+  if Text.compare("\u{E9}", "z") == 1 && Text.compare("ab", "abc") == 0 - 1 { held = held + 1 }
+  let long = "a".repeat(50000)
+  if Text.trimEnd(long + "  ").length() == 50000 && Text.findIndex(long + "1", Char.isDigit) == Some(50000) {
+    held = held + 1
+  }
+
   // Slicing answers the same for text as for an array of the same length.
   // They disagreed: an array clamped and text refused, so `rest` of empty text
   // stopped a program where `rest` of an empty array answered nothing.

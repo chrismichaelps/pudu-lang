@@ -13,7 +13,6 @@ module Pudu.Eval
   , scopeTo
   ) where
 
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -23,16 +22,15 @@ import Pudu.Eval.Env
   ( Env (..)
   , integerKindAt
   , tally
-  , captureEnvironment
   , Eval (..)
   , Evaluator (..)
   , abortAt
+  , capturedFrames
   , bind
   , expectBool
   , lookupName
   , unwind
   , Unwind (..)
-  , updateExisting
   , withFrame
   , withNewFrame
   )
@@ -57,6 +55,8 @@ import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Keyed (setContains, setFromMembers)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Order (comparableValue)
+import Pudu.Eval.Place (placeOf, storePlace)
+import Pudu.Eval.Capture (reachableNames)
 import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
@@ -64,7 +64,7 @@ import Pudu.Eval.Value
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Literal (IntegerValue)
+  ( Literal (IntegerValue, ResolvedInteger)
   , Block (..)
   , lambdaName
   , FieldInit (..)
@@ -128,6 +128,7 @@ blockIntroducesBindings block = any statementIntroduces (blockStatements block)
   statementIntroduces (Located _ statement) = case statement of
     DeclarationStatement (Located _ BindingDeclaration{}) -> True
     LetElseStatement{} -> True
+    LetPatternStatement{} -> True
     _ -> False
 
 {-| Interactive top-level bindings use the frame their context retains. Nested
@@ -162,6 +163,19 @@ evaluateStatement (Located _ statement) = case statement of
     case matchPattern pattern' value of
       Just bindings -> mapM_ (uncurry bind) bindings
       Nothing -> evaluateBlock fallback >> pure ()
+  {-| A destructuring binding has no fallback, because the parser admitted only
+      a pattern that tests nothing a binding could not answer. What is left is a
+      sequence's length, and a sequence of the wrong length is reported here —
+      where the binding is, with the pattern the reader wrote beside it. -}
+  LetPatternStatement _ pattern' _ subject -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> mapM_ (uncurry bind) bindings
+      Nothing ->
+        abortAt (Just (locatedSpan pattern')) "E7013"
+          ("this pattern does not match the " <> valueKind value <> " it was given")
+          (Just "check the number of elements the pattern names against the value")
+          >> pure ()
   InvalidStatement -> pure ()
 
 {-| Evaluation is not counted per expression.
@@ -193,6 +207,18 @@ scopeTo = Call.scopeTo
 callNeeds :: CallNeeds
 callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock}
 
+{-| A range's end, which must be a whole number.
+
+    The checker already requires it, so reaching this means an `unsafe` region
+    or a foreign value produced something else, and a range built from it would
+    silently cover nothing. -}
+rangeBound :: Span -> Value -> Evaluator Integer
+rangeBound spanValue value = case value of
+  IntValue _ number -> pure number
+  _ ->
+    abortAt (Just spanValue) "E7001"
+      ("a range end must be a whole number, not a " <> valueKind value) Nothing
+
 loopNeeds :: LoopNeeds
 loopNeeds =
   LoopNeeds
@@ -214,6 +240,7 @@ evaluateHere (Located spanValue expression) = case expression of
     IntegerValue _ -> do
       selected <- integerKindAt spanValue
       pure (integerLiteralValue selected literal)
+    ResolvedInteger kind number -> pure (IntValue kind number)
     _ -> pure (literalValue literal)
   NameExpression names -> readPath spanValue names
   UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
@@ -231,11 +258,17 @@ evaluateHere (Located spanValue expression) = case expression of
       Nothing -> do
         value <- evaluate target
         readMember spanValue value (locatedValue member)
+  {-| Both ends are evaluated once, here, so a range used twice reads its ends
+      once each rather than once per use. -}
+  RangeExpression lower inclusive upper -> do
+    low <- mapM (fmap (rangeBound spanValue) . evaluate) lower
+    high <- mapM (fmap (rangeBound spanValue) . evaluate) upper
+    RangeValue <$> sequence low <*> pure inclusive <*> sequence high
   IndexExpression target index -> do
     tally "index"
     container <- evaluate target
     key <- evaluate index
-    readIndex spanValue container key
+    readIndex (locatedSpan index) container key
   TryExpression target -> do
     value <- evaluate target
     unwrapTry spanValue value
@@ -263,8 +296,13 @@ evaluateHere (Located spanValue expression) = case expression of
     {-| A literal captures the environment it was written in, so calling it
         later means what it meant then. A declaration does not, and the two
         cases are distinguished by this field rather than by asking what kind
-        of function it is. -}
-    captured <- captureEnvironment
+        of function it is.
+
+        What it captures is what it can reach: module scope whole, and of the
+        frames a call pushed, only the names the literal mentions. Capturing the
+        whole stack kept every value that happened to be in scope alive for as
+        long as the literal was. -}
+    captured <- capturedFrames (reachableNames value)
     pure (FunctionValue (Closure lambdaName value Nothing (Just captured)))
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
@@ -275,13 +313,20 @@ evaluateHere (Located spanValue expression) = case expression of
       The base is evaluated first and its fields kept in the order it declared
       them, so an update does not reorder what it did not mention — two records
       of one type compare and render the same whether either was written
-      whole or as a change to the other. -}
+      whole or as a change to the other.
+
+      Every field of the result is decided before the record is returned. A
+      field left as a pending choice would hold both the record it came from
+      and this update's written fields, so a record updated in a loop would
+      keep every earlier version, and everything those versions held, alive. -}
   RecordUpdateExpression path source fields -> do
     base <- evaluate source
     written <- mapM (evaluateFieldInit spanValue) fields
     case base of
-      RecordValue heldName held ->
-        pure (RecordValue heldName [(name, maybe value id (lookup name written)) | (name, value) <- held])
+      RecordValue heldName held -> do
+        let updated = [(name, maybe value id (lookup name written)) | (name, value) <- held]
+        foldr (\(_, value) rest -> value `seq` rest) () updated
+          `seq` pure (RecordValue heldName updated)
       _ ->
         abortAt (Just spanValue) "E7001"
           (lastPathSegment path <> " can only be updated from a record of the same type")
@@ -354,8 +399,13 @@ evaluateGuard guard = case guard of
 applyBinary :: Span -> Located Expression -> Text -> Located Expression -> Evaluator Value
 applyBinary spanValue left operator right = case operator of
   "=" -> do
-    value <- evaluate right
-    assign spanValue left value
+    target <- placeOf evaluate left
+    case target of
+      Just place -> do
+        value <- evaluate right
+        storePlace place value
+        pure UnitValue
+      Nothing -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing
   "&&" -> do
     leftValue <- evaluate left
     truth <- expectBool spanValue leftValue
@@ -378,12 +428,3 @@ applyBinary spanValue left operator right = case operator of
 
 expectBoolValue :: Span -> Value -> Evaluator Value
 expectBoolValue spanValue value = BoolValue <$> expectBool spanValue value
-
-assign :: Span -> Located Expression -> Value -> Evaluator Value
-assign spanValue target value = case locatedValue target of
-  NameExpression (name :| []) -> do
-    found <- updateExisting name value
-    if found
-      then pure UnitValue
-      else abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
-  _ -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing

@@ -1,0 +1,37 @@
+// Traits
+// A trait names what a type can do, and dynamic lets one list hold different types.
+module Main
+
+import Std.Io as Io
+
+trait Describe {
+  fn describe(self: &Self) -> Str
+}
+
+type Deer = { name: Str, heightCm: Int }
+
+type Bird = { name: Str, canFly: Bool }
+
+impl Describe for Deer {
+  fn describe(self: &Self) -> Str {
+    "{self.name} stands {self.heightCm} cm tall"
+  }
+}
+
+impl Describe for Bird {
+  fn describe(self: &Self) -> Str {
+    if self.canFly { "{self.name} flies" } else { "{self.name} walks" }
+  }
+}
+
+fn main() -> Int {
+  let animals: Array[dynamic Describe] = [
+    Deer{name: "Pudu", heightCm: 40},
+    Bird{name: "Condor", canFly: true},
+    Bird{name: "Rhea", canFly: false}
+  ]
+  for animal in animals {
+    let _said = Io.writeLine(animal.describe())
+  }
+  0
+}

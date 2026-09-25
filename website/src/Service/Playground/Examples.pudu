@@ -1,0 +1,86 @@
+module Service.Playground.Examples
+
+import Std.Io as Io
+import Std.List as List
+import Std.Text as Text
+import Error as SiteError
+
+/// Addresses beneath the playground that are not examples. An example named
+/// like one would never be reached.
+const RESERVED_SLUGS: Set[Str] = setOf(["shared", "open"])
+
+/// One program the playground offers to start from.
+export type Example = { slug: Str, title: Str, summary: Str, source: Str }
+
+/// Every example, in the order the menu lists them. The first is the one the
+/// playground opens with.
+export type Examples = { entries: Array[Example] }
+
+/// The examples a directory holds.
+///
+/// Each file is named `NN-slug.pudu`: the number orders the menu and is left
+/// out of the address. A file opens with two comment lines, its title and one
+/// sentence about it, above its module, so the example carries its own
+/// description and a reader who runs it sees where it came from.
+///
+/// Examples are read once, before any request, like the documentation. A
+/// directory that cannot be read, or holds none, stops the site from starting
+/// rather than serving a playground with nothing in it.
+export fn load(directory: Str) -> Result[Examples, SiteError.SiteError] {
+  let names = match Io.list(directory) {
+    case Ok(found) => found
+    case Err(_) => { return Err(SiteError.ExamplesUnreadable(directory)) }
+  }
+  var programs: Array[Str] = []
+  for name in names {
+    if name.endsWith(".pudu") { programs = programs.push(name) }
+  }
+  let ordered = List.sortBy(&programs, fn(left: Str, right: Str) -> Bool { left < right })
+  var entries: Array[Example] = []
+  for name in ordered {
+    let path = directory + "/" + name
+    let source = match Io.read(path) {
+      case Ok(content) => content
+      case Err(_) => { return Err(SiteError.ExamplesUnreadable(path)) }
+    }
+    let lines = source.split("\n")
+    if RESERVED_SLUGS.contains(slugOf(name)) { return Err(SiteError.ExamplesUnreadable(path)) }
+    entries = entries.push(Example {
+        slug: slugOf(name),
+        title: commentAt(&lines, 0, slugOf(name)),
+        summary: commentAt(&lines, 1, ""),
+        source: source
+      })
+  }
+  if entries.length() == 0 { return Err(SiteError.ExamplesUnreadable(directory)) }
+  Ok(Examples{entries: entries})
+}
+
+/// The example at an address, when there is one.
+export fn find(examples: &Examples, slug: Str) -> Option[Example] {
+  for entry in examples.entries {
+    if entry.slug == slug { return Some(entry) }
+  }
+  None
+}
+
+/// The example the playground opens with.
+export fn first(examples: &Examples) -> Example { examples.entries[0] }
+
+/// A file's address: its name without the extension or the ordering number.
+fn slugOf(name: Str) -> Str {
+  let base = name.take(name.length() - ".pudu".length())
+  let dash = base.indexOf("-")
+  if dash > 0 {
+    if let Some(_) = Text.wholeOf(base.take(dash)) { return base.drop(dash + 1) }
+  }
+  base
+}
+
+/// The text of a leading `// ` comment line, or the fallback when that line is
+/// not one.
+fn commentAt(lines: &Array[Str], index: Int, fallback: Str) -> Str {
+  if index >= lines.length() { return fallback }
+  let line = lines[index].trim()
+  if line.startsWith("//") && !line.startsWith("///") { line.drop(2).trim() } else { fallback }
+}

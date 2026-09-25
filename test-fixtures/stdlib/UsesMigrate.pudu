@@ -1,6 +1,6 @@
 module UsesMigrate
 
-import Std.Db.Migrate {Applied, ArrivedLate, Changed, Repeated}
+import Std.Db.Migrate {Applied, ArrivedLate, Changed, Repeated, Unnumbered}
 import Std.Db.Migrate as Migrate
 import Std.Result as Result
 
@@ -93,6 +93,16 @@ export fn main() -> Int {
   // that ran it is still correct.
   if let Ok(_) = Migrate.plan(&[second, third], &[ranOf(&first), ranOf(&second)]) {
     held = held + 1
+  }
+
+  // Versions count from one. A version of zero or below stands at or under an
+  // empty record, so it is refused as not a version rather than reported as
+  // arriving late against nothing.
+  if let Err(Unnumbered(version)) = Migrate.plan(&[Migrate.migration(0, "zero", &["select 0"])], &[]) {
+    if version == 0 { held = held + 1 }
+  }
+  if let Err(problem) = Migrate.plan(&[first, Migrate.migration(0 - 3, "negative", &["select 0"])], &[]) {
+    if Migrate.explain(&problem).contains("count upward from 1") { held = held + 1 }
   }
 
   // Nothing at all, on either side, is a settled plan.

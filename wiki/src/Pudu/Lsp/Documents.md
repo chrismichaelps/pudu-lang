@@ -22,12 +22,14 @@ What the server knows about each open document: one compile's answers, kept by t
 ## Interface
 
 ```haskell
-data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, .. }
+data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, analysisMethods, analysisExports, analysisDependencies, .. }
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
-setWorkspaceRoot :: FilePath -> Documents -> Documents
-workspaceRoot    :: Documents -> Maybe FilePath
+documentGeneration  :: Documents -> Int
+nextGeneration      :: Documents -> Documents
+setWorkspaceFolders :: [FilePath] -> Documents -> Documents
+workspaceFolders    :: Documents -> [FilePath]
 analysisOf       :: Text -> Documents -> Maybe Analysis
 allDocuments     :: Documents -> [(Text, Analysis)]
 rememberAnalysis :: Text -> Analysis -> Documents -> Documents
@@ -38,11 +40,18 @@ uriOf            :: Json -> Maybe Text
 
 ### Governance
 
+- The store carries a generation, advanced whenever what any compile would read may have changed:
+  a document remembered or forgotten, or a file event. Anything kept from a compile — a repaired
+  analysis — is valid only while it stays the same.
+
 - **The store is a value the loop threads, not a mutable cell.** What a reply says and what the server holds therefore cannot disagree part-way through answering a request.
 - One `Analysis` is everything one compile said about one file — its text, source, diagnostics,
   documentation index, resolved symbol identities, and what the checker made of each expression by
   span. Hover and definition use resolution to distinguish a foreign declaration from a local or
   parameter with the same spelling.
+- The ordinary lexer tokens, tooling tree of the root module, and the program's canonical sum and record shapes ([[Lsp Shapes]]) stay beside those
+  semantic products. Syntax-directed features can therefore identify the cursor's construct and
+  combine it with the same compile's checked type without reparsing or consulting stale global data.
 - **Two documentation indexes, because a span belongs to one file.** `analysisFileIndex` holds this
   document's declarations and is what anything starting from a cursor must ask — hover, the outline,
   token classification — since an offset compared against another module's spans matches a
@@ -53,7 +62,7 @@ uriOf            :: Json -> Maybe Text
 
 ### Linkage
 
-- **Requires:** [[Compiler Pipeline]], [[Doc Index]], [[Source Text]].
+- **Requires:** [[Compiler Pipeline]], [[Doc Index]], [[Source Text]], [[Lsp Context]].
 - **Consumed by:** [[Lsp Server]].
 
 ## Referenced by

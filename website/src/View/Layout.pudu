@@ -16,20 +16,69 @@ export fn page(
   structured: Option[Json.Json],
   content: Html.Html
 ) -> Html.Html {
+  document(siteUrl, title, description, path, indexable, structured, "", [
+      H.a().class("skip").href("#content").says("Skip to content"),
+      masthead(path),
+      H.main().id("content").class("shell").holds(content),
+      footer()
+    ])
+}
+
+/// A page that is a tool rather than a document: the masthead, then the tool
+/// filling the rest of the window, with no footer beneath it to scroll to.
+export fn workspace(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json],
+  content: Html.Html
+) -> Html.Html {
+  document(siteUrl, title, description, path, indexable, structured, "workspace-page", [
+      H.a().class("skip").href("#content").says("Skip to content"),
+      masthead(path),
+      H.main().id("content").class("workspace-shell").holds(content)
+    ])
+}
+
+fn document(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json],
+  bodyClass: Str,
+  parts: Array[H.Node]
+) -> Html.Html {
+  let body = if bodyClass.isEmpty() { H.body() } else { H.body().class(bodyClass) }
   H.html().lang("en").holding([
       H.head().holding([
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
-          H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=7")
-        ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
-      H.body().holding([
-          H.a().class("skip").href("#content").says("Skip to content"),
-          masthead(path),
-          H.main().id("content").class("shell").holds(content),
-          footer()
-        ])
+          H.link().rel("icon").at("sizes", "48x48").href(Constants.FAVICON_PATH),
+          H.link().rel("icon").at("type", "image/png").at("sizes", "48x48").href(Constants.ICON_48_PATH),
+          H.link().rel("icon").at("type", "image/png").at("sizes", "96x96").href(Constants.ICON_96_PATH),
+          H.link().rel("icon").at("type", "image/png").at("sizes", "192x192").href(Constants.ICON_192_PATH),
+          H.link().rel("apple-touch-icon").at("sizes", "180x180").href(Constants.TOUCH_ICON_PATH),
+          H.link().rel("manifest").href(Constants.MANIFEST_PATH),
+          H.meta().name("theme-color").at("content", Constants.THEME_COLOR),
+          H.link().rel("stylesheet").href("/assets/site.css?v=60")
+        ].concat(fontPreloads()).concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
+      body.holding(parts)
     ]).html()
+}
+
+/// A preload for each face the page's text is set in. The stylesheet names the
+/// fonts only once it is parsed; asked for here, they arrive with it, and the
+/// fallback's matched metrics cover whatever is left of the wait.
+fn fontPreloads() -> Array[H.Node] {
+  var links: Array[H.Node] = []
+  for font in Constants.PRELOADED_FONTS {
+    links = links.push(H.link().rel("preload").href(font).at("as", "font").at("type", "font/woff2").at("crossorigin", "anonymous"))
+  }
+  links
 }
 
 /// One search form, identified by the class that says which one it is.
@@ -55,11 +104,24 @@ export fn searchForm(query: Str, extraClass: Str) -> H.Node {
     ])
 }
 
+/// The banner that opens a page: a label, the page's one `h1`, a lead, and
+/// whatever the page places under it (a search form, actions, facts).
+/// `variant` is added to `hero-banner`: empty for the full banner, or
+/// `page-banner` for the shorter one reference pages open with.
+export fn banner(variant: Str, label: Str, title: Str, lead: Str, extra: Array[H.Node]) -> H.Node {
+  let classes = if variant.isEmpty() { "hero-banner" } else { "hero-banner " + variant }
+  H.header().class(classes).holding([
+      H.span().class("hero-banner-label").says(label),
+      H.h1().says(title),
+      if lead.isEmpty() { H.nothing() } else { H.p().says(lead) }
+    ].concat(extra))
+}
+
 fn masthead(path: Str) -> H.Node {
   H.header().class("masthead").holding([
       H.div().class("masthead-inner").holding([
           H.a().class("brand").href("/").holding([
-              H.img().src(Constants.FULL_LOGO_PATH).alt("Pudu programming language")
+              H.img().src(Constants.LOGO_PATH).alt("Pudu programming language").at("width", "168").at("height", "56")
             ]),
           navigation(path, "top-nav desktop-nav"),
           H.tag("details").class("mobile-nav").holding([
@@ -75,12 +137,25 @@ fn masthead(path: Str) -> H.Node {
 
 fn navigation(path: Str, classes: Str) -> H.Node {
   H.nav().class(classes).label("Main navigation").holding([
-      navigationLink("/guide", "Guide", path == "/guide"),
-      navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || path.startsWith("/docs/")),
+      navigationLink("/docs", "Docs", isDocumentation(path)),
+      navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || isSymbol(path)),
+      navigationLink("/playground", "Playground", path == "/playground" || path.startsWith("/playground/")),
+      navigationLink("/packages", "Packages", path == "/packages" || path.startsWith("/packages/") || path.startsWith("/@")),
+      navigationLink("/download", "Download", path == "/download"),
       navigationLink("/about", "About", path == "/about"),
       navigationLink("/donate", "Donate", path == "/donate")
     ])
 }
+
+/// Whether a path is the documentation: its index, or one page beneath it.
+///
+/// Documentation pages and API symbols share the `/docs/` prefix, and are told
+/// apart by depth — a page is one segment below it, a symbol three.
+fn isDocumentation(path: Str) -> Bool {
+  path == "/docs" || path == "/guide" || (path.startsWith("/docs/") && path.split("/").length() == 3)
+}
+
+fn isSymbol(path: Str) -> Bool { path.startsWith("/docs/") && path.split("/").length() > 3 }
 
 fn navigationLink(target: Str, label: Str, current: Bool) -> H.Node {
   let linked = H.a().href(target).says(label)
@@ -90,15 +165,58 @@ fn navigationLink(target: Str, label: Str, current: Bool) -> H.Node {
 fn footer() -> H.Node {
   H.footer().class("footer").holding([
       H.div().class("footer-inner").holding([
-          H.span().class("footer-brand").holding([
-              H.img().src(Constants.SHORT_LOGO_PATH).alt(""),
-              H.span().says("Pudu language documentation")
+          H.div().class("footer-brand-column").holding([
+              H.span().class("footer-brand").holding([
+                  H.img().src(Constants.MARK_PATH).alt("").at("width", "34").at("height", "33"),
+                  H.span().says("Pudu")
+                ]),
+              H.p().class("footer-blurb").says("A statically typed language where a signature says what a function takes, what it gives back, and whether it changes what it was given.")
             ]),
+          footerColumn("Learn", &[
+              ("/docs", "Documentation"),
+              ("/docs/introduction", "Getting started"),
+              ("/modules", "Standard library"),
+              ("/playground", "Playground"),
+              ("/search", "Search the API")
+            ]),
+          footerColumn("Get Pudu", &[
+              ("/download", "Download"),
+              ("/releases", "Release notes")
+            ]),
+          footerColumn("Project", &[
+              ("/about", "About"),
+              ("/contributing", "Contributing"),
+              ("/conduct", "Code of Conduct"),
+              ("/security", "Security")
+            ]),
+          footerColumn("Community", &[
+              ("/community", "Get involved"),
+              ("https://github.com/chrismichaelps/pudu-lang/issues", "Issues"),
+              ("https://github.com/chrismichaelps/pudu-lang/discussions", "Discussions"),
+              ("/donate", "Donate")
+            ])
+        ]),
+      H.div().class("footer-base").holding([
           H.small().says(Constants.COPYRIGHT),
-          H.span().class("footer-links").holding([
-              H.a().href("/donate").says("Donate"),
-              H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub")
+          H.span().class("footer-base-links").holding([
+              H.a().href("/privacy").says("Privacy"),
+              H.a().href("/brand").says("Brand"),
+              H.a().href(Constants.LICENSE_URL).at("rel", "external noopener noreferrer").says("Apache-2.0"),
+              H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub"),
+              H.a().href("/donate").says("Donate")
             ])
         ])
+    ])
+}
+
+/// One column of the footer: a heading and the pages under it.
+fn footerColumn(title: Str, links: &Array[(Str, Str)]) -> H.Node {
+  var items: Array[H.Node] = []
+  for link in links {
+    items = items.push(H.li().holding([H.a().href(link[0]).says(link[1])]))
+  }
+  H.div().class("footer-column").holding([
+      H.h2().class("footer-heading").says(title),
+      H.ul().holding(items)
     ])
 }

@@ -95,7 +95,9 @@ character pass is taken only by the text that needs it.
   cannot end a line or an object early.
 - `carryingValue` takes the quotes and source escapes `show` puts around text back off. How a value
   is delimited is the format's decision, and logging must preserve the held text rather than turn a
-  newline into the two characters `\` and `n`.
+  newline into the two characters `\` and `n`. Text holding no backslash is answered unchanged;
+  otherwise its characters are walked once and the pieces joined once, and a backslash ending the
+  text, or one before a character `show` never escapes, is kept as written.
 - A line filtered by the threshold is still a success. Nothing went wrong; there was just nothing to
   write.
 - Every builder answers a new logger and leaves the one it was given alone.

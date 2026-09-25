@@ -1,0 +1,37 @@
+// Time and randomness
+// Instants, durations, and dates from Std.Time, and seeded random numbers that repeat on every run.
+module Main
+
+import Std.Io as Io
+import Std.Random as Random
+import Std.Time as Time
+
+fn main() -> Int {
+  // A fixed instant, so the output is the same every run: 1 March 2024, noon UTC.
+  let launch = Time.instantOf(1709294400000)
+  let later = Time.add(&launch, &Time.plus(&Time.days(3), &Time.hours(5)))
+  match Time.toRfc3339(&later) {
+    case Ok(text) => { let _later = Io.writeLine("three days and five hours later: {text}") }
+    case Err(problem) => { let _bad = Io.writeLine(problem) }
+  }
+  let _gap = Io.writeLine("the gap is {Time.describe(&Time.between(&launch, &later))}")
+  match Time.parseDate("2024-02-29") {
+    case Ok(date) => { let _leap = Io.writeLine("a leap day parses: {Time.renderDate(&date)}") }
+    case Err(problem) => { let _bad = Io.writeLine(problem) }
+  }
+
+  // The clock is allowed too; it just answers differently each run.
+  let started = Time.elapsed()
+
+  // A generator is a value: each draw answers the next generator with the number.
+  // The same seed gives the same numbers, which is what a test wants.
+  let seeded = Random.fromSeed(2024u64)
+  let (afterDie, die) = Random.between(&seeded, 1, 6)
+  let (afterPick, animal) = Random.pick(&afterDie, &["pudu", "huemul", "guanaco", "vicuña"])
+  let (_, shuffled) = Random.shuffle(&afterPick, &[1, 2, 3, 4, 5])
+  let _die = Io.writeLine("die {die}, animal {animal}, shuffled {shuffled}")
+
+  let _took = Io.writeLine("that took {Time.elapsed() - started} ms")
+  // Change the seed, or use Random.fromClock(), and run again.
+  0
+}

@@ -37,6 +37,12 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
 
 ### Governance
 
+- **A block is a scope.** `checkBlock` and `checkBlockAgainst` each run in a fresh name frame, so
+  a `let` inside a block — a block expression, a branch, a loop body — is gone when the block ends
+  and a later use of the same spelling reads the outer binding. This is the scope name resolution
+  and evaluation already give a block; the checker agrees with them. A `let … else` binding stays
+  for the rest of the block it is written in.
+
 - A direct empty Set literal is inspected after its binding or expression statement has received
   all available local constraints. If its element variable remains unresolved, `E3037` asks for an
   explicit `Set[T]`; a contextual literal is left alone.
@@ -89,6 +95,11 @@ exception.
 
 ## Grill Log
 
+- **Q:** Why does the block itself open the frame rather than each caller? **A:** Every construct
+  with a block — `if`, loops, block expressions, function bodies — must discard the block's
+  bindings, and a caller that forgot let an inner shadow retype the outer name. _Rationale:_ one
+  place owns the rule. _Rejected:_ wrapping call sites, which is how the leak arose.
+
 - **Q:** Diagnose `#{}` while first inferring it? **A:** No. _Rationale:_ inference has not yet seen
   the annotation or surrounding call/return constraint. The statement boundary is the earliest
   point that can distinguish missing context from context not yet applied. _Rejected:_ eager
@@ -112,3 +123,7 @@ exception.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Expression]]
+
+## Places
+
+A local binding's annotation and inferred type are checked by [[Check Place]], which refuses one that would hold an exclusive reference. See [[ADR-0022-lending-a-place]].

@@ -8,22 +8,33 @@ aliases: [Pudu Website Architecture]
 
 ## Purpose
 
-Serve the language guide and complete generated API catalogue from a Pudu application, with the
-same routes and rendering used by the local server, static capture, and Vercel function.
+Serve the language documentation and complete generated API catalogue from a Pudu application, with
+the same routes and rendering used by the local server, static capture, and Vercel function.
 
 ## Dependency direction
 
 ```text
-Main / Render / Prerender        Function
-           |                        |
-       Web.Routes              Web.Dynamic
-          /  \                   /      \
-       View  Service.Catalog  View.Dynamic  Service.Search
-         \       /                \          /
-          Seo / Constants          Domain.Entry
+Main / Render / Prerender                    Function
+           |                                    |
+       Web.Routes                          Web.Dynamic
+       /   |     \                           /      \
+   View  Service.Catalog  Service.Docs  View.Dynamic  Service.Search
+            Service.Releases
+     \        /               /              \          /
+      Seo / Constants   View.Markdown         Domain.Entry
 
 SearchIndex -> Service.Catalog -> generated compact search database
 ```
+
+## Documentation
+
+The language documentation is Markdown in `website/docs/`, one file per page named `NN-slug.md`.
+[[website Service Docs]] loads the files once, before any request, in the order their numbers give;
+[[website View Markdown]] and [[website View MarkdownInline]] render a documented subset of Markdown
+into typed `Std.Html` trees, so no page can inject markup; [[website View Docs]] lays a page out with
+the page list, the article, and its contents. The pages are part of the crawlable static graph:
+`Seo.paths` lists `/docs` and every page, so the prerender and the sitemap agree. The dynamic function
+never loads them.
 
 Config and Error are leaf policies used from the composition edge. SEO owns canonical metadata,
 structured data, robots policy, and sitemap rendering; views choose page facts but do not spell tags.
@@ -31,7 +42,28 @@ structured data, robots policy, and sitemap rendering; views choose page facts b
 Dependencies point downward. Domain code knows no HTTP or HTML. Services know catalogue and query
 values, not requests. Views receive values and return typed `Std.Html` trees. The static router owns
 the complete crawlable documentation graph. The dynamic router owns only search and the no-index
-fallback, so the Lambda closure does not retain static-page machinery.
+fallback, so the Lambda closure does not retain static-page machinery. Public package documents are a
+second generated catalogue: `website/scripts/generate-packages.mjs` copies GitHub repository facts,
+profiles, latest-release files, generated API summaries, and recent public issues and pull requests
+at build time. The local router and
+prerender use the full snapshot; the Lambda loads only its compact project documents, including
+declaration search facts, for `/packages/search` and `/packages/suggest`. Recent discussion bodies live in separate static
+documents. A package with invalid Pudu source omits its API reference but does not stop
+the catalogue and source pages from deploying. Missing snapshot files or malformed project names
+fail startup rather than publishing incomplete source pages.
+
+## Downloads
+
+The archives `/download` offers are read from `website/data/releases.json`, which
+`website/scripts/generate-releases.mjs` writes from the published releases before a deployment.
+[[website Service Releases]] loads that document once, before any request, so the page is part of
+the static graph and answers from the CDN: a reader waits for no API, and a rate limit or an outage
+at the forge cannot take the download page down. A new release reaches the page on the next
+deployment, which is the trip its announcement takes anyway.
+
+The page publishes each archive's SHA-256 beside it, fetched from the checksum the release itself
+publishes rather than recomputed, so the page cannot disagree with the file it links to. A document
+that carries no archive stops the site from starting rather than serving a page with nothing to take.
 
 ## Search contract
 

@@ -7,6 +7,7 @@ module Pudu.Compiler.Program.TypeBoundarySpec
   ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler (CompileContext (..))
 import Pudu.Compiler.Program.Common (codes, helps, runEntry)
@@ -22,6 +23,8 @@ import Pudu.Repl.Session
   , loadModule
   , submitEntry
   )
+import Pudu.Type.Check.Rule (typesNamingModules)
+import Pudu.Type.Interface.Graph (graphInterfaces)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeBoundaryProperties :: [(String, IO Property)]
@@ -36,11 +39,23 @@ testTypeNamesAreNotValues = do
   missing <- codes "test-fixtures/stdlib/RejectsMissingArgument.pudu"
   values <- codes "test-fixtures/stdlib/RejectsTypeAsValue.pudu"
   members <- codes "test-fixtures/stdlib/RejectsTypeMember.pudu"
+  let namingPath = "test-fixtures/stdlib/TypesNamingModules.pudu"
+  namingCodes <- codes namingPath
+  namingValue <- runEntry namingPath
+  namingSource <- TextIO.readFile namingPath
+  let imports = filter (Text.isPrefixOf "import ") (Text.lines namingSource)
+      advised = ["import Std." <> name <> " as " <> name | name <- typesNamingModules]
   pure $ conjoin
     [ counterexample "wired-in, prelude, and declared types are not bare or callable values"
         (values === replicate 6 "E2010")
     , counterexample "non-variant members through every type category are refused precisely"
         (members === replicate 3 "E3034")
+    , counterexample "every import the E3034 help advises is the one the fixture writes"
+        (imports === advised)
+    , counterexample "the advised imports resolve and draw no diagnostic"
+        (namingCodes === [])
+    , counterexample "a program written with the advised imports runs"
+        (namingValue === Just "4")
     , counterexample
         ( "a call missing an argument is refused where it is written, while a "
             <> "default may still be omitted and a parameter is not the declaration "
@@ -95,7 +110,7 @@ testReplLoadContext = do
   pure $ conjoin
     [ map (diagnosticCodeText . diagnosticCode) loadedDiagnostics === []
     , counterexample "the loaded context retains both graph interfaces"
-        (Map.size (contextTypes (sessionContext loaded)) === 2)
+        (Map.size (graphInterfaces (contextTypes (sessionContext loaded))) === 2)
     , counterexample
         ("post-load diagnostics: " <> show
           [(diagnosticCodeText (diagnosticCode value), diagnosticMessage value) | value <- resultDiagnostics entry])

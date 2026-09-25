@@ -8,6 +8,8 @@ aliases: [Tooling]
 
 - [[Language Server]] — `pudu lsp`, which answers an editor from the ordinary compile so the editor and the command line can never disagree.
 - [[Format]] — `pudu fmt`, the one committed style, applied from the token stream so it can only move whitespace.
+- [[Pudu CLI Lint]] and [[Pudu Lint]] — typed source suggestions with stable rules, explicit
+  suppression, structured output, and source-verified safe fixes.
 
 ## Purpose
 

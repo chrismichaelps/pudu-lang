@@ -17,6 +17,7 @@ module Pudu.Eval.Operator.Access
   , unwrapTry
   ) where
 
+import qualified Data.ByteString as ByteString
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -26,11 +27,12 @@ import Pudu.Eval.Env
   ( Evaluator
   , Unwind (ReturnUnwind)
   , abortAt
-  , lookupName
+  , lookupMethod
   , unwind
   , variantOwner
   )
 import Pudu.Eval.HashMap (bucketsMethods)
+import Pudu.Eval.Range (rangeBounds, rangeMethods)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( ArrayMethod (..)
@@ -45,8 +47,25 @@ import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.Source (Span)
 
+{-| Read one element, or the stretch a range names.
+
+    Indexing by a range is a slice, and it shares this entry rather than having
+    one of its own because it is the same question asked of the same value: a
+    number names one element and a range names several. Reading them apart would
+    mean two rules for what "out of bounds" means on the same expression. -}
 readIndex :: Span -> Value -> Value -> Evaluator Value
 readIndex spanValue container key = case (container, key) of
+  (ArrayValue members, RangeValue{}) -> do
+    (from, count) <- rangeBounds spanValue key (Seq.length members)
+    pure (ArrayValue (Seq.take count (Seq.drop from members)))
+  (StrValue text, RangeValue{}) -> do
+    (from, count) <- rangeBounds spanValue key (Text.length text)
+    pure (StrValue (Text.take count (Text.drop from text)))
+  {-| A byte slice names a stretch of the same storage rather than copying it,
+      which is what makes reading a section of a large input affordable. -}
+  (BytesValue bytes, RangeValue{}) -> do
+    (from, count) <- rangeBounds spanValue key (ByteString.length bytes)
+    pure (BytesValue (ByteString.take count (ByteString.drop from bytes)))
   (TupleValue members, IntValue _ index)
     | index >= 0 && fromInteger index < length members -> pure (members !! fromInteger index)
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
@@ -76,6 +95,7 @@ readMember spanValue value member = case value of
   CharValue _ -> readCharMember spanValue value member
   MapValue _ -> readKeyedMember spanValue value member mapMethods MapMethodValue "Map"
   SetValue _ -> readKeyedMember spanValue value member setMethods SetMethodValue "Set"
+  RangeValue{} -> readKeyedMember spanValue value member rangeMethods RangeMethodValue "Range"
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
@@ -97,9 +117,11 @@ readMember spanValue value member = case value of
       failed at run time. -}
   _ -> case nominalNameOf value of
     Just owner -> readMethod spanValue value owner member
-    Nothing ->
-      abortAt (Just spanValue) "E7001"
-        ("cannot read " <> member <> " from a " <> valueKind value) Nothing
+    Nothing
+      | member == textMember -> pure (TextMethodValue value)
+      | otherwise ->
+          abortAt (Just spanValue) "E7001"
+            ("cannot read " <> member <> " from a " <> valueKind value) Nothing
 
 {-| Array accessor methods are built into the evaluator: `length`, `get`,
     `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`,
@@ -150,14 +172,15 @@ readKeyedMember spanValue receiver member table build described =
     everything. -}
 builtinMethodNamesFor :: Text -> [Text]
 builtinMethodNamesFor owner = case owner of
-  "Array" -> map fst arrayMethods
-  "Str" -> map fst stringMethods
-  "Map" -> map fst mapMethods
-  "Set" -> map fst setMethods
+  "Array" -> map fst arrayMethods <> [textMember]
+  "Range" -> map fst rangeMethods <> [textMember]
+  "Str" -> map fst stringMethods <> [textMember]
+  "Map" -> map fst mapMethods <> [textMember]
+  "Set" -> map fst setMethods <> [textMember]
   "Bytes" -> map fst bytesMethods
-  "Buckets" -> map fst bucketsMethods
+  "Buckets" -> map fst bucketsMethods <> [textMember]
   "Char" -> ["code", "toText"]
-  _ -> []
+  _ -> [textMember]
 
 mapMethods :: [(Text, MapMethod)]
 mapMethods =
@@ -251,6 +274,7 @@ nominalNameOf value = case value of
   BoolValue _ -> Just "Bool"
   UnitValue -> Just "()"
   ArrayValue _ -> Just "Array"
+  RangeValue{} -> Just "Range"
   MapValue _ -> Just "Map"
   SetValue _ -> Just "Set"
   TupleValue _ -> Nothing
@@ -260,11 +284,13 @@ nominalNameOf value = case value of
     the type the reader wrote — rather than against whichever was tried last. -}
 readMethodAmong :: Span -> Value -> [Text] -> Text -> Text -> Evaluator Value
 readMethodAmong spanValue receiver owners reported member = case owners of
-  [] ->
-    abortAt (Just spanValue) "E7001"
-      ("no field or method " <> member <> " on a " <> reported) Nothing
+  []
+    | member == textMember -> pure (TextMethodValue receiver)
+    | otherwise ->
+        abortAt (Just spanValue) "E7001"
+          ("no field or method " <> member <> " on a " <> reported) Nothing
   owner : rest -> do
-    found <- lookupName (owner <> "." <> member)
+    found <- lookupMethod (owner <> "." <> member)
     case found of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -272,13 +298,21 @@ readMethodAmong spanValue receiver owners reported member = case owners of
 
 readMethod :: Span -> Value -> Text -> Text -> Evaluator Value
 readMethod spanValue receiver owner member = do
-  found <- lookupName (owner <> "." <> member)
+  found <- lookupMethod (owner <> "." <> member)
   case found of
     Just (FunctionValue closure) ->
       pure (FunctionValue closure{closureSelf = Just receiver})
-    _ ->
-      abortAt (Just spanValue) "E7001"
-        ("no field or method " <> member <> " on a " <> owner) Nothing
+    _
+      | member == textMember -> pure (TextMethodValue receiver)
+      | otherwise ->
+          abortAt (Just spanValue) "E7001"
+            ("no field or method " <> member <> " on a " <> owner) Nothing
+
+{-| The method every value answers when its type declares none by that name.
+    A type's own implementation is found first, so a program that renders one
+    of its types its own way keeps doing so. -}
+textMember :: Text
+textMember = "toText"
 
 {-| `?` yields the success value, or returns the failure from the enclosing
     function unchanged, which is the elaboration [[architecture/SEMANTICS]]

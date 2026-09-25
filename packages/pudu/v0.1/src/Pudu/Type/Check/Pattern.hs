@@ -12,7 +12,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
-import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
+import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
+import Pudu.Source (Span)
 import Pudu.Type.Check.Rule (countText, literalType)
 import Pudu.Type.Env
   ( Checker
@@ -22,6 +23,7 @@ import Pudu.Type.Env
   , lookupField
   , lookupTypeParams
   , lookupName
+  , qualifiesSomething
   , lookupVariant
   , lookupVariantFields
   , lookupVariantIn
@@ -41,14 +43,45 @@ import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
     a variant whose name is not separately bound — a wired-in one reached
     without an import — working as before. -}
 variantForPath
-  :: ModuleName -> Text -> Checker (Maybe (NominalId, [Text], [Type]))
-variantForPath path name = do
-  bound <- lookupName (moduleNameText path)
+  :: DeclaredTypes -> ModuleName -> Text -> Checker (Maybe (NominalId, [Text], [Type]))
+variantForPath declared path name = do
+  let segments = NonEmpty.toList (moduleNameSegments path)
+      written = moduleNameText path
+      qualifier = Text.intercalate "." (init segments)
+  bound <- lookupName written
   case bound >>= ownerOfScheme of
-    Just owner -> do
-      owned <- lookupVariantIn owner name
-      maybe (lookupVariant name) (pure . Just) owned
-    Nothing -> lookupVariant name
+    Just owner -> lookupVariantIn owner name
+    Nothing -> case init segments of
+      [] -> lookupVariant name
+      _ -> case Map.lookup qualifier (declaredNames declared) of
+        Just owner -> lookupVariantIn owner name
+        Nothing -> pure Nothing
+
+{-| Diagnose the tail resolution deliberately leaves for typing.
+
+    A dotted constructor either names a value exported beneath a module
+    qualifier or a variant owned by a known type. Once the writer supplied that
+    qualifier, falling back to a bare variant would discard their choice and
+    make the program depend on unrelated loaded declarations. -}
+reportUnknownQualifiedConstructor :: DeclaredTypes -> Span -> ModuleName -> Checker Bool
+reportUnknownQualifiedConstructor declared patternSpan path =
+  case init (NonEmpty.toList (moduleNameSegments path)) of
+    [] -> pure False
+    _ | Map.member (moduleNameText path) (declaredNames declared) -> pure False
+    qualifierSegments -> do
+      let qualifier = Text.intercalate "." qualifierSegments
+          name = NonEmpty.last (moduleNameSegments path)
+      case Map.lookup qualifier (declaredNames declared) of
+        Just _ ->
+          True <$ report "E3034" patternSpan (qualifier <> " has no " <> name)
+            (Just "check the variant name against the type declaration")
+        Nothing -> do
+          ownsMembers <- qualifiesSomething qualifier
+          if ownsMembers
+            then
+              True <$ report "E3033" patternSpan (qualifier <> " exports no " <> name)
+                (Just ("check the spelling against " <> qualifier))
+            else pure False
 
 {-| The type a constructor answers with: the type itself for a variant with no
     payload, and the result for one that takes a payload. -}
@@ -78,13 +111,27 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     memberTypes <- mapM (const freshVariable) members
     _ <- unify patternSpan subjectType (TupleTypeValue memberTypes)
     sequence_ (zipWith (bindPattern declared rigid) members memberTypes)
+  {-| Every element of a sequence has the one element type, and the rest holds
+      a sequence of the same. A tuple is not admitted here: its members may
+      differ, and a pattern that bound them all at one type would be claiming
+      something the tuple does not say. -}
+  ArrayPattern prefix rest suffix -> do
+    element <- freshVariable
+    _ <- unify patternSpan subjectType (NominalType "Array" [element])
+    mapM_ (\part -> bindPattern declared rigid part element) (prefix <> suffix)
+    case rest of
+      Just (BoundRest name) ->
+        bindName (locatedValue name) (monotype (NominalType "Array" [element]))
+      _ -> pure ()
   ConstructorPattern path arguments -> do
     let name = NonEmpty.last (moduleNameSegments path)
-    variant <- variantForPath path name
+    variant <- variantForPath declared path name
     {-| A variant that named its payload is matched by naming it, for the
         reason it is built that way: one spelling reaches the value, so the
         other can only ever fail to match. -}
-    named <- lookupVariantFields name
+    named <- case variant of
+      Just _ -> lookupVariantFields name
+      Nothing -> pure Nothing
     case named of
       Just names
         | not (null arguments) ->
@@ -96,7 +143,9 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
               )
       _ -> pure ()
     case variant of
-      Nothing -> mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
+      Nothing -> do
+        _ <- reportUnknownQualifiedConstructor declared patternSpan path
+        mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
       Just (owner, ownerParams, declaredPayload) -> do
         replacements <- freshFor ownerParams
         let ownerType = NominalType owner (map snd replacements)
@@ -110,7 +159,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
               (Just "match one pattern per declared payload element")
             mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
   RecordPattern path fields _ -> do
-    variantShape <- namedVariantShapeFor path
+    variantShape <- namedVariantShapeFor declared path
     case variantShape of
       Just (owner, ownerParams, declaredShape) -> do
         replacements <- freshFor ownerParams
@@ -122,8 +171,20 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
         _ <- unify patternSpan subjectType ownerType
         mapM_ (bindFieldPattern declared rigid expected) fields
       Nothing -> do
-        declaredFieldTypes <- recordFieldsFor declared path subjectType
-        mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
+        reported <- case path of
+          Just constructorPath ->
+            reportUnknownQualifiedConstructor declared patternSpan constructorPath
+          Nothing -> pure False
+        if reported
+          then do
+            let errorFields =
+                  [ (locatedValue (fieldPatternName (locatedValue field)), ErrorType)
+                  | field <- fields
+                  ]
+            mapM_ (bindFieldPattern declared rigid errorFields) fields
+          else do
+            declaredFieldTypes <- recordFieldsFor declared path subjectType
+            mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
   InvalidPattern -> pure ()
@@ -181,13 +242,13 @@ recordFieldsFor declared path subjectType = do
     stand for its payload. A record type's own pattern has no variant to find
     and takes the other path. -}
 namedVariantShapeFor
-  :: Maybe ModuleName -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
-namedVariantShapeFor path = case path of
+  :: DeclaredTypes -> Maybe ModuleName -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
+namedVariantShapeFor declared path = case path of
   Nothing -> pure Nothing
   Just modulePath -> do
     let name = NonEmpty.last (moduleNameSegments modulePath)
     fieldNames <- lookupVariantFields name
-    variant <- lookupVariant name
+    variant <- variantForPath declared modulePath name
     pure $ case (fieldNames, variant) of
       (Just names, Just (owner, ownerParams, payload))
         | length names == length payload -> Just (owner, ownerParams, zip names payload)

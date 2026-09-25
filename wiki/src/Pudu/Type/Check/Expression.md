@@ -51,6 +51,9 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
 - `if let` checks its subject once, looks through a borrow exactly as `match` does, binds the pattern
   in a fresh then-branch type scope, and unifies its branch values exactly as ordinary `if` does.
   Without else it has unit type. No separate pattern checker exists for this form.
+- An assignment's target, a `&mut` argument, a call's loans, a captured name, and a type application's
+  arguments are handed to [[Check Place]]; a call admits its own `&mut` arguments before checking them
+  and compares its loans with the callee's parameter types before unifying them.
 - A non-empty `SetExpression` unifies all member types and produces `Set[T]`. The empty form creates
   one local inference variable; expected-type contexts may determine it before a statement boundary.
 

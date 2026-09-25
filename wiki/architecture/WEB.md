@@ -106,8 +106,8 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | A real database client? | **Ready** | [[Std Db]] and [[Std Db Session]]: PostgreSQL, authenticated, with transactions, savepoints, and pooling. |
 | Are values ever placed into a statement as text? | **Ready** | No. Values cross as parameters. |
-| Schema migrations? | **Ready** | [[Std Db Migrate]]. Versioned, digested, each in its own transaction, locked in the database so two processes do not both migrate. What should run is decided without a database. |
-| Zero-downtime schema change? | **Absent** | Depends on migrations existing first. |
+| Schema migrations? | **Ready** | [[Std Db Migrate]], through any driver: `Database.migrate` or a start-up stage on SQLite or PostgreSQL. Versioned, digested, each in its own transaction with its record, and on PostgreSQL locked inside that transaction so two processes do not both migrate and a failure leaves no lock behind. What should run is decided without a database. |
+| Zero-downtime schema change? | **Absent** | Migrations exist, but nothing plans a change in expand-then-contract steps, and a migration that must run outside a transaction, such as building an index concurrently, cannot be written. Until then a change that locks a large table locks it for as long as it runs. |
 | Is a failed transaction left open? | **Ready** | A scoped transaction rolls back what failed before the connection is returned. |
 | Connection limits? | **Ready** | Pools bound their count. |
 
@@ -138,12 +138,38 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 |---|---|---|
 | Cross-site scripting? | **Ready** | Not representable in [[Std Html]] — for text, for destinations, and for event handlers. Escaping alone covers only the first, which is where template engines stop. |
 | Cross-site request forgery? | **Ready** | Provenance is checked before a token is: a state-changing request from another site, or from one that will not say, is refused. |
-| Request smuggling? | **Ready** | A message that states its length two ways is refused. There is no precedence rule, so there is no difference between readers to exploit. |
+| Request smuggling? | **Ready** | A message that states its length two ways is refused. There is no precedence rule, so there is no difference between readers to exploit. A header line another reader could take differently — whitespace before its colon, a name that is not a token, a folded line, a stray line break inside a value — is refused with 400 rather than trimmed into agreement, and so is a request line that is not exactly a token method, a target without whitespace, and HTTP/1.0 or HTTP/1.1, one space apart. |
 | Transport security? | **Ready** | [[Std Tls]]. Verification is not a parameter. |
 | Authentication? | **Ready** | [[Std App Password]] carries the work factor it was made with, so raising it locks nobody out. [[Std App Session]] issues a new name on every change of privilege, which is the fixation defence made unforgettable rather than documented. [[Std App Totp]] provides RFC 6238 time-based one-time passwords for multi-factor authentication with Base32 codecs, clock skew tolerance, and replay prevention. [[Std App Jwt]] provides RFC 7519 JSON Web Tokens with HS256 HMAC-SHA256 signing, constant-time verification, and domain-rich claims policies. |
 | Authorisation? | **Ready** | [[Std App Access]]. A requirement is given in the same call as the handler and there is no call that omits it, so a route needing nothing and a route somebody forgot stop being the same line. A program can list what every route requires. |
 | Secrets handling? | **Ready** | [[Std App Secret]]: opaque container types prevent accidental logging or trace exposure; explicit redaction (`[REDACTED]`), masked suffix display, and constant-time equality comparisons. |
 | Audit trail? | **Ready** | [[Std App Audit]]: structured append-only audit trail with tamper-evident cryptographic hash chaining (SHA-256), outcome classification, secrets redaction, and SIEM NDJSON export. |
+
+## API contracts
+
+| Question | Verdict | Where it stands |
+|---|---|---|
+| One failure body for every refusal? | **Ready** | [[Std App Problem]]: RFC 9457 problem details. `uniform` rewrites any plain 4xx/5xx and drops 5xx text; validation reports become 422 with per-field `errors`. |
+| Can a client retry a payment safely? | **Ready** | [[Std App Idempotency]]: a repeated `Idempotency-Key` replays the stored answer, a key reused for a different body is refused, and a 5xx releases the key. Decide-and-begin is one locked step. |
+| Listings that stay stable under inserts? | **Ready** | [[Std App Page]]: keyset cursors, refused (not clamped) oversize limits, `Link: rel="next"`, and a `size + 1` fetch helper for stores. |
+| A machine-readable API description? | **Ready** | [[Std App OpenApi]]: OpenAPI 3.1 from values; failures published as problem bodies. `App.describing` refuses to build when the description and the router disagree, in either direction. |
+| Modules reacting to each other's facts? | **Ready** | [[Std App Events]]: ordered in-process publish/subscribe, and an outbox drained after commit, retried, and buried after a limit. |
+| Jobs at calendar times? | **Ready** | [[Std App Work]] `Calendar` runs a [[Std Cron]] schedule on the same clock as interval jobs. |
+
+## How the pieces connect
+
+Every application module joins [[Std App]] at one of three points, so a capability is either a line
+in the program's composition or absent:
+
+| Joint | Written as | Modules |
+|---|---|---|
+| A step around every handler | `App.wrapping(app, step)` | [[Std App Problem]] `uniform`, [[Std App Idempotency]] `guarded`, [[Std Http Server Guard]], [[Std App Access]], [[Std App Tenant]] |
+| Routes | `App.serving(app, router)`, `App.describing(app, document, path)` | [[Std App Health]], [[Std App OpenApi]], handlers using [[Std App Page]] and [[Std App Bind]] |
+| A stage that starts and stops | `App.using(app, stage)` | [[Std App Database]], pools, [[Std App Work]] schedules draining [[Std App Events]] outboxes |
+| A value handlers read | passed in the composition | [[Std App Config]], [[Std App Metrics]], [[Std App Cache]], [[Std App Flag]], [[Std App Locale]] |
+
+Nothing is discovered by scanning or registered as a side effect: what a service does is readable
+from the function that builds its `App`.
 
 ## Everything else an organisation asks
 

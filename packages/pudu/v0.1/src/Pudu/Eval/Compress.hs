@@ -7,10 +7,9 @@ module Pudu.Eval.Compress
   ) where
 
 import qualified Codec.Compression.Zlib.Internal as Zlib
-import Control.Exception (SomeAsyncException, SomeException, fromException, tryJust)
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
-import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
 
 compressGzip :: Bytes.ByteString -> Integer -> Integer -> IO (IoOutcome Bytes.ByteString)
 compressGzip = compressWith Zlib.gzipFormat
@@ -76,12 +75,7 @@ decompressWith format input limit
 
 synchronous :: IO (IoOutcome a) -> IO (IoOutcome a)
 synchronous action = do
-  outcome <- tryJust synchronousOnly action
+  outcome <- trySynchronous action
   pure $ case outcome of
     Left problem -> IoFailed (Text.pack (show problem))
     Right value -> value
- where
-  synchronousOnly :: SomeException -> Maybe SomeException
-  synchronousOnly problem = case fromException problem :: Maybe SomeAsyncException of
-    Just _ -> Nothing
-    Nothing -> Just problem

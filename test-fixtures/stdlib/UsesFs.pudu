@@ -1,0 +1,124 @@
+module UsesFs
+
+import Std.Bytes as Bytes
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Io as Io
+import Std.Path as Path
+import Std.Result as Result
+
+/// Atomic replacement, temporary names, permissions, metadata, containment,
+/// and tree removal, all inside a directory made and removed by the fixture.
+export fn main() -> Int {
+  var held = 0
+  let temporary = Env.temporaryDirectory()
+
+  if let Ok(first) = Fs.temporaryDirectoryIn(temporary, "pudu-fs-") {
+    if let Ok(second) = Fs.temporaryDirectoryIn(temporary, "pudu-fs-") {
+      if first != second && Io.exists(first) && Io.exists(second) &&
+      Path.nameOf(first).startsWith("pudu-fs-")
+      {
+        held = held + 1
+      }
+      let _gone = Fs.removeTree(second)
+    }
+
+    let target = Path.join(first, "config.txt")
+    if Fs.writeTextAtomically(target, "one") == Ok(()) &&
+    Fs.writeTextAtomically(target, "two") == Ok(()) &&
+    Io.read(target) == Ok("two") && Io.list(first) == Ok(["config.txt"])
+    {
+      held = held + 1
+    }
+
+    if let Err(Fs.Failed(Io.NotFound(_))) =
+    Fs.writeTextAtomically(Path.join(Path.join(first, "missing"), "x.txt"), "x")
+    {
+      if Io.list(first) == Ok(["config.txt"]) { held = held + 1 }
+    }
+
+    if let Ok(staged) = Fs.temporaryFileIn(first, "draft.") {
+      if Path.nameOf(staged).startsWith("draft.") && Io.exists(staged) {
+        if let Ok(info) = Fs.metadata(staged) {
+          if info.size == 0 && !info.isDirectory && !info.isSymbolicLink { held = held + 1 }
+        }
+      }
+      if Fs.rename(staged, target) == Ok(()) && !Io.exists(staged) && Io.read(target) == Ok("") {
+        held = held + 1
+      }
+    }
+    if let Err(Fs.Failed(Io.NotFound(_))) = Fs.rename(Path.join(first, "absent"), target) {
+      held = held + 1
+    }
+
+    let _written = Io.write(target, "hello")
+    if let Ok(info) = Fs.metadata(target) {
+      if info.size == 5 && info.permissions.readable && info.permissions.writable { held = held + 1 }
+    }
+    if let Ok(info) = Fs.metadata(first) {
+      if info.isDirectory { held = held + 1 }
+    }
+
+    let readOnly = Fs.Permissions{readable: true, writable: false, executable: false, searchable: false}
+    if Fs.setPermissions(target, &readOnly) == Ok(()) {
+      if let Ok(now) = Fs.permissions(target) {
+        if now.readable && !now.writable { held = held + 1 }
+      }
+      let writableAgain = Fs.Permissions{..readOnly, writable: true}
+      let _restored = Fs.setPermissions(target, &writableAgain)
+    }
+
+    if let Ok(real) = Fs.canonical(first) {
+      if Fs.canonical(Path.join(Path.join(first, "."), "config.txt")) == Ok(Path.join(real, "config.txt")) {
+        held = held + 1
+      }
+    }
+    if let Err(Fs.Failed(Io.NotFound(_))) = Fs.canonical(Path.join(first, "nowhere")) { held = held + 1 }
+
+    if let Ok(outside) = Fs.temporaryDirectoryIn(temporary, "pudu-fs-outside-") {
+      let base = Path.join(first, "base")
+      let _made = Io.makeDirectory(base)
+      let _inner = Io.write(Path.join(base, "inside.txt"), "in")
+      if let Ok(realInside) = Fs.resolveInside(base, "inside.txt") {
+        if Path.nameOf(realInside) == "inside.txt" { held = held + 1 }
+      }
+      if let Err(Fs.OutsideBase("..")) = Fs.resolveInside(base, "..") { held = held + 1 }
+
+      let _secret = Io.write(Path.join(outside, "secret.txt"), "keep")
+      if Fs.linkTo(outside, Path.join(base, "escape")) == Ok(()) {
+        if let Err(Fs.OutsideBase(_)) = Fs.resolveInside(base, Path.join("escape", "secret.txt")) {
+          held = held + 1
+        }
+        if Fs.removeTree(base) == Ok(()) && !Io.exists(base) &&
+        Io.read(Path.join(outside, "secret.txt")) == Ok("keep")
+        {
+          held = held + 1
+        }
+      }
+      let _cleanOutside = Fs.removeTree(outside)
+    }
+
+    var seen = ""
+    let kept = Fs.withTemporaryDirectory("pudu-fs-scope-", fn(directory: Str) -> Result[Str, Fs.FsError] {
+        let _note = Io.write(Path.join(directory, "note.txt"), "x")
+        Ok(directory)
+      })
+    if let Ok(directory) = kept {
+      if !Io.exists(directory) { held = held + 1 }
+    }
+    let failing = Fs.withTemporaryDirectory("pudu-fs-scope-", fn(directory: Str) -> Result[Str, Fs.FsError] {
+        Err(Fs.OutsideBase(directory))
+      })
+    if let Err(Fs.OutsideBase(directory)) = failing {
+      if !Io.exists(directory) { held = held + 1 }
+    }
+
+    if let Err(Fs.Failed(Io.NotFound(_))) = Fs.temporaryDirectoryIn(Path.join(first, "no-parent"), "x-") {
+      held = held + 1
+    }
+
+    if Fs.removeTree(first) == Ok(()) && !Io.exists(first) { held = held + 1 }
+  }
+
+  held
+}

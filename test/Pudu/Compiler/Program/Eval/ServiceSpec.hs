@@ -13,9 +13,34 @@ testServiceEvaluation = do
   addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  checkedDestinations <- runEntry "test-fixtures/stdlib/UsesHtmlDestinationBuild.pudu"
+  safeStreaming <- runEntry "test-fixtures/stdlib/UsesHtmlSafeStream.pudu"
+  incrementalHtml <- runEntry "test-fixtures/stdlib/UsesHtmlIncremental.pudu"
+  compactMarkup <- runEntry "test-fixtures/stdlib/UsesHtmlCompact.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
+  deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
+  canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
+  layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
+  interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
+  desktop <- runEntry "test-fixtures/stdlib/UsesUiDesktop.pudu"
+  toolkit <- runEntry "test-fixtures/stdlib/UsesUiToolkitAll.pudu"
+  controls <- runEntry "test-fixtures/stdlib/UsesUiControlsAll.pudu"
+  shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
+  pointing <- runEntry "test-fixtures/stdlib/UsesUiGestureAll.pudu"
+  exposing <- runEntry "test-fixtures/stdlib/UsesUiAccessible.pudu"
+  menuBar <- runEntry "test-fixtures/stdlib/UsesUiMenuBar.pudu"
+  selecting <- runEntry "test-fixtures/stdlib/UsesUiSelectionAll.pudu"
+  gridded <- runEntry "test-fixtures/stdlib/UsesUiGridAll.pudu"
+  stroked <- runEntry "test-fixtures/stdlib/UsesUiDrawAll.pudu"
+  lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
+  sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
+  rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
+  deviceAudio <- runEntry "test-fixtures/stdlib/UsesAudioDevice.pudu"
+  studioConfiguration <- runEntry "examples/media/ConfigChecks.pudu"
+  timing <- runEntry "test-fixtures/stdlib/UsesVideo.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
+  migrated <- runEntry "test-fixtures/stdlib/UsesMigrateApply.pudu"
   connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
@@ -27,6 +52,7 @@ testServiceEvaluation = do
   submitted <- runEntry "test-fixtures/stdlib/UsesBind.pudu"
   columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
+  keptThrough <- runEntry "test-fixtures/stdlib/UsesStoreDriver.pudu"
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
   builtAndShaped <- runEntry "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
@@ -35,6 +61,8 @@ testServiceEvaluation = do
   scheduled <- runEntry "test-fixtures/stdlib/UsesWork.pudu"
   spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   cached <- runEntry "test-fixtures/stdlib/UsesCache.pudu"
+  contracts <- runEntry "test-fixtures/stdlib/UsesAppContractsAll.pudu"
+  wiring <- runEntry "test-fixtures/stdlib/UsesAppWiringAll.pudu"
   pure $ conjoin
     [ {-| Checked against a server written in the fixture that speaks the wire
           protocol, so what the client sends is observable: that a value is sent
@@ -66,7 +94,7 @@ testServiceEvaluation = do
           naming a length this program then tries to hold. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "81")
+        (database === Just "86")
     {-| The driver layer is an interface rather than an implementation — a
         driver is a record of functions, which is what lets a program choose
         which backends it admits — so it is checked against one written in the
@@ -105,7 +133,19 @@ testServiceEvaluation = do
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "60")
+        (markup === Just "66")
+    , counterexample
+        "checked HTML builder destinations reject program-bearing values without compatibility drift"
+        (checkedDestinations === Just "16")
+    , counterexample
+        "safe HTML streaming keeps text inert and boundary identifiers out of code contexts"
+        (safeStreaming === Just "18")
+    , counterexample
+        "prepared HTML output flushes before delayed producers and remains bounded under backpressure"
+        (incrementalHtml === Just "22")
+    , counterexample
+        "compact HTML plans join static runs without crossing typed slots"
+        (compactMarkup === Just "39")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than
@@ -114,6 +154,39 @@ testServiceEvaluation = do
     , counterexample
         "two screens differ in what their state differs in"
         (screens === Just "37")
+    , counterexample
+        "deep HTML, JSON, and UI values render, differ, and patch exactly"
+        (deepRenderers === Just "15")
+    , counterexample
+        "a native canvas clips and blends into exact bounded pixels"
+        (canvas === Just "43")
+    , counterexample
+        "declarative layout places exact frames, names every control, and repaints only damage"
+        (layout === Just "49")
+    , counterexample
+        "a screen routes input to tagged controls, rings focus, and repaints only what changed"
+        (interaction === Just "31")
+    , counterexample
+        "a desktop window plan rejects unsafe extents before opening a device"
+        (desktop === Just "8")
+    , counterexample
+        "bitmap text measures, wraps, and draws into exact pixels"
+        (lettering === Just "22")
+    , counterexample
+        "PCM audio keeps exact samples, time, and WAV bytes and refuses malformed input"
+        (sound === Just "43")
+    , counterexample
+        "an audio graph renders exact samples that do not depend on slice boundaries"
+        (rendering === Just "24")
+    , counterexample
+        "device audio refuses invalid plans and PCM before hardware acquisition"
+        (deviceAudio === Just "23")
+    , counterexample
+        "the Media Studio configuration admits bounded device playback"
+        (studioConfiguration === Just "8")
+    , counterexample
+        "video timing stays exact across scales and tracks never overlap pictures"
+        (timing === Just "20")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two
@@ -123,16 +196,27 @@ testServiceEvaluation = do
         encoded ascent, and an address only the server can reach. -}
     , counterexample
         "the web layer refuses what it is supposed to refuse"
-        (refused === Just "82")
+        (refused === Just "86")
     {-| That what a schema change should do is decided without a database: a
         migration edited after it was applied stops everything, because both
         databases report the same version from then on and nothing later can
         detect that their schemas differ; a version arriving below one already
-        applied is refused rather than run out of order; and a rename is not an
-        edit, because the digest is over what runs. -}
+        applied is refused rather than run out of order; a version below one is
+        refused as not a version; and a rename is not an edit, because the
+        digest is over what runs. -}
     , counterexample
         "a schema change is planned before a database is reached"
-        (schemas === Just "21")
+        (schemas === Just "23")
+    {-| Applied against a real SQLite database, because what matters here is
+        only visible in one: a migration and its record commit together, a
+        failure part way through a migration leaves none of it behind while
+        the ones before it stay, a refusal runs nothing at all, and a second
+        run finds nothing to do. On PostgreSQL the lock is taken inside each
+        migration's transaction, before the record is read again, so it ends
+        with the transaction whichever way that goes. -}
+    , counterexample
+        "migrations apply once, whole or not at all, through any driver"
+        (migrated === Just "26")
     {-| A connection URI is where text a person or an environment supplied
         becomes the address a program dials, so what the parser accepts is the
         whole of what it will connect to. Each refusal is one a URI could
@@ -143,7 +227,7 @@ testServiceEvaluation = do
         one. The accepted forms sit beside them, because a parser that refuses
         everything is no safer and much less useful. -}
     , counterexample "a connection URI is read exactly, or refused"
-        (connectionStrings === Just "35")
+        (connectionStrings === Just "41")
     {-| That the two questions asked from outside a process stay two
         questions: a liveness judgement is handed a reading rather than a
         connection and is declared comptime, so reaching a clock or a socket
@@ -239,7 +323,18 @@ testServiceEvaluation = do
         for a list of one, so the batched shape is the ordinary one. -}
     , counterexample
         "a loaded value is a value, and children load for many parents at once"
-        (kept === Just "32")
+        (kept === Just "35")
+    {-| The same store through any driver, against a real SQLite database: a
+        write reports how many rows it changed although SQLite's driver states
+        no count, a key naming nothing changes nothing and says so, a value
+        spelling a statement is kept as that value, and children come back
+        grouped from one statement. On PostgreSQL the count is read from the
+        command tag and no transaction is opened for it. The SQLite connection
+        underneath waits for another connection's lock rather than refusing at
+        once, and files a violated constraint under its own category. -}
+    , counterexample
+        "a store reads and writes through any driver and counts what it changed"
+        (keptThrough === Just "25")
     {-| That a statement of real shape holds together: every join, grouping, an
         aggregate, a condition on the group, ordering that says where nothing
         sorts, set operations, a named result, and row locking — composed into
@@ -336,4 +431,66 @@ testServiceEvaluation = do
     , counterexample
         "a lookup says whether what it found is still fresh"
         (cached === Just "50")
+    {-| Six counts in two-digit slots: 10 desktop checks (every adapter record
+        kind decoded, a screen restated from outside an input, a refused frame
+        duration), 8 theme, 8 motion, 6 history, 7 list-windowing, and 9 keymap
+        checks. Driving a real window runs only when a display is promised. -}
+    , counterexample
+        "a desktop app decodes input, themes, animates, undoes, windows lists, and binds shortcuts"
+        (toolkit === Just "100808060709")
+    {-| Controls read aloud with their state and updated only by their own
+        events (12), and navigation: stacks, tabs, a split view, and modal
+        presentation that blocks presses on the view beneath (15). -}
+    , counterexample
+        "desktop controls, navigation, and modals behave and are read aloud"
+        (controls === Just "1215")
+    {-| Settings saved and read back through nested directories (9), a menu
+        bar validated against the keymap and read aloud with shortcuts (8),
+        and focus held inside a presented dialog (4). -}
+    , counterexample
+        "an application saves settings, offers menus, and traps focus in dialogs"
+        (shell === Just "90804")
+    {-| Taps, drags, and long presses recognized from pointer phases (7),
+        pointer records decoded (2), a slider set by taps and drags (6), and
+        clipboard refusals explained (2). The shared clipboard itself is
+        touched only when a run promises it may be. -}
+    , counterexample
+        "pointer gestures drive sliders and the clipboard reports what it holds"
+        (pointing === Just "7020602")
+    {-| Every role named (1); snapshots that keep reading order, parents,
+        frames, focus, and names, and mark nothing for a non-control or
+        missing focus (8); each refusal decode makes (7); and a forged
+        session refused by expose and exposed (2). -}
+    , counterexample
+        "a layout's accessibility tree crosses to the window and back"
+        (exposing === Just "1872")
+    {-| Menu-bar records for a bar with a separator, a submenu, and bound and
+        unbound commands (2); chosen commands decoded as signals (3); and a
+        forged session refused by install and installed (2). -}
+    , counterexample
+        "a menu bar crosses to the platform and its choices come back"
+        (menuBar === Just "232")
+    , counterexample
+        "list selection chooses single rows, ranges, toggles, and follows the keyboard"
+        (selecting === Just "15")
+    , counterexample
+        "a grid places equal columns and lines up a short last row"
+        (gridded === Just "5")
+    , counterexample
+        "strokes, gradients, and polygons paint exactly the pixels they describe"
+        (stroked === Just "15")
+    {-| Problem bodies, cursor pages, and idempotency keys, read as three
+        counts packed into one number: 17 problem checks, 15 page checks, and
+        18 idempotency checks, including a middleware run against a shared store
+        that calls its handler once per key. -}
+    , counterexample
+        "failures, pages, and repeated requests answer by one contract"
+        (contracts === Just "171518")
+    {-| Events with an outbox (11), a router-checked API description (16), an
+        application that refuses to build when its description and routes
+        disagree (4), and calendar jobs on the work schedule (4), in two-digit
+        slots. -}
+    , counterexample
+        "events, the API description, and calendar jobs connect through the application"
+        (wiring === Just "11160404")
     ]

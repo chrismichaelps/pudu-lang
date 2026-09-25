@@ -7,7 +7,7 @@
 module Pudu.Foreign.OwnershipSpec (ownershipProperties) where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, throwTo)
-import Control.Exception (AsyncException (ThreadKilled))
+import Control.Exception (AsyncException (ThreadKilled), throwIO, try)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.List (sort)
@@ -38,6 +38,7 @@ ownershipProperties =
   , ("a declared version is asked for the way each platform spells it", testVersionedNames)
   , ("two references to one address are two claims", testCountedClaims)
   , ("every outstanding reference is released at teardown", testCountedTeardown)
+  , ("an interrupt during teardown still releases the rest, then stops", testInterruptedTeardown)
   ]
 
 {-| A cleanup that records that it ran, so a leak and a double release are both
@@ -315,6 +316,26 @@ testCountedTeardown = do
         , counterexample "a reference arriving after closing is refused" (refused === Nothing)
         , counterexample "and is released rather than left behind"
             (afterClosed === [4096, 4096, 8192, 16384])
+        ]
+    )
+
+{-| A kill that lands inside one cleanup is not that cleanup failing. The other
+    resources are still released, and the kill reaches the caller afterwards
+    instead of being answered as a quiet cleanup failure. -}
+testInterruptedTeardown :: IO Property
+testInterruptedTeardown = do
+  store <- newForeignStore
+  releases <- newReleases
+  _ <- claimOwnedGeneration store 4096 (throwIO ThreadKilled)
+  _ <- claimOwnedGeneration store 8192 (releasing releases 8192)
+  _ <- claimCountedGeneration store 16384 (releasing releases 16384)
+  _ <- claimOwnedGeneration store 32768 (ioError (userError "the library refused"))
+  outcome <- try (closeForeignStore store)
+  afterwards <- released releases
+  pure
+    ( conjoin
+        [ counterexample "every other resource is released" (afterwards === [8192, 16384])
+        , counterexample "the kill reaches the caller" (outcome === Left ThreadKilled)
         ]
     )
 

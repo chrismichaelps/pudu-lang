@@ -112,7 +112,8 @@ data MatchArm = MatchArm
   { armPattern :: !(Located Pattern), armGuard :: !(Maybe (Located Expression))
   , armBody :: !(Located Expression) }
 data Literal
-  = IntegerValue !Text | FloatValue !Text | DecimalValue !Text
+  = IntegerValue !Text | ResolvedInteger !IntegerKind !Integer
+  | FloatValue !Text | DecimalValue !Text
   | StringValue !Text | CharValue !Char
   | BoolValue !Bool | NullValue
 data Expression
@@ -140,6 +141,28 @@ data Expression
 All constructors derive `Eq` and `Show` and are exported for parser construction and structural tests.
 
 ### Governance
+
+- Every node has a stored form ([[Cache Persist]]), defined in [[Syntax Stored]]. A module's declarations and a function's body
+  are stored as blocks of their own and read when first reached, so loading a stored module reads
+  its name and imports and leaves the rest until something looks at it.
+
+- `RangeExpression` holds two **optional** ends. A range is not a binary operator on two values,
+  because either end may be absent and a binary node has no way to say so; an absent end means "as
+  far as the thing this is applied to goes", which is what makes `items[2..]` the tail of a sequence
+  the writer never measured.
+
+- `ArrayPattern` holds the elements before the rest and the elements after it **apart**, rather than
+  in one list with a marker inside. That is the shape the matcher needs — a prefix read from the
+  front, a suffix from the back, and the rest between — and one list would mean finding the marker
+  again at every use.
+
+- `LetPatternStatement` carries the binding kind and an optional annotation, so `var {x, y} = point`
+  binds parts that may be assigned and a reader can state the type of a value that never receives
+  one name. It is a separate statement from `LetElseStatement` because the two ask opposite things
+  of their pattern: with a fallback it must be able to fail, without one it must not.
+
+- The short function literal builds `LambdaExpression` exactly as `fn(...)` does. **No node records
+  which spelling was written**, so nothing after the parser can behave differently for one of them.
 
 - `SetExpression` retains every written member in source order. It does not deduplicate in the
   frontend: duplicate expressions must still resolve, type-check, expand, and evaluate before the
@@ -179,6 +202,11 @@ No algorithm; strict algebraic representation with derived equality/show for tes
 DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is deliberate data recursion, not monolithic logic.
 
 ## Grill Log
+
+- **Q:** Why does the tree hold a `ResolvedInteger` the parser never builds? **A:** [[Compiler Literals]]
+  writes it into the module the evaluator runs, once checking has fixed each literal's kind, so an
+  evaluation reads a number instead of parsing text. Tooling reads the parser's tree, which never
+  contains one.
 
 - **Q:** Elaborate a Set literal into `setOf([..])` during parsing? **A:** No. _Rationale:_ that
   would fabricate source structure and spans, obscure the literal from formatting and tooling, and

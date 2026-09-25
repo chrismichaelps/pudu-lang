@@ -2,7 +2,7 @@ module UsesGuard
 
 import Std.App.Trace as Trace
 import Std.Http as Http
-import Std.Http.Safe {Escapes, FramedTwice, FromAnotherSite, LengthDisagrees, Reserved, SameOrigin, Unstated}
+import Std.Http.Safe {Escapes, FramedTwice, FromAnotherSite, LengthDisagrees, Reserved, SameOrigin, UnsupportedEncoding, Unstated}
 import Std.Http.Safe as Safe
 import Std.Http.Server.Guard as Guard
 import Std.Http.Server.Reply as Reply
@@ -50,6 +50,24 @@ export fn main() -> Int {
   if Result.unwrapOr(Safe.bodyLength(&[("Content-Length", "42")]), -1) == 42 { held = held + 1 }
   if Result.unwrapOr(Safe.bodyLength(&[("Host", "x")]), -1) == 0 { held = held + 1 }
   if Safe.isChunked(&[("Transfer-Encoding", "chunked")]) { held = held + 1 }
+
+  // A transfer encoding whose final coding is not chunked leaves the body's
+  // end unstated. Reading it as an empty body would read the body's bytes as
+  // the next request, so it is refused, and a coding that merely contains the
+  // word is not chunked.
+  if let Err(UnsupportedEncoding(_)) = Safe.bodyLength(&[("Transfer-Encoding", "gzip")]) {
+    held = held + 1
+  }
+  if let Err(UnsupportedEncoding(_)) = Safe.bodyLength(&[("Transfer-Encoding", "chunked, gzip")]) {
+    held = held + 1
+  }
+  if let Err(UnsupportedEncoding(_)) = Safe.bodyLength(&[("Transfer-Encoding", "notchunked")]) {
+    held = held + 1
+  }
+  // The final coding is read across every header in order.
+  if Safe.isChunked(&[("Transfer-Encoding", "gzip"), ("transfer-encoding", " Chunked ")]) {
+    held = held + 1
+  }
 
   // A header value that would end the header is refused rather than escaped.
   // Escaping guesses at an intent no legitimate value has.
@@ -305,7 +323,7 @@ fn wrapped(routed: &Route.Router, step: Route.Middleware) -> Route.Handler {
 }
 
 fn requestFor(method: Http.Method, path: Str, headers: &Array[(Str, Str)]) -> Route.Request {
-  let message = Http.Request{method: method, target: path, headers: *headers, body: ""}
+  let message = Http.Request{method: method, target: path, headers: *headers, body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: path,

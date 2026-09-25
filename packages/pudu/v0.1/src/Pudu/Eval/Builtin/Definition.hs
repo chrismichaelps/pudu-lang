@@ -26,7 +26,15 @@ data Builtin
   | AppendFileBuiltin
   | FileExistsBuiltin
   | Sha512Builtin
+  | Sha3_256Builtin
+  | Sha3_512Builtin
+  | Blake2b256Builtin
+  | Blake2b512Builtin
+  | ChecksumBuiltin
+  | HmacSha512Builtin
+  | ConstantTimeEqualBuiltin
   | SpawnBuiltin
+  | SpawnWithBuiltin
   | ChildReadBuiltin
   | ChildReadErrorBuiltin
   | ChildWriteBuiltin
@@ -90,6 +98,27 @@ data Builtin
   | CellGetBuiltin
   | CellSwapBuiltin
   | SecureBytesBuiltin
+  | DesktopOpenBuiltin
+  | DesktopPresentBuiltin
+  | DesktopPumpBuiltin
+  | DesktopInputsBuiltin
+  | DesktopClipboardReadBuiltin
+  | DesktopClipboardWriteBuiltin
+  | DesktopAccessibilityBuiltin
+  | DesktopAccessibilityReportBuiltin
+  | DesktopMenuBuiltin
+  | DesktopMenuReportBuiltin
+  | DesktopCloseBuiltin
+  | AudioDevicePlayBuiltin
+  | AudioStreamOpenBuiltin
+  | AudioStreamWriteBuiltin
+  | AudioStreamPauseBuiltin
+  | AudioStreamResumeBuiltin
+  | AudioStreamVolumeBuiltin
+  | AudioStreamSnapshotBuiltin
+  | AudioStreamCloseBuiltin
+  | AudioToneBytesBuiltin
+  | AudioRampBytesBuiltin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
@@ -107,6 +136,17 @@ data Builtin
   | ArgumentsBuiltin
   | EnvironmentBuiltin
   | TemporaryDirectoryBuiltin
+  | RenamePathBuiltin
+  | CreateTemporaryFileBuiltin
+  | CreateDirectoryExclusiveBuiltin
+  | RemoveEmptyDirectoryBuiltin
+  | PermissionsOfBuiltin
+  | SetPermissionsOfBuiltin
+  | PathIsSymbolicLinkBuiltin
+  | CreateSymbolicLinkBuiltin
+  | CanonicalPathBuiltin
+  | FileSizeBuiltin
+  | DirectoryExistsBuiltin
   | HomeDirectoryBuiltin
   | PathSeparatorsBuiltin
   | SearchSeparatorBuiltin
@@ -167,6 +207,10 @@ data Builtin
   | ColumnBinarySearchF64Builtin
   | ColumnGatherU64Builtin
   | ColumnGatherF64Builtin
+  | CsvRecordsBuiltin
+  | JsonDecodeBuiltin
+  | JsonEncodeBuiltin
+  | XmlDecodeBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -190,7 +234,15 @@ builtinName value = case value of
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
   Sha512Builtin -> "sha512Of"
+  Sha3_256Builtin -> "sha3_256Of"
+  Sha3_512Builtin -> "sha3_512Of"
+  Blake2b256Builtin -> "blake2b256Of"
+  Blake2b512Builtin -> "blake2b512Of"
+  ChecksumBuiltin -> "checksumOf"
+  HmacSha512Builtin -> "hmacSha512Of"
+  ConstantTimeEqualBuiltin -> "constantTimeEqual"
   SpawnBuiltin -> "spawnProgram"
+  SpawnWithBuiltin -> "spawnProgramWith"
   ChildReadBuiltin -> "childReadChunk"
   ChildReadErrorBuiltin -> "childReadErrorChunk"
   ChildWriteBuiltin -> "childWriteChunk"
@@ -254,6 +306,27 @@ builtinName value = case value of
   CellGetBuiltin -> "cellGet"
   CellSwapBuiltin -> "cellSwap"
   SecureBytesBuiltin -> "secureRandomBytes"
+  DesktopOpenBuiltin -> "desktopOpen"
+  DesktopPresentBuiltin -> "desktopPresent"
+  DesktopPumpBuiltin -> "desktopPump"
+  DesktopInputsBuiltin -> "desktopInputs"
+  DesktopClipboardReadBuiltin -> "desktopClipboardRead"
+  DesktopClipboardWriteBuiltin -> "desktopClipboardWrite"
+  DesktopAccessibilityBuiltin -> "desktopAccessibility"
+  DesktopAccessibilityReportBuiltin -> "desktopAccessibilityReport"
+  DesktopMenuBuiltin -> "desktopMenu"
+  DesktopMenuReportBuiltin -> "desktopMenuReport"
+  DesktopCloseBuiltin -> "desktopClose"
+  AudioDevicePlayBuiltin -> "audioDevicePlay"
+  AudioStreamOpenBuiltin -> "audioStreamOpen"
+  AudioStreamWriteBuiltin -> "audioStreamWrite"
+  AudioStreamPauseBuiltin -> "audioStreamPause"
+  AudioStreamResumeBuiltin -> "audioStreamResume"
+  AudioStreamVolumeBuiltin -> "audioStreamVolume"
+  AudioStreamSnapshotBuiltin -> "audioStreamSnapshot"
+  AudioStreamCloseBuiltin -> "audioStreamClose"
+  AudioToneBytesBuiltin -> "audioToneBytes"
+  AudioRampBytesBuiltin -> "audioRampBytes"
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"
@@ -271,6 +344,17 @@ builtinName value = case value of
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
   TemporaryDirectoryBuiltin -> "temporaryPath"
+  RenamePathBuiltin -> "renamePath"
+  CreateTemporaryFileBuiltin -> "createTemporaryFile"
+  CreateDirectoryExclusiveBuiltin -> "createDirectoryExclusive"
+  RemoveEmptyDirectoryBuiltin -> "removeEmptyDirectory"
+  PermissionsOfBuiltin -> "permissionsOf"
+  SetPermissionsOfBuiltin -> "setPermissionsOf"
+  PathIsSymbolicLinkBuiltin -> "pathIsSymbolicLink"
+  CreateSymbolicLinkBuiltin -> "createSymbolicLink"
+  CanonicalPathBuiltin -> "canonicalPath"
+  FileSizeBuiltin -> "fileSize"
+  DirectoryExistsBuiltin -> "directoryExists"
   HomeDirectoryBuiltin -> "userHome"
   PathSeparatorsBuiltin -> "pathSeparators"
   SearchSeparatorBuiltin -> "searchSeparator"
@@ -331,3 +415,7 @@ builtinName value = case value of
   ColumnBinarySearchF64Builtin -> "columnBinarySearchF64"
   ColumnGatherU64Builtin -> "columnGatherU64"
   ColumnGatherF64Builtin -> "columnGatherF64"
+  CsvRecordsBuiltin -> "csvRecords"
+  JsonDecodeBuiltin -> "jsonDecode"
+  JsonEncodeBuiltin -> "jsonEncode"
+  XmlDecodeBuiltin -> "xmlDecode"

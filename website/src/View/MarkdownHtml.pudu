@@ -1,0 +1,203 @@
+module View.MarkdownHtml
+
+import Std.Html.Build as H
+
+/// Where a package file's relative targets point: `pages` for links and
+/// `files` for images, each a prefix ending in `/`. An empty prefix refuses
+/// relative targets of its kind.
+export type Targets = { pages: Str, files: Str }
+
+/// Elements kept, each rebuilt from its own name.
+const KEPT: Array[Str] = ["p", "div", "span", "a", "img", "br", "strong", "em", "b", "i", "code", "sub", "sup", "h1", "h2", "h3", "h4"]
+
+/// Elements dropped together with everything inside them.
+const SILENCED: Array[Str] = ["script", "style", "iframe", "object", "embed", "template", "noscript", "textarea", "title", "svg", "math"]
+
+/// Kept elements that hold nothing and have no closing tag.
+const EMPTY: Array[Str] = ["img", "br"]
+
+/// The alignments a README may ask for, each shown through a class.
+const ALIGNMENTS: Array[Str] = ["left", "center", "right"]
+
+/// Entities decoded in text and attribute values; `&amp;` last, so an
+/// escaped entity is not decoded twice.
+const ENTITIES: Array[(Str, Str)] = [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&nbsp;", " "), ("&amp;", "&")]
+
+/// The characters a tag or attribute name is made of.
+const NAME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+
+/// An element still open: its name, its kept attributes, and its children so far.
+type Open = { name: Str, attributes: Array[(Str, Str)], children: Array[H.Node] }
+
+/// Targets that refuse every relative link and image.
+export fn none() -> Targets { Targets{pages: "", files: ""} }
+
+/// Whether a line begins an HTML block: a tag, a closing tag, or a comment.
+///
+/// A name followed by anything but a space, `>`, or `/` is not a tag, so an
+/// address written `<https://…>` stays prose.
+export fn opensBlock(bare: Str) -> Bool {
+  if bare.startsWith("<!--") { return true }
+  let named = if bare.startsWith("</") { bare.drop(2) } else if bare.startsWith("<") { bare.drop(1) } else { return false }
+  let name = nameAt(named)
+  if name.isEmpty() { return false }
+  let after = named.drop(name.length())
+  after.isEmpty() || after.startsWith(" ") || after.startsWith(">") || after.startsWith("/")
+}
+
+/// A block of README HTML as nodes rebuilt from the allowlist.
+export fn render(text: Str, targets: &Targets) -> Array[H.Node] {
+  var stack: Array[Open] = [Open{name: "", attributes: [], children: []}]
+  var silenced = ""
+  var rest = text
+  while !rest.isEmpty() {
+    let opening = rest.indexOf("<")
+    if opening != 0 {
+      let run = if opening < 0 { rest } else { rest.take(opening) }
+      if silenced.isEmpty() { stack = appended(stack, H.words(decoded(run))) }
+      rest = rest.drop(run.length())
+      continue
+    }
+    if rest.startsWith("<!--") {
+      let close = rest.indexOf("-->")
+      rest = if close < 0 { "" } else { rest.drop(close + 3) }
+      continue
+    }
+    let closing = rest.indexOf(">")
+    if closing < 0 {
+      if silenced.isEmpty() { stack = appended(stack, H.words(decoded(rest))) }
+      rest = ""
+      continue
+    }
+    let inside = rest.slice(1, closing)
+    rest = rest.drop(closing + 1)
+    if inside.startsWith("/") {
+      let name = nameAt(inside.drop(1)).toLower()
+      if silenced.isEmpty() { stack = closed(stack, name, targets) } else if name == silenced { silenced = "" }
+      continue
+    }
+    let name = nameAt(inside).toLower()
+    if name.isEmpty() {
+      if silenced.isEmpty() { stack = appended(stack, H.words(decoded("<" + inside + ">"))) }
+      continue
+    }
+    let selfClosing = inside.trim().endsWith("/")
+    if !silenced.isEmpty() || !KEPT.contains(name) {
+      if silenced.isEmpty() && SILENCED.contains(name) && !selfClosing { silenced = name }
+      continue
+    }
+    let opened = Open{name: name, attributes: attributesOf(inside.drop(name.length())), children: []}
+    stack = if EMPTY.contains(name) || selfClosing { appended(stack, built(&opened, targets)) } else { stack.push(opened) }
+  }
+  while stack.length() > 1 { stack = closeTop(stack, targets) }
+  stack[0].children
+}
+
+/// A target a page may use: a web address, a place on this site, or a
+/// relative path joined to `prefix`; `None` for anything else.
+export fn resolve(target: Str, prefix: Str) -> Option[Str] {
+  let bare = target.trim()
+  let lower = bare.toLower()
+  if lower.startsWith("https://") || lower.startsWith("http://") || bare.startsWith("/") || bare.startsWith("#") { return Some(bare) }
+  if bare.isEmpty() || prefix.isEmpty() || bare.contains(":") || bare.contains("..") || bare.contains("\\") { return None }
+  Some(prefix + (if bare.startsWith("./") { bare.drop(2) } else { bare }))
+}
+
+/// The name a tag or attribute begins with, or the empty text.
+fn nameAt(text: Str) -> Str {
+  let found = text.take(text.spanOf(NAME_CHARACTERS))
+  if found.isEmpty() || NAME_CHARACTERS.take(52).contains(found.take(1)) { found } else { "" }
+}
+
+/// Text with the entities a README writes decoded.
+fn decoded(text: Str) -> Str {
+  var out = text
+  for entity in ENTITIES { out = out.replace(entity[0], entity[1]) }
+  out
+}
+
+/// The attributes written after a tag's name, as lower-case names and decoded values.
+fn attributesOf(text: Str) -> Array[(Str, Str)] {
+  var pairs: Array[(Str, Str)] = []
+  var rest = text.trim()
+  while !rest.isEmpty() {
+    let name = nameAt(rest)
+    if name.isEmpty() {
+      rest = rest.drop(1).trim()
+      continue
+    }
+    rest = rest.drop(name.length()).trim()
+    var value = ""
+    if rest.startsWith("=") {
+      rest = rest.drop(1).trim()
+      let quote = if rest.startsWith("\"") { "\"" } else if rest.startsWith("'") { "'" } else { "" }
+      if quote.isEmpty() {
+        let end = rest.indexOf(" ")
+        value = if end < 0 { rest } else { rest.take(end) }
+        rest = if end < 0 { "" } else { rest.drop(end) }
+      } else {
+        let end = rest.drop(1).indexOf(quote)
+        value = if end < 0 { rest.drop(1) } else { rest.slice(1, end + 1) }
+        rest = if end < 0 { "" } else { rest.drop(end + 2) }
+      }
+    }
+    pairs = pairs.push((name.toLower(), decoded(value)))
+    rest = rest.trim()
+  }
+  pairs
+}
+
+/// The attribute an element keeps for one it was written with, if any.
+fn kept(element: Str, name: Str, value: Str, targets: &Targets) -> Option[(Str, Str)] {
+  if name == "href" && element == "a" { return Some(("href", resolve(value, targets.pages) ?)) }
+  if name == "src" && element == "img" { return Some(("src", resolve(value, targets.files) ?)) }
+  if name == "title" || (name == "alt" && element == "img") { return Some((name, value)) }
+  if (name == "width" || name == "height") && element == "img" && !value.isEmpty() && value.spanOf("0123456789") == value.length() {
+    return Some((name, value))
+  }
+  let alignment = value.trim().toLower()
+  if name == "align" && ALIGNMENTS.contains(alignment) { return Some(("class", "md-align-" + alignment)) }
+  None
+}
+
+/// An element rebuilt from its name and kept attributes; an image whose
+/// source was refused is left out.
+fn built(open: &Open, targets: &Targets) -> H.Node {
+  var node = H.tag(open.name)
+  var sourced = false
+  for pair in open.attributes {
+    match kept(open.name, pair[0], pair[1], targets) {
+      case Some(attribute) => {
+        if attribute[0] == "src" { sourced = true }
+        node = node.at(attribute[0], attribute[1])
+      }
+      case None => {}
+    }
+  }
+  if open.name == "img" && !sourced { return H.nothing() }
+  node.holding(open.children)
+}
+
+/// The stack with a node added to the innermost open element.
+fn appended(stack: Array[Open], node: H.Node) -> Array[Open] {
+  let last = stack.length() - 1
+  let top = stack[last]
+  stack.pop().push(Open{..top, children: top.children.push(node)})
+}
+
+/// The stack with its innermost element closed into its parent.
+fn closeTop(stack: Array[Open], targets: &Targets) -> Array[Open] {
+  let last = stack.length() - 1
+  appended(stack.pop(), built(&stack[last], targets))
+}
+
+/// The stack with the innermost open element of a name closed, and every
+/// element opened inside it; a closing tag with nothing to close changes nothing.
+fn closed(stack: Array[Open], name: Str, targets: &Targets) -> Array[Open] {
+  var position = stack.length() - 1
+  while position > 0 && stack[position].name != name { position = position - 1 }
+  if position == 0 { return stack }
+  var out = stack
+  while out.length() > position { out = closeTop(out, targets) }
+  out
+}

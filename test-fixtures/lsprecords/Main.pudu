@@ -1,0 +1,9 @@
+module Main
+
+import Lib.Tools as T
+
+type Point = { unrelated: Str }
+
+fn main(p: T.Point) -> Int {
+  p.x
+}

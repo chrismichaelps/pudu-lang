@@ -63,19 +63,20 @@ evaluateModule :: Module -> EvalOutcome
   declaration is called in the environment it is called from, which is what lets a module's functions
   see each other and an imported module's frame stay reachable. A literal may be returned, stored,
   and called long after the block that gave its free names meaning has ended.
-- A literal captures every frame in scope rather than only the names its body mentions. Capturing
-  selectively would need the resolver's answer about free names, and the two would have to agree
-  forever; capturing the environment means they cannot disagree.
+- A literal keeps module scope whole and narrows call frames to an over-approximation of the names
+  its body mentions. Module lookups may use keys no source spelling names, while call frames contain
+  only lexical names; retaining an extra lexical name costs one entry, but dropping one would change
+  meaning.
 - A member chain of plain identifiers is tried as one dotted name before it is read as a field
   access, so a module's function can be passed as a value. `Std.Char.toUpper` is one binding;
   `record.field.inner` is two reads, and is untouched because its base is bound.
 
-- Text indices count Unicode scalars, not bytes, so `charAt` and `slice` agree with what a reader
-  counting characters expects. It is the same choice indexing already makes.
-- An index outside the text is `E7004`. A silent clamp turns a logic error into wrong output that
-  looks correct.
-- A slice is clamped at the **end** and refused at the **start**: a `to` beyond the text is the
-  ordinary way to ask for "the rest", while a negative `from` is arithmetic that went wrong.
+- Text indices count Unicode scalars, not bytes, so `charAt` and range indexing agree with what a
+  reader counting characters expects. It is the same choice indexing already makes.
+- A range index over an array, text, or bytes must lie wholly inside the value and run forward; an
+  out-of-bounds or reversed slice is `E7004`, reported on the range that supplied the bounds. A
+  silent clamp would turn arithmetic that went wrong into plausible but different output. Tuples
+  admit literal scalar indices only because their positions may have different types.
 
 - A program's dependencies are linked before its entry point runs. Each is loaded into a frame of
   its own and republished under its dotted path, so `Std.List.sum` is a name in the environment
@@ -107,7 +108,7 @@ evaluateModule :: Module -> EvalOutcome
 - Arguments bind left to right; a parameter with no argument evaluates its default in the environment the earlier parameters already extended, matching the declared evaluation order.
 - Assignment writes the binding where it was declared rather than creating a new one in the innermost frame.
 - Recursion and iteration are bounded. Exceeding either reports `E7002` rather than exhausting the host, which keeps an interactive session usable after a runaway program.
-- Runtime failures are ordinary diagnostics: `E7001` shape and definedness, `E7002` limits, `E7003` arity, `E7004` domain errors such as division by zero and index range, `E7005` no matching arm – a defensive path once exhaustiveness checking runs, but still reported rather than crashing – `E7006` a jump outside a loop — now a defensive path, since [[Name Resolution]] rejects one as `E2016` before the program runs — `E7007` a panic from the prelude's `panic` builtin, which represents a violated invariant rather than a recoverable domain failure, `E7010` a decimal quotient with no terminating base-ten expansion, which is reported rather than rounded because rounding is the decimal analogue of a silent integer wrap.
+- Runtime failures are ordinary diagnostics: `E7001` shape and definedness, `E7002` limits, `E7003` arity, `E7004` an operand outside the operation's domain, `E7005` a computed integer result that its declared kind cannot hold, `E7006` a defensive jump outside a loop, `E7007` a panic from the prelude's `panic` builtin, `E7010` a decimal quotient with no terminating base-ten expansion, and `E7011` a defensive match with no accepted arm. Earlier phases make several of these unreachable for admitted programs, but the evaluator still reports them instead of crashing.
 - Calling an async closure evaluates supplied arguments and omitted defaults left to right, then returns a cold `TaskValue` without running the body. `.await` starts that prepared body; `Ok` yields its payload, `Err` propagates like `?`, and awaiting a non-task is defensive runtime `E7008`.
 
 - **A type that writes `Sequence` is iterated by it, and a sum falls back to its payload only when nothing does.** [[Type Check Iteration]] decides the binder's type in exactly this order, and taking the payload first made the two disagree: a program with its own implementation type checked against the implementation and then ran against the payload, so a binder the checker called `Int` held a variant.
@@ -133,6 +134,7 @@ Install declarations, evaluate module constants, then evaluate the named entry p
 - A control transfer that reaches the top has left every construct that could own it: a return yields its value, a stray break or continue yields unit rather than losing the run.
 - Iteration handles built-in enumerable values directly and asks every other nominal value for the admitted `begin`/`advance` sequence protocol; a missing or malformed protocol says so instead of silently doing nothing.
 - `?` yields the success value or returns the failure from the enclosing function unchanged, which is the elaboration [[architecture/SEMANTICS]] gives it.
+- A record update decides every field before it returns. A field left pending would hold the record it came from and the update's written fields, so a state record updated once per line kept every earlier version alive: `Std.Csv.foldRows` peaked at 102 MB for 2 MB and 275 MB for 20 MB. The residency gate's `foldRows` probe keeps that bounded.
 - A member access finds a field first and a method of the value's type second; in callee position the method wins, matching how the same call is typed. A method call binds the receiver as the function's first parameter.
 - A trait-qualified call derives its receiver owner through [[Eval Operator]]'s `nominalNameOf`, so implementations for wired-in scalars dispatch by exact kind (`UInt8`, not a generic integer label) as well as implementations for records and variants.
 - The interpreter's task is cold and deterministic but not concurrently scheduled. Awaiting the same immutable task value again replays its pure body until the scheduler slice introduces task identity and at-most-once state; current Pudu has no task-observable IO, clock, or randomness.
@@ -188,3 +190,7 @@ The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanu
 
 
 `evaluateBlockInFrame` executes statements and a block result in the current frame; ordinary lexical blocks retain `withNewFrame` behavior when declarations or let-else statements are present (`blockIntroducesBindings`), avoiding redundant empty frame push/pop cycles and deep environment lookups in tight loops. `outcomeOf` supplies shared result conversion to context execution. Resolved Grill Log: persistent top-level binding execution must not silently pop the frame at the end of each block. Loops whose bodies contain no binding declarations execute in the existing frame without allocating empty environment maps.
+
+## Places
+
+Assignment resolves its place through [[Eval Place]] — root and index keys first — then evaluates the right-hand side and stores; a field, an element, and `*r` are places as well as a variable. See [[ADR-0022-lending-a-place]].

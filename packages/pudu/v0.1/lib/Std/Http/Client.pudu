@@ -132,7 +132,7 @@ impl Limiting for Limits {
 
 /// Request a URL, within the given limits.
 export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError] {
-  send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held)
+  send(&Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None}, held)
 }
 
 /// Send a request and read what comes back.
@@ -183,7 +183,7 @@ fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Resp
     return Err(NotPermitted(Safe.explain(&problem)))
   }
   let port = Option.unwrapOr(Url.effectivePort(&place), if secured(&place) { 443 } else { 80 })
-  let written = Message.renderRequest(&addressed(request, &place))
+  let written = Message.renderRequestBytes(&addressed(request, &place))
   if secured(&place) {
     overSecured(&place, port, written, held, expires, &request.method)
   } else {
@@ -193,10 +193,9 @@ fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Resp
 
 fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
   Http.Request {
-    method: request.method,
+    ..*request,
     target: pathAndQuery(place),
-    headers: withLength(&withHost(&request.headers, place), request.body),
-    body: request.body
+    headers: withLength(&withHost(&request.headers, place), &Http.requestBytes(request))
   }
 }
 
@@ -217,12 +216,12 @@ fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
 /// some other way — a chunked upload written by hand — is that caller's to
 /// frame, and a second length header would make the request ambiguous, which is
 /// the shape a server is required to refuse.
-fn withLength(headers: &Array[(Str, Str)], body: Str) -> Array[(Str, Str)] {
-  if body.isEmpty() || Option.isSome(&Http.header(headers, "content-length"))
+fn withLength(headers: &Array[(Str, Str)], body: &Bytes) -> Array[(Str, Str)] {
+  if body.length() == 0 || Option.isSome(&Http.header(headers, "content-length"))
     || Option.isSome(&Http.header(headers, "transfer-encoding")) {
-      *headers
+    *headers
   } else {
-    headers.push(("content-length", show(body.toBytes().length())))
+    headers.push(("content-length", show(body.length())))
   }
 }
 
@@ -245,7 +244,7 @@ fn secured(place: &Url.Url) -> Bool { place.scheme.toLower() == SECURE_SCHEME }
 fn overSecured(
   place: &Url.Url,
   port: Int,
-  written: Str,
+  written: Bytes,
   held: &Limits,
   expires: Int,
   method: &Http.Method
@@ -253,7 +252,7 @@ fn overSecured(
   let opened = Tls.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return securedFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Tls.Secured{token: 0})
-  let outcome = Result.andThen(Tls.sendTextWithin(&connection, written, remaining(expires)),
+  let outcome = Result.andThen(Tls.sendWithin(&connection, &written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Tls.TlsError] {
       receiveSecured(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
@@ -274,7 +273,7 @@ fn overSecured(
 fn overPlain(
   place: &Url.Url,
   port: Int,
-  written: Str,
+  written: Bytes,
   held: &Limits,
   expires: Int,
   method: &Http.Method
@@ -282,7 +281,7 @@ fn overPlain(
   let opened = Net.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return plainFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Net.Connection{token: 0})
-  let outcome = Result.andThen(Net.sendTextWithin(&connection, written, remaining(expires)),
+  let outcome = Result.andThen(Net.sendWithin(&connection, &written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Net.NetError] {
       receivePlain(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
@@ -300,6 +299,42 @@ fn overPlain(
   }
 }
 
+/// What is known so far about the response being read: where its head ends
+/// (-1 before the blank line has arrived) and how its body is framed.
+type Reading = { headEnd: Int, framing: Option[Message.Framing] }
+
+/// Whether the response is complete after another piece arrived. The head is
+/// parsed once, when its blank line arrives; after that each piece costs a
+/// size comparison, or for a chunked body a look at the last bytes and one
+/// full decode when they end in a terminating chunk.
+fn gather(reading: &Reading, pieces: &Array[Bytes], size: Int, method: &Http.Method) -> (Reading, Bool) {
+  var known = *reading
+  if known.headEnd < 0 {
+    let joined = ByteSeq.join(pieces)
+    let split = joined.indexOf("\r\n\r\n".toBytes())
+    if split < 0 { return (known, false) }
+    known = Reading{headEnd: split + 4, framing: Message.framingOf(&joined.take(split + 4), method)}
+  }
+  let complete = match known.framing {
+    case None => false
+    case Some(Message.HeadOnly) => true
+    case Some(Message.Length(length)) => size - known.headEnd >= length
+    case Some(Message.UntilClose) => false
+    case Some(Message.Chunked) => {
+      let last = pieces[pieces.length() - 1]
+      let tail = if last.length() >= 5 || pieces.length() < 2 { last } else { pieces[pieces.length() - 2].concat(last) }
+      if !tail.endsWith("0\r\n\r\n".toBytes()) { false } else {
+        let body = ByteSeq.join(pieces).drop(known.headEnd)
+        match Message.decodeChunkedBytes(&body, body.length()) {
+          case Ok(_) => true
+          case Err(_) => false
+        }
+      }
+    }
+  }
+  (known, complete)
+}
+
 fn receiveSecured(
   connection: &Tls.Secured,
   limit: Int,
@@ -308,6 +343,7 @@ fn receiveSecured(
 ) -> Result[Received, Tls.TlsError] {
   var pieces: Array[Bytes] = []
   var size = 0
+  var reading = Reading{headEnd: -1, framing: None}
   var failure: Option[Tls.TlsError] = None
   var exceeded = false
   var going = true
@@ -325,7 +361,9 @@ fn receiveSecured(
           going = false
         } else {
           pieces = pieces.push(bytes)
-          if Message.responseComplete(&ByteSeq.join(&pieces), method) { going = false }
+          let (updated, complete) = gather(&reading, &pieces, size, method)
+          reading = updated
+          if complete { going = false }
         }
       } else {
         going = false
@@ -347,6 +385,7 @@ fn receivePlain(
 ) -> Result[Received, Net.NetError] {
   var pieces: Array[Bytes] = []
   var size = 0
+  var reading = Reading{headEnd: -1, framing: None}
   var failure: Option[Net.NetError] = None
   var exceeded = false
   var going = true
@@ -364,7 +403,9 @@ fn receivePlain(
           going = false
         } else {
           pieces = pieces.push(bytes)
-          if Message.responseComplete(&ByteSeq.join(&pieces), method) { going = false }
+          let (updated, complete) = gather(&reading, &pieces, size, method)
+          reading = updated
+          if complete { going = false }
         }
       } else {
         going = false
@@ -420,7 +461,8 @@ fn redirected(request: &Http.Request, answer: &Http.Response) -> Result[Http.Req
       method: methodAfter(&request.method, answer.status.code),
       target: destination,
       headers: if sameOrigin { request.headers } else { withoutCredentials(&request.headers) },
-      body: if keepsBody(answer.status.code) { request.body } else { "" }
+      body: if keepsBody(answer.status.code) { request.body } else { "" },
+      binaryBody: if keepsBody(answer.status.code) { request.binaryBody } else { None }
     }
   )
 }

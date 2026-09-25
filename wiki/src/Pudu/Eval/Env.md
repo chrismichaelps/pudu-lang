@@ -25,10 +25,19 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- A function literal's capture is **narrowed to what it can reach**. Module scope — every frame that
+  was on the stack when the program's declarations finished loading, recorded as `envModuleDepth` —
+  is kept whole and by reference, because a name in it may be looked up by a key no syntax spells and
+  because it is alive for the length of the program anyway. The frames a call pushed hold only names
+  somebody wrote, so the literal is given the ones [[Eval Capture]] says it mentions, collapsed into
+  one frame. The result is forced rather than left as a thunk: an unforced restriction holds the
+  frames it was taken from, which is exactly what it exists to drop, and the leak would be invisible
+  because the answer is correct either way.
+
 - The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
 
 - The environment also carries one runtime resource set allocated for the evaluation. Foreign
-  resources, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
+  resources, desktop, persistent audio, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
   child host threads retain the same set; a different program evaluated in the same host process
   receives a different set.
 
@@ -36,6 +45,9 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - An unwind carries what the transfer needs to find its owner. A break and a continue carry their optional label, so a loop can tell one addressed to it from one meant for a loop further out and re-raise the latter untouched; a break also carries the value its loop will produce, which is unit when none was written.
 - Lexical and captured frames are restored on both ordinary completion and control unwind. A `return`, `break`, or `continue` may cross any number of blocks without leaking their bindings into the construct that catches it; captured callbacks likewise restore the caller before forwarding an unwind.
+- Entering a captured closure replaces both its frames and `envModuleDepth`; leaving restores both.
+  Swapping only the frames makes a dependency function inherit the root module's boundary, so a
+  nested literal can retain an entire imported call stack instead of just the names it reaches.
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
@@ -70,12 +82,21 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Why not express frame restoration as `push; action; pop` in the evaluator monad? **A:** An unwind deliberately short-circuits monadic continuation, so the `pop` would never run and a block-local binding could change later dispatch. _Rationale:_ `withFrame` and `withCaptured` inspect the nested outcome and restore frames for both completion paths. _Rejected:_ cleanup in an ordinary bind continuation.
+- **Q:** Can a captured environment borrow `envModuleDepth` from its caller? **A:** No. The caller's
+  depth classifies a different frame stack. _Rationale:_ `Captured` transports the boundary with the
+  frames and `withCaptured` restores the caller's pair on both completion paths. _Rejected:_ frame-
+  only capture switching.
 - **Q:** Keep process-global resource tables? **A:** No. _Rationale:_ one evaluation's teardown could
   close another concurrently evaluated program's live resources. _Rejected:_ serializing all
   embedded evaluations behind one global lock.
 - **Q:** Store foreign ownership outside the environment? **A:** No. _Rationale:_ captured closures
   and child threads need the same claims, while independent evaluations need disjoint teardown.
   _Rejected:_ a global foreign-address registry.
+- **Q:** Reuse an integer desktop token across evaluations? **A:** No. _Rationale:_ each environment
+  owns a distinct [[Eval Desktop]] registry, so teardown and stale-token checks cannot affect another
+  program. _Rejected:_ a process-global window table.
+- **Q:** Share audio-stream tokens between evaluations? **A:** No. _Rationale:_ their native queues
+  and callback lifetime belong to one runtime scope just like windows and handles.
 - **Q:** Why introduce `updateExisting` alongside `update`?
   **A:** Updating a mutable binding previously required searching the frame hierarchy with `lookupName` to check existence and then searching again to write the new value; `updateExisting` performs the traversal and mutation in a single pass, returning a boolean indicating whether the binding was present.
 

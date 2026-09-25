@@ -1,0 +1,7 @@
+module InvalidRangeStep
+
+/// A range counts upward. A zero step would never advance, so it is refused
+/// where the method is called rather than becoming a loop that never ends.
+export fn main() -> Int {
+  (1..5).step(0).length()
+}

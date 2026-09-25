@@ -40,6 +40,23 @@ A close failure is included with the primary error rather than silently replacin
 local size limit is rejected before touching the connection. This is a byte budget, not a deadline;
 whole-query deadlines and aggregate row budgets remain separate work.
 
+## Opening has a time limit
+
+`Config.connectMillis` bounds opening a connection from dialling through the end of authentication:
+`connect` dials with `Net.connectWithin`, and every read until the server reports it is ready waits
+only for the time that remains. A host that drops packets and a server that accepts and then says
+nothing are each refused with `Connect("the database did not finish opening the connection within
+its time limit")`. The limit lives on the connection as a deadline that `connect` clears once the
+connection is ready, so a query that legitimately runs long is never cut short; bounding a query is
+the server's `statement_timeout`. `config` defaults the limit to `DEFAULT_CONNECT_MILLISECONDS`, ten
+seconds. Against a local server that accepted and stayed silent, a 400 ms limit refused the
+connection after 403 ms.
+
+- **Q:** Put the same deadline on every read? **A:** No. _Rationale:_ a report or a migration that
+  runs longer than any fixed limit is still correct, and cutting it off leaves work half done;
+  PostgreSQL's `statement_timeout` is where a query's bound belongs. _Rejected:_ a default query read
+  timeout.
+
 ### Resolved Grill Log
 
 - **Q:** Buffer an arbitrarily large advertised frame? **A:** No; reject from the header before

@@ -13,7 +13,9 @@ Decide which handler answers a request, and give that handler what routing produ
 ## Interface
 The routed request, the handler and middleware shapes, route constructors for each method, a router
 built from a list of them with a fallback, direct dispatch, and access to a captured parameter, a
-query parameter, a header, and the body.
+query parameter, a header, and the body — as text through `body` and as exact bytes through
+`bodyBytes`. `formOf` reads a multipart form from those bytes, so a binary file part is not lost to a
+text conversion.
 ## Governance and algorithm
 Routing needs no connection, so everything here is a value in and a value out and a program checks
 its routes by calling them. Routes are tried in the order they are written, first match wins, and a

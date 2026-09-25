@@ -1,92 +1,350 @@
 module Web.Routes
 
+import Std.Char as Chars
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Io as Io
 import Std.Option as Option
+import Std.Text as Text
+import Std.Url as Url
 import Constants as Constants
 import Seo as Seo
 import Service.Catalog as Catalog
+import Service.Documents as Documents
+import Service.Packages as Packages
+import Service.Playground.Admission as Admission
+import Site as Site
 import View.About as About
+import View.Docs as DocsView
+import View.Document as Document
 import View.Documentation as Documentation
 import View.Donation as Donation
+import View.Download as Download
 import View.Home as Home
+import View.Packages.Catalog as PackageCatalog
+import View.Packages.Discussion as PackageDiscussion
+import View.Packages.Project as PackageProject
+import View.Packages.Reference as PackageReference
+import View.Packages.Source as PackageSource
+import View.Packages.Suggest as PackageSuggest
+import View.Releases as ReleasesView
+import Web.Playground as PlaygroundWeb
 
-export fn routes(siteUrl: Str, catalog: &Catalog.Catalog) -> Route.Router {
-  Route.withFallback(&Route.routing(&[
-        Route.get("/", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, Home.home(siteUrl, catalog))
-          }),
-        Route.get("/search", fn(asked: Route.Request) -> Http.Response {
-            Reply.page(200, Home.results(siteUrl, catalog, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
-          }),
-        Route.get("/modules", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, Documentation.modules(siteUrl, catalog))
-          }),
-        Route.get("/module/:module", fn(asked: Route.Request) -> Http.Response {
-            let name = Option.unwrapOr(Route.param(&asked, "module"), "")
-            match Documentation.modulePage(siteUrl, catalog, name) {
-              case Some(page) => Reply.page(200, page)
-              case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
-            }
-          }),
-        Route.get("/docs/:module/:kind/:name", fn(asked: Route.Request) -> Http.Response {
-            let moduleName = Option.unwrapOr(Route.param(&asked, "module"), "")
-            let kind = Option.unwrapOr(Route.param(&asked, "kind"), "")
-            let name = Option.unwrapOr(Route.param(&asked, "name"), "")
-            let entries = Catalog.findAll(catalog, moduleName, kind, name)
-            if entries.length() == 0 {
-              Reply.page(404, Documentation.missing(siteUrl, asked.path))
-            } else {
-              Reply.page(200, Documentation.symbols(siteUrl, &entries))
-            }
-          }),
-        Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, Documentation.guide(siteUrl))
-          }),
-        Route.get("/about", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, About.page(siteUrl))
-          }),
-        Route.get("/donate", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, Donation.page(siteUrl))
-          }),
-        Route.get("/health", fn(_request: Route.Request) -> Http.Response { noIndex(Reply.text(200, "ok")) }),
-        Route.get("/robots.txt", fn(_request: Route.Request) -> Http.Response {
-            cached(Reply.text(200, Seo.robots(siteUrl)), "text/plain; charset=utf-8")
-          }),
-        Route.get("/sitemap.xml", fn(_request: Route.Request) -> Http.Response {
-            cached(Reply.text(200, Seo.sitemap(siteUrl, catalog)), "application/xml; charset=utf-8")
-          }),
-        Route.get("/assets/site.css", fn(_request: Route.Request) -> Http.Response {
-            stylesheet()
-          }),
-        Route.get("/assets/pudu-lang-full-logo.png", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/assets/pudu-lang-full-logo.png", "image/png")
-          }),
-        Route.get("/assets/pudu-lang-short.png", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/assets/pudu-lang-short.png", "image/png")
-          }),
-        Route.get("/fonts/Nunito-Book.ttf", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/fonts/Nunito-Book.ttf", "font/ttf")
-          }),
-        Route.get("/fonts/Nunito-Bold.ttf", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/fonts/Nunito-Bold.ttf", "font/ttf")
-          }),
-        Route.get("/fonts/Nunito-BookItalic.ttf", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/fonts/Nunito-BookItalic.ttf", "font/ttf")
-          }),
-        Route.get("/fonts/Nunito-BoldItalic.ttf", fn(_request: Route.Request) -> Http.Response {
-            binary("website/public/fonts/Nunito-BoldItalic.ttf", "font/ttf")
-          })
-      ]), fn(asked: Route.Request) -> Http.Response {
+/// Every route of the complete site.
+///
+/// The playground's routes are its own module's, served here with the peer
+/// of each connection as the reader: this router is reached directly or
+/// through a proxy this program cannot vouch for, so no forwarded address is
+/// believed.
+export fn routes(site: &Site.Site) -> Route.Router {
+  let siteUrl = site.siteUrl
+  let catalog = &site.catalog
+  let search = &site.search
+  let docs = &site.docs
+  let release = &site.release
+  let documents = &site.documents
+  let playground = PlaygroundWeb.Serving {
+    siteUrl: siteUrl,
+    playground: site.playground,
+    reader: Admission.peerReader,
+    gates: site.gates,
+    missing: fn(path: Str) -> Http.Response { Reply.page(404, Documentation.missing(siteUrl, path)) }
+  }
+  let packages = &site.packages
+  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([
+          Route.get("/", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, Home.home(siteUrl, catalog, release, packages))
+            }),
+          Route.get("/search", fn(asked: Route.Request) -> Http.Response {
+              Reply.page(200, Home.results(siteUrl, search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+            }),
+          Route.get("/modules", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, Documentation.modules(siteUrl, catalog))
+            }),
+          Route.get("/module/:module", fn(asked: Route.Request) -> Http.Response {
+              let name = Option.unwrapOr(Route.param(&asked, "module"), "")
+              match Documentation.modulePage(siteUrl, catalog, name) {
+                case Some(page) => Reply.page(200, page)
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/docs/:module/:kind/:name", fn(asked: Route.Request) -> Http.Response {
+              let moduleName = Option.unwrapOr(Route.param(&asked, "module"), "")
+              let kind = Option.unwrapOr(Route.param(&asked, "kind"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "name"), "")
+              let entries = Catalog.findAll(catalog, moduleName, kind, name)
+              if entries.length() == 0 {
+                Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              } else {
+                Reply.page(200, Documentation.symbols(siteUrl, &entries))
+              }
+            }),
+          Route.get("/docs", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
+            }),
+          Route.get("/docs/:page", fn(asked: Route.Request) -> Http.Response {
+              let slug = Option.unwrapOr(Route.param(&asked, "page"), "")
+              match DocsView.page(siteUrl, docs, slug, catalog.languageVersion) {
+                case Some(page) => Reply.page(200, page)
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          // The guide became the documentation. The old address still answers,
+          // with the documentation's own canonical address, so a link to it keeps
+          // working and a crawler is told which address to keep.
+          Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
+            }),
+          Route.get("/download", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, Download.page(siteUrl, release))
+            }),
+          Route.get("/releases", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, ReleasesView.page(siteUrl, release))
+            }),
+          Route.get("/packages", fn(_request: Route.Request) -> Http.Response {
+              packageCatalog(siteUrl, packages, "", 1)
+            }),
+          Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
+              packageCatalogFiltered(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+            }),
+          Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
+              PackageSuggest.reply(packages, &catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+            }),
+          Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
+              let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
+              if page < 2 || page > PackageCatalog.pages(packages.projects.length()) { Reply.page(404, Documentation.missing(siteUrl, asked.path)) } else { packageCatalog(siteUrl, packages, "", page) }
+            }),
+          Route.get("/packages/avatars/:login", fn(asked: Route.Request) -> Http.Response {
+              let login = Option.unwrapOr(Route.param(&asked, "login"), "")
+              match Packages.avatarBytes(packages, login) {
+                case Some(bytes) => {
+                  let mediaType = if login.endsWith(".jpg") { "image/jpeg" } else if login.endsWith(".webp") { "image/webp" } else if login.endsWith(".gif") { "image/gif" } else { "image/png" }
+                  cached(Reply.bytes(200, mediaType, &bytes), mediaType)
+                }
+                case None => Reply.text(404, "asset not found")
+              }
+            }),
+          Route.get("/conduct", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "conduct", &asked)
+            }),
+          Route.get("/contributing", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "contributing", &asked)
+            }),
+          Route.get("/security", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "security", &asked)
+            }),
+          Route.get("/community", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "community", &asked)
+            }),
+          Route.get("/privacy", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "privacy", &asked)
+            }),
+          Route.get("/brand", fn(asked: Route.Request) -> Http.Response {
+              published(siteUrl, documents, "brand", &asked)
+            }),
+          Route.get("/about", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, About.page(siteUrl))
+            }),
+          Route.get("/donate", fn(_request: Route.Request) -> Http.Response {
+              Reply.page(200, Donation.page(siteUrl))
+            }),
+          Route.get("/health", fn(_request: Route.Request) -> Http.Response { noIndex(Reply.text(200, "ok")) }),
+          Route.get("/robots.txt", fn(_request: Route.Request) -> Http.Response {
+              cached(Reply.text(200, Seo.robots(siteUrl)), "text/plain; charset=utf-8")
+            }),
+          Route.get("/sitemap.xml", fn(_request: Route.Request) -> Http.Response {
+              cached(Reply.text(200, Seo.sitemap(siteUrl, catalog, docs, &site.playground.examples, packages)), "application/xml; charset=utf-8")
+            }),
+          Route.get("/assets/site.css", fn(_request: Route.Request) -> Http.Response {
+              asset(Constants.STYLESHEET_PATH, "text/css; charset=utf-8")
+            }),
+          Route.get("/assets/playground/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.PLAYGROUND_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/docs/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.DOCS_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/download/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.DOWNLOAD_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/pudu/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.PUDU_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/packages/files/:icon", fn(asked: Route.Request) -> Http.Response {
+              let icon = Option.unwrapOr(Route.param(&asked, "icon"), "")
+              if !["pudu.png", "markdown.svg", "toml.svg", "json.svg", "yaml.svg", "js.svg", "css.svg", "html.svg", "text.svg"].contains(icon) { return Reply.text(404, "asset not found") }
+              binary("website/public/assets/packages/files/" + icon, if icon.endsWith(".png") { "image/png" } else { "image/svg+xml" })
+            }),
+          Route.get("/assets/packages/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.PACKAGES_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
+          Route.get("/assets/pudu-lang-full-logo.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-full-logo.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-short.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-short.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-logo.webp", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-logo.webp", "image/webp")
+            }),
+          Route.get("/assets/pudu-lang-mark.webp", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-mark.webp", "image/webp")
+            }),
+          Route.get("/favicon.ico", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/favicon.ico", "image/x-icon")
+            }),
+          Route.get("/site.webmanifest", fn(_request: Route.Request) -> Http.Response {
+              asset("website/public/site.webmanifest", "application/manifest+json")
+            }),
+          Route.get("/assets/pudu-lang-icon-48.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-48.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-96.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-96.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-192.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-192.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-icon-512.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-icon-512.png", "image/png")
+            }),
+          Route.get("/assets/apple-touch-icon.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/apple-touch-icon.png", "image/png")
+            }),
+          Route.get("/assets/pudu-lang-social.png", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/assets/pudu-lang-social.png", "image/png")
+            }),
+          Route.get("/fonts/Nunito-Book.woff2", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/fonts/Nunito-Book.woff2", "font/woff2")
+            }),
+          Route.get("/fonts/Nunito-Bold.woff2", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/fonts/Nunito-Bold.woff2", "font/woff2")
+            }),
+          Route.get("/fonts/Nunito-BookItalic.woff2", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/fonts/Nunito-BookItalic.woff2", "font/woff2")
+            }),
+          Route.get("/fonts/Nunito-BoldItalic.woff2", fn(_request: Route.Request) -> Http.Response {
+              binary("website/public/fonts/Nunito-BoldItalic.woff2", "font/woff2")
+            }),
+          Route.get("/:handle/:project/source/*file", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "project"), "")
+              let file = Url.decodeComponent(Option.unwrapOr(Route.param(&asked, "file"), ""))
+              match Packages.find(packages, handle, name) {
+                case Some(project) => match PackageSource.page(siteUrl, packages, &project, file) {
+                  case Some(page) => Reply.page(200, page)
+                  case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+                }
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/:project/source", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "project"), "")
+              match Packages.find(packages, handle, name) {
+                case Some(project) => match PackageSource.page(siteUrl, packages, &project, "") {
+                  case Some(page) => Reply.page(200, page)
+                  case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+                }
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/:project/docs", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "project"), "")
+              match Packages.find(packages, handle, name) {
+                case Some(project) => Reply.page(200, PackageReference.page(siteUrl, packages, &project))
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/:project/releases", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "project"), "")
+              match Packages.find(packages, handle, name) {
+                case Some(project) => Reply.page(200, PackageProject.releases(siteUrl, packages, &project))
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/:project/tickets/page/:page", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+            }),
+          Route.get("/:handle/:project/tickets/:number", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+            }),
+          Route.get("/:handle/:project/tickets", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "tickets", "", 1)
+            }),
+          Route.get("/:handle/:project/contributions/page/:page", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+            }),
+          Route.get("/:handle/:project/contributions/:number", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+            }),
+          Route.get("/:handle/:project/contributions", fn(asked: Route.Request) -> Http.Response {
+              discussion(siteUrl, packages, &asked, "contributions", "", 1)
+            }),
+          Route.get("/:handle/:project", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let name = Option.unwrapOr(Route.param(&asked, "project"), "")
+              match Packages.find(packages, handle, name) {
+                case Some(project) => Reply.page(200, PackageProject.overview(siteUrl, packages, &project))
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle/page/:page", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
+              if page < 2 { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+              match PackageCatalog.profilePage(siteUrl, packages, handle, page) {
+                case Some(shown) => Reply.page(200, shown)
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            }),
+          Route.get("/:handle", fn(asked: Route.Request) -> Http.Response {
+              let handle = Option.unwrapOr(Route.param(&asked, "handle"), "")
+              match PackageCatalog.profile(siteUrl, packages, handle) {
+                case Some(page) => Reply.page(200, page)
+                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+              }
+            })
+        ])), fn(asked: Route.Request) -> Http.Response {
       Reply.page(404, Documentation.missing(siteUrl, asked.path))
     })
 }
 
+fn pageOf(raw: Str) -> Int { Option.unwrapOr(Text.wholeOf(raw), 0) }
+
+fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int) -> Http.Response {
+  if page < 1 || page > PackageCatalog.resultPages(packages, query) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
+  Reply.page(200, PackageCatalog.pageNumber(siteUrl, packages, query, page))
+}
+
+fn packageCatalogFiltered(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int, filter: Str) -> Http.Response {
+  if page < 1 || page > PackageCatalog.resultPagesFiltered(packages, query, filter) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
+  Reply.page(200, PackageCatalog.pageNumberFiltered(siteUrl, packages, query, page, filter))
+}
+
+fn discussion(siteUrl: Str, packages: &Packages.Packages, asked: &Route.Request, kind: Str, number: Str, page: Int) -> Http.Response {
+  let handle = Option.unwrapOr(Route.param(asked, "handle"), "")
+  let name = Option.unwrapOr(Route.param(asked, "project"), "")
+  let Some(project) = Packages.find(packages, handle, name) else { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+  let records = if kind == "tickets" { project.tickets } else { project.contributions }
+  if number.isEmpty() {
+    if page < 1 || page > PackageDiscussion.pages(records.length()) || (asked.path.contains("/page/") && page < 2) { return Reply.page(404, Documentation.missing(siteUrl, asked.path)) }
+    return Reply.page(200, PackageDiscussion.listingPage(siteUrl, packages, &project, kind, page))
+  }
+  match Packages.discussion(&records, number) {
+    case Some(record) => Reply.page(200, PackageDiscussion.detail(siteUrl, packages, &project, kind, &record))
+    case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+  }
+}
+
+/// A request for a page, as a platform or a test asks for one: a `GET` with no
+/// headers and nothing in its body.
 export fn requestFor(target: Str) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: Http.Get, target: target, headers: [], body: ""},
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
     path: Route.pathOf(target),
     params: mapOf([]),
     query: Route.queryOf(target),
@@ -94,8 +352,22 @@ export fn requestFor(target: Str) -> Route.Request {
   }
 }
 
-export fn render(siteUrl: Str, catalog: &Catalog.Catalog, target: Str) -> Http.Response {
-  Route.dispatch(&routes(siteUrl, catalog), requestFor(target))
+/// The site's answer to a request for a page.
+export fn render(site: &Site.Site, target: Str) -> Http.Response {
+  answer(site, requestFor(target))
+}
+
+/// The site's answer to any request.
+export fn answer(site: &Site.Site, request: Route.Request) -> Http.Response {
+  Route.dispatch(&routes(site), request)
+}
+
+/// A document the repository keeps, or the missing page when there is none.
+fn published(siteUrl: Str, documents: &Documents.Documents, slug: Str, asked: &Route.Request) -> Http.Response {
+  match Document.page(siteUrl, documents, slug) {
+    case Some(page) => Reply.page(200, page)
+    case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+  }
 }
 
 fn binary(path: Str, mediaType: Str) -> Http.Response {
@@ -105,9 +377,41 @@ fn binary(path: Str, mediaType: Str) -> Http.Response {
   }
 }
 
-fn stylesheet() -> Http.Response {
-  match Io.read(Constants.STYLESHEET_PATH) {
-    case Ok(content) => cached(Reply.text(200, content), "text/css; charset=utf-8")
+/// One of the script modules in `directory`, by its path below it.
+///
+/// Only lower-case names of letters and dashes, in folders named the same way
+/// and ending in `.js`, are served: nothing else in the folder and nothing
+/// outside it. The modules import one another by relative address, which
+/// carries no version, so each is checked again on every load rather than kept
+/// for an hour, and a deployment that changes one is seen at once.
+fn scriptModule(directory: Str, path: Str) -> Http.Response {
+  if !isModulePath(path) { return Reply.text(404, "asset not found") }
+  match Io.read(directory + "/" + path) {
+    case Ok(content) => {
+      Http.Response {
+        ..Reply.text(200, content),
+        headers: [("content-type", "text/javascript; charset=utf-8"), ("cache-control", "no-cache")]
+      }
+    }
+    case Err(_) => Reply.text(404, "asset not found")
+  }
+}
+
+/// Whether a path names a script module the way the folder names them.
+export fn isModulePath(path: Str) -> Bool {
+  if !path.endsWith(".js") { return false }
+  for segment in path.take(path.length() - ".js".length()).split("/") {
+    if segment.isEmpty() { return false }
+    for character in segment.chars() {
+      if !(Chars.isLower(character) || character == '-') { return false }
+    }
+  }
+  true
+}
+
+fn asset(path: Str, mediaType: Str) -> Http.Response {
+  match Io.read(path) {
+    case Ok(content) => cached(Reply.text(200, content), mediaType)
     case Err(_) => Reply.text(404, "asset not found")
   }
 }

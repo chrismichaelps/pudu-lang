@@ -2,66 +2,89 @@
   <img src="public/pudu-lang-full-logo.png" alt="Pudu" width="800">
 </p>
 
+<p align="center">
+  <a href="https://website-ivory-one-hyy8j9ljag.vercel.app/">Website</a> |
+  <a href="https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index">Reference</a> |
+  <a href="https://github.com/chrismichaelps/pudu-lang/wiki/Standard-Library">Standard library</a> |
+  <a href="examples">Examples</a> |
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
 # Pudu
 
-Pudu is a statically typed, expression-oriented language. Effects return `Result` values, absence
-is explicit, pattern matching is exhaustive, and unsafe code sits inside named capability regions.
-The standard library is ordinary Pudu source checked by the same compiler.
+Pudu is a statically typed, expression-oriented language for services, tools, and native
+applications. Failure is a value, absence is explicit, and every `match` is exhaustive.
 
-Pudu is pre-release. The compiler checks, interprets, formats, documents, serves editor requests,
-and runs an interactive session. A project may depend on other directories of Pudu code by path;
-there is no registry, and nothing reaches the network. `pudu build` writes one executable holding
-the program, every module it reached, and the compiler itself, so a deployment is one file to copy
-— the program is still interpreted when it starts. Native code generation and a stable 1.0
-compatibility promise are not implemented yet.
+This repository holds the compiler, the standard library, and the tooling: one `pudu` executable
+that checks, runs, tests, formats, lints, documents, and bundles programs, and serves editors over
+the Language Server Protocol.
 
-```bash
-pudu build src/Main.pudu -o service
-./service          # runs anywhere the compiler runs, with nothing installed
+```pudu
+module Shapes
+
+import Std.Io as Io
+
+type Shape
+  = Circle(Float)
+  | Rectangle(Float, Float)
+
+fn area(shape: Shape) -> Float {
+  match shape {
+    case Circle(radius) => 3.14159 * radius * radius
+    case Rectangle(width, height) => width * height
+  }
+}
+
+export fn main() -> Result[(), Str] {
+  for shape in [Circle(1.0), Rectangle(3.0, 4.0)] {
+    Io.writeLine(show(area(shape))) ?
+  }
+  Ok(())
+}
 ```
 
-Start with the [documentation website](https://website-ivory-one-hyy8j9ljag.vercel.app/) or the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are
-[language](https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index),
-[standard library](https://github.com/chrismichaelps/pudu-lang/wiki/Standard-Library),
-[tooling](https://github.com/chrismichaelps/pudu-lang/wiki/CLI-REPL-And-Documentation), and
-[status](https://github.com/chrismichaelps/pudu-lang/wiki/Implementation-Status). The versioned
-[`wiki/`](wiki) directory remains the engineering specification for grammar, semantics,
-architecture, module mirrors, and delivery history.
+> **Pudu is pre-release (0.1.1).** Programs are interpreted, dependencies are GitHub packages or
+> local directories, and the language may change before 1.0. Open work is tracked in
+> [RELEASE-READINESS.md](wiki/architecture/RELEASE-READINESS.md).
 
-## Build
+## Installing a pre-release
 
-Pudu requires GHC 9.10 or later and Cabal 3.12 or later. CI uses GHC 9.14.1.
+Pre-release archives for Linux x86-64 and macOS on Apple silicon are attached to each
+[release](https://github.com/chrismichaelps/pudu-lang/releases). Each archive holds `bin/pudu` and
+the standard library beside it:
 
 ```bash
-cabal build all
-cabal test all --test-show-details=direct
-cabal run pudu -- check path/to/Main.pudu
+tar -xzf pudu-0.1.1-darwin-arm64.tar.gz
+export PATH="$PWD/pudu-0.1.1-darwin-arm64/bin:$PATH"
+pudu version
 ```
 
-## Install
+## Building from source
+
+Building requires GHC 9.10 or later and Cabal 3.12 or later.
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-scripts/refresh-install.sh
+git clone https://github.com/chrismichaelps/pudu-lang.git
+cd pudu-lang
+cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
 ```
 
-The script builds, installs to `$HOME/.local/bin` (pass another directory as its
-argument), and then proves that exact file with `pudu check`, a REPL probe, and a
-real LSP session. It also lists every `pudu` on `PATH` and stops if an older copy
-comes first, because a second copy is what makes a fix land in the tree and never
-reach the editor — every development build reports the same version, so nothing
-else notices.
+Then create and run a project:
 
-Run it again after any change to the compiler, and restart the editor's language
-server so it picks up the new executable.
+```bash
+pudu init hello
+cd hello
+pudu run src/Main.pudu
+pudu test
+```
 
-Development builds currently share version `0.1.0.0`, so the checks above prove the installed
-binary by behavior instead of trusting the version string.
+The installed executable carries its standard library. Editor support is `pudu lsp`, with a VS Code
+extension in [`editors/vscode`](editors/vscode). macOS and Linux x86-64 are tested; Windows is not.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Public behavior changes as one unit: specification,
-implementation, diagnostics, examples, and tests must agree.
+See [CONTRIBUTING.md](CONTRIBUTING.md). The engineering specification (grammar, semantics, and
+design decisions) lives in [`wiki/`](wiki).
 
 ## License
 

@@ -1,0 +1,192 @@
+module UsesHtmlIncremental
+
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as Buffer
+import Std.Html as Html
+import Std.Html.Ssr as Ssr
+import Std.Html.Stream as Stream
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn textOf(bytes: &Bytes) -> Str { Result.unwrapOr(ByteSeq.toText(bytes), "") }
+
+fn allFit(chunks: &Array[Bytes], maximum: Int) -> Bool {
+  for chunk in chunks {
+    if chunk.length() == 0 || chunk.length() > maximum { return false }
+  }
+  true
+}
+
+fn produced(calls: &Sync.Counter, value: Str) -> Result[Html.Html, Str] {
+  let _counted = Sync.increment(calls, 1)
+  Ok(Html.text(value))
+}
+
+fn refused(calls: &Sync.Counter, reason: Str) -> Result[Html.Html, Str] {
+  let _counted = Sync.increment(calls, 1)
+  Err(reason)
+}
+
+export fn main() -> Int {
+  var held = 0
+  let calls = Sync.counter(0)
+  let plan = Ssr.prepareBytes(&[
+      Ssr.Fixed(Html.trusted("head")),
+      Ssr.Slot("body"),
+      Ssr.Fixed(Html.trusted("<footer>end</footer>")),
+      Ssr.Slot("body")
+    ])
+  let producers: Map[Str, Ssr.Producer] = mapOf([
+      ("body", fn() -> Result[Html.Html, Str] { produced(&calls, "body-content") })
+    ])
+  let started = Ssr.beginIncremental(&plan, &producers, 8)
+  if Result.isOk(&started) { held = held + 1 }
+
+  if let Ok(cursor) = started {
+    match Ssr.flushIncremental(&cursor) {
+      case Ok(Ssr.IncrementalOutput(first, afterFirst)) => {
+        if textOf(&first) == "head" && Result.unwrapOr(Sync.count(&calls), -1) == 0 {
+          held = held + 1
+        }
+        match Ssr.flushIncremental(&afterFirst) {
+          case Ok(Ssr.IncrementalOutput(second, afterSecond)) => {
+            if second.length() == 8 && Result.unwrapOr(Sync.count(&calls), -1) == 1 {
+              held = held + 1
+            }
+            let rest = Ssr.finishIncremental(&afterSecond)
+            if Result.isOk(&rest) { held = held + 1 }
+            if let Ok(remaining) = rest {
+              if allFit(&remaining, 8) { held = held + 1 }
+              let incremental = ByteSeq.join(&[first, second, ByteSeq.join(&remaining)])
+              let buffered = Ssr.finishBytes(
+                  &plan,
+                  &mapOf([("body", Html.text("body-content"))])
+              )
+              if let Ok(whole) = buffered {
+                if incremental == whole.body { held = held + 1 }
+              }
+              if Result.unwrapOr(Sync.count(&calls), -1) == 1 { held = held + 1 }
+            }
+          }
+          case _ => {}
+        }
+      }
+      case _ => {}
+    }
+  }
+
+  if let Err(Ssr.InvalidIncrementalLimit(0)) = Ssr.beginIncremental(&plan, &producers, 0) {
+    held = held + 1
+  }
+  if let Err(Ssr.InvalidIncrementalLimit(-1))
+    = Ssr.beginIncremental(&plan, &producers, 0 - 1) {
+    held = held + 1
+  }
+
+  let missingPlan = Ssr.prepareBytes(&[Ssr.Fixed(Html.trusted("head")), Ssr.Slot("missing")])
+  let noProducers: Map[Str, Ssr.Producer] = mapOf([])
+  if let Ok(missingCursor) = Ssr.beginIncremental(&missingPlan, &noProducers, 8) {
+    if let Ok(Ssr.IncrementalOutput(first, afterFirst)) = Ssr.flushIncremental(&missingCursor) {
+      if textOf(&first) == "head" { held = held + 1 }
+      if let Err(Ssr.MissingProducer("missing")) = Ssr.flushIncremental(&afterFirst) {
+        held = held + 1
+      }
+    }
+  }
+
+  let cancelledCalls = Sync.counter(0)
+  let cancelledProducers: Map[Str, Ssr.Producer] = mapOf([
+      ("missing", fn() -> Result[Html.Html, Str] { produced(&cancelledCalls, "late") })
+    ])
+  if let Ok(cancelCursor) = Ssr.beginIncremental(&missingPlan, &cancelledProducers, 8) {
+    if let Ok(Ssr.IncrementalOutput(_, afterFirst)) = Ssr.flushIncremental(&cancelCursor) {
+      let cancelled = Ssr.cancelIncremental(&afterFirst)
+      if let Err(Ssr.StreamCancelled) = Ssr.finishIncremental(&cancelled) {
+        held = held + 1
+      }
+      if Result.unwrapOr(Sync.count(&cancelledCalls), -1) == 0 { held = held + 1 }
+    }
+  }
+
+  let failureCalls = Sync.counter(0)
+  let failedProducers: Map[Str, Ssr.Producer] = mapOf([
+      ("missing", fn() -> Result[Html.Html, Str] { refused(&failureCalls, "database") })
+    ])
+  if let Ok(failedCursor) = Ssr.beginIncremental(&missingPlan, &failedProducers, 8) {
+    if let Ok(Ssr.IncrementalOutput(_, afterFirst)) = Ssr.flushIncremental(&failedCursor) {
+      if let Err(Ssr.ProducerFailed("missing", "database"))
+        = Ssr.flushIncremental(&afterFirst) {
+        held = held + 1
+      }
+    }
+  }
+
+  let invalidPlan = Ssr.EncodedPlan {
+    bytes: Buffer.CompactBytePlan {
+      parts: [Buffer.StaticBlock("x".toBytes(), 2)],
+      totalStaticBytes: 2
+    }
+  }
+  if let Ok(invalidCursor) = Ssr.beginIncremental(&invalidPlan, &noProducers, 8) {
+    if let Err(Ssr.InvalidIncrementalStatic(2, 1)) = Ssr.flushIncremental(&invalidCursor) {
+      held = held + 1
+    }
+  }
+  if let Ok(validCursor) = Ssr.beginIncremental(&plan, &producers, 8) {
+    let invalidCursor = Ssr.IncrementalCursor {
+      plan: validCursor.plan,
+      producers: validCursor.producers,
+      cached: validCursor.cached,
+      partIndex: 0,
+      partOffset: 999,
+      maxBytes: validCursor.maxBytes,
+      cancelled: false
+    }
+    if let Err(Ssr.InvalidIncrementalState(0, 999)) = Ssr.flushIncremental(&invalidCursor) {
+      held = held + 1
+    }
+  }
+  let emptyPlan = Ssr.prepareBytes(&[])
+  if let Ok(emptyCursor) = Ssr.beginIncremental(&emptyPlan, &noProducers, 8) {
+    if let Ok(Ssr.IncrementalFinished) = Ssr.flushIncremental(&emptyCursor) {
+      held = held + 1
+    }
+  }
+
+  let deferredCalls = Sync.counter(0)
+  let deferred = Stream.defer(
+    "Orders4",
+      &Html.text("loading <"),
+    fn() -> Result[Html.Html, Str] { produced(&deferredCalls, "done <") }
+  )
+  if Result.isOk(&deferred) { held = held + 1 }
+  if let Ok(value) = deferred {
+    if textOf(&Stream.deferredInitial(&value)).contains("loading &lt;")
+      && Result.unwrapOr(Sync.count(&deferredCalls), -1) == 0 {
+      held = held + 1
+    }
+    if let Ok(resolved) = Stream.resolveDeferred(&value) {
+      if textOf(&resolved).contains("done &lt;")
+        && Result.unwrapOr(Sync.count(&deferredCalls), -1) == 1 {
+        held = held + 1
+      }
+    }
+  }
+  let deferredFailure = Stream.defer(
+    "Orders5",
+      &Html.text("loading"),
+    fn() -> Result[Html.Html, Str] { Err("late") }
+  )
+  if let Ok(value) = deferredFailure {
+    if Stream.resolveDeferred(&value) == Err("late") { held = held + 1 }
+  }
+  if Result.isErr(&Stream.defer(
+      "bad-id",
+        &Html.text("loading"),
+      fn() -> Result[Html.Html, Str] { Ok(Html.text("never")) }
+    )) {
+    held = held + 1
+  }
+
+  held
+}

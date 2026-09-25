@@ -52,7 +52,7 @@ export type Logger = {
   printer: Out.Printer
 }
 
-// -- Reading a value back out of `show` --------------------------------------
+// Reading a value back out of `show`
 
 /// Text as `show` would have rendered it, with the quotes it adds taken off.
 ///
@@ -69,30 +69,36 @@ fn unshown(value: Str) -> Str {
 }
 
 /// Text with the source escapes produced by `show` read back as characters.
+///
+/// Text with no backslash is answered as it arrived. Otherwise the characters
+/// are walked once and the pieces joined once; appending each character to the
+/// text built so far copied that text every time. A backslash that ends the
+/// text, or one before a character `show` never escapes, is kept as written.
 fn unescapeShown(value: Str) -> Str {
-  var out = ""
-  var index = 0
-  while index < value.length() {
-    let character = value.charAt(index)
-    if character != '\\' || index + 1 >= value.length() {
-      out = out + character.toText()
-      index = index + 1
+  if !value.contains("\\") { return value }
+  var pieces: Array[Str] = []
+  var pending = false
+  for character in value.chars() {
+    if pending {
+      pieces = pieces.push(match character {
+          case 'n' => "\n"
+          case 't' => "\t"
+          case '"' => "\""
+          case '\\' => "\\"
+          case _ => "\\" + character.toText()
+        })
+      pending = false
+    } else if character == '\\' {
+      pending = true
     } else {
-      let escapedValue = value.charAt(index + 1)
-      out = out + match escapedValue {
-        case 'n' => "\n"
-        case 't' => "\t"
-        case '"' => "\""
-        case '\\' => "\\"
-        case _ => "\\" + escapedValue.toText()
-      }
-      index = index + 2
+      pieces = pieces.push(character.toText())
     }
   }
-  out
+  if pending { pieces = pieces.push("\\") }
+  pieces.join("")
 }
 
-// -- Building a logger -------------------------------------------------------
+// Building a logger
 
 /// A logger to the output stream, keeping everything from `Info` up.
 ///
@@ -178,7 +184,7 @@ export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
   value.carrying(key, unshown(show(held)))
 }
 
-// -- Reading a logger back ---------------------------------------------------
+// Reading a logger back
 
 /// The level a logger keeps from.
 export fn leastOf(value: &Logger) -> Level { value.least }
@@ -243,7 +249,7 @@ export fn levelFrom(name: Str) -> Option[Level] {
   }
 }
 
-// -- Formats -----------------------------------------------------------------
+// Formats
 
 /// A field's value written so the pair it belongs to can be read back.
 ///
@@ -378,7 +384,7 @@ fn member(key: Str, value: Str) -> Str {
   "\"" + escaped(key) + "\":\"" + escaped(value) + "\""
 }
 
-// -- Making a line -----------------------------------------------------------
+// Making a line
 
 /// The line a logger would make, before anything writes it.
 ///
@@ -410,7 +416,7 @@ export fn stamped(value: &Logger, moment: Str, level: Level, message: Str) -> St
   (value.format)(lineOf(value, moment, level, message))
 }
 
-// -- Writing a line ----------------------------------------------------------
+// Writing a line
 
 /// Write a line, or nothing when the level is below what the logger keeps.
 ///

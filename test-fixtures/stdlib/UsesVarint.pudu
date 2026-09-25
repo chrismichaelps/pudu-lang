@@ -2,12 +2,6 @@ module UsesVarint
 
 import Std.Varint as Varint
 
-fn assert(cond: Bool, held: &mut Int) {
-  if cond {
-      *held = *held + 1
-  }
-}
-
 fn main() -> Int {
   var held = 0
 

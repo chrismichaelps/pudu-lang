@@ -1,0 +1,34 @@
+module View.Pudu
+
+import Std.Html.Build as H
+
+/// The pudu wanders the edge: the home banner.
+export const ROAM: Str = "roam"
+/// The pudu is lost and hides from the pointer: the missing page.
+export const SHY: Str = "shy"
+/// The pudu asks, and cheers at its target: the donation page.
+export const ASK: Str = "ask"
+
+/// The script that draws the pudu and performs the stage's mode.
+const SCRIPT_PATH: Str = "/assets/pudu/main.js?v=2"
+
+/// `banner` with a pudu behind it. The stage precedes the banner one layer
+/// below it, so the opaque banner covers whatever of the pudu is under its
+/// top edge. A `raised` host adds the room a page banner lacks above it.
+export fn around(mode: Str, raised: Bool, banner: H.Node) -> H.Node {
+  host(mode, raised, "", banner)
+}
+
+/// `around`, with the element whose hover and focus the `ASK` pudu answers.
+export fn asking(target: Str, banner: H.Node) -> H.Node {
+  host(ASK, true, target, banner)
+}
+
+fn host(mode: Str, raised: Bool, target: Str, banner: H.Node) -> H.Node {
+  let stage = H.div().class("pudu-stage").at("data-pudu", mode).at("aria-hidden", "true")
+  H.div().class(if raised { "pudu-host pudu-host-raised" } else { "pudu-host" }).holding([
+      if target.isEmpty() { stage } else { stage.at("data-pudu-target", target) },
+      banner,
+      H.script().kind("module").src(SCRIPT_PATH)
+    ])
+}

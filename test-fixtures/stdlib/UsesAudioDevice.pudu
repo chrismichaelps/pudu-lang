@@ -1,0 +1,106 @@
+module UsesAudioDevice
+
+import Std.Audio as Audio
+import Std.Audio.Device as Device
+import Std.Bytes as Bytes
+
+export fn main() -> Int {
+  var checked = 0
+  if let Err(Device.InvalidFramesPerBuffer(15)) = Device.plan(15, 3, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidFramesPerBuffer(4097)) = Device.plan(4097, 3, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidBufferCount(1)) = Device.plan(256, 1, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidBufferCount(9)) = Device.plan(256, 9, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidTimeout(0)) = Device.plan(256, 3, 0) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidTimeout(60001)) = Device.plan(256, 3, 60001) {
+    checked = checked + 1
+  }
+  if let Ok(target) = Device.plan(256, 3, 1000) {
+    let empty = Audio.Pcm{format: Audio.Format{sampleRate: 8000, channels: 1}, data: Bytes.empty()}
+    if let Err(Device.EmptyAudio) = Device.play(&target, &empty) {
+      checked = checked + 1
+    }
+    let malformed = Audio.Pcm {
+      format: Audio.Format{sampleRate: 8000, channels: 2},
+      data: bytesOf([0u8, 1u8])
+    }
+    if let Err(Device.MalformedAudio(2, 4)) = Device.play(&target, &malformed) {
+      checked = checked + 1
+    }
+    let invalidRate = Audio.Pcm {
+      format: Audio.Format{sampleRate: 7999, channels: 1},
+      data: bytesOf([0u8, 0u8])
+    }
+    if let Err(Device.InvalidFormat(Audio.InvalidSampleRate(7999))) =
+    Device.play(&target, &invalidRate)
+    {
+      checked = checked + 1
+    }
+  }
+  let mono = Audio.Format{sampleRate: 8000, channels: 1}
+  if let Err(Device.InvalidFormat(Audio.InvalidSampleRate(7999))) =
+  Device.streamPlan(Audio.Format{sampleRate: 7999, channels: 1}, 256, 3, 1000)
+  {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidFormat(Audio.InvalidChannels(9))) =
+  Device.streamPlan(Audio.Format{sampleRate: 8000, channels: 9}, 256, 3, 1000)
+  {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidFramesPerBuffer(15)) = Device.streamPlan(mono, 15, 3, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidBufferCount(9)) = Device.streamPlan(mono, 256, 9, 1000) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidWriteTimeout(0)) = Device.streamPlan(mono, 256, 3, 0) {
+    checked = checked + 1
+  }
+  if let Ok(streamTarget) = Device.streamPlan(mono, 256, 3, 1000) {
+    if streamTarget.format == mono && streamTarget.framesPerBuffer == 256 &&
+    streamTarget.buffers == 3 && streamTarget.writeTimeoutMilliseconds == 1000
+    {
+      checked = checked + 1
+    }
+  }
+  let forged = Device.Stream {
+    token: 9223372036854775807,
+    format: mono,
+    writeTimeoutMilliseconds: 1000
+  }
+  if let Err(Device.InvalidVolume(-0.1)) = Device.setVolume(&forged, -0.1) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidVolume(1.1)) = Device.setVolume(&forged, 1.1) {
+    checked = checked + 1
+  }
+  let stereo = Audio.Pcm {
+    format: Audio.Format{sampleRate: 8000, channels: 2},
+    data: bytesOf([0u8, 0u8, 0u8, 0u8])
+  }
+  if let Err(Device.FormatMismatch(expected, actual)) = Device.write(&forged, &stereo) {
+    if expected == mono && actual.channels == 2 { checked = checked + 1 }
+  }
+  let emptyStream = Audio.Pcm{format: mono, data: Bytes.empty()}
+  if let Ok(0) = Device.write(&forged, &emptyStream) { checked = checked + 1 }
+  let brokenStream = Audio.Pcm{format: mono, data: bytesOf([0u8])}
+  if let Err(Device.MalformedAudio(1, 2)) = Device.write(&forged, &brokenStream) {
+    checked = checked + 1
+  }
+  if let Err(Device.InvalidTimeout(0)) = Device.closeStream(&forged, false, 0) {
+    checked = checked + 1
+  }
+  if let Err(Device.ClosedStream) = Device.pause(&forged) { checked = checked + 1 }
+  if let Err(Device.ClosedStream) = Device.snapshot(&forged) { checked = checked + 1 }
+  checked
+}

@@ -1,0 +1,5 @@
+module Mid
+
+import Deep as D
+
+export fn relay() -> Int { D.deep() }

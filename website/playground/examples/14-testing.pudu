@@ -1,0 +1,44 @@
+// Testing
+// A suite of checks with Std.Test: plain conditions, equality, options, results, groups, and tables of cases.
+module Main
+
+import Std.Io as Io
+import Std.Test as Test
+import Std.Text as Text
+
+fn percentage(text: Str) -> Result[Int, Str] {
+  let Some(value) = Text.wholeOf(text.trim()) else { return Err("'{text}' is not a number") }
+  if value < 0 || value > 100 { Err("{value} is out of range") } else { Ok(value) }
+}
+
+fn isLeapYear(year: Int) -> Bool {
+  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn main() -> Int {
+  let parsing = Test.suite("percentage", &[
+      Test.succeeded("a number in range", &percentage("42")),
+      Test.equals("spaces are ignored", &percentage(" 7 "), &Ok(7)),
+      Test.errored("a word is refused", &percentage("many")),
+      Test.errored("above 100 is refused", &percentage("101"))
+    ])
+  let leapYears = [(2000, true), (1900, false), (2024, true), (2023, false)]
+  let years = Test.suite("leap years", &Test.each(&leapYears, |row: (Int, Bool)| "{row[0]}", |row: (Int, Bool)| isLeapYear(row[0]) == row[1]))
+  let lookups = Test.suite("lookups", &[
+      Test.present("a key that is there", &mapOf([("ada", 1)]).get("ada")),
+      Test.absent("a key that is not", &mapOf([("ada", 1)]).get("grace")),
+      Test.todo("unicode case folding", "not written yet")
+    ])
+
+  let suite = Test.group("examples", &[parsing, years, lookups])
+  for name in Test.names(&suite) {
+    let _name = Io.writeLine("check: {name}")
+  }
+  // The lines name every failure, then the totals.
+  let report = Test.run(&suite)
+  for line in Test.lines(&report) {
+    let _line = Io.writeLine(line)
+  }
+  // Change a check above so it fails, and run again to see how a failure reads.
+  Test.status(&report)
+}

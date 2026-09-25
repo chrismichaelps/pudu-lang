@@ -15,7 +15,8 @@ Obtain cryptographically strong bytes from the host operating system without exp
 Exports one bounded `secureBytes` operation returning `IoOutcome ByteString`.
 ## Governance and algorithm
 The `entropy` package selects the platform entropy provider. Counts are validated before allocation;
-host exceptions become `IoFailed`; no deterministic or clock-based fallback exists.
+synchronous host failures become `IoFailed` through `trySynchronous` from [[Eval Io]], while an
+interrupt is re-raised; no deterministic or clock-based fallback exists.
 ## Grill Log
 - **Q:** Read `/dev/urandom` directly? **A:** No. _Rationale:_ Pudu targets more than Unix and the
   selected dependency owns the platform-specific provider. _Rejected:_ `System.Random`; clock seeds;

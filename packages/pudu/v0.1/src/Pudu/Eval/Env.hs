@@ -14,12 +14,17 @@ module Pudu.Eval.Env
   , ascend
   , bind
   , bindMethod
+  , lookupMethod
   , callLimit
   , captureEnvironment
+  , capturedFrames
+  , markModuleScope
   , currentFrame
   , currentMethods
   , replaceMethods
   , currentConcurrentStore
+  , currentDesktopStore
+  , currentAudioStreamStore
   , currentForeignStore
   , currentHandleStore
   , currentChildStore
@@ -53,6 +58,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Eval.Concurrent (ConcurrentStore)
+import Pudu.Eval.AudioStream (AudioStreamStore)
+import Pudu.Eval.Desktop (DesktopStore)
 import Pudu.Eval.Child (ChildStore)
 import Pudu.Eval.Handle (HandleStore)
 import Pudu.Diagnostic
@@ -65,9 +72,10 @@ import Pudu.Diagnostic
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Value (Captured (..), Value (..))
 import Pudu.Foreign.Ownership (ForeignStore)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.Set (Set)
 import Pudu.Source (Span)
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
@@ -82,6 +90,16 @@ data Env = Env
       free, and a program that nobody asked to explain should not pay for the
       explanation. -}
   , envTally :: !(Maybe (IORef (Map Text Int)))
+  {-| How many frames at the bottom of the stack belong to the program rather
+      than to a call.
+
+      Everything below this line is module scope: the root's declarations, each
+      dependency's, and the built-ins. A name in one of them may be looked up by
+      a key the source never spells — an implementation's `Owner.advance`, found
+      from the type of a value the loop is holding — so those frames are kept
+      whole by anything that narrows the stack. Everything above the line was
+      pushed by a call or a block and holds only names somebody wrote. -}
+  , envModuleDepth :: !Int
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
@@ -90,6 +108,8 @@ data Env = Env
   , envSocketStore :: !SocketStore
   , envTlsStore :: !TlsStore
   , envConcurrentStore :: !ConcurrentStore
+  , envDesktopStore :: !DesktopStore
+  , envAudioStreamStore :: !AudioStreamStore
   , envForeignStore :: !ForeignStore
   }
 
@@ -107,6 +127,12 @@ currentTlsStore = Evaluator $ \env -> pure (Done (envTlsStore env) env)
 
 currentConcurrentStore :: Evaluator ConcurrentStore
 currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env) env)
+
+currentDesktopStore :: Evaluator DesktopStore
+currentDesktopStore = Evaluator $ \env -> pure (Done (envDesktopStore env) env)
+
+currentAudioStreamStore :: Evaluator AudioStreamStore
+currentAudioStreamStore = Evaluator $ \env -> pure (Done (envAudioStreamStore env) env)
 
 currentForeignStore :: Evaluator ForeignStore
 currentForeignStore = Evaluator $ \env -> pure (Done (envForeignStore env) env)
@@ -266,15 +292,18 @@ emptyEnv
   -> SocketStore
   -> TlsStore
   -> ConcurrentStore
+  -> DesktopStore
+  -> AudioStreamStore
   -> ForeignStore
   -> Env
-emptyEnv handles children sockets secured concurrent foreignStore =
+emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
     , envIntegerKinds = Map.empty
     , envTally = Nothing
+    , envModuleDepth = 0
     , envDepth = 0
     , envScopes = []
     , envEffects = True
@@ -283,6 +312,8 @@ emptyEnv handles children sockets secured concurrent foreignStore =
     , envSocketStore = sockets
     , envTlsStore = secured
     , envConcurrentStore = concurrent
+    , envDesktopStore = desktop
+    , envAudioStreamStore = audioStreams
     , envForeignStore = foreignStore
     }
 
@@ -337,6 +368,16 @@ lookupName name =
     current : rest -> case Map.lookup name current of
       Just found -> Just found
       Nothing -> search rest
+
+{-| The implementation a type provides under this name, and nothing else.
+
+    A method call on a receiver asks this rather than `lookupName`. The frames
+    also hold every name an import made, and an alias spelled like a type —
+    `import Std.Bytes as Bytes` — binds `Bytes.toText` there. Searching them
+    for a method dispatched a built-in type's method to whichever module some
+    other file had imported under that name. -}
+lookupMethod :: Text -> Evaluator (Maybe Value)
+lookupMethod name = Evaluator $ \env -> pure (Done (Map.lookup name (envMethods env)) env)
 
 {-| Record an implementation's method, where every module can reach it. -}
 bindMethod :: Text -> Value -> Evaluator ()
@@ -438,20 +479,78 @@ withFrame bindings (Evaluator action) =
 captureEnvironment :: Evaluator [Map Text Value]
 captureEnvironment = Evaluator $ \env -> pure (Done (envFrames env) env)
 
+{-| Record that every frame now on the stack is module scope.
+
+    Called once the program's declarations are in place and before its entry
+    runs, so the line between what a program declared and what a call pushed is
+    drawn where it actually is rather than guessed at. -}
+markModuleScope :: Evaluator ()
+markModuleScope =
+  Evaluator $ \env -> pure (Done () env{envModuleDepth = length (envFrames env)})
+
+{-| The environment a function literal captures, holding only what it can reach.
+
+    Module scope is kept whole and by reference: it is alive for the length of
+    the program anyway, and a name in it may be looked up by a key the literal
+    never spells. The frames above it were pushed by calls and blocks, and hold
+    only names somebody wrote — so the literal is given exactly the ones it
+    mentions, collapsed into one frame.
+
+    What that buys is not speed at the capture, which was already a pointer
+    copy, but what the capture keeps alive afterwards. A literal stored in a
+    table used to hold every value that happened to be in scope beside it: two
+    hundred closures made in a loop next to a twenty-thousand element array held
+    416MB, and hold 76MB now — the same as the loop that makes no closures at
+    all. Lookup inside the literal is shallower for the same reason.
+
+    The names are an over-approximation, which is the only safe direction: one
+    collected that the literal cannot use costs a map entry, and one missed
+    would be a binding that vanished. -}
+capturedFrames :: Set Text -> Evaluator Captured
+capturedFrames reachable = Evaluator $ \env -> do
+  let frames = envFrames env
+      localCount = length frames - envModuleDepth env
+  {-| An unmarked stack is every frame the program has, which is what a literal
+      written while the module's own declarations are still loading sees. It is
+      kept whole: nothing has drawn the line yet, so there is nothing to narrow
+      against. -}
+  pure $
+    if envModuleDepth env <= 0 || localCount <= 0
+      then Done (Captured frames (envModuleDepth env)) env
+      else
+        let (locals, moduleScope) = splitAt localCount frames
+            {-| Innermost first, so `Map.unions` keeps the binding that shadows. -}
+            picked = Map.restrictKeys (Map.unions locals) reachable
+        {-| Forced here rather than left as a thunk. An unforced restriction
+            holds the frames it was taken from, which is every value that was in
+            scope — exactly what this is for dropping, and the leak would have
+            been invisible because the answer is correct either way. -}
+            captured = Captured (picked : moduleScope) (length moduleScope)
+         in Map.size picked `seq` Done captured env
+
 {-| Run an action in a captured environment, restoring the caller's afterwards.
 
     A declaration passes `Nothing` and runs where it was called, which is what
     lets a module's functions see each other. A literal passes the frames it
     captured, so a free name means what it meant where the literal was
     written — not what it happens to mean where it is finally called. -}
-withCaptured :: Maybe [Map Text Value] -> Evaluator a -> Evaluator a
+withCaptured :: Maybe Captured -> Evaluator a -> Evaluator a
 withCaptured Nothing action = action
-withCaptured (Just frames) (Evaluator action) =
+withCaptured (Just captured) (Evaluator action) =
   Evaluator $ \env -> do
-    outcome <- action env{envFrames = frames}
+    outcome <- action env
+      { envFrames = capturedEnvironment captured
+      , envModuleDepth = capturedModuleDepth captured
+      }
     pure $ case outcome of
-      Done value next -> Done value next{envFrames = envFrames env}
-      Unwound transfer next -> Unwound transfer next{envFrames = envFrames env}
+      Done value next -> Done value next
+        { envFrames = envFrames env
+        , envModuleDepth = envModuleDepth env
+        }
+      Unwound transfer next -> Unwound transfer next
+        { envFrames = envFrames env
+        , envModuleDepth = envModuleDepth env
+        }
       Aborted stop -> Aborted stop
 
 {-| Remove the lexical frame a `withFrame` introduced while retaining every

@@ -41,6 +41,7 @@ pathSeparators :: [Text]
 searchPathSeparatorText :: Text
 monotonicMilliseconds :: IO Integer
 exitWith :: Integer -> IO ()
+trySynchronous :: IO a -> IO (Either SomeException a)
 ```
 
 ### Governance
@@ -79,6 +80,11 @@ exitWith :: Integer -> IO ()
 - `exitWith` is the only effect that does not answer with an outcome: a program that asked to stop
   has nothing left to decide. A status outside the range an operating system carries is clamped
   rather than refused, because refusing would leave the program running.
+- **An interrupt is not a failure of the effect.** `trySynchronous` turns the failures an action
+  itself raised into values and re-raises asynchronous exceptions — an interrupt, a killed thread, a
+  fired timeout. Every runtime module that must not let a host exception escape uses it instead of
+  catching `SomeException`, because a catch-all turned Ctrl-C into an ordinary failure: a server
+  blocked in accept answered `user interrupt` and its loop kept serving.
 
 ### Linkage
 

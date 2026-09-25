@@ -4,6 +4,7 @@ import Std.App as App
 import Std.App.Config as Config
 import Std.App.Database as Database
 import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
 import Std.Db.Row as Row
 import Std.Html.Compose as Page
 import Std.Html as Html
@@ -92,12 +93,14 @@ export fn main() -> Result[Int, Str] {
       Route.post("/api/notes", fn(request: Route.Request) -> Http.Response { create(&database, request, insertSql) })
     ])
   let connected = App.using(&App.over("notes", &settings, &routes), Database.stage(&database, "database"))
-  let application = App.using(&connected, App.stage("schema",
-      fn() -> Result[(), Str] {
-        let _created = Result.mapErr(Database.execute(&database,
-            "CREATE TABLE IF NOT EXISTS pudu_notes (title VARCHAR(200) PRIMARY KEY, body TEXT NOT NULL)"), describe) ?
-        Ok(())
-      }, fn() -> Result[(), Str] { Ok(()) }))
+  // A later change to the table is a second migration, never an edit to this
+  // one. The first keeps IF NOT EXISTS so a notes.db made before migrations
+  // existed is adopted rather than refused.
+  let schema = [
+    Migrate.migration(1, "notes",
+        &["CREATE TABLE IF NOT EXISTS pudu_notes (title VARCHAR(200) PRIMARY KEY, body TEXT NOT NULL)"])
+  ]
+  let application = App.using(&connected, Database.migrationStage(&database, "schema", &schema))
   Result.mapErr(App.run(&application), fn(problem: App.AppError) -> Str { App.explain(&problem) })
 }
 

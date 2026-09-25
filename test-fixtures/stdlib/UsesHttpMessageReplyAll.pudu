@@ -5,7 +5,7 @@ import Std.Html as Html
 import Std.Html.Ssr {MissingSlot}
 import Std.Html.Ssr as Ssr
 import Std.Http as Http
-import Std.Http.Message {BadHeader, BadRequestLine, NoRequestLine, ShortBody}
+import Std.Http.Message {AmbiguousHeader, BadHeader, BadRequestLine, BadStatusLine, NoRequestLine, ShortBody}
 import Std.Http.Message as Message
 import Std.Http.Server.Reply as Reply
 import Std.Json as Json
@@ -95,6 +95,97 @@ export fn main() -> Int {
     case _ => {}
   }
 
+  // A request line is three parts one space apart, and anything else is
+  // refused rather than split where a guess would put it: a target holding a
+  // space, a doubled or leading or trailing space, a tab, a missing version, a
+  // version that never arrives as a line, and a method that is not a token.
+  let unclearLines = [
+    "GET /a b HTTP/1.1\r\n",
+    "GET  /a HTTP/1.1\r\n",
+    " GET /a HTTP/1.1\r\n",
+    "GET /a HTTP/1.1 \r\n",
+    "GET\t/a HTTP/1.1\r\n",
+    "GET /a\r\n",
+    "GET /a HTTP/2\r\n",
+    "G(T /a HTTP/1.1\r\n"
+  ]
+  var refusedLines = 0
+  for head in unclearLines {
+    if let Err(BadRequestLine(_)) = Message.parseHead(head) { refusedLines = refusedLines + 1 }
+  }
+  if refusedLines == unclearLines.length() { held = held + 1 }
+  match Message.parseHead("GET /a?b=c HTTP/1.0\r\nhost: example.com\r\n") {
+    case Ok(request) => { if request.target == "/a?b=c" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // A header a proxy in front would read differently is refused rather than
+  // trimmed into agreement. Whitespace before the colon, an empty or spaced
+  // name, a folded continuation, and a bare line break inside a value are each
+  // how two readers of one message come to disagree about where its body ends.
+  let ambiguous = [
+    "GET /x HTTP/1.1\r\nContent-Length : 5\r\n",
+    "GET /x HTTP/1.1\r\n: 5\r\n",
+    "GET /x HTTP/1.1\r\nContent Length: 5\r\n",
+    "GET /x HTTP/1.1\r\nhost: a\r\n  folded: b\r\n",
+    "GET /x HTTP/1.1\r\nx-note: a\nContent-Length: 5\r\n",
+    "GET /x HTTP/1.1\r\nx-note: a\rb\r\n",
+    "GET /x HTTP/1.1\r\n\tfolded: b\r\n"
+  ]
+  var refusedAmbiguous = 0
+  for head in ambiguous {
+    if let Err(AmbiguousHeader(_)) = Message.parseHead(head) { refusedAmbiguous = refusedAmbiguous + 1 }
+  }
+  if refusedAmbiguous == ambiguous.length() { held = held + 1 }
+  match Message.parseHead("GET /x HTTP/1.1\r\nContent-Length : 5\r\n") {
+    case Err(problem) => {
+      if Message.explain(&problem).contains("Content-Length : 5") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+  // What is ordinary stays accepted: whitespace around a value, punctuation a
+  // name may hold, and an empty value.
+  match Message.parseHead("GET /x HTTP/1.1\r\nX-Custom_Name.v2!: \t spaced \t\r\nx-empty:\r\n") {
+    case Ok(request) => {
+      if request.headers == [("X-Custom_Name.v2!", "spaced"), ("x-empty", "")] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A response is read by the same rule, since a client behind a proxy has the
+  // same problem in the other direction.
+  if let Err(AmbiguousHeader(_)) = Message.parseResponse("HTTP/1.1 200 OK\r\nContent-Length : 5\r\n\r\nhello") {
+    held = held + 1
+  }
+
+  // A status line is a version, one space and three digits, then nothing or a
+  // reason. A code of any other width, a doubled space, a version this reader
+  // does not speak, and a reason run into the code are refused; a reason may
+  // hold spaces of its own and may be absent.
+  let unclearStatus = [
+    "HTTP/1.1 2000 OK\r\n",
+    "HTTP/1.1 20 OK\r\n",
+    "HTTP/1.1 -20 OK\r\n",
+    "HTTP/1.1 099 OK\r\n",
+    "HTTP/1.1  200 OK\r\n",
+    "HTTP/2 200 OK\r\n",
+    "HTTP/1.1 200OK\r\n"
+  ]
+  var refusedStatus = 0
+  for head in unclearStatus {
+    if let Err(BadStatusLine(_)) = Message.parseResponse(head) { refusedStatus = refusedStatus + 1 }
+  }
+  if refusedStatus == unclearStatus.length() { held = held + 1 }
+  match Message.parseResponse("HTTP/1.0 418 I'm a teapot, truly\r\n\r\n") {
+    case Ok(answer) => {
+      if answer.status.code == 418 && answer.status.reason == "I'm a teapot, truly" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Message.parseResponse("HTTP/1.1 204\r\n\r\n") {
+    case Ok(answer) => { if answer.status.code == 204 && !answer.status.reason.isEmpty() { held = held + 1 } }
+    case Err(_) => {}
+  }
+
   // A response read from what a connection carried.
   match Message.parseResponse("HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n") {
     case Ok(response) => {
@@ -123,7 +214,8 @@ export fn main() -> Int {
     method: Http.Get,
     target: "/here",
     headers: [("host", "example.com")],
-    body: ""
+    body: "",
+    binaryBody: None
   }
   let written = Message.renderRequest(&asked)
   if written == "GET /here HTTP/1.1\r\nhost: example.com\r\n\r\n" { held = held + 1 }
@@ -218,6 +310,15 @@ export fn main() -> Int {
   // A size that is not one, and framing that stops part way through.
   if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("zz\r\nWiki\r\n0\r\n\r\n"), 1000)) {
     held = held + 1
+  }
+  // Every field of a trailer is read, the first as much as the rest, and a
+  // well-formed trailer still ends the body.
+  if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWiki\r\n0\r\nbroken\r\n\r\n"), 1000)) {
+    held = held + 1
+  }
+  match Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWiki\r\n0\r\nx-sum: 1\r\nx-more: 2\r\n\r\n"), 1000) {
+    case Ok(body) => { if body == Bytes.fromText("Wiki") { held = held + 1 } }
+    case Err(_) => {}
   }
   if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWi\r\n0\r\n\r\n"), 1000)) {
     held = held + 1

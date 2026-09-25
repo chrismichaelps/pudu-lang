@@ -317,12 +317,12 @@ fn layered(base: &Config, found: &Array[(Str, Str)], layer: Source) -> Config {
 /// rather than replacing them, so a profile states its differences.
 fn sectionFor(document: &Toml.Toml, profile: Str) -> Toml.Toml {
   if profile.isEmpty() {
-      *document
+    *document
   } else {
     if let Some(section) = Toml.field(document, profile) {
       merged(document, &section, profile)
     } else {
-        *document
+      *document
     }
   }
 }

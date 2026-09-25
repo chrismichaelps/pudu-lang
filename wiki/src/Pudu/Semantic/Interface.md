@@ -29,6 +29,7 @@ data ExportIndex
 
 moduleExports :: Module -> ModuleExports
 exportIndex :: Map ModuleName Module -> ExportIndex
+exportsOf :: ExportIndex -> ModuleName -> [ExportedName]
 importBindings
   :: ExportIndex
   -> Located Import
@@ -36,6 +37,9 @@ importBindings
 ```
 
 ### Governance
+
+- `exportsOf` lists what one module exports, in namespace and name order, for tooling that offers
+  exactly the importable surface of a module ([[Lsp Import Completion]]).
 
 - Exports are indexed by declaring module, namespace, and declared name. The index is built from parsed module declarations before any body is resolved.
 - Only `export` declarations enter the index. Implementations are unnamed and are carried by [[Type Interface]], not introduced as lexical bindings.

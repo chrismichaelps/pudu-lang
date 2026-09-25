@@ -2,39 +2,60 @@ module View.Home
 
 import Std.Html.Build as H
 import Std.Html as Html
+import Std.Option as Option
 import Std.Url as Url
 import Seo as Seo
 import Service.Catalog as Catalog
+import Service.Packages as Packages
+import Service.Releases as Releases
+import Service.Search as Search
 import View.Dynamic as Dynamic
 import View.Layout as Layout
+import View.Pudu as Pudu
 
-export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
-  let intro = H.section().class("intro").holding([
-      H.h1().says("Find the Pudu API you need."),
-      H.p().says("Search every public function, type, trait, constructor, and constant by name or type."),
+/// The home page: the banner with the release, the language's promise, and
+/// API search; then how Pudu reads, its packages when there are any, and its
+/// library.
+export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Release, packages: &Packages.Packages) -> Html.Html {
+  let intro = H.section().class("hero-banner home-hero").holding([
+      H.a().class("hero-banner-release").href("/releases").holding([
+          H.span().class("release-pill").says(if release.prerelease { "Pre-release" } else { "Latest" }),
+          H.span().says("Pudu " + release.version + " is out")
+        ]),
+      H.h1().says("Programs that say what they do."),
+      H.p().says("Pudu is a statically typed language where a signature tells you what a function takes, what it gives back, whether it can fail, and whether it changes what it was given."),
+      H.p().class("hero-actions").holding([
+          H.a().class("button button-light").href("/docs/introduction").says("Start learning"),
+          H.a().class("button button-ghost").href("/download").says("Download " + release.version)
+        ]),
+      Layout.searchForm("", "banner-search"),
       exampleQueries()
     ])
   let modules = modulePanel(&catalog.modules, catalog.languageVersion)
-  Layout.page(siteUrl, "Pudu language and API search", "Search every public Pudu language and standard-library declaration by name or type.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
-        intro,
-        Layout.searchForm("", "home-search"),
-        H.div().class("grid").holding([
-            H.section().holding([
+  Layout.page(siteUrl, "Pudu: a statically typed programming language", "Pudu is a statically typed programming language where a signature tells you what a function takes, gives back, can fail with, and changes. Learn it, download it, and search its standard library.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
+        Pudu.around(Pudu.ROAM, false, intro),
+        // The shape example sits beside its explanation, and the modules have a
+        // row of their own below. Side by side, a two-line example next to a
+        // tall list of modules left the example's column mostly empty, and a
+        // long module name overflowed the narrow column it was given.
+        H.section().class("shape-section").holding([
+            H.div().holding([
                 H.h2().says("Start with a shape"),
-                H.p().class("summary").says("Try Result[T, E], &mut T, Array[T] -> T, server, or json."),
-                H.pre().class("signature").holding([
-                    H.code().says("fn find[T](items: &Array[T], keep: fn(T) -> Bool) -> Option[T]")
-                  ])
+                H.p().class("summary").says("Search by what a function takes and gives back. Try Result[T, E], &mut T, Array[T] -> T, server, or json.")
               ]),
-            modules
+            H.pre().class("signature shape-code").holding([
+                H.code().says("fn find[T](items: &Array[T], keep: fn(T) -> Bool) -> Option[T]")
+              ])
           ]),
+        modules,
+        featured(packages),
         H.section().class("home-section start-section").holding([
             H.div().holding([
                 H.span().class("kind").says("Start here"),
                 H.h2().says("Write a complete program"),
                 H.p().says("A Pudu program names its module, imports what it uses, and returns a status from main."),
                 H.p().class("home-actions").holding([
-                    H.a().href("/guide").says("Read the language guide"),
+                    H.a().href("/docs").says("Read the documentation"),
                     H.a().href("/modules").says("Browse the complete API")
                   ])
               ]),
@@ -47,23 +68,29 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
             H.p().class("section-lead").says("Pudu keeps important choices visible in function signatures and at the place where a value is used."),
             H.div().class("principles").holding([
                 principle("Typed results", "Result[Value, Problem] tells the caller that work may fail. The caller handles both paths."),
-                principle("Explicit references", "&T borrows a value for reading. &mut T gives one temporary place permission to change it."),
+                principle("Explicit references", "&T borrows a value for reading. &mut T asks for the exclusive right to change it, written where the call is made."),
                 principle("Checked patterns", "match lists the shapes a value may have, so each case can be handled directly.")
               ])
           ]),
-        H.section().class("home-section haskell-note").holding([
-            H.div().holding([
-                H.span().class("kind").says("Compiler"),
-                H.h2().says("Built on a Haskell foundation"),
-                H.p().says("The first Pudu compiler is written in Haskell. Its strong types and functional style help keep compiler stages explicit and testable.")
+        H.section().class("home-section").holding([
+            H.h2().says("The library is already there"),
+            H.p().class("section-lead").says("The standard library ships inside the archive. There is nothing to add to a manifest before a program can read a file, answer a request, or talk to a database."),
+            H.div().class("principles").holding([
+                principle("Services", "HTTP clients and servers, TLS that verifies its chain and hostname, sockets, and routing."),
+                principle("Data", "JSON, CSV, TOML, YAML and XML, with readers that hold a flat memory peak as a file grows."),
+                principle("Storage", "SQLite, and PostgreSQL over its own wire protocol with parameters bound rather than pasted."),
+                principle("Work", "Workers, bounded channels, locks, and a testing module with property checks.")
               ]),
-            H.p().holding([H.a().href("/about").says("Learn about Pudu and its author")])
+            H.p().class("home-actions").holding([
+                H.a().href("/modules").says("Browse all " + show(catalog.modules.length()) + " modules"),
+                H.a().href("/download").says("Download Pudu " + release.version)
+              ])
           ])
       ]).html())
 }
 
-export fn results(siteUrl: Str, catalog: &Catalog.Catalog, query: Str) -> Html.Html {
-  Dynamic.results(siteUrl, &catalog.entries, query)
+export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html {
+  Dynamic.results(siteUrl, search, query)
 }
 
 fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
@@ -76,11 +103,36 @@ fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
         ]))
     index = index + 1
   }
-  H.aside().class("panel").holding([
-      H.h2().says("Browse modules"),
-      H.p().class("meta").says("Pudu " + languageVersion),
+  H.section().class("panel module-panel").holding([
+      H.div().class("module-panel-head").holding([
+          H.h2().says("Browse modules"),
+          H.p().class("meta").says("Pudu " + languageVersion)
+        ]),
       H.ul().class("module-list").holding(links),
       H.p().holding([H.a().href("/modules").says("View all modules")])
+    ])
+}
+
+/// Up to six packages from the snapshot, or nothing when there is none.
+fn featured(packages: &Packages.Packages) -> H.Node {
+  if !Packages.present(packages) { return H.nothing() }
+  var cards: Array[H.Node] = []
+  for project in packages.projects.slice(0, 6) {
+    cards = cards.push(H.a().class("home-package").href("/" + project.name).holding([
+          H.span().class("home-package-name").holding([H.span().class("package-owner").says(project.handle), H.span().class("package-slash").says(" / "), H.strong().says(project.project)]),
+          H.span().class("home-package-description").says(project.description),
+          H.span().class("home-package-meta").says(Option.unwrapOr(project.latest, "unreleased") + " · ★ " + show(project.stars))
+        ]))
+  }
+  H.section().class("home-section").holding([
+      H.span().class("kind").says("Packages"),
+      H.h2().says("Build with what the community shares"),
+      H.p().class("section-lead").says("Packages are published from GitHub and installed with one command. Every release is kept exactly as it was tagged."),
+      H.div().class("home-packages").holding(cards),
+      H.p().class("home-actions").holding([
+          H.a().href("/packages").says(if packages.projects.length() == 1 { "Explore the package" } else { "Explore all " + show(packages.projects.length()) + " packages" }),
+          H.a().href("/docs/dependencies").says("Learn how dependencies work")
+        ])
     ])
 }
 

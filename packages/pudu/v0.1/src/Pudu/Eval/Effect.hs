@@ -17,11 +17,36 @@ import Pudu.Eval.Child
   , readChildChunk
   , readChildErrorChunk
   , startChild
+  , startChildWith
   , stopChild
   , waitChild
   , waitChildWithin
   )
+import Pudu.Eval.AudioDevice (playAudioDevice)
+import Pudu.Eval.AudioStream
+  ( AudioStreamSnapshot (..)
+  , closeAudioStream
+  , openAudioStream
+  , pauseAudioStream
+  , readAudioStreamSnapshot
+  , resumeAudioStream
+  , setAudioStreamVolume
+  , writeAudioStream
+  )
 import Pudu.Eval.Clock
+import Pudu.Eval.Desktop
+  ( closeDesktop
+  , exposeDesktop
+  , inputsDesktop
+  , installMenu
+  , openDesktop
+  , presentDesktop
+  , pumpDesktop
+  , readClipboard
+  , reportDesktop
+  , reportMenu
+  , writeClipboard
+  )
 import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
   ( closeHandleAt
@@ -73,11 +98,14 @@ import Pudu.Eval.Socket
   , sendOnWithin
   , shutdownWriteAt
   )
+import Pudu.Eval.Confinement (guardConfined, keptWhenConfined)
 import Pudu.Eval.Io
 import Pudu.Eval.Entropy (secureBytes)
 import Pudu.Eval.Env
   ( effectsAdmitted
   , currentConcurrentStore
+  , currentDesktopStore
+  , currentAudioStreamStore
   , currentHandleStore
   , currentChildStore
   , currentSocketStore
@@ -120,6 +148,17 @@ effectBuiltins =
   , ArgumentsBuiltin
   , EnvironmentBuiltin
   , TemporaryDirectoryBuiltin
+  , RenamePathBuiltin
+  , CreateTemporaryFileBuiltin
+  , CreateDirectoryExclusiveBuiltin
+  , RemoveEmptyDirectoryBuiltin
+  , PermissionsOfBuiltin
+  , SetPermissionsOfBuiltin
+  , PathIsSymbolicLinkBuiltin
+  , CreateSymbolicLinkBuiltin
+  , CanonicalPathBuiltin
+  , FileSizeBuiltin
+  , DirectoryExistsBuiltin
   , HomeDirectoryBuiltin
   , PathSeparatorsBuiltin
   , SearchSeparatorBuiltin
@@ -131,6 +170,7 @@ effectBuiltins =
   , ZoneOffsetBuiltin
   , RunBuiltin
   , SpawnBuiltin
+  , SpawnWithBuiltin
   , ChildReadBuiltin
   , ChildReadErrorBuiltin
   , ChildWriteBuiltin
@@ -184,6 +224,25 @@ effectBuiltins =
   , CellGetBuiltin
   , CellSwapBuiltin
   , SecureBytesBuiltin
+  , DesktopOpenBuiltin
+  , DesktopPresentBuiltin
+  , DesktopPumpBuiltin
+  , DesktopInputsBuiltin
+  , DesktopClipboardReadBuiltin
+  , DesktopClipboardWriteBuiltin
+  , DesktopAccessibilityBuiltin
+  , DesktopAccessibilityReportBuiltin
+  , DesktopMenuBuiltin
+  , DesktopMenuReportBuiltin
+  , DesktopCloseBuiltin
+  , AudioDevicePlayBuiltin
+  , AudioStreamOpenBuiltin
+  , AudioStreamWriteBuiltin
+  , AudioStreamPauseBuiltin
+  , AudioStreamResumeBuiltin
+  , AudioStreamVolumeBuiltin
+  , AudioStreamSnapshotBuiltin
+  , AudioStreamCloseBuiltin
   ]
 
 {-| Perform one effect.
@@ -197,6 +256,7 @@ effectBuiltins =
     to stop has nothing left to decide. -}
 callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
 callEffect spanValue builtin arguments = do
+  guardConfined spanValue (builtinName builtin) (keptWhenConfined builtin)
   admitted <- effectsAdmitted
   handles <- currentHandleStore
   sockets <- currentSocketStore
@@ -364,9 +424,139 @@ callEffect spanValue builtin arguments = do
         resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
       (SecureBytesBuiltin, [IntValue _ count]) ->
         resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
+      (DesktopOpenBuiltin, [StrValue title, IntValue _ width, IntValue _ height, BoolValue resizable]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap intValue
+          <$> lift refusal (openDesktop desktop title (fromInteger width) (fromInteger height) resizable)
+      (DesktopPresentBuiltin, [IntValue _ token, IntValue _ width, IntValue _ height, BytesValue rgba]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (presentDesktop desktop (fromInteger token) (fromInteger width) (fromInteger height) rgba)
+      (DesktopPumpBuiltin, [IntValue _ token, IntValue _ milliseconds]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap BoolValue
+          <$> lift refusal (pumpDesktop desktop (fromInteger token) (fromInteger milliseconds))
+      (DesktopInputsBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap StrValue
+          <$> lift refusal (inputsDesktop desktop (fromInteger token))
+      (DesktopClipboardReadBuiltin, []) ->
+        resultOf . fmap StrValue <$> lift refusal readClipboard
+      (DesktopClipboardWriteBuiltin, [StrValue value]) ->
+        effectUnit (writeClipboard value)
+      (DesktopAccessibilityBuiltin, [IntValue _ token, StrValue records]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (exposeDesktop desktop (fromInteger token) records)
+      (DesktopAccessibilityReportBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap StrValue
+          <$> lift refusal (reportDesktop desktop (fromInteger token))
+      (DesktopMenuBuiltin, [IntValue _ token, StrValue records]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (installMenu desktop (fromInteger token) records)
+      (DesktopMenuReportBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap StrValue
+          <$> lift refusal (reportMenu desktop (fromInteger token))
+      (DesktopCloseBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (closeDesktop desktop (fromInteger token))
+      ( AudioDevicePlayBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          , IntValue _ timeout
+          ]
+        ) ->
+        resultOf . fmap intValue
+          <$> lift refusal
+            ( playAudioDevice
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+                (fromInteger timeout)
+            )
+      ( AudioStreamOpenBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap openStreamValue
+          <$> lift refusal
+            ( openAudioStream
+                streams
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+            )
+      ( AudioStreamWriteBuiltin
+        , [ IntValue _ token
+          , IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ timeout
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap writeStreamValue
+          <$> lift refusal
+            ( writeAudioStream
+                streams
+                token
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger timeout)
+            )
+      (AudioStreamPauseBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (pauseAudioStream streams token)
+      (AudioStreamResumeBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (resumeAudioStream streams token)
+      (AudioStreamVolumeBuiltin, [IntValue _ token, FloatValue _ volume]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (setAudioStreamVolume streams token volume)
+      (AudioStreamSnapshotBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap streamSnapshotValue
+          <$> lift refusal (readAudioStreamSnapshot streams token)
+      (AudioStreamCloseBuiltin, [IntValue _ token, BoolValue drain, IntValue _ timeout]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (closeAudioStream streams token drain (fromInteger timeout))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
+      (RenamePathBuiltin, [StrValue from, StrValue to]) ->
+        effectUnit (renamePathAt (Text.unpack from) (Text.unpack to))
+      (CreateTemporaryFileBuiltin, [StrValue directory, StrValue prefix]) ->
+        resultOf . fmap StrValue
+          <$> lift refusal (createTemporaryFileIn (Text.unpack directory) (Text.unpack prefix))
+      (CreateDirectoryExclusiveBuiltin, [StrValue path]) ->
+        effectUnit (createDirectoryExclusiveAt (Text.unpack path))
+      (RemoveEmptyDirectoryBuiltin, [StrValue path]) ->
+        effectUnit (removeEmptyDirectoryAt (Text.unpack path))
+      (PermissionsOfBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (permissionsMaskAt (Text.unpack path))
+      (SetPermissionsOfBuiltin, [StrValue path, IntValue _ mask]) ->
+        effectUnit (setPermissionsMaskAt (Text.unpack path) mask)
+      (PathIsSymbolicLinkBuiltin, [StrValue path]) ->
+        resultOf . fmap BoolValue <$> lift refusal (isSymbolicLinkAt (Text.unpack path))
+      (CreateSymbolicLinkBuiltin, [StrValue target, StrValue link]) ->
+        effectUnit (createSymbolicLinkAt (Text.unpack target) (Text.unpack link))
+      (CanonicalPathBuiltin, [StrValue path]) ->
+        resultOf . fmap StrValue <$> lift refusal (canonicalPathAt (Text.unpack path))
+      (FileSizeBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (fileSizeAt (Text.unpack path))
+      (DirectoryExistsBuiltin, [StrValue path]) ->
+        BoolValue <$> lift refusal (testDirectoryExists (Text.unpack path))
       (HomeDirectoryBuiltin, []) -> optionalText <$> lift refusal homeDirectoryPath
       (PathSeparatorsBuiltin, []) ->
         ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
@@ -385,6 +575,19 @@ callEffect spanValue builtin arguments = do
       (SpawnBuiltin, [StrValue program, ArrayValue given]) -> do
         children <- currentChildStore
         resultOf . fmap intValue <$> lift refusal (startChild children (Text.unpack program) (textsOf given))
+      (SpawnWithBuiltin, [StrValue program, ArrayValue given, ArrayValue pairs, BoolValue inherits, StrValue directory]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue
+          <$> lift
+            refusal
+            ( startChildWith
+                children
+                (Text.unpack program)
+                (textsOf given)
+                (pairsOf pairs)
+                inherits
+                (Text.unpack directory)
+            )
       (ChildReadBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
         children <- currentChildStore
         resultOf . fmap optionalBytesValue
@@ -427,6 +630,25 @@ callEffect spanValue builtin arguments = do
   textArray = ArrayValue . Seq.fromList . map StrValue
   pairArray pairs =
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
+
+  openStreamValue (token, sampleRate, channels) =
+    ArrayValue (Seq.fromList (map intOf [token, toInteger sampleRate, toInteger channels]))
+
+  writeStreamValue (accepted, status) =
+    ArrayValue (Seq.fromList (map intOf [accepted, toInteger status]))
+
+  streamSnapshotValue snapshot =
+    ArrayValue . Seq.fromList . map intOf $
+      [ snapshotSubmittedFrames snapshot
+      , snapshotAcquiredFrames snapshot
+      , snapshotClockFrames snapshot
+      , snapshotClockNanoseconds snapshot
+      , snapshotUnderruns snapshot
+      , snapshotInterruptions snapshot
+      , snapshotDeviceChanges snapshot
+      , snapshotTimelineFailures snapshot
+      , toInteger (snapshotState snapshot)
+      ]
   intValue = intOf . toInteger
   optionalBytesValue found = case found of
     Just bytes -> VariantValue "Some" [BytesValue bytes]
@@ -473,6 +695,9 @@ processValue outcome =
 
 textsOf :: Seq.Seq Value -> [Text]
 textsOf values = [text | StrValue text <- toList values]
+
+pairsOf :: Seq.Seq Value -> [(Text, Text)]
+pairsOf values = [(name, value) | TupleValue [StrValue name, StrValue value] <- toList values]
 
 {-| An outcome as the language's own failure carrier. -}
 resultOf :: IoOutcome Value -> Value

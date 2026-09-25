@@ -56,6 +56,18 @@ export fn main() -> Int {
   if widths == [200000, 200000] { held = held + 1 }
   if Result.unwrapOr(Io.countBytes(wide), -1) == 400002 { held = held + 1 }
 
+  // A character whose encoding straddles the boundary between two reads is
+  // still one character, on a line that is still one line.
+  let straddle = Io.join(target, "straddle.txt")
+  let before = "a".repeat(65535)
+  held = held + okIo(Io.writeAllBytes(straddle, &ByteSeq.fromText(before + "é\nnext")))
+  if Result.unwrapOr(Io.readAllLinesOf(straddle), []) == [before + "é", "next"] { held = held + 1 }
+
+  // A carriage return before each newline is not part of the line.
+  let crlf = Io.join(target, "crlf.txt")
+  held = held + okIo(Io.writeAllBytes(crlf, &ByteSeq.fromText("one\r\n\r\ntwo\r\n")))
+  if Result.unwrapOr(Io.readAllLinesOf(crlf), []) == ["one", "", "two"] { held = held + 1 }
+
   // Appending adds after what the file holds rather than replacing it.
   held = held + okIo(Io.appendAllBytes(ragged, &ByteSeq.fromText("\nthree")))
   if Result.unwrapOr(Io.countBytes(ragged), -1) == 13 { held = held + 1 }
@@ -83,6 +95,8 @@ export fn main() -> Int {
   held = held + ok(Io.removeIfPresent(file))
   held = held + ok(Io.removeIfPresent(ragged))
   held = held + ok(Io.removeIfPresent(wide))
+  held = held + ok(Io.removeIfPresent(straddle))
+  held = held + ok(Io.removeIfPresent(crlf))
   held = held + ok(Io.removeIfPresent(Io.join(target, "written.txt")))
   held
 }

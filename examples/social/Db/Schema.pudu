@@ -1,8 +1,9 @@
 module Db.Schema
 
 import Std.App.Database as Database
+import Std.Db.Migrate as Migrate
 
-/// What the tables are, applied once at start-up.
+/// What the tables are, brought up to date at start-up.
 ///
 /// Three tables, and the shape of the third is the whole design: a like is a
 /// row naming a post and the person who liked it, with the pair unique. Storing
@@ -12,46 +13,60 @@ import Std.App.Database as Database
 /// the count is asked for rather than kept.
 export type SchemaError = { message: Str }
 
+/// Run whatever the database has not run yet.
+///
+/// A migration records itself as it commits, so starting the service against
+/// a database that already has these tables does nothing, and one that ran an
+/// earlier text of a migration is refused rather than left different.
 export fn apply(db: &Database.Database) -> Result[(), SchemaError] {
-  for statement in statements() {
-    match Database.execute(db, statement) {
-      case Err(problem) => {
-        return Err(SchemaError{message: problem.message})
-      }
-      case Ok(_) => {}
-    }
+  match Database.migrate(db, &migrations()) {
+    case Err(problem) => Err(SchemaError{message: Migrate.explain(&problem)})
+    case Ok(_) => Ok(())
   }
-  Ok(())
 }
 
-/// The statements, in the order they must run.
+/// The migrations, numbered in the order they were written.
 ///
-/// Children are declared after their parents, and each says what it belongs to
-/// with a foreign key that removes it when the parent goes. A comment on a
-/// deleted post is not a comment on anything.
-fn statements() -> Array[Str] {
+/// A later change to the schema is a further migration with the next number,
+/// never an edit to one that has shipped. Children are declared after their
+/// parents, and each says what it belongs to with a foreign key that removes it
+/// when the parent goes. A comment on a deleted post is not a comment on
+/// anything.
+fn migrations() -> Array[Migrate.Migration] {
   [
-    "CREATE TABLE IF NOT EXISTS post ("
-      + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-      + " author TEXT NOT NULL,"
-      + " body TEXT NOT NULL,"
-      + " written INTEGER NOT NULL"
-      + ")",
-    "CREATE TABLE IF NOT EXISTS comment ("
-      + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-      + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
-      + " author TEXT NOT NULL,"
-      + " body TEXT NOT NULL,"
-      + " written INTEGER NOT NULL"
-      + ")",
+    Migrate.migration(
+      1,
+      "posts and comments",
+        &[
+        "CREATE TABLE post ("
+          + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          + " author TEXT NOT NULL,"
+          + " body TEXT NOT NULL,"
+          + " written INTEGER NOT NULL"
+          + ")",
+        "CREATE TABLE comment ("
+          + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
+          + " author TEXT NOT NULL,"
+          + " body TEXT NOT NULL,"
+          + " written INTEGER NOT NULL"
+          + ")",
+        "CREATE INDEX comment_by_post ON comment(post)"
+      ]
+    ),
     // The pair is unique, so liking twice is refused by the table rather than
     // by a check a caller might forget. Two requests racing cannot both win.
-    "CREATE TABLE IF NOT EXISTS approval ("
-      + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
-      + " reader TEXT NOT NULL,"
-      + " PRIMARY KEY (post, reader)"
-      + ")",
-    "CREATE INDEX IF NOT EXISTS comment_by_post ON comment(post)",
-    "CREATE INDEX IF NOT EXISTS approval_by_post ON approval(post)"
+    Migrate.migration(
+      2,
+      "approvals",
+        &[
+        "CREATE TABLE approval ("
+          + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
+          + " reader TEXT NOT NULL,"
+          + " PRIMARY KEY (post, reader)"
+          + ")",
+        "CREATE INDEX approval_by_post ON approval(post)"
+      ]
+    )
   ]
 }

@@ -5,9 +5,97 @@ import Std.Option as Option
 import Std.Text as Text
 import Error as SiteError
 
-export type Config = { host: Str, port: Int, connections: Int, cataloguePath: Str, siteUrl: Str }
+export type Config = {
+  host: Str,
+  port: Int,
+  connections: Int,
+  cataloguePath: Str,
+  packagesPath: Str,
+  docsPath: Str,
+  releasesPath: Str,
+  documentsPath: Str,
+  releaseNotesPath: Str,
+  siteUrl: Str,
+  playground: Playground
+}
+
+/// How the playground runs programs, read from the environment.
+///
+/// `runner` is `off`, `local`, or the URL of a runner's `/run` address. It is
+/// `off` unless set: a site that runs programs has to be told to, because the
+/// machine it runs on is the one the programs reach.
+export type Playground = {
+  runner: Str,
+  token: Str,
+  sandbox: Str,
+  compiler: Str,
+  library: Str,
+  workspace: Str,
+  isolation: Str,
+  memoryMegabytes: Int,
+  examplesPath: Str,
+  sourceBytes: Int,
+  runMillis: Int,
+  outputBytes: Int,
+  runsPerMinute: Int,
+  questionsPerMinute: Int,
+  trackedClients: Int,
+  cacheEntries: Int,
+  concurrency: Int,
+  listenHost: Str,
+  listenPort: Int
+}
+
+export const RUNNER_OFF: Str = "off"
+export const RUNNER_LOCAL: Str = "local"
+export const ISOLATION_CONFINED: Str = "confined"
+const ISOLATIONS: Set[Str] = setOf(["bwrap", "confined", "none"])
 
 export fn load() -> Result[Config, SiteError.SiteError] {
+  let playground = loadPlayground() ?
+  loadWith(&playground)
+}
+
+/// The settings, with a playground that cannot be configured switched off
+/// rather than stopping everything else.
+///
+/// For the serverless function, which serves search as well: a runner address
+/// set without its secret is a playground that cannot run anything, and search
+/// going down with it would turn one missing variable into an outage. The
+/// reason is answered beside the settings so the function can report it.
+export fn loadServing() -> Result[(Config, Option[SiteError.SiteError]), SiteError.SiteError] {
+  match loadPlayground() {
+    case Ok(playground) => Ok((loadWith(&playground) ?, None))
+    case Err(problem) => Ok((loadWith(&switchedOff()) ?, Some(problem)))
+  }
+}
+
+/// A playground that runs nothing, with every other setting at its default.
+export fn switchedOff() -> Playground {
+  Playground {
+    runner: RUNNER_OFF,
+    token: "",
+    sandbox: "website/playground/sandbox.sh",
+    compiler: "pudu",
+    library: "packages/pudu/v0.1/lib",
+    workspace: "",
+    isolation: "bwrap",
+    memoryMegabytes: 256,
+    examplesPath: Env.variableOr("PUDU_PLAYGROUND_EXAMPLES", "website/playground/examples"),
+    sourceBytes: 65536,
+    runMillis: 10000,
+    outputBytes: 65536,
+    runsPerMinute: 30,
+    questionsPerMinute: 240,
+    trackedClients: 10000,
+    cacheEntries: 0,
+    concurrency: 1,
+    listenHost: "127.0.0.1",
+    listenPort: 8090
+  }
+}
+
+fn loadWith(playground: &Playground) -> Result[Config, SiteError.SiteError] {
   let port = whole("PUDU_SITE_PORT", Env.variableOr("PUDU_SITE_PORT", "8080"), 0, 65535) ?
   let connections = whole(
     "PUDU_SITE_CONNECTIONS",
@@ -20,8 +108,57 @@ export fn load() -> Result[Config, SiteError.SiteError] {
       port: port,
       connections: connections,
       cataloguePath: Env.variableOr("PUDU_CATALOG_PATH", "website/data/api.json"),
-      siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?
+      packagesPath: Env.variableOr("PUDU_PACKAGES_PATH", "website/data/packages"),
+      docsPath: Env.variableOr("PUDU_DOCS_PATH", "website/docs"),
+      releasesPath: Env.variableOr("PUDU_RELEASES_PATH", "website/data/releases.json"),
+      documentsPath: Env.variableOr("PUDU_DOCUMENTS_PATH", "."),
+      releaseNotesPath: Env.variableOr("PUDU_RELEASE_NOTES_PATH", "packages/pudu/v0.1/release-notes"),
+      siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?,
+      playground: *playground
     })
+}
+
+/// The playground's settings, refused when they could not work together.
+export fn loadPlayground() -> Result[Playground, SiteError.SiteError] {
+  let runner = Env.variableOr("PUDU_PLAYGROUND_RUNNER", RUNNER_OFF).trim()
+  let token = Env.variableOr("PUDU_PLAYGROUND_TOKEN", "")
+  let isolation = Env.variableOr("PUDU_PLAYGROUND_ISOLATION", "bwrap").trim()
+  let remote = runner.startsWith("https://") || runner.startsWith("http://")
+  if runner != RUNNER_OFF && runner != RUNNER_LOCAL && !remote {
+    return Err(SiteError.BadSetting("PUDU_PLAYGROUND_RUNNER"))
+  }
+  if remote && token.isEmpty() {
+    return Err(SiteError.PlaygroundMisconfigured("a remote runner needs PUDU_PLAYGROUND_TOKEN"))
+  }
+  if !ISOLATIONS.contains(isolation) {
+    return Err(SiteError.BadSetting("PUDU_PLAYGROUND_ISOLATION"))
+  }
+  Ok(Playground {
+      runner: runner,
+      token: token,
+      sandbox: Env.variableOr("PUDU_PLAYGROUND_SANDBOX", "website/playground/sandbox.sh"),
+      compiler: Env.variableOr("PUDU_PLAYGROUND_COMPILER", "pudu"),
+      library: Env.variableOr("PUDU_PLAYGROUND_LIBRARY", "packages/pudu/v0.1/lib"),
+      workspace: Env.variableOr("PUDU_PLAYGROUND_WORKSPACE", ""),
+      isolation: isolation,
+      memoryMegabytes: bounded("PUDU_PLAYGROUND_MEMORY_MB", 256, 16, 65536) ?,
+      examplesPath: Env.variableOr("PUDU_PLAYGROUND_EXAMPLES", "website/playground/examples"),
+      sourceBytes: bounded("PUDU_PLAYGROUND_SOURCE_BYTES", 65536, 64, 1048576) ?,
+      runMillis: bounded("PUDU_PLAYGROUND_RUN_MS", 10000, 100, 60000) ?,
+      outputBytes: bounded("PUDU_PLAYGROUND_OUTPUT_BYTES", 65536, 256, 1048576) ?,
+      runsPerMinute: bounded("PUDU_PLAYGROUND_RUNS_PER_MINUTE", 30, 1, 100000) ?,
+      questionsPerMinute: bounded("PUDU_PLAYGROUND_QUESTIONS_PER_MINUTE", 240, 1, 1000000) ?,
+      trackedClients: bounded("PUDU_PLAYGROUND_TRACKED_CLIENTS", 10000, 1, 10000000) ?,
+      cacheEntries: bounded("PUDU_PLAYGROUND_CACHE_ENTRIES", 256, 0, 100000) ?,
+      concurrency: bounded("PUDU_PLAYGROUND_CONCURRENCY", 4, 1, 1024) ?,
+      listenHost: Env.variableOr("PUDU_RUNNER_HOST", "127.0.0.1"),
+      listenPort: bounded("PUDU_RUNNER_PORT", 8090, 0, 65535) ?
+    })
+}
+
+/// A whole-number setting, or its default when unset.
+fn bounded(name: Str, fallback: Int, least: Int, greatest: Int) -> Result[Int, SiteError.SiteError] {
+  whole(name, Env.variableOr(name, show(fallback)), least, greatest)
 }
 
 fn baseUrl(written: Str) -> Result[Str, SiteError.SiteError] {

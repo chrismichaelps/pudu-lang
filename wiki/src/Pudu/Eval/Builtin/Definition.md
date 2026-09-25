@@ -36,6 +36,8 @@ builtinName :: Builtin -> Text
 - Every constructor has exactly one source-level name in the total `builtinName` match.
 - Adding a wired-in function requires corresponding evaluator and prelude work; a constructor here
   does not by itself expose a language feature.
+- Persistent audio has seven explicit tags—open, write, pause, resume, volume, snapshot, and close—
+  rather than one selector-driven primitive, so arity and carrier shape remain statically visible.
 
 ## Linkage
 
@@ -62,6 +64,28 @@ builtinName :: Builtin -> Text
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]
+
+## Cryptographic builtin vocabulary
+
+The closed vocabulary adds `Sha3_256Builtin`, `Sha3_512Builtin`, `Blake2b256Builtin`,
+`Blake2b512Builtin`, `HmacSha512Builtin`, and `ConstantTimeEqualBuiltin`, each with one exact
+source-level name.
+
+Resolved Grill Log: keep algorithm families as separate constructors rather than a string-selected
+digest builtin, preserving total naming and exhaustive dispatch.
+
+## Desktop capability vocabulary
+
+`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`,
+`DesktopClipboardReadBuiltin`, `DesktopClipboardWriteBuiltin`, `DesktopAccessibilityBuiltin`,
+`DesktopAccessibilityReportBuiltin`, `DesktopMenuBuiltin`, `DesktopMenuReportBuiltin`, and
+`DesktopCloseBuiltin` name the
+desktop operations beneath [[Std Ui Desktop]]. Separate constructors keep arity and
+failure attribution exhaustive; no string-selected operation or framework symbol enters the
+language.
+
+Resolved Grill Log: expose a resource lifecycle rather than a blocking demo primitive, so later
+application spaces can reuse the same presenter without changing the effect ABI.
 
 ## Word-map cardinality kernel
 
@@ -128,7 +152,10 @@ unpacked IDs directly as an ArrayValue. No tests or measurements run.
 Registers `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `BufferScanU64Builtin`,
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
-`SwissTableSizeBuiltin` in the closed builtin enumeration.
+`SwissTableSizeBuiltin` in the closed builtin enumeration. `CsvRecordsBuiltin` names `csvRecords`,
+the native record scan in [[Eval Csv]], `JsonDecodeBuiltin` names `jsonDecode`, the native
+decoder, and `JsonEncodeBuiltin` names `jsonEncode`, the native encoder, both in [[Eval Json]].
+`XmlDecodeBuiltin` names `xmlDecode`, the native reader in [[Eval Xml]].
 
 Resolved Grill Log: Register explicit enum tags for low-level memory buffers and flat hash tables
 to enable direct O(1) builtin dispatch without runtime string lookups.
@@ -141,3 +168,10 @@ to enable direct O(1) builtin dispatch without runtime string lookups.
 Registers tlsUpgradeWithin(Int,Str,Int), gzipCompress(Bytes,Int,Int), gzipDecompress(Bytes,Int) as named effect primitives returning Result[T,Str].
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Native checksum tag (#343)
+
+Registers `ChecksumBuiltin` with the canonical name `checksumOf`.
+
+Resolved Grill Log: one tag for every algorithm, selected by a code, keeps the wired-in surface one
+name wide.

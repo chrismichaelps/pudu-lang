@@ -1,0 +1,213 @@
+module UsesAudio
+
+import Std.Audio as Audio
+import Std.Bytes as Bytes
+
+/// Exact PCM construction, time, gain, mixing, slicing, and WAV round trips.
+export fn main() -> Int {
+  var held = 0
+
+  if let Err(Audio.InvalidSampleRate(7999)) = Audio.format(7999, 1) { held = held + 1 }
+  if let Err(Audio.InvalidChannels(0)) = Audio.format(48000, 0) {
+    if let Err(Audio.InvalidChannels(9)) = Audio.format(48000, 9) { held = held + 1 }
+  }
+
+  if let Ok(stereo) = Audio.format(48000, 2) {
+    if let Ok(quiet) = Audio.silence(&stereo, 3) {
+      if Audio.frameCount(&quiet) == 3 && Audio.samples(&quiet) == [0, 0, 0, 0, 0, 0] { held = held + 1 }
+    }
+    if let Err(Audio.NegativeFrames(-1)) = Audio.silence(&stereo, -1) { held = held + 1 }
+    if let Err(Audio.MisalignedSamples(3, 2)) = Audio.fromSamples(&stereo, [1, 2, 3]) {
+      held = held + 1
+    }
+    if let Err(Audio.SampleOutOfRange(1, 32768)) = Audio.fromSamples(&stereo, [0, 32768]) {
+      held = held + 1
+    }
+    if let Ok(pair) = Audio.fromSamples(&stereo, [1, -1, 2, -2]) {
+      if Audio.sampleAt(&pair, 1, 1) == Some(-2) && Audio.sampleAt(&pair, 2, 0) == None &&
+      Audio.sampleAt(&pair, 0, 2) == None && Audio.sampleAt(&pair, -1, 0) == None
+      {
+        held = held + 1
+      }
+    }
+
+    let oneSecond = Audio.Seconds{numerator: 1, denominator: 1}
+    let half = Audio.Seconds{numerator: 1, denominator: 2}
+    if Audio.seconds(&stereo, 48000) == Ok(oneSecond) && Audio.seconds(&stereo, 24000) == Ok(half) {
+      held = held + 1
+    }
+    if let Err(Audio.InvalidTime(1, 0)) = Audio.framesAt(&stereo, 1, 0) { held = held + 1 }
+  }
+
+  if let Ok(cd) = Audio.format(44100, 1) {
+    let tenth = Audio.Seconds{numerator: 1, denominator: 10}
+    if Audio.seconds(&cd, 4410) == Ok(tenth) && Audio.framesAt(&cd, 1, 3) == Ok(14700) &&
+    Audio.framesAt(&cd, 7200, 1) == Ok(317520000)
+    {
+      held = held + 1
+    }
+
+    if let Ok(loud) = Audio.fromSamples(&cd, [1000, -1001, 30000, -30000, 1]) {
+      if let Ok(same) = Audio.gain(&loud, 32768) {
+        if same == loud { held = held + 1 }
+      }
+      if let Ok(halved) = Audio.gain(&loud, 16384) {
+        if Audio.samples(&halved) == [500, -501, 15000, -15000, 1] { held = held + 1 }
+      }
+      if let Ok(doubled) = Audio.gain(&loud, 65536) {
+        if Audio.samples(&doubled) == [2000, -2002, 32767, -32768, 2] { held = held + 1 }
+      }
+      if let Ok(muted) = Audio.gain(&loud, 0) {
+        if Audio.samples(&muted) == [0, 0, 0, 0, 0] { held = held + 1 }
+      }
+      if let Err(Audio.InvalidGain(-1)) = Audio.gain(&loud, -1) {
+        if let Err(Audio.InvalidGain(131073)) = Audio.gain(&loud, 131073) { held = held + 1 }
+      }
+    }
+
+    if let Ok(bed) = Audio.fromSamples(&cd, [30000, -30000, 5]) {
+      if let Ok(hit) = Audio.fromSamples(&cd, [10000, -10000]) {
+        if let Ok(mixed) = Audio.mix(&bed, &hit) {
+          if Audio.samples(&mixed) == [32767, -32768, 5] { held = held + 1 }
+        }
+        if let Ok(joined) = Audio.append(&hit, &bed) {
+          if Audio.samples(&joined) == [10000, -10000, 30000, -30000, 5] { held = held + 1 }
+        }
+      }
+      if let Ok(stereo) = Audio.format(44100, 2) {
+        if let Ok(other) = Audio.silence(&stereo, 1) {
+          if let Err(Audio.FormatMismatch) = Audio.mix(&bed, &other) { held = held + 1 }
+        }
+      }
+
+      if let Ok(window) = Audio.slice(&bed, 1, 4) {
+        if Audio.samples(&window) == [-30000, 5, 0, 0] { held = held + 1 }
+      }
+      if let Err(Audio.SliceTooLarge(4097, 4096)) = Audio.slice(&bed, 0, 4097) { held = held + 1 }
+      if let Err(Audio.NegativeFrames(-2)) = Audio.slice(&bed, -2, 1) { held = held + 1 }
+    }
+  }
+
+  if let Ok(stereo) = Audio.format(22050, 2) {
+    if let Ok(clip) = Audio.fromSamples(&stereo, [-2, 1, 32767, -32768]) {
+      if let Ok(document) = Audio.encodeWav(&clip) {
+        let octets = Bytes.toArray(&document)
+        if Bytes.length(&document) == 52 &&
+        Bytes.slice(&document, 0, 4) == Bytes.fromText("RIFF") &&
+        octets.slice(4, 8) == [44u8, 0u8, 0u8, 0u8] && octets.slice(22, 24) == [2u8, 0u8] &&
+        octets.slice(24, 28) == [34u8, 86u8, 0u8, 0u8] && octets.slice(44, 48) == [254u8, 255u8, 1u8, 0u8] &&
+        octets.slice(48, 52) == [255u8, 127u8, 0u8, 128u8]
+        {
+          held = held + 1
+        }
+        if Audio.decodeWav(&document) == Ok(clip) { held = held + 1 }
+        if let Err(Audio.MalformedWav(Audio.Truncated)) =
+        Audio.decodeWav(&Bytes.slice(&document, 0, 51))
+        {
+          held = held + 1
+        }
+        if let Err(Audio.TooManySamples(4, 3)) = Audio.decodeWavWithin(&document, 3) {
+          held = held + 1
+        }
+
+        let header = Bytes.slice(&document, 0, 36)
+        let listed = Bytes.join(&[
+            Bytes.fromText("RIFF"),
+            Bytes.putU32Le(56u32),
+            Bytes.slice(&header, 8, 36),
+            Bytes.fromText("LIST"),
+            Bytes.putU32Le(3u32),
+            Bytes.fromText("abc"),
+            bytesOf([0u8]),
+            Bytes.slice(&document, 36, 52)
+          ])
+        if Audio.decodeWav(&listed) == Ok(clip) { held = held + 1 }
+
+        let floating = Bytes.join(&[
+            Bytes.slice(&document, 0, 20),
+            Bytes.putU16Le(3u16),
+            Bytes.slice(&document, 22, 34),
+            Bytes.putU16Le(32u16),
+            Bytes.slice(&document, 36, 52)
+          ])
+        if let Err(Audio.UnsupportedWav(3, 32)) = Audio.decodeWav(&floating) { held = held + 1 }
+
+        let formatOnly = Bytes.join(&[
+            Bytes.fromText("RIFF"),
+            Bytes.putU32Le(28u32),
+            Bytes.slice(&document, 8, 36)
+          ])
+        if let Err(Audio.MalformedWav(Audio.MissingData)) = Audio.decodeWav(&formatOnly) {
+          held = held + 1
+        }
+      }
+    }
+  }
+
+  if let Ok(stereo) = Audio.format(8000, 2) {
+    let forged = Audio.Pcm{format: stereo, data: bytesOf([0u8, 0u8, 0u8])}
+    if let Err(Audio.MisalignedSamples(1, 2)) = Audio.gain(&forged, 16384) {
+      if Audio.frameCount(&forged) == 0 && Audio.sampleAt(&forged, 0, 0) == None { held = held + 1 }
+    }
+  }
+
+  if let Err(Audio.MalformedWav(Audio.MissingRiff)) = Audio.decodeWav(&Bytes.fromText("RIFX0000WAVE")) {
+    held = held + 1
+  }
+
+  if let Ok(narrow) = Audio.format(8000, 1) {
+    if let Ok(ramp) = Audio.fromSamples(&narrow, [0, 1000]) {
+      if let Ok(up) = Audio.resample(&ramp, 16000) {
+        if up.format.sampleRate == 16000 && Audio.samples(&up) == [0, 500, 1000, 1000] {
+          held = held + 1
+        }
+      }
+      if let Ok(same) = Audio.resample(&ramp, 8000) {
+        if same == ramp { held = held + 1 }
+      }
+      if let Err(Audio.InvalidSampleRate(100)) = Audio.resample(&ramp, 100) { held = held + 1 }
+      if let Ok(thirds) = Audio.resample(&ramp, 24000) {
+        if Audio.samples(&thirds) == [0, 333, 667, 1000, 1000, 1000] { held = held + 1 }
+      }
+    }
+    if let Ok(steps) = Audio.fromSamples(&narrow, [-1, 1]) {
+      if let Ok(fine) = Audio.resample(&steps, 16000) {
+        if Audio.samples(&fine) == [-1, 0, 1, 1] { held = held + 1 }
+      }
+    }
+  }
+  if let Ok(wide) = Audio.format(16000, 1) {
+    if let Ok(dense) = Audio.fromSamples(&wide, [0, 100, 200, 300]) {
+      if let Ok(down) = Audio.resample(&dense, 8000) {
+        if Audio.samples(&down) == [0, 200] { held = held + 1 }
+      }
+    }
+  }
+  if let Ok(stereo) = Audio.format(8000, 2) {
+    if let Ok(pair) = Audio.fromSamples(&stereo, [100, -100, 3, 4, -3, -4]) {
+      if let Ok(mono) = Audio.downmix(&pair) {
+        if mono.format.channels == 1 && Audio.samples(&mono) == [0, 4, -4] { held = held + 1 }
+      }
+      if let Ok(swapped) = Audio.remap(&pair, &[1, 0]) {
+        if Audio.samples(&swapped) == [-100, 100, 4, 3, -4, -3] { held = held + 1 }
+      }
+      if let Err(Audio.InvalidChannelMap(2)) = Audio.remap(&pair, &[0, 2]) { held = held + 1 }
+      if let Err(Audio.FormatMismatch) = Audio.upmix(&pair, 4) { held = held + 1 }
+    }
+  }
+  if let Ok(single) = Audio.format(8000, 1) {
+    if let Ok(tone) = Audio.fromSamples(&single, [5, -6]) {
+      if let Ok(surround) = Audio.upmix(&tone, 3) {
+        if surround.format.channels == 3 && Audio.samples(&surround) == [5, 5, 5, -6, -6, -6] {
+          held = held + 1
+        }
+      }
+      if let Err(Audio.InvalidChannels(9)) = Audio.upmix(&tone, 9) { held = held + 1 }
+      if let Ok(far) = Audio.slice(&tone, 1152921504606846976, 2) {
+        if Audio.samples(&far) == [0, 0] { held = held + 1 }
+      }
+    }
+  }
+
+  held
+}

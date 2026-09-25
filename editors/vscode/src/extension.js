@@ -1,7 +1,8 @@
-const { window, workspace } = require("vscode");
+const { commands, window, workspace } = require("vscode");
 const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
 
 let client;
+let output;
 
 /**
  * Start the server and hand it every `.pudu` document.
@@ -16,6 +17,26 @@ async function activate(context) {
     return;
   }
 
+  // One channel for the whole session, so a restart appends to what the
+  // reader was already looking at instead of opening a second panel.
+  output = window.createOutputChannel("Pudu");
+  context.subscriptions.push(output);
+
+  context.subscriptions.push(
+    commands.registerCommand("pudu.restartServer", restart),
+    // A new compiler path names a different server; the running one is stale.
+    workspace.onDidChangeConfiguration(change => {
+      if (change.affectsConfiguration("pudu.serverPath")) {
+        restart();
+      }
+    }),
+    { dispose: () => stop() }
+  );
+
+  await start();
+}
+
+async function start() {
   const configured = workspace.getConfiguration("pudu").get("serverPath") || "pudu";
   const server = {
     command: configured,
@@ -23,25 +44,21 @@ async function activate(context) {
     transport: TransportKind.stdio,
   };
 
-  client = new LanguageClient(
+  const candidate = new LanguageClient(
     "pudu",
     "Pudu",
     { run: server, debug: server },
     {
       documentSelector: [{ scheme: "file", language: "pudu" }],
       synchronize: { fileEvents: workspace.createFileSystemWatcher("**/*.pudu") },
+      outputChannel: output,
     }
   );
 
-  // The client is what is disposable. `start` answers with a promise, and
-  // pushing that instead leaves nothing registered to dispose — the editor then
-  // has no way to stop the server, and reports that stopping it timed out.
-  context.subscriptions.push(client);
-
   try {
-    await client.start();
+    await candidate.start();
+    client = candidate;
   } catch (failure) {
-    client = undefined;
     window.showErrorMessage(
       `Pudu: could not start \`${configured} lsp\`. ` +
         "Set `pudu.serverPath` to the compiler, or put it on your PATH. " +
@@ -50,13 +67,30 @@ async function activate(context) {
   }
 }
 
-async function deactivate() {
+async function stop() {
   if (!client) {
     return;
   }
   const stopping = client;
   client = undefined;
-  await stopping.stop();
+  try {
+    await stopping.stop();
+  } catch {
+    // A server that already exited has nothing left to stop.
+  }
+}
+
+/**
+ * Stop the running server and start the configured one: what a reader wants
+ * after rebuilding the compiler, without reloading the window.
+ */
+async function restart() {
+  await stop();
+  await start();
+}
+
+async function deactivate() {
+  await stop();
 }
 
 module.exports = { activate, deactivate };

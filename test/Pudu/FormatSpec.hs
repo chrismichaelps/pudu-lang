@@ -17,15 +17,19 @@ formatProperties =
   , ("indentation follows brace depth", testIndentation)
   , ("a wrapped parameter list belongs to its declaration", testWrappedParameters)
   , ("a list written one item to a line keeps its items level", testLeadingCommas)
+  , ("a statement opening with a prefix operator starts its own line", testPrefixStatements)
   , ("spacing is normalised inside a line", testSpacing)
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
   , ("a Set literal keeps its sigil and braces tight", testSetLiteral)
+  , ("a macro call keeps its name, bang, and arguments tight", testMacroCalls)
   , ("imports sort with the standard library first", testImportOrder)
   , ("input that does not lex is returned untouched", testUnlexable)
   , ("blank-line runs collapse to one", testBlankLines)
   , ("a loop label is one thing and starts its own line", testLabels)
   , ("a record written as a change to another lines its fields up", testUpdateIndent)
+  , ("a function literal holds its bars against its parameters", testLiteralBars)
+  , ("a range holds its ends and a pattern holds its fields", testRangeAndPatternSpacing)
   ]
 
 {-| The property that makes the formatter safe to run on anything.
@@ -126,6 +130,39 @@ testLeadingCommas = do
     , "}"
     ]
 
+{-| A line that opens with `*`, `-`, or `&` is a statement of its own: the
+    parser reads `*count = 0` on its own line as an assignment through a
+    reference, never as the line above multiplied. Indented as a continuation it
+    looked like part of the statement before it. A binary operator that cannot
+    open an expression still carries the line above on. -}
+testPrefixStatements :: IO Property
+testPrefixStatements = do
+  formatted <- formatOf written
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  written =
+    Text.unlines
+      [ "module M"
+      , "fn bump(count: &mut Int, step: Int) -> () {"
+      , "*count = *count + step"
+      , "if *count > 9 { return }"
+      , "*count = *count"
+      , "+ step"
+      , "}"
+      ]
+  expected =
+    [ "module M"
+    , "fn bump(count: &mut Int, step: Int) -> () {"
+    , "  *count = *count + step"
+    , "  if *count > 9 { return }"
+    , "  *count = *count"
+    , "    + step"
+    , "}"
+    ]
+
 testIndentation :: IO Property
 testIndentation = do
   formatted <- formatOf nested
@@ -178,6 +215,70 @@ testSpacing = do
     , "fn add(a: Int, b: Int) -> Int { a + b }"
     , "fn call() -> Int { add(1, 2) }"
     , "fn reach(xs: Array[Int]) -> Int { xs[0] }"
+    ]
+
+{-| The bars of a function literal attach to its parameters, and a bar that
+    joins two values does not. They are spelled the same, so the difference is
+    the only thing worth testing here. -}
+testLiteralBars :: IO Property
+testLiteralBars = do
+  formatted <- formatOf messy
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  messy =
+    Text.unlines
+      [ "module M"
+      , "fn twice(xs: Array[Int]) -> Array[Int] { xs.map( | x | x*2 ) }"
+      , "fn typed() -> Int { ( | x : Int | -> Int { x } )( 1 ) }"
+      , "fn none() -> Int { (||7)() }"
+      , "fn joined(a: Int, b: Int) -> Int { a|b }"
+      , "type Choice = | Left | Right"
+      ]
+  expected =
+    [ "module M"
+    , "fn twice(xs: Array[Int]) -> Array[Int] { xs.map(|x| x * 2) }"
+    , "fn typed() -> Int { (|x: Int| -> Int { x })(1) }"
+    , "fn none() -> Int { (|| 7)() }"
+    , "fn joined(a: Int, b: Int) -> Int { a | b }"
+    , "type Choice = | Left | Right"
+    ]
+
+{-| A range reads as one value, so it holds its ends; a binding that takes a
+    record apart holds its fields the way the record construction does, while
+    still standing clear of the keyword that opened it. -}
+testRangeAndPatternSpacing :: IO Property
+testRangeAndPatternSpacing = do
+  formatted <- formatOf messy
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  messy =
+    Text.unlines
+      [ "module M"
+      , "type Point = { x: Int, y: Int }"
+      , "fn spans(xs: Array[Int]) -> Int { xs[ 1 .. 3 ].length() + xs[ 2 .. ].length() }"
+      , "fn counted() -> Int { ( 1 ..= 4 ).length() }"
+      , "fn apart(p: Point) -> Int {"
+      , "  let { x , y } = p"
+      , "  let [ first , .. rest ] = [1, 2, 3]"
+      , "  x + y + first + rest.length()"
+      , "}"
+      ]
+  expected =
+    [ "module M"
+    , "type Point = { x: Int, y: Int }"
+    , "fn spans(xs: Array[Int]) -> Int { xs[1..3].length() + xs[2..].length() }"
+    , "fn counted() -> Int { (1..=4).length() }"
+    , "fn apart(p: Point) -> Int {"
+    , "  let {x, y} = p"
+    , "  let [first, ..rest] = [1, 2, 3]"
+    , "  x + y + first + rest.length()"
+    , "}"
     ]
 
 testIfLetSpacing :: IO Property
@@ -237,6 +338,32 @@ testSetLiteral = do
               , "fn values() -> Set[Int] { #{3, 1, 2, } }"
               , "fn empty() -> Set[Int] { #{} }"
               , "fn contains() -> Bool { 2 in #{1, 2} }"
+              ]
+        )
+    )
+
+testMacroCalls :: IO Property
+testMacroCalls = do
+  formatted <- formatOf
+    (Text.unlines
+      [ "module M"
+      , "macro twice(value: expr) = value + value"
+      , "fn run() -> Int {"
+      , "  swap ! (first,second)"
+      , "  let total = timed!( { first + second })"
+      , "  twice!(total) + twice !(1)"
+      , "}"
+      ])
+  pure
+    ( counterexample (Text.unpack formatted)
+        ( Text.lines formatted
+          === [ "module M"
+              , "macro twice(value: expr) = value + value"
+              , "fn run() -> Int {"
+              , "  swap!(first, second)"
+              , "  let total = timed!({ first + second })"
+              , "  twice!(total) + twice!(1)"
+              , "}"
               ]
         )
     )

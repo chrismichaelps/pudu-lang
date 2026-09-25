@@ -265,9 +265,11 @@ export fn listPaths(path: Str) -> Result[Array[Str], Str] {
 /// ```
 export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 
-/// A file copied, or a report of what stopped it.
+/// A file copied byte for byte, or a report of what stopped it.
 ///
-/// The destination is replaced when it exists. The source is left as it was.
+/// Bytes rather than text, so a copy of an image or an archive is the file
+/// and not a failure to decode one. The destination is replaced when it exists;
+/// the source is left as it was.
 ///
 /// ## Examples
 ///
@@ -275,14 +277,21 @@ export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 /// let _ = Io.copy("notes.txt", "notes.bak")
 /// ```
 export fn copy(from: Str, to: Str) -> Result[(), Str] {
-  writeFile(to, readFile(from) ?)
+  match readAllBytes(from) {
+    case Ok(contents) =>
+    match writeAllBytes(to, &contents) {
+      case Ok(_) => Ok(())
+      case Err(reason) => Err(describe(reason))
+    }
+    case Err(reason) => Err(describe(reason))
+  }
 }
 
-/// A file moved, which is a copy followed by removing the original.
+/// A file moved by renaming it, copying only when a rename cannot reach.
 ///
-/// Written as those two steps, so a failure partway leaves the copy behind rather
-/// than losing the file. It is not atomic, and it is not a rename across devices
-/// that the operating system could have done in one step.
+/// A rename within one filesystem never leaves both or neither; the copy and
+/// removal are the fallback for a destination on another filesystem, where a
+/// failure partway leaves the copy behind rather than losing the file.
 ///
 /// ## Examples
 ///
@@ -290,8 +299,33 @@ export fn copy(from: Str, to: Str) -> Result[(), Str] {
 /// let _ = Io.move("draft.txt", "final.txt")
 /// ```
 export fn move(from: Str, to: Str) -> Result[(), Str] {
-  copy(from, to) ?
-  removeFile(from)
+  match renamePath(from, to) {
+    case Ok(_) => Ok(())
+    case Err(message) =>
+    if !fileExists(from) {
+      Err(message)
+    } else {
+      copy(from, to) ?
+      removeFile(from)
+    }
+  }
+}
+
+/// The cause an operating-system message names for a path, so other modules
+/// classify failures the way this one does.
+export fn classified(message: Str, path: Str) -> IoError { causeOf(message, path) }
+
+fn describe(reason: IoError) -> Str {
+  match reason {
+    case NotFound(path) => "does not exist: " + path
+    case PermissionDenied(path) => "permission denied: " + path
+    case IsDirectory(path) => "is a directory: " + path
+    case AlreadyExists(path) => "already exists: " + path
+    case NotText => "not text"
+    case UnexpectedEnd => "unexpected end"
+    case HandleClosed => "handle is closed"
+    case Other(message) => message
+  }
 }
 
 /// The path vocabulary, so a program reaching for it through `Std.Io` finds
@@ -693,8 +727,9 @@ export fn appendAllBytes(path: Str, contents: &Bytes) -> Result[(), IoError] {
 /// would leave that variable as it found it.
 export fn foldLines[T](path: Str, seed: T, step: fn(T, Str) -> T) -> Result[T, IoError] {
   withReader(path, fn(reader: Reader) -> Result[T, IoError] {
+      let newline = ByteSeq.fromArray(&[10u8])
       var total = seed
-      var carried = ByteSeq.empty()
+      var pending: Array[Bytes] = []
       var failure: Option[IoError] = None
       var going = true
       while going {
@@ -705,19 +740,25 @@ export fn foldLines[T](path: Str, seed: T, step: fn(T, Str) -> T) -> Result[T, I
         } else {
           let piece = Result.unwrapOr(chunk, None)
           if let Some(bytes) = piece {
-            carried = carried.concat(bytes)
-            let split = takeLines(carried)
-            if let Err(reason) = split[0] {
-              failure = Some(reason)
-              going = false
+            let fromEnd = bytes.reverse().indexOf(newline)
+            if fromEnd < 0 {
+              pending = pending.push(bytes)
+            } else {
+              let cut = bytes.length() - fromEnd - 1
+              let split = takeLines(ByteSeq.join(&pending.push(bytes.take(cut))))
+              if let Err(reason) = split {
+                failure = Some(reason)
+                going = false
+              }
+              for line in Result.unwrapOr(split, []) { total = step(total, line) }
+              pending = [bytes.drop(cut + 1)]
             }
-            for line in Result.unwrapOr(split[0], []) { total = step(total, line) }
-            carried = split[1]
           } else {
             going = false
           }
         }
       }
+      let carried = ByteSeq.join(&pending)
       if let Some(reason) = failure { Err(reason) } else {
         if carried.isEmpty() { Ok(total) } else {
           if let Some(line) = carried.toText() {
@@ -752,31 +793,15 @@ export fn readAllLinesOf(path: Str) -> Result[Array[Str], IoError] {
   foldLines(path, [], fn(lines: Array[Str], line: Str) -> Array[Str] { lines.push(line) })
 }
 
-/// The complete lines a buffer holds, and the partial line left over.
-/// The remainder is carried into the next chunk rather than reported, because
-/// a line divided by a chunk boundary is one line and not two.
-fn takeLines(buffer: Bytes) -> (Result[Array[Str], IoError], Bytes) {
-  let newline = ByteSeq.fromArray(&[10u8])
-  var lines: Array[Str] = []
-  var rest = buffer
-  var failure: Option[IoError] = None
-  var going = true
-  while going {
-    let found = rest.indexOf(newline)
-    if found < 0 {
-      going = false
-    } else {
-      let text = rest.take(found).toText()
-      if let Some(line) = text {
-        lines = lines.push(trimReturn(line))
-      } else {
-        failure = Some(NotText)
-        going = false
-      }
-      rest = rest.drop(found + 1)
-    }
-  }
-  if let Some(reason) = failure { (Err(reason), rest) } else { (Ok(lines), rest) }
+/// The lines of a block that ends where its last newline stood.
+/// The block is decoded once and divided by one native split, so what a line
+/// costs is the caller's step and nothing interpreted beside it. Cutting at a
+/// newline byte never divides an encoded character, because no byte of a
+/// multi-byte character is a newline.
+fn takeLines(block: Bytes) -> Result[Array[Str], IoError] {
+  let Some(text) = block.toText() else { return Err(NotText) }
+  let lines = text.split("\n")
+  if text.contains("\r") { Ok(lines.map(trimReturn)) } else { Ok(lines) }
 }
 
 /// A file written where a carriage return precedes each newline still holds

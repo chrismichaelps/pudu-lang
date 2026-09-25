@@ -1,0 +1,257 @@
+module Std.Cron
+
+import Std.Time.Format.Civil as Civil
+import Std.Time as Time
+
+/// Why a schedule expression was refused.
+export type CronError
+  = FieldCount(Int)
+  | Malformed(Str, Str)
+  | OutOfRange(Str, Int, Int, Int)
+  | UnknownMacro(Str)
+
+/// A five-field schedule: minute, hour, day of month, month, day of week.
+///
+/// Each field is a membership table indexed by value. `anyDay` and
+/// `anyWeekday` record a `*` in those fields, which decides how the two day
+/// fields combine.
+export type Schedule = {
+  minutes: Array[Bool],
+  hours: Array[Bool],
+  days: Array[Bool],
+  months: Array[Bool],
+  weekdays: Array[Bool],
+  anyDay: Bool,
+  anyWeekday: Bool
+}
+
+/// Days searched by `next` before a schedule is reported as never firing.
+const SEARCH_DAYS: Int = 3000
+
+const MINUTE_MILLIS: Int = 60000
+
+const DAY_MINUTES: Int = 1440
+
+const MACROS: Map[Str, Str] = mapOf([
+    ("@yearly", "0 0 1 1 *"),
+    ("@annually", "0 0 1 1 *"),
+    ("@monthly", "0 0 1 * *"),
+    ("@weekly", "0 0 * * 0"),
+    ("@daily", "0 0 * * *"),
+    ("@midnight", "0 0 * * *"),
+    ("@hourly", "0 * * * *")
+  ])
+
+const MONTH_NAMES: Map[Str, Int] = mapOf([
+    ("JAN", 1),
+    ("FEB", 2),
+    ("MAR", 3),
+    ("APR", 4),
+    ("MAY", 5),
+    ("JUN", 6),
+    ("JUL", 7),
+    ("AUG", 8),
+    ("SEP", 9),
+    ("OCT", 10),
+    ("NOV", 11),
+    ("DEC", 12)
+  ])
+
+const WEEKDAY_NAMES: Map[Str, Int] = mapOf([
+    ("SUN", 0),
+    ("MON", 1),
+    ("TUE", 2),
+    ("WED", 3),
+    ("THU", 4),
+    ("FRI", 5),
+    ("SAT", 6)
+  ])
+
+const NO_NAMES: Map[Str, Int] = mapOf([])
+
+/// Parses a five-field expression or one of `@yearly`, `@annually`,
+/// `@monthly`, `@weekly`, `@daily`, `@midnight`, `@hourly`.
+///
+/// Fields accept `*`, `n`, `a-b`, `*/s`, `a-b/s`, `a/s`, and comma lists.
+/// Months accept `JAN`..`DEC`; weekdays accept `SUN`..`SAT`, and `7` is Sunday.
+export fn parse(text: Str) -> Result[Schedule, CronError] {
+  let trimmed = text.trim()
+  let expanded = if trimmed.startsWith("@") {
+    match MACROS.get(trimmed.toLower()) {
+      case Some(body) => body
+      case None => { return Err(UnknownMacro(trimmed)) }
+    }
+  } else {
+    trimmed
+  }
+  let fields = expanded.split(" ").filter(|part| part.length() > 0)
+  if fields.length() != 5 { return Err(FieldCount(fields.length())) }
+  let minutes = field("minute", fields[0], 0, 59, &NO_NAMES) ?
+  let hours = field("hour", fields[1], 0, 23, &NO_NAMES) ?
+  let days = field("day", fields[2], 1, 31, &NO_NAMES) ?
+  let months = field("month", fields[3], 1, 12, &MONTH_NAMES) ?
+  let rawWeekdays = field("weekday", fields[4], 0, 7, &WEEKDAY_NAMES) ?
+  var weekdays = rawWeekdays.slice(0, 7)
+  if rawWeekdays[7] { weekdays[0] = true }
+  Ok(Schedule {
+      minutes: minutes,
+      hours: hours,
+      days: days,
+      months: months,
+      weekdays: weekdays,
+      anyDay: fields[2] == "*",
+      anyWeekday: fields[4] == "*"
+    })
+}
+
+/// Whether the minute containing `moment` (UTC) is one the schedule fires in.
+export fn matches(schedule: &Schedule, moment: &Time.Instant) -> Bool {
+  let minute = Civil.floorDiv(Time.toMillis(moment), MINUTE_MILLIS)
+  let day = Civil.floorDiv(minute, DAY_MINUTES)
+  let within = minute - day * DAY_MINUTES
+  dayFires(schedule, day) && schedule.hours[within / 60] && schedule.minutes[within % 60]
+}
+
+/// The first minute strictly after `after` (UTC) that the schedule fires in.
+///
+/// `None` when no such minute exists within the search window, as for
+/// `0 0 30 2 *`.
+export fn next(schedule: &Schedule, after: &Time.Instant) -> Option[Time.Instant] {
+  let start = Civil.floorDiv(Time.toMillis(after), MINUTE_MILLIS) + 1
+  let firstDay = Civil.floorDiv(start, DAY_MINUTES)
+  var offset = 0
+  while offset < SEARCH_DAYS {
+    let day = firstDay + offset
+    if dayFires(schedule, day) {
+      let from = if offset == 0 { start - day * DAY_MINUTES } else { 0 }
+      if let Some(within) = firstMinute(schedule, from) {
+        return Some(Time.instantOf((day * DAY_MINUTES + within) * MINUTE_MILLIS))
+      }
+    }
+    offset = offset + 1
+  }
+  None
+}
+
+/// Up to `count` successive firing minutes after `after`.
+export fn upcoming(schedule: &Schedule, after: &Time.Instant, count: Int) -> Array[Time.Instant] {
+  var found = []
+  var cursor = *after
+  while found.length() < count {
+    match next(schedule, &cursor) {
+      case Some(moment) => {
+        found = found.push(moment)
+        cursor = moment
+      }
+      case None => { break }
+    }
+  }
+  found
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &CronError) -> Str {
+  match problem {
+    case FieldCount(count) => "expected 5 fields, found {count}"
+    case Malformed(name, text) => "malformed {name} field: {text}"
+    case OutOfRange(name, found, low, high) => "{name} {found} is outside {low}-{high}"
+    case UnknownMacro(text) => "unknown schedule macro: {text}"
+  }
+}
+
+fn dayFires(schedule: &Schedule, day: Int) -> Bool {
+  let (_, month, dayOfMonth) = Civil.civilFromDays(day)
+  if !schedule.months[month] { return false }
+  let weekday = Civil.floorMod(day + 4, 7)
+  let byDay = schedule.days[dayOfMonth]
+  let byWeekday = schedule.weekdays[weekday]
+  if schedule.anyDay && schedule.anyWeekday { return true }
+  if schedule.anyDay { return byWeekday }
+  if schedule.anyWeekday { return byDay }
+  byDay || byWeekday
+}
+
+fn firstMinute(schedule: &Schedule, from: Int) -> Option[Int] {
+  var within = from
+  while within < DAY_MINUTES {
+    let hour = within / 60
+    if !schedule.hours[hour] {
+      within = (hour + 1) * 60
+      continue
+    }
+    if schedule.minutes[within % 60] { return Some(within) }
+    within = within + 1
+  }
+  None
+}
+
+fn field(
+  name: Str,
+  text: Str,
+  low: Int,
+  high: Int,
+  names: &Map[Str, Int]
+) -> Result[Array[Bool], CronError] {
+  var table = replicated(high + 1)
+  for item in text.split(",") {
+    let (range, step) = stepped(name, item) ?
+    let (first, last) = if range == "*" {
+      (low, high)
+    } else {
+      let bounds = range.split("-")
+      if bounds.length() > 2 { return Err(Malformed(name, item)) }
+      let start = value(name, bounds[0], names) ?
+      let finish = if bounds.length() == 2 {
+        value(name, bounds[1], names) ?
+      } else {
+        if step > 1 { high } else { start }
+      }
+      (start, finish)
+    }
+    if first < low || first > high { return Err(OutOfRange(name, first, low, high)) }
+    if last < low || last > high { return Err(OutOfRange(name, last, low, high)) }
+    if first > last { return Err(Malformed(name, item)) }
+    var at = first
+    while at <= last {
+      table[at] = true
+      at = at + step
+    }
+  }
+  Ok(table)
+}
+
+fn stepped(name: Str, item: Str) -> Result[(Str, Int), CronError] {
+  let parts = item.split("/")
+  if parts.length() == 1 { return Ok((item, 1)) }
+  if parts.length() > 2 { return Err(Malformed(name, item)) }
+  let step = number(parts[1])
+  match step {
+    case Some(size) if size > 0 => Ok((parts[0], size))
+    case _ => Err(Malformed(name, item))
+  }
+}
+
+fn value(name: Str, text: Str, names: &Map[Str, Int]) -> Result[Int, CronError] {
+  if let Some(found) = names.get(text.toUpper()) { return Ok(found) }
+  match number(text) {
+    case Some(found) => Ok(found)
+    case None => Err(Malformed(name, text))
+  }
+}
+
+fn number(text: Str) -> Option[Int] {
+  if text.length() == 0 || text.length() > 4 { return None }
+  var total = 0
+  for symbol in text {
+    let code = symbol.code()
+    if code < 48 || code > 57 { return None }
+    total = total * 10 + code - 48
+  }
+  Some(total)
+}
+
+fn replicated(size: Int) -> Array[Bool] {
+  var table = []
+  while table.length() < size { table = table.push(false) }
+  table
+}

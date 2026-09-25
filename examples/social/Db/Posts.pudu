@@ -48,25 +48,26 @@ export fn find(db: &Database.Database, reader: Str, id: Int) -> Result[Option[Po
 }
 
 /// Write a post and answer it as the feed would show it.
+///
+/// `RETURNING` answers the identifier this statement chose, and the post is
+/// then read by that identifier. Reading the newest post afterwards would
+/// answer somebody else's whenever two people post at once.
 export fn add(db: &Database.Database, author: Str, body: Str, at: Int) -> Result[Post, PostError] {
-  match Database.query(
+  let written = match Database.query(
     db,
-    "INSERT INTO post (author, body, written) VALUES (?, ?, ?)",
+    "INSERT INTO post (author, body, written) VALUES (?, ?, ?) RETURNING id",
       &[Driver.TextValue(author), Driver.TextValue(body), Driver.IntegerValue(big(at))]
   ) {
-    case Err(problem) => Err(PostError{message: problem.message})
-    case Ok(_) => {
-      let recent = read(
-        db,
-        withCounts("") + " ORDER BY p.id DESC LIMIT 1",
-          &[Driver.TextValue(author)]
-      ) ?
-      if recent.length() == 0 {
-        Err(PostError{message: "the post was written and could not be read back"})
-      } else {
-        Ok(recent[0])
-      }
-    }
+    case Err(problem) => { return Err(PostError{message: problem.message}) }
+    case Ok(rows) => rows
+  }
+  let id = match Row.integer(&written, 0, "id") {
+    case Ok(held) => Option.unwrapOr(convertInteger[Int](held), 0)
+    case Err(_) => { return Err(PostError{message: "the post was written and its identifier could not be read"}) }
+  }
+  match find(db, author, id) ? {
+    case None => Err(PostError{message: "the post was written and could not be read back"})
+    case Some(post) => Ok(post)
   }
 }
 
@@ -79,19 +80,19 @@ export fn remove(db: &Database.Database, id: Int) -> Result[Bool, PostError] {
       // The children go with it. The schema says so too, but foreign keys are
       // off by default in SQLite and a program that relies on a setting it did
       // not make is a program that leaves orphans on somebody else's machine.
-      for statement in [
-        "DELETE FROM approval WHERE post = ?",
-        "DELETE FROM comment WHERE post = ?",
-        "DELETE FROM post WHERE id = ?"
-      ] {
-        match Database.query(db, statement, &[Driver.IntegerValue(big(id))]) {
-          case Err(problem) => {
-            return Err(PostError{message: problem.message})
-          }
-          case Ok(_) => {}
-        }
+      //
+      // All three in one transaction: run one at a time, a failure after the
+      // first would leave a post whose approvals and replies are already gone.
+      let key = [Driver.IntegerValue(big(id))]
+      let removed = Database.transaction(db, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+          let _approvals = Driver.ask(&open, "DELETE FROM approval WHERE post = ?", &key) ?
+          let _comments = Driver.ask(&open, "DELETE FROM comment WHERE post = ?", &key) ?
+          Driver.ask(&open, "DELETE FROM post WHERE id = ?", &key)
+        })
+      match removed {
+        case Err(problem) => Err(PostError{message: problem.message})
+        case Ok(_) => Ok(true)
       }
-      Ok(true)
     }
   }
 }

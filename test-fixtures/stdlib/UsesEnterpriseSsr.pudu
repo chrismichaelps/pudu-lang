@@ -44,7 +44,7 @@ fn tightened[C: Totp.Configuring](base: &C) -> C {
 
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: Get, target: "/", headers: headers, body: ""},
+    message: Http.Request{method: Get, target: "/", headers: headers, body: "", binaryBody: None},
     path: "/",
     params: mapOf([]),
     query: mapOf([]),
@@ -251,6 +251,30 @@ export fn main() -> Int {
   if r1.status.code == 200 { passed = passed + 1 }
   if r2.status.code == 200 { passed = passed + 1 }
   if r3.status.code == 429 { passed = passed + 1 }
+
+  // A limiter remembering two peers forgets the one seen least recently, which
+  // then starts a fresh window: "a" is refused, then forgotten once "b" and "c"
+  // arrive, and admitted again.
+  let peerA = testRequest([], "a")
+  let peerB = testRequest([], "b")
+  let peerC = testRequest([], "c")
+  let bounded = Guard.rateLimitedTracking(1, 60, 2)
+  let _firstA = bounded(peerA, okHandler)
+  let refusedA = bounded(peerA, okHandler)
+  let _firstB = bounded(peerB, okHandler)
+  let _firstC = bounded(peerC, okHandler)
+  let forgottenA = bounded(peerA, okHandler)
+  if refusedA.status.code == 429 && forgottenA.status.code == 200 { passed = passed + 1 }
+
+  // A refused peer counts as seen, so newer peers push out an older one rather
+  // than the peer being refused.
+  let held = Guard.rateLimitedTracking(1, 60, 2)
+  let _heldA = held(peerA, okHandler)
+  let _heldB = held(peerB, okHandler)
+  let _againA = held(peerA, okHandler)
+  let _heldC = held(peerC, okHandler)
+  let stillA = held(peerA, okHandler)
+  if stillA.status.code == 429 { passed = passed + 1 }
 
   // 15. HtmlStream: suspenseError boundary
   let errFallback = "<div>Async Error Boundary</div>".toBytes()

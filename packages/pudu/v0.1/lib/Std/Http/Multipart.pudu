@@ -123,8 +123,11 @@ fn failureOf(outcome: Result[Part, MultipartError]) -> Option[MultipartError] {
   if let Err(problem) = outcome { Some(problem) } else { Some(Malformed("a part could not be read")) }
 }
 
-/// Whether a chunk is the end marker or the empty space around one.
+/// Whether a chunk is the end marker or the empty space around one. Only a
+/// chunk of at most six bytes is examined as text; a part has headers and is
+/// longer, and its content need not be UTF-8.
 fn closingOrEmpty(chunk: &Bytes) -> Bool {
+  if ByteSeq.length(chunk) > 6 { return false }
   let text = Result.unwrapOr(ByteSeq.toText(chunk), "").trim()
   text.isEmpty() || text == "--"
 }
@@ -168,7 +171,7 @@ fn trimmedEnd(body: &Bytes) -> Bytes {
     let tail = Result.unwrapOr(ByteSeq.toText(&ByteSeq.slice(body, length - 2, length)), "")
     if tail == "\r\n" { ByteSeq.slice(body, 0, length - 2) } else { *body }
   } else {
-      *body
+    *body
   }
 }
 

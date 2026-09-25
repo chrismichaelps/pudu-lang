@@ -1,9 +1,17 @@
 module Std.Toml.Read
 
 import Std.Option as Option
-import Std.Toml {Boolean, Fractional, List, Malformed, Moment, Table, Text, Toml, TomlError, Unexpected, Unterminated, Whole}
+import Std.Toml {Boolean, Fractional, List, Malformed, Moment, Table, Text, Toml, TomlError, TooDeep, Unexpected, Unterminated, Whole}
 import Std.Toml as Document
 import Std.Toml.Scan as Scan
+
+/// The most lists and inline tables one value may nest.
+///
+/// Reading recurses once per level, and the evaluator bounds how deep calls
+/// may go, so a value nested past that bound would stop the whole program
+/// rather than answer an error. This bound refuses it as `TooDeep` well inside
+/// the evaluator's own limit.
+const MAX_DEPTH: Int = 512
 
 /// A configuration read from text.
 ///
@@ -11,9 +19,16 @@ import Std.Toml.Scan as Scan
 /// afterwards, because a section header changes where every later key belongs:
 /// a reader that gathered keys first would have to remember which header each
 /// arrived under, which is the same bookkeeping done less directly.
+///
+/// Tables under construction are drafts held side by side and named by
+/// position, each keeping its keys in written order and a map from key to where
+/// it points. Placing a key is one map lookup per segment of its path, so the
+/// work does not grow with how many keys the table already holds. The drafts
+/// become the finished value once, when the text has been read.
 export fn read(source: Str) -> Result[Toml, TomlError] {
-  var root = Document.table()
+  var drafts = [emptyDraft()]
   var section: Array[Str] = []
+  var current = 0
   var index = 0
   var failure: Option[TomlError] = None
 
@@ -31,24 +46,23 @@ export fn read(source: Str) -> Result[Toml, TomlError] {
           // A repeated section starts a new table at the end of a list; a plain
           // one names a table that may already exist and is not replaced, so
           // keys written under it after another section still land in it.
-          if found[1] {
-            root = appendAt(&root, &section, Document.table())
-          } else {
-            if Option.isNone(&pathAt(&root, &section)) {
-              root = setAt(&root, &section, Document.table())
+          let opened = if found[1] { appendTable(drafts, &section) } else { openTable(drafts, &section) }
+          match opened {
+            case Ok(next) => {
+              drafts = next[0]
+              current = next[1]
             }
+            case Err(reason) => { failure = Some(reason) }
           }
         } else {
           failure = failureOf(header, index)
         }
       } else {
-        let pairing = readPair(source, index)
+        let pairing = readPair(source, index, 0)
         if let Ok(found) = pairing {
-          let whole = joinPath(&section, &found[0])
-          if Option.isSome(&pathAt(&root, &whole)) {
-            failure = Some(Document.Duplicate(dotted(&whole)))
-          } else {
-            root = setAt(&root, &whole, found[1])
+          match placeValue(drafts, current, &section, &found[0], found[1]) {
+            case Ok(next) => { drafts = next }
+            case Err(reason) => { failure = Some(reason) }
           }
           index = found[2]
         } else {
@@ -58,7 +72,7 @@ export fn read(source: Str) -> Result[Toml, TomlError] {
     }
   }
 
-  if let Some(reason) = failure { Err(reason) } else { Ok(root) }
+  if let Some(reason) = failure { Err(reason) } else { Ok(finished(&drafts, 0)) }
 }
 
 /// The failure a step reported, or a general one when it reported none.
@@ -85,14 +99,14 @@ fn readHeader(source: Str, start: Int) -> Result[(Array[Str], Bool, Int), TomlEr
 }
 
 /// A key and its value, and where the line ended.
-fn readPair(source: Str, start: Int) -> Result[(Array[Str], Toml, Int), TomlError] {
+fn readPair(source: Str, start: Int, depth: Int) -> Result[(Array[Str], Toml, Int), TomlError] {
   let named = readKeyPath(source, start) ?
   var index = Scan.skipInline(source, named[1])
   if source.slice(index, index + 1) != "=" {
     Err(Unexpected(index, "a key with no value"))
   } else {
     index = Scan.skipInline(source, index + 1)
-    let valued = readValue(source, index) ?
+    let valued = valueAt(source, index, depth) ?
     Ok((named[0], valued[0], valued[1]))
   }
 }
@@ -122,26 +136,29 @@ fn readKeyPath(source: Str, start: Int) -> Result[(Array[Str], Int), TomlError] 
 
 /// A value, and where it ended.
 export fn readValue(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  valueAt(source, start, 0)
+}
+
+/// A value inside `depth` open lists and inline tables, and where it ended.
+fn valueAt(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
   let index = Scan.skipInline(source, start)
   let character = source.slice(index, index + 1)
   if character == "\"" || character == "'" {
     let quoted = Scan.readQuoted(source, index) ?
     Ok((Text(quoted[0]), quoted[1]))
+  } else if (character == "[" || character == "\{") && depth >= MAX_DEPTH {
+    Err(TooDeep(index))
+  } else if character == "[" {
+    readList(source, index, depth + 1)
+  } else if character == "\{" {
+    readInline(source, index, depth + 1)
   } else {
-    if character == "[" {
-      readList(source, index)
-    } else {
-      if character == "\{" {
-        readInline(source, index)
-      } else {
-        readBare(source, index)
-      }
-    }
+    readBare(source, index)
   }
 }
 
 /// A list of values, which may run over several lines and end with a comma.
-fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+fn readList(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
   var items: Array[Toml] = []
   var index = Scan.skipBlank(source, start + 1)
   var closed = false
@@ -154,7 +171,7 @@ fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
         closed = true
         index = index + 1
       } else {
-        let valued = readValue(source, index)
+        let valued = valueAt(source, index, depth)
         if let Ok(found) = valued {
           items = items.push(found[0])
           index = Scan.skipBlank(source, found[1])
@@ -169,8 +186,8 @@ fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
 }
 
 /// A table written between braces on one line.
-fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
-  var built = Document.table()
+fn readInline(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
+  var drafts = [emptyDraft()]
   var index = Scan.skipInline(source, start + 1)
   var closed = false
   var failure: Option[TomlError] = None
@@ -182,9 +199,12 @@ fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
         closed = true
         index = index + 1
       } else {
-        let pairing = readPair(source, index)
+        let pairing = readPair(source, index, depth)
         if let Ok(found) = pairing {
-          built = setAt(&built, &found[0], found[1])
+          match placeValue(drafts, 0, &[], &found[0], found[1]) {
+            case Ok(next) => { drafts = next }
+            case Err(reason) => { failure = Some(reason) }
+          }
           index = Scan.skipInline(source, found[2])
           if source.slice(index, index + 1) == "," { index = Scan.skipInline(source, index + 1) }
         } else {
@@ -193,7 +213,7 @@ fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
       }
     }
   }
-  if let Some(reason) = failure { Err(reason) } else { Ok((built, index)) }
+  if let Some(reason) = failure { Err(reason) } else { Ok((finished(&drafts, 0), index)) }
 }
 
 /// A value written without quotes: a truth, a number, or a moment.
@@ -229,77 +249,116 @@ fn dotted(pieces: &Array[Str]) -> Str {
   out
 }
 
-/// The value a path names, walking tables and the last table of a repeated
-/// section.
-fn pathAt(root: &Toml, pieces: &Array[Str]) -> Option[Toml] {
-  var current = Some(*root)
-  for piece in pieces {
-    if let Some(held) = current { current = stepInto(&held, piece) } else { current = None }
-  }
-  current
+// Building the document
+
+/// Where a key of a table under construction points: a value, a table, or the
+/// tables of a repeated section in the order they were opened.
+type Slot
+  = Value(Toml)
+  | Nested(Int)
+  | Repeated(Array[Int])
+
+/// A table under construction: its keys in the order they were written, and
+/// where each one points.
+type Draft = { order: Array[Str], slots: Map[Str, Slot] }
+
+fn emptyDraft() -> Draft { Draft{order: [], slots: mapOf([])} }
+
+/// The drafts with a key of one of them pointed somewhere, keeping the order
+/// the key was first written in.
+fn withSlot(drafts: Array[Draft], position: Int, name: Str, slot: Slot) -> Array[Draft] {
+  let draft = drafts[position]
+  let order = if Option.isSome(&draft.slots.get(name)) { draft.order } else { draft.order.push(name) }
+  drafts.remove(position).insert(position, Draft{order: order, slots: draft.slots.insert(name, slot)})
 }
 
-/// One step of a walk.
+/// The table a path names below another, opening the tables not written yet.
 ///
-/// A repeated section is a list, and a key written under it belongs to the
-/// last table in that list rather than to the list itself, so a step through
-/// one lands there.
-fn stepInto(value: &Toml, name: Str) -> Option[Toml] {
-  if let Some(found) = Document.field(value, name) {
-    let items = Option.unwrapOr(Document.asList(&found), [])
-    if items.length() > 0 && Option.isSome(&Document.asTable(&items[items.length() - 1])) {
-      Some(items[items.length() - 1])
-    } else {
-      Some(found)
+/// A step through a repeated section lands in its newest table, because a key
+/// written under one belongs there rather than to the list. A step through a
+/// value is refused with the path that reached it: a value is not a table to
+/// write into, and turning it into one would silently discard it.
+fn openPath(drafts: Array[Draft], from: Int, pieces: &Array[Str]) -> Result[(Array[Draft], Int), Str] {
+  var built = drafts
+  var current = from
+  var walked: Array[Str] = []
+  for piece in pieces {
+    walked = walked.push(piece)
+    match built[current].slots.get(piece) {
+      case Some(Nested(inner)) => { current = inner }
+      case Some(Repeated(tables)) => { current = tables[tables.length() - 1] }
+      case Some(Value(_)) => { return Err(dotted(&walked)) }
+      case None => {
+        let created = built.length()
+        built = withSlot(built.push(emptyDraft()), current, piece, Nested(created))
+        current = created
+      }
     }
-  } else {
-    None
+  }
+  Ok((built, current))
+}
+
+/// The table a plain section header names.
+fn openTable(drafts: Array[Draft], pieces: &Array[Str]) -> Result[(Array[Draft], Int), TomlError] {
+  match openPath(drafts, 0, pieces) {
+    case Ok(opened) => Ok(opened)
+    case Err(path) => Err(Document.Duplicate(path))
   }
 }
 
-/// A document with a value placed at a path, building the tables above it.
-fn setAt(root: &Toml, pieces: &Array[Str], value: Toml) -> Toml {
-  if pieces.length() == 0 {
-    value
-  } else {
-    let name = pieces[0]
-    let rest = pieces.slice(1, pieces.length())
-    if rest.length() == 0 {
-      placeInto(root, name, value)
-    } else {
-      let below = Option.unwrapOr(stepInto(root, name), Document.table())
-      placeInto(root, name, setAt(&below, &rest, value))
+/// A new table at the end of a repeated section, which is what a doubled
+/// header does. A key already holding anything else is refused.
+fn appendTable(drafts: Array[Draft], pieces: &Array[Str]) -> Result[(Array[Draft], Int), TomlError] {
+  let name = pieces[pieces.length() - 1]
+  let opened = openTable(drafts, &pieces.slice(0, pieces.length() - 1)) ?
+  let created = opened[0].length()
+  let built = opened[0].push(emptyDraft())
+  match built[opened[1]].slots.get(name) {
+    case None => Ok((withSlot(built, opened[1], name, Repeated([created])), created))
+    case Some(Repeated(tables)) => Ok((withSlot(built, opened[1], name, Repeated(tables.push(created))), created))
+    case Some(_) => Err(Document.Duplicate(dotted(pieces)))
+  }
+}
+
+/// The drafts with a value placed at a key path below a table, refusing a key
+/// already given and a path through a value.
+fn placeValue(
+  drafts: Array[Draft],
+  table: Int,
+  section: &Array[Str],
+  key: &Array[Str],
+  value: Toml
+) -> Result[Array[Draft], TomlError] {
+  let name = key[key.length() - 1]
+  match openPath(drafts, table, &key.slice(0, key.length() - 1)) {
+    case Err(_) => Err(Document.Duplicate(dotted(&joinPath(section, key))))
+    case Ok(opened) => {
+      if Option.isSome(&opened[0][opened[1]].slots.get(name)) {
+        Err(Document.Duplicate(dotted(&joinPath(section, key))))
+      } else {
+        Ok(withSlot(opened[0], opened[1], name, Value(value)))
+      }
     }
   }
 }
 
-/// A document with a table appended at a path, which is what a repeated
-/// section header does.
-fn appendAt(root: &Toml, pieces: &Array[Str], value: Toml) -> Toml {
-  if pieces.length() == 0 {
-    value
-  } else {
-    let name = pieces[0]
-    let rest = pieces.slice(1, pieces.length())
-    if rest.length() == 0 {
-      let held = Option.unwrapOr(Document.field(root, name), List([]))
-      let items = Option.unwrapOr(Document.asList(&held), [])
-      Document.withField(root, name, List(items.push(value)))
-    } else {
-      let below = Option.unwrapOr(stepInto(root, name), Document.table())
-      placeInto(root, name, appendAt(&below, &rest, value))
+/// The finished value of a draft and every table below it.
+fn finished(drafts: &Array[Draft], position: Int) -> Toml {
+  let draft = drafts[position]
+  var entries: Array[(Str, Toml)] = []
+  for name in draft.order {
+    if let Some(slot) = draft.slots.get(name) {
+      let held = match slot {
+        case Value(value) => value
+        case Nested(inner) => finished(drafts, inner)
+        case Repeated(tables) => {
+          var items: Array[Toml] = []
+          for inner in tables { items = items.push(finished(drafts, inner)) }
+          List(items)
+        }
+      }
+      entries = entries.push((name, held))
     }
   }
-}
-
-/// Put a value under a name, writing through a repeated section to its last
-/// table rather than over the list.
-fn placeInto(root: &Toml, name: Str, value: Toml) -> Toml {
-  let held = Option.unwrapOr(Document.field(root, name), Document.table())
-  let items = Option.unwrapOr(Document.asList(&held), [])
-  if items.length() > 0 && Option.isSome(&Document.asTable(&items[items.length() - 1])) {
-    Document.withField(root, name, List(items.remove(items.length() - 1).push(value)))
-  } else {
-    Document.withField(root, name, value)
-  }
+  Table(entries)
 }

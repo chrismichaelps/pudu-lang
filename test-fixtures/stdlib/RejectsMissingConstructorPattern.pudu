@@ -1,0 +1,11 @@
+module RejectsMissingConstructorPattern
+
+import Std.Audio as Audio
+
+export fn main() -> Int {
+  if let Err(Audio.InvalidChannelCount(9)) = Audio.format(48000, 9) {
+    1
+  } else {
+    0
+  }
+}

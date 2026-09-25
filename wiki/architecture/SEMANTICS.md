@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.6.1-draft"
+semantic_version: "1.0.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -103,8 +103,13 @@ Supporting judgements:
 - Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
 - A block evaluates statements sequentially and yields its final expression. A resultless block whose final statement directly transfers control with `return`, `break`, or `continue` has type `Never`; every other resultless block yields unit.
-- Assignment evaluates the target place once, then the right side, then stores.
+- Assignment evaluates the target place once — its root and every index key — then the right side, then stores. A place is a `var` binding, a `mut` field of a place, an element of an array place, or `*r` for an exclusive reference. A `&mut` argument lends a place for the length of its call: the callee is given the value, and on every exit — its last expression, `return`, or `?` — each `&mut` parameter's final value is stored back into the place it was lent from. Because an exclusive reference can only be a parameter and loans to one call cannot overlap, nothing observes the place during the call, and this is exactly writing through it. See [[ADR-0022-lending-a-place]].
 - Pattern guards evaluate only after structural pattern success.
+- A range has a finite extent only when both ends are present. `length()` on `a..`, `..b`, or `..`
+  reports `E7004`; `isBounded()` exposes that boundary, `isEmpty()` is false when the extent is
+  unknown, and `contains(value)` remains defined because an absent end removes a restriction. A
+  sequence pattern applies to an array, while a tuple is taken apart by a tuple pattern. See
+  [[ADR-0023-bounded-range-extent]].
 - Optimizations must preserve all observable ordering: IO, mutation, panic, failure propagation, destruction, and cancellation points.
 
 ## Control-Flow Typing
@@ -260,11 +265,21 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
+  missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
+  `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple
+  where the checker requires an array sequence pattern. See [[ADR-0023-bounded-range-extent]].
+- **0.7.0-draft · 2026-09-15:** Admitted places: a `var`, a `mut` field of a place, an element of an array place, and `*r` for an exclusive reference are assignable, and `&mut place` lends a place to one call and receives the parameter's final value on every exit. Assignment to a `let`, a parameter, or a pattern binding, a write through `&T`, overlapping loans, and an exclusive reference anywhere but a parameter are refused. A program that assigned to a `let` or a parameter no longer checks; no committed source did. See [[ADR-0022-lending-a-place]].
 - **0.6.0-draft · 2026-09-03:** Added opaque nominal foreign handles, explicit same-block release ownership, pre-dispatch liveness refusals, reusable exported binding modules with canonical handle identity, and C++ interoperability through `extern "C"` only. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft · 2026-09-04:** Made every admitted scalar and flat-record foreign crossing exact: full-domain `UInt64`, locale-independent UTF-8 text fields and results, result-only unit, and declaration-time bridge capacity checks. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft clarification · 2026-09-04:** Restored the existing namespace rule at expression
   heads: type-only names no longer masquerade as runtime values, while constructor and qualified
   variant paths retain their deliberate type lookup. This changes no conforming program.
+- **0.6.1-draft clarification 2 · 2026-09-20:** Clarified that ordinary nested foreign records retain
+  their declared aggregate tree when the native bridge asks the target for layout and call
+  classification; enumerating scalar leaves for validation never meant flattening the ABI shape.
+  [[ADR-0021-a-value-the-library-owns]] separately accepts the design of opaque owned by-value
+  resources, but changes no accepted program until its complete implementation slice lands.
 - **0.5.0-draft · 2026-08-31:** Added ordered Set literals and Set-only membership expressions, preserving source-order evaluation, key-order identity, contextual typing for the empty literal, and the existing `E7008` key-order boundary. See [[ADR-0013-ordered-set-literals-and-membership]].
 - **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
 - **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].

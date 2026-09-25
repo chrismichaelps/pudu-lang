@@ -28,7 +28,10 @@ scanSymbol :: LexerCursor -> Maybe LexerCursor
 ## Governance
 
 - Candidates derive from every bounded `SymbolKind` and its exhaustive `symbolText`; no second spelling table exists.
-- Candidates are ordered by descending scalar length once. The first exact prefix wins, so `..=`, `..`, `.`, `->`, `==`, and related prefixes are deterministic.
+- Candidates are grouped by first character and ordered by descending scalar length once, in a
+  constant table. The first exact prefix within the group wins, so `..=`, `..`, `.`, `->`, `==`,
+  and related prefixes are deterministic, and a symbol is decided against the two or three spellings
+  sharing its first character rather than all of them.
 - A non-match returns `Nothing`; a match consumes exactly its spelling and emits `Symbol` through the opening mark.
 
 ## Algorithm

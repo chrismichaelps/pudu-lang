@@ -1,0 +1,11 @@
+module Root
+
+import First as F
+import Second as S
+
+fn main(value: F.First[Int]) -> Int {
+  match value {
+    case F.Shared(item) => item
+    case F.OnlyFirst => 0
+  }
+}

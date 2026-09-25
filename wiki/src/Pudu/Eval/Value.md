@@ -35,12 +35,22 @@ body.
 
 ### Governance
 
+- A range holds **two ends and a rule for reading them**, not the values between them. Either end may
+  be absent, which is what lets `items[2..]` mean the tail of something whose length the writer never
+  had to ask for; the value that is indexed supplies what is missing. Two ranges compare by where
+  they start, then by how far they reach, so an ordered collection holds them in the order they
+  cover.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - `boolValue`, `trueValue`, `falseValue`, `zeroValue`, and `oneValue` are shared constants to avoid heap-allocating boolean and small numeric results across tight loop iterations.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 - `FloatValue` carries [[Float Literal]]'s `FloatWidth` beside its normalized `Double` storage. The tag is semantic: equality and operators cannot erase whether the admitted value is binary32 or binary64.
 - A closure is equal to another when it is the same closure: same name, same receiver, same function. What it captured is deliberately not compared, because a captured environment reaches the scope the closure was made in, and that scope holds the closure — so a comparison that followed captures would not end. Equality on closures exists to answer identity, which is what removing one from a list of the tasks a scope started is asking.
+- `Captured` retains the lexical frames together with their module-depth boundary. The boundary is
+  part of the capture because a function called through an imported module may create another
+  literal; that nested literal must narrow call locals without mistaking the imported module frames
+  for transient data.
 - `OrdValue` and `compareValues` are declared here, not in [[Eval Order]], because `MapValue` and `SetValue` are keyed by that order and the value type cannot be declared without it. `Value` itself still has no `Ord` instance: a function is a value and no order on functions is meaningful, so the wrapper keeps every keyed use visible.
 - Original network builtins and separately named timeout variants remain distinct constructors, so
   adding an operation budget does not change the arity of an existing prelude value.
@@ -79,6 +89,10 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Store an already computed async result? **A:** No; store the prepared closure and bindings. _Rationale:_ an async call is cold and body evaluation begins at `.await`. _Rejected:_ eager execution wrapped in a task-shaped value; a placeholder unit task.
 - **Q:** Erase `Float32` to a host `Double`? **A:** No; pair normalized storage with a width tag. _Rationale:_ later operations must round to binary32 and mixed-width values must not compare equal merely because their storage matches. _Rejected:_ static-only precision; a separate runtime constructor with duplicated rendering logic.
 - **Q:** Why did #157 move the order into this module rather than leave it beside `comparableValue`? **A:** Because the keyed constructors now name it. A map keyed by a balanced tree cannot be declared before the order that tree is arranged by, and declaring the instance in [[Eval Order]] would make it an orphan, which [[grammar/haskell]] prohibits. _Rejected:_ an `.hs-boot` cycle, which preserves the old file boundary at the price of a build-order subtlety every later reader has to learn.
+- **Q:** Recompute the module boundary from the caller when entering a closure? **A:** No. The caller
+  may belong to another module or the interactive session, so its boundary describes the wrong
+  stack. _Rationale:_ frames and the boundary that classifies them form one captured environment.
+  _Rejected:_ replacing only `envFrames` in `withCaptured`.
 - **Q:** Does moving the order in push this file past the size target? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table then moved to [[Eval Builtin Definition]]. Foreign handles then took it to 548, and the built-in method vocabulary moved to [[Eval Method]], leaving 328. Each extraction followed the same seam — a closed tag set and its name table, depending on no runtime value — and each is re-exported here, so no call site learned that anything moved. _Rationale:_ size accounting must describe the current source honestly, and a limit is worth keeping only if the split follows the code rather than the line count. _Rejected:_ claiming an old measurement is current; splitting the file arbitrarily to fit.
 
 ## Foreign handle generations
@@ -113,3 +127,12 @@ includes the claim, so a borrowed handle and an owned one at one address are not
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Text method of every value (#347)
+
+`TextMethodValue receiver` is `value.toText` for a value whose type declares no `toText`: the
+receiver bound, rendered as `display` renders it when called. It is not comparable and has shape
+rank 29.
+
+Resolved Grill Log: one constructor carrying the receiver rather than a method tag per kind, because
+the behaviour is the same for every kind of value.

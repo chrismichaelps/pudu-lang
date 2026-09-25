@@ -1,5 +1,6 @@
 module Std.Db.Postgres
 
+import Std.Bytes as ByteSeq
 import Std.Db.ConnectionString as ConnectionString
 import Std.Db as Db
 import Std.Db.Driver as Driver
@@ -116,7 +117,9 @@ fn textParameters(values: &Array[Driver.Value]) -> Result[Array[Option[Str]], Dr
       case DecimalValue(held) => Some(show(held))
       case RealValue(held) => Some(show(held))
       case BooleanValue(held) => Some(if held { "true" } else { "false" })
-      case BytesValue(_) => { return Err(Driver.error("postgresql", "unsupported", "binary parameters are not implemented by this driver")) }
+      // A bytea parameter crosses as its hexadecimal text form, which the
+      // server reads back into exactly the bytes it spells.
+      case BytesValue(held) => Some("\\x" + ByteSeq.encodeHex(&held))
     }
     found = found.push(text)
   }

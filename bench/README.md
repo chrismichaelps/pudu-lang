@@ -21,6 +21,17 @@ at x3.60 that a careful measure put at x2.27. Figures below a noise floor carry
 no ratio at all, and a program that failed to compile is reported rather than
 timed, because a program that does not run is not a fast one.
 
+## 1a. How a program's module count costs
+
+```bash
+node bench/graph.mjs "$(cabal list-bin exe:pudu)"
+```
+
+Checks generated sparse programs of 25 to 200 modules and reports time and
+allocation at each doubling. A module count that doubles should cost twice as
+much; more than that means some module is doing work proportional to the whole
+graph, which is what preparing interfaces once per program removed.
+
 ## 1b. What one request costs
 
 ```bash

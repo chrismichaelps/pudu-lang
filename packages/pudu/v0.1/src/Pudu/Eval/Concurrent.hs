@@ -33,14 +33,13 @@ import Control.Concurrent.STM
   , retry
   , writeTVar
   )
-import Control.Exception (SomeException, try)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.Sequence (Seq, ViewL (..), (|>))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
-import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
 import Pudu.Eval.Value (Value)
 
 {-| @Eval.Concurrent.Running — one thread the program started.
@@ -294,5 +293,5 @@ closeConcurrentStore store = do
   atomicModifyIORef' (cellTable store) (\_ -> (IntMap.empty, ()))
  where
   stopQuietly running = do
-    _ <- try (killThread (runningThread running)) :: IO (Either SomeException ())
+    _ <- trySynchronous (killThread (runningThread running))
     pure ()

@@ -129,7 +129,7 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 ## Edge Cases
 
-- A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape.
+- A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape. Resolution diagnoses an unqualified miss as `E2010`; typing diagnoses a qualified missing module export as `E3033` or a missing variant on a known type as `E3034`.
 - A call with fewer arguments than parameters is accepted here because a parameter may declare a default; arity is only rejected when there are too many.
 - `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
 - `.await` reports `E3016` outside an async function and `E3017` for a non-task operand. A task failure uses `E3011` when the enclosing return cannot propagate it; a mismatched `Result` failure type remains ordinary `E3001`.
@@ -163,3 +163,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Boundary]] · [[Type Env]] · [[Type Unify]] · [[Type Check Coherence]] · [[architecture/SEMANTICS]]
+
+## Places
+
+The module is checked with the set of spans that use a `var` binding, from resolution. A function's parameter and result types, a module binding's type, and a type declaration's fields go to [[Check Place]], and after each top-level declaration a function literal's untyped parameters are judged there. See [[ADR-0022-lending-a-place]].

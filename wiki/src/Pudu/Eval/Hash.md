@@ -10,9 +10,11 @@ aliases: [Eval Hash]
 ---
 # Eval Hash
 ## Purpose
-Provide runtime-speed SHA-256, HMAC-SHA-256, PBKDF2-SHA-256, and non-cryptographic value mixing.
+Provide runtime-speed SHA-2, SHA-3, BLAKE2b, HMAC-SHA256/512, PBKDF2-SHA256, constant-time byte
+comparison, and non-cryptographic value mixing.
 ## Interface
-Exports byte/value hashing, SHA-256, keyed SHA-256, and PBKDF2 derivation.
+Exports byte/value hashing, SHA-256/512, SHA3-256/512, BLAKE2b-256/512, keyed SHA-256/512,
+constant-time equality, and PBKDF2 derivation.
 ## Governance and algorithm
 Digest primitives must match the Pudu implementation and published vectors. `hashOfValue` is a
 collection mixer, not a digest or cross-run identity; iteration/length validation occurs at the
@@ -27,6 +29,11 @@ unbounded work/allocation while admitting deployed password-hashing parameters.
   can wrap and a hostile peer can otherwise demand unbounded CPU or memory. _Rejected:_ relying on
   eventual allocation failure; an unbounded iteration count.
 - **Q:** Import `Data.List (foldl')` under GHC 9.10? **A:** No; `foldl'` is in Prelude; omit redundant import for -Werror compliance.
+- **Q:** Hand-roll SHA-3 or BLAKE2b in the evaluator? **A:** No. _Rationale:_ the runtime already
+  carries an audited implementation with typed digest selection. _Rejected:_ duplicate security code.
+
+Resolved Grill Log: every named digest maps to its exact cryptographic family and output width;
+secret comparison uses the audited constant-time primitive and exposes only length-dependent timing.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Std Db]] · [[architecture/STDLIB]]
 

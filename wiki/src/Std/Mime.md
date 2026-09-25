@@ -11,7 +11,6 @@ aliases: [Std Mime]
 
 Parse, format, classify, and negotiate Multipurpose Internet Mail Extensions (MIME) Media Types (RFC 2045, RFC 6838).
 Provides an authoritative registry of over 60 common file extensions and media types, and implements HTTP `Accept` content negotiation.
-Inspired by `java.net.URLConnection`, `javax.activation.MimetypesFileTypeMap`, and Haskell `mime-types`.
 
 ## Interface
 
@@ -34,8 +33,10 @@ Inspired by `java.net.URLConnection`, `javax.activation.MimetypesFileTypeMap`, a
 ## Algorithm and boundaries
 
 Media types are parsed strictly following RFC 2045 BNF: tokens are separated by `/`, followed by semicolon-delimited parameters (`key=value`).
-Quoted parameter values are stripped of wrapping quotes and unescaped.
-Content negotiation parses quality factor weights (`q=0.0` to `q=1.0`), sorts offers in descending priority, and selects the most specific matching type among supported candidates.
+Quoted parameter values are stripped of their wrapping quotes; the text between them is kept as written.
+Type, subtype, and parameter names are compared lower case, and surrounding whitespace is removed with the built-in `trim`.
+The extension registry is two module constants, `EXTENSION_TYPES` and `TYPE_EXTENSIONS`, read with one map lookup each rather than a chain of comparisons.
+Content negotiation parses quality factor weights (`q=0.0` to `q=1.0`) and orders offers by descending quality with the stable `List.sortOn`, so offers of equal quality keep the order the client wrote them in; the first offer, in that order, that matches an available type wins.
 
 ## Grill Log
 
@@ -43,6 +44,10 @@ Content negotiation parses quality factor weights (`q=0.0` to `q=1.0`), sorts of
   **A:** Web servers and HTTP response handlers routinely serve static files. Requiring users to hand-roll MIME dictionaries leads to mislabeled headers (e.g. `text/plain` for JavaScript/WASM), breaking browser execution.
 - **Q:** How are quality factors handled when omitted?
   **A:** Quality factors default to `1.0` (highest preference) when unspecified, conforming to RFC 7231 §5.3.2.
+- **Q:** Order offers of equal quality however the sort leaves them? **A:** No. _Rationale:_ the client
+  lists its preferences in order, and a swapping selection sort turned `text/html;q=0.5,
+  application/json;q=0.5` into a JSON answer. _Rejected:_ an unstable sort; ranking ties by the
+  server's own list.
 
 ## Referenced by
 

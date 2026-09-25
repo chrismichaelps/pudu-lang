@@ -13,11 +13,16 @@ module Pudu.Eval.Program
   , evaluateModule
   , evaluateInteractiveBlock
   , evaluateProgramEntry
+  , evaluateProgramEntryFolded
   , evaluateProgramTallied
+  , evaluateProgramTalliedFolded
+  , foldModule
+  , linkedNames
   ) where
 
 import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env
@@ -26,6 +31,7 @@ import Pudu.Eval.Env
   , captureEnvironment
   , currentFrame
   , currentMethods
+  , markModuleScope
   , pushFrame
   , replaceFrame
   , replaceMethods
@@ -35,7 +41,13 @@ import Pudu.Eval.Env
   , abortAt
   , lookupName
   )
-import Pudu.Eval.Install (installBuiltinConstructors, loadDeclarations, loadModuleDeclarations)
+import Pudu.Eval.Frozen (Frozen, freeze, thaw)
+import Pudu.Eval.Install
+  ( installBuiltinConstructors
+  , loadDeclarations
+  , loadModuleDeclarations
+  , loadModuleDeclarationsWith
+  )
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
@@ -44,11 +56,12 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Block
+  , Declaration (..)
   , Import (..)
   , Function (..)
   , Module (..)
   )
-import Data.IORef (newIORef, readIORef)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Pudu.Source (Span)
 import Pudu.Eval
   ( EvalOutcome (..)
@@ -89,8 +102,19 @@ evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
     to pass what it had. -}
 evaluateProgramEntry
   :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramEntry integerKinds dependencies entryName moduleValue =
-  fst <$> evaluateProgramTallied integerKinds dependencies entryName moduleValue
+evaluateProgramEntry = evaluateProgramEntryFolded Map.empty
+
+{-| Run a program, binding the constants folding already computed — by module
+    path, then name — rather than evaluating their initializers again. -}
+evaluateProgramEntryFolded
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> IO EvalOutcome
+evaluateProgramEntryFolded folded integerKinds dependencies entryName moduleValue =
+  runCounted Nothing (programEntry folded integerKinds dependencies entryName moduleValue)
 
 {-| The same, and what running it cost.
 
@@ -105,39 +129,69 @@ evaluateProgramTallied
   -> Text
   -> Module
   -> IO (EvalOutcome, Map.Map Text Int)
-evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
-  counters <- newIORef Map.empty
-  outcome <- runCounted (Just counters) $ do
-    withIntegerKinds integerKinds
-    builtins <- linkDependencies dependencies
-    pushFrame builtins
-    {-| The root gets a frame of its own so its declarations shadow every
-        dependency's rather than sharing a frame with the last one linked. -}
-    pushFrame Map.empty
-    installImportAliases (moduleImports moduleValue)
-    inherited <- currentMethods
-    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
-    {-| The root's own functions are given its environment, exactly as a
-        dependency's are.
+evaluateProgramTallied = evaluateProgramTalliedFolded Map.empty
 
-        Without this a function the root declared worked when the root called
-        it and failed when anything else did: a declaration carries no captured
-        environment, so it runs in the frame of whoever called it, and a module
-        that was handed one has no reason to hold the root's imports. Passing a
-        named function to `List.map`, to a route table, or to anything else
-        that calls back reported the function's own imports as undefined —
-        at run time, having type-checked. -}
-    scopeRootDeclarations inherited
-    found <- lookupName entryName
-    case found of
-      Just (FunctionValue closure) -> do
-        result <- callClosure closure [] Nothing
-        if functionAsync (closureFunction closure)
-          then awaitTask (locatedSpan (functionName (closureFunction closure))) result
-          else pure result
-      _ -> pure UnitValue
+evaluateProgramTalliedFolded
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> IO (EvalOutcome, Map.Map Text Int)
+evaluateProgramTalliedFolded folded integerKinds dependencies entryName moduleValue = do
+  counters <- newIORef Map.empty
+  outcome <- runCounted (Just counters) (programEntry folded integerKinds dependencies entryName moduleValue)
   collected <- readIORef counters
   pure (outcome, collected)
+
+{-| Link the program and call its entry point.
+
+    One action serves both entries, so an ordinary run and a tallied one cannot
+    drift apart in what they link, in which order, or in how an asynchronous
+    entry is awaited. Only the tallied entry allocates counters; an ordinary
+    run passes none, and every tally site costs it one comparison. -}
+programEntry
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> Evaluator Value
+programEntry folded integerKinds dependencies entryName moduleValue = do
+  withIntegerKinds integerKinds
+  builtins <- linkDependenciesFolded folded dependencies
+  pushFrame builtins
+  {-| The root gets a frame of its own so its declarations shadow every
+      dependency's rather than sharing a frame with the last one linked. -}
+  pushFrame Map.empty
+  installImportAliases (moduleImports moduleValue)
+  inherited <- currentMethods
+  loadModuleDeclarationsWith evaluate
+    (foldedFor folded (moduleNameText (locatedValue (moduleName moduleValue))))
+    (moduleDeclarations moduleValue)
+  {-| The root's own functions are given its environment, exactly as a
+      dependency's are.
+
+      Without this a function the root declared worked when the root called
+      it and failed when anything else did: a declaration carries no captured
+      environment, so it runs in the frame of whoever called it, and a module
+      that was handed one has no reason to hold the root's imports. Passing a
+      named function to `List.map`, to a route table, or to anything else
+      that calls back reported the function's own imports as undefined —
+      at run time, having type-checked. -}
+  scopeRootDeclarations inherited
+  {-| Every frame now on the stack is the program's own. What a call pushes
+      above this line holds only names somebody wrote, which is what lets a
+      function literal capture the ones it mentions instead of all of them. -}
+  markModuleScope
+  found <- lookupName entryName
+  case found of
+    Just (FunctionValue closure) -> do
+      result <- callClosure closure [] Nothing
+      if functionAsync (closureFunction closure)
+        then awaitTask (locatedSpan (functionName (closureFunction closure))) result
+        else pure result
+    _ -> pure UnitValue
 
 {-| Rebuild declarations below the live local frame without replaying its source.
     Captured values keep their old scopes and literal-kind entries. -}
@@ -157,6 +211,7 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     scopeRootDeclarations inherited
+    markModuleScope
     pushFrame locals
   let Evaluator execute = evaluateBlockInFrame block
   Evaluator $ \env -> do
@@ -179,13 +234,36 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     that cannot hold what it computes is a mistake worth naming at compile
     time. -}
 evaluateModule :: Map.Map Span Text -> Module -> IO EvalOutcome
-evaluateModule integerKinds moduleValue =
-  runWithEffects
-    False
-    ( withIntegerKinds integerKinds
-        >> loadDeclarations evaluate (moduleDeclarations moduleValue)
-        >> pure UnitValue
-    )
+evaluateModule integerKinds moduleValue = fst <$> foldModule integerKinds moduleValue
+
+{-| Fold a module's constants: evaluate them with effects denied, and answer
+    with what went wrong and with every constant whose value is plain data.
+
+    Folding runs the module alone, with nothing but the language in scope, so a
+    constant that compiles is one whose value is fixed by its own module; the
+    values answered are what linking would compute, and linking installs them
+    instead of computing them again. -}
+foldModule :: Map.Map Span Text -> Module -> IO (EvalOutcome, Map.Map Text Frozen)
+foldModule integerKinds moduleValue = do
+  found <- newIORef Map.empty
+  outcome <- runWithEffects False $ do
+    withIntegerKinds integerKinds
+    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    frame <- currentFrame
+    Evaluator $ \env -> do
+      writeIORef found (Map.mapMaybe freeze (Map.restrictKeys frame constants))
+      pure (Done () env)
+    pure UnitValue
+  folded <- readIORef found
+  pure (outcome, if null (outcomeDiagnostics outcome) then folded else Map.empty)
+ where
+  constants = Set.fromList
+    [ locatedValue name
+    | Located _ (BindingDeclaration _ _ name _ _) <- moduleDeclarations moduleValue
+    ]
+
+foldedFor :: Map.Map Text (Map.Map Text Frozen) -> Text -> Map.Map Text Value
+foldedFor folded path = maybe Map.empty (Map.map thaw) (Map.lookup path folded)
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -270,28 +348,73 @@ scopeMethodsDeclaredBy before environment = do
   let declaredHere = Map.map (scopeTo environment) (Map.difference after before)
   replaceMethods (Map.union declaredHere after)
 
+{-| Every name linking a program's dependencies binds, in no particular order.
+
+    What linking costs grows with this list, and the program never sees most of
+    it, so it is the measure a test holds linking to. -}
+linkedNames :: [(Text, Module)] -> IO [Text]
+linkedNames dependencies = do
+  found <- newIORef []
+  _ <- runWithEffects False $ do
+    _ <- linkDependencies dependencies
+    frames <- captureEnvironment
+    Evaluator $ \env -> do
+      writeIORef found (concatMap Map.keys frames)
+      pure (Done () env)
+    pure UnitValue
+  readIORef found
+
+{-| Link every dependency, in dependency order, and leave the program's frames
+    as the published names over whatever lay beneath.
+
+    Each module is linked in an environment of its own: its declarations, the
+    names its imports bind, the language's builtins, and the published names of
+    the modules linked before it — every one of them under its canonical path,
+    in one frame that is the registry of what has been linked. A module's
+    functions are scoped to exactly that, so a name looked up inside one walks
+    five frames however large the program is. When every module's frames stayed
+    on the stack, a lookup that missed walked three frames for every module
+    linked before, and a field access misses once on every evaluation, while the
+    longest dotted prefix is tried. Publishing is one insertion per declaration,
+    and an import reads the registry by its path rather than every frame. -}
 linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
-linkDependencies dependencies = do
+linkDependencies = linkDependenciesFolded Map.empty
+
+linkDependenciesFolded :: Map.Map Text (Map.Map Text Frozen) -> [(Text, Module)] -> Evaluator (Map.Map Text Value)
+linkDependenciesFolded folded dependencies = do
   pushFrame Map.empty
   installBuiltinConstructors
   builtins <- currentFrame
-  mapM_ (linkOne builtins) dependencies
+  beneath <- drop 1 <$> captureEnvironment
+  published <- foldLinks builtins beneath Map.empty dependencies
+  setFrames (published : beneath)
   pure builtins
  where
-  linkOne builtins (path, dependency) = do
-    pushFrame builtins
-    pushFrame Map.empty
+  foldLinks _ _ published [] = pure published
+  foldLinks builtins beneath published (dependency : rest) = do
+    linked <- linkOne builtins beneath published dependency
+    foldLinks builtins beneath linked rest
+
+  linkOne builtins beneath published (path, dependency) = do
+    setFrames (Map.empty : builtins : published : beneath)
     installImportAliases (moduleImports dependency)
+    {-| The module's own declarations get a frame above its imports, so what is
+        published under its path is what it declared. Publishing the whole frame
+        also published every alias the module imported, and each importer
+        republished those under its own alias in turn: the names grew with the
+        depth of the import graph, and a site of sixty modules linked millions
+        of them before its first request. -}
+    pushFrame Map.empty
     inherited <- currentMethods
-    loadModuleDeclarations evaluate (moduleDeclarations dependency)
+    loadModuleDeclarationsWith evaluate (foldedFor folded path) (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
     replaceFrame scoped
     scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
-    mapM_ (publish path) (Map.toList scoped)
+    pure (Map.union (Map.mapKeysMonotonic ((path <> ".") <>) scoped) published)
 
-  publish path (name, value) = bind (path <> "." <> name) value
+  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = frames})
 
 {-| Give a declared function the environment of the module that declared it.
 

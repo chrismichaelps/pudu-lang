@@ -30,11 +30,26 @@ measured speedup is made. The public record may contain empty chunks; `isEmpty` 
 Uses array push, concat, and join plus text emptiness. Compiler emitters and diagnostic formatters
 can import it explicitly. No IO or foreign primitive is introduced.
 
+## Builder and view decision
+
+This is already the needed `StringBuilder` role: callers append persistent fragments and materialize
+once. A second builder name or mutable façade would duplicate the contract without improving the
+current representation. A distinct `StringView` is not added: `Str.drop`, `take`, and `slice` retain
+shared native text storage, and parsers that advance an unread remainder already get view semantics;
+byte-coordinate consumers use [[Std Source Buffer]]. A public view would additionally need retention
+and scalar-versus-byte indexing rules but has no demonstrated caller that these two surfaces cannot
+serve. The decision must be revisited only with a measured workload and an ownership contract, not
+as speculative API breadth.
+
 ## Grill Log
 
 - **Q:** Concatenate the whole prefix while appending? **A:** No; retain chunks and allocate the
   final text at `finish`, keeping the materialization point explicit.
 - **Q:** Count bytes as characters? **A:** No; this builder exposes neither ambiguous length.
+- **Q:** Add `StringBuilder` and `StringView` names beside the existing APIs? **A:** No. The builder
+  role already exists, and shared `Str` remainders plus the byte-indexed source buffer cover the two
+  view use cases observed in the compiler and standard library. _Rejected:_ alias-only API growth;
+  an unmeasured view with unspecified backing-storage retention.
 
 ## Referenced by
 

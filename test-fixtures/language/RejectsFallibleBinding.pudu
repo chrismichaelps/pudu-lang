@@ -1,0 +1,9 @@
+module RejectsFallibleBinding
+
+/// A binding that takes a value apart has nowhere to go when the pattern does
+/// not apply, so a pattern that tests a tag belongs in `let ... else`.
+export fn main() -> Int {
+  let found = Some(1)
+  let Some(value) = found
+  value
+}

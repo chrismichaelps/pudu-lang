@@ -1,0 +1,38 @@
+// Borrowing and changing
+// A signature says whether a function reads a value or changes it: & borrows, &mut lends it to be changed.
+module Main
+
+import Std.Io as Io
+
+type Account = { owner: Str, mut balance: Int }
+
+fn describe(account: &Account) -> Str {
+  "{account.owner} has {account.balance}"
+}
+
+fn deposit(account: &mut Account, amount: Int) -> () {
+  account.balance = account.balance + amount
+}
+
+fn withdraw(account: &mut Account, amount: Int) -> Result[(), Str] {
+  if amount > account.balance {
+    return Err("{account.owner} cannot withdraw {amount}")
+  }
+  account.balance = account.balance - amount
+  Ok(())
+}
+
+fn main() -> Int {
+  var account = Account{owner: "Ada", balance: 10}
+  deposit(&mut account, 25)
+  let _after = Io.writeLine(describe(&account))
+  match withdraw(&mut account, 100) {
+    case Ok(_) => { let _said = Io.writeLine("withdrew 100") }
+    case Err(reason) => { let _said = Io.writeLine(reason) }
+  }
+  match withdraw(&mut account, 30) {
+    case Ok(_) => { let _said = Io.writeLine("withdrew 30: " + describe(&account)) }
+    case Err(reason) => { let _said = Io.writeLine(reason) }
+  }
+  0
+}

@@ -1,0 +1,134 @@
+module UsesUiText
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Text as Text
+
+fn litAt(surface: &Canvas.Surface, x: Int, y: Int, ink: Canvas.Color) -> Bool {
+  Canvas.pixelAt(surface, Canvas.point(x, y)) == Ok(Some(ink))
+}
+
+/// Bitmap text measured, wrapped, and drawn into exact pixels.
+export fn main() -> Int {
+  var held = 0
+  let white = Canvas.rgb(255u8, 255u8, 255u8)
+  let black = Canvas.rgb(0u8, 0u8, 0u8)
+
+  if let Err(Text.InvalidScale(0)) = Text.face(0) { held = held + 1 }
+  if let Err(Text.InvalidScale(65)) = Text.face(65) { held = held + 1 }
+
+  if let Ok(one) = Text.face(1) {
+    let expected = Text.Metrics{advance: 6, ascent: 7, lineHeight: 9}
+    if Text.metrics(&one) == expected { held = held + 1 }
+    if Text.measure(&one, "") == Ok(Canvas.size(0, 7)) &&
+    Text.measure(&one, "A") == Ok(Canvas.size(5, 7)) &&
+    Text.measure(&one, "Hi!") == Ok(Canvas.size(17, 7))
+    {
+      held = held + 1
+    }
+    if Text.measure(&one, "ab\nwide one\n") == Ok(Canvas.size(47, 25)) { held = held + 1 }
+    if Text.hasGlyph('~') && Text.hasGlyph(' ') && !Text.hasGlyph('\t') && !Text.hasGlyph('é') {
+      held = held + 1
+    }
+
+    if Text.wrapped(&one, "the quick brown fox", 29) ==
+    Ok(["the", "quick", "brown", "fox"])
+    {
+      held = held + 1
+    }
+    if Text.wrapped(&one, "the quick brown fox", 59) == Ok(["the quick", "brown fox"]) {
+      held = held + 1
+    }
+    if Text.wrapped(&one, "abcdefgh", 17) == Ok(["abc", "def", "gh"]) { held = held + 1 }
+    if Text.wrapped(&one, "ab cd", 0) == Ok(["a", "b", "c", "d"]) { held = held + 1 }
+    if Text.wrapped(&one, "one\n\ntwo", 100) == Ok(["one", "", "two"]) { held = held + 1 }
+    if let Err(Text.NegativeWidth(-1)) = Text.wrapped(&one, "x", -1) { held = held + 1 }
+
+    if let Ok(target) = Canvas.canvas(12, 16, white) {
+      if let Ok(drawn) = Text.draw(&one, &target, Canvas.point(0, 0), "I", black) {
+        if Canvas.commandCount(&drawn) == 3 {
+          if let Ok(surface) = Canvas.render(&drawn) {
+            if litAt(&surface, 1, 0, black) && litAt(&surface, 3, 0, black) &&
+            !litAt(&surface, 0, 0, black) && !litAt(&surface, 4, 0, black) &&
+            litAt(&surface, 2, 3, black) && !litAt(&surface, 1, 3, black) &&
+            litAt(&surface, 1, 6, black) && !litAt(&surface, 2, 7, black)
+            {
+              held = held + 1
+            }
+          }
+        }
+      }
+
+      if let Ok(pair) = Text.draw(&one, &target, Canvas.point(0, 0), "|\n|", black) {
+        if let Ok(surface) = Canvas.render(&pair) {
+          if litAt(&surface, 2, 6, black) && !litAt(&surface, 2, 7, black) &&
+          !litAt(&surface, 2, 8, black) && litAt(&surface, 2, 9, black)
+          {
+            held = held + 1
+          }
+        }
+      }
+
+      if let Ok(boxed) = Text.draw(&one, &target, Canvas.point(6, 0), "é", black) {
+        if let Ok(surface) = Canvas.render(&boxed) {
+          if litAt(&surface, 6, 3, black) && litAt(&surface, 10, 3, black) &&
+          !litAt(&surface, 8, 3, black) && litAt(&surface, 8, 0, black)
+          {
+            held = held + 1
+          }
+        }
+      }
+
+      if let Ok(spaced) = Text.draw(&one, &target, Canvas.point(0, 0), "   ", black) {
+        if Canvas.commandCount(&spaced) == 0 { held = held + 1 }
+      }
+
+      if let Ok(clipped) = Text.draw(&one, &target, Canvas.point(-3, -3), "H", black) {
+        if let Ok(surface) = Canvas.render(&clipped) {
+          if litAt(&surface, 1, 0, black) && !litAt(&surface, 0, 1, black) { held = held + 1 }
+        }
+      }
+    }
+
+    if let Ok(target) = Canvas.canvas(12, 16, white) {
+      if let Ok(cut) = Text.drawWithin(&one, &target, Canvas.point(0, 0), "I", black, Canvas.rect(0, 0, 12, 1)) {
+        if Canvas.commandCount(&cut) == 1 {
+          if let Ok(surface) = Canvas.render(&cut) {
+            if litAt(&surface, 1, 0, black) && !litAt(&surface, 2, 3, black) { held = held + 1 }
+          }
+        }
+      }
+    }
+
+    if let Ok(tight) = Canvas.canvasWithinLimits(10, 10, white, 100, 2) {
+      if let Err(Text.Drawing(Canvas.CommandBudgetExceeded(2))) =
+      Text.draw(&one, &tight, Canvas.point(0, 0), "I", black)
+      {
+        held = held + 1
+      }
+    }
+  }
+
+  if let Ok(three) = Text.face(3) {
+    if Text.measure(&three, "Hi") == Ok(Canvas.size(33, 21)) { held = held + 1 }
+    if let Ok(target) = Canvas.canvas(20, 25, white) {
+      if let Ok(drawn) = Text.draw(&three, &target, Canvas.point(1, 1), "-", black) {
+        if let Ok(surface) = Canvas.render(&drawn) {
+          if litAt(&surface, 1, 10, black) && litAt(&surface, 15, 12, black) &&
+          !litAt(&surface, 16, 10, black) && !litAt(&surface, 1, 9, black) &&
+          !litAt(&surface, 1, 13, black)
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+    if Text.wrapped(&three, "ab cd", 34) == Ok(["ab", "cd"]) &&
+    Text.wrapped(&three, "ab cd", 51) == Ok(["ab", "cd"]) &&
+    Text.wrapped(&three, "ab cd", 87) == Ok(["ab cd"])
+    {
+      held = held + 1
+    }
+  }
+
+  held
+}

@@ -24,8 +24,12 @@ module Pudu.Eval.Builtin
 
 import qualified Data.Text as Text
 
+import qualified Pudu.Eval.AudioKernel as AudioKernel
 import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
+import qualified Pudu.Eval.Csv as Csv
+import qualified Pudu.Eval.Json as Json
+import qualified Pudu.Eval.Xml as Xml
 import qualified Pudu.Eval.SwissTable as Swiss
 import qualified Pudu.Runtime.Word as Word
 
@@ -49,7 +53,22 @@ import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
 import Pudu.Eval.Aead (openBytes, sealBytes)
 import Pudu.Eval.Verify (verifyEcdsaP256Sha256, verifyRsaSha256)
-import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256, sha512)
+import Pudu.Eval.Checksum (checksumKindOf, checksumUpdate)
+import Data.Word (Word64)
+import Pudu.IntegerLiteral (IntegerKind (UnsignedKind))
+import Pudu.Eval.Hash
+  ( blake2b256
+  , blake2b512
+  , constantTimeEqual
+  , hashOfValue
+  , hmacSha256
+  , hmacSha512
+  , pbkdf2Sha256
+  , sha256
+  , sha3_256
+  , sha3_512
+  , sha512
+  )
 import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value
@@ -128,6 +147,19 @@ callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
 callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
   (Sha512Builtin, [BytesValue message]) -> pure (BytesValue (sha512 message))
+  (Sha3_256Builtin, [BytesValue message]) -> pure (BytesValue (sha3_256 message))
+  (Sha3_512Builtin, [BytesValue message]) -> pure (BytesValue (sha3_512 message))
+  (Blake2b256Builtin, [BytesValue message]) -> pure (BytesValue (blake2b256 message))
+  (Blake2b512Builtin, [BytesValue message]) -> pure (BytesValue (blake2b512 message))
+  (ChecksumBuiltin, [IntValue _ code, IntValue _ previous, BytesValue message])
+    | Just kind <- checksumKindOf code, previous >= 0, previous <= toInteger (maxBound :: Word64) ->
+        pure (IntValue (UnsignedKind 64) (toInteger (checksumUpdate kind (fromInteger previous) message)))
+    | otherwise ->
+        abortAt (Just spanValue) "E7001" "checksumOf expects a known algorithm and an unsigned previous value" Nothing
+  (HmacSha512Builtin, [BytesValue key, BytesValue message]) ->
+    pure (BytesValue (hmacSha512 key message))
+  (ConstantTimeEqualBuiltin, [BytesValue left, BytesValue right]) ->
+    pure (BoolValue (constantTimeEqual left right))
   (VerifyRsaBuiltin, [BytesValue modulus, BytesValue power, BytesValue message, BytesValue signature]) ->
     pure (BoolValue (verifyRsaSha256 modulus power message signature))
   (VerifyEcdsaBuiltin, [BytesValue x, BytesValue y, BytesValue message, BytesValue signature]) ->
@@ -148,6 +180,25 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
           ( BytesValue
               (pbkdf2Sha256 password salt (fromInteger rounds) (fromInteger wanted))
           )
+  (AudioToneBytesBuiltin,
+    [ IntValue _ wave
+    , IntValue _ period
+    , IntValue _ amplitude
+    , IntValue _ channels
+    , IntValue _ start
+    , IntValue _ frames
+    ]) ->
+      pure (optionalBytes (AudioKernel.toneBytes wave period amplitude channels start frames))
+  (AudioRampBytesBuiltin,
+    [ BytesValue source
+    , IntValue _ channels
+    , IntValue _ start
+    , IntValue _ fromFrame
+    , IntValue _ fromGain
+    , IntValue _ toFrame
+    , IntValue _ toGain
+    ]) ->
+      pure (optionalBytes (AudioKernel.rampBytes source channels start fromFrame fromGain toFrame toGain))
   (WordMapUnionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapUnion" Word.WordUnion values
   (WordMapIntersectionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapIntersection" Word.WordIntersection values
   (WordMapDifferenceBuiltin, values) -> callWordMapAlgebra spanValue "wordMapDifference" Word.WordDifference values
@@ -200,6 +251,10 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (ColumnBinarySearchF64Builtin, values) -> Column.callColumnBinarySearchF64 spanValue values
   (ColumnGatherU64Builtin, values) -> Column.callColumnGatherU64 spanValue values
   (ColumnGatherF64Builtin, values) -> Column.callColumnGatherF64 spanValue values
+  (CsvRecordsBuiltin, values) -> Csv.callCsvRecords spanValue values
+  (JsonDecodeBuiltin, values) -> Json.callJsonDecode spanValue values
+  (JsonEncodeBuiltin, values) -> Json.callJsonEncode spanValue values
+  (XmlDecodeBuiltin, values) -> Xml.callXmlDecode spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing
@@ -214,12 +269,21 @@ isHashingBuiltin :: Builtin -> Bool
 isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
   Sha512Builtin -> True
+  Sha3_256Builtin -> True
+  Sha3_512Builtin -> True
+  Blake2b256Builtin -> True
+  Blake2b512Builtin -> True
+  ChecksumBuiltin -> True
+  HmacSha512Builtin -> True
+  ConstantTimeEqualBuiltin -> True
   VerifyRsaBuiltin -> True
   VerifyEcdsaBuiltin -> True
   SealBuiltin -> True
   OpenSealedBuiltin -> True
   HmacBuiltin -> True
   DeriveKeyBuiltin -> True
+  AudioToneBytesBuiltin -> True
+  AudioRampBytesBuiltin -> True
   WordMapUnionBuiltin -> True
   WordMapIntersectionBuiltin -> True
   WordMapDifferenceBuiltin -> True
@@ -272,5 +336,8 @@ isHashingBuiltin builtin = case builtin of
   ColumnBinarySearchF64Builtin -> True
   ColumnGatherU64Builtin -> True
   ColumnGatherF64Builtin -> True
+  CsvRecordsBuiltin -> True
+  JsonDecodeBuiltin -> True
+  JsonEncodeBuiltin -> True
+  XmlDecodeBuiltin -> True
   _ -> False
-

@@ -29,6 +29,14 @@ parseBlock :: Parser (Located Block)
 
 ### Governance
 
+- `let PATTERN = value` and `let PATTERN = value else BLOCK` are read by one routine, because until
+  the value has been read there is nothing to tell them apart. The `else` decides which statement it
+  is, and each form asks the **opposite** thing of the pattern: with a fallback it must be able to
+  fail, since one that always matches makes the fallback unreachable (`E1057`); without one it must
+  not test anything a binding could not recover from (`E1059`). A sequence's length is the one
+  exception, checked where the binding runs — requiring a fallback for it would mean writing one at
+  every `let [first, ..rest] = items`.
+
 - Two statements written on one line are rejected with `E1049`. A newline delimits a statement here and there is no terminator, so `{ 1 2 }` is not one expression and not two statements — it is two with the separator missing, and it silently became the second one. The rule reports once per block and never where the statement it followed already failed, which is what keeps a hostile `{{{{...` reporting one `E1099` rather than one diagnostic per brace.
 
 - The block is the fixed point of the declaration/statement/expression recursion: it supplies itself as the `BlockParser` capability to [[Parser Expression]] and [[Parser Binding]], so no module needs a declaration orchestrator import or an `hs-boot` file.

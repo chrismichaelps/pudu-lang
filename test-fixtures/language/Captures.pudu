@@ -1,0 +1,102 @@
+module Captures
+
+/// What a function literal can still reach after it is carried away.
+///
+/// A literal holds the names it mentions and the program's own declarations,
+/// not everything that happened to be in scope beside it. That is a narrowing,
+/// and a narrowing is only safe if nothing it drops was reachable — so every
+/// way a literal reaches a name is exercised here, and each answer is a number
+/// `main` adds, after the literal has left the scope it was written in.
+
+import Std.Iter {Sequence}
+import Std.Option as Option
+
+const BASE: Int = 1000
+
+type Counter = { upto: Int }
+
+type Shape =
+  | Round(Int)
+  | Square(Int)
+
+impl Sequence[Int, Int] for Counter {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {
+    if state >= self.upto { None } else { Some((state + 1, state)) }
+  }
+}
+
+fn helper(value: Int) -> Int { value + 1 }
+
+/// A literal that reaches a module constant, a module function, an imported
+/// alias, and a wired-in builtin — none of which it was handed.
+fn reachesModuleScope() -> fn(Int) -> Int {
+  |x| BASE + helper(x) + Option.unwrapOr(Some(2), 0) + display("").length()
+}
+
+/// A literal that reaches a name it was handed, beside a large value it was
+/// not: `unused` is in scope where the literal is written and is never
+/// mentioned by it.
+fn reachesItsOwn(kept: Int) -> fn(Int) -> Int {
+  let unused = (0..500).toArray()
+  |x| x + kept
+}
+
+/// The nearer of two bindings of one name, which is the one in scope where the
+/// literal was written.
+fn reachesTheNearer() -> fn(Int) -> Int {
+  let value = 1
+  let shadowed = {
+    let value = 2
+    |x| x + value
+  }
+  shadowed
+}
+
+/// A literal written inside a literal, reaching what the outer one was handed.
+fn reachesThroughALiteral(outer: Int) -> fn(Int) -> fn(Int) -> Int {
+  |middle| |inner| outer + middle + inner
+}
+
+/// A literal that walks a type implementing the sequence protocol. The methods
+/// it calls are found from the value it is holding, not from anything the
+/// literal spells, so they have to survive the narrowing.
+fn walksASequence() -> fn(Int) -> Int {
+  |upto| {
+    var total = 0
+    for step in (Counter{upto: upto}) {
+      total = total + step
+    }
+    total
+  }
+}
+
+/// A literal that matches a sum and builds a record by field shorthand.
+fn matchesAndBuilds() -> fn(Int) -> Int {
+  |side| {
+    let shape = Square(side)
+    let upto = match shape {
+      case Round(radius) => radius
+      case Square(edge) => edge
+    }
+    let built = Counter{upto}
+    built.upto
+  }
+}
+
+export fn main() -> Int {
+  let moduleScope = reachesModuleScope()
+  let own = reachesItsOwn(5)
+  let nearer = reachesTheNearer()
+  let through = reachesThroughALiteral(100)
+  let walking = walksASequence()
+  let building = matchesAndBuilds()
+
+  let held = [moduleScope, own, nearer, walking, building]
+  var fromHeld = 0
+  for one in held {
+    fromHeld = fromHeld + one(4)
+  }
+
+  fromHeld + through(20)(3)
+}

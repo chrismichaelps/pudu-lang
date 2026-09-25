@@ -1,0 +1,79 @@
+module Std.Ui.Virtual
+
+/// The rows of a long list worth placing: `first` through `last` exclusive,
+/// the first row's top in content coordinates, and the full content height.
+export type Window = { first: Int, last: Int, top: Int, height: Int }
+
+/// Content-coordinate tops of rows with the given heights, plus the total
+/// height as the final entry.
+export fn offsets(heights: &Array[Int]) -> Array[Int] {
+  var tops = [0]
+  var running = 0
+  for height in heights {
+    running = running + (if height < 0 { 0 } else { height })
+    tops = tops.push(running)
+  }
+  tops
+}
+
+/// The rows of `count` equal rows of `rowHeight` visible through a viewport
+/// of `viewport` pixels scrolled to `scroll`, widened by `overscan` rows on
+/// each side.
+export fn visible(count: Int, rowHeight: Int, viewport: Int, scroll: Int, overscan: Int) -> Window {
+  if count <= 0 || rowHeight <= 0 { return Window{first: 0, last: 0, top: 0, height: 0} }
+  let height = count * rowHeight
+  let clamped = clampScroll(height, viewport, scroll)
+  let first = max(0, clamped / rowHeight - overscan)
+  let last = min(count, (clamped + viewport + rowHeight - 1) / rowHeight + overscan)
+  Window{first: first, last: last, top: first * rowHeight, height: height}
+}
+
+/// The same for rows of varying height, given their `offsets`.
+export fn visibleOf(tops: &Array[Int], viewport: Int, scroll: Int, overscan: Int) -> Window {
+  let count = tops.length() - 1
+  if count <= 0 { return Window{first: 0, last: 0, top: 0, height: 0} }
+  let height = tops[count]
+  let clamped = clampScroll(height, viewport, scroll)
+  let first = max(0, rowAt(tops, clamped) - overscan)
+  let last = min(count, rowAt(tops, clamped + viewport - 1) + 1 + overscan)
+  Window{first: first, last: last, top: tops[first], height: height}
+}
+
+/// The row under content coordinate `y`, given `offsets`; `None` outside.
+export fn indexAt(tops: &Array[Int], y: Int) -> Option[Int] {
+  let count = tops.length() - 1
+  if count <= 0 || y < 0 || y >= tops[count] { return None }
+  Some(rowAt(tops, y))
+}
+
+/// The smallest change to `scroll` that shows row `index` whole, given
+/// `offsets`; `scroll` unchanged when the row is already whole or absent.
+export fn scrollToShow(tops: &Array[Int], index: Int, viewport: Int, scroll: Int) -> Int {
+  if index < 0 || index >= tops.length() - 1 { return scroll }
+  let top = tops[index]
+  let bottom = tops[index + 1]
+  if top < scroll { return top }
+  if bottom > scroll + viewport { return max(0, bottom - viewport) }
+  scroll
+}
+
+/// `scroll` held within 0 and the furthest position that still fills the
+/// viewport.
+export fn clampScroll(height: Int, viewport: Int, scroll: Int) -> Int {
+  let furthest = max(0, height - viewport)
+  if scroll < 0 { 0 } else { min(scroll, furthest) }
+}
+
+fn rowAt(tops: &Array[Int], y: Int) -> Int {
+  var low = 0
+  var high = tops.length() - 2
+  while low < high {
+    let middle = (low + high + 1) / 2
+    if tops[middle] <= y { low = middle } else { high = middle - 1 }
+  }
+  low
+}
+
+fn max(first: Int, second: Int) -> Int { if first > second { first } else { second } }
+
+fn min(first: Int, second: Int) -> Int { if first < second { first } else { second } }

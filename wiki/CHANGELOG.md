@@ -5,6 +5,1748 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Standard library documentation written for readers (#228)
+
+- Fourteen core modules (`Std.List`, `Std.Map`, `Std.Set`, `Std.Text`, `Std.Option`, `Std.Result`,
+  `Std.Order`, `Std.Math`, `Std.Bits`, `Std.Char`, `Std.Bytes`, `Std.Io`, `Std.Json`, `Std.Time`)
+  document each public declaration with its reasoning, `## Examples`, and `## See also` where a
+  neighbour answers a nearby question.
+- [[website View Documentation]] renders that prose through the shared Markdown pipeline, so
+  examples are copyable code blocks and sections are anchored headings on every declaration page.
+- [[website Service Search]] ranks documentation by its summary line only, so a long reference text
+  that mentions a term does not outrank the declaration that defines it.
+- [[website Domain Library]] places `Std.Checksum`, `Std.Cron`, `Std.Dotenv`, `Std.Human`, `Std.Ip`,
+  `Std.Site`, `Std.Stats`, and `Std.Term` in their sections.
+
+## 2026-09-25 — A build step for any Pudu web application (#351)
+
+- [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with
+  a layout and routing per host, fast by rendering in parallel and rewriting only what changed.
+- [[Std Site]]: `build` renders on a worker pool, places each response by its content type, refuses
+  unsafe paths and failed pages, copies a public directory, and writes Vercel's Build Output routes
+  derived from the layout; `Static`, `Netlify`, and `CloudflarePages` need none.
+- [[website Prerender]] builds through it: 91 s → 26 s on four cores for 3,705 byte-identical pages,
+  and a rebuild with nothing changed writes nothing. [[Uses Site All]] (28 checks).
+
+## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
+
+- [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time
+  and readable from its bytes; [[Pudu Version]] `identityText` files products under version and digest.
+- [[Pudu Bundle]] `sharesSources` lets `pudu build --runtime` carry products to a runtime from the
+  same sources — including one for another platform — so a cross-built function starts in 37 ms
+  instead of 360 ms (22 modules). A runtime from other sources receives none, and the build says so.
+- [[architecture/DEPLOYMENT-TARGETS]] carries the measured start figures.
+
+## 2026-09-25 — Checksums at runtime speed (#343)
+
+- [[Eval Checksum]] and the pure built-in `checksumOf`: CRC-32, CRC-32C, CRC-64 (ECMA-182 as xz), and
+  FNV-1a 32/64 as strict folds over bytes. A megabyte's CRC-32 drops from 6.6 s in Pudu to 43 ms.
+- [[Std Checksum]]: a function per algorithm, each with an `Update` form that chains over chunks,
+  and fixed-width hex.
+- [[Std Compress Gzip]] `crc32` delegates, so gzip and zip checks stop paying 11 s a megabyte.
+- [[Uses Checksum All]] asserts the published check values (15 checks).
+
+## 2026-09-25 — Every value answers `toText()` (#347)
+
+- [[grammar/pudu]]: every value answers `toText()` with the text `display` writes; a `toText` its
+  type declares wins, also through an unbounded type parameter; `Bytes.toText()` keeps `Option`.
+- [[Type Check Rule]] types the universal method where nothing declared answers;
+  [[Eval Operator Access]] falls back to a bound [[Eval Value]] `TextMethodValue` that [[Eval Call]]
+  renders through `display`; completion offers it for every owner.
+- The book's text and traits chapters say so, with a runnable example. [[Uses To Text]] (12 checks)
+  and [[Rejects To Text Misuse]] cover it.
+
+## 2026-09-25 — Quantities people write (#341)
+
+- [[Std Human]]: `parseBytes` in decimal and binary units, `bytes` and `bytesDecimal` to one
+  decimal place, `parseDuration` and `duration` that round-trip (and read what `Time.describe`
+  writes), `ordinal`, `plural`, and `relative`. Every step of reading is checked against `Int`, and a
+  fraction that does not come to whole bytes or milliseconds is refused.
+- [[Uses Human All]] reaches every export (44 checks); the API coverage floor rises to 3554.
+
+## 2026-09-25 — Internet addresses and network prefixes (#339)
+
+- [[Std Ip]]: IPv4 and IPv6 addresses in one value, strict parsing (no leading zeros, one `::`,
+  no zone suffix), RFC 5952 rendering, bytes both ways, IPv4-mapped unmapping, neighbours, and
+  classification (loopback, private, link-local, multicast, unspecified, documentation, shared,
+  public).
+- Networks read strictly (host bits past the prefix are refused), masked explicitly with
+  `networkOf`, and asked `contains`, `overlaps`, `first`, `last`, `netmask`, and `within` — the
+  allowlist question, which unmaps a dual-stack peer first.
+- [[Uses Ip All]] reaches every export (55 checks); the API coverage floor rises to 3544.
+
+## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
+
+- [[Std Concurrent Scope]] `all` runs sibling actions under one child token, cancels the rest on the
+  first failure (typed or a crash), and answers only after every action has finished.
+  [[Uses Concurrent Scope]] proves cancellation with siblings that would otherwise wait forever.
+
+## 2026-09-25 — Menus in the macOS menu bar (#334)
+
+- [[Std Ui Menu]] `native` writes a bar as records; [[Std Ui Desktop]] `install` makes it the
+  platform's menu bar, `installed` reads it back, chosen commands arrive as `Chosen`, and
+  `driveCommands` routes chords and menu choices to one `apply` by command name.
+- [[Pudu Desktop Menu]] builds the `NSMenu`s behind an application menu with Quit, shows each
+  command's shortcut, and clears the bar when its window closes.
+
+## 2026-09-25 — A desktop window speaks to assistive technology (#331)
+
+- [[Std Ui Accessible]] encodes a layout's accessibility tree (role, name, frame, parent, focus) as
+  records and decodes the platform's report of it.
+- [[Std Ui Desktop]] `expose` hands a window that tree and `exposed` reads back what the platform
+  reports; `drive` exposes every frame it presents.
+- [[Pudu Desktop Access]] builds one AppKit accessibility element per record, with frames that
+  follow the window and focus that VoiceOver follows; [[Pudu Desktop Host]] shares the window classes.
+
+## 2026-09-25 — Futures, cancellation, pools, coordination, and retries (#330)
+
+- [[Std Concurrent]] `contain()` runs an action on a thread of its own and answers a crash as
+  `Failed`; the page no longer describes preemptive `cancel`, `scope`, and `withDeadline`, which were
+  never implemented.
+- [[Std Concurrent Future]]: typed results, promises, bounded waits, all-settled, wait-all, races,
+  first success, and deadlines. [[Std Concurrent Cancel]]: cooperative tokens with inherited
+  deadlines and interruptible pauses.
+- [[Std Concurrent Pool]]: fixed workers behind a bounded queue. [[Std Concurrent Coordinate]]:
+  semaphores, latches, wait groups, and run-once values. [[Std Concurrent Retry]]: capped backoff
+  with jitter.
+- [[Uses Concurrent Futures]] and [[Uses Concurrent Coordination]] reach every export, including
+  crashing work, contention, and refusals.
+
+## 2026-09-25 — A pudu behind the banner
+
+- [[Pudu mascot script]] draws a small two-tone pudu behind a page's banner: it roams the home
+  banner's edge, hides from the pointer on the missing page, and asks on the donation page, perking
+  up when the donate link is hovered or focused. [[website View Pudu]] places it.
+
+## 2026-09-24 — Pointer gestures, sliders, and the clipboard (#322)
+
+- The macOS adapter reports down, move, and up phases with timestamps and reads and replaces the
+  clipboard's text ([[Pudu Desktop Adapter]], [[Eval Desktop]]).
+- [[Std Ui Gesture]] recognizes taps, long presses, and drags; [[Std Ui Controls]] adds `slider` and
+  `slid`; [[Std Ui Clipboard]] reads and writes text with typed failures.
+- [[Std Ui Selection]] chooses list rows singly, by range from an anchor, and by toggle, and follows
+  keyboard movement and keymap commands.
+- [[Std Ui Grid]] places cells in equal flexible columns and lines up a short last row.
+- [[Std Ui Draw]] strokes lines, polylines, and outlines, painting exactly the pixels whose centres lie
+  within half the width, computed in integers, and fills linear gradients that end exactly on their
+  colors and polygons by the even-odd rule.
+
+## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
+
+- [[Std Ui Preferences]] saves typed settings atomically in the platform's per-user directory.
+- [[Std Ui Menu]] describes menu bars as data, draws them with shortcut labels, and reports commands
+  and shortcuts that disagree.
+- [[Std Ui Layout]] `trapping()` keeps focus inside a view; presented dialogs use it.
+
+## 2026-09-24 — Desktop controls, navigation, and modal presentation (#322)
+
+- [[Std Ui Controls]]: accessible buttons, toggles, steppers, pickers, progress bars, fields, and
+  secure fields, each named with its state, and updates that read only their own events.
+- [[Std Ui Navigation]]: page stacks, tabs, split views, and sheets, alerts, and confirmations over a
+  scrim that blocks presses on the view beneath.
+
+## 2026-09-24 — A desktop window delivers input, and the ui library themes, animates, and undoes (#322)
+
+- The macOS adapter queues presses, scrolls, named keys, printable text, Command/Control chords, and
+  resizes while pumping; `desktopInputs` drains them ([[Eval Desktop]], [[Pudu Desktop Adapter]]).
+  Key presses no longer reach the responder chain, so an unhandled key is silent.
+- [[Std Ui Desktop]] adds `signals`, the pure `decodeSignals`, and `drive`, which runs a screen until
+  the window closes and presents only damaged turns. [[Std Ui Screen]] adds `restated` for state
+  changes that did not come from an input.
+- New [[Std Ui Theme]], [[Std Ui Motion]], [[Std Ui History]], [[Std Ui Virtual]], and
+  [[Std Ui Keymap]].
+- [[architecture/NATIVE-UI]] gains a desktop concept-coverage table naming every remaining gap, and
+  the UI pages describe the reference framework in neutral terms.
+## 2026-09-24 — Events, an outbox, calendar jobs, and a router-checked API description (#323)
+
+- [[Std App Events]] publishes in order to topic patterns and holds an outbox that is drained after
+  commit, retried, and buried after a limit.
+- [[Std App OpenApi]] writes OpenAPI 3.1 from values, publishes failures as problem bodies, and
+  reports routes and operations that disagree; [[Std App]] `describing` refuses to build when they do.
+- [[Std App Work]] gains `Calendar`, running a [[Std Cron]] schedule on the same clock as interval jobs.
+
+## 2026-09-24 — Problem bodies, cursor pages, and idempotent retries (#323)
+
+- [[Std App Problem]] gives every refusal one RFC 9457 body; `uniform` rewrites plain failures and
+  validation reports become 422 with per-field errors.
+- [[Std App Page]] pages listings by keyset cursor with refused oversize limits and `Link` headers.
+- [[Std App Idempotency]] replays the stored answer for a repeated `Idempotency-Key`, refuses a key
+  reused for another body, and releases a key after a 5xx.
+- [[architecture/WEB]] gains an API-contracts table and the joints through which every application
+  module enters `Std.App`.
+## 2026-09-24 — Schedules, statistics, environment files, and terminal styling (#321)
+
+- [[Std Cron]] parses five-field schedules and macros and answers whether a minute fires and the
+  next firing minute in UTC; an impossible date answers `None`.
+- [[Std Stats]] adds mean, median, percentiles, variance, deviation, covariance, correlation,
+  histograms, summaries, and a constant-state streaming accumulator; too little data answers `None`.
+- [[Std Dotenv]] reads environment files into ordered entries with quoting, escapes, and earlier-key
+  expansion, and renders entries back to text that reads the same.
+- [[Std Term]] writes terminal colour and style sequences, strips them, and controls the cursor.
+
+## 2026-09-24 — A bundle carries its compiled products (#319)
+
+- `pudu build` compiles through a cache held in memory and carries its entries in the bundle; a
+  bundle starts from them and never reads or prunes the host cache ([[Compiler Cache]],
+  [[Bundle]]). A minimal HTTP server's time to `listen`, M1 `-O2`, best of 7: 628 → 40 ms with no
+  host cache, 105 → 36 ms warm, and 920 → 37 ms after another Pudu program ran on the same host,
+  which used to erase its products.
+- A build onto an explicitly named runtime carries sources without checked products, because the
+  named executable's cache compatibility cannot be established from its version string.
+
+## 2026-09-24 — Integer literals resolved once, after checking (#317)
+
+- The evaluated module carries each integer literal as `ResolvedInteger kind value`
+  ([[Compiler Literals]]), so an evaluation no longer parses the literal's text or looks its kind up by
+  span. Measured on an M1 with the `-O2` runtime, best of three: a 3M-iteration counting loop
+  5444 → 3344 ms, `fib(27)` 858 → 673 ms, a 100k-entry map 641 → 491 ms, a 200k-element array
+  536 → 458 ms. The loop's allocation fell from 22.8 GB to 16.1 GB.
+
+## 2026-09-24 — The Pudu mark in search results
+
+- Search results showed a globe for the site: its only icon was 64 pixels, and Google shows a favicon
+  only at a multiple of 48. The site now serves `/favicon.ico` (16, 32, 48) and the "P" mark at 48, 96,
+  192, and 512 pixels, a 180-pixel touch icon, `/site.webmanifest`, and a `theme-color`
+  ([[website View Layout]]).
+- The home page names the site `Pudu`, with alternate names, a `SearchAction`, and the organization
+  and its logo, in one JSON-LD graph. Its title and description now describe the language
+  ([[website Seo]]).
+
+## 2026-09-24 — Installing packages from a terminal is tested (#314)
+
+- [[Package install suite]] drives `pudu install`, `uninstall`, `deps`, and `tree` against real git
+  repositories: adding a package not in `pudu.toml` (bare, exact, caret, tilde, comma range, a named
+  pre-release, several at once), repeats, moves, restoring a clone, `--locked`, path and git
+  sources, transitive dependencies and their conflicts, removal, and refusals that must leave
+  `pudu.toml` and `pudu.lock` byte-identical. It runs in CI and in `test/gates.sh`.
+- The same suite uses what was installed: a program importing a package and its dependency checks,
+  runs, builds, and is tested; without `deps/` check says to install; and through `pudu lsp` on the
+  project's files, completion, hover, and definition reach into `deps/`, and a server already running
+  reads a package installed after it started on the next edit.
+
+## 2026-09-24 — Download page around its buttons (#312)
+
+- `/download` opens with the home page's hero, carrying a release pill and a download button per
+  archive; [[Download platform script]] makes the reader's platform the primary button and turns the
+  per-archive install steps into tabs. Each archive's steps name its real files, and are painted and
+  copyable. Without script every button and every section is shown ([[website View Download]]).
+
+## 2026-09-24 — Painted, copyable code and steady avatars (#310)
+
+- Documentation and package Markdown paint `pudu` blocks on the server with the playground's `tok-*`
+  colours, pinned to the playground's painter by a shared fixture ([[website View Syntax]],
+  [[Syntax parity test]]), and paint shell blocks. Every code block has a copy button, shown by
+  `/assets/docs/copy.js` and hidden without script.
+- A package banner or profile avatar loads eagerly with high priority, `/packages/avatars/` is cached
+  for a day, and the two-tone mark shows only when there is no image, so the mark no longer flashes
+  before the image ([[Package avatar fallback]]).
+
+## 2026-09-24 — Package pages fit any phone and render README HTML (#308)
+
+- Below 900px a package overview stretches its columns to the page instead of sizing them to their
+  content, which had widened the page to 787px on a 375px phone. README images keep to their column,
+  and the install panel's version row wraps. No package page overflows from 280px through 884px
+  ([[website stylesheet]]).
+- A package's Markdown files render the HTML a README writes for GitHub, rebuilt from an allowlist
+  ([[website View MarkdownHtml]]), with Markdown images. Relative links open the source tab, and
+  relative images load from the release's commit on GitHub. The documentation keeps its stricter
+  subset.
+- [[website Markdown suite]] covers rendering, refusals, target resolution, and the width rules.
+
+## 2026-09-24 — Release names modules outside the package root (#304)
+
+- `pudu release` writes a warning naming every module under the manifest's `source` that is neither
+  the root module nor under the root's directory, as [[architecture/PACKAGES]] requires; the
+  executable entry `Main.pudu` is exempt and the release still publishes ([[Pudu CLI Publish]]).
+- Covered in [[src/test/package-registry]] for a release that names such modules and one that names
+  none. Whether the warning should refuse the release is open for Language Architect review.
+
+## 2026-09-24 — Collections docs name the Option-answering get (#306)
+
+- The Collections chapter says `items.get(i)` stops the program at a missing position, as `items[i]`
+  does, and names `List.get(&items, i)` for an `Option`. Its arrays example now calls `List.get` past
+  the end, so `test/docs-examples.py` checks the claim.
+
+## 2026-09-23 — 0.1.1 on the download page (#302)
+
+- v0.1.1 is published as a pre-release with linux-amd64 and darwin-arm64 archives.
+  `website/data/releases.json` names them, and production `/download` serves only those links.
+- The site is deployed with `https://www.pudu-lang.org` as its canonical origin, on a musl runtime
+  built from the 0.1.1 checkout.
+
+## 2026-09-23 — Release 0.1.1 prepared (#302)
+
+- `release/0.1.1` raises the compiler package to 0.1.1, adds its release notes, and regenerates the
+  website catalogue at that version. The release decision is a pre-release tagged `v0.1.1`.
+
+## 2026-09-23 — Package-ready generated projects (#302)
+
+- `pudu init --lib --name @owner/repo` creates a library under the package system's canonical
+  module root with a runnable test and editable package metadata. The default application scaffold
+  remains runnable.
+- The project manifest's source directory is an implicit compiler search root, so tests can import
+  project modules without declaring a local-only self dependency. Existing manifests still parse.
+- Project search roots are deduplicated by canonical path, so a file already under `src/` never
+  searches `src` a second time, including through an existing `src = "src"` self dependency.
+- `pudu search <query> <file>...` is the declaration search again; words without source paths
+  search packages. `pudu help` lists the package and publication commands.
+- The generated-project gate now installs a Git dependency, verifies stable lock bytes, releases
+  a named library to a local bare remote, and imports the tagged library from another project.
+
+## 2026-09-23 — Incremental package snapshots (#301)
+
+- Package discovery lists every `topic:pudu-package` repository past GitHub's 1,000-result search cap
+  by splitting the query by creation date.
+- Snapshot builds are incremental:
+  - API reads are conditional (ETags; `304` answers cost no rate limit).
+  - Each tag commit's manifest is read once.
+  - Packages with unchanged tags and releases carry their files and API catalogue forward with no
+    archive download.
+- A build that runs low on rate limit defers changed packages to the next build instead of failing,
+  and ends with a summary of refreshed, reused, and deferred packages and requests made.
+- `discover.test.mjs` lists 2,500 synthetic repositories through a capped search. The package suite
+  checks reuse, not-modified answers, a starved budget, and a new tag.
+
+## 2026-09-23 — Package search suggestions and a banner-headed site (#300)
+
+- `GET /packages/suggest` returns bounded JSON suggestions: owners, projects, and public
+  declarations with kind marks, signatures, and site-built links. Queries may name an owner
+  (`@alice`), an owner's project (`@alice/js`), a declaration (`textOf`, `Value.textOf`), or a
+  signature shape (`Value -> Str`, `Array Value`). One service ranks the suggestions and the full
+  `/packages/search` page.
+- Every package search box is a combobox: Up/Down select, Enter opens, Right Arrow on a project
+  searches inside it behind a removable chip, Backspace removes the chip, Escape closes, and `/`
+  focuses the field. A `?` disclosure lists the query forms. Project pages carry a box fixed to that
+  project. The script is split into constants, text, network, view, and feature modules and inserts
+  package text only as text.
+- A filter now means "inside this project": filtered results list that project's declarations and no
+  project rows.
+- Every page with a header, now including package search results, owner profiles, and project
+  pages, opens with the dark blue gradient banner. Below it the site drops glows, lifted cards, and
+  pill badges for ink on surfaces tinted from the soft blue of the logo's `P`: typographic page headers with a four-colour logo rule, ink primary buttons, sentence-case
+  section titles, a package ledger with release and star columns beside topic counts, a project banner
+  with a facts line, and owner marks drawn from the logo's two-tone letter pairs.
+- The package search box also suggests standard library declarations as their own group, ranked by
+  the same name and signature rules, and linked to their API pages.
+- API search results, module pages, the documentation index, and the home module list use ledger
+  rows under ink rules instead of boxed signatures and cards.
+- Project tabs share one heading style. Overview shows the README as a file beside Install, Latest
+  release, Dependencies, Topics, and Details; Releases puts the latest release and its command above
+  a ledger; Docs lists declarations as rows with kind marks beside a ruled module index; Tickets and
+  Contributions are ledgers with state dots, and a detail reads as a post.
+- The Source tab is a light file column beside a file with a header bar and plain gutter. Choosing a
+  file replaces only the file pane (prefetched on hover, with Back and Forward), so the page no
+  longer reloads and flashes.
+- No suggestion is selected until the reader chooses one; Enter otherwise submits, and Right Arrow
+  narrows only on a chosen project with the caret at the end. Title-case queries still find projects
+  and owners.
+- `Test/PackageSearch.pudu` (27 checks) covers ranking, query forms, filters, bounds, and the JSON
+  reply; the website suite checks both routers, the signature search page, and the project box.
+
+## 2026-09-23 — Visible package data states
+
+- Catalogue, search, ticket, and contribution lists now show a bordered banner when empty, retain
+  visible loaded rows, and show an accessible spinner while the next page loads. The 404 page uses
+  the compact shared banner. Regression checks cover the rendered states and missing page.
+- Owner images use the GitHub profile avatar: the build's local copy first, then GitHub's hosted
+  avatar if the copy is unavailable. A neutral user silhouette replaces missing images and the
+  stylesheet revision makes it visible to returning browsers. Failed images on later scrolled pages
+  also reveal the silhouette.
+
+## 2026-09-22 — Progressive package lists and source icons
+
+- Catalog, handle, search, ticket, and contribution lists now render 20 rows per request. The next
+  page loads near the scroll edge, with a normal “Load more” link as a fallback. Numbered public
+  pages are prerendered; search pages use a page query in the dynamic function.
+- The source tree uses the Pudu VS Code file icon and local, attributed icons for Markdown and
+  common source/configuration files, with a generic file fallback.
+
+## 2026-09-22 — Native package conversations and focused search
+
+- Package search now presents linked projects and matching public declarations in a focused result
+  panel. Compact declaration facts travel in the dynamic package snapshot, so search works without
+  the static API catalogue files.
+- Project Tickets and Contributions tabs render up to 100 recent public GitHub issues and pull
+  requests respectively, with native detail pages, states, labels, authors, dates, and safe Markdown
+  bodies. GitHub retains posting and review. The sitemap and local package fixture cover these paths.
+- The GitHub snapshot generator filters pull requests out of Tickets and preserves merged state in
+  Contributions; the stand-in GitHub integration gate checks both. Recent discussion bodies are
+  stored in static per-project documents, while the search function loads only the compact index.
+  Ticket and contribution paths resolve to prerendered pages in the deployment.
+
+## 2026-09-22 — Shared page banners and package catalogue rows
+
+- Download, About, Releases, documentation indexes and chapters, library modules and symbols,
+  search, support, policy documents, and missing pages now open with the home banner's compact
+  reading-page variant. Their title, lead, metadata, and actions remain in the page's content order.
+- The package catalogue and handle pages use linked rows showing name, description, release, and
+  stars. Larger catalogues show six most-starred packages before the complete list; smaller ones
+  list each package once. Regression checks cover the banner and row markup.
+
+## 2026-09-22 — Package pages from public registry snapshots
+
+- The website can snapshot public projects from a hosted registry and prerender `/packages`,
+  `/@handle`, project overview/source/docs/releases, and one page per latest-release file. The
+  `@alice/json-kit` fixture exercises the complete browsing flow, including encoded filenames,
+  binary files, install commands, missing routes, and canonical sitemap paths.
+- Package search reads the same snapshot in the dynamic function. The install disclosure offers an
+  exact release command, version picker, copy controls, and the unversioned command with its
+  72-hour release-age behavior. The build publishes no package pages until a hosted registry is
+  configured with `PUDU_PACKAGES_REGISTRY`.
+- A listed release whose file tree is unavailable now answers a registry error instead of an empty
+  list. Snapshot generation validates names and paths, fetches files with bounded concurrency, and
+  keeps other package pages available when one project's API documentation cannot be generated.
+- The package catalog now uses an original Pudu search banner and a compact, nonduplicated project
+  list. Project pages place identity, release, and install in a distinct header; the README and
+  metadata have separate reading surfaces. The mobile install panel stays within the viewport.
+
+
+## 2026-09-22 — GitHub is the package index
+
+- Pudu runs no package service and keeps no database. A package is a GitHub repository with a
+  `pudu.toml` and the topic `pudu-package`; its releases are its version tags. `pudu install
+  @owner/repo` reads the tags and each tag's `pudu.toml` from the machine's bare clone with git (one
+  `for-each-ref`, one `cat-file --batch`), bounded to live tags by `git ls-remote`, and chooses only tags
+  whose manifest names the package and the tag's version. The lock pins the commit and the tree digest,
+  so a moved or deleted tag changes no locked build; a locked, cached package installs without git
+  touching the network.
+- `pudu release` tags and pushes, then with a token creates the GitHub release and adds the topic.
+  `pudu login` takes `--token`, GitHub's device flow when `PUDU_GITHUB_CLIENT_ID` names an application,
+  or the GitHub CLI's token. `pudu search` lists packages from GitHub search. `pudu push` is gone.
+- The website's package pages are built from the GitHub API at deploy time.
+- The `registry/` service, its HTTP client, and its archive format are removed.
+
+## 2026-09-22 — One banner for the home page and the packages
+
+- The home page opens with the banner the package catalogue uses, holding the release, the headline,
+  Start learning and Download, and API search with example queries. Published packages appear on the
+  home page as cards.
+- The masthead links Packages. `/packages` always answers: before any package is published it shows the
+  three commands that publish one.
+
+## 2026-09-22 — A code view for package source, and GitHub beside every project
+
+- A package's Source tab is a code view: a file sidebar with the release, a filter, and the tree with
+  folder icons and badges by file type; a breadcrumb; and a file card naming the language, lines, and
+  size, with Copy path and GitHub actions. Pudu files are highlighted on the server, Markdown files are
+  rendered, and each module is shown beside its declarations, which link into the Docs tab.
+- Every project links its repository's Issues, Pull requests, and Stars on GitHub, with open-issue and
+  star counts.
+- The package page script is split into small modules for copying, the version picker, and the file
+  filter.
+
+## 2026-09-22 — Tar and HTTP at the size of a real release
+
+- `Std.Http.Client` decides when a response is complete from its head, parsed once, instead of joining
+  and re-reading everything received after every piece: a 1.3 MB archive from GitHub took 20 s and now
+  takes the time the network does. `Std.Http.Message` exports `Framing` and `framingOf`.
+- `Std.Archive.Tar` builds and reads headers from native slices: writing 289 files went from 70.5 s to
+  2.9 s at `-O0`, and reading 352 entries from 6.3 s to 2.9 s.
+- The registry copies each repository's star, fork, and open-issue counts at push and release. Its
+  GitHub client was checked against the live API, including tag resolution and the archive redirect.
+
+## 2026-09-22 — Packages live on GitHub
+
+- A package is a GitHub repository: `@owner/repo` is `github.com/owner/repo`, and handles are GitHub
+  users and organizations. `pudu login` runs GitHub's OAuth device flow (`--private` asks for the
+  `repo` scope, `--token` and `PUDU_TOKEN` take a GitHub token). The registry keeps no accounts,
+  passwords, or token secrets; it asks GitHub whose a token is and remembers the answer by digest for
+  five minutes. Profiles (name, avatar) are copied from GitHub.
+- `pudu release <version>` refuses a working tree with changes, checks and tests the project, tags the
+  commit `v<version>`, pushes the tag, and asks the registry to publish it. The registry needs push
+  permission on the repository, fetches the tagged commit's archive from GitHub, applies every archive
+  refusal, and repacks the files into its own canonical archive, recording the tag and commit. Installs
+  use that copy, so a moved or deleted tag changes no locked build. `pudu push` registers a project from
+  its default branch. A private repository's project exists only to tokens that can read it.
+- `Std.Archive.Tar` reads pax extended headers (their `path`) and skips pax global headers, as found in
+  every archive `git archive` and GitHub produce.
+- `test/package-registry.py` runs against a stand-in GitHub backed by real git repositories.
+
+## 2026-09-22 — Installs that fail change nothing
+
+- `pudu install`, `update`, `upgrade`, and `uninstall` stage every package they copy beside its
+  destination and verify it before writing `pudu.lock`; if any package fails, the staged copies are
+  removed and the lock and `deps/` stay as they were. Each staged package then replaces its
+  destination by rename.
+- The suite checks that clean, `--locked`, and `--offline` reinstalls give the same files and that the
+  same graph writes the same lock bytes. `test/package-registry.py` adds registry conformance checks:
+  links, hard links, parent and absolute paths, duplicates, a `Std` root, another package's manifest,
+  an archive past the unpacked limit, file paths outside a release, archive digests against their
+  documents, and unknown tokens. It runs in CI and in `test/gates.sh`.
+
+## 2026-09-22 — Registry packages: install, login, push, release, upgrade
+
+- `pudu install @handle/name[@version]` resolves registry releases with the solver, downloads each
+  archive once into the machine's cache, checks its SHA-256 against the registry and the lock before
+  unpacking, and refuses an archive whose `pudu.toml` names another package or version. A cached
+  archive that no longer matches is downloaded again. With a lock and a warm cache, installing makes
+  no request.
+- `pudu login` pairs the machine by device code, or stores `--token`; tokens are kept per registry in
+  `$PUDU_HOME/credentials.toml` with mode 0600, and `PUDU_TOKEN` overrides them. `pudu logout`,
+  `pudu whoami`, `pudu push [--private]`, and `pudu release <version> [--notes FILE] [--private]`,
+  which checks the project and runs its tests before uploading.
+- `pudu upgrade` raises requirements to the newest releases and names every major version crossed.
+  A new resolution skips releases younger than `[install] min-release-age` (72 hours by default)
+  unless the lock already holds one or it is named exactly. A misspelled package name suggests the
+  closest real ones. `[install] registry` or `PUDU_REGISTRY` chooses the registry.
+- `test/package-registry.py` drives all of it against a local registry in CI.
+
+## 2026-09-22 — The package registry
+
+- `registry/` is the package registry, a Pudu program serving the `/api/v1` API from a data
+  directory: search, project documents, release archives and single files, push of a head snapshot,
+  immutable releases, yanking, settings, unlisting, handle profiles, device pairing for `pudu login`,
+  `whoami`, and token revocation. A release's version, dependencies, root, and modules come from the
+  `pudu.toml` and files inside its archive; archives with links, unsupported entries, unsafe paths,
+  duplicate paths, or past the size and file limits are refused. Private projects answer 404 to
+  anyone but their owner. `registry account` creates an account and prints a token.
+- `Std.Http.Multipart` reads a file part whose content is not UTF-8; such parts were dropped.
+
+## 2026-09-22 — Tar paths past 100 bytes, and types it does not know
+
+- `Std.Archive.Tar` writes a path longer than 100 bytes through the USTAR prefix field and reads it back
+  whole; it truncated such paths before. A header whose type is not a file, directory, or symbolic
+  link — a hard link, a device, a pax header — fails with `UnsupportedType` instead of reading as a
+  file.
+
+## 2026-09-22 — SHA-256 of text at native speed
+
+- `Std.Crypto.sha256` and `sha256Hex` answer from the runtime's digest instead of the rounds written in
+  Pudu: 104 KB hashed in 4.5 s now takes under a millisecond at `-O2`. Every ETag the HTTP server sends
+  is one of these, as is every token digest the package registry keeps. `sha256Bytes` remains the
+  readable reference, and the fixtures check that both give the same digests.
+
+## 2026-09-22 — Installing shows its work and does each thing once
+
+- `pudu install`, `uninstall`, and `update` show one live line while they work — a spinner, the
+  phase, what was fetched, taken from the cache, copied, and already up to date, and the elapsed
+  time — then a summary: how many packages were resolved and from where, the `+`/`-`/`~` changes,
+  what was installed or restored, the files written, and the total time. `--verbose` prints each
+  step as a timed line; `--quiet` prints only errors. Colour only for a terminal, never under
+  `NO_COLOR`.
+- A lock whose commits are in the cache installs without starting git or touching the network, as
+  the design always said; a repository is fetched at most once per run; checkout digests are kept
+  beside the checkout; a copy is hashed as it is written; and `deps/` is re-hashed only when a
+  file's size or modification time changed. Fetches and copies run side by side. On 1,200 modules
+  in three git packages at `-O2`: a repeated install 470 → 80 ms, restoring `deps/` 730 → 200 ms,
+  a first install 1.1 → 0.6 s.
+- A cached checkout whose files no longer match `pudu.lock` is refused instead of installed.
+
+## 2026-09-22 — Dependencies: install, lock, and deps/
+
+- `pudu install` adds a directory or a git repository as a dependency, records the commit and a tree
+  digest of its files in `pudu.lock`, and installs it into `deps/`, where `pudu check`, `run`, `test`,
+  and the language server find its modules. `pudu install` alone installs what the lock names,
+  restoring any edited file; `--locked` refuses to change the lock and `--offline` refuses the
+  network. `pudu uninstall`, `update`, `deps`, and `tree` complete the set.
+- One version of each package per program, chosen by a solver that prefers the lock, then the newest
+  release, and names every requirement it cannot meet. Two packages may not own one module root, and
+  no package may ship modules under `Std` or `Core`; installed packages are never searched for a
+  standard module. Nothing a package contains is executed while installing.
+- A diagnostic about the project rather than a module — the manifest, the lock — prints its code,
+  message, and file instead of a placeholder.
+- A new documentation chapter, Dependencies; `pudu init` ignores `deps/`.
+
+## 2026-09-22 — The site's bytes and its layout shift
+
+- The masthead logo is a 6 KiB WebP drawn at its size instead of a 579 KiB PNG four times too wide,
+  the footer mark and the icon are small images of their own instead of a 512 KiB PNG, and every
+  image states its size. Link previews use a 1200×630 card.
+- Fonts are WOFF2 (44 KiB a face instead of 130), preloaded, with a fallback face scaled to Nunito's
+  metrics so text does not move when the font arrives.
+- The playground no longer shifts when its script mounts (Lighthouse measured 0.80): the page draws
+  the splitter column and the Run shortcut itself, and the script adopts them. Its thirty modules are
+  preloaded together rather than discovered three imports deep.
+
+## 2026-09-22 — Website polish at every width
+
+- The home hero's release pill and action buttons no longer sit flush against the heading and the
+  paragraph: a more specific `.intro p{margin:0}` had been overriding their spacing.
+- A code block's language label no longer covers a long first line.
+- API summaries and declaration text render their code spans as code, in the symbol page, the module
+  pages, the library map, and search results, and a symbol page's description drops the backticks.
+- A long unbroken word in a document no longer widens the page on a phone, and the footer's bottom
+  links wrap at 320 pixels. The footer no longer adds its own margin to the page's bottom padding.
+- The playground toolbar lines up with the masthead, keeps one row from 761 pixels up — its
+  diagnostics status gives way with an ellipsis instead of pushing a control onto another row — and
+  two rows on a phone, where it had three.
+
+## 2026-09-22 — A playground example for every chapter; the formatter keeps macro calls
+
+- The playground's menu grows from six programs to nineteen: functions, numbers, text, ranges and
+  sets, control flow, generics, compile time and macros, testing, JSON and CSV, HTML, HTTP routes,
+  concurrency, and time and randomness join the originals, so every chapter that a confined run can
+  execute has a program to run and change.
+- `test/docs-examples.py` runs playground examples with `pudu run --confined`, as the sandbox does,
+  so an example that reaches for a file or the network fails the gate rather than a reader.
+- `pudu fmt` writes a macro call tight — `twice!(20)`, `timed!({ work() })` — where it used to
+  write `twice !(20)` and `timed !( { work() })`.
+
+## 2026-09-22 — Documentation for numbers, compile time, macros, and foreign code
+
+- Three documentation chapters: **Numbers** (widths and literal suffixes; checked, wrapping, and
+  saturating arithmetic; conversion through `BigInt`; `Decimal` and its rounding rules), **Compile
+  time and macros** (`comptime fn`, what compile-time code may do, typed hygienic macros), and
+  **Unsafe and foreign code** (named capabilities, unsafe functions with safe wrappers, `foreign`
+  blocks, owned handles, output slots). Generics gains parameters of higher kind, `F[_]`.
+- The chapters are renumbered to place the new ones in reading order; addresses are unchanged.
+- A documentation table cell keeps a pipe written `\|`, so the saturating operators can be listed.
+
+## 2026-09-21 — A watched program follows more than its source; the site follows it
+
+- `pudu run --watch --also <path>` starts the program again when anything under a path changes, not
+  only its `.pudu` sources, and tells the program `PUDU_WATCH` (which start this is) and
+  `PUDU_WATCH_CHANGED` (what changed before it). Watched paths are reported absolutely, and editor
+  swap files and tool output directories are ignored.
+- `website/scripts/dev.sh` runs the site that way. Every open page reloads when a source, page,
+  data file, script, or example changes, and swaps in a changed stylesheet without reloading, so the
+  scroll position and anything typed stay. A site that is not watched carries none of it.
+- The site's search ranks a catalogue index prepared once instead of lowering every entry per
+  query: a query with no hits takes 63 ms instead of 113 on the local server and a broad one 176 ms
+  instead of 574, with every ranking unchanged.
+- A documentation page marks, in its contents, the section being read, without reading the layout
+  while the page scrolls.
+- The playground's editor asks the language server after `import `, `case `, and a `{` or `,` that
+  opens an import's selection or a record literal; accepts a module path over the whole typed path;
+  and keeps the server's order. The API catalogue carries the new `Std.Html.Ssr`, `Stream`,
+  `Buffer`, and `Bounded` declarations.
+
+## 2026-09-21 — Imported names, record literals, and import selections in the editor
+
+- Go to definition on a name another module exports — `List.length`, a name an import selects, a
+  qualified type — opens the declaration in that module's file, and on an import's path opens the
+  module; a selected name is no longer defined at the import line. Hover on such a name shows its
+  documentation as its module wrote it, not only the inferred type.
+- A record literal `Point{…}` completes the fields it has not set yet, with their types, including
+  while the literal is unclosed.
+- Import completion ranks the modules the typed path or its last segment begins first, stops
+  offering names a selection already holds, and offers only `as` after a finished path.
+- Completion opens by itself after `{` and `,` in an import's selection or a record literal, and
+  nowhere else a brace or comma is typed. Items keep the server's order when an editor sorts, so
+  the nearest binding is listed before the prelude.
+
+## 2026-09-21 — Newer edits and cancellations are seen while analysis runs
+
+- The language server reads messages on a thread of its own. `$/cancelRequest` answers a queued
+  request at once as cancelled (`-32800`) and interrupts one being worked on; a newer full text for a
+  document drops the older changes still waiting behind it and interrupts the analysis of an older
+  one, unless a request waits between them. A burst of edits followed by a completion compiles the
+  latest text only, and every request is still answered exactly once. A cache write interrupted part
+  way removes its partial file (issue #285).
+
+## 2026-09-21 — A stored float constant reads back
+
+- A module with a `Float64` constant failed to run after it had been checked — `pudu: a stored
+  module could not be read` — because the cache's integer encoding overflowed for the constant's
+  bits, which every stored float exceeds. Integers are now encoded on their unsigned bits and
+  round-trip at any magnitude; the cache directory name is new, so nothing written the old way is
+  read. The modules chapter's import table also said `import Shapes.Area` binds the full path; it
+  binds `Area` (issue #288).
+
+## 2026-09-21 — A repaired completion is compiled once
+
+- Completion and signature help keep the analyses of repaired texts for the current state of the
+  open documents, keyed by that state, the document, and the exact text, and bounded to eight. The
+  same request at an unchanged state compiles nothing: on a 30-module program, repeated completion
+  after an unfinished `text.` answers from the kept analysis instead of compiling the program again
+  each time. Any edit, open, close, or file event starts an empty cache (issue #284).
+
+## 2026-09-21 — Imports read the editor's open buffers
+
+- An importing document is compiled against the text of the modules the editor has open, not
+  their files on disk, so a function added to an open, unsaved module is completed in its importers
+  at once — through transitive imports too. When an open module changes or closes, or a closed file
+  changes on disk, every open document whose program read it is analysed again and its diagnostics
+  are published again; closing a module returns its importers to the disk (issue #283).
+
+## 2026-09-21 — Each document finds its own modules
+
+- The language server roots each document as `pudu check` does — its path with the declared
+  module's segments taken off — instead of treating the editor's workspace folder as the source
+  root. Opening a repository that holds `src/Main.pudu` and `src/Lib.pudu` no longer reports
+  `E2014` for `import Lib`, sibling programs in one workspace read their own modules, every
+  workspace folder is kept, and percent-encoded paths are decoded. The document analysis moved out
+  of the server loop into its own module (issue #282).
+
+## 2026-09-21 — Completion keeps working in unfinished text
+
+- `text.` inside a function whose closing brace is not written yet offers `Str`'s members, and
+  `case ` in an unclosed `match` offers the subject's variants. A repair now ends the text at the
+  cursor and closes what is open, replaces an unfinished arm with a placeholder, and blanks other
+  declarations that have syntax errors, all keeping offsets; a repair is taken only when it answers
+  what was asked. The parser's recovered tree is kept for tooling when a document does not parse and
+  is never executed.
+- Inside a constructor's payload, `case Holds(` offers the payload type's variants rather than the
+  subject's, and only `_` where the payload's type is not a known sum. Signature help uses the same
+  closing repair (issue #281).
+
+## 2026-09-21 — Member completion is on the whole receiver
+
+- `produce(1).` offers the members of `produce`'s result instead of its last argument's, and
+  `produce(1 ).` offers the same. `text .` and a comment before the dot are member positions, as are
+  indexes, chains, nested calls, groups, and literals. The receiver is read from the lexer's tokens
+  and typed by its exact span, or the widest expression inside it. A cursor inside a member name is
+  still a member position (issue #280).
+
+## 2026-09-21 — Module completion is a module's exports
+
+- `L.` offers exactly what `L`'s module exports, including a sum's variants and foreign
+  declarations, and no longer its private functions. A name a selective import brought in is
+  described by the module it came from, whatever other module shares its name and whatever the
+  import order. `import M { pu` offers `M`'s exports while the import is still unfinished
+  (issue #279).
+
+## 2026-09-21 — Qualifiers are the ones imports bind
+
+- `Tools.` after `import Lib.Tools` offers `Lib.Tools`'s declarations, as `T.` does after
+  `import Lib.Tools as T` — including when the import is split across lines, separated by a tab, or
+  followed by a comment. A selective import no longer offers its module as a qualifier, a full path
+  such as `Lib.Tools.` is not treated as one, and imports are read from the parsed declarations
+  rather than from text lines (issue #278).
+
+## 2026-09-21 — Method completion follows the checker
+
+- `value.` offers the methods a call on the receiver would find: a type's own and inherited trait
+  default methods, a `dynamic` trait's members, and for a type parameter the members of the traits
+  its bounds and `where` clauses name, with the checker's signatures as details. A type of the same
+  name in another module no longer lends its methods. The checker publishes each module's declared
+  methods and the editor joins them per program (issue #277).
+
+## 2026-09-21 — Field completion reads the declared record
+
+- `value.` offers the fields of the receiver's record type found by its declaring module and name,
+  so an imported record's fields are offered and a local record of the same name lends none.
+  Generic arguments are substituted (`Box[Int]`'s `value: T` is `Int`, nested ones too), `mut`
+  fields are offered and marked, and references and aliases reach the record they name. Fields are
+  no longer read by slicing the declaration's text (issue #276).
+
+## 2026-09-21 — Completion offers the bindings in scope
+
+- Names are offered from the frames name resolution opened, kept with their source extents: a
+  `let` in a block that has ended, a pattern name from another match arm, a closure's parameter
+  outside it, and a loop binder after the loop are no longer offered, and an inner shadow is
+  offered in place of the outer binding. A `let` is not offered inside its own initializer.
+- Bindings are read from the text as written whenever it resolves, so a pattern name is offered in
+  its arm while the name being typed is still unknown.
+- The narrowest type at a point is one pass over the type table instead of a sort (issue #275).
+
+## 2026-09-21 — A block's bindings end with the block
+
+- The type checker discarded nothing a block declared, so `let shadow = "text"` inside an `if`
+  or a block expression retyped an outer `shadow` for the rest of the function and a valid program
+  was rejected with `E3001`. A block is now a scope for the checker as it already was for name
+  resolution and evaluation.
+
+## 2026-09-21 — Completion knows where the cursor is
+
+- A match arm is offered the variants of its subject's type, spelled as this module reaches them,
+  without variants an earlier unguarded arm fully covers, plus `_`. Imported and generic sums keep
+  their owner and show substituted payloads. A type position is offered type parameters in scope
+  and types. Comments and string literals are offered nothing.
+- `import Std.` and `import Std.Co` offer every module the program could import — its own, its
+  manifest dependencies', and the standard library's — as whole paths, while the document does not
+  parse. The catalog is found once per source root and refreshed when files change.
+- The compiler keeps the parsed tree for tooling when typing fails, so pattern completion works
+  while a match is still non-exhaustive (issue #274).
+
+## 2026-09-21 — Constants are not evaluated twice
+
+- A module's constants whose values are plain data are bound from what folding computed when the
+  program links, instead of their initializers running again; functions and anything carrying an
+  environment are still evaluated at link. Folded values are stored with a module's checked product.
+- The full-stack service reaches `listening` in 58.5ms warm (from 67.6ms) and 337.5ms without the
+  cache (from 363.1ms) (issue #271).
+
+## 2026-09-21 — Linking reads a registry and environments stay small
+
+- Linking keeps one published frame of every linked module's declarations under their canonical
+  paths, and links each module in an environment of five frames instead of three per module linked
+  before it. An import reads the registry by its path.
+- Median request latency on the benchmark service fell by about a third (`/plain` 1.5ms to 1.0ms)
+  and allocation up to `listening` by 37MB (issue #270).
+
+## 2026-09-21 — Unchanged modules are not compiled again
+
+- `check`, `run`, `explain`, and `test` keep each module's parsed and checked products across runs.
+  A module whose text was parsed before is not lexed or parsed again; one checked before in a
+  program presenting the same interfaces is not checked again. Editing a function body re-checks
+  only that module. `PUDU_CACHE=off` compiles everything from source.
+- Stored products are keyed by content and position-free interface fingerprints, verified by a
+  digest, written atomically, bounded in number, and never hold diagnostics. A stored module's
+  declarations and function bodies are read only when first used.
+- On the full-stack example a warm `check` takes 25ms and allocates 24MB (from 0.745s and 1.92GB),
+  peak live memory falls from 72.8MB to 4.3MB, and the service reaches `listening` in 70ms instead
+  of 746ms (issues #272 and #273).
+
+## 2026-09-21 — An ordinary run keeps no evaluator tally
+
+- `pudu run` links and enters the program through the same action `pudu explain` uses, without
+  counters: no tally map is allocated or updated at name lookups and tally sites. Tallied runs
+  still return every counter (issue #269).
+
+## 2026-09-21 — Type interfaces are prepared once per program
+
+- A compiled program prepares one interface graph: dependency order, formation names, trait table,
+  defaults, collected declarations, and the constructors, trait members, and foreign functions every
+  module starts from. Each module adds only the values it imported and the implementation methods of
+  traits it can see, from the interfaces that can contribute them.
+- A dependency's formation mistake is reported once instead of once per importer, and records naming
+  each other across an import cycle now receive canonical identities on both sides.
+- Qualifier lookup, trivia and symbol scanning, keyword and symbol spelling tables, parser steps, the
+  lexer's cursor, and a source's line table no longer allocate per question, per token, or per
+  character.
+- The full-stack check fell from 0.745s and 1.92GB allocated to 0.302s and 492MB; time to listening
+  from 745.8ms to 355.1ms. A 200-module sparse program checks in 196ms instead of 2918ms, and
+  allocation now doubles with the module count instead of growing faster (issue #268).
+
+## 2026-09-21 — Module resolution setup is shared per compiler invocation
+
+- Program discovery now reads one coherent manifest snapshot and reuses ordered project and
+  standard-library roots for every module in that invocation. Manifest language diagnostics derive
+  from the same bytes as dependency roots, and candidate roots are deduplicated before probing.
+- Failed requested modules are memoized without suppressing diagnostics: each importing span still
+  receives its own `E2014`. All snapshot state is discarded at return, so later invocations observe
+  manifest, environment, and filesystem changes.
+- On the 63-module full-stack example, manifest ancestor checks fell from 378 to 6,
+  standard-library root probes from 1,176 to 20, and executable ancestor walks from 56 to one.
+  Best-of-five optimized startup to listening improved from 761.0ms to 748.2ms, socket readiness
+  from 761.7ms to 748.9ms, and full-stack check allocation from 1,949,389,304 to 1,918,713,536 bytes
+  on the same local host for issue #267.
+
+## 2026-09-21 — Prepared HTML can be pulled before deferred slots run
+
+- `Std.Html.Ssr.beginIncremental` creates a request-local encoded cursor without invoking dynamic
+  producers. Each `flushIncremental` emits at most one caller-bounded application chunk, stops at a
+  dynamic boundary after accumulated static output, and evaluates only the plan part it reaches.
+- Repeated dynamic slots render once per cursor. Missing producers and producer failures remain late
+  typed errors after any earlier chunks; cancellation prevents every remaining producer, and
+  `finishIncremental` explicitly drains without joining bounded chunks.
+- `Std.Html.Stream.defer` retains a validated typed placeholder immediately and requests its fallible
+  typed content only through `resolveDeferred`. Focused checks cover first-output ordering,
+  backpressure, byte parity with buffered rendering, bounds, repeated-slot reuse, cancellation, late
+  missing/failure paths, invalid public state/metadata, empty completion, and deferred safety for
+  issue #266.
+- In three optimized local probes, a four-byte static head was available in 0ms, 0ms, and 1ms before
+  producing and escaping a 200,000-character body; complete application output took 34ms, 34ms, and
+  37ms and 548 remaining chunks at a 1,460-byte limit. These are application-level timings, not
+  socket writes or network TTFB.
+
+## 2026-09-21 — Streaming HTML has typed safe entry points
+
+- `Std.Html.Stream.prepareHead` retains reusable early-head bytes built from escaped title and
+  metadata text, typed preload destinations, and explicitly trusted CSS. The legacy string helper
+  remains available as an unchecked compatibility path.
+- Typed suspense helpers accept `Html` fallback/content and return a typed refusal unless the
+  boundary identifier is non-empty ASCII alphanumeric. Text therefore cannot become markup or a
+  handler, trusted markup stays explicit, and boundary IDs never require HTML or JavaScript quoting.
+- Eighteen focused exact-output and refusal checks cover quotes, ampersands, closing-tag and handler
+  text, unsafe preload schemes, trusted CSS/markup, prepared-head reuse, every suspense helper,
+  hostile and empty identifiers, documented replacement behavior, and legacy compatibility for
+  issue #265. This safety migration makes no allocation, latency, or complexity improvement claim.
+
+## 2026-09-20 — Fluent HTML destinations can be checked before rendering
+
+- `Std.Html.Build` adds typed `hrefTo`, `srcFrom`, and `actionTo` setters plus checked string
+  conveniences and a generic `atChecked` path. Existing unchecked setters remain source-compatible;
+  intentional exceptions use the visibly named `Html.trustedDestination` escape hatch.
+- `Html.attribute` now applies destination validation to case-insensitive `href`, `src`, and
+  `action` names as well as refusing controls and handler attributes. Direct raw element pairs remain
+  compatible, with case-insensitive handler dropping retained as a rendering backstop.
+- Focused exact-output checks cover accepted ordinary and prepared rendering, unsafe and mixed-case
+  schemes, controls, named and generic setter bypasses, mixed-case handlers, trusted destinations,
+  ordinary checked attributes, and legacy compatibility for issue #264. No runtime speedup or
+  complexity improvement is claimed by this safety migration.
+
+## 2026-09-20 — HTML output coalescing has an enforceable byte bound
+
+- `Std.Html.Buffer.coalesceBounded` preserves input order and bytes while ensuring every returned
+  application-output chunk is at most the requested positive size. Empty inputs add no output, and
+  zero or negative limits return a typed `CoalesceError` carrying the rejected value.
+- Oversized inputs are divided with storage-sharing `Bytes.slice`; complete single-piece batches
+  remain shared, while batches assembled from multiple pieces pay one `Bytes.join`. The legacy
+  `coalesceToMss` behavior remains available but is documented as best effort rather than a hard
+  bound or a promise about TCP packets, TLS records, or HTTP frames.
+- Focused checks cover empty input, exact boundaries, one and multiple oversized inputs, mixed empty
+  and small inputs, byte-for-byte reconstruction, positive-bound enforcement, both nonpositive
+  cases, and legacy compatibility for issue #263.
+- An optimized mixed-size probe ran 5,000 batches and produced 29.2 MB of output: 14.6 MB crossed
+  multi-piece joins and 14.6 MB remained storage-sharing slices. The complete probe measured 0.51s
+  elapsed, 2,014,906,448 heap bytes including compiler/evaluator overhead, and 88,670,208 bytes
+  maximum RSS on one macOS host; these are implementation measurements, not transport guarantees.
+
+## 2026-09-20 — Conditional HTML builders can defer false subtrees
+
+- `Std.Html.whenBuilt`, `Std.Html.Build.Building.whenBuilt`, and
+  `Std.Html.Compose.Composition.whenBuilt` accept zero-argument typed builders. False returns empty
+  or the existing persistent receiver without invoking the callback; true invokes it exactly once
+  and places its result through the existing typed append path.
+- Existing eager `when` functions remain unchanged, including ordinary argument evaluation. Deferred
+  builders preserve output order, earlier persistent values, escaping, explicit trusted markup,
+  destination checks, handler blocking, and iterative rendering.
+- Focused callback-count and exact-output checks cover false/true/eager behavior in all three layers,
+  persistent aliases, insertion order, escaped/trusted distinctions, and eager compatibility for
+  issue #262.
+- In a same-machine optimized probe running a false 1,000-node optional subtree 200 times, deferred
+  construction reduced measured heap allocation from 5,287,071,968 to 62,426,608 bytes, process
+  maximum RSS from 85,426,176 to 80,084,992 bytes, and elapsed time from 1.33s to 0.04s. The probe
+  includes compiler/evaluator overhead and is comparative evidence, not a portable service guarantee.
+
+## 2026-09-20 — SSR budgets stop dynamic rendering at the first overflow
+
+- `Std.Html.Bounded` adds iterative rendering with an exact UTF-8 output budget. It admits raw
+  Unicode widths and fixed HTML escape expansions scalar by scalar, so a rejected large text,
+  trusted value, attribute, or element stops without constructing or encoding its complete output.
+- `Std.Html.Ssr.renderWithin` now passes only the remaining budget into a dynamic slot's first
+  rendering. Successful slot fragments and exact lengths remain cached per request; repeated
+  occurrences count again without rerendering. Negative-limit, missing-slot, and overflow precedence
+  remains in document order.
+- Focused checks cover exact and one-byte-short boundaries, zero and negative limits, multibyte
+  Unicode, escape expansion, repeated-slot accounting, both missing/overflow precedence orders,
+  successful bounded element parity, and early refusal of a 100,000-character node for issue #261.
+- In a same-machine optimized probe rejecting a 200,000-character escaped node fifty times at a
+  three-byte limit, early bounded rendering reduced measured heap allocation from 2,436,739,600 to
+  179,451,376 bytes and elapsed time from 0.48s to 0.09s. The probe includes compiler/evaluator
+  overhead and is comparative evidence, not a portable service guarantee.
+
+## 2026-09-20 — Typed SSR shells prepare nested child slots once
+
+- `Std.Html.Ssr.Shell` adds a structural tree of fixed `Html`, named complete-child slots, elements,
+  and fragments. `prepareShell` compiles it iteratively through renderer-produced element boundaries
+  into the existing prepared-plan operations; it adds no template parser, string marker replacement,
+  dynamic attributes, or second HTML serializer.
+- `Std.Html.Compose.documentShell` and `documentShellIn` provide reusable versions of the existing
+  typed document shell with one named body slot. Request values remain outside prepared shells, and
+  ordinary `Plan` rendering preserves deterministic missing errors and per-request repeated-slot
+  reuse.
+- Focused checks cover ordinary document parity, language-qualified pages, ordered and escaped
+  attributes, handler blocking, trusted children, repeated and missing slots, void elements, mixed
+  fixed/slot fragments, and 1,600-level non-recursive compilation for issue #260.
+- In a same-machine optimized probe rendering 5,000 changing bodies, the reusable shell reduced
+  measured heap allocation from 3,514,992,160 to 2,262,937,928 bytes, process maximum RSS from
+  93,896,704 to 86,622,208 bytes, and elapsed time from 0.99s to 0.75s. The probe includes compiler
+  and evaluator overhead and is comparative evidence, not a portable service guarantee.
+
+## 2026-09-20 — SSR can retain encoded response bytes and exact lengths
+
+- `Std.Html.Ssr.prepareBytes` renders, joins, and UTF-8 encodes each complete static run once while
+  retaining every slot boundary. The reusable plan contains no request-specific value.
+- `byteSegments` renders and encodes each unique used dynamic slot once per request, reuses those
+  bytes at repeated positions, and returns the ordered segments with their exact combined length.
+  `finishBytes` produces one contiguous response through checked byte-plan assembly.
+- Existing text plans and results remain unchanged. Focused checks cover empty output, multibyte
+  Unicode, escaped expansion, repeated slots, exact lengths, cross-request isolation, missing slots,
+  and byte-for-byte parity with legacy text rendering for issue #259.
+- In a warm optimized same-machine probe of 500 132,016-byte responses, retained segmented bytes
+  reduced measured heap allocation from 1,131,969,376 to 1,041,871,032 bytes and process maximum RSS
+  from 97,026,048 to 94,961,664 bytes; both paths measured 0.28s elapsed. The probe includes compiler
+  and evaluator overhead and is comparative evidence, not a portable service guarantee.
+
+## 2026-09-20 — Checked HTML byte plans report assembly failures
+
+- `Std.Html.Buffer.renderChecked` and `renderCompactChecked` add typed assembly without changing the
+  permissive renderers. Missing dynamic slots fail before allocation, while supplied empty bytes
+  remain valid and repeated names resolve once but retain every document position.
+- Checked assembly treats public plan metadata as untrusted. It validates ordinary static totals,
+  each compact block length, and compact totals; refuses checked-capacity overflow; propagates
+  `Buffer.copy` refusal; and requires the final write cursor to match the allocated length.
+- Focused success, failure, regression, and exact-output checks cover ordinary and compact parity,
+  missing-versus-empty values, repeated slots, invalid metadata, negative metadata, and overflow for
+  issue #258.
+
+## 2026-09-20 — Static HTML plan runs compact once
+
+- `Std.Html.Ssr.prepareCompact` joins each adjacent rendered static run during preparation and
+  flushes before every typed slot. The existing `prepare`, public `Plan`, output, escaping, explicit
+  trusted markup, destination checks, event-handler blocking, missing-slot diagnostics, output
+  budgets, document order, and per-request repeated-slot memoization remain unchanged.
+- `Std.Html.Buffer.compileCompact` produces an additive compact byte-plan type. Each joined static
+  byte block retains its exact length, while dynamic slots remain separate ordering boundaries.
+  Existing `BytePlan`, `compile`, and `renderToBytes` remain source-compatible.
+- A focused same-machine optimized probe prepared forty plans of 1,200 adjacent fixed pieces and
+  rendered one plan eighty times. Compaction changed response traversal from 1,200 static parts to
+  one. Preparation measured 0.67s/86.6MB ordinary and 0.62s/85.5MB compact; rendering measured
+  0.26s/87.6MB ordinary and 0.06s/84.4MB compact. These include compiler/runtime startup and are
+  comparison evidence, not portable guarantees. Exact empty, static-only, mixed, repeated-slot,
+  escaping, trusted, refusal, byte-plan, and output-parity checks cover issue #257.
+
+## 2026-09-20 — Owned foreign values have an accepted boundary
+
+- [[ADR-0021-a-value-the-library-owns]] now accepts the design for resources a library passes by
+  value. Their opaque declarations preserve nested aggregate shape and ABI scalar classes; the
+  target bridge derives natural C offsets, size, alignment, and call classification. Packed,
+  over-aligned, union, bit-field, flexible-member, and target-vector layouts remain refused.
+- Ownership mode stays on each result. Identity defaults to the whole representation and may narrow
+  through unreadable zero-based layout paths. Live claims carry generations, so repeated live
+  ownership is refused while reused address or integer bits after release create a distinct claim.
+- `Ptr` remains declaration-only ABI metadata. By-value resources are move-only and cannot be read,
+  constructed, compared, hashed, destructured, or projected by source code. This closes issue #227's
+  design questions; implementation remains a separate complete compiler/runtime/native-bridge slice,
+  and unsupported declarations must continue to be rejected.
+
+## 2026-09-20 — HTML rendering advances one child at a time
+
+- `Std.Html` now keeps one active child cursor and suspends only its parent when descending. It no
+  longer slices the traversal stack once per step or schedules every sibling in reverse before any
+  of them renders. Deep traversal remains iterative and public `renderChunks` boundaries are
+  unchanged.
+- Empty non-void elements close immediately; nested elements retain their closing tag in the one
+  continuation that restores the parent cursor. Text escaping, explicit trusted markup, void
+  spelling, ordered attributes, and event-handler blocking retain exact output coverage.
+- `Std.Html.document` still writes `<!DOCTYPE html>\n`; `Std.Html.Build.document` still writes the
+  compact `<!DOCTYPE html>`, but the builder now prepends that fragment before the final join instead
+  of materializing and copying the complete body first.
+- A focused depth-1,600, width-1,200, 40-attribute probe reduced evaluator steps by 12.7%, host heap
+  allocation by 14.6%, peak residency by 12.1%, and elapsed time by 24.7% on the same local
+  no-optimization build. These are comparison measurements, not portable guarantees.
+- Exact chunk/output fixtures now cover accepted and refused attributes, escaped text, trusted
+  markup, empty documents, both document prefixes, 1,200 siblings, 40 attributes, and the existing
+  1,600-level renderer regression. The clean optimized full repository gate passes. See
+  [[2026-09-20-html-renderer-overhead]] · issue #256.
+
+## 2026-09-19 — The new language foundations agree at their edges
+
+- An unbounded range no longer reports `length() == 0`. It has no finite extent, so `length()` now
+  reports `E7004` with guidance to test `isBounded()` or supply both ends; `contains()` still answers
+  because a missing end excludes nothing.
+- `length()` and `sum()` now report `E7005` when their declared `Int` result cannot hold the exact
+  answer. They no longer construct an out-of-range integer value behind the checker's type.
+- Slice bounds are validated as written before an inclusive end is converted to an exclusive one,
+  so `[..=-1]` is refused rather than becoming an empty prefix. Runtime slice diagnostics point at
+  the range inside the brackets, and tuple slicing is refused by both checker and evaluator.
+- A sequence pattern applies to an array, not a tuple. The checker already refused a tuple because
+  its members may have different types; [[Eval Match]] now follows the same rule instead of quietly
+  accepting the shape if evaluation reached it.
+- Short-literal formatting recognizes Unicode parameter names, and an async short literal is held
+  as a cold task until awaited.
+- Captured environments retain the module boundary with their frames. A literal created inside an
+  imported function or a later interactive entry therefore narrows transient locals instead of
+  retaining the whole foreign call stack or prior session.
+- Comprehensive fixtures exercise every range spelling, range methods and control-flow forms,
+  slices over arrays, text, and bytes, both function-literal spellings in value positions,
+  higher-order and async composition, nested record destructuring, imported closure capture, open
+  range extent failures, invalid steps and bounds, integer overflow, and tuple-pattern parity.
+
+## 2026-09-17 — A function literal is two tokens, a range is a value, and a binding takes a value apart
+
+- **The short function literal.** `|x| x + 1` builds the same value `fn(x) => x + 1` builds, with
+  `||body` for one that takes nothing, `|x: Int| -> Int { … }` where the types are worth stating, and
+  `async |x| …` for one that awaits. Nothing after the parser can tell which spelling was written.
+  The bars cannot be confused with the operator or the variant separator they share a spelling with:
+  a bar in operand position is never either of those, and [[Format Spacing]] tells the three apart by
+  what follows the bar rather than by what precedes it.
+- **A range is a value, and it does not build what it counts.** `0..n`, `0..=n`, `2..`, `..5`, and
+  `..` are all `Range[Int]` — bound to a name, passed, compared, rendered as written. [[Eval Range]]
+  holds two ends and a rule for reading them, so `for i in 0..20_000_000` walks one value at a time
+  and the memory the loop costs does not depend on how far it counts. It was a tuple built eagerly
+  before, which meant `for i in 0..5` did not run at all: the checker called it a `Range` and nothing
+  could iterate one. The range answers `length`, `contains`, `start`, `end` and the rest by
+  arithmetic, and hands back its values only when asked.
+- **Indexing by a range is a slice.** `items[2..5]`, `items[2..]`, `items[..5]`, `items[..]` over
+  arrays, text, and bytes. An absent end is answered by the value being sliced rather than by the
+  writer measuring it first; a slice past the end is `E7004` rather than a quiet clamp, because a
+  clamped slice hands back a different sequence than the one asked for.
+- **A binding takes a value apart.** `let {x, y} = point`, `let (a, b) = pair`,
+  `let [head, ..rest] = items`, with `var` for parts that may be assigned and an annotation for the
+  subject as a whole. A sequence pattern names elements from either end or both, and `..` holds or
+  skips what they did not take. A pattern that tests a tag has nowhere to go and is `E1059`, which
+  points at `let … else`; a sequence of the wrong length is `E7013` where the binding runs, the way
+  reading past the end of the same sequence already is.
+- **A function literal holds what it mentions.** [[Eval Capture]] answers which names a literal's
+  body can reach, and [[Eval Env]] gives it those together with module scope, which is kept whole
+  because a name in it may be looked up by a key no syntax spells. Two hundred literals made in a
+  loop beside a twenty-thousand element array held 416MB and hold 76MB — the same as the loop that
+  makes none. A line beginning with `|x|` now starts a statement rather than continuing the line
+  above, so a literal written as a block's result is read as one.
+- New codes: `E1059` a binding whose pattern can fail, `E1062` a chained range, `E1063` an inclusive
+  range with no end, `E7013` a sequence of the wrong length at a binding.
+
+## 2026-09-16 — The playground is an editor, and the language server answers while a program is half written
+
+- [[Website Playground Script]] is a layered set of modules: highlighting, a gutter that marks problem
+  lines, completion as the reader types, signature help on `(` and `,`, hover, F8 to the next problem,
+  paired brackets, indentation, comment toggling, a resizable split, examples and Reset in place, and
+  output whose diagnostic places move the caret. The language server is the only source of meaning.
+- [[LSP Repair]] answers completion and signature help from a nearby text that compiles further, so
+  `total.` lists the members of `total` and `area(width, ` shows `area`'s parameters.
+  [[LSP Completion]] offers bindings in scope, record fields, and module members; after a dot it never
+  offers keywords. [[LSP SignatureHelp]] reads the callee's type from the checker, covering built-in and
+  trait methods.
+- `pudu run` writes every diagnostic to standard error, so standard output is only what the program
+  wrote. `pudu run --confined` ([[Eval Confinement]]) refuses files, programs, the network, and foreign
+  calls with `E7027`, and [[Playground Sandbox]] runs every program that way; `confined` isolation lets
+  the serverless function run programs itself.
+- The Vercel build routes both playground APIs to the function and ships the compiler, library, and
+  sandbox beside it.
+
+## 2026-09-15 — A release is published only from main, only for a compiler change
+
+- [[Release Workflow]] builds `linux-amd64` and `darwin-arm64` archives, verifies each checksum, runs a
+  program from each unpacked archive with an empty environment, and publishes an annotated tag and a
+  GitHub release — marked pre-release for `0.x` — from `main`. [[Release Plan]] decides: only a push
+  that changes `packages/pudu/` at a version with no tag releases, so merging README, website,
+  example, or wiki changes never does — those paths do not start the workflow, and the plan reads
+  every changed path, which a trigger filter cannot past 300 files, and a `release/` branch builds without publishing. Seven
+  tests hold the decision in CI and `test/gates.sh`.
+- [[First Release Readiness]] records the `0.1.0` pre-release scope against the open rows, and
+  `packages/pudu/v0.1/release-notes/0.1.0.md` states what it is and is not. The README describes
+  installing from a pre-release archive, and the semantics ledger records `0.7.0-draft` for places.
+
+## 2026-09-15 — The documentation reads as a book, from a first program to HTTP services
+
+- Ten new chapters join the ten there were, ordered so each builds on the last: getting started,
+  functions, text, collections, modules and packages, generics, testing, files and the system, data
+  formats, and HTTP servers and clients. The introduction ends with the outline in five parts. Files
+  were renumbered; every address stayed the same.
+- Every one of the 87 examples is a complete program that was run with the current compiler: `main`
+  answers 0, test modules pass under `pudu test`, the two-file modules example ran as a project, and
+  the server and client examples reach the network only behind a flag. Writing them corrected four
+  claims: the comparison traits are imported from `Std.Order`, `Env.temporaryDirectory()` and
+  `Client.limits()` are calls, and `task` is a reserved word.
+- On a phone, a table cell holding only code may wrap, so a three-column table no longer squeezes its
+  prose to one word per line. The stylesheet address moves to `v=10`.
+
+## 2026-09-15 — `&mut`, `mut` fields, and array elements change what they name
+
+- [[ADR-0022-lending-a-place]]. A place is a `var`, a `mut` field of a place, an element of an array
+  place, or `*r` for an exclusive reference, and assignment writes it: [[Eval Place]] resolves the
+  place and its index keys before the right-hand side. `&mut place` lends a place to one call, and
+  [[Eval Call]] stores each `&mut` parameter's final value back into it on every exit, including
+  `return` and `?`, for plain calls, `&mut self` methods, trait-qualified calls, and a reference lent
+  on by name.
+- [[Check Place]] states the rules: a root must be `var` or reached through `&mut` (`E3078`), a field
+  must be `mut` (`E3079`), nothing is written through `&T` (`E3080`), anything else is not a place
+  (`E3077`); `&mut` is only a call argument (`E3081`), loans to one call may not overlap (`E3082`),
+  `&mut T` is only a parameter's type (`E3083`), and no binding, result, closure, other value, or type
+  argument keeps one (`E3084`). The checker takes `var` from the resolver's symbol table.
+- Assigning to a `let`, a parameter, or a pattern binding was accepted and ran; it is now `E3078`. No
+  committed source relied on it: all 527 standard library, example, website, and fixture sources
+  check unchanged. `UsesPlaces` evaluates 18 writes; `PlaceSpec` covers 28 acceptances and refusals;
+  the three `PatternSpec` writes that expected `E3077` are now accepted.
+- The ownership documentation describes the implemented behaviour, with six programs that were run.
+- `pudu fmt` indented a statement opening with `*`, `-`, or `&` as a continuation of the line above,
+  which the new assignments through a reference made common; it now places such a line at its block's
+  level, and inside parentheses or brackets keeps the indentation it gave before.
+- Two checker cases that kept a local `&mut` borrow and returned `&mut` are restated as a `&mut`
+  parameter, since both forms are now refused by design.
+
+## 2026-09-15 — Documentation spacing and a fuller About page
+
+- A chapter card's number now sits on its own line above the chapter title, and the folded page
+  list on a narrow screen has room below it before the page's own label. The stylesheet address
+  moves to `v=9` so a browser holding the earlier one fetches the change.
+- The About page says what Pudu is built around, what ships with the compiler, and that 0.1.0 is
+  pre-release, replacing a sentence that called it the first stable version. The author's profile
+  links are labelled LinkedIn and GitHub rather than repeating the author's name.
+
+## 2026-09-15 — Documentation pages carry their author and version, and the library reads as a map
+
+- Reading the site as a newcomer on a phone found the page list opened above every article, a home
+  page that assumed the reader already knew a name to search for, and 163 modules in one unexplained
+  list. A documentation page now opens with the article and a closed page list, and names its author,
+  the language version, and a link to its Markdown source. Code blocks use the light `--code` surface
+  with a language label.
+- `/modules` is now the standard library as a map: twelve sections from [[website Domain Library]],
+  each module with its declaration count, one sentence on what it is for, and its child modules. The
+  home page says what Pudu is and links to the introduction and the library before the search.
+- The catalogue was regenerated from the current compiler: 173 modules and 3,456 declarations, now
+  including `Std.Audio`, `Std.Video`, `Std.Fs`, and the `Std.Ui` canvas, layout, screen, text, and
+  desktop modules. All 27 documentation programs were run again and pass; the website suite holds 100
+  assertions.
+
+## 2026-09-15 — An assignment the evaluator cannot store is refused where it is written
+
+- The checker accepted `*reference = value`, `record.field = value`, and `items[i] = value`, while the
+  evaluator treats `&`, `&mut`, and `*` as the value itself and stores only into a variable by name, so
+  each checked and then stopped the program with `E7001 assignment target is not a place`. Such an
+  assignment is now `E3077` at check time, naming the forms that work: assign the variable a new value,
+  such as `record = Record{..record, field: value}`, or return the changed value. No committed program
+  used these forms; `UsesVarint`'s never-called helper that assigned through `*held` is removed.
+  Implementing places for references and `mut` fields remains open in [[First Release Readiness]].
+
+## 2026-09-15 — Language documentation rendered from Markdown, and home page layout fixes
+
+- The website gains a documentation section: ten Markdown pages in `website/docs/` — introduction,
+  basics, types, control flow, errors, ownership, traits, concurrency, the standard library, and
+  tooling — rendered on the server by `Service.Docs`, `View.Markdown`, `View.MarkdownInline`, and
+  `View.Docs` with a page list, the article, and on-page contents. `/docs` and `/docs/:page` are
+  prerendered and in the sitemap; `/guide` answers with `/docs` as its canonical address, and the
+  navigation's Guide link is now Docs. All 27 complete programs in the pages were checked and run.
+- The home page's "Start with a shape" example sat beside a tall module panel, leaving a large empty
+  area under it, and long module names such as `Std.App.Database` overflowed the 280-pixel panel. The
+  example now sits beside its explanation and the modules have their own wrapping grid; at 1280 and
+  375 pixels no page overflows horizontally and no module link overflows its cell.
+- Writing the ownership page found that assigning through a reference checks and then stops the
+  program with `E7001`: the evaluator treats `&`, `&mut`, and `*` as the value itself. The page states
+  the limitation, the home page no longer claims `&mut` changes a value, and
+  [[First Release Readiness]] records it as a critical row. The website suite rises to 91 checks.
+
+## 2026-09-15 — Bytes cross the PostgreSQL driver both ways
+
+- The PostgreSQL driver refused every `BytesValue` parameter, and a `bytea` column came back as the
+  text `\x…`, which `Row.bytes` rightly will not call bytes. So binary data worked through the driver
+  layer on SQLite and not at all on PostgreSQL. A bytes parameter now crosses as its hexadecimal text
+  form, and `Db.asDriverRows` reads a `bytea` column's `\x` hex back into `BytesValue`, keeping any
+  other form as text. Against a live PostgreSQL 14 server, three bytes, an empty value and a null
+  each came back exactly, and the server measured the stored value at three bytes. `UsesStore` rises
+  to 35.
+
+## 2026-09-15 — A readiness check that asks the database
+
+- `Std.App.Health` had readiness checks but nothing that asked a database, so every service wrote its own
+  probe or reported ready while its database was down. `Database.readiness(database, name)` runs
+  `select 1` through the started client and answers `Well` or `Unwell`. `UsesAppDatabase` rises to 59:
+  an unstarted SQLite database is unwell, the same database started is well, and a started driver that
+  refuses the question is unwell.
+
+## 2026-09-15 — Opening a PostgreSQL connection has a time limit
+
+- `Std.Db.Session.connect` dialled with no limit and read the handshake with no deadline, so a host that
+  dropped packets held the caller for as long as the operating system waited, and a server that
+  accepted and stayed silent held it forever — since pools now reopen lost connections on a request,
+  that request with it. `Config.connectMillis` now bounds dialling and the whole handshake, ten seconds
+  by default; `connect_timeout` in a connection URI sets it in whole seconds. Query reads keep no
+  deadline. Against a silent local server a 400 ms limit refused the connection after 403 ms.
+  `UsesDb` rises to 86 and `UsesConnectionString` to 41.
+
+## 2026-09-15 — SQLite waits for a lock, and says what a failure was
+
+- `Std.Db.Sqlite` set no busy timeout, so while one process held a write transaction a second process
+  writing to the same file was refused within 0.09 seconds, reported only as
+  `SQLite operation failed with status 5`. Every connection now sets `PRAGMA busy_timeout` to five
+  seconds when it opens, so two worker processes can share one file.
+- A SQLite status now carries a category and message from one table — `busy`, `constraint`,
+  `readonly`, `io`, `corrupt`, `full`, `unavailable` — read from the primary code of an extended one,
+  with the number kept in `code`.
+
+## 2026-09-15 — A PostgreSQL pool survives a dropped connection
+
+- `Std.Db.withConnection` closed the whole pool when an action failed with anything other than a
+  server error, so a dropped socket, an idle timeout or a server restart made every later query on
+  every thread answer `Closed` until the program restarted. Reproduced against a live PostgreSQL 14
+  server by terminating a pool's backends. A connection that cannot be lent again is now closed and its
+  place kept empty, and the next borrower opens a fresh connection there, so the pool keeps its size.
+  Against the same server, each dead connection failed one request and the following requests were
+  answered by new backends. `UsesDb` rises to 84 with a stub that hangs up after each answer.
+- The `social` example removed a post with three separate statements, so a failure after the first
+  left a post whose approvals and replies were already gone. The three now run in one
+  `Database.transaction`. Checked on a running server: a post with a reply was removed, the feed no
+  longer listed it, and its page answered 404.
+- The `fullstack` and `social` examples answered a newly written row by reading the newest row
+  afterwards — `social` the newest post in the whole table, not even the author's — so two requests
+  writing at once could each be answered with the other's row. Both now take the row, or its
+  identifier, from `INSERT … RETURNING`, which PostgreSQL and SQLite 3.35 or later both support.
+
+## 2026-09-14 — Header lines another reader would take differently are refused
+
+- `Std.Http.Message` trimmed a header name before using it, so the server read `Content-Length : 5`
+  as a body length, accepted an empty name, a name with a space in it, and a folded continuation line,
+  and kept a bare line break inside a value. A proxy that follows the protocol rejects or reads each of
+  those differently, and a proxy and a server that disagree about where a body ends see different
+  requests in the same bytes. Each is now refused as `AmbiguousHeader`, in requests and responses
+  alike, and the server answers 400. A name is a token with nothing between it and its colon; a
+  value is still trimmed.
+- The request line was split at its first space and trimmed, so `GET /a b HTTP/1.1` became target
+  `/a` with version `b HTTP/1.1`, doubled spaces were absorbed, and a missing version defaulted to
+  HTTP/1.1. A request line is now exactly a token method, a target without whitespace, and HTTP/1.0 or
+  HTTP/1.1, one space apart, and anything else is `BadRequestLine`.
+- `decodeChunkedBytes` checked a chunked body's trailer with the head reader, which skips the line a
+  head begins with, so a trailer's first field was never read and a malformed one ended the body as
+  though it were well formed. Every trailer field is now read.
+- The status line a client reads was split and trimmed like the request line, and its code was any
+  whole number, so `HTTP/1.1 2000 OK`, `HTTP/1.1  200` and `HTTP/2 200` were all read. Whether a
+  response has a body depends on its code, so a code two readers take differently is a body they frame
+  differently. A status line is now HTTP/1.0 or HTTP/1.1, one space, exactly three digits from 100,
+  then nothing or a space and a reason; anything else is `BadStatusLine`.
+- `UsesHttpMessageReplyAll` rises to 104 (100 before the trailer fix, which is the malformed first
+  field being accepted). Against a running server, an ordinary request answered 200
+  while whitespace before a colon, a folded line, a target holding a space, and a request line with no
+  version each answered 400.
+
+## 2026-09-14 — Kept values through any driver
+
+- `Std.Db.Store` built backend-neutral statements but could only run them on a PostgreSQL session, so a
+  SQLite application could describe a kept value and not save it. `Store.Target` (a client and its
+  driver) and `saveIn`, `changeIn`, `removeIn`, `loadIn`, `loadAllIn`, `loadWhereIn` and
+  `loadForParentsIn` run the same statements through any driver, spelled for its placeholders;
+  `Database.storeTarget` answers one for a started database.
+- A write answers how many rows it changed. PostgreSQL states that in its command tag; SQLite's driver
+  states no count, so the store asks `changes()` in the same transaction as the write, and a change or
+  removal naming no row answers 0 rather than reporting a write that did not happen.
+- `UsesStoreDriver` (23) runs against in-memory SQLite and checks that a PostgreSQL driver is sent
+  numbered placeholders with no transaction. Against a live PostgreSQL 14 server, saves, a refused
+  duplicate key, changes and removals of present and absent keys, loads and grouped loads all answered
+  as on SQLite.
+
+## 2026-09-14 — Migrations through any driver, with no lock left behind
+
+- `Std.Db.Migrate` ran only on a PostgreSQL wire session, so an application on `Std.App.Database`
+  (every example, and every SQLite program) had no way to migrate. `Migrate.apply(client, driver,
+  migrations)` now runs over the driver contract, and `Database.migrate` and
+  `Database.migrationStage` expose it. Each migration commits with its record in one driver
+  transaction; on PostgreSQL that transaction first takes `pg_advisory_xact_lock` and reads the
+  record again, so a process that waited skips what another applied.
+- The session path took `pg_advisory_lock` and then returned early on a changed migration, a late
+  one, or an unreadable record without releasing it. On a pooled connection the lock stayed held and
+  every later migration anywhere waited forever. It is now released on every path, through the
+  connection the rollback left rather than a copy from before it.
+- A version of zero or below was reported as arriving late against an empty record; it is refused as
+  `Unnumbered`. The unused `Unordered` refusal is removed. The record's applied time defaults to
+  `current_timestamp`, which both bundled backends accept.
+- `UsesMigrateApply` (26) applies migrations to in-memory SQLite and checks what a PostgreSQL driver
+  is sent; `UsesMigrate` rises to 23. Against a live PostgreSQL 14 server both paths refused changed
+  and failing migrations with no advisory lock left, and four processes started together applied
+  three migrations exactly once between them. The `fullstack` and `social` examples now migrate at
+  start-up, and `examples/README.md` covers every example folder.
+
+## 2026-09-14 — One refusal for a bad audio stream token on every target
+
+- CI on Linux had failed since device audio streaming landed: on a target without a stream adapter,
+  pausing, resuming, writing, setting the volume of, snapshotting, or closing a stream answered
+  `UnsupportedPlatform`, where macOS answers `ClosedStream` for the same forged token, so
+  `UsesAudioDevice` counted 21 of 23. Opening still answers `UnsupportedPlatform`, because it is the
+  only call that could create a stream; every call on a token now answers `ClosedStream`, after close's
+  own deadline check. Checked by building with the macOS audio and desktop definitions removed and
+  warnings as errors, and running the full suite on that build.
+
+## 2026-09-14 — URL user information, IPv6 hosts, and faster query decoding
+
+- `Std.Url.parse` split the authority at its first colon, so `https://user:pw@host:8443/` was
+  `BadPort("pw@host:8443")`, `https://user@host/` gave the host `user@host`, and
+  `http://[::1]:8080/` was `BadPort`. User information before the last `@` is now not part of the host
+  and is not kept, and a bracketed IPv6 host keeps its brackets with the port read after them.
+- `decodeComponent` returns text holding neither `%` nor `+` unchanged without rebuilding it byte by
+  byte, and finding where the authority and path end is one native search per delimiter. A five-pair
+  query decodes in 179 µs instead of 452 µs.
+- Over 473 fuzz inputs, `decodeComponent` and `parseQuery` answer identically to before, and `parse`
+  differs only for the 24 inputs holding user information, each now reading the host and port.
+
+## 2026-09-14 — Oversized numbers from outside a program no longer stop it
+
+- Eight readers accumulated digits without a bound, so twenty digits raised `E7005` and ended the
+  program: `Std.Semver.parse` (now `NotANumber`), `Std.Args.numberOf` (now nothing),
+  `Std.Regex.compile` for a repeat count (now `BadRepeat`), `Std.Text.Parse.hexadecimal` (now a parse
+  failure), `Std.Http.Message` chunk sizes (now not a size), `Std.Http.Safe.framing` for a content
+  length (now refused), `Std.Http.Server.Resilience` for an `rtt` hint (now held at the largest
+  `Int`), and the internal readers of `Std.App.Trace` and `Std.Time`. Each checks before multiplying.
+  `UsesOverflowGuards` drives the seven reachable from outside; each stopped the program before.
+
+## 2026-09-14 — A TOML number that stopped the program
+
+- `Std.Toml.Scan.digitsIn` multiplied without a bound, so `size = 99999999999999999999` stopped the
+  program with `E7005`. It now answers nothing for digits past what an `Int` holds, in every base, and
+  such a word is kept as written, as every other word that is not a whole number is.
+
+## 2026-09-14 — JSON Lines residency evidence
+
+- `test/residency.py` runs `Std.Json.foldLines` over JSON Lines files of 2 MB and 20 MB and requires
+  the same peak, as it already does for `Std.Io.foldLines`, `countBytes`, and `Std.Csv.foldRows`.
+
+## 2026-09-14 — Faster YAML lines and a number that stopped the program
+
+- `Std.Yaml`'s private whole-number reader multiplied without a bound, so `replicas:
+  99999999999999999999` stopped the program with `E7005`. It now reads through `Std.Text.wholeOf`,
+  and such a value is text.
+- Measuring indentation, stripping comments, and finding a key use native searches wherever the answer
+  cannot differ, walking characters only for lines that hold a `#` or a quote, and
+  `Std.Text.trimStart` is one native span search instead of a predicate per character. A 1 MB document
+  reads in 5.4 s instead of 10.5 s, and 69 edge and generated documents read identically.
+
+## 2026-09-14 — Native XML reading
+
+- `Std.Xml.decode` first tries the runtime's `xmlDecode` (`Pudu.Eval.Xml`), which walks the document's
+  UTF-8 bytes, finds each run of text and attribute value by searching for its end, and builds
+  `Std.Xml.Tag` values directly. It answers only documents it reads exactly as the library's reader
+  does and leaves every other document, including every malformed one, to that reader. A 1 MB document
+  of records decodes in 0.10 s instead of 14.65 s. 84 documents — entities and numeric references at
+  their edges, attribute quoting, CDATA, comments and instructions before and inside the root,
+  document type declarations, mismatched closes, non-ASCII names, 511 to 513 levels of nesting, and
+  thirty generated documents — give identical trees and identical errors either way.
+
+## 2026-09-14 — Native JSON encoding
+
+- `Std.Json.encode` and `encodePretty` are written by the runtime's `jsonEncode` in one walk into UTF-8
+  bytes, each string as runs between the characters that need an escape. The 3.26 MB document is
+  written in 0.12 s instead of 12.2 s. Compact and pretty output for 91 documents, covering every
+  control character, empty and nested containers, and generated values, is byte-for-byte the former
+  encoder's. The Pudu `Writing` stack and its per-character string builder are removed.
+
+## 2026-09-14 — Native JSON decoding, JSON Lines, and number overflow
+
+- `Std.Text.wholeOf` and `countOf` stopped the program with `E7005` when digits spelled more than an
+  `Int` holds, and `Std.Json.decode` inherited it: one oversized number in untrusted JSON ended the
+  program. They now answer nothing, and `decode` reports `expected a number` where the number
+  begins.
+- `Std.Json.decode` first tries the runtime's `jsonDecode` (`Pudu.Eval.Json`), which reads the text's
+  bytes in one pass and builds `Std.Json` values directly. It answers only text it reads exactly as
+  the library's reader does and leaves every other text, including every invalid one, to that
+  reader, so errors keep their positions and wording. A 3.26 MB document decodes in 0.17 s instead of
+  17.5 s. 88 edge and generated documents decode to identical values and identical errors either
+  way.
+- `Std.Json.foldLines` folds a JSON Lines file one value to a line over `Std.Io.foldLines`, skipping
+  blank lines and answering `JsonLinesError` (`Unreadable(IoError)` or `Malformed(line, JsonError)`).
+  199,415 values in 20 MB fold in 1.7 s at a 100 MB peak.
+
+## 2026-09-14 — Missing-import advice for types named like modules
+
+- `Result.unwrapOr(...)` written without `import Std.Result as Result` drew `E3034` with help about
+  variants, which never names the actual mistake. For the eight types that share a name with a
+  standard-library module (`Bool`, `Bytes`, `Char`, `Decimal`, `Map`, `Option`, `Result`, `Set`), the
+  help now names the import. A fixture writes exactly those imports, and a spec checks that they are
+  the advised ones, resolve without a diagnostic, and run.
+
+## 2026-09-14 — Streaming CSV rows and bounded record updates
+
+- `Std.Csv.foldRows` and `foldRowsWith` fold a file's rows holding one chunk and one record at a
+  time, answering `CsvReadError` (`Unreadable(IoError)` or `Malformed(CsvError)`) so existing
+  matches on `CsvError` keep compiling. Rows equal those `parse` gives for the whole text, and an
+  unterminated field names the same position: checked against the character scanner on 69 MB of
+  generated files with quoted newlines, doubled quotes, CRLF, empty lines, multi-byte characters,
+  and 70 KB fields, plus tab delimiters, invalid text, and a missing file.
+- A new runtime scan, `csvRecords` in `Pudu.Eval.Csv`, reads one-byte delimiters by searching for
+  structural bytes and decoding each field once. On 20 MB of rows holding a quoted field, `parse`
+  takes 0.59 s instead of 272 s and `foldRows` 1.53 s; unquoted rows fold in 0.68 s. Other
+  delimiters keep the character scanner.
+- A record update now decides every field before it returns. A field left pending held the record
+  it came from, so a state record updated once per line kept every earlier version: the fold peaked
+  at 275 MB for 20 MB of input and now stays at 98 MB. `test/residency.py` gains a `foldRows` probe
+  that must hold the same peak at ten times the input.
+
+## 2026-09-14 — Line streaming splits natively
+
+- `Std.Io.foldLines`, and `forEachLine` and `readAllLinesOf` above it, look for the last newline in
+  each new 64 KiB chunk, join pending chunks once, decode each newline-terminated block once, and
+  divide it with one native split. On a 20 MB file of 83-byte lines the optimised build folds in
+  0.49 s instead of 2.39 s, and a line longer than a chunk is no longer rescanned per chunk. Lines
+  from one block share its decoded text, so holding every line of 20 MB peaks at 124 MiB instead
+  of 173 MiB.
+- Output is unchanged: a 6.7 MB mixed file of CRLF lines, empty lines, multi-byte characters across
+  read boundaries, a 150 KB line, and no final newline yields the same lines as before, and invalid
+  text still reports `NotText`. `UsesStreams` adds a character straddling the read boundary and
+  CRLF lines as regressions.
+- The residency gate's buffered control now requires the peak to rise by at least the extra input
+  rather than by half of a peak that is mostly the runtime itself.
+- The root README is now a short introduction that links to the reference, standard library,
+  examples, and contributing guide.
+
+## 2026-09-14 — Persistent native audio stream and qualified-pattern correctness
+
+- `Std.Audio.Device` now owns persistent output sessions in addition to bounded one-shot clips.
+  A stream opens with the target adapter's accepted format, accepts bounded PCM writes with explicit
+  partial progress, pauses, resumes, changes volume, snapshots state and telemetry, and closes by
+  draining or immediately. Tokens belong to one evaluation, operations on one session serialize
+  without blocking unrelated streams, and runtime teardown closes leaks. The private macOS Audio
+  Queue adapter preallocates two to eight buffers; callbacks do bounded atomic bookkeeping only.
+- Stream snapshots expose submitted frames, a hardware queue position clamped to submitted media,
+  clock nanoseconds, underruns, interruptions, device changes, timeline-query failures, and state.
+  A temporarily unavailable initial timeline is retained as telemetry rather than aborting playback,
+  while starvation cannot advance pictures beyond media actually submitted.
+- `examples/media/Studio.pudu` uses the audio stream as its master presentation clock and writes a
+  version-three report. The real configured 480×270 launch submitted all 16,016 stereo frames,
+  presented 27 of 30 pictures by dropping late frames, reported zero underruns, interruptions, and
+  device changes, wrote valid WAV and JSON artifacts, and closed the window and queue. Two real
+  `LaunchAudioStream.pudu` runs fed 4,096 frames apiece and exercised pause, resume, volume, timeline,
+  drain, and stale-token refusal.
+- Qualified constructor patterns no longer discard their qualifier and fall back to the global
+  bare-variant table. A missing exported module constructor now reports exactly one `E3033`; a known
+  type without the written variant reports exactly one `E3034`; named-field recovery binds nested
+  patterns at the error type without cascading field diagnostics. The exact `Std.Audio` typo that
+  exposed the defect and local type-owned positional/named cases are permanent regressions.
+- A record type destructured through its module, such as `Audio.Format { sampleRate, channels }`, is
+  again a record pattern: the qualified-constructor diagnostic first asks whether the full path names
+  a declared type, and `AcceptsQualifiedRecordPattern.pudu` holds it at zero diagnostics.
+- `Std.Diff.unifiedDiff` no longer reports texts that differ only in their final newline as equal.
+  The unterminated side's last line compares as distinct and is followed by
+  `\ No newline at end of file`; line splitting no longer re-walks the text per character.
+  `UsesDiff.pudu` holds 14 claims.
+- `Std.Url.encodeComponent` and `decodeComponent` escape UTF-8 bytes. A character above ASCII was
+  escaped from its scalar value, so `€` became `%20%AC` and read back as a space and `¬`, and a
+  standard `%C3%A9` decoded to two characters instead of `é`. Both directions now walk bytes through
+  module-constant tables and join once; escapes that do not spell UTF-8 leave the text unchanged.
+  `Std.Http` form fields reuse the component codec with a plus for a space. `UsesUrlAll.pudu` holds
+  53 claims and `UsesHttpAll.pudu` 93.
+- `charAt`, `length`, and `slice` on long text no longer walk from the start on every call. A
+  two-entry cursor keyed by the text's buffer remembers the last scalar position and the counted
+  length, so a positional scan walks only the distance it moves, in either direction. At -O2 a
+  `charAt` scan of 640,000 ASCII characters fell from 11.0 s to 0.94 s and 160,000 mixed-width
+  characters from 0.97 s to 0.27 s. Forward, backward, interleaved, shared-buffer, and past-the-end
+  evaluator cases guard the answers.
+- Foreign-resource teardown no longer swallows an interrupt. Every cleanup still runs and a
+  cleanup's own failure is still dropped, but an asynchronous exception raised during one is held
+  until the rest have released and is then re-raised, so Ctrl-C during teardown stops the program.
+- The README states the version development builds report, `0.1.0`.
+- CI's "standard library and examples compile" step searched a root `lib` directory that does not
+  exist, so it compiled only the examples. It now names `packages/pudu/v0.1/lib`, and all 201
+  library and example modules check clean.
+- `Std.Mime.negotiate` keeps offers of equal quality in the order the client wrote them: its
+  swapping selection sort turned `text/html;q=0.5, application/json;q=0.5` into a JSON answer, and a
+  stable `List.sortOn` replaces it. The extension registry is two module-constant maps instead of
+  comparison chains, and the per-character lower-casing, trimming, and splitting helpers give way to
+  the built-in methods. `UsesMime.pudu` holds 11 claims.
+- `Std.Log` reads `show`'s source escapes back in one pass and returns text holding no backslash
+  unchanged, instead of appending each character to the text built so far.
+- `Std.Toml.Read` builds documents through drafts addressed by position, so placing a key no longer
+  rebuilds and searches the table it lands in. At -O2 a 5,000-key table reads in 0.87 s instead of
+  43.2 s. A key written through a value and a repeated section over a value are refused as
+  `Duplicate` rather than silently replacing the value with a table. `Std.Toml.field` stops at the
+  first match. `UsesToml.pudu` holds 49 claims.
+- The compiler builds again on targets without the macOS media adapters, which is where CI runs.
+  `Pudu.Eval.Desktop`, `AudioStream`, and `AudioDevice` defined store fields, helpers, and imports
+  that only the adapter branch used, so a Linux build with warnings as errors failed. Without an
+  adapter each store is now an empty constructor and adapter-only code sits inside the platform
+  guard; all 181 library modules type-check with the macOS flags removed. The audio-device and
+  desktop error classifiers are module-constant tables rather than comparison chains.
+- `pudu init` no longer drops doubled letters from the package name it writes: `hello` became
+  `helo`, `book-keeper` became `bok-keper`, and `app2` became `ap2`, because every run of a repeated
+  character was collapsed rather than only runs of separators. Only separators collapse now, and the
+  names that failed are regression cases.
+- A missing standard module's help says where the library was looked for when none was found. It
+  was built from only the locations that exist, so with no library installed it read `looked in `
+  followed by nothing, or by an empty source root. With a library present it still names the
+  program's roots and the library found; with none it names `PUDU_LIB`, the installed layout, the
+  package data directory, and the walk up from the executable in one phrase, with `.` for a program
+  in the working directory.
+- `test/residency.py` is a gate and a CI step: `Std.Io.foldLines` and `countBytes` must reach the
+  same peak memory on a 20 MB file as on a 2 MB one, and buffered `readAllLinesOf` must grow, proving
+  the measurement sees memory at all. At 10 MB and 100 MB, `foldLines` peaked at 87 and 86 MB,
+  `countBytes` at 82 and 82 MB, and the buffered reader at 119 and 527 MB.
+- The `cabal sdist` archive is self-contained: unpacked outside the checkout it builds `pudu`, and
+  that binary, given its data directory, runs a standard-library program from an unrelated
+  directory with every claim holding.
+
+## 2026-09-13 — Configurable desktop media laboratory
+
+- `pudu lint` now analyzes files or directories through the ordinary typed compiler. Existing
+  compiler warnings become named lint rules; native `W7101` detects four equivalent redundant
+  Boolean-comparison shapes and carries an exact source-verified safe edit. Human and stable JSON
+  output, closed project and file/next-line suppression, unknown-code rejection, deterministic
+  discovery/deduplication, permission-preserving staged replacement, post-fix recompilation, and a
+  live CLI gate ship together. The analyzer exposes structural work counts; a 1,000-comparison
+  property proves one visit per expression without substituting a machine-dependent timing claim.
+  Eight CLI properties, four analyzer properties, the full compiler suite, both package checks, the
+  diagnostic-identity gate, and live four-finding/fix/clean execution pass.
+- `pudu init` now creates a Pudu-only inward dependency graph: `Main` composes effects,
+  `App.Greeting` owns the use case, and `Domain.Greeting` owns pure policy. The generator preserves
+  existing regular source and support files, refuses links and incompatible paths before writes,
+  normalizes directory names to the package identity grammar, rejects reserved/empty identities,
+  acquires its serialization lock atomically, maps competing creators to a typed refusal, stages
+  new files, and commits `pudu.toml` last. Seven
+  filesystem properties cover success and refusals. The previously unregistered scaffold script is
+  now a mandatory release gate and proves check, run, test, lint, formatter, build, bundled execution, and
+  an intentionally failing generated test from outside the repository.
+- The string construction/view audit found no missing public type: `Std.Text.Builder` already holds
+  persistent chunks and joins once; native `Str` remainders share storage for Unicode parsing, and
+  `Std.Text.Source` supplies explicit byte-coordinate views. A separate `StringView` would duplicate
+  those contracts without a measured caller while adding unresolved retention and coordinate rules.
+- HTML rendering, compact and pretty JSON encoding, UI tree comparison, and UI patch application
+  no longer consume one evaluator frame per value level. Explicit work stacks preserve document
+  and change order; patch application descends iteratively and rebuilds immutable ancestors from the
+  leaf. A Pudu fixture builds 1,600-level values and holds 15 exact claims across serialized lengths
+  and boundaries, edit path depth, the rendered post-patch tree, and a deep invalid patch path.
+  Native repeated indentation
+  reduced that 5.1 MB pretty-JSON regression from about 30 seconds to about 6 seconds. The full
+  70-module Cabal suite passes.
+- `Std.Json` decoding is linear and bounded. The reader walks a cursor over the unread remainder
+  instead of indexing UTF-8 text by position, so a 538-kilobyte document decodes in 2.4 s rather than
+  9.1 s and a 200,000-character string in 3 ms rather than 1,970 ms. Nesting deeper than 512 levels
+  answers the new `JsonError.TooDeep` instead of exhausting the evaluator's call limit and stopping
+  the program. The string fixture now holds 20 claims.
+- `Std.Bytes` hexadecimal and base64 codecs are linear. Encoders gather pieces and join once instead
+  of copying the growing text per byte, and decoders walk characters in order instead of reaching
+  each by position; at 120,000 bytes hex encoding fell from 2,299 ms to 423 ms and base64 decoding
+  from 2,019 ms to 979 ms. Error positions are unchanged, and the bytes fixture now holds 54 claims,
+  including exact digit positions and large round trips through every alphabet.
+- `Std.Diff.unifiedDiff` numbers a hunk side holding no lines by the line the change follows, so a
+  zero-context insertion renders `@@ -2,0 +3,2 @@` as `patch` expects instead of one line late. The
+  diff fixture now holds 12 claims.
+- `Std.Text` padding with an empty filler returns the text instead of looping forever: `padLeft`,
+  `padRight`, and `center` compute a whole-copy count. Scans and builders across the module walk
+  characters in order and join gathered pieces once instead of reading by position and appending per
+  character, so trimming, searching, grouping, comparison, and character maps are linear. The module
+  gains its missing vault mirror, and the text fixture now holds 91 claims.
+- `Std.Csv` reads in linear time: the scanner walks one character array and joins each field once
+  instead of reading by position and appending per character, so 200,000 characters of quoted rows
+  take 0.87 s rather than 2.55 s. Rendering joins fields and lines once.
+- `Std.Xml` and `Std.Toml` bound nesting at 512 levels and answer the new `TooDeep` error at the
+  opening position, where a deeply nested document previously exhausted the evaluator's call limit
+  and stopped the program. `Std.Xml` gains its missing vault mirror.
+- `Std.Http.Safe.framing` refuses a transfer encoding whose final coding is not exactly `chunked` as
+  the new `UnsupportedEncoding`. A `gzip` or `chunked, gzip` request was framed as an empty body,
+  leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
+  passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
+  handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
+- `Std.Glob.matches` decides a path in one walk that advances every reachable pattern position per
+  character, instead of trying each length a `*` could take and backtracking. `*a*a*a*a*a*a*a*b`
+  against forty `a`s, which ran for over a minute, answers in 11 ms, and a pattern of thousands of
+  stars no longer recurses once per star. The rewrite also corrects a dropped separator: `**/b`
+  matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
+  `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
+  exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- HTTP requests carry exact byte bodies. `Http.Request` gains `binaryBody: Option[Bytes]`, matching
+  `Response`, with `Http.withBytes` and `Http.requestBytes`. `Std.Http.Server` delivers a body that is
+  not UTF-8 as its bytes instead of refusing it, `Route.bodyBytes` reads them, and `Route.formOf`
+  hands the multipart reader those bytes, so a binary file upload arrives intact. `Std.Http.Client`
+  renders and sends requests as bytes, and a redirect that keeps its body keeps a byte body too. The
+  server fixture holds 37 claims and the client fixture 53.
+- Runtime effects no longer turn interrupts into failures. Sockets, TLS, entropy, compression, desktop
+  teardown, and thread teardown each caught every exception, including Ctrl-C: a server blocked in
+  `Net.accept` answered `Err(Other("user interrupt"))` and a serving loop would keep running. They now
+  share `Pudu.Eval.Io.trySynchronous`, which reports an action's own failures and re-raises
+  asynchronous exceptions, replacing two private copies of the same filter. Ten runs interrupted
+  while blocked in accept each exited 130 within 80 ms of the signal.
+- Desktop pumping answers interrupts. One native pump for the whole requested duration held Ctrl-C
+  until it ended, and the runtime then reported it as `PlatformFailure("user interrupt")` while the
+  program continued: a 10-second pump interrupted at 1.5 s ran to 10.28 s and exited 0. A pump now
+  runs in native slices of at most 16 ms against a monotonic deadline, a watched stop request ends it
+  early, and every asynchronous exception is re-raised rather than reported as a platform failure.
+- `Std.Ui.Layout.placeWithin` caps the nesting budget a caller may request at 512 and refuses a larger
+  one as `InvalidBudget`, the way the node budget was already capped. With no ceiling, a budget of
+  100,000 let 5,000 nested views exhaust the evaluator's call limit and stop the program; a view built
+  from data reaches that depth without anyone writing it. The layout fixture holds 49 claims.
+- `Std.Regex.compile` bounds group nesting at 256 levels and answers the new `RegexError.TooDeep` at
+  the opening bracket, where a pattern of 5,000 nested groups exhausted the evaluator's call limit and
+  stopped the program. Searches were already bounded by `stepLimit`. `Std.Regex` gains its missing
+  vault mirror.
+- `Std.Yaml` bounds block nesting at 512 levels and answers the new `YamlError.TooDeep` at the line
+  that opened the block too deep, where 3,000 nested mappings exhausted the evaluator's call limit and
+  stopped the program. The YAML fixture holds 20 claims.
+- Device playback is cancellable. The native play runs on a worker thread while the evaluating thread
+  waits, so Ctrl-C during an 8-second clip stops the program in 0.07 s with exit 130 instead of after
+  the clip with exit 0 and a `PlatformFailure("user interrupt")`. A program watching for a stop
+  request receives the new `DeviceError.Cancelled`; in both cases the adapter's cancel token stops and
+  releases the Audio Queue before the answer.
+- Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
+  trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
+  `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is
+  `InvalidRate` rather than a division trap. Audio, graph, and video fixtures now hold 43, 24, and 20.
+- Desktop event pumping now uses a safe foreign call, so a long pump no longer stalls garbage
+  collection for other evaluator threads.
+
+- Made the compiler source distribution installable: the production `pudu` package no longer points
+  outside its root for Haskell tests. A separate repository-root `pudu-tests` package preserves all
+  70 registered modules under `cabal test all`; both manifests pass `cabal check`, `cabal sdist pudu`
+  succeeds, and `cabal install exe:pudu` completes from the archive. The PATH-aware refresh proof now
+  accepts multiple byte-identical installs while still rejecting divergent stale binaries.
+- Added a desktop capability conformance ledger derived from user-visible AppKit responsibilities,
+  with `WORKING`, `PARTIAL`, `MISSING`, and `EXCLUDED` evidence states. It intentionally measures
+  complete application behavior rather than copying framework symbols or deprecated machinery.
+- Added `examples/media/Studio.pudu`, a configurable bounded Pudu-native media laboratory with nested
+  JSON configuration, checked resource limits, monotonic phase metrics, and a machine-readable
+  capability report. A real configured run rendered 16,016 stereo frames in bounded slices to a
+  valid 16-bit 16 kHz PCM WAV, aligned and presented 30 generated pictures at 30000/1001 timing
+  through a native 480×270 window, pumped events, and closed the session. Eight headless
+  configuration assertions cover malformed, unsafe, device-queue, and cross-media cases.
+- Added `Std.Audio.Device` bounded default-speaker playback and a private macOS Audio Queue adapter.
+  Queue buffers are all allocated before start, the callback performs atomic completion bookkeeping
+  only, refill and byte copies remain outside it, the queue is flushed and drained before success so
+  the final buffers are heard, the monotonic deadline bounds the whole play, and every return
+  disposes the queue. A real-device gate forces a one-millisecond timeout, then
+  reacquires the device and acknowledges exactly 4,000 frames; Studio acknowledged 16,016 frames.
+- Added pure compiled tone and Q15-ramp byte kernels beneath `Std.Audio.Graph`. Existing exact graph
+  tests remain the semantic oracle. The same 16,016-frame stereo Studio preparation fell from
+  13,401 ms to 54–55 ms while retaining exact PCM, removing the exposed real-time preparation blocker.
+  Persistent streaming, device discovery/switching, underrun reporting, codecs, shared device-clock
+  synchronization, capture, native input, and Windows/Linux adapters remain explicit gaps.
+
+## 2026-09-12 — Native application-media foundation
+
+- Added `Std.Ui.Desktop`, an independently designed Pudu API for bounded window plans and explicit
+  open/present/pump/close sessions. Tokens belong to one evaluation, concurrent use is serialized
+  against close, failed close remains retryable, malformed surfaces and unsafe dimensions are typed,
+  and runtime teardown closes leaks.
+- Added the first real macOS presenter as private language-runtime plumbing over public AppKit and
+  CoreGraphics entry points. No platform object or pointer crosses into Pudu, and no platform UI
+  framework or third-party toolkit is linked. A Pudu launch fixture displayed its exact 480×280
+  Canvas surface in a titled desktop window, pumped the event loop for 1.8 seconds, and returned
+  `Ok(1)` after closing. Headless validation remains separate.
+- Made the platform's declarative UI framework the primary behavioral benchmark while defining Pudu's distinct model: applications
+  will own typed models and named spaces rather than copy protocols, property wrappers, builders,
+  delegates, or one-for-one renamed framework declarations. Added official application, scene,
+  window, document, settings, focus, AppKit event, and Metal presentation references.
+- Included nested `Std.Audio` modules in package data so `Std.Audio.Graph` ships in source
+  distributions.
+
+- Corrected the serious-release table against the standard library that actually ships, separating
+  missing lifecycle, package, large-input, HTTP-client, filesystem, and concurrency evidence from
+  optional ecosystem breadth.
+- Established the Pudu-only UI, audio, and video boundary: small media libraries and Apple publications inform
+  explicit frame/resource lifetimes, accessibility, real-time audio, and timestamped media, but no
+  foreign toolkit or platform framework enters the portable packages.
+- Added a bounded RGBA conformance canvas with overflow-safe clipping, exact painter ordering,
+  source-over blending, pixel and command budgets, and 33 Pudu-level edge assertions.
+- Replaced per-pixel canvas writes with a band-and-span rasterizer and added `repaint` for damaged
+  regions. A 512×512 frame with an opaque and a translucent fill went from 4.35 s and 267 MB to
+  0.10 s and 96 MB at -O2, indistinguishable from startup; the fixture now holds 41 assertions,
+  including byte equality between repaint and full render.
+- `Std.Bytes.join` joins neighbours in pairs and `repeat` doubles, instead of carrying every octet
+  through an array: joining 262,144 four-byte parts fell from 1.71 s to 1.06 s at -O2.
+- Limited Apple references to the developer documentation archive and read open declarative UI
+  implementations only for size negotiation; no API names or code are carried over.
+- Added `Std.Ui.Layout`: declarative `View` values whose modifiers are fields rather than wrapper
+  nodes, two-pass placement with exact cumulative grow distribution, a semantics tree that refuses
+  unnamed meaningful roles, focus order, hit testing, painting into the canvas, and damage regions
+  whose repaint equals a full render. 29 assertions; a 1,001-node screen places in about 0.18 s and
+  paints plus renders in about 0.56 s at -O2, still outside an interactive frame budget.
+- Added `Std.Ui.Screen`: a running screen as state, view function, update function, and frame.
+  Presses route through hit testing to controls, `Next`/`Previous`/`Activate`/`Dismiss` drive focus
+  and activation, events name controls by tag, and each update repaints only layout damage with bytes
+  equal to a fresh start. Layout gained tags with duplicate-tag refusal and single damage for a
+  recolored node. 16 screen assertions; layout now 33.
+- Added `Std.Ui.Text`: an original 5×7 bitmap face for printable ASCII packed into a constant table,
+  whole-number scaling, exact measuring, greedy wrapping that always progresses, a visible box for
+  missing glyphs, and drawing that merges lit pixels into runs extended across rows. 21 assertions.
+- The canvas now finds a command's first span by halving and rebuilds only overlapped spans, reusing
+  encoded pixels for the last two colors: a 400-character paragraph (1,072 rectangles) went from
+  3.22 s to 1.40 s at -O2.
+- Layout gained text views: `text` leaves measured in the single measuring pass, named by what they
+  say, drawn in `inked` color at `scaled` size, and damaged by their extent so text overflowing a fixed
+  frame still repaints exactly. Layout now 40 assertions.
+- Screens draw a one-pixel focus ring outside the focused control, recolorable with `focusRing`;
+  focus moves damage only the rings left and reached, and every frame in the fixture matches a
+  reference built without the screen. Screen now 20 assertions.
+- Added `Std.Audio`: interleaved 16-bit PCM held as little-endian bytes, frame-counted time converted
+  to exact fractions, Q15 gain rounding half away from zero, saturating mix, exact-length slices bounded
+  at 4,096 frames, and WAV encoding and bounded decoding with specific refusals. Encoding one second of
+  48 kHz stereo adds 0.02 s and decoding 0.03 s at -O2. 30 assertions.
+- Added `Std.Audio.Graph`: a pull-model render graph whose nodes—clips placed by frame, integer square,
+  saw, and triangle tones, Q15 gain, saturating mixes, and linear gain ramps—are functions of frame
+  position. The whole graph is admitted before rendering, slices are bounded at 4,096 frames and depth at
+  sixty-four, and a range rendered in slices equals the range rendered whole. 21 assertions.
+- Added `Std.Video`: frame rates and timestamps as exact fractions with cross-scale addition and
+  comparison, frame/time conversion exact over hours, tracks of same-size pictures that refuse overlap
+  and empty durations with lookup by halving, and audio frames aligned on the same clock. 19 assertions.
+- Screens keep the view they last placed; an update producing an equal view with unchanged focus keeps
+  the new state and skips placement, painting, and repaint. Screen now 21 assertions.
+- The canvas never composes commands hidden under an opaque command covering the rendered region: 300
+  stacked fills followed by a full-frame cover render at 512×512 in 0.14 s instead of 4.38 s at -O2.
+  Canvas now 43 assertions.
+- Screens accept text: `TypedText` and the `Erase` key reach the update as `Typed` and `Erased` events
+  only when focus is on a `Field`, so typing while a button holds focus changes nothing. Screen now 27
+  assertions.
+- Layout gained scrolling: `scrollColumn` and `scrollRow` place children at full length in a document
+  shifted by a clamped `scrolledTo` offset, and every node records its scrolling ancestors' window as a
+  clip that painting, hit testing, and damage respect. `Text.drawWithin` cuts glyphs to a window. Layout
+  now 46 assertions and text 22.
+- Screens deliver scrolling: `Scrolled(point, delta)` reaches the update as `ScrolledTo(tag, offset)`
+  for the frontmost tagged scrolling node under the point, clamped to its range, and a scroll that
+  cannot move changes nothing. Screen now 31 assertions.
+- `Std.Audio` resamples by linear interpolation in exact arithmetic with half-away-from-zero rounding,
+  downmixes to mono, upmixes mono, and remaps channels by name, refusing channels the source lacks.
+  Audio now 42 assertions.
+- Added `Std.Fs` on new runtime effects: files replaced by renaming a staged copy created under an
+  exclusively claimed name, temporary directories claimed by creation with scoped cleanup, portable
+  permission flags, metadata, symbolic links, canonical paths, containment decided on real locations,
+  and tree removal that never follows links. `Std.Io.copy` now copies bytes and `move` renames before
+  falling back to copy and remove. 19 assertions.
+- `Std.Process` gains launches: `launch` with `withVariable`, `isolated`, and `inDirectory` states the
+  environment and working directory a program starts with, `begin` refuses invalid variable names before
+  starting, `runLaunch` reads both streams at once, and `withStarted` stops a program when the scope that
+  started it returns. Process now 47 assertions.
+- `Std.Crypto` gains SHA3-256, SHA3-512, BLAKE2b-256, BLAKE2b-512, and HMAC-SHA512 through the runtime's
+  audited implementations, `bytesMatch` for constant-time equality, and `newKey` and `newNonce` from the
+  secure source. Every new digest is checked against values from an independent implementation and RFC
+  4231; BLAKE3 is deferred until it can be checked against its reference vectors. Crypto now 59
+  assertions.
+
 ## 2026-09-12 — Adapter-free production website
 
 - Promoted the verified Pudu-native `provided.al2023` deployment to production without rebuilding
@@ -984,8 +2726,6 @@ map construction. No tests, builds, reviews or measurements run, as requested.
 - 2026-08-27 · [[Evaluator]], [[Eval Env]], [[Tooling]] · add the tools for optimising the compiler, in the order they are worth using. `bench/scaling.mjs` builds inputs at doubling sizes and reports the ratio between them, which is what a growth problem looks like and what instruction selection never shows; `bench/profile.sh` names the cost centre; `bench/ir.sh` dumps one module's core, stg, cmm, and instructions at the optimisation the shipped build uses, and points at where a name appears in each. `pudu explain` answers the other question — what a Pudu program cost to run, in names looked up and closures called, because a Pudu program has no machine code and those are the costs this implementation has. Found straight away: a block costs the square of the statements it holds, filed as issue #112 · risk LOW · depth n/a→SHALLOW · issue #112
 
 - 2026-08-26 · [[Type Env]], [[Type Check]], [[Evaluator]], [[Eval Env]], [[Eval Match]], [[grammar/pudu]] · enforce a declared width on every value, not only on one written with a suffix. `fn add(a: Int8, b: Int8) -> Int8 { a + b }` called with `127, 127` answered `254`, and `let x: Int8 = 127` then `x + x` did the same, while `127i8 + 127i8` reported `E7005` as the grammar says it should. The evaluator built every suffixless literal as a platform integer on the stated assumption that the checker defaults an unconstrained literal to `Int` — true, but the literal is not unconstrained when an annotation or a parameter says otherwise. Inference now publishes what it settled on for each literal, keyed by its whole span so a program and its dependencies share one table, and the literal is built as the type it is · risk MED · depth DEEP→DEEP · issue #110
-
-- 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
 
 - 2026-08-26 · [[Eval Match]] · make matching and equality agree about a number's width. `let a = 7i8` then `match a { case 7 => ... }` fell through to the wildcard while `a == 7` on the next line was true, because matching compared values structurally and the width tag is part of that, where `==` meets the two widths and compares what they hold. A number is the same number whatever width holds it, and the arm that looks like it matches now does. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way · risk MED · depth MEDIUM→MEDIUM · issue #110
 

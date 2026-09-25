@@ -1,0 +1,42 @@
+// Text
+// Interpolation, splitting and joining, characters, padding, and reading numbers out of text.
+module Main
+
+import Std.Io as Io
+import Std.Text as Text
+
+const SCORES: Str = "ada: 36\ngrace: 45\nalan: 41\nbad line\nlinus: many"
+
+fn row(name: Str, score: Int) -> Str {
+  Text.padRight(Text.capitalize(name), 8, ".") + Text.padLeft("{score}", 4, " ")
+}
+
+fn main() -> Int {
+  let name = "Pudu"
+  let _hello = Io.writeLine("{name} has {name.length()} letters, upper-cased {name.toUpper()}")
+  let _braces = Io.writeLine("braces are written \{like this\}")
+
+  let words = "the smallest deer in the world".split(" ")
+  let _words = Io.writeLine("{words.length()} words, joined: {words.join("-")}")
+  let _replace = Io.writeLine("the world".replace("world", "forest"))
+
+  var vowels = 0
+  for character in "pudu lives in chile".chars() {
+    if "aeiou".contains(character.toText()) { vowels = vowels + 1 }
+  }
+  let _vowels = Io.writeLine("{vowels} vowels")
+
+  // Text.wholeOf answers None when the text is not a whole number.
+  for line in SCORES.lines() {
+    let parts = line.split(":")
+    if parts.length() != 2 {
+      let _skipped = Io.writeLine("skipped: '{line}'")
+      continue
+    }
+    match Text.wholeOf(parts[1].trim()) {
+      case Some(score) => { let _row = Io.writeLine(row(parts[0], score)) }
+      case None => { let _bad = Io.writeLine("not a number: '{parts[1].trim()}'") }
+    }
+  }
+  0
+}

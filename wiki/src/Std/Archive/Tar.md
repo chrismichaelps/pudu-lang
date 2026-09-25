@@ -35,9 +35,22 @@ Tar streams operate over strict 512-byte block boundaries.
 Header checksums are calculated by summing all unsigned byte values across the 512-byte header block with the 8 checksum bytes treated as ASCII spaces (`0x20`).
 Octal numbers are formatted with leading zeros and null/space terminators, and decoded by reading ASCII digits `'0'..='7'`.
 Payloads are zero-padded to 512-byte alignment.
+A path longer than 100 bytes is written as the USTAR `prefix` (up to 155 bytes) and `name`, split at a
+`/`; the reader joins `prefix` and `name` when the header carries the `ustar` magic.
+Type flags `0` and NUL read as `File`, `5` as `Directory`, and `2` as `Symlink`. A pax extended header
+(`x`) supplies the `path` of the entry after it and a pax global header (`g`) is skipped; neither is an
+entry. Any other flag (hard link, device, FIFO, GNU extension) fails with `UnsupportedType`.
 Decoding terminates when encountering two consecutive 512-byte blocks of zeroes or the end of the byte stream.
 
 ## Grill Log
+
+- **Q:** Build and read headers byte by byte? **A:** No; headers are sliced, cut at NUL, and joined natively, and the writer sums only the bytes it wrote for the checksum. _Rationale:_ packing 289 files took 70.5 s at `-O0` and now takes 2.9 s; reading 352 entries went from 6.3 s to 2.9 s.
+
+- **Q:** Read an unknown type flag as a file? **A:** No, `UnsupportedType`. _Rationale:_ a hard link or
+  device read as an empty file is a different archive from the one written, and package archives must
+  be refused when they carry either. _Rejected:_ defaulting to `File`.
+- **Q:** Truncate a path over 100 bytes? **A:** No, use the USTAR prefix. _Rationale:_ truncation
+  silently renames the file. _Rejected:_ GNU long-name headers, which other USTAR readers do not know.
 
 - **Q:** Why POSIX USTAR format over GNU or PAX formats?
   **A:** USTAR is universally supported by `tar(1)`, standard Unix utilities, Go/Rust/Java/Python tar libraries, and requires no arbitrary extended headers for standard file paths.

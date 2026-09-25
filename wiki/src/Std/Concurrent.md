@@ -19,7 +19,7 @@ Every started task has a runtime token and an observable join result; worker fai
 - **Q:** Treat these handles as detached fire-and-forget work? **A:** No. _Rationale:_ unjoined work
   leaks lifetime and failure. _Rejected:_ silent thread exceptions; claiming scheduler fairness.
 ## Referenced by
-[[src/Std/_MOC]] · [[Eval Concurrent]] · [[architecture/SEMANTICS]]
+[[src/Std/_MOC]] · [[Eval Concurrent]] · [[architecture/SEMANTICS]] · [[Std Concurrent Future]] · [[Std Concurrent Cancel]] · [[Std Concurrent Pool]] · [[Std Concurrent Coordinate]] · [[Std Concurrent Retry]] · [[Std Concurrent Scope]] · [[Uses Concurrent]] · [[Uses Concurrent Futures]] · [[Uses Concurrent Coordination]]
 
 ## Bounded batch execution
 
@@ -52,3 +52,25 @@ Resolved Grill Log:
 - **Q:** How are fallible transforms handled? **A:** Both pure and fallible mapping are supported:
   mapBounded collects arbitrary typed values U, while mapResultBounded unpacks Result[U, E] to
   preserve the first typed failure in input order.
+
+## Containment
+
+`contain(action)` runs an action on a thread of its own and joins it, so a crash inside the action is
+answered as `Failed` instead of ending the caller. Every waiting construct in the concurrency modules
+puts caller code behind this boundary, so a crash can neither leave a future unsettled nor keep a
+lock or a permit.
+
+## Cancellation and deadlines
+
+Threads cannot be interrupted: the runtime has no primitive that stops a running or blocked thread.
+Cancellation is cooperative, through [[Std Concurrent Cancel]] tokens that work checks between steps
+and waits through; [[Std Concurrent Future]] builds races and deadlines on them, and
+[[Std Concurrent Pool]], [[Std Concurrent Coordinate]], and [[Std Concurrent Retry]] complete the
+concurrency layer.
+
+Resolved Grill Log:
+- **Q:** Describe preemptive `cancel`, `scope`, and `withDeadline` here? **A:** No. _Rationale:_ an
+  earlier revision of this page recorded them, but no implementation ever existed; the page states
+  what the runtime and library do. _Rejected:_ documenting unimplemented contracts.
+- **Q:** Why a thread per contained action? **A:** A crash is only visible to whoever joins the
+  thread it happened on. _Rejected:_ running caller code on the thread that must report its outcome.

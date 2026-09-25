@@ -1,0 +1,115 @@
+module View.MarkdownInline
+
+import Std.Html.Build as H
+import View.MarkdownHtml as Html
+
+/// The characters that may open inline markup.
+const MARKERS: Array[Str] = ["`", "*", "[", "!["]
+
+/// One line of Markdown prose as nodes: code spans, strong and emphasised text,
+/// links, and images, with everything between them as text. Relative targets
+/// are refused.
+///
+/// A plain run is taken up to the next marker in one step rather than a
+/// character at a time. A marker with nothing to close it is kept as the
+/// character it is, so a stray asterisk reads as written rather than swallowing
+/// the rest of the line. Every piece of text becomes a text node, so nothing a
+/// page says can become markup.
+export fn render(text: Str) -> Array[H.Node] {
+  renderWith(text, &Html.none())
+}
+
+/// A line of a package file, whose relative links and images resolve against `targets`.
+export fn renderWith(text: Str, targets: &Html.Targets) -> Array[H.Node] {
+  var out: Array[H.Node] = []
+  var pending = ""
+  var rest = text
+  while !rest.isEmpty() {
+    let next = nextMarker(rest)
+    if next < 0 {
+      pending = pending + rest
+      rest = ""
+    } else if next > 0 {
+      pending = pending + rest.take(next)
+      rest = rest.drop(next)
+    } else {
+      match marked(rest, targets) {
+        case Some(found) => {
+          out = withText(out, pending)
+          pending = ""
+          out = out.push(found[0])
+          rest = rest.drop(found[1])
+        }
+        case None => {
+          pending = pending + rest.take(1)
+          rest = rest.drop(1)
+        }
+      }
+    }
+  }
+  withText(out, pending)
+}
+
+/// Markup that begins the text, and how many characters it used.
+fn marked(rest: Str, targets: &Html.Targets) -> Option[(H.Node, Int)] {
+  if rest.startsWith("`") {
+    let close = rest.drop(1).indexOf("`")
+    if close < 0 { return None }
+    return Some((H.code().says(rest.slice(1, close + 1)), close + 2))
+  }
+  if rest.startsWith("**") {
+    let close = rest.drop(2).indexOf("**")
+    if close <= 0 { return None }
+    return Some((H.strong().holding(renderWith(rest.slice(2, close + 2), targets)), close + 4))
+  }
+  if rest.startsWith("*") {
+    let close = rest.drop(1).indexOf("*")
+    if close <= 0 { return None }
+    return Some((H.em().holding(renderWith(rest.slice(1, close + 1), targets)), close + 2))
+  }
+  if rest.startsWith("![") { return image(rest, targets) }
+  link(rest, targets)
+}
+
+/// A link written `[label](target)`, when the target is one a page may link to.
+///
+/// A label that is an image, as a badge is, ends after the image's own target.
+/// Any other target, such as a script written where an address belongs, is
+/// refused and the text is shown as it was written.
+fn link(rest: Str, targets: &Html.Targets) -> Option[(H.Node, Int)] {
+  if !rest.startsWith("[") { return None }
+  let labelled = if rest.startsWith("[![") { image(rest.drop(1), targets) } else { None }
+  let middle = match labelled {
+    case Some(inner) => if rest.drop(inner[1] + 1).startsWith("](") { inner[1] + 1 } else { return None }
+    case None => rest.indexOf("](")
+  }
+  if middle < 0 { return None }
+  let end = rest.drop(middle + 2).indexOf(")")
+  if end < 0 { return None }
+  let target = Html.resolve(rest.slice(middle + 2, middle + 2 + end), targets.pages) ?
+  Some((H.a().href(target).holding(renderWith(rest.slice(1, middle), targets)), middle + 3 + end))
+}
+
+/// An image written `![alt](source)`, when its source resolves.
+fn image(rest: Str, targets: &Html.Targets) -> Option[(H.Node, Int)] {
+  let middle = rest.indexOf("](")
+  if middle < 0 { return None }
+  let end = rest.drop(middle + 2).indexOf(")")
+  if end < 0 { return None }
+  let source = Html.resolve(rest.slice(middle + 2, middle + 2 + end), targets.files) ?
+  Some((H.img().src(source).alt(rest.slice(2, middle)), middle + 3 + end))
+}
+
+/// Where the nearest marker begins, or -1 when the text holds none.
+fn nextMarker(rest: Str) -> Int {
+  var nearest = -1
+  for marker in MARKERS {
+    let found = rest.indexOf(marker)
+    if found >= 0 && (nearest < 0 || found < nearest) { nearest = found }
+  }
+  nearest
+}
+
+fn withText(out: Array[H.Node], text: Str) -> Array[H.Node] {
+  if text.isEmpty() { out } else { out.push(H.words(text)) }
+}

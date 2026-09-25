@@ -1,9 +1,26 @@
 module Constants
 
 export const SITE_NAME: Str = "Pudu"
-export const SITE_DESCRIPTION: Str = "Search the Pudu language and standard library."
+export const SITE_DESCRIPTION: Str = "Pudu is a statically typed programming language where a signature tells you what a function takes, what it gives back, whether it can fail, and whether it changes what it was given."
 export const FULL_LOGO_PATH: Str = "/assets/pudu-lang-full-logo.png"
 export const SHORT_LOGO_PATH: Str = "/assets/pudu-lang-short.png"
+/// The masthead logo, twice the width it is drawn at (168 by 56 pixels).
+export const LOGO_PATH: Str = "/assets/pudu-lang-logo.webp"
+/// The short mark beside the footer's name, twice its drawn 34 pixels.
+export const MARK_PATH: Str = "/assets/pudu-lang-mark.webp"
+export const FAVICON_PATH: Str = "/favicon.ico"
+export const ICON_48_PATH: Str = "/assets/pudu-lang-icon-48.png"
+export const ICON_96_PATH: Str = "/assets/pudu-lang-icon-96.png"
+export const ICON_192_PATH: Str = "/assets/pudu-lang-icon-192.png"
+export const MARK_512_PATH: Str = "/assets/pudu-lang-icon-512.png"
+export const MANIFEST_PATH: Str = "/site.webmanifest"
+export const THEME_COLOR: Str = "#263f86"
+export const TOUCH_ICON_PATH: Str = "/assets/apple-touch-icon.png"
+/// The card a link preview shows: 1200 by 630, the size link previews ask for.
+export const SOCIAL_IMAGE_PATH: Str = "/assets/pudu-lang-social.png"
+/// The two faces every page draws text in, fetched with the page rather than
+/// after the stylesheet names them.
+export const PRELOADED_FONTS: Array[Str] = ["/fonts/Nunito-Book.woff2", "/fonts/Nunito-Bold.woff2"]
 export const REPOSITORY_URL: Str = "https://github.com/chrismichaelps/pudu-lang/"
 export const DONATION_URL: Str = "https://paypal.me/chrismperezsantiago"
 export const HASKELL_URL: Str = "https://www.haskell.org/"
@@ -11,5 +28,19 @@ export const AUTHOR_NAME: Str = "Chris M. Pérez Santiago"
 export const AUTHOR_GITHUB_URL: Str = "https://github.com/chrismichaelps"
 export const AUTHOR_LINKEDIN_URL: Str = "https://www.linkedin.com/in/chrisperezsantiago/"
 export const COPYRIGHT: Str = "© 2026 Chris M. Pérez Santiago. All rights reserved."
+/// Where a documentation page's Markdown can be read and changed.
+export const DOCS_SOURCE_URL: Str = "https://github.com/chrismichaelps/pudu-lang/blob/dev/website/docs/"
+/// Where a document the repository keeps at its root can be read and changed.
+export const LICENSE_URL: Str = "https://github.com/chrismichaelps/pudu-lang/blob/dev/LICENSE"
+export const REPOSITORY_SOURCE_URL: Str = "https://github.com/chrismichaelps/pudu-lang/blob/dev/"
 export const CATALOGUE_PATH: Str = "website/data/api.json"
+export const RELEASES_PATH: Str = "website/data/releases.json"
 export const STYLESHEET_PATH: Str = "website/public/site.css"
+/// Where the playground's script modules are kept, one folder per layer.
+export const PLAYGROUND_SCRIPTS_DIRECTORY: Str = "website/public/assets/playground"
+/// Where the documentation pages' script modules are kept.
+export const DOCS_SCRIPTS_DIRECTORY: Str = "website/public/assets/docs"
+export const DOWNLOAD_SCRIPTS_DIRECTORY: Str = "website/public/assets/download"
+/// Where the pudu mascot's script modules are kept.
+export const PUDU_SCRIPTS_DIRECTORY: Str = "website/public/assets/pudu"
+export const PACKAGES_SCRIPTS_DIRECTORY: Str = "website/public/assets/packages"

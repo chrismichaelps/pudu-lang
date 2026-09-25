@@ -21,6 +21,7 @@ wiredInTypeNames =
   , "Float32", "Float64", "Float"
   , "Bool", "Char", "Str", "Never", "BigInt", "Decimal"
   , "Option", "Result", "Array", "Task", "Map", "Set", "Bytes", "Buckets"
+  , "Range"
   , "Copy"
   ]
 
@@ -41,7 +42,8 @@ preludeValueNames =
   [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "bucketsOf", "mixHash", "show", "display", "convertInteger"
   , "wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"
   , "wordMapIsSubsetOf", "wordMapIsDisjointFrom"
-  , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
+  , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sha3_256Of", "sha3_512Of", "blake2b256Of", "blake2b512Of", "checksumOf", "hmacSha512Of", "constantTimeEqual", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
+  , "audioToneBytes", "audioRampBytes"
   , "bufferAlloc", "bufferReadU64", "bufferWriteU64", "bufferScanU64", "bufferCopy", "bufferSize"
   , "bufferReadI64", "bufferWriteI64", "bufferReadF64", "bufferWriteF64", "bufferReadU32", "bufferWriteU32"
   , "bufferFill", "bufferCompare"
@@ -51,6 +53,7 @@ preludeValueNames =
   , "columnSortIndicesU64", "columnSortIndicesF64", "columnBinarySearchU64", "columnBinarySearchF64"
   , "columnGatherU64", "columnGatherF64"
   , "swissTableEmpty", "swissTableLookup", "swissTableInsert", "swissTableDelete", "swissTableEntries", "swissTableSize"
+  , "csvRecords", "jsonDecode", "jsonEncode", "xmlDecode"
 
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"
@@ -68,6 +71,9 @@ effectValueNames =
   , "spawnProgram", "childReadChunk", "childReadErrorChunk", "childWriteChunk"
   , "childCloseInput", "childWait", "childWaitWithin", "childStop"
   , "listDirectory", "createDirectory"
+  , "renamePath", "createTemporaryFile", "createDirectoryExclusive", "removeEmptyDirectory"
+  , "permissionsOf", "setPermissionsOf", "pathIsSymbolicLink", "createSymbolicLink"
+  , "canonicalPath", "fileSize", "directoryExists"
   , "openReader", "openWriter", "openAppender"
   , "readChunk", "writeChunk", "flushWriter", "closeHandle"
   , "tcpListen", "tcpAccept", "tcpConnect", "tcpConnectWithin"
@@ -80,9 +86,13 @@ effectValueNames =
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "secureRandomBytes"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
+  , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
+  , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"
   , "pathSeparators", "searchSeparator", "exit", "clock"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
+  , "spawnProgramWith"
   ]
 
 {-| The implicit import is suppressed by an explicit import of the same module,

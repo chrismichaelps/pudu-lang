@@ -107,6 +107,14 @@ export fn main() -> Int {
   if Url.decodeComponent("100%") == "100%" { held = held + 1 }
   if Url.decodeComponent("%zz") == "%zz" { held = held + 1 }
   if Url.decodeComponent(Url.encodeComponent("a b&c=d#e")) == "a b&c=d#e" { held = held + 1 }
+  // An escape names a UTF-8 byte, so text beyond ASCII is written as its bytes
+  // and read back as the characters they spell, in either case of hex.
+  if Url.encodeComponent("é") == "%C3%A9" { held = held + 1 }
+  if Url.decodeComponent("%C3%A9") == "é" { held = held + 1 }
+  if Url.decodeComponent("%e2%82%ac") == "€" { held = held + 1 }
+  if Url.decodeComponent(Url.encodeComponent("€ naïve 😀")) == "€ naïve 😀" { held = held + 1 }
+  // Escapes that do not spell UTF-8 leave the text as it arrived.
+  if Url.decodeComponent("%FF") == "%FF" { held = held + 1 }
 
   // A query on its own, written and read.
   if Url.renderQuery(&[("a", "1"), ("b", "x y")]) == "a=1&b=x%20y" { held = held + 1 }
@@ -119,6 +127,17 @@ export fn main() -> Int {
   if Url.parseQuery("a&b=2") == [("a", ""), ("b", "2")] { held = held + 1 }
   if Url.parseQuery("") == [] { held = held + 1 }
   if Url.parseQuery("a=x+y") == [("a", "x y")] { held = held + 1 }
+
+  // User information is not the host, and its colon is not a port.
+  let credentialed = read("https://user:pw@api.example.com:8443/items")
+  if credentialed.host == "api.example.com" && credentialed.port == Some(8443) { held = held + 1 }
+  if read("https://user@api.example.com/").host == "api.example.com" { held = held + 1 }
+
+  // An IPv6 host keeps its brackets, and only what follows them is the port.
+  let bracketed = read("http://[::1]:8080/x")
+  if bracketed.host == "[::1]" && bracketed.port == Some(8080) { held = held + 1 }
+  if read("http://[::1]/").port == None { held = held + 1 }
+  if Url.render(&bracketed) == "http://[::1]:8080/x" { held = held + 1 }
 
   held
 }

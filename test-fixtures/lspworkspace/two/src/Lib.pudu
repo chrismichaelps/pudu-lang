@@ -1,0 +1,3 @@
+module Lib
+
+export fn fromTwo() -> Int { 2 }

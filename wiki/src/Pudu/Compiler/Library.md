@@ -25,9 +25,20 @@ standard library shipped with the compiler.
 ### Signatures
 
 ```haskell
+data ResolutionContext
+data ResolutionMetrics
+
+newResolutionContext :: FilePath -> IO ResolutionContext
+resolutionDiagnostics :: ResolutionContext -> [Diagnostic]
+resolutionSearchRoots :: ResolutionContext -> ModuleName -> [FilePath]
+resolutionTriedRoots :: ResolutionContext -> ModuleName -> [Text]
+resolutionMetrics :: ResolutionContext -> ResolutionMetrics
+
 isStandardModule :: ModuleName -> Bool
+candidateRoots :: IO [FilePath]
 libraryRoots :: IO [FilePath]
 searchRoots :: FilePath -> ModuleName -> IO [FilePath]
+triedRoots :: FilePath -> ModuleName -> IO [FilePath]
 ```
 
 ### Governance
@@ -45,6 +56,14 @@ searchRoots :: FilePath -> ModuleName -> IO [FilePath]
 - Library roots query `PUDU_LIB`, Cabal installed data files (`Package.getDataFileName "lib"`),
   versioned package development paths (`packages/pudu/v<major>.<minor>/lib`), and root `lib/`.
   The compiler under development uses the local standard library without an extra install step.
+- `newResolutionContext` performs every environment, executable, current-directory, manifest, and
+  root-existence query once for one compile invocation. Candidate roots are deduplicated before
+  existence probes while preserving first-match precedence.
+- `ResolutionMetrics` reports manifest ancestor checks, manifest reads, executable ancestors, and
+  root existence probes. It is deterministic evidence about setup work, not a process-global
+  telemetry sink.
+- Existing IO entry points remain compatibility conveniences. Program compilation uses the pure
+  context accessors so module count cannot multiply setup discovery.
 
 ### Linkage
 
@@ -53,9 +72,21 @@ searchRoots :: FilePath -> ModuleName -> IO [FilePath]
 
 ## Algorithm
 
-Prepend the program's source root to the library roots when the module's first segment is `Std`;
-otherwise return the program's source root alone. Roots that do not exist are dropped, so a search
-never reports a failure against a directory that was never there.
+Load one [[Compiler Manifest]] snapshot, collect the standard-library candidate descriptions, remove
+duplicate filesystem paths in first-seen order, and probe each unique root once. Store the program
+root, existing dependency roots, existing library roots, attempted-root descriptions, manifest
+diagnostics, and operation counts in `ResolutionContext`.
+
+Prepend the program's source root and manifest dependency roots to the library roots when a module's
+first segment is `Std`; otherwise return only project-owned roots. These per-module queries are pure.
+
+Reporting a module that was not found is written for a reader by `triedRoots`. When a library root
+exists it names the program's roots and the library roots found, because the module is most likely
+misspelled. When none exists, the search alone names nothing, so it names the locations that were
+empty instead: `PUDU_LIB` when set, the installed `lib/pudu` beside the executable's `bin`, the
+package data directory, and the walk up from the executable described once — "that directory and
+every directory above it" — rather than spelled out for each ancestor, which ran to some forty
+paths.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -70,6 +101,10 @@ never reports a failure against a directory that was never there.
   not a list, because a second library root is a package manager in disguise.
 - The executable's own directory is consulted through `getExecutablePath`, which can fail on a
   platform that does not support it; the failure drops that root rather than the whole search.
+- Duplicate roots reached through `PUDU_LIB`, installation layout, package data, or checkout layout
+  retain their earliest precedence and incur one existence probe.
+- No context is reused across invocations. A new `PUDU_LIB`, newly created root, or changed manifest
+  is therefore visible without invalidation machinery.
 
 ## Depth
 
@@ -87,7 +122,18 @@ DEPTH 0.30 (SHALLOW by intent). It answers one question about paths.
   no package manager. _Rationale:_ a manifest that names one root is a longer spelling of the
   environment variable; a manifest that names several is the first half of dependency resolution.
   _Deferred:_ revisit with [[architecture/STDLIB]]'s deferred registry.
+- **Q:** Should roots be lazily discovered the first time a `Std` import appears? **A:** No.
+  _Rationale:_ one eager bounded setup makes counts deterministic, keeps missing diagnostics based
+  on the same snapshot, and avoids mutable state in the graph walk. _Rejected:_ per-namespace lazy
+  IO; an `IORef` cache; process-global roots.
+- **Q:** Should duplicate candidates be removed after probing? **A:** No. _Rationale:_ aliases are
+  otherwise paid for repeatedly even though only the first can affect precedence. _Rejected:_
+  probe-then-deduplicate; sorting, which changes resolution order.
 
 ## Referenced by
 
-[[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[architecture/STDLIB]]
+[[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Compiler Manifest]] · [[architecture/STDLIB]]
+
+Installed packages (`contextPackageRoots`) are searched after the project's own roots for an ordinary
+module and never for a `Std.*` module: the project may shadow a standard module in its own tree, and
+a dependency may not.

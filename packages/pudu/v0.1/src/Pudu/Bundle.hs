@@ -34,6 +34,7 @@ module Pudu.Bundle
   , runtimeBytes
   , attachedBundle
   , materialise
+  , sharesSources
   ) where
 
 import Control.Exception (IOException, onException, try)
@@ -50,6 +51,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Source (Source, sourceText)
+import Pudu.Version (digestIn, sourceDigest)
 import System.Directory
   ( createDirectoryIfMissing
   , doesFileExist
@@ -76,8 +78,25 @@ import System.IO
 data Bundle = Bundle
   { bundleEntry :: !Text
   , bundleModules :: ![(Text, Text)]
+  {-| The compiler version that made the products; a runtime of another
+      version compiles from the modules instead of reading them. -}
+  , bundleCompiler :: !Text
+  {-| Product-cache entries the build made compiling the program, by name. -}
+  , bundleProducts :: ![(Text, ByteString.ByteString)]
   }
   deriving stock (Eq, Show)
+
+{-| Whether a named runtime was built from the sources this compiler was.
+
+    Read from its bytes rather than by running it: it may be built for a
+    platform this machine cannot run. An unreadable file shares nothing, and
+    saying why it cannot be read is the caller's check to make first. -}
+sharesSources :: FilePath -> IO Bool
+sharesSources path = do
+  bytes <- try (ByteString.readFile path) :: IO (Either IOException ByteString.ByteString)
+  pure $ case bytes of
+    Right contents -> digestIn contents == Just sourceDigest
+    Left _ -> False
 
 {-| The marker that says a bundle is attached.
 
@@ -96,8 +115,8 @@ lengthWidth = 16
     Modules are ordered by name so that building the same program twice
     produces the same bytes — a build that differed run to run would defeat
     anything comparing two deployments. -}
-bundleOf :: ModuleName -> Map ModuleName Source -> Bundle
-bundleOf entry sources =
+bundleOf :: ModuleName -> Map ModuleName Source -> Text -> [(Text, ByteString.ByteString)] -> Bundle
+bundleOf entry sources compiler products =
   Bundle
     { bundleEntry = moduleNameText entry
     , bundleModules =
@@ -105,23 +124,26 @@ bundleOf entry sources =
           [ (moduleNameText name, sourceText source)
           | (name, source) <- Map.toList sources
           ]
+    , bundleCompiler = compiler
+    , bundleProducts = sortOn fst products
     }
 
 encode :: Bundle -> ByteString.ByteString
 encode bundle =
   ByteString.concat
     ( [utf8 (bundleEntry bundle), newline, utf8 (countText (length (bundleModules bundle))), newline]
-        <> concatMap one (bundleModules bundle)
+        <> concatMap (\(name, text) -> one name (utf8 text)) (bundleModules bundle)
+        <> [utf8 (bundleCompiler bundle), newline, utf8 (countText (length (bundleProducts bundle))), newline]
+        <> concatMap (uncurry one) (bundleProducts bundle)
     )
  where
-  one (name, text) =
-    let body = utf8 text
-     in [ utf8 name
-        , newline
-        , utf8 (countText (ByteString.length body))
-        , newline
-        , body
-        ]
+  one name body =
+    [ utf8 name
+    , newline
+    , utf8 (countText (ByteString.length body))
+    , newline
+    , body
+    ]
   newline = Char8.pack "\n"
   countText = Text.pack . show
 
@@ -130,9 +152,19 @@ decode raw = do
   (entry, afterEntry) <- line raw
   (countLine, afterCount) <- line afterEntry
   count <- readNumber countLine
-  (modules, _) <- take' count afterCount
-  pure (Bundle (Encoding.decodeUtf8Lenient entry) modules)
+  (modules, afterModules) <- take' count afterCount
+  let (compiler, products) = maybe ("", []) id (productsIn afterModules)
+  pure (Bundle (Encoding.decodeUtf8Lenient entry) [(name, Encoding.decodeUtf8Lenient body) | (name, body) <- modules] compiler products)
  where
+  {-| The products section, which a bundle written before it existed lacks. -}
+  productsIn input
+    | ByteString.null input = Nothing
+    | otherwise = do
+        (compiler, afterCompiler) <- line input
+        (countLine, afterCount) <- line afterCompiler
+        count <- readNumber countLine
+        (products, _) <- take' count afterCount
+        pure (Encoding.decodeUtf8Lenient compiler, products)
   line input = case ByteString.elemIndex 10 input of
     Nothing -> Nothing
     Just at -> Just (ByteString.take at input, ByteString.drop (at + 1) input)
@@ -144,7 +176,7 @@ decode raw = do
     unless (ByteString.length afterSize >= size) Nothing
     let body = ByteString.take size afterSize
     (rest, leftover) <- take' (remaining - 1 :: Int) (ByteString.drop size afterSize)
-    pure ((Encoding.decodeUtf8Lenient name, Encoding.decodeUtf8Lenient body) : rest, leftover)
+    pure ((Encoding.decodeUtf8Lenient name, body) : rest, leftover)
   readNumber input = case Char8.readInt input of
     Just (value, remainder) | ByteString.null remainder -> Just value
     _ -> Nothing

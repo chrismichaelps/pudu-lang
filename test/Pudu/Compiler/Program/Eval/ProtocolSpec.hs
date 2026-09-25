@@ -71,6 +71,7 @@ testProtocolEvaluation = do
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
+  overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -98,13 +99,13 @@ testProtocolEvaluation = do
         agrees with itself however wrong both halves are. -}
     , counterexample
         "bytes slice, search, and carry the published base64 and hex vectors"
-        (byteSequences === Just "49")
+        (byteSequences === Just "54")
     {-| The three things that make a separated file harder than splitting on
         the separator: a quoted field, a quote inside one, and a separator or
         newline that a quoted field swallows. -}
     , counterexample
         "a separated file survives quotes, newlines, and its own separator"
-        (separated === Just "25")
+        (separated === Just "31")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
         given, so nothing is assumed about what else the machine holds.
@@ -126,7 +127,7 @@ testProtocolEvaluation = do
         arriving and a reply going back are checked over a real socket. -}
     , counterexample
         "a server routes, wraps, and answers over a connection"
-        (serving === Just "36")
+        (serving === Just "39")
     {-| That a client bounds what a request may cost and where it may go: an
         address the network trusts is refused unless the caller named it, and
         refused again at every redirect rather than only at the first, since a
@@ -135,7 +136,7 @@ testProtocolEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "52")
+        (fetched === Just "53")
     {-| A platform that invokes a program rather than connecting to it, served
         against a runtime interface the fixture serves itself — which is
         possible because the interface is a value rather than something read
@@ -171,7 +172,7 @@ testProtocolEvaluation = do
         reading rather than once the memory is gone. -}
     , counterexample
         "an uploaded name never becomes a path"
-        (uploaded === Just "44")
+        (uploaded === Just "45")
     {-| That a message cannot carry more than it says. A line break in an
         address or a subject would let whoever supplied it write headers of
         their own, which is how bulk mail is sent through somebody else's
@@ -210,10 +211,10 @@ testProtocolEvaluation = do
         (bloomFilter === Just "10")
     , counterexample
         "Diff Myers O(ND) line/token differences, unified diff headers and hunks, and Levenshtein metrics"
-        (diffOps === Just "10")
+        (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
-        (mimeType === Just "10")
+        (mimeType === Just "11")
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")
@@ -261,7 +262,7 @@ testProtocolEvaluation = do
         padding that a body shorter or longer than a block must get. -}
     , counterexample
         "a USTAR archive round-trips entries, sizes, directories, and padding"
-        (tarArchive === Just "13")
+        (tarArchive === Just "14")
     {-| Each piece of pattern syntax against a subject that distinguishes it
         from the piece next to it: greedy against lazy on the same subject, a
         group that took part against one that did not, a bound that is met
@@ -270,7 +271,7 @@ testProtocolEvaluation = do
         up and says so rather than running. -}
     , counterexample
         "patterns compile, match, capture, replace, and refuse to run away"
-        (regexEngine === Just "24")
+        (regexEngine === Just "27")
     {-| What can be checked from inside one process: that the platform can hear
         a request to stop, and that a program nobody has asked to stop says so.
         Whether an actual signal reaches a running program is checked by
@@ -305,7 +306,7 @@ testProtocolEvaluation = do
         version string into a number. -}
     , counterexample
         "a manifest's mappings, sequences, block scalars, and quoting all survive"
-        (yamlDocuments === Just "18")
+        (yamlDocuments === Just "21")
     {-| The two orderings each have one case that a plausible implementation
         gets wrong and no ordinary use would reveal: `1.10.0` after `1.9.0`,
         which comparing as text reverses, and a `*` that stops at a separator,
@@ -313,7 +314,7 @@ testProtocolEvaluation = do
         one of them cannot be written. -}
     , counterexample
         "versions order by number and globs stop at separators"
-        (versionsAndGlobs === Just "24")
+        (versionsAndGlobs === Just "29")
     {-| A SOAP envelope, because the parts that break a reader arrive together
         in one: a prefixed name, a self-closing element, an entity in text,
         and a CDATA section whose content must not be read as either. The
@@ -322,7 +323,7 @@ testProtocolEvaluation = do
         the machine it is running on. -}
     , counterexample
         "an envelope's names, entities, and CDATA survive, and a DTD is refused"
-        (xmlDocuments === Just "16")
+        (xmlDocuments === Just "18")
     {-| A round trip proves the two halves agree; the size proves they agree
         about a real archive rather than about storing everything, which would
         also round-trip. That an archive written here is read by an ordinary
@@ -349,7 +350,7 @@ testProtocolEvaluation = do
         ends on its own is only read from if both are running at once. -}
     , counterexample
         "a started program streams, honours a deadline, is stopped, and pipes into another"
-        (childProcesses === Just "13")
+        (childProcesses === Just "14")
     {-| The document is checked against the shape a collector requires rather
         than against itself, because a round trip through one writer and its
         own reader agrees however wrong both are. Two of these are about what
@@ -379,7 +380,7 @@ testProtocolEvaluation = do
         sections, dotted keys, and a document written and read back. -}
     , counterexample
         "a configuration reads back what it was written as"
-        (configured === Just "44")
+        (configured === Just "49")
     {-| Every export of the configuration scanner. Each reading call answers a
         value and where it stopped, and the position is checked beside the
         value every time: a reader answering the right text and the wrong
@@ -391,7 +392,7 @@ testProtocolEvaluation = do
         a number from recognising that a word is one. -}
     , counterexample
         "every scan says where it stopped and a literal string keeps its backslash"
-        (scanned === Just "83")
+        (scanned === Just "86")
     {-| Every export of the message, reply and rendering modules. A message is
         written and read back from the same value, and the written text is also
         compared against what the protocol says, ending and all — a writer and
@@ -402,10 +403,17 @@ testProtocolEvaluation = do
         declares as well as the body it carries, over a body carrying a
         character wider than one byte, where counting characters and counting
         bytes part company and a client reading the declared number stops in
-        the middle. -}
+        the middle. A header another reader could take differently — whitespace
+        before its colon, an empty or spaced name, a folded line, a stray line
+        break inside a value — is refused rather than trimmed, in requests and
+        responses alike, because that disagreement is how a proxy and a server
+        come to see different requests in the same bytes. A request line is
+        three parts one space apart — a token method, a target with no
+        whitespace, and HTTP/1.0 or HTTP/1.1 — and any other line is refused
+        rather than split where a guess would put it. -}
     , counterexample
         "a message survives being written and read, and declares its body in bytes"
-        (messaged === Just "93")
+        (messaged === Just "104")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}
@@ -415,20 +423,20 @@ testProtocolEvaluation = do
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"
-        (jsonStrings === Just "16")
+        (jsonStrings === Just "20")
     {-| Rendering a page from a plan prepared once and filled per request,
         including the case that is not a rendering fault but a way into the
         page: text carrying markup must arrive as the characters it is made
         of. -}
     , counterexample
         "a page rendered from a prepared plan, its holes, its limit, and its escaping"
-        (htmlServer === Just "18")
+        (htmlServer === Just "48")
     {-| Every export of the markup builder, checked against what it renders:
         each attribute against the attribute it sets, each tag against its own
         opening tag, and text against the escaping that keeps it text. -}
     , counterexample
         "every tag and attribute renders the markup it names"
-        (htmlBuild === Just "97")
+        (htmlBuild === Just "106")
     {-| Every export of the protocol module against the wire form it stands
         for. The header names are checked against the spelling that goes on
         the wire, since a name answering the wrong header asks for something
@@ -437,7 +445,7 @@ testProtocolEvaluation = do
         wrong and nowhere else. -}
     , counterexample
         "every protocol name answers the wire form it stands for"
-        (httpAll === Just "91")
+        (httpAll === Just "93")
     {-| Every export of the database wire module, each message checked against
         the wire rather than against the reader beside it: the letter it starts
         with, the length it states, and the bytes after that length. A writer
@@ -480,7 +488,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "48")
+        (urlAll === Just "58")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same
@@ -501,9 +509,15 @@ testProtocolEvaluation = do
         the mapper could not read are different faults with different fixes. -}
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
-        (appDatabase === Just "56")
+        (appDatabase === Just "59")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
         (realFormats === Just "16383")
+    {-| Digits past what an Int holds, in a version, a command line, a pattern,
+        a parser's input, a chunked body, a client hint, and a content length.
+        Each stopped the program with E7005 and is now refused or held at a
+        bound where it is read. -}
+    , counterexample "an oversized number read from outside refuses rather than stopping the program"
+        (overflowGuards === Just "7")
     ]

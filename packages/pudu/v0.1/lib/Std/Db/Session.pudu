@@ -2,6 +2,7 @@ module Std.Db.Session
 
 import Std.Bytes as ByteSeq
 import Std.Db.Protocol as Wire
+import Std.Env as Env
 import Std.Net as Net
 import Std.Option as Option
 import Std.Random as Random
@@ -41,7 +42,10 @@ export type Config = {
   port: Int,
   database: Str,
   user: Str,
-  password: Str
+  password: Str,
+  /// How long opening a connection may take, from dialling through the end of
+  /// authentication, in milliseconds.
+  connectMillis: Int
 }
 
 /// A connection, and the bytes read from it that have not yet made a message.
@@ -67,7 +71,11 @@ export type Connection = {
   /// the number beside it is not, which is what tells a copy apart from the
   /// connection it was taken from.
   lease: Sync.Cell[Int],
-  epoch: Int
+  epoch: Int,
+  /// When a read must have finished, on the monotonic clock, or -1 for no
+  /// limit. Set while a connection is being opened and cleared once it is
+  /// ready, so a query that legitimately runs long is never cut short.
+  deadline: Int
 }
 
 /// Where a connection stands with respect to a transaction.
@@ -82,9 +90,24 @@ export type TransactionStatus
   | Active
   | Failed
 
+/// How long opening a connection may take unless a configuration says otherwise.
+///
+/// A host that drops packets rather than refusing them leaves a connection
+/// waiting for as long as the operating system cares to, and a server that
+/// accepts and then says nothing leaves it waiting forever. Either would hold
+/// a request, and the pooled place it was filling, with nothing to report.
+export const DEFAULT_CONNECT_MILLISECONDS: Int = 10000
+
 /// A configuration pointing at a database on this machine.
 export fn config(database: Str, user: Str, password: Str) -> Config {
-  Config{host: "127.0.0.1", port: 5432, database: database, user: user, password: password}
+  Config {
+    host: "127.0.0.1",
+    port: 5432,
+    database: database,
+    user: user,
+    password: password,
+    connectMillis: DEFAULT_CONNECT_MILLISECONDS
+  }
 }
 
 /// The same, somewhere else.
@@ -94,12 +117,15 @@ export fn at(base: &Config, host: Str, port: Int) -> Config {
     port: port,
     database: base.database,
     user: base.user,
-    password: base.password
+    password: base.password,
+    connectMillis: base.connectMillis
   }
 }
 
 /// How much is asked of the socket in one read.
 const CHUNK: Int = 65536
+
+const OPENING_TIMED_OUT: Str = "the database did not finish opening the connection within its time limit"
 
 /// Read the next message, taking more from the socket only when what has
 /// arrived does not already hold one.
@@ -141,7 +167,13 @@ export fn nextMessageLimited(
     }
     let missing = required - held.buffer.length()
     let requested = if missing < CHUNK { missing } else { CHUNK }
-    match Net.receive(&held.socket, requested) {
+    var wait = -1
+    if held.deadline >= 0 {
+      wait = held.deadline - Env.elapsedMilliseconds()
+      if wait <= 0 { return failedRead(&held, Connect(OPENING_TIMED_OUT)) }
+    }
+    match Net.receiveWithin(&held.socket, requested, wait) {
+      case Err(Net.NetOperationTimedOut) => { return failedRead(&held, Connect(OPENING_TIMED_OUT)) }
       case Err(problem) => { return failedRead(&held, Other(show(problem))) }
       case Ok(None) => { return failedRead(&held, Closed) }
       case Ok(Some(bytes)) => {
@@ -207,8 +239,14 @@ export fn serverFailure(payload: &Bytes) -> DbError {
 }
 
 /// Open a connection and take it through to the point it will accept a query.
+///
+/// Dialling and the whole handshake share one time limit, the configuration's
+/// `connectMillis`: a host that drops packets, and a server that accepts and
+/// then answers nothing, are each refused once it passes rather than holding
+/// the caller for as long as they choose.
 export fn connect(settings: &Config) -> Result[Connection, DbError] {
-  let opened = Net.connect(settings.host, settings.port)
+  let started = Env.elapsedMilliseconds()
+  let opened = Net.connectWithin(settings.host, settings.port, settings.connectMillis)
   if let Err(problem) = opened {
     Err(Connect(show(problem)))
   } else {
@@ -219,7 +257,8 @@ export fn connect(settings: &Config) -> Result[Connection, DbError] {
       parameters: [],
       status: Idle,
       lease: Sync.cell(0),
-      epoch: 0
+      epoch: 0,
+      deadline: started + settings.connectMillis
     }
     let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
     let sent = write(&stream, &hello)
@@ -230,7 +269,7 @@ export fn connect(settings: &Config) -> Result[Connection, DbError] {
     // server still expecting the next message has no other way to learn the
     // client has given up.
     if Result.isErr(&outcome) { let _closed = Net.close(&socket) }
-    outcome
+    Result.map(outcome, fn(ready: Connection) -> Connection { Connection{..ready, deadline: -1} })
   }
 }
 

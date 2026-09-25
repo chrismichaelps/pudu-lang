@@ -1,0 +1,8 @@
+module SliceEndsBeforeStart
+
+/// A slice names one forward stretch of a value. Reversing its bounds names no
+/// such stretch and must not be treated as an empty or reversed slice.
+export fn main() -> Int {
+  let values = [1, 2, 3, 4]
+  values[3..1].length()
+}

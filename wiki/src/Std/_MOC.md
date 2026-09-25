@@ -5,9 +5,14 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
-- [[Std Html SSR]] — reusable static render plans, typed slots and output budgets.
-- [[Std Html Buffer]] — hardware-aware unboxed byte templates, memcpy rendering, and MSS coalescing.
-- [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.
+- [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
+  conditionals, and exact rendering delegated to `Std.Html`.
+- [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
+  lengths, output budgets, and pull-based bounded incremental delivery.
+- [[Std Html Buffer]] — byte templates with permissive or checked exact-size assembly, opt-in compact
+  static blocks, typed failures, and explicitly bounded application-output coalescing.
+- [[Std Html Stream]] — prepared safe heads, typed progressive suspense output, deferred producers,
+  and retained unchecked compatibility helpers.
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
 - [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.
@@ -15,7 +20,7 @@ tags: [moc, module, stdlib]
 - [[Std App IsrCache]] — zero-copy thread-safe byte cache with tag-based invalidation for ISR.
 - [[Std Ui Island]] — isolated island elements, client micro-runtime, and zero-JS form fallback.
 
-- [[Std Html Compose]] — fluent content composition with reusable view functions.
+- [[Std Html Compose]] — fluent persistent content composition with eager or deferred conditionals.
 
 - [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
 - [[Std BitVector]] — dense 64-bit word packed bit-vector, SIMD bitwise algebra, and hardware scans.
@@ -26,6 +31,7 @@ tags: [moc, module, stdlib]
 - [[Std Byte Cursor]] — checked binary reads retaining absolute byte positions.
 - [[Std Source Buffer]] — LF line indexing and explicit byte-coordinate locations.
 - [[Std Symbol Interner]] — persistent, session-local spelling IDs.
+- [[Std Text]] — total character-oriented search, trim, pad, split, fold, and comparison helpers.
 - [[Std Text Builder]] — persistent fragments with explicit final text materialization.
 
 - [[Std Random]] — deterministic generators and OS-backed secure bytes.
@@ -36,6 +42,9 @@ tags: [moc, module, stdlib]
 - [[Std Compress Gzip]] — RFC 1952 GZIP compression, multi-block DEFLATE streaming, IEEE 802.3 CRC-32, and HTTP middleware.
 - [[Std Csv]] — quoted separated-row and header-table parsing/rendering.
 - [[Std Toml]] — TOML 1.0 configuration with exact numeric/time spellings.
+- [[Std Yaml]] — the configuration subset of YAML, refusing anchors, tags, and merge keys, with bounded nesting.
+- [[Std Glob]] — path patterns with segment-bound `*`, crossing `**`, sets, and a linear matcher.
+- [[Std Regex]] — compiled regular expressions with a step bound and bounded group nesting.
 - [[Std Toml Read]] — turning configuration text into that model.
 - [[Std Toml Scan]] — the lexical layer beneath the reader.
 - [[Std Path]] — host-aware lexical path construction and decomposition.
@@ -44,6 +53,12 @@ tags: [moc, module, stdlib]
 - [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
 - [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
 - [[Std Concurrent]] — joinable host-thread work.
+- [[Std Concurrent Future]] — typed results from other threads, with races, all-settled, and deadlines.
+- [[Std Concurrent Cancel]] — cooperative cancellation tokens with inherited deadlines.
+- [[Std Concurrent Pool]] — a fixed set of workers behind a bounded queue.
+- [[Std Concurrent Coordinate]] — semaphores, latches, wait groups, and run-once values.
+- [[Std Concurrent Retry]] — retries with capped backoff and jitter.
+- [[Std Concurrent Scope]] — sibling tasks that succeed together, cancel together, and never outlive the call.
 - [[Std Channel]] — bounded typed queues with closure.
 - [[Std Sync]] — runtime mutexes and atomic cells.
 - [[Std Net]] — streaming-first TCP listeners and connections.
@@ -58,10 +73,37 @@ tags: [moc, module, stdlib]
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
 - [[Std Db]] — queries, rows, transactions, and pools over a session.
 - [[Std App]] — the program as a value: what starts it, and what stops it.
-- [[Std Html]] — a page as a value, so text placed in one cannot become markup.
+- [[Std Html]] — a page as a value, with typed eager or deferred conditional construction.
+- [[Std Html Bounded]] — iterative HTML rendering that stops at an exact UTF-8 output budget.
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
+- [[Std Ui Theme]] — color roles, spacing, type scale, light and dark, and contrast audits.
+- [[Std Ui Motion]] — transitions with easing curves and springs, retargetable mid-flight.
+- [[Std Ui History]] — undo and redo over whole states.
+- [[Std Ui Virtual]] — the rows of a long list a viewport shows.
+- [[Std Ui Keymap]] — shortcut chords to commands, per platform, with menu labels.
+- [[Std Ui Controls]] — accessible buttons, toggles, steppers, pickers, progress, and fields, with their updates.
+- [[Std Ui Navigation]] — page stacks, tabs, split views, sheets, alerts, and confirmations.
+- [[Std Ui Preferences]] — settings saved atomically in the platform's per-user directory.
+- [[Std Ui Menu]] — menu bars as data, drawn with shortcuts and checked against the keymap.
+- [[Std Ui Gesture]] — taps, long presses, and drags recognized from pointer phases.
+- [[Std Ui Clipboard]] — the system clipboard's text, read and replaced.
+- [[Std Ui Selection]] — single, range, and toggle selection over list rows, keyboard-driven.
+- [[Std Ui Grid]] — cells in equal flexible columns, with row and column arithmetic.
+- [[Std Ui Draw]] — exact-pixel strokes, polylines, and outlines over the canvas.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
+- [[Std Ui Canvas]] — bounded Pudu-native RGBA software rendering for application UI.
+- [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.
+- [[Std Ui Screen]] — state, view, and update driven by routed input with damage-only repaint.
+- [[Std Ui Text]] — an original bitmap face: measuring, wrapping, and drawing into the canvas.
+- [[Std Ui Desktop]] — bounded plans and explicit sessions for real desktop window presentation.
+- [[Std Ui Accessible]] — the accessibility snapshot a window is given, and the platform's report of it.
+- [[Std Audio]] — exact 16-bit PCM, rational time, Q15 gain, saturating mix, and bounded WAV.
+- [[Std Audio Graph]] — a stateless pull-model render graph over bounded, slice-independent renders.
+- [[Std Audio Device]] — bounded PCM playback plans with exact completion and typed target failures.
+- [[Std Video]] — exact fractional rates and timestamps, ordered picture tracks, and audio alignment.
+- [[Std Fs]] — atomic replacement, claimed temporary names, permissions, and link-aware containment.
+- [[Std Crypto]] — named digest families, keyed digests, constant-time comparison, and sealing.
 - [[Std Mail]] — a message a program sends, which cannot carry more than it says.
 - [[Std Mail Smtp]] — native RFC 5321 client transport over streaming TCP with AUTH LOGIN/PLAIN and multi-line reply parsing.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.
@@ -72,6 +114,11 @@ tags: [moc, module, stdlib]
 - [[Std App Password]] — a password kept in a form that proves it without holding it.
 - [[Std App Secret]] — secrets protected from unintended disclosure with explicit redaction.
 - [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
+- [[Std App Problem]] — RFC 9457 problem bodies, validation reports as 422, and a uniform failure step.
+- [[Std App Page]] — keyset cursor pagination with bounded sizes and `Link` headers.
+- [[Std App Idempotency]] — replayed answers for repeated `Idempotency-Key` requests.
+- [[Std App Events]] — ordered in-process publish/subscribe and an outbox drained after commit.
+- [[Std App OpenApi]] — OpenAPI 3.1 descriptions checked against the router that serves them.
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
@@ -104,8 +151,17 @@ tags: [moc, module, stdlib]
 - [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
+- [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
+- [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
+- [[Std Checksum]] — CRC-32, CRC-32C, CRC-64, and FNV-1a over bytes, chained a chunk at a time.
+- [[Std Human]] — byte sizes and durations read and written, ordinals, plurals, and relative time.
+- [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
+- [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
+- [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
+- [[Std Site]] — the build step a web application calls: pages in parallel, per-host layout and routing.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
+- [[Std Ip]] — IPv4 and IPv6 addresses, canonical rendering, classification, and network prefixes.
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.
 - [[Std IntMap]] — high-performance bitwise Patricia Trie integer map inspired by Haskell Data.IntMap.

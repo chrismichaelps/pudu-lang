@@ -1,0 +1,32 @@
+{
+  "window": {
+    "caption": "Pudu Enterprise Media Laboratory",
+    "width": 480,
+    "height": 270,
+    "resizable": false,
+    "maxPixels": 129600
+  },
+  "audio": {
+    "sampleRate": 16000,
+    "channels": 2,
+    "frames": 16016,
+    "sliceFrames": 2048,
+    "period": 160,
+    "amplitude": 6000,
+    "waveform": "triangle",
+    "wavName": "pudu-enterprise-media.wav",
+    "playToDevice": true,
+    "deviceFramesPerBuffer": 512,
+    "deviceBuffers": 4,
+    "deviceTimeoutMilliseconds": 4000
+  },
+  "video": {
+    "rateFrames": 30000,
+    "rateSeconds": 1001,
+    "frames": 30,
+    "pumpMilliseconds": 34
+  },
+  "report": {
+    "fileName": "pudu-enterprise-media-report.json"
+  }
+}

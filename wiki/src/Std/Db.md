@@ -33,12 +33,27 @@ failure closes every successfully opened connection. A connection that cannot be
 construction is also closed. Cleanup failures are retained with the primary construction error.
 
 Borrowers check closing state after acquisition, so queued connections cannot start new work after
-closure is observed. Returning a connection validates transaction settlement; a failed rollback
-closes that connection and closes the pool, waking waiters rather than silently shrinking capacity
-until they wait forever. A connection returned after closure is closed by its borrower. Only successful callbacks and
-synchronized server errors are candidates for reuse; other database failures close the pool because
-this callback API cannot establish transport health. All typed
-return, settlement, and close failures are propagated instead of being discarded.
+closure is observed. A connection returned after closure is closed by its borrower. Only successful
+callbacks and synchronized server errors are candidates for reuse. All typed return, settlement, and
+close failures are propagated instead of being discarded.
+
+**A lost connection keeps its place.** Each place in the pool holds a connection or nothing. A
+connection that cannot be lent again — a transport or protocol failure, a failed rollback, a lending
+that could not be renewed — is closed and its place returned empty, before its close is reported.
+The next borrower to take an empty place opens a fresh connection with the settings the pool was
+built from; if that fails, the place goes back empty and the borrower gets the connection error. So
+capacity never shrinks and waiters are never stranded, and a dropped socket or a restarted server
+costs the requests that were using those connections rather than every request until the program
+restarts. The settings are kept inside a function, so showing a pool cannot show its password.
+Checked against a live PostgreSQL 14 server: after both backends of a two-connection pool were
+terminated, each failed one request and the next requests were answered by fresh connections.
+
+**Taking a connection waits without a limit.** A borrower that finds every connection lent waits on
+the pool's channel until one comes back, however long that is. Under a burst larger than the pool,
+requests queue rather than fail, which is the ordinary behaviour of a pool, but nothing yet turns a
+wait that has gone on too long into a refusal. Bounding it needs a timed receive on [[Std Channel]],
+and the runtime's channel primitives (`channelPull` and its siblings) take no time limit today. Until
+then, the server's `statement_timeout` is what bounds how long any one lent connection is held.
 
 `closePool` closes admission and the queue, drains queued connections, and attempts all closes.
 It does not wait for active callbacks; their returns perform final cleanup. Host panic and forced
@@ -49,7 +64,12 @@ worker cancellation are not handled by this pure-Pudu scoped helper and remain r
 - **Q:** Return an empty pool after requesting zero connections? **A:** No; refuse before allocating
   a channel. No caller can make progress through such a pool.
 - **Q:** Put a failed rollback's connection back? **A:** No; it has unknown transaction state.
-  Discard it and close admission rather than reusing it or stranding capacity waiters.
+  Discard it and keep its place empty rather than reusing it or stranding capacity waiters.
+- **Q:** Close the whole pool when one connection's transport fails? **A:** No. _Rationale:_ closing
+  the pool was how capacity waiters were kept from waiting forever, but it turned one dropped socket
+  into every later request failing until restart. An empty place that the next borrower refills keeps
+  capacity and wakes waiters without that cost. _Rejected:_ closing the pool; shrinking it; retrying
+  the failed request, which may not be safe to repeat.
 - **Q:** Lose earlier opens if a later connection fails? **A:** No; constructor failure owns all
   partial resources and drains them before returning its error.
 

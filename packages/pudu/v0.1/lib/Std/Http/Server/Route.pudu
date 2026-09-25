@@ -281,8 +281,11 @@ export fn header(request: &Request, name: Str) -> Option[Str] {
   found
 }
 
-/// The body a request carried.
+/// The body a request carried, as text; empty when the body was not UTF-8.
 export fn body(request: &Request) -> Str { request.message.body }
+
+/// The exact bytes of the body a request carried, whether or not they are text.
+export fn bodyBytes(request: &Request) -> Bytes { Http.requestBytes(&request.message) }
 
 /// The form a request carried, when it carried one.
 ///
@@ -295,7 +298,7 @@ export fn formOf(
   held: &Multipart.Limits
 ) -> Result[Array[Multipart.Part], Multipart.MultipartError] {
   Multipart.read(
-      &request.message.body.toBytes(),
+      &bodyBytes(request),
     Option.unwrapOr(header(request, "content-type"), ""),
     held
   )

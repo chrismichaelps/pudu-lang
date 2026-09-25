@@ -1,0 +1,49 @@
+module Service.Documents
+
+import Std.Io as Io
+import Error as SiteError
+
+/// The documents the site shows, and the files they are written in.
+///
+/// The first three are the files contributors read in the repository, so the
+/// page and the repository cannot drift into saying different things: there is
+/// one copy, and the site renders it. The rest are the site's own pages, kept as
+/// Markdown beside it rather than as markup inside a view.
+export const PUBLISHED: Array[(Str, Str)] = [
+  ("conduct", "CODE_OF_CONDUCT.md"),
+  ("contributing", "CONTRIBUTING.md"),
+  ("security", "SECURITY.md"),
+  ("community", "website/pages/community.md"),
+  ("privacy", "website/pages/privacy.md"),
+  ("brand", "website/pages/brand.md")
+]
+
+/// One document, as the Markdown it was written in.
+export type Document = { slug: Str, file: Str, lines: Array[Str] }
+
+export type Documents = { pages: Array[Document] }
+
+/// Every published document, read once before any request.
+///
+/// A document that cannot be read stops the site from starting rather than
+/// leaving a link in the footer that answers with nothing.
+export fn load(root: Str) -> Result[Documents, SiteError.SiteError] {
+  var pages: Array[Document] = []
+  for published in PUBLISHED {
+    let path = root + "/" + published[1]
+    let text = match Io.read(path) {
+      case Ok(content) => content
+      case Err(_) => { return Err(SiteError.DocumentUnreadable(path)) }
+    }
+    pages = pages.push(Document{slug: published[0], file: published[1], lines: text.split("\n")})
+  }
+  Ok(Documents{pages: pages})
+}
+
+/// The document at an address, when there is one.
+export fn find(documents: &Documents, slug: Str) -> Option[Document] {
+  for page in documents.pages {
+    if page.slug == slug { return Some(page) }
+  }
+  None
+}

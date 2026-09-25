@@ -8,8 +8,8 @@
 //
 // Usage: node test/build-bundle.mjs [path-to-pudu]
 
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -46,6 +46,37 @@ writeFileSync(source, program);
 
 const failures = [];
 
+// The product section is length-prefixed after the modules. Reading its count
+// checks the artifact itself, rather than inferring what the build carried from
+// an output message or a timing threshold.
+const productCount = (path) => {
+  const file = readFileSync(path);
+  const marker = Buffer.from("\n--pudu-bundle--\n");
+  const trailer = file.length - marker.length - 16;
+  if (trailer < 0 || !file.subarray(trailer + 16).equals(marker)) {
+    throw new Error("the bundle trailer is missing");
+  }
+  const size = Number(file.subarray(trailer, trailer + 16).toString());
+  const body = file.subarray(trailer - size, trailer);
+  let offset = 0;
+  const line = () => {
+    const end = body.indexOf(10, offset);
+    if (end < 0) throw new Error("the bundle body is incomplete");
+    const value = body.subarray(offset, end).toString();
+    offset = end + 1;
+    return value;
+  };
+  line();
+  const modules = Number(line());
+  for (let index = 0; index < modules; index += 1) {
+    line();
+    const length = Number(line());
+    offset += length;
+  }
+  line();
+  return Number(line());
+};
+
 const buildSaid = execFileSync(executable, ["build", source, "-o", built], { stdio: "pipe" })
   .toString()
   .trim();
@@ -67,6 +98,9 @@ if (carried < 4) {
     `build-bundle: the build carried ${carried} modules, so the library was left out: ${JSON.stringify(buildSaid)}`
   );
   process.exit(1);
+}
+if (productCount(built) < 1) {
+  failures.push("the default bundle carried no compiled products");
 }
 
 // Run it the way a deployment would: elsewhere, and with nothing inherited.
@@ -99,6 +133,33 @@ if (first !== "Bundled true") {
 const moved = run(elsewhere);
 if (moved !== "Bundled true") {
   failures.push(`copied elsewhere it printed ${JSON.stringify(moved)}`);
+}
+
+// A bundle starts from the products its build carried, and never from the
+// host's cache: it creates no cache directory there, and leaves the directory
+// another Pudu program keeps exactly as it was. Before, each bundle compiled
+// every module on a machine without its products and erased every other
+// program's on start, so two Pudu programs on one host kept each other cold.
+const cacheHome = mkdtempSync(join(tmpdir(), "pudu-cache-home-"));
+const neighbour = join(cacheHome, "pudu", "a".repeat(64));
+mkdirSync(neighbour, { recursive: true });
+writeFileSync(join(neighbour, "entry"), "another program's product");
+const cached = (() => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", `XDG_CACHE_HOME=${cacheHome}`, elsewhere], { stdio: "pipe" }).toString().trim();
+  } catch (problem) {
+    return `exited with ${problem.status}`;
+  }
+})();
+if (cached !== "Bundled true") {
+  failures.push(`with a cache home it printed ${JSON.stringify(cached)}`);
+}
+const cacheEntries = readdirSync(join(cacheHome, "pudu"));
+if (cacheEntries.length !== 1 || cacheEntries[0] !== "a".repeat(64)) {
+  failures.push(`the bundle changed the host cache: ${JSON.stringify(cacheEntries)}`);
+}
+if (!existsSync(join(neighbour, "entry"))) {
+  failures.push("the bundle erased another program's cache directory");
 }
 
 // A bundle is the program, so the compiler's own words are the program's
@@ -252,6 +313,50 @@ const onto = join(directory, "onto-named-runtime");
 const ontoSaid = run(onto);
 if (ontoSaid !== "Bundled true") {
   failures.push(`built onto a named runtime it printed ${JSON.stringify(ontoSaid)}`);
+}
+// A runtime built from the same sources reads the products exactly as this
+// compiler wrote them, so it is sent them: a cross-built artefact then starts
+// from what was checked instead of checking every module on every start.
+if (productCount(onto) < 1) {
+  failures.push("a runtime built from the same sources received no compiled products");
+}
+
+// A runtime built from other sources would discard the products, so it is sent
+// none, and the build says why. The stand-in is this compiler with one digit of
+// its source digest changed, which is what a runtime from another checkout is
+// to the check: the same file shape, a different digest.
+{
+  const foreignRuntime = join(directory, "foreign-runtime");
+  const bytes = readFileSync(executable);
+  const needle = Buffer.from("PUDU-SOURCE-DIGEST:");
+  let at = bytes.indexOf(needle);
+  while (at >= 0 && !/^[0-9a-f]{64};$/.test(bytes.subarray(at + needle.length, at + needle.length + 65).toString("latin1"))) {
+    at = bytes.indexOf(needle, at + 1);
+  }
+  if (at < 0) {
+    failures.push("the compiler carries no source digest to compare runtimes by");
+  } else {
+    const digit = at + needle.length;
+    bytes[digit] = bytes[digit] === 0x30 ? 0x31 : 0x30;
+    writeFileSync(foreignRuntime, bytes, { mode: 0o755 });
+    const foreignOut = join(directory, "onto-foreign-runtime");
+    const built = spawnSync(executable, ["build", source, "-o", foreignOut, "--runtime", foreignRuntime], { encoding: "utf8" });
+    if (built.status !== 0) {
+      failures.push(`a build onto a runtime from other sources failed: ${built.stderr}`);
+    } else {
+      if (!built.stderr.includes("built from other sources")) {
+        failures.push("a build onto a runtime from other sources did not say it carries no products");
+      }
+      if (productCount(foreignOut) !== 0) {
+        failures.push("a runtime built from other sources received products it would discard");
+      }
+      if (run(foreignOut) !== "Bundled true") {
+        failures.push("a program attached to a runtime from other sources did not run");
+      }
+    }
+    forget(foreignRuntime);
+    forget(foreignOut);
+  }
 }
 
 // Naming a runtime that already carries a program replaces that program rather

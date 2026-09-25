@@ -44,6 +44,8 @@ isPreludeModule :: ModuleName -> Bool
 - Names only. No arities, kinds, signatures, or definitions — those enter with typing, and a placeholder here would be a second source of truth.
 - Both compatibility network effect names and their `Within` variants are present; this module owns
   discoverability only, while [[Type Check Prelude]] owns their different signatures.
+- The four desktop effect names are compiler-owned capability operations consumed by
+  [[Std Ui Desktop]]. They expose no platform-framework identifiers.
 
 ### Linkage
 
@@ -76,6 +78,32 @@ DEPTH 0.30 (SHALLOW by intent). It is a single normative list; deepening it befo
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
+
+## Cryptographic primitive names
+
+The pure value vocabulary includes `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`,
+`hmacSha512Of`, and `constantTimeEqual`, allowing `Std.Crypto` to resolve them without a foreign or
+effect capability.
+
+Resolved Grill Log: expose only exact algorithm names; the standard library owns the documented
+public wrappers while these remain language-runtime primitives.
+
+## Desktop capability names
+
+`desktopOpen`, `desktopPresent`, `desktopPump`, `desktopInputs`, `desktopClipboardRead`, `desktopClipboardWrite`, `desktopAccessibility`, `desktopAccessibilityReport`, `desktopMenu`, `desktopMenuReport`, and `desktopClose` are discoverable effect values.
+Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
+standard-library wrapper is the public contract.
+
+## Device-audio capability name
+
+`audioDevicePlay`, `audioStreamOpen`, `audioStreamWrite`, `audioStreamPause`, `audioStreamResume`,
+`audioStreamVolume`, `audioStreamSnapshot`, and `audioStreamClose` are discoverable effect values
+consumed by [[Std Audio Device]]. Resolved Grill Log: expose target-neutral primitive names; queue
+ownership and target framework names remain behind the runtime boundary.
+
+`audioToneBytes` and `audioRampBytes` are discoverable pure values used by [[Std Audio Graph]].
+Resolved Grill Log: their low-level spelling makes them representation primitives, while graph nodes
+and errors remain the documented public API.
 
 ## Word-map cardinality kernel
 
@@ -142,6 +170,9 @@ Adds the 12 primitive names to `preludeSymbols`:
 `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
 `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
 and `swissTableSize`. They are resolved in user code and STD modules without qualified import prefixes.
+`csvRecords`, the native record scan behind [[Std Csv]], and `jsonDecode` and `jsonEncode`, the native
+decoder and encoder behind [[Std Json]], and `xmlDecode`, the native reader behind [[Std Xml]], are
+prelude names on the same terms.
 
 Resolved Grill Log: Register symbols directly in prelude symbol tables alongside existing hashing and memory primitives.
 
@@ -170,3 +201,7 @@ They are available implicitly in the value namespace for standard library module
 Adds tlsUpgradeWithin, gzipCompress and gzipDecompress to the prelude value vocabulary.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Native checksum name (#343)
+
+Adds `checksumOf` to the pure value vocabulary so [[Std Checksum]] resolves it without a capability.

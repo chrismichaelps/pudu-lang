@@ -2,7 +2,7 @@ module UsesRegex
 
 import Std.Option as Option
 import Std.Regex as Regex
-import Std.Regex {StepLimit, UnbalancedParen}
+import Std.Regex {StepLimit, TooDeep, UnbalancedParen}
 
 fn compiled(pattern: Str) -> Regex.Regex {
   match Regex.compile(pattern) {
@@ -211,6 +211,24 @@ fn main() -> Int {
         + Option.unwrapOr(Regex.capture(&found, 1), "")
     })
   if flipped == "two@one" {
+    held = held + 1
+  }
+
+  // 25. Groups nested to the bound compile and match
+  if let Ok(deepest) = Regex.compile("(".repeat(256) + "a" + ")".repeat(256)) {
+    if Regex.isMatch(&deepest, "a") {
+      held = held + 1
+    }
+  }
+
+  // 26. Nesting past the bound is refused at the group that passed it, rather
+  // than stopping the program
+  if let Err(TooDeep(256)) = Regex.compile("(".repeat(5000) + "a" + ")".repeat(5000)) {
+    held = held + 1
+  }
+
+  // 27. A group that captures nothing counts toward the bound the same way
+  if let Err(TooDeep(768)) = Regex.compile("(?:".repeat(300) + "a" + ")".repeat(300)) {
     held = held + 1
   }
 

@@ -1,0 +1,8 @@
+module RejectsChainedRange
+
+/// A range has two ends. `1..2..3` names no value, and reading it as one range
+/// inside another would report a type error about a shape nobody wrote.
+export fn main() -> Int {
+  let chained = 1..2..3
+  chained.length()
+}

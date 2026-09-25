@@ -1,0 +1,95 @@
+module View.Packages.Highlight
+
+import Std.Html.Build as H
+
+/// The words `wiki/grammar/pudu.md` reserves.
+const KEYWORDS: Set[Str] = setOf([
+    "module", "import", "export", "as", "let", "var", "const", "mut", "fn", "async", "return", "if", "else",
+    "match", "case", "for", "in", "while", "loop", "break", "continue", "type", "enum", "struct", "trait",
+    "impl", "where", "await", "task", "spawn", "comptime", "macro", "true", "false", "null", "unsafe", "with",
+    "scope", "dynamic"
+  ])
+
+/// One run of a line: its text and the class that colours it, empty for plain text.
+export type Token = { text: Str, kind: Str }
+
+fn isWordStart(c: Char) -> Bool { (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' }
+
+fn isWordPart(c: Char) -> Bool { isWordStart(c) || (c >= '0' && c <= '9') }
+
+fn isDigit(c: Char) -> Bool { c >= '0' && c <= '9' }
+
+fn wordKind(word: Str, previous: Str) -> Str {
+  if KEYWORDS.contains(word) { return "tk-keyword" }
+  if previous == "fn" { return "tk-function" }
+  let first = word.chars()[0]
+  if first >= 'A' && first <= 'Z' { "tk-type" } else { "" }
+}
+
+/// The tokens of one line of Pudu: comments, text literals, numbers,
+/// keywords, type names, and the name after `fn`; everything else plain.
+export fn tokens(source: Str) -> Array[Token] {
+  let chars = source.chars()
+  var found: Array[Token] = []
+  var plain = ""
+  var previous = ""
+  var index = 0
+  while index < chars.length() {
+    let c = chars[index]
+    if c == '/' && index + 1 < chars.length() && chars[index + 1] == '/' {
+      if !plain.isEmpty() { found = found.push(Token{text: plain, kind: ""}) }
+      plain = ""
+      found = found.push(Token{text: source.drop(index), kind: "tk-comment"})
+      index = chars.length()
+    } else if c == '"' {
+      if !plain.isEmpty() { found = found.push(Token{text: plain, kind: ""}) }
+      plain = ""
+      var end = index + 1
+      var closed = false
+      while end < chars.length() && !closed {
+        if chars[end] == '\\' { end = end + 2 } else {
+          if chars[end] == '"' { closed = true }
+          end = end + 1
+        }
+      }
+      let stop = if end > chars.length() { chars.length() } else { end }
+      found = found.push(Token{text: source.slice(index, stop), kind: "tk-string"})
+      index = stop
+    } else if isDigit(c) && (index == 0 || !isWordPart(chars[index - 1])) {
+      if !plain.isEmpty() { found = found.push(Token{text: plain, kind: ""}) }
+      plain = ""
+      var end = index
+      while end < chars.length() && (isWordPart(chars[end]) || chars[end] == '.') { end = end + 1 }
+      found = found.push(Token{text: source.slice(index, end), kind: "tk-number"})
+      index = end
+    } else if isWordStart(c) {
+      var end = index
+      while end < chars.length() && isWordPart(chars[end]) { end = end + 1 }
+      let word = source.slice(index, end)
+      let kind = wordKind(word, previous)
+      if kind.isEmpty() { plain = plain + word } else {
+        if !plain.isEmpty() { found = found.push(Token{text: plain, kind: ""}) }
+        plain = ""
+        found = found.push(Token{text: word, kind: kind})
+      }
+      previous = word
+      index = end
+    } else {
+      plain = plain + source.slice(index, index + 1)
+      if c != ' ' { previous = "" }
+      index = index + 1
+    }
+  }
+  if !plain.isEmpty() { found = found.push(Token{text: plain, kind: ""}) }
+  found
+}
+
+/// One line as spans, coloured when `pudu` is set.
+export fn line(text: Str, pudu: Bool) -> Array[H.Node] {
+  if !pudu { return [H.words(text)] }
+  var nodes: Array[H.Node] = []
+  for token in tokens(text) {
+    nodes = nodes.push(if token.kind.isEmpty() { H.words(token.text) } else { H.span().class(token.kind).says(token.text) })
+  }
+  nodes
+}

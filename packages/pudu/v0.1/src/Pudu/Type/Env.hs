@@ -23,6 +23,7 @@ module Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , recordDeclaredMethod
   , bindImportedMethod
   , emptyDeclared
   , freshVariable
@@ -45,6 +46,13 @@ module Pudu.Type.Env
   , lookupVariantIn
   , lookupVariantFields
   , lookupRecordedExpression
+  , setWritableNames
+  , isWritableName
+  , admitLentArgument
+  , isLentArgument
+  , isMutableField
+  , recordUnwrittenParameter
+  , takeUnwrittenParameters
   , recordExpression
   , report
   , reportedAt
@@ -62,6 +70,10 @@ module Pudu.Type.Env
   , addObligation
   , resolveVariable
   , runChecker
+  , evalChecker
+  , InstalledNames
+  , installedNames
+  , installNames
   , setVariable
   , validateIntegerLiteralsSince
   , withDeclared
@@ -97,6 +109,10 @@ data DeclaredTypes = DeclaredTypes
   { declaredNames :: !(Map Text NominalId)
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
+  {-| The record fields declared `mut`, which are the only fields an
+      assignment may write. Kept apart from the field types because nothing
+      but a place asks. -}
+  , declaredMutableFields :: !(Set (NominalId, Text))
   , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
   {-| The same variants, keyed by the type that owns them as well as by their
       name.
@@ -127,6 +143,7 @@ emptyDeclared =
     { declaredNames = Map.empty
     , declaredParams = Map.empty
     , declaredFields = Map.empty
+    , declaredMutableFields = Set.empty
     , declaredVariants = Map.empty
     , declaredOwnedVariants = Map.empty
     , declaredVariantFields = Map.empty
@@ -186,7 +203,18 @@ data CheckerState = CheckerState
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateIntegerKinds :: ![(Span, Text)]
   , stateRigidBounds :: !(Map Text [NominalId])
+  {-| Uses of names that reach a `var` binding, from the resolver. -}
+  , stateWritableNames :: !(Set SpanKey)
+  {-| The `&mut` expressions written directly as a call's arguments, the one
+      position where lending a place means something. -}
+  , stateLentArguments :: !(Set SpanKey)
+  {-| Function literal parameters written without a type, proved not to be
+      exclusive references once inference has settled them. -}
+  , stateUnwrittenParameters :: ![(Span, Type)]
   , stateDiagnosticsRev :: ![Diagnostic]
+  {-| The methods this module's own declarations provide — its impls, the
+      trait defaults those inherit, and its traits' members — by owner. -}
+  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
   }
 
 type SpanKey = (Int, Int)
@@ -202,6 +230,8 @@ data CheckerProducts = CheckerProducts
   { producedTypes :: ![(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
+  {-| What `recordDeclaredMethod` collected, in declaration order. -}
+  , producedMethods :: ![(NominalId, Text, Scheme)]
   {-| The type inference settled on for each integer literal.
 
       A literal written without a suffix is not a platform `Int` merely because
@@ -233,6 +263,14 @@ instance Monad Checker where
       (value, next) -> next `seq` case continue value of
         Checker continued -> continued next
 
+{-| The value an action computes, with everything it recorded discarded.
+
+    For work whose only product is its value, such as forming the declarations
+    a whole module graph shares, where a diagnostic belongs to the module that
+    wrote the declaration and is reported when that module is checked. -}
+evalChecker :: Checker a -> a
+evalChecker (Checker action) = fst (action initialState)
+
 runChecker :: Checker a -> CheckerProducts
 runChecker (Checker action) = case action initialState of
   (_, CheckerState
@@ -241,11 +279,13 @@ runChecker (Checker action) = case action initialState of
     , stateFrames = frames
     , stateDiagnosticsRev = diagnostics
     , stateIntegerKinds = kinds
+    , stateDeclaredMethodsRev = methods
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
+      , producedMethods = reverse methods
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -284,8 +324,72 @@ initialState =
     , stateIntegerLiterals = []
     , stateIntegerKinds = []
     , stateRigidBounds = Map.empty
+    , stateWritableNames = Set.empty
+    , stateLentArguments = Set.empty
+    , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
+    , stateDeclaredMethodsRev = []
     }
+
+{-| What installing a graph's interfaces left in the checker: the names it
+    bound, the restrictions those names carry, and the next free variable.
+
+    A consumer starts from this rather than installing every interface again.
+    The frame is a persistent map, so every consumer shares it and pays only for
+    what it adds. The next variable travels with it, so a variable the
+    installation made can never be confused with one the consumer makes. -}
+data InstalledNames = InstalledNames
+  { installedFrame :: !(Map Text Scheme)
+  , installedUnsafe :: !(Map Text [Capability])
+  , installedComptime :: !(Map Text Bool)
+  , installedNext :: !Int
+  }
+
+instance Eq InstalledNames where
+  left == right =
+    installedFrame left == installedFrame right
+      && installedUnsafe left == installedUnsafe right
+      && installedComptime left == installedComptime right
+      && installedNext left == installedNext right
+
+instance Show InstalledNames where
+  show value = "InstalledNames {" <> show (Map.size (installedFrame value)) <> " names}"
+
+installedNames :: Checker InstalledNames
+installedNames =
+  Checker $ \state ->
+    ( InstalledNames
+        { installedFrame = case stateFrames state of
+            current : _ -> current
+            [] -> Map.empty
+        , installedUnsafe = stateUnsafeFunctions state
+        , installedComptime = stateComptimeFunctions state
+        , installedNext = stateNext state
+        }
+    , state
+    )
+
+{-| Begin from installed names, before anything of the module's own is bound. -}
+{-| Record a method this module's declarations provide for `owner`, so tooling
+    can offer what a value of that type — or a parameter bounded by that trait —
+    can be called with, from the same facts a call is checked against. -}
+recordDeclaredMethod :: NominalId -> Text -> Scheme -> Checker ()
+recordDeclaredMethod owner name scheme =
+  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme) : stateDeclaredMethodsRev state})
+
+installNames :: InstalledNames -> Checker ()
+installNames installed =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateFrames = case stateFrames state of
+            current : rest -> (current <> installedFrame installed) : rest
+            [] -> [installedFrame installed]
+        , stateUnsafeFunctions = stateUnsafeFunctions state <> installedUnsafe installed
+        , stateComptimeFunctions = stateComptimeFunctions state <> installedComptime installed
+        , stateNext = max (stateNext state) (installedNext installed)
+        }
+    )
 
 freshVariable :: Checker Type
 freshVariable =
@@ -520,7 +624,11 @@ qualifiesSomething qualifier =
   Checker $ \state -> (any covered (stateFrames state), state)
  where
   prefix = qualifier <> "."
-  covered frame = any (Text.isPrefixOf prefix) (Map.keys frame)
+  {-| A frame's keys are ordered, so every name under the qualifier sits
+      together, starting at the first key not below the prefix. -}
+  covered frame = case Map.lookupGE prefix frame of
+    Just (key, _) -> Text.isPrefixOf prefix key
+    Nothing -> False
 
 {-| Run an action as the body of a closure, remembering how deep the name
     frames were when it began. -}
@@ -638,6 +746,37 @@ lookupRecordedExpression spanValue =
 
 keyOf :: Span -> SpanKey
 keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+
+setWritableNames :: Set SpanKey -> Checker ()
+setWritableNames names = Checker $ \state -> ((), state{stateWritableNames = names})
+
+{-| Whether the name used at this span reaches a binding declared with `var`. -}
+isWritableName :: Span -> Checker Bool
+isWritableName spanValue =
+  Checker $ \state -> (Set.member (keyOf spanValue) (stateWritableNames state), state)
+
+admitLentArgument :: Span -> Checker ()
+admitLentArgument spanValue =
+  Checker $ \state ->
+    ((), state{stateLentArguments = Set.insert (keyOf spanValue) (stateLentArguments state)})
+
+isLentArgument :: Span -> Checker Bool
+isLentArgument spanValue =
+  Checker $ \state -> (Set.member (keyOf spanValue) (stateLentArguments state), state)
+
+isMutableField :: NominalId -> Text -> Checker Bool
+isMutableField owner field =
+  Checker $ \state ->
+    (Set.member (owner, field) (declaredMutableFields (stateDeclared state)), state)
+
+recordUnwrittenParameter :: Span -> Type -> Checker ()
+recordUnwrittenParameter spanValue typeValue =
+  Checker $ \state ->
+    ((), state{stateUnwrittenParameters = (spanValue, typeValue) : stateUnwrittenParameters state})
+
+takeUnwrittenParameters :: Checker [(Span, Type)]
+takeUnwrittenParameters =
+  Checker $ \state -> (reverse (stateUnwrittenParameters state), state{stateUnwrittenParameters = []})
 
 {-| Record that a type must implement a trait. Obligations are proved after the
     body is checked, when inference has solved what the argument types are. -}

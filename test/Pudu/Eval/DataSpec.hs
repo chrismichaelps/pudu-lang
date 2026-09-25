@@ -193,6 +193,39 @@ testTextMethods = do
   unchanged <- runProgram [] ["var name = \"a\"", "name.toUpper()"] "name"
   outOfRange <- codesOf "\"hi\".charAt(9)"
   negativeRepeat <- codesOf "\"hi\".repeat(-1)"
+  forwardScan <- runProgram []
+    [ "let text = \"a\233\128512b\".repeat(100)"
+    , "var copied = \"\""
+    , "var i = 0"
+    , "while i < text.length() {"
+    , "  copied = copied + text.charAt(i).toText()"
+    , "  i = i + 1"
+    , "}"
+    ] "copied == text"
+  backwardScan <- runProgram []
+    [ "let text = \"a\233\128512b\".repeat(100)"
+    , "var copied = \"\""
+    , "var i = text.length() - 1"
+    , "while i >= 0 {"
+    , "  copied = text.charAt(i).toText() + copied"
+    , "  i = i - 1"
+    , "}"
+    ] "copied == text"
+  interleaved <- runProgram []
+    [ "let left = \"a\233\128512b\".repeat(100)"
+    , "let right = \"xyzw\".repeat(100)"
+    , "let far = left.charAt(399)"
+    , "let other = right.charAt(1)"
+    , "let sliced = left.slice(4, 8)"
+    , "let near = left.charAt(2)"
+    ]
+    "far == 'b' && other == 'y' && sliced == \"a\233\128512b\" && near == '\128512' && left.length() == 400 && right.length() == 400"
+  sharedBuffer <- runProgram []
+    [ "let text = \"\233\".repeat(300)"
+    , "let _far = text.charAt(290)"
+    , "let part = text.slice(10, 200)"
+    ] "part.length() == 190 && part.charAt(189) == '\233' && text.charAt(299) == '\233'"
+  pastEnd <- codesOf "\"a\233\128512b\".repeat(100).charAt(400)"
   pure $ conjoin
     [ counterexample "case folds" (upper === "\"AB\"")
     , counterexample "whitespace is stripped" (trimmed === "\"x\"")
@@ -208,4 +241,9 @@ testTextMethods = do
     , counterexample "the receiver is unchanged" (unchanged === "\"a\"")
     , counterexample "an index outside the text is E7004" (outOfRange === ["E7004"])
     , counterexample "a negative repeat is E7004" (negativeRepeat === ["E7004"])
+    , counterexample "a forward scan by position reads every scalar" (forwardScan === "true")
+    , counterexample "a backward scan by position reads every scalar" (backwardScan === "true")
+    , counterexample "two long texts read in turn keep their own positions" (interleaved === "true")
+    , counterexample "a slice sharing its parent's buffer counts its own scalars" (sharedBuffer === "true")
+    , counterexample "an index at the scalar length of a long text is E7004" (pastEnd === ["E7004"])
     ]

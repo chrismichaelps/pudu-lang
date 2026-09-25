@@ -22,7 +22,8 @@ import Pudu.Type.Check.FunctionGenericSpec
   , testLambdaTypes
   )
 import Pudu.Type.Check.ControlFlowSpec
-  ( testControlFlow
+  ( testBlockScope
+  , testControlFlow
   , testExportedSignatures
   , testIterationTypes
   , testNoCascade
@@ -33,6 +34,7 @@ import Pudu.Type.Check.PatternSpec
   ( testExhaustiveness
   , testMatchThroughBorrow
   )
+import Pudu.Type.Check.PlaceSpec (testPlaces)
 import Pudu.Type.Check.PrimitiveSpec
   ( testAnnotations
   , testDecimalType
@@ -80,6 +82,7 @@ typeProperties =
   , ("records check fields on construction and access", testRecords)
   , ("sum constructors and patterns type their payloads", testVariants)
   , ("control flow unifies its branches", testControlFlow)
+  , ("a block's bindings end with the block", testBlockScope)
   , ("exported signatures must be annotated", testExportedSignatures)
   , ("a type error reports once and does not cascade", testNoCascade)
   , ("an earlier phase's error suppresses type checking", testPhaseOrder)
@@ -106,4 +109,5 @@ typeProperties =
   , ("compile-time functions keep their evaluator pure", testComptime)
   , ("a structured scope requires an async function", testScopes)
   , ("expression types are recorded for tooling", testRecordedTypes)
+  , ("places are written and lent only where the language allows", testPlaces)
   ]

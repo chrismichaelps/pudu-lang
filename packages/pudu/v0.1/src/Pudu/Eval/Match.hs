@@ -6,6 +6,7 @@ module Pudu.Eval.Match
   ) where
 
 import Data.Foldable (toList)
+import qualified Data.Sequence as Seq
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Eval.Value (Value (..), intOf)
@@ -15,7 +16,7 @@ import Pudu.FloatLiteral
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import qualified Pudu.Frontend.Syntax.Tree as Tree
-import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
+import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
 import Pudu.IntegerLiteral
   ( IntegerKind (..)
   , IntegerSuffix (..)
@@ -37,6 +38,29 @@ matchPattern (Located _ pattern') value = case pattern' of
     TupleValue values | length values == length members ->
       concat <$> sequence (zipWith matchPattern members values)
     _ -> Nothing
+  {-| A sequence pattern reads its named elements from the front and from the
+      back, and the rest is what lies between them.
+
+      The length is checked before anything is read: without a rest the value
+      must have exactly as many elements as the pattern names, and with one it
+      must have at least that many. Both are one comparison, so a pattern that
+      does not apply fails before a single element is matched. -}
+  ArrayPattern prefix rest suffix -> case sequenceElements value of
+    Nothing -> Nothing
+    Just elements
+      | rest == Nothing, length elements /= named -> Nothing
+      | rest /= Nothing, length elements < named -> Nothing
+      | otherwise ->
+          let (front, remaining) = splitAt (length prefix) elements
+              (middle, back) = splitAt (length remaining - length suffix) remaining
+           in concat
+                <$> sequence
+                  ( zipWith matchPattern prefix front
+                      <> restBinding rest middle
+                      <> zipWith matchPattern suffix back
+                  )
+     where
+      named = length prefix + length suffix
   ConstructorPattern (ModuleName segments) arguments -> case value of
     VariantValue name payload
       | name == lastSegment segments && length payload == length arguments ->
@@ -57,6 +81,21 @@ matchPattern (Located _ pattern') value = case pattern' of
   AlternativePattern alternatives -> firstMatch alternatives
   InvalidPattern -> Nothing
  where
+  {-| A sequence pattern applies to an array. Not to a tuple: a tuple's members
+      may differ, and binding them all at the one element type the pattern
+      implies would claim something the tuple does not say — which is what the
+      checker tells a reader who tries, so nothing here should quietly allow it
+      anyway. -}
+  sequenceElements held = case held of
+    ArrayValue members -> Just (toList members)
+    _ -> Nothing
+
+  restBinding rest middle = case rest of
+    Nothing -> []
+    Just (IgnoredRest _) -> [Just []]
+    Just (BoundRest name) ->
+      [Just [(locatedValue name, ArrayValue (Seq.fromList middle))]]
+
   firstMatch alternatives = case alternatives of
     [] -> Nothing
     alternative : rest -> case matchPattern alternative value of
@@ -151,6 +190,7 @@ literalValue literal = case literal of
     Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
       IntValue (kindOfSuffix parsedIntegerSuffix) parsedIntegerValue
     Nothing -> intOf 0
+  Tree.ResolvedInteger kind number -> IntValue kind number
   Tree.FloatValue text -> case parseFloatLiteral text of
     Just ParsedFloat{parsedFloatValue, parsedFloatWidth} ->
       FloatValue parsedFloatWidth parsedFloatValue

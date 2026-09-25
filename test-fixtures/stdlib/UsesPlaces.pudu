@@ -1,0 +1,144 @@
+module UsesPlaces
+
+type Counter = { mut count: Int, label: Str }
+
+type Holder = { mut inner: Counter, mut items: Array[Int] }
+
+type Pair = { mut left: Int, mut right: Int }
+
+trait Tick {
+  fn tick(self: &mut Self) -> ()
+}
+
+impl Tick for Counter {
+  fn tick(self: &mut Self) -> () { self.count = self.count + 1 }
+}
+
+fn bump(n: &mut Int) -> () { *n = *n + 1 }
+
+fn twice(n: &mut Int) -> () {
+  bump(n)
+  bump(n)
+}
+
+fn reset(counter: &mut Counter) -> () { *counter = Counter{count: 100, label: "reset"} }
+
+fn setCount(counter: &mut Counter, value: Int) -> () { counter.count = value }
+
+fn fill(items: &mut Array[Int], value: Int) -> () {
+  var index = 0
+  while index < items.length() {
+    items[index] = value
+    index = index + 1
+  }
+}
+
+fn tickThrough(counter: &mut Counter) -> () { counter.tick() }
+
+fn capped(n: &mut Int) -> Bool {
+  *n = *n + 1
+  if *n > 2 { return false }
+  *n = *n + 10
+  true
+}
+
+fn check(ok: Bool) -> Result[Int, Str] {
+  if ok { Ok(1) } else { Err("stopped") }
+}
+
+fn guarded(n: &mut Int, ok: Bool) -> Result[Int, Str] {
+  *n = *n + 1
+  let _passed = check(ok) ?
+  *n = *n + 100
+  Ok(*n)
+}
+
+fn exchange(left: &mut Int, right: &mut Int) -> () {
+  let held = *left
+  *left = *right
+  *right = held
+}
+
+fn advance(position: &mut Int) -> Int {
+  let current = *position
+  *position = *position + 1
+  current
+}
+
+fn tally(total: Int, held: Bool) -> Int { if held { total + 1 } else { total } }
+
+export fn main() -> Int {
+  var passed = 0
+
+  var score = 1
+  score = score + 1
+  passed = tally(passed, score == 2)
+
+  var counter = Counter{count: 0, label: "a"}
+  counter.count = 5
+  passed = tally(passed, counter.count == 5 && counter.label == "a")
+
+  var holder = Holder{inner: Counter{count: 0, label: "in"}, items: [1, 2, 3]}
+  holder.inner.count = 7
+  holder.items[1] = 20
+  passed = tally(passed, holder.inner.count == 7 && holder.items[1] == 20 && holder.items[0] == 1)
+
+  var items = [1, 2, 3]
+  items[2] = 30
+  passed = tally(passed, items[2] == 30 && items.length() == 3)
+
+  var lent = 41
+  bump(&mut lent)
+  passed = tally(passed, lent == 42)
+
+  twice(&mut lent)
+  passed = tally(passed, lent == 44)
+
+  reset(&mut counter)
+  passed = tally(passed, counter.count == 100 && counter.label == "reset")
+
+  setCount(&mut counter, 3)
+  passed = tally(passed, counter.count == 3)
+
+  fill(&mut items, 9)
+  passed = tally(passed, items[0] == 9 && items[1] == 9 && items[2] == 9)
+
+  counter.tick()
+  passed = tally(passed, counter.count == 4)
+
+  Tick.tick(&mut counter)
+  Counter.tick(&mut counter)
+  passed = tally(passed, counter.count == 6)
+
+  tickThrough(&mut counter)
+  passed = tally(passed, counter.count == 7)
+
+  tickThrough(&mut holder.inner)
+  passed = tally(passed, holder.inner.count == 8)
+
+  var counters = [Counter{count: 0, label: "x"}, Counter{count: 10, label: "y"}]
+  counters[1].tick()
+  passed = tally(passed, counters[1].count == 11 && counters[0].count == 0)
+
+  var small = 1
+  let early = capped(&mut small)
+  var large = 5
+  let late = capped(&mut large)
+  passed = tally(passed, early && small == 12 && !late && large == 6)
+
+  var tried = 0
+  let stopped = guarded(&mut tried, false)
+  let finished = guarded(&mut tried, true)
+  passed = tally(passed, stopped == Err("stopped") && finished == Ok(102) && tried == 102)
+
+  var pair = Pair{left: 1, right: 2}
+  exchange(&mut pair.left, &mut pair.right)
+  passed = tally(passed, pair.left == 2 && pair.right == 1)
+
+  var position = 0
+  var slots = [0, 0, 0]
+  slots[advance(&mut position)] = 5
+  passed = tally(passed, slots[0] == 5 && slots[1] == 0 && position == 1)
+
+  passed
+}

@@ -2,7 +2,6 @@ module Std.Http.Message
 
 import Std.Bytes as ByteSeq
 import Std.Http as Http
-import Std.Text as Text
 
 /// What stopped a message from being read.
 export type MessageError
@@ -11,6 +10,7 @@ export type MessageError
   | NoStatusLine
   | BadStatusLine(Str)
   | BadHeader(Str)
+  | AmbiguousHeader(Str)
   | ShortBody(Int, Int)
 
 /// A request read from the text a connection carried.
@@ -26,7 +26,8 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
         headers: headers,
-        body: split[1]
+        body: split[1],
+        binaryBody: None
       })
   }
 }
@@ -41,7 +42,8 @@ export fn parseHead(head: Str) -> Result[Http.Request, MessageError] {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
         headers: headers,
-        body: ""
+        body: "",
+        binaryBody: None
       })
   }
 }
@@ -59,7 +61,14 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
 
 /// A request written as the protocol writes it, head and body together.
 export fn renderRequest(value: &Http.Request) -> Str {
+  if let Some(_) = value.binaryBody { panic("binary requests require renderRequestBytes") }
   Http.renderHead(value) + value.body
+}
+
+/// A request written as the protocol writes it, as the exact bytes sent, so a
+/// byte body goes out unchanged.
+export fn renderRequestBytes(value: &Http.Request) -> Bytes {
+  ByteSeq.concat(&ByteSeq.fromText(Http.renderHead(value)), &Http.requestBytes(value))
 }
 
 /// A response written as the protocol writes it.
@@ -140,6 +149,34 @@ export fn responseComplete(source: &Bytes, method: &Http.Method) -> Bool {
   }
 }
 
+/// Where a response's body ends, as its head says: at the head itself, after
+/// a declared length, at the terminating chunk, or when the connection closes.
+export type Framing
+  = HeadOnly
+  | Length(Int)
+  | Chunked
+  | UntilClose
+
+/// The framing of a response whose head (through the blank line) is given,
+/// or nothing when the head does not parse.
+export fn framingOf(head: &Bytes, method: &Http.Method) -> Option[Framing] {
+  let text = match ByteSeq.toText(head) {
+    case Ok(held) => held
+    case Err(_) => { return None }
+  }
+  match parseResponse(text) {
+    case Err(_) => None
+    case Ok(response) => {
+      if Http.methodName(method) == "HEAD" || hasNoBody(response.status.code) { return Some(HeadOnly) }
+      if Http.isChunked(&response.headers) { return Some(Chunked) }
+      match Http.contentLength(&response.headers) {
+        case Some(length) => Some(Length(length))
+        case None => Some(UntilClose)
+      }
+    }
+  }
+}
+
 fn hasNoBody(code: Int) -> Bool {
   (code >= 100 && code < 200) || code == 204 || code == 304
 }
@@ -179,6 +216,8 @@ export fn explain(problem: &MessageError) -> Str {
     case NoStatusLine => "the message has no status line"
     case BadStatusLine(line) => "the status line is not a version, code, and reason: " + line
     case BadHeader(line) => "a header has no colon: " + line
+    case AmbiguousHeader(line) =>
+    "a header could be read more than one way, so it is refused rather than guessed: " + line
     case ShortBody(declared, actual) =>
     "the body is " + show(actual) + " where " + show(declared) + " was declared"
   }
@@ -209,29 +248,45 @@ fn headLines(head: Str) -> Array[Str] {
 }
 
 /// A request line read into its method, target, and version.
+///
+/// Exactly three parts, one space apart: a method that is a token, a target
+/// holding no whitespace, and a version this reader speaks. A line with more
+/// or fewer parts is refused rather than split where a guess would put it:
+/// `GET /a b HTTP/1.1` is a target one reader takes as `/a` and another as
+/// `/a b`, and a request two readers route differently is not one request.
 fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
-  let s1 = line.indexOf(" ")
-  if s1 < 0 { return Err(BadRequestLine(line)) }
-  let method = line.take(s1)
-  let rest = line.drop(s1 + 1).trim()
-  let s2 = rest.indexOf(" ")
-  if s2 < 0 {
-    Ok((method, rest, "HTTP/1.1"))
-  } else {
-    Ok((method, rest.take(s2), rest.drop(s2 + 1).trim()))
+  let parts = line.split(" ")
+  if parts.length() != 3 { return Err(BadRequestLine(line)) }
+  let target = parts[1]
+  let unclearTarget = target.isEmpty() || target.contains("\t") || target.contains("\r")
+  if !isToken(parts[0]) || unclearTarget || !TEXT_VERSIONS.contains(parts[2]) {
+    return Err(BadRequestLine(line))
   }
+  Ok((parts[0], target, parts[2]))
 }
 
+/// The versions a message's first line may name, request or status. Later
+/// versions do not arrive as a line of text.
+const TEXT_VERSIONS: Set[Str] = setOf(["HTTP/1.0", "HTTP/1.1"])
+
 /// A status line read into the status it names.
+///
+/// A version this reader speaks, one space, exactly three digits, and then
+/// either nothing or one space and a reason, which may hold spaces of its own.
+/// A code of any other width is refused rather than read as a number: whether
+/// a response carries a body is decided by its code, so a code two readers
+/// take differently is a body two readers frame differently.
 fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
-  let s1 = line.indexOf(" ")
-  if s1 < 0 { return Err(BadStatusLine(line)) }
-  let rest = line.drop(s1 + 1).trim()
-  let s2 = rest.indexOf(" ")
-  let codeStr = if s2 < 0 { rest } else { rest.take(s2) }
-  match Text.countOf(codeStr) {
+  let space = line.indexOf(" ")
+  if space < 0 || !TEXT_VERSIONS.contains(line.take(space)) { return Err(BadStatusLine(line)) }
+  let rest = line.drop(space + 1)
+  let afterCode = rest.drop(3)
+  if rest.length() < 3 || !(afterCode.isEmpty() || afterCode.startsWith(" ")) {
+    return Err(BadStatusLine(line))
+  }
+  match statusCodeOf(rest.take(3)) {
     case Some(code) => {
-      let reason = if s2 < 0 { "" } else { rest.drop(s2 + 1).trim() }
+      let reason = afterCode.trim()
       Ok(Http.Status {
           code: code,
           reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
@@ -241,7 +296,26 @@ fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
   }
 }
 
+/// Three digits as a status code, which counts from 100.
+fn statusCodeOf(digits: Str) -> Option[Int] {
+  var total = 0
+  for character in digits.chars() {
+    if character < '0' || character > '9' { return None }
+    total = total * 10 + (character.code() - '0'.code())
+  }
+  if total < 100 { None } else { Some(total) }
+}
+
 /// Header lines read into pairs, with names kept as written.
+///
+/// A line another reader could take differently is refused rather than
+/// trimmed into a meaning. A proxy in front of this server that rejects
+/// `Content-Length : 5`, or joins a folded line onto the one before it, and a
+/// server behind it that accepts either, disagree about where a body ends —
+/// and the bytes they disagree about become a second request only one of them
+/// saw. So a name is exactly a token with nothing between it and its colon, a
+/// line does not begin with whitespace, and no stray line break survives inside
+/// a value.
 fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
   var out: Array[(Str, Str)] = []
   var index = 1
@@ -249,31 +323,55 @@ fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
   while index < count {
     let line = lines[index]
     if !line.isEmpty() {
+      if line.startsWith(" ") || line.startsWith("\t") || line.contains("\r") || line.contains("\n") {
+        return Err(AmbiguousHeader(line))
+      }
       let colon = line.indexOf(":")
       if colon < 0 { return Err(BadHeader(line)) }
-      out = out.push((
-          line.take(colon).trim(),
-          line.drop(colon + 1).trim()
-        ))
+      let name = line.take(colon)
+      if !isToken(name) { return Err(AmbiguousHeader(line)) }
+      out = out.push((name, line.drop(colon + 1).trim()))
     }
     index = index + 1
   }
   Ok(out)
 }
 
+/// The punctuation a header name may hold beside letters and digits.
+const TOKEN_PUNCTUATION: Set[Str] = setOf(["!", "#", "$", "%", "&", "'", "*", "+", "-", ".", "^", "_", "`", "|", "~"])
+
+/// Whether a name is a token: at least one character, each a letter, a digit,
+/// or one of the punctuation marks a name may hold.
+fn isToken(name: Str) -> Bool {
+  if name.isEmpty() { return false }
+  for character in name.chars() {
+    let alphanumeric = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+      || (character >= '0' && character <= '9')
+    if !alphanumeric && !TOKEN_PUNCTUATION.contains(character.toText()) { return false }
+  }
+  true
+}
+
 fn min(left: Int, right: Int) -> Int { if left < right { left } else { right } }
 
+/// Hexadecimal digits as a whole number, or nothing.
+///
+/// A chunk size arrives from the peer, so digits past what an `Int` holds are
+/// refused as not a size rather than stopping the program reading them.
 fn hexOf(text: Str) -> Option[Int] {
   if text.isEmpty() { None } else {
     var total = 0
     for character in text.toLower().chars() {
       let found = "0123456789abcdef".indexOf(character.toText())
-      if found < 0 { return None }
+      if found < 0 || total > (INT_MAX - found) / 16 { return None }
       total = total * 16 + found
     }
     Some(total)
   }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// Serialize binary payloads without a text or base64 conversion.
 export fn renderResponseBytes(value: &Http.Response) -> Bytes {
@@ -316,7 +414,11 @@ export fn decodeChunkedBytes(source: &Bytes, limit: Int) -> Result[Bytes, Messag
         case Ok(value) => value
         case Err(_) => { return Err(BadHeader("invalid chunk trailer")) }
       }
-      let _headers = parseHeaders(&trailer.split("\r\n")) ?
+      // The header reader skips the line a head begins with, so the trailer
+      // is placed after an empty one; otherwise its first field went unread.
+      var trailerLines = [""]
+      for field in trailer.split("\r\n") { trailerLines = trailerLines.push(field) }
+      let _headers = parseHeaders(&trailerLines) ?
       return Ok(ByteSeq.join(&parts))
     }
     if size > limit - total { return Err(BadHeader("chunked body exceeds limit")) }

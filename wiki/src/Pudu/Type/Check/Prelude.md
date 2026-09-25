@@ -34,6 +34,8 @@ effectSignatures           :: [(Text, Scheme)]
 - Existing TCP/TLS effects retain their original signatures; separately named `Within` connect,
   send, receive, and TLS-close signatures carry the millisecond operation timeout consumed by the
   runtime boundary. `Std.Net` and `Std.Tls` own the typed public spelling.
+- Desktop effects take plain strings, integers, booleans, and bytes and return `Result` values;
+  opaque native pointers are not expressible in their signatures.
 
 ### Linkage
 
@@ -49,6 +51,58 @@ effectSignatures           :: [(Text, Scheme)]
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]]
+
+## Cryptographic primitive signatures
+
+SHA3-256/512 and BLAKE2b-256/512 each have `fn(Bytes) -> Bytes`; HMAC-SHA512 has
+`fn(Bytes, Bytes) -> Bytes`; constant-time equality has `fn(Bytes, Bytes) -> Bool`.
+
+Resolved Grill Log: the type layer states byte shape and arity while the distinct names carry
+algorithm identity; no unchecked algorithm selector is admitted.
+
+## Desktop capability signatures
+
+- `desktopOpen(Str, Int, Int, Bool) -> Result[Int, Str]`
+- `desktopPresent(Int, Int, Int, Bytes) -> Result[(), Str]`
+- `desktopPump(Int, Int) -> Result[Bool, Str]`
+- `desktopInputs(Int) -> Result[Str, Str]`
+- `desktopClipboardRead() -> Result[Str, Str]`
+- `desktopClipboardWrite(Str) -> Result[(), Str]`
+- `desktopAccessibility(Int, Str) -> Result[(), Str]`
+- `desktopAccessibilityReport(Int) -> Result[Str, Str]`
+- `desktopMenu(Int, Str) -> Result[(), Str]`
+- `desktopMenuReport(Int) -> Result[Str, Str]`
+- `desktopClose(Int) -> Result[(), Str]`
+
+Resolved Grill Log: the token is meaningful only to the evaluation-local owner; the public wrapper
+narrows its use to `Session`.
+
+## Device-audio capability signature
+
+`audioDevicePlay(Int, Int, Bytes, Int, Int, Int) -> Result[Int, Str]` carries sample rate, channel
+count, interleaved signed-16 PCM, frames per buffer, buffer count, and deadline milliseconds. The
+successful integer is the exact number of frames acknowledged by the device queue.
+
+Resolved Grill Log: keep the compiler signature representation-only; [[Std Audio Device]] owns the
+typed plan and error vocabulary while the runtime independently revalidates every bound.
+
+Persistent stream capabilities are representation-only as well:
+
+- `audioStreamOpen(Int, Int, Int, Int) -> Result[Array[Int], Str]`
+- `audioStreamWrite(Int, Int, Int, Bytes, Int) -> Result[Array[Int], Str]`
+- pause/resume take one token and return `Result[(), Str]`
+- volume takes one token plus `Float64` and returns `Result[(), Str]`
+- snapshot returns `Result[Array[Int], Str]`
+- close takes token, drain flag, and deadline and returns `Result[(), Str]`
+
+The two arrays have closed lengths interpreted only by [[Std Audio Device]]; no platform type or
+pointer enters the type graph. Tokens remain mathematical integers in the runtime lookup instead of
+being narrowed a second time, so a forged large target-width value cannot wrap into a valid token.
+
+`audioToneBytes(Int, Int, Int, Int, Int, Int) -> Option[Bytes]` and
+`audioRampBytes(Bytes, Int, Int, Int, Int, Int, Int) -> Option[Bytes]` describe the pure bounded
+preparation kernels. Resolved Grill Log: `Option` records trust-boundary refusal without duplicating
+the graph's public error taxonomy in the compiler.
 
 ## Word-map cardinality kernel
 
@@ -123,6 +177,14 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
 - `swissTableDelete: fn[V](&FlatMap[V], UInt64) -> FlatMap[V]`
 - `swissTableEntries: fn[V](&FlatMap[V]) -> Array[(UInt64, V)]`
 - `swissTableSize: fn[V](&FlatMap[V]) -> Int`
+- `csvRecords: fn(Bytes, Str) -> Option[(Array[Array[Str]], Int, Int)]`, the native record scan
+  [[Std Csv]] reads through ([[Eval Csv]])
+- `jsonDecode: fn(Str) -> Option[Std.Json.Json]`, the native decoder [[Std Json]] tries first
+  ([[Eval Json]])
+- `jsonEncode: fn(&Std.Json.Json, Bool) -> Str`, the native encoder behind [[Std Json]]'s `encode`
+  and `encodePretty`
+- `xmlDecode: fn(Str) -> Option[Std.Xml.Tag]`, the native reader [[Std Xml]] tries first
+  ([[Eval Xml]])
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 
@@ -175,3 +237,13 @@ Wires type schemes for the 13 extended primitives:
 tlsUpgradeWithin: (Int,Str,Int)->Result[Int,Str]; gzipCompress: (Bytes,Int,Int)->Result[Bytes,Str]; gzipDecompress: (Bytes,Int)->Result[Bytes,Str].
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Native checksum signature (#343)
+
+`checksumOf(kind: Int, previous: UInt64, source: Bytes) -> UInt64` is a pure built-in: codes 0–4
+select CRC-32 (IEEE), CRC-32C, CRC-64/ECMA-182 as xz uses it, FNV-1a 32, and FNV-1a 64 in
+[[Eval Checksum]]. [[Std Checksum]] is its only caller and the typed surface.
+
+Resolved Grill Log: a code rather than a named sum because a wired-in signature cannot name a type a
+library declares; an unknown code or a `previous` outside `UInt64` aborts with `E7001` rather than
+answering a checksum of nothing.

@@ -68,13 +68,60 @@ jobs:
       # ones no test reaches were never checked at all. The fixtures are
       # excluded because many of them are programs that must fail to check.
       - name: Verify the standard library and examples compile
-        run: cabal run -v0 pudu -- check $(find lib examples -name '*.pudu')
+        run: cabal run -v0 pudu -- check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
+      # The documentation promises that every example is a complete program
+      # that runs as written, and the playground opens on its examples. A
+      # documentation edit that broke one used to reach readers unnoticed.
+      - name: Verify every documentation and playground example runs
+        run: python3 test/docs-examples.py --pudu "$PUDU" --run
+      # The website is a Pudu program too: nothing else compiles it, formats
+      # it, or runs its suites. `PUDU` is what the playground suite's sandbox
+      # runs programs with, so it exercises the compiler this job built.
+      - name: Verify the website compiles, is formatted, and passes its suites
+        run: |
+          "$PUDU" check $(find website/src -name '*.pudu')
+          "$PUDU" fmt --check website/src website/playground/examples
+          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu
+      - name: Verify package discovery lists every topic result past the search cap
+        run: node --test website/scripts/packages/discover.test.mjs
+      - name: Verify the playground paints Pudu as the documentation does
+        run: node --test website/scripts/syntax-parity.test.mjs
+      - name: Verify packages install and publish through git and a stand-in GitHub
+        run: python3 test/package-registry.py --pudu "$PUDU"
+      - name: Verify pudu install adds, moves, restores, and removes packages from a terminal
+        run: python3 test/package-install.py --pudu "$PUDU"
+      # The sandbox fails closed: asked to isolate a program on a host where it
+      # cannot, it runs nothing and says so with its own status.
+      - name: Verify the playground sandbox refuses to run unisolated
+        run: |
+          work="$(mktemp -d)"
+          printf 'module Main\n\nfn main() -> Int {\n  0\n}\n' > "$work/Main.pudu"
+          set +e
+          PATH=/usr/bin:/bin website/playground/sandbox.sh --workdir "$work" --program Main.pudu \
+            --compiler "$PUDU" --library packages/pudu/v0.1/lib --isolation bwrap \
+            --memory-mb 64 --cpu-seconds 2 --
+          status=$?
+          set -e
+          if command -v bwrap >/dev/null; then
+            echo "bubblewrap is installed on this runner; the refusal path is not what ran"
+          else
+            test "$status" -eq 125
+          fi
+      - name: Verify the Linguist submission is consistent
+        run: python3 scripts/linguist.py check --pudu "$PUDU"
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
+      # A merge that changes only documentation, the website, or the examples
+      # must never publish a release; the decision the release workflow asks is
+      # held to that here, where every change is checked.
+      - name: Verify only a compiler change at a new version releases
+        run: python3 test/release-plan.test.py
       - name: Verify the language server answers a real session
         run: node test/lsp-session.mjs "$PUDU"
       - name: Verify the language server survives what an editor sends it
         run: node test/lsp-robustness.mjs "$PUDU"
+      - name: Verify a watched program starts again for its sources and its --also paths
+        run: node test/watch.mjs "$PUDU"
       # A running process is the only place this can be checked: the request
       # arrives from outside, and what is under test is what a program already
       # running does with it.
@@ -104,6 +151,11 @@ jobs:
       # to be deliberate.
       - name: Verify the fixtures still reach as much of the library
         run: node test/api-coverage.mjs "$PUDU"
+      # Peak memory is a property of the whole process, which a program cannot
+      # observe, so it is measured from outside: a streaming reader must hold
+      # as much at ten times the input, and a buffered control must not.
+      - name: Verify a streaming reader holds as much at ten times the input
+        run: python3 test/residency.py "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

@@ -41,7 +41,7 @@ import Pudu.Type.Env
   , emptyDeclared
   , freshVariable
   )
-import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, restrictedBy)
+import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, nominalKey, restrictedBy)
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -210,6 +210,7 @@ rejectUnknownQualifiedType declared typeSpan path
 builtinTypeNames :: [Text]
 builtinTypeNames =
   [ "Array", "Str", "Bytes", "Buckets", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
+  , "Range"
   , "Int", "UInt", "BigInt", "Decimal", "Float", "Float32", "Float64"
   , "Int8", "Int16", "Int32", "Int64", "Int128"
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
@@ -242,12 +243,21 @@ formNamed declared rigid path arguments
       its own that unified with nothing. An argument count that does not match
       is left nominal, so the mismatch is reported where the name is used
       rather than silently half-applied. -}
-  | otherwise = case Map.lookup pathText (declaredAliases declared) of
+  | otherwise = case aliasFor of
       Just (parameters, aliased)
         | length parameters == length arguments ->
             expandAlias (zip parameters arguments) aliased
-      _ -> NominalType (Map.findWithDefault fallback pathText (declaredNames declared)) arguments
+      _ -> NominalType identity arguments
  where
+  identity = Map.findWithDefault fallback pathText (declaredNames declared)
+  {-| An alias is found by the name written, or by the declaration that name
+      reaches. A record declared in one module can name an alias another
+      module declares, and a third module forms that field with its own names,
+      where the qualifier the record's module wrote means nothing: only the
+      declaration it identifies does. -}
+  aliasFor = case Map.lookup pathText (declaredAliases declared) of
+    Just found -> Just found
+    Nothing -> Map.lookup (nominalKey identity) (declaredAliases declared)
   pathText = moduleNameText path
   name = lastSegment path
   unqualified = pathText == name
@@ -436,7 +446,17 @@ collectOne owner declared (Located _ declaration) = case declaration of
     case locatedValue (typeDefinition value) of
       RecordDefinition fields -> do
         formed <- mapM (formField declared rigid) fields
-        pure declared{declaredFields = Map.insert identity formed (declaredFields declared)}
+        let mutable =
+              [ (identity, locatedValue (fieldName field))
+              | Located _ field <- fields
+              , fieldMutable field
+              ]
+        pure
+          declared
+            { declaredFields = Map.insert identity formed (declaredFields declared)
+            , declaredMutableFields =
+                foldr Set.insert (declaredMutableFields declared) mutable
+            }
       SumDefinition variants -> do
         entries <- mapM (formVariant declared rigid identity) variants
         let named =

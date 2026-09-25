@@ -8,13 +8,17 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (peekKind, runParser)
 import Pudu.Frontend.Syntax
-  ( BindingKind (..)
+  ( ArrayRest (..)
+  , BindingKind (..)
   , Block (..)
   , Declaration (..)
   , Expression (..)
+  , FieldPattern (..)
   , Literal (..)
   , Located (..)
+  , Pattern (..)
   , Statement (..)
+  , moduleNameText
   )
 import Pudu.Frontend.Token (TokenKind (..))
 import Pudu.Source (SourceName (SourceName), newSource, spanEnd, spanStart, unOffset)
@@ -31,6 +35,7 @@ parserBlockProperties =
   , ("nested blocks resolve the parser recursion", testNesting)
   , ("unclosed and unrecognized statements recover exactly", testRecovery)
   , ("loops and jumps parse as statements", testLoopStatements)
+  , ("a binding takes a value apart", testDestructuringBindings)
   , ("a statement ends at the line break", testAdjacentStatements)
   , ("long statement lists stay linear while brace floods share the budget", testHostileBlocks)
   ]
@@ -107,6 +112,43 @@ testReturnStatements = do
     , counterexample "return does not absorb the next line"
         (shape bareBeforeStatement === "[return]=>f()")
     , codes bareBeforeStatement === []
+    ]
+
+{-| `let PATTERN = value` with no fallback, which takes a value apart.
+
+    The `else` decides which statement it is, and each form asks the opposite
+    thing of the pattern: with a fallback the pattern must be able to fail,
+    without one it must not test anything a binding could not recover from. -}
+testDestructuringBindings :: IO Property
+testDestructuringBindings = do
+  record <- parse "{\n  let {x, y} = point\n}"
+  tuple <- parse "{\n  let (a, b) = pair\n}"
+  sequenced <- parse "{\n  let [head, ..rest] = items\n}"
+  mutable <- parse "{\n  var {x} = point\n}"
+  annotated <- parse "{\n  let {x}: Point = point\n}"
+  named <- parse "{\n  let value = 1\n}"
+  fallible <- parse "{\n  let Some(found) = value\n}"
+  withFallback <- parse "{\n  let Some(found) = value else { return 0 }\n}"
+  irrefutableFallback <- parse "{\n  let (a, b) = pair else { return 0 }\n}"
+  pure $ conjoin
+    [ counterexample "a record is taken apart by field"
+        (shape record === "[let {x,y}=point]")
+    , counterexample "a tuple is taken apart by position"
+        (shape tuple === "[let (a,b)=pair]")
+    , counterexample "a sequence is taken apart by position"
+        (shape sequenced === "[let [head,..rest]=items]")
+    , counterexample "var binds parts that may be assigned"
+        (shape mutable === "[var {x}=point]")
+    , counterexample "an annotation describes the subject"
+        (shape annotated === "[let {x}=point]")
+    , counterexample "a lowercase name after let is still an ordinary binding"
+        (shape named === "[let value=1]")
+    , counterexample "a pattern that tests a tag needs somewhere to go"
+        (codes fallible === ["E1059"])
+    , counterexample "a fallback admits a pattern that can fail"
+        (codes withFallback === [])
+    , counterexample "a fallback needs a pattern that can fail"
+        (codes irrefutableFallback === ["E1057"])
     ]
 
 testNesting :: IO Property
@@ -230,7 +272,41 @@ statementShape (Located _ statement) = case statement of
       <> foldMap ((" " <>) . expressionShape) value
   ContinueStatement label -> "continue" <> foldMap (\name -> "@" <> locatedValue name) label
   LetElseStatement _ subject _ -> "let else=" <> expressionShape subject
+  LetPatternStatement bindingKind pattern' _ subject ->
+    bindingKindText bindingKind <> " " <> patternShape pattern' <> "=" <> expressionShape subject
   InvalidStatement -> "invalid"
+
+patternShape :: Located Pattern -> Text
+patternShape (Located _ value) = case value of
+  WildcardPattern -> "_"
+  BindingPattern name -> locatedValue name
+  LiteralPattern _ -> "literal"
+  RangePattern{} -> "range"
+  TuplePattern members -> "(" <> Text.intercalate "," (map patternShape members) <> ")"
+  ArrayPattern prefix rest suffix ->
+    "[" <> Text.intercalate ","
+      (map patternShape prefix <> foldMap (pure . restShape) rest <> map patternShape suffix)
+      <> "]"
+  ConstructorPattern path arguments ->
+    moduleNameText path
+      <> if null arguments then Text.empty
+         else "(" <> Text.intercalate "," (map patternShape arguments) <> ")"
+  RecordPattern path fields rest ->
+    maybe Text.empty moduleNameText path
+      <> "{" <> Text.intercalate "," (map fieldShape fields)
+      <> (if rest then ",.." else Text.empty) <> "}"
+  AlternativePattern alternatives -> Text.intercalate "|" (map patternShape alternatives)
+  InvalidPattern -> "invalid"
+
+restShape :: ArrayRest -> Text
+restShape rest = case rest of
+  IgnoredRest _ -> ".."
+  BoundRest name -> ".." <> locatedValue name
+
+fieldShape :: Located FieldPattern -> Text
+fieldShape (Located _ field) =
+  locatedValue (fieldPatternName field)
+    <> maybe Text.empty (\value -> ":" <> patternShape value) (fieldPatternValue field)
 
 declarationShape :: Located Declaration -> Text
 declarationShape (Located _ declaration) = case declaration of

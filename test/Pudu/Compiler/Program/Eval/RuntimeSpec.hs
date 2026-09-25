@@ -28,6 +28,7 @@ testRuntimeEvaluation = do
   named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
   ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
   acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
+  aliasDispatch <- runEntry "test-fixtures/aliasdispatch/Main.pudu"
   sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   longLoops <- runEntry "test-fixtures/stdlib/UsesLongLoops.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
@@ -60,6 +61,7 @@ testRuntimeEvaluation = do
   spawned <- runEntry "test-fixtures/stdlib/UsesProcessAll.pudu"
   datedAndSqueezed <- runEntry "test-fixtures/stdlib/UsesCivilGzipLogAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
+  filesystem <- runEntry "test-fixtures/stdlib/UsesFs.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
   appliedAndShown <- runEntry "test-fixtures/stdlib/UsesFunctionShowAll.pudu"
@@ -69,8 +71,78 @@ testRuntimeEvaluation = do
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
+  places <- runEntry "test-fixtures/stdlib/UsesPlaces.pudu"
+  schedules <- runEntry "test-fixtures/stdlib/UsesCronAll.pudu"
+  statistics <- runEntry "test-fixtures/stdlib/UsesStatsAll.pudu"
+  settings <- runEntry "test-fixtures/stdlib/UsesDotenvAll.pudu"
+  styled <- runEntry "test-fixtures/stdlib/UsesTermAll.pudu"
+  awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
+  coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
+  siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
+  written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
+  quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
+  addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
-    [ {-| Every export of the character module, each predicate asked once of a
+    [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
+          lent with &mut and handed back after a plain finish, `return`, and
+          `?`, through methods, trait-qualified calls, and a place lent on. -}
+      counterexample "a place is written, lent, and handed back on every exit"
+        (places === Just "18")
+    {-| Every schedule export: macros, names, steps, the day-field union, a
+        date that never occurs, and each refusal's message. -}
+    , counterexample "a schedule fires at the minutes its fields name"
+        (schedules === Just "18")
+    {-| Every statistic against a stated answer, and no answer invented for a
+        sample too small to have one. -}
+    , counterexample "statistics answer for enough data and refuse too little"
+        (statistics === Just "27")
+    , counterexample "an environment file reads, expands, renders back, and refuses by line"
+        (settings === Just "17")
+    , counterexample "terminal styles write the sequences they name and strip back to text"
+        (styled === Just "13")
+    {-| Futures, cancellation, races, and deadlines, including work that
+        crashes, a race entrant that crashes first, and a wait on a token
+        with no deadline for a future whose work crashed. -}
+    , counterexample "a future settles once, even when its work crashes"
+        (awaited === Just "30")
+    {-| Pools, semaphores, latches, wait groups, run-once values, and retry
+        policies, including crashing jobs and guarded actions, an extra
+        release, a full queue holding a producer back, and backoff that
+        saturates instead of overflowing. -}
+    , counterexample "coordination survives crashes, over-release, and contention"
+        (coordinated === Just "39")
+    {-| Values in order, an empty scope, a typed failure and a crash each
+        cancelling a sibling that would otherwise wait forever, a cancelled
+        parent reaching every action, every action finished on return, and the
+        causing failure kept over one that follows the cancellation. -}
+    , counterexample
+        "a scope cancels its siblings on the first failure and outlives none of them"
+        (siblings === Just "7")
+    {-| Pages written where hosts serve them, unsafe paths and failed pages
+        refused, unchanged files left alone, one worker and eight agreeing,
+        and each host's layout and routing. -}
+    , counterexample "a site builds for its host and rewrites only what changed"
+        (built === Just "28")
+    {-| Each checksum's published check value, chunked updates equal to the
+        whole, and a one-bit change moving every one. -}
+    , counterexample "checksums match their published values and chain over chunks"
+        (checked === Just "15")
+    {-| Every kind of value answers toText with the text interpolation writes,
+        a declared toText wins even through a type parameter, the method binds
+        its receiver as a value, and bytes keep their refusing form. -}
+    , counterexample "every value answers toText, and a declared one wins"
+        (written === Just "12")
+    {-| Byte sizes and durations read and written, with overflow at Int's
+        limits refused rather than stopping the program. -}
+    , counterexample "quantities read strictly and write back to what they read"
+        (quantities === Just "44")
+    {-| Addresses and networks in both families: canonical rendering, every
+        refusal, and a mapped IPv4 peer still held by an IPv4 allowlist. -}
+    , counterexample "addresses parse strictly, render canonically, and match networks"
+        (addressed === Just "55")
+    , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}
       counterexample
@@ -83,7 +155,7 @@ testRuntimeEvaluation = do
         found to refuse rather than answer nothing. -}
     , counterexample
         "every text operation answers what it says it answers"
-        (textual === Just "82")
+        (textual === Just "91")
     {-| Every export of the option and result modules, each asked of a value
         that is there and one that is not. These two exist for the absent
         case, so a check that only covered the present one would be the half
@@ -155,7 +227,7 @@ testRuntimeEvaluation = do
         and each answers nothing rather than saying which. -}
     , counterexample
         "every digest agrees with its published answer and nothing changed opens"
-        (digested === Just "48")
+        (digested === Just "59")
     {-| Every export of the test, printing and generator modules. The test
         module is checked by making it fail: a suite where everything holds
         exercises none of the reporting that exists for the case a reader
@@ -192,7 +264,7 @@ testRuntimeEvaluation = do
         back from its output, and output larger than one read can carry. -}
     , counterexample
         "a program that fails still ran and its two streams stay apart"
-        (spawned === Just "37")
+        (spawned === Just "47")
     {-| Every export of the calendar, compression and logging modules. The
         calendar is asked in both directions from the same pair, since a reader
         and a writer that shifted a day the same way agree with each other
@@ -213,6 +285,13 @@ testRuntimeEvaluation = do
     , counterexample
         "every file operation writes what can be read back"
         (files === Just "45")
+    {-| The file operations whose safety depends on being one step: a file
+        replaced by renaming a staged copy over it, a temporary name claimed by
+        creating it, containment decided on the real location a link resolves
+        to, and a tree removed without following the links inside it. -}
+    , counterexample
+        "a filesystem operation that must be one step is one step"
+        (filesystem === Just "19")
     {-| Every export of the byte module, with the two orders checked against
         each other as well as against their own answers: a pair of functions
         that agreed with each other but not with the wire would pass every
@@ -268,7 +347,7 @@ testRuntimeEvaluation = do
         boundary is still one line. -}
     , counterexample
         "a stream reads and writes without holding the whole file"
-        (streams === Just "21")
+        (streams === Just "27")
     {-| A path is decided by reading it rather than by asking the file system,
         so it needs nothing to exist and does not follow a link. -}
     , counterexample
@@ -299,9 +378,11 @@ testRuntimeEvaluation = do
     , counterexample
         "threads share a channel, a lock, and a cell without losing a write"
         (threads === Just "32")
+    , counterexample "an import alias spelled like a type does not take over its methods"
+        (aliasDispatch === Just "224")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "107")
+        (enterpriseSsr === Just "109")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")
@@ -328,7 +409,7 @@ testRuntimeEvaluation = do
         this and they did not agree, silently. -}
     , counterexample
         "a count and a whole number are read differently"
-        (numbers === Just "25")
+        (numbers === Just "28")
     {-| That a record may be written as another record with some fields
         different. Without it, changing one field of a ten-field record means
         writing the other nine out — nine chances to copy one wrong, with the

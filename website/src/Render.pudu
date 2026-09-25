@@ -7,19 +7,18 @@ import Std.Json as Json
 import Std.Option as Option
 import Config as Config
 import Error as SiteError
-import Service.Catalog as Catalog
+import Site as Site
 import Web.Routes as Web
 
 fn main() -> Int {
   match Config.load() {
     case Err(problem) => failed(&problem)
     case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
+      match Site.load(&settings) {
         case Err(problem) => failed(&problem)
-        case Ok(catalog) => {
+        case Ok(site) => {
           let target = Option.unwrapOr(Env.at(0), "/")
-          let response = Web.render(settings.siteUrl, &catalog, target)
-          let _written = Io.writeLine(envelope(&response))
+          let _written = Io.writeLine(envelope(&Web.render(&site, target)))
           0
         }
       }

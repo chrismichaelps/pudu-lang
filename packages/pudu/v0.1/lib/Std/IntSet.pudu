@@ -103,7 +103,7 @@ export fn insert(set: &IntSet, value: Int) -> IntSet {
     case Empty => Tip(value)
     case Tip(x) => {
       if x == value {
-          *set
+        *set
       } else {
         join(value, Tip(value), x, Tip(x))
       }
@@ -279,7 +279,7 @@ fn diffTwoBins(
   } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
     if zeroBit(p1, m2) { difference(left, l2) } else { difference(left, r2) }
   } else {
-      *left
+    *left
   }
 }
 

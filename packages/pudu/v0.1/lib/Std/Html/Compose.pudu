@@ -1,6 +1,7 @@
 module Std.Html.Compose
 
 import Std.Html as Html
+import Std.Html.Ssr as Ssr
 
 /// An ordered, persistent sequence of typed views.
 export type Content = { nodes: Array[Html.Html] }
@@ -16,6 +17,7 @@ export trait Composition {
   fn add(self: &Self, view: Html.Html) -> Self
   fn each[T](self: &Self, items: Array[T], view: fn(T) -> Html.Html) -> Self
   fn when(self: &Self, condition: Bool, view: Html.Html) -> Self
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Html.Html) -> Self
   fn fragment(self: &Self) -> Html.Html
   fn article(self: &Self) -> Html.Html
   fn section(self: &Self) -> Html.Html
@@ -48,6 +50,10 @@ impl Composition for Content {
     if condition { Content{nodes: self.nodes.push(view)} } else { *self }
   }
 
+  fn whenBuilt(self: &Self, condition: Bool, builder: fn() -> Html.Html) -> Self {
+    if condition { Content{nodes: self.nodes.push(builder())} } else { *self }
+  }
+
   fn fragment(self: &Self) -> Html.Html { Html.fragment(&self.nodes) }
   fn article(self: &Self) -> Html.Html { Html.tag("article", &self.nodes) }
   fn section(self: &Self) -> Html.Html { Html.tag("section", &self.nodes) }
@@ -63,13 +69,34 @@ export fn documentIn(language: Str, title: Str, body: Content) -> Html.Html {
   shell(&[("lang", language)], title, body)
 }
 
+/// A reusable document shell whose body is one complete typed child slot.
+export fn documentShell(title: Str, bodySlot: Str) -> Ssr.Shell {
+  typedShell(&[], title, bodySlot)
+}
+
+/// A reusable language-qualified document shell with one complete body slot.
+export fn documentShellIn(language: Str, title: Str, bodySlot: Str) -> Ssr.Shell {
+  typedShell(&[("lang", language)], title, bodySlot)
+}
+
+fn fixedHead(title: Str) -> Html.Html {
+  Html.head(&[
+      Html.meta(&[("charset", "utf-8")]),
+      Html.meta(&[("name", "viewport"), ("content", "width=device-width, initial-scale=1")]),
+      Html.title(title)
+    ])
+}
+
 fn shell(attributes: &Array[(Str, Str)], title: Str, body: Content) -> Html.Html {
   Html.html(attributes, &[
-      Html.head(&[
-          Html.meta(&[("charset", "utf-8")]),
-          Html.meta(&[("name", "viewport"), ("content", "width=device-width, initial-scale=1")]),
-          Html.title(title)
-        ]),
+      fixedHead(title),
       Html.body(&[], &body.nodes)
+    ])
+}
+
+fn typedShell(attributes: &Array[(Str, Str)], title: Str, bodySlot: Str) -> Ssr.Shell {
+  Ssr.ShellElement("html", *attributes, [
+      Ssr.ShellFixed(fixedHead(title)),
+      Ssr.ShellElement("body", [], [Ssr.ShellSlot(bodySlot)])
     ])
 }

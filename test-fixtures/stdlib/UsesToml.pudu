@@ -105,6 +105,15 @@ export fn main() -> Int {
   // A key given twice is refused rather than silently taking the last.
   if let Err(_) = Read.read("a = 1\na = 2\n") { held = held + 1 }
 
+  // A key cannot write through a value: that would silently replace the value
+  // with a table.
+  if let Err(Toml.Duplicate(_)) = Read.read("a = 1\na.b = 2\n") { held = held + 1 }
+
+  // A repeated section cannot take over a key that already holds a value.
+  if let Err(Toml.Duplicate(_)) = Read.read("fruit = 1\n[[fruit]]\nname = \"x\"\n") {
+    held = held + 1
+  }
+
   // A string never closed is refused rather than running to the end.
   if let Err(_) = Read.read("a = \"unterminated\n") { held = held + 1 }
 
@@ -128,6 +137,16 @@ export fn main() -> Int {
   // A key needing quotes gets them, so what is written reads back.
   if Toml.renderKey("key with spaces") == "\"key with spaces\"" { held = held + 1 }
   if Toml.renderKey("plain_key") == "plain_key" { held = held + 1 }
+
+  // Nesting is read to its bound and refused past it where the list or inline
+  // table that passed it opens, rather than stopping the program.
+  if Result.isOk(&Read.read("a = " + "[".repeat(512) + "]".repeat(512) + "\n")) { held = held + 1 }
+  if let Err(Toml.TooDeep(516)) = Read.read("a = " + "[".repeat(100000) + "]".repeat(100000) + "\n") {
+    held = held + 1
+  }
+  if let Err(Toml.TooDeep(3076)) = Read.read("a = " + "\{ b = ".repeat(600) + "1" + " \}".repeat(600) + "\n") {
+    held = held + 1
+  }
 
   held
 }

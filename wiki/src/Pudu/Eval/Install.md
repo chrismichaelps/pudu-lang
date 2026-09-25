@@ -33,6 +33,9 @@ lastSegmentOf    :: NonEmpty Text -> Text
 
 ### Governance
 
+- `loadModuleDeclarationsWith` binds a constant from its folded value ([[Eval Frozen]]) when folding
+  produced one, and evaluates its initializer, in declaration order, when it did not.
+
 - The wired-in sums record their variants' owners exactly as a declared sum does. Without it an implementation written for `Option` or `Result` is looked for under `Some` or `Err`, and is never found.
 - **Order is the whole point.** Functions and variant constructors are installed before any constant
   runs, so mutual recursion and forward references work exactly as [[Name Resolution]] promised they
@@ -83,6 +86,19 @@ against it, then evaluate each constant in declaration order.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]
+
+## Cryptographic builtin installation
+
+Installs `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`, `hmacSha512Of`, and
+`constantTimeEqual` as pure builtin values beside the existing SHA-2 primitives.
+
+Resolved Grill Log: installation uses the canonical names from [[Eval Builtin Definition]] and does
+not add aliases whose spelling could obscure the selected algorithm.
+
+## Audio-kernel installation
+
+Installs `audioToneBytes` and `audioRampBytes` as pure builtin values. Resolved Grill Log: install
+their canonical low-level names for [[Std Audio Graph]] without exposing target-device vocabulary.
 
 ## Word-map cardinality kernel
 
@@ -148,7 +164,9 @@ unpacked IDs directly as an ArrayValue. No tests or measurements run.
 Binds the 12 primitive names in the initial evaluation environment:
 `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
 `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
-and `swissTableSize`. Each name maps to its corresponding `Builtin` constructor.
+and `swissTableSize`. Each name maps to its corresponding `Builtin` constructor. `csvRecords` binds
+`CsvRecordsBuiltin`, `jsonDecode` binds `JsonDecodeBuiltin`, `jsonEncode` binds `JsonEncodeBuiltin`, and
+`xmlDecode` binds `XmlDecodeBuiltin` the same way.
 
 Resolved Grill Log: Install all 12 primitives as first-class builtin values available at top-level scope without dynamic handle allocation.
 
@@ -167,6 +185,6 @@ Each name maps directly to its `BuiltinValue` in the runtime environment.
 - **Q:** Require manual import of columnar and hardware memory builtins? **A:** No; install them directly in the runtime environment matching existing buffer builtins for zero-cost primitive execution.
 - **Q:** How are permutation sort and binary search installed? **A:** Registered in `builtinValues` with their direct names (`columnSortIndicesU64`, etc.) so `Std.Column` delegates without intermediate shims.
 
+## Native checksum installation (#343)
 
-
-
+Installs `checksumOf` as a pure built-in value beside the digests, under its canonical name.

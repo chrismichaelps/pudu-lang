@@ -5,7 +5,9 @@ module Pudu.Compiler.Program.Common
   , messages
   , moduleNames
   , runEntry
+  , runEntryValue
   , runtimeCodes
+  , runtimeDetails
   , runtimeMessages
   ) where
 
@@ -19,19 +21,28 @@ import Pudu.Compiler.Program
   , rootCompileResult
   )
 import Pudu.Diagnostic
-  ( diagnosticCode
+  ( Diagnostic
+  , diagnosticCode
   , diagnosticCodeText
   , diagnosticHelp
   , diagnosticMessage
+  , diagnosticSpan
   )
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Source (spanEnd, spanStart, unOffset)
 
 {-| Compiles a Pudu root program and evaluates its "main" function, returning the rendered value. -}
 runEntry :: FilePath -> IO (Maybe Text)
-runEntry path = do
+runEntry path = fmap (fmap renderValue) (runEntryValue path)
+
+{-| Compiles and evaluates a program while preserving the raw entry value for
+    structural runtime assertions that have no source-visible rendering. -}
+runEntryValue :: FilePath -> IO (Maybe Value)
+runEntryValue path = do
   program <- compileProgram path
   case rootCompileResult program >>= compileModule of
     Nothing -> pure Nothing
@@ -41,28 +52,34 @@ runEntry path = do
           (programDependencies program)
           "main"
           parsed
-      pure (fmap renderValue (outcomeValue outcome))
+      pure (outcomeValue outcome)
 
 {-| Compiles and evaluates a program, extracting runtime diagnostic codes if aborted or static codes if failed. -}
 runtimeCodes :: FilePath -> IO [Text]
-runtimeCodes path = do
-  program <- compileProgram path
-  case rootCompileResult program >>= compileModule of
-    Nothing -> pure (map (diagnosticCodeText . diagnosticCode) (programDiagnostics program))
-    Just parsed -> do
-      outcome <- evaluateProgramEntry
-          (programIntegerKinds program)
-          (programDependencies program)
-          "main"
-          parsed
-      pure (map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics outcome))
+runtimeCodes path = map (diagnosticCodeText . diagnosticCode) <$> runtimeDiagnostics path
 
 {-| Compiles and evaluates a program, extracting runtime error message texts. -}
 runtimeMessages :: FilePath -> IO [Text]
-runtimeMessages path = do
+runtimeMessages path = map diagnosticMessage <$> runtimeDiagnostics path
+
+{-| Compiles and evaluates a program, preserving the complete stable contract
+    of each diagnostic: identity, wording, help, and source offsets. -}
+runtimeDetails :: FilePath -> IO [(Text, Text, Maybe Text, (Int, Int))]
+runtimeDetails path = map detail <$> runtimeDiagnostics path
+ where
+  detail finding =
+    ( diagnosticCodeText (diagnosticCode finding)
+    , diagnosticMessage finding
+    , diagnosticHelp finding
+    , let spanValue = diagnosticSpan finding
+       in (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+    )
+
+runtimeDiagnostics :: FilePath -> IO [Diagnostic]
+runtimeDiagnostics path = do
   program <- compileProgram path
   case rootCompileResult program >>= compileModule of
-    Nothing -> pure (map diagnosticMessage (programDiagnostics program))
+    Nothing -> pure (programDiagnostics program)
     Just parsed -> do
       outcome <-
         evaluateProgramEntry
@@ -70,7 +87,7 @@ runtimeMessages path = do
           (programDependencies program)
           "main"
           parsed
-      pure (map diagnosticMessage (outcomeDiagnostics outcome))
+      pure (outcomeDiagnostics outcome)
 
 {-| Derives the topologically sorted module names in the program dependency graph. -}
 moduleNames :: FilePath -> IO [Text]

@@ -1,0 +1,231 @@
+module View.Packages.Source
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Option as Option
+import Std.Url as Url
+import Domain.Entry as Domain
+import Service.Catalog as Catalog
+import Service.Packages as Packages
+import View.Markdown as Markdown
+import View.Packages.Frame as Frame
+import View.Packages.Highlight as Highlight
+import View.Packages.Reference as Reference
+
+/// The language a file extension names, as the file header shows it.
+const LANGUAGES: Map[Str, Str] = mapOf([
+    ("pudu", "Pudu"),
+    ("md", "Markdown"),
+    ("toml", "TOML"),
+    ("json", "JSON"),
+    ("txt", "Text"),
+    ("yml", "YAML"),
+    ("yaml", "YAML"),
+    ("js", "JavaScript"),
+    ("css", "CSS"),
+    ("html", "HTML")
+  ])
+
+/// Local icons for the source tree's known file types.
+const ICONS: Map[Str, Str] = mapOf([
+    ("pudu", "pudu.png"), ("md", "markdown.svg"), ("mdx", "markdown.svg"),
+    ("toml", "toml.svg"), ("json", "json.svg"), ("yaml", "yaml.svg"),
+    ("yml", "yaml.svg"), ("js", "js.svg"), ("mjs", "js.svg"),
+    ("css", "css.svg"), ("html", "html.svg"), ("htm", "html.svg")
+  ])
+
+/// The file a source page opens on: the README, the manifest, or the first file.
+export fn defaultFile(project: &Packages.Project) -> Str {
+  for wanted in ["README.md", "pudu.toml"] {
+    if project.files.contains(wanted) { return wanted }
+  }
+  if project.files.isEmpty() { "" } else { project.files[0] }
+}
+
+fn extensionOf(path: Str) -> Str {
+  let parts = nameOf(path).split(".")
+  if parts.length() < 2 || parts[0].isEmpty() { "" } else { parts[parts.length() - 1].toLower() }
+}
+
+fn nameOf(path: Str) -> Str {
+  let parts = path.split("/")
+  parts[parts.length() - 1]
+}
+
+/// The directory a file is in, ending in `/`, or the empty text at the top.
+fn directoryOf(path: Str) -> Str {
+  path.take(path.length() - nameOf(path).length())
+}
+
+/// The module a `.pudu` file under `src/` declares: `src/JsonKit/Parse.pudu` is `JsonKit.Parse`.
+export fn moduleOf(path: Str) -> Str {
+  if extensionOf(path) != "pudu" { return "" }
+  let inner = if path.startsWith("src/") { path.drop(4) } else { path }
+  inner.take(inner.length() - 5).split("/").join(".")
+}
+
+/// The directories and files directly under a directory, directories first.
+fn entriesUnder(files: &Array[Str], directory: Str) -> (Array[Str], Array[Str]) {
+  let prefix = if directory.isEmpty() { "" } else { directory + "/" }
+  var directories: Array[Str] = []
+  var leaves: Array[Str] = []
+  for file in *files {
+    if file.startsWith(prefix) {
+      let rest = file.drop(prefix.length())
+      let slash = rest.indexOf("/")
+      if slash < 0 { leaves = leaves.push(file) } else {
+        let child = prefix + rest.take(slash)
+        if !directories.contains(child) { directories = directories.push(child) }
+      }
+    }
+  }
+  (directories, leaves)
+}
+
+fn fileIcon(path: Str) -> H.Node {
+  let icon = Option.unwrapOr(ICONS.get(extensionOf(path)), "text.svg")
+  H.img().class("code-file-icon").src("/assets/packages/files/" + icon).alt("").at("width", "20").at("height", "20").at("loading", "lazy")
+}
+
+fn tree(project: &Packages.Project, directory: Str, selected: Str) -> H.Node {
+  let (directories, leaves) = entriesUnder(&project.files, directory)
+  var items: Array[H.Node] = []
+  for child in directories {
+    let folder = H.details().holding([
+        H.summary().class("code-folder").holding([H.span().class("code-icon code-icon-folder").at("aria-hidden", "true"), H.span().says(nameOf(child))]),
+        tree(project, child, selected)
+      ])
+    let open = selected.startsWith(child + "/") || directory.isEmpty()
+    items = items.push(H.li().class("code-tree-folder").at("data-path", child).holding([if open { folder.at("open", "") } else { folder }]))
+  }
+  for file in leaves {
+    let link = H.a().class("code-tree-link").href(Frame.sourcePath(project, file)).holding([fileIcon(file), H.span().says(nameOf(file))])
+    items = items.push(H.li().class("code-tree-file").at("data-path", file).holding([if file == selected { link.at("aria-current", "page") } else { link }]))
+  }
+  H.ul().class("code-tree").holding(items)
+}
+
+fn sidebar(project: &Packages.Project, selected: Str) -> H.Node {
+  H.aside().class("code-sidebar").holding([
+      H.div().class("code-sidebar-head").holding([
+          H.span().class("code-sidebar-title").says("Files"),
+          H.span().class("code-release").says(Option.unwrapOr(project.latest, "unreleased"))
+        ]),
+      H.labelFor().class("skip").at("for", "code-filter").says("Filter files"),
+      H.input().class("code-filter").id("code-filter").kind("search").placeholder("Filter files").at("autocomplete", "off"),
+      H.nav().label("Files").holding([tree(project, "", selected)]),
+      H.p().class("code-sidebar-foot").says(show(project.files.length()) + " files")
+    ])
+}
+
+fn crumbs(project: &Packages.Project, path: Str) -> H.Node {
+  var parts: Array[H.Node] = [H.a().href(Frame.tabPath(project, "source")).says(project.name)]
+  let segments = path.split("/")
+  var index = 0
+  for segment in segments {
+    parts = parts.push(H.span().class("code-crumb-slash").at("aria-hidden", "true").says("/"))
+    parts = parts.push(if index == segments.length() - 1 { H.strong().says(segment) } else { H.span().says(segment) })
+    index = index + 1
+  }
+  H.nav().class("code-crumbs").label("Path").holding(parts)
+}
+
+fn sizeText(bytes: Int) -> Str {
+  if bytes < 1024 { show(bytes) + " B" } else { show((bytes * 10 / 1024) / 10) + "." + show((bytes * 10 / 1024) % 10) + " KB" }
+}
+
+fn listing(text: Str, pudu: Bool) -> H.Node {
+  var rows: Array[H.Node] = []
+  var number = 1
+  for line in text.split("\n") {
+    let id = "L" + show(number)
+    rows = rows.push(H.span().class("code-line").id(id).holding([
+          H.a().class("code-number").href("#" + id).at("aria-label", "Line " + show(number)).says(show(number)),
+          H.span().class("code-text").holding(Highlight.line(line, pudu))
+        ]))
+    number = number + 1
+  }
+  H.pre().class("code-listing").holding([H.code().holding(rows)])
+}
+
+fn outline(project: &Packages.Project, moduleName: Str) -> H.Node {
+  let Some(catalog) = project.catalog else { return H.nothing() }
+  let entries = Catalog.moduleEntries(&catalog, moduleName)
+  if entries.isEmpty() { return H.nothing() }
+  H.aside().class("code-outline").holding([
+      H.p().class("package-label").says("Declarations"),
+      H.p().class("code-outline-module").holding([H.code().says(moduleName)]),
+      H.ul().holding(entries.map(|entry: Domain.Entry| H.li().holding([
+              H.a().href(Frame.tabPath(project, "docs") + "#" + Reference.anchorOf(moduleName, entry.kind, entry.name)).holding([
+                  H.span().class("code-outline-kind").says(entry.kind),
+                  H.span().says(entry.name)
+                ])
+            ])))
+    ])
+}
+
+fn blobUrl(project: &Packages.Project, path: Str) -> Str {
+  let revision = match Packages.latestRelease(project) {
+    case Some(release) => if release.commit.isEmpty() { release.tag } else { release.commit }
+    case None => ""
+  }
+  var encoded: Array[Str] = []
+  for segment in path.split("/") { encoded = encoded.push(Url.encodeComponent(segment)) }
+  project.repository + "/blob/" + revision + "/" + encoded.join("/")
+}
+
+fn card(packages: &Packages.Packages, project: &Packages.Project, path: Str) -> Option[H.Node] {
+  let extension = extensionOf(path)
+  let language = Option.unwrapOr(LANGUAGES.get(extension), if extension.isEmpty() { "File" } else { extension.toUpper() })
+  let text = Packages.fileText(packages, project, path)
+  let bytes = Packages.fileBytes(packages, project, path) ?
+  let body = match text {
+    case Some(held) => if extension == "md" {
+      let read = Markdown.parseReadme(&held.split("\n"), &Frame.fileTargets(project, directoryOf(path)))
+      H.div().class("code-preview doc").holding((if read.title.isEmpty() { [] } else { [H.h1().says(read.title)] }).concat(read.blocks))
+    } else { listing(held, extension == "pudu") }
+    case None => H.p().class("code-binary").says("This release includes a binary file. There is no text preview.")
+  }
+  let lines = match text {
+    case Some(held) => [H.span().says(show(held.split("\n").length()) + " lines")]
+    case None => []
+  }
+  let head = H.header().class("code-card-head").holding([
+      H.div().class("code-card-title").holding([fileIcon(path), H.h1().says(nameOf(path))]),
+      H.p().class("code-card-meta").holding([H.span().says(language)].concat(lines).concat([H.span().says(sizeText(bytes.length()))])),
+      H.div().class("code-card-actions").holding([
+          H.button().class("install-copy code-action").kind("button").at("data-copy", path).at("aria-label", "Copy the path").says("Copy path"),
+          H.a().class("code-action").href(blobUrl(project, path)).at("rel", "external noopener noreferrer").says("GitHub ↗")
+        ])
+    ])
+  Some(H.article().class("code-card").holding([head, body]))
+}
+
+/// One file of the latest release in the code view: the file tree, the path,
+/// the file itself, and for a module the declarations it makes. `None` when
+/// the release has no such file.
+export fn page(siteUrl: Str, packages: &Packages.Packages, project: &Packages.Project, file: Str) -> Option[Html.Html] {
+  let chosen = if file.isEmpty() { defaultFile(project) } else { file }
+  let version = Option.unwrapOr(project.latest, "")
+  if chosen.isEmpty() {
+    return Some(Frame.page(siteUrl, packages, project, "source", project.name + " source", "The source of " + project.name + ".", [
+          H.section().class("package-body").holding([H.p().says("No release has been published yet, so there is no source to show.")])
+        ]))
+  }
+  let shown = card(packages, project, chosen) ?
+  let canonical = if file.isEmpty() { Frame.tabPath(project, "source") } else { Frame.sourcePath(project, chosen) }
+  Some(Frame.pageAt(siteUrl, packages, project, "source", canonical, chosen + " · " + project.name, "The source of " + chosen + " in " + project.name + " " + version + ".", [
+        H.div().class("code-view").holding([
+            sidebar(project, chosen),
+            H.section().class("code-main").at("data-code-main", "").at("aria-live", "polite").holding([
+                crumbs(project, chosen),
+                H.div().class("code-body").holding([shown, outline(project, moduleOf(chosen))])
+              ])
+          ])
+      ]))
+}
+
+/// Every address the source tab answers for a project.
+export fn paths(project: &Packages.Project) -> Array[Str] {
+  [Frame.tabPath(project, "source")].concat(project.files.map(|file: Str| Frame.sourcePath(project, file)))
+}

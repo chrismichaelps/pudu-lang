@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/lib/Std/Ui.pudu"
+path: "@root/packages/pudu/v0.1/lib/Std/Ui.pudu"
 fidelity: Active
 domain: "[[Standard Library]]"
 subsystem: "[[architecture/STDLIB]]"
@@ -22,11 +22,19 @@ twice with the same state gives the same view, so the difference between two ren
 difference the state made, and a screen can be checked by comparing values rather than by driving
 one.
 
-The difference between two views is computed by walking both together. A node whose element name
+The difference between two views is computed by walking both together with an explicit stack, so
+screen depth does not consume evaluator call frames. Child pairs enter the stack in reverse order,
+preserving document-order changes and keeping a node's attribute change before its descendants. A node whose element name
 changed is replaced whole rather than reconciled, because an element that became a different element
 shares nothing with what it was and pretending otherwise produces a wrong tree that renders
 plausibly. Text and attributes are compared in place. A path names a node by the indices that reach
 it from the root, which is a value both ends can hold without either keeping a copy of the tree.
+
+Applying a change also treats depth as data. It walks the path iteratively while retaining each
+ancestor and selected child index, changes the target, then rebuilds the immutable ancestors from
+the leaf back to the root. An invalid path leaves the original screen unchanged. This gives patch
+application the same depth safety as comparison without introducing mutable view nodes or changing
+the public value model.
 
 **Where an event is answered is a property of the event.** The established server-rendered model
 sends every interaction to the server and waits, so a control that could have answered immediately
@@ -34,6 +42,7 @@ waits for the network, and a viewer holds server state for as long as they are l
 event says which it is: one that only needs what is already on the screen is answered where it
 happened, and one that needs what only the server knows makes the trip. That distinction is in the
 event's type, so a component states it once rather than a framework guessing per interaction.
+
 ## Grill Log
 - **Q:** Reconcile two elements of different names by matching their children? **A:** No.
   _Rationale:_ an element that became a different element shares nothing with what it was; matching
@@ -49,5 +58,14 @@ event's type, so a component states it once rather than a framework guessing per
 - **Q:** Let a component read the clock or a connection? **A:** No. _Rationale:_ a component that is
   not a function of its state cannot be compared, and comparison is how every check here works.
   _Rejected:_ effects inside render.
+- **Q:** Let view nesting determine comparison call depth? **A:** No. _Rationale:_ nesting is data,
+  not control flow, and a valid screen must not stop an application when compared. _Accepted:_ an
+  explicit stack that retains preorder change semantics. _Rejected:_ a provisional depth cap;
+  recursive comparison guarded only by the evaluator's global frame limit.
+- **Q:** Make comparison depth-safe while leaving patch application recursive? **A:** No.
+  _Rationale:_ the two ends rely on `applied(before, changes(before, after))`; making only the first
+  half robust leaves the actual synchronization path able to stop the application. _Accepted:_
+  iterative descent plus bottom-up immutable reconstruction. _Rejected:_ mutable nodes; an
+  application-only depth limit; documenting deep patches as unsupported.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Html]] · [[ADR-0016 An Application Is a Value]] · [[architecture/STDLIB]]

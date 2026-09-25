@@ -29,6 +29,8 @@ The socket acquisition is bracketed until the handshake succeeds, so timeout or 
 cannot leave an untracked descriptor behind. Timed send/receive invalidates the connection because
 interrupting a TLS record leaves protocol state indeterminate. Deadline-bounded close attempts the
 protocol goodbye only within its remaining budget, then closes the socket unconditionally.
+Host failures and every quiet cleanup go through `trySynchronous` from [[Eval Io]], so an interrupt
+during a handshake, a read, or a close stops the program instead of being reported as a failure.
 ## Negative Logic (Prohibited Paths)
 - No parameter, environment variable, or code path that weakens or skips verification.
 - No token reuse: a closed connection's token never names a later one.

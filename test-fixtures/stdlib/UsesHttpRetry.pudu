@@ -14,7 +14,7 @@ fn answer(code: Int, reason: Str) -> Http.Response {
 }
 
 fn request(method: Http.Method, headers: Array[(Str, Str)]) -> Http.Request {
-  Http.Request{method: method, target: "/orders", headers: headers, body: ""}
+  Http.Request{method: method, target: "/orders", headers: headers, body: "", binaryBody: None}
 }
 
 /// A policy given both a count and a budget, through the trait rather than

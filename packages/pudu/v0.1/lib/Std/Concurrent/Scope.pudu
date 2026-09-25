@@ -1,0 +1,76 @@
+module Std.Concurrent.Scope
+
+import Std.Concurrent.Cancel as Cancel
+import Std.Concurrent as Concurrent
+import Std.Concurrent.Future as Future
+import Std.Option as Option
+
+/// Why a scope failed: an action's own failure, or a crash, including a
+/// thread that could not be started.
+export type ScopeError[E]
+  = Failed(E)
+  | Crashed(Concurrent.ConcurrentError)
+
+/// How long the scope sleeps between looks at its actions.
+const WATCH_MILLIS: Int = 5
+
+/// Why the shared token fires when an action fails.
+const SIBLING_FAILED: Str = "a sibling failed"
+
+/// Run every action on its own thread with one child token of `parent`, and
+/// answer every value in input order, or the first failure seen.
+///
+/// The first failure cancels the shared token. The answer comes only after
+/// every started action has finished, so no thread outlives the call.
+export fn all[T, E](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> Result[T, E]]) -> Result[Array[T], ScopeError[E]] {
+  let stop = Cancel.child(parent)
+  var pending: Array[Future.Future[Result[T, E]]] = []
+  var first: Option[ScopeError[E]] = None
+  for action in actions {
+    match Future.start(fn() -> Result[T, E] { action(stop) }) {
+      case Ok(started) => { pending = pending.push(started) }
+      case Err(problem) => {
+        first = Some(Crashed(problem))
+        let _cancelled = Cancel.cancel(&stop, SIBLING_FAILED)
+        break
+      }
+    }
+  }
+
+  var finished: Array[Int] = []
+  while finished.length() < pending.length() {
+    var index = 0
+    for watched in pending {
+      if finished.indexOf(index) < 0 && Future.isDone(&watched) {
+        finished = finished.push(index)
+        if Option.isNone(&first) {
+          if let Some(problem) = failureOf(Future.wait(&watched)) {
+            first = Some(problem)
+            let _cancelled = Cancel.cancel(&stop, SIBLING_FAILED)
+          }
+        }
+      }
+      index = index + 1
+    }
+    if finished.length() < pending.length() { let _slept = Concurrent.sleep(WATCH_MILLIS) }
+  }
+
+  if let Some(problem) = first { return Err(problem) }
+  var values: Array[T] = []
+  for settled in pending {
+    match Future.wait(&settled) {
+      case Ok(Ok(value)) => { values = values.push(value) }
+      case Ok(Err(problem)) => { return Err(Failed(problem)) }
+      case Err(problem) => { return Err(Crashed(problem)) }
+    }
+  }
+  Ok(values)
+}
+
+fn failureOf[T, E](outcome: Result[Result[T, E], Concurrent.ConcurrentError]) -> Option[ScopeError[E]] {
+  match outcome {
+    case Ok(Ok(_)) => None
+    case Ok(Err(problem)) => Some(Failed(problem))
+    case Err(problem) => Some(Crashed(problem))
+  }
+}

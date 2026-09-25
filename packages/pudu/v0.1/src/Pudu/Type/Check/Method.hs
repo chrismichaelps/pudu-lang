@@ -42,6 +42,7 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindImportedMethod
   , bindName
+  , recordDeclaredMethod
   , implementsTrait
   , ambiguousProviders
   , markAmbiguousMethod
@@ -114,10 +115,11 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
   let rigid = ("Self", 0) : traitParams <> functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
-  bindName (methodKey owner (locatedValue (functionName method)))
-    ( polytype rigid (bounds <> declareBounds declared method)
-        (FunctionTypeValue (functionAsync method) inputs result)
-    )
+  let scheme =
+        polytype rigid (bounds <> declareBounds declared method)
+          (FunctionTypeValue (functionAsync method) inputs result)
+  bindName (methodKey owner (locatedValue (functionName method))) scheme
+  recordDeclaredMethod owner (locatedValue (functionName method)) scheme
 
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
@@ -202,7 +204,11 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
       when localCollision $
         markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
       mapM_ (recordMethodProvider key) providing
-      if rejectCollision then bindImportedMethod key scheme else bindName key scheme
+      if rejectCollision
+        then bindImportedMethod key scheme
+        else do
+          bindName key scheme
+          recordDeclaredMethod owner (locatedValue (functionName method)) scheme
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}

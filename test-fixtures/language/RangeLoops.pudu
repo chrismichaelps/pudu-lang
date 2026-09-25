@@ -1,0 +1,83 @@
+module RangeLoops
+
+/// Walking a range, in every shape a loop takes.
+///
+/// A range is walked from its own ends rather than turned into an array first,
+/// so the last loop here counts to twenty million while holding nothing: if it
+/// ever builds what it counts, this fixture stops finishing.
+
+export fn main() -> Int {
+  var exclusive = 0
+  for n in 0..5 {
+    exclusive = exclusive + n
+  }
+
+  var inclusive = 0
+  for n in 0..=5 {
+    inclusive = inclusive + n
+  }
+
+  var overEmpty = 0
+  for n in 3..3 {
+    overEmpty = overEmpty + 1
+  }
+
+  var overReversed = 0
+  for n in 5..1 {
+    overReversed = overReversed + 1
+  }
+
+  var single = 0
+  for n in 7..8 {
+    single = single + n
+  }
+
+  var named = 0
+  let span = 1..4
+  for n in span {
+    named = named + n
+  }
+
+  var stopped = 0
+  for n in 0..1000 {
+    if n > 4 { break }
+    stopped = stopped + n
+  }
+
+  var skipped = 0
+  for n in 0..10 {
+    if n % 2 == 1 { continue }
+    skipped = skipped + n
+  }
+
+  var nested = 0
+  for outer in 0..3 {
+    for inner in 0..3 {
+      nested = nested + outer * inner
+    }
+  }
+
+  var escaped = 0
+  @rows for outer in 0..10 {
+    for inner in 0..10 {
+      if inner > outer { continue @rows }
+      escaped = escaped + 1
+    }
+  }
+
+  // A range used to index inside the loop that produced the index.
+  let values = [10, 20, 30, 40]
+  var indexed = 0
+  for position in 0..values.length() {
+    indexed = indexed + values[position]
+  }
+
+  // Counting far enough that building the values would not fit.
+  var counted = 0
+  for _step in 0..20000000 {
+    counted = counted + 1
+  }
+
+  exclusive + inclusive + overEmpty + overReversed + single + named
+    + stopped + skipped + nested + escaped + indexed + (counted / 20000000)
+}

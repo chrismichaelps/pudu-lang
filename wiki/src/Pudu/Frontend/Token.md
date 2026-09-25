@@ -99,7 +99,8 @@ symbolText :: SymbolKind -> Text
 - Literal payloads preserve decoded or category-specific data only where later scanners define it; `tokenLexeme` always preserves exact source spelling.
 - Trivia text and spans are lossless. Leading trivia belongs to the following token; the later cursor makes EOF own final trailing trivia.
 - Data constructors are phase-owned and exported for efficient exhaustive parser/scanner matching. Relational source/span invariants are centralized by the later cursor rather than duplicated in shallow token constructors.
-- Keyword and symbol reverse lookup uses one bounded, immutable vocabulary. Adding a constructor forces an exhaustive text mapping and a round-trip test.
+- Keyword and symbol reverse lookup uses one bounded, immutable vocabulary, held as constant maps
+  built once, because every identifier the lexer reads and every symbol the parser expects asks. Adding a constructor forces an exhaustive text mapping and a round-trip test.
 
 ### Linkage
 

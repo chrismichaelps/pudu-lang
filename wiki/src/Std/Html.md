@@ -17,6 +17,15 @@ page is mostly made of, and a general one for the rest. Attributes, including th
 are lists — classes and inline style — built rather than spelled. Rendering a view to markup, and
 rendering a whole document with its declaration. Escaping text and an attribute value, exported
 because a program building markup this module does not cover still needs them.
+`escapeScalar`, `isHandler`, and `isVoidElement` expose the core renderer's authoritative
+scalar escaping and syntax/safety predicates to [[Std Html Bounded]].
+`whenBuilt(condition, builder: fn() -> Html)` is the deferred counterpart to eager `when`: false
+returns an empty fragment without invoking the callback, while true invokes it exactly once and
+returns the typed view it built.
+`attribute` is the generic checked attribute constructor. Besides controls and case-insensitive
+handler names, it validates values of `href`, `src`, and `action` through `destination`; arbitrary
+attribute pairs passed directly to element constructors remain an explicit unchecked compatibility
+surface and the renderer continues dropping handlers as a final backstop.
 ## Governance and algorithm
 Text is text and markup is markup, and the only way to obtain markup is to build a node. That is
 the whole design. A template language has to solve escaping repeatedly — and gets it wrong at each
@@ -76,22 +85,78 @@ functions already are, and they compose without a second mechanism to learn.
 - **Q:** Validate that an element's children are permitted inside it? **A:** No. _Rationale:_ that
   is a large table which is wrong at the edges and goes stale, and the failure it prevents is a
   page that renders oddly rather than one that is unsafe. _Rejected:_ a content model.
+- **Q:** Change eager `when` to accept a callback? **A:** No; that would break existing callers and
+  change evaluation timing. `whenBuilt` is separately named and additive.
+- **Q:** Invoke a false callback and discard its result? **A:** No; the entire point is to avoid
+  constructing optional work. False returns `Fragment([])` before the callback is called.
+- **Q:** Call a true callback more than once to inspect or copy it? **A:** No; it is invoked exactly
+  once and its typed `Html` result is returned unchanged.
+- **Q:** Treat `attribute("href", value)` as ordinary escaped text? **A:** No; escaping cannot make a
+  program-bearing scheme safe, so destination-bearing names use the destination check.
+- **Q:** Reject all raw attribute pairs at element construction? **A:** No; that would break the
+  public element shape. Checked construction is strengthened additively, while rendering retains
+  case-insensitive handler blocking as defense in depth.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
+[[2026-09-20-bounded-ssr-slots]] · [[2026-09-20-deferred-html-builders]] ·
+[[2026-09-20-checked-html-destinations]] · [[2026-09-21-safe-html-streaming]]
 
 ## Fragment rendering
 
 `renderChunks` collects rendered text fragments in document order; render joins them once.
-Element recursion appends opening, child fragments and closing markup to one persistent array
-instead of materializing each child subtree. `document` streams the `<!DOCTYPE html>\n` prefix
-directly into `appendRendered` before joining. `appendAttributes` streams formatted attribute
-strings directly into the active chunk array, eliminating intermediate attribute arrays and joins.
+An explicit cursor-frame stack appends opening, child fragments and closing markup to one persistent
+array instead of recursing once per element or materializing each child subtree. The active child
+collection and its next index stay in local cursor state. Descending suspends only that parent cursor,
+and returning uses the array's constant-time `pop`; traversal never slices the pending stack and
+never schedules all siblings eagerly. `document` seeds the writer with the `<!DOCTYPE html>\n`
+prefix before joining. [[Std Html Build]] prepends its distinct compact `<!DOCTYPE html>` fragment
+to `renderChunks` before the one final join, avoiding a second copy of the materialized body.
+
+`renderChunks` retains its existing fragment boundaries: opening tag, each accepted formatted
+attribute, opening terminator, text/trusted content, and closing tag remain separate chunks. The
+current public surface exposes those chunks to SSR preparation, so coalescing them here would be an
+API change and belongs in the opt-in plan compaction work rather than this renderer. Attribute
+formatting therefore continues to produce one fragment per accepted attribute; the scheduling and
+document-prefix changes are the measured optimization in this slice.
+
 `escape(content)` delegates directly to the native `content.escapeHtml()` builder-backed built-in,
 eliminating intermediate string loops and replacements. Attribute rendering, escaping, void-element
 syntax and trusted markup behavior are unchanged. This is buffered rendering, not socket streaming;
-recursive traversal depth remains proportional to HTML depth.
+view depth no longer consumes evaluator call frames.
+
+[[Std Html Bounded]] uses the same cursor-frame traversal and serialization rules. It counts UTF-8
+width from each scalar before retaining output and expands text one escaped scalar at a time, so a
+rejected large text or trusted node stops without encoding or escaping its complete output. Element
+names, ordered accepted attributes, attribute values, terminators, and closing tags pass through the
+same incremental budget admission; handler attributes remain omitted. Successful bounded output
+joins to exactly the same bytes as `render`, but its internal fragment grouping is not the public
+`renderChunks` grouping contract.
+
+The pre-change no-optimization baseline used a focused program with depth 1,600, width 1,200, and
+40 attributes. `pudu explain` reported 358,532 evaluator steps; the host RTS reported
+2,336,078,616 allocated bytes, 3,868,920 bytes maximum residency, and 0.855 seconds elapsed. The
+cursor traversal reported 312,954 steps, 1,994,412,360 allocated bytes, 3,398,968 bytes maximum
+residency, and 0.644 seconds elapsed: reductions of 12.7%, 14.6%, 12.1%, and 24.7% respectively.
+These figures are a local same-build comparison point, not portable performance guarantees.
 
 Resolved Grill Log:
 - **Q:** Keep the existing serialized output while removing repeated subtree joins? **A:** Yes; expose fragments for SSR composition without promising bounded-memory transport.
 - **Q:** Why delegate `escape` to `content.escapeHtml()`? **A:** Pudu's native string `escapeHtml()` uses a builder fast path in Haskell that skips unescaped text in blocks, avoiding repeated string scans, regexes, or five sequential `.replace()` calls in Pudu script.
 - **Q:** Why stream attributes directly into the chunk array with `appendAttributes`? **A:** Every HTML element previously allocated a separate `pieces: Array[Str]`, formatted attributes into it, and called `.join("")` to create an intermediate attribute string. Appending directly to the document chunk stream removes two allocations and one string concatenation per element.
+- **Q:** Keep recursive traversal because ordinary pages are shallow? **A:** No. Page depth can come from program data, and a renderer must not stop the application merely because a valid value is deeply nested. An explicit work stack preserves exact output order without consuming one evaluator frame per node. _Rejected:_ a documentation-only nesting limit; catching the evaluator failure after it occurs.
+- **Q:** Coalesce public chunks to reduce the fragment count? **A:** No in this slice. _Rationale:_
+  `renderChunks` is consumed as a prepared SSR boundary, and changing its grouping would mix an
+  observable API decision into an internal scheduling repair. _Rejected:_ silently joining opening
+  syntax or text runs; duplicating traversal for `render` and `renderChunks`.
+- **Q:** Keep slicing the pending stack because the sequence shares structure? **A:** No. _Rationale:_
+  the runtime confirms slicing is logarithmic while `pop` is constant time, and cursor frames also
+  bound scheduled sibling work. _Rejected:_ claiming a full-array copy; retaining repeated slices.
+- **Q:** Count a text node after calling `escapeHtml()`? **A:** No for bounded rendering. A single
+  refused node could already have traversed and allocated its full escaped output. The bounded writer
+  admits each scalar or fixed escape expansion before retaining it and stops at the first overflow.
+- **Q:** Convert a complete trusted string to `Bytes` merely to count it? **A:** No; scalar UTF-8
+  width is counted incrementally, so rejection does not allocate a complete encoded copy of caller-
+  supplied trusted markup.
+- **Q:** Change `renderChunks` fragment boundaries to share the bounded implementation? **A:** No;
+  those boundaries are public and consumed by preparation. `Std.Html.Bounded.render` is additive
+  and promises output and exact length, not identical chunk grouping.

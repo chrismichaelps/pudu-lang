@@ -136,3 +136,12 @@ layout, where a line is already a unit.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Tooling]] · [[grammar/pudu]] · [[Pudu CLI]]
+
+## Statement lines that open with a prefix operator
+
+Indentation tracks the delimiters still open rather than a count of them. Where statements are
+written — at the top of a file or directly inside a block — a line opening with `*`, `-`, or `&` starts
+a statement, as the parser reads it: `*count = 0` is an assignment through a reference, not the line
+above multiplied. Inside parentheses or brackets the same line is an argument or an item and keeps
+the continuation indent it had, so existing formatted sources are unchanged. See
+[[ADR-0022-lending-a-place]].

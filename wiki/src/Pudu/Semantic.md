@@ -69,3 +69,7 @@ DEPTH 0.30 (SHALLOW by intent). This is a curated stable facade whose deletion w
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Semantic/_MOC]] · [[Compiler Pipeline]] · [[Compiler Program]] · [[Repl Session]]
+
+## Places
+
+`writableReferences` answers the spans of every use of a `var` binding, which the checker uses to decide whether an assignment's root may change. See [[ADR-0022-lending-a-place]].

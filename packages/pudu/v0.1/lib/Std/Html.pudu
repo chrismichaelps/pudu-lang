@@ -107,6 +107,11 @@ export fn when(condition: Bool, view: Html) -> Html {
   if condition { view } else { Fragment([]) }
 }
 
+/// Build one view only when its condition holds.
+export fn whenBuilt(condition: Bool, builder: fn() -> Html) -> Html {
+  if condition { builder() } else { Fragment([]) }
+}
+
 /// The class attribute, from the classes rather than from their spelling, so a
 /// caller adding one does not also maintain the separators.
 export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", names.join(" ")) }
@@ -257,7 +262,16 @@ export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
   if lowered.startsWith("on") {
     Err(Handler(name))
   } else {
-    if hasControl(name) || hasControl(value) { Err(Control(name)) } else { Ok((name, value)) }
+    if hasControl(name) || hasControl(value) {
+      Err(Control(name))
+    } else {
+      if lowered == "href" || lowered == "src" || lowered == "action" {
+        let held = destination(value) ?
+        Ok((name, held.written))
+      } else {
+        Ok((name, value))
+      }
+    }
   }
 }
 
@@ -319,23 +333,70 @@ export fn render(view: &Html) -> Str { renderChunks(view).join("") }
 /// Buffered output fragments, in document order, without joining child subtrees.
 export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
 
+/// Whether an element has no closing tag and cannot render children.
+export fn isVoidElement(name: Str) -> Bool { VOID_ELEMENTS.contains(name) }
+
+/// A suspended parent cursor, with an optional closing tag to write on return.
+type Writing
+  = Resume(Array[Html], Int)
+  | CloseAndResume(Str, Array[Html], Int)
+
+/// A view's markup appended to what was written before it.
+///
+/// Written with its own stack rather than by recursion, because nesting depth
+/// is decided by whatever data a page was built from, and recursing once per
+/// level let a deep enough document stop the program.
 fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
-  match view {
-    case Text(content) => pieces.push(escape(content))
-    case Trusted(markup) => pieces.push(markup)
-    case Fragment(children) => appendChildren(&children, pieces)
-    case Element(name, attributes, children) => {
-      let opened = appendAttributes(&attributes, pieces.push("<" + name))
-      if VOID_ELEMENTS.contains(name) { opened.push(" />") } else {
-        appendChildren(&children, opened.push(">")).push("</" + name + ">")
+  var out = pieces
+  var current: Array[Html] = [*view]
+  var index = 0
+  var pending: Array[Writing] = []
+  while index < current.length() || pending.length() > 0 {
+    if index >= current.length() {
+      let step = pending[pending.length() - 1]
+      pending = pending.pop()
+      match step {
+        case Resume(parent, next) => {
+          current = parent
+          index = next
+        }
+        case CloseAndResume(name, parent, next) => {
+          out = out.push("</" + name + ">")
+          current = parent
+          index = next
+        }
+      }
+    } else {
+      let node = current[index]
+      index = index + 1
+      match node {
+        case Text(content) => { out = out.push(escape(content)) }
+        case Trusted(markup) => { out = out.push(markup) }
+        case Fragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(Resume(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case Element(name, attributes, children) => {
+          out = appendAttributes(&attributes, out.push("<" + name))
+          if VOID_ELEMENTS.contains(name) {
+            out = out.push(" />")
+          } else {
+            out = out.push(">")
+            if children.length() == 0 {
+              out = out.push("</" + name + ">")
+            } else {
+              pending = pending.push(CloseAndResume(name, current, index))
+              current = children
+              index = 0
+            }
+          }
+        }
       }
     }
   }
-}
-
-fn appendChildren(children: &Array[Html], pieces: Array[Str]) -> Array[Str] {
-  var out = pieces
-  for child in children { out = appendRendered(&child, out) }
   out
 }
 
@@ -346,6 +407,18 @@ export fn document(view: &Html) -> Str { appendRendered(view, ["<!DOCTYPE html>\
 /// themselves.
 ///
 export fn escape(content: Str) -> Str { content.escapeHtml() }
+
+/// Escapes one text scalar using the renderer's exact HTML spellings.
+export fn escapeScalar(value: Char) -> Str {
+  match value {
+    case '&' => "&amp;"
+    case '<' => "&lt;"
+    case '>' => "&gt;"
+    case '"' => "&quot;"
+    case '\'' => "&#39;"
+    case other => other.toText()
+  }
+}
 
 /// The attributes of an element, written.
 ///

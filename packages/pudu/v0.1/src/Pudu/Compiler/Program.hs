@@ -2,20 +2,26 @@
 module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileProgramCached
   , compileProgramSource
+  , compileProgramSourceOver
   , programDependencies
+  , programFolded
   , programIntegerKinds
   , programDocs
   , rootCompileResult
+  , sourceRootFor
   ) where
 
 import Control.Exception (IOException, try)
+import Data.ByteString (ByteString)
 import Data.Graph (SCC, flattenSCC, stronglyConnComp)
 import Data.List (isSuffixOf, sort)
 import Data.List.NonEmpty (toList)
 import Data.Maybe (fromMaybe)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler
@@ -25,9 +31,28 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
-import Pudu.Compiler.Manifest (manifestVersionDiagnostics)
-import Pudu.Compiler.Library (isStandardModule, searchRoots)
+import Pudu.Compiler.Cache
+  ( CheckedProduct (..)
+  , ProductCache
+  , disabledCache
+  , graphFingerprint
+  , interfaceKey
+  , lookupChecked
+  , lookupFrontend
+  , pruneProducts
+  , storeChecked
+  , storeFrontend
+  )
+import Pudu.Compiler.Library
+  ( ResolutionContext
+  , isStandardModule
+  , newResolutionContext
+  , resolutionDiagnostics
+  , resolutionSearchRoots
+  , resolutionTriedRoots
+  )
 import Pudu.Doc (DocIndex)
+import Pudu.Eval.Frozen (Frozen)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -42,6 +67,7 @@ import Pudu.Frontend.Syntax.Tree (Import (..), Module (..))
 import Pudu.Semantic.Interface (exportIndex)
 import Pudu.Source (Source, SourceName (..), Span, emptySpan, newSource)
 import Pudu.Type.Interface (interfaceSkeleton)
+import Pudu.Type.Interface.Graph (emptyInterfaceGraph, prepareInterfaces)
 import System.FilePath
   ( (</>)
   , dropExtension
@@ -64,7 +90,9 @@ data ProgramResult = ProgramResult
   , programNamedSources :: !(Map ModuleName Source)
   , programOrder :: ![ModuleName]
   , programDiagnostics :: ![Diagnostic]
-  , programContext :: !CompileContext
+  {-| Built only when something needs it: a run whose every module was
+      reused never prepares the interfaces it had no module to check. -}
+  , programContext :: ~CompileContext
   }
 
 {-| Every documented name in the program, in dependency order.
@@ -104,36 +132,55 @@ programIntegerKinds :: ProgramResult -> Map.Map Span Text.Text
 programIntegerKinds result =
   Map.unions [compileIntegerKinds compiled | compiled <- Map.elems (programModules result)]
 
+{-| The constants folding computed for every module, by module path: what
+    linking binds instead of evaluating the initializers again. -}
+programFolded :: ProgramResult -> Map.Map Text.Text (Map.Map Text.Text Frozen)
+programFolded result =
+  Map.fromList
+    [ (moduleNameText name, compileFolded compiled)
+    | (name, compiled) <- Map.toList (programModules result)
+    ]
+
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
 
 compileProgram :: FilePath -> IO ProgramResult
-compileProgram rootPath = do
+compileProgram = compileProgramCached disabledCache
+
+{-| Compile a program, reusing what an earlier run stored for modules that have
+    not changed.
+
+    Only what running and reporting need comes back from a stored module: its
+    tree and what its integer literals became. Its tokens, resolution, types,
+    and documentation are not kept, so tooling that reads those compiles with
+    `compileProgram`. -}
+compileProgramCached :: ProductCache -> FilePath -> IO ProgramResult
+compileProgramCached cache rootPath = do
   rootRead <- readSource rootPath
   case rootRead of
     Left _ -> do
       source <- newSource (SourceName (Text.pack rootPath)) Text.empty
       pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
-        (CompileContext (exportIndex Map.empty) Map.empty True))
+        (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
     Right rootSource -> do
-      let rootFrontend = runFrontend rootSource
+      rootFrontend <- frontendFor cache rootSource
       case frontendModule rootFrontend of
         Nothing ->
           pure
-            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) Map.empty True))
+            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
         Just rootModule -> do
           let rootName = locatedValue (moduleName rootModule)
               (sourceRoot, rootMismatch) = deriveSourceRoot rootPath rootModule
           if rootMismatch
             then do
               let mismatch = rootPathMismatch rootPath (moduleName rootModule)
-                  emptyContext = CompileContext (exportIndex Map.empty) Map.empty True
+                  emptyContext = CompileContext (exportIndex Map.empty) emptyInterfaceGraph True
               compiled <- compileFrontendWith emptyContext rootFrontend
               pure
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
                   [rootSource] (Map.singleton rootName rootSource) [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
-            else discoverFrom sourceRoot rootSource rootFrontend rootModule
+            else discoverFrom cache Map.empty sourceRoot rootSource rootFrontend rootModule
 
 {-| Compile a program whose root is already in memory.
 
@@ -146,28 +193,40 @@ compileProgram rootPath = do
     The source root is given rather than derived, because there is no path to
     derive it from. -}
 compileProgramSource :: FilePath -> Source -> IO ProgramResult
-compileProgramSource sourceRoot rootSource = do
+compileProgramSource = compileProgramSourceOver Map.empty
+
+{-| `compileProgramSource` with some modules' text given rather than read: a
+    path in `overlay` is read from there before the disk, and a path absent
+    from it from the disk as always.
+
+    An editor holds edits the disk has not seen, in the module being written
+    and in the modules it imports. Compiling the importer against the disk
+    would answer with declarations the reader has already changed. Paths are
+    compared after `normalise`, the form module paths are built in. -}
+compileProgramSourceOver :: Map FilePath Text.Text -> FilePath -> Source -> IO ProgramResult
+compileProgramSourceOver overlay sourceRoot rootSource = do
   let rootFrontend = runFrontend rootSource
   case frontendModule rootFrontend of
     Nothing ->
       pure
         ( ProgramResult Nothing Map.empty [rootSource] Map.empty []
             (frontendDiagnostics rootFrontend)
-            (CompileContext (exportIndex Map.empty) Map.empty True)
+            (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True)
         )
-    Just rootModule -> discoverFrom sourceRoot rootSource rootFrontend rootModule
+    Just rootModule -> discoverFrom disabledCache overlay sourceRoot rootSource rootFrontend rootModule
 
 {-| Walk a root module's imports and compile everything the walk reaches. -}
-discoverFrom :: FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
-discoverFrom sourceRoot rootSource rootFrontend rootModule = do
+discoverFrom :: ProductCache -> Map FilePath Text.Text -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom cache overlay sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
-  manifestProblems <- manifestVersionDiagnostics sourceRoot
-  discovered <- discover sourceRoot
+  resolution <- newResolutionContext sourceRoot
+  discovered <- discover cache overlay resolution
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
-    manifestProblems
+    Set.empty
+    (resolutionDiagnostics resolution)
     (importsOf rootModule)
-  finish rootName discovered
+  finish cache rootName discovered
 
 data Discovery = Discovery
   { discoveredFrontends :: !(Map ModuleName FrontendResult)
@@ -176,47 +235,61 @@ data Discovery = Discovery
   }
 
 discover
-  :: FilePath
+  :: ProductCache
+  -> Map FilePath Text.Text
+  -> ResolutionContext
   -> Map ModuleName FrontendResult
   -> Map ModuleName Source
+  -> Set.Set ModuleName
   -> [Diagnostic]
   -> [(Located Import, ModuleName)]
   -> IO Discovery
-discover sourceRoot frontends sources diagnostics pending = case pending of
+discover cache overlay resolution frontends sources failed diagnostics pending = case pending of
   [] -> pure (Discovery frontends sources diagnostics)
   (locatedImport, requested) : rest
-    | Map.member requested frontends -> discover sourceRoot frontends sources diagnostics rest
+    | Map.member requested frontends ->
+        discover cache overlay resolution frontends sources failed diagnostics rest
+    | Set.member requested failed ->
+        discover cache overlay resolution frontends sources failed
+          (diagnostics <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport)
+          rest
     | otherwise -> do
-        roots <- searchRoots sourceRoot requested
-        loaded <- readFirst [modulePath root requested | root <- roots]
+        let roots = resolutionSearchRoots resolution requested
+        loaded <- readFirstFrom overlay [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
-            discover sourceRoot frontends sources
-              (diagnostics <> missingModule requested roots locatedImport) rest
+            discover cache overlay resolution frontends sources (Set.insert requested failed)
+              ( diagnostics
+                  <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport
+              )
+              rest
           Right source -> do
-            let frontend = runFrontend source
+            frontend <- frontendFor cache source
             case frontendModule frontend of
               Nothing ->
-                discover sourceRoot
+                discover cache overlay resolution
                   (Map.insert requested frontend frontends)
                   (Map.insert requested source sources)
+                  failed
                   diagnostics rest
               Just parsed ->
                 let actual = locatedValue (moduleName parsed)
                  in if actual /= requested
-                      then discover sourceRoot
+                      then discover cache overlay resolution
                         (Map.insert requested frontend{frontendModule = Nothing} frontends)
                         (Map.insert requested source sources)
+                        failed
                         (diagnostics <> pathMismatch requested (moduleName parsed)) rest
-                      else discover sourceRoot
+                      else discover cache overlay resolution
                         (Map.insert requested frontend frontends)
                         (Map.insert requested source sources)
+                        failed
                         diagnostics (importsOf parsed <> rest)
 
-finish :: ModuleName -> Discovery -> IO ProgramResult
-finish rootName discovered = do
+finish :: ProductCache -> ModuleName -> Discovery -> IO ProgramResult
+finish cache rootName discovered = do
   let validModules = Map.mapMaybe frontendModule (discoveredFrontends discovered)
-      interfaces = Map.map interfaceSkeleton validModules
+      interfaces = prepareInterfaces (Map.map interfaceSkeleton validModules)
       context = CompileContext (exportIndex validModules) interfaces True
       order = dependencyOrder validModules
       pending =
@@ -226,7 +299,15 @@ finish rootName discovered = do
         ]
   {-| Modules compile in dependency order, one at a time, because compiling a
       module folds its constants and folding runs the evaluator. -}
-  results <- mapM (\(name, frontend) -> (,) name <$> compileFrontendWith context frontend) pending
+  keys <- mapM
+    (\(name, source) -> (,) (moduleNameText name) <$> interfaceKey cache source)
+    (Map.toList (discoveredSources discovered))
+  let graph = graphFingerprint keys
+      compileOne (name, frontend) = (,) name <$> case Map.lookup name (discoveredSources discovered) of
+        Nothing -> compileFrontendWith context frontend
+        Just source -> checkedFor cache graph context source frontend
+  results <- mapM compileOne pending
+  pruneProducts cache
   let compiled = Map.fromList results
       uncompiled = Map.difference (discoveredFrontends discovered) compiled
       diagnostics = sortDiagnostics
@@ -240,6 +321,51 @@ finish rootName discovered = do
         (discoveredSources discovered)
         order diagnostics context
     )
+
+{-| A module's frontend, from the cache when this exact text was parsed before.
+
+    Only a parse that produced no diagnostic is stored, so a diagnostic is
+    always the one this run's parser gives. -}
+frontendFor :: ProductCache -> Source -> IO FrontendResult
+frontendFor cache source = do
+  stored <- lookupFrontend cache source
+  case stored of
+    Just parsed -> pure (FrontendResult [] (Just parsed) [])
+    Nothing -> do
+      let frontend = runFrontend source
+      case frontendModule frontend of
+        Just parsed | null (frontendDiagnostics frontend) -> storeFrontend cache source parsed
+        _ -> pure ()
+      pure frontend
+
+{-| A module's check, from the cache when this text was checked before in a
+    program of exactly these modules. Only a check that produced no diagnostic
+    is stored, for the same reason as a parse. -}
+checkedFor :: ProductCache -> ByteString -> CompileContext -> Source -> FrontendResult -> IO CompileResult
+checkedFor cache graph context source frontend = do
+  stored <- lookupChecked cache graph source
+  case stored of
+    Just reused ->
+      pure CompileResult
+        { compileTokens = frontendTokens frontend
+        , compileModule = Just (checkedModule reused)
+        , compileSyntax = Just (checkedModule reused)
+        , compileResolution = Nothing
+        , compileTypes = Nothing
+        , compileIntegerKinds = checkedIntegerKinds reused
+        , compileDocs = Nothing
+        , compileDiagnostics = []
+        , compileMethods = []
+        , compileFolded = checkedFolded reused
+        }
+    Nothing -> do
+      compiled <- compileFrontendWith context frontend
+      case compileModule compiled of
+        Just checked | null (compileDiagnostics compiled) ->
+          storeChecked cache graph source
+            (CheckedProduct checked (compileIntegerKinds compiled) (compileFolded compiled))
+        _ -> pure ()
+      pure compiled
 
 dependencyOrder :: Map ModuleName Module -> [ModuleName]
 dependencyOrder modules =
@@ -259,12 +385,22 @@ importsOf value =
   ]
 
 deriveSourceRoot :: FilePath -> Module -> (FilePath, Bool)
-deriveSourceRoot rootPath value =
-  let pathParts = splitDirectories (dropExtension (normalise rootPath))
-      nameParts = map Text.unpack (toList (moduleNameSegments (locatedValue (moduleName value))))
+deriveSourceRoot rootPath value = sourceRootFor rootPath (locatedValue (moduleName value))
+
+{-| The source root of a program whose entry file at `path` declares `name`:
+    the path with the module's segments taken off its end, so `src/App/Main.pudu`
+    declaring `App.Main` is rooted at `src`. When the path does not end in the
+    name, the file's own directory, and `True` to say they disagree.
+
+    Every tool that compiles a file-backed program asks this, so an import
+    resolves to the same file in the editor as on the command line. -}
+sourceRootFor :: FilePath -> ModuleName -> (FilePath, Bool)
+sourceRootFor path name =
+  let pathParts = splitDirectories (dropExtension (normalise path))
+      nameParts = map Text.unpack (toList (moduleNameSegments name))
       agrees = nameParts `isSuffixOf` pathParts
       kept = take (length pathParts - length nameParts) pathParts
-   in (if agrees then joinPath kept else takeDirectory rootPath, not agrees)
+   in (if agrees then joinPath kept else takeDirectory path, not agrees)
 
 modulePath :: FilePath -> ModuleName -> FilePath
 modulePath sourceRoot name =
@@ -272,6 +408,22 @@ modulePath sourceRoot name =
 
 {-| Read the first path that exists, keeping the last failure so a module that
     is nowhere is reported against the search rather than against one guess. -}
+{-| `readFirst`, taking a path's text from `overlay` when it holds it. The
+    paths are still tried in order, so an overlaid module never shadows one an
+    earlier root holds. -}
+readFirstFrom :: Map FilePath Text.Text -> [FilePath] -> IO (Either IOException Source)
+readFirstFrom overlay paths
+  | Map.null overlay = readFirst paths
+  | otherwise = case paths of
+      [] -> readFirst []
+      path : rest -> case Map.lookup (normalise path) overlay of
+        Just text -> Right <$> newSource (SourceName (Text.pack path)) text
+        Nothing -> do
+          loaded <- readSource path
+          case (loaded, rest) of
+            (Left _, _ : _) -> readFirstFrom overlay rest
+            _ -> pure loaded
+
 readFirst :: [FilePath] -> IO (Either IOException Source)
 readFirst [] = readSource ""
 readFirst [path] = readSource path
@@ -288,7 +440,7 @@ readSource path = do
     Left problem -> pure (Left problem)
     Right contents -> Right <$> newSource (SourceName (Text.pack path)) contents
 
-missingModule :: ModuleName -> [FilePath] -> Located Import -> [Diagnostic]
+missingModule :: ModuleName -> [Text.Text] -> Located Import -> [Diagnostic]
 missingModule requested roots locatedImport = do
   code <- maybe [] pure (mkDiagnosticCode "E2014")
   value <- maybe [] pure
@@ -315,7 +467,7 @@ missingModule requested roots locatedImport = do
 
   searched
     | null roots = "; nothing was searched"
-    | otherwise = "; looked in " <> Text.intercalate ", " (map Text.pack roots)
+    | otherwise = "; looked in " <> Text.intercalate ", " roots
 
 pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
 pathMismatch requested actual = do

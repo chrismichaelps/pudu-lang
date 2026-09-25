@@ -29,6 +29,16 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- A range's two ends **meet each other before either meets `Int`**, so a range written between two
+  values of one wrong type is one mistake and one diagnostic rather than the same complaint about
+  each end. Its type is `Range[Int]`: that is the type an index is, and therefore the type a range is
+  useful at.
+
+- Indexing by a number reads one element and indexing by a range reads a stretch, and the index
+  decides which. A stretch of an array is an array, of text is text, of bytes is bytes; a tuple is
+  refused, because its members may differ and the type of a stretch of one depends on which stretch
+  — a number the checker does not have.
+
 - Binary `in` requires `left : T` and `right : Set[T]`, returning `Bool`. This closed operator rule
   deliberately does not search methods or trait implementations.
 
@@ -111,6 +121,12 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - The same membership test includes the implicit prelude's type-only names. `Sync.cell` without an
   import is therefore a member on the prelude trait `Sync`, not a module access that may be deferred;
   it receives the same `E3034` as a member written through a wired-in or locally declared type.
+- **A type that shares its name with a standard-library module is usually that module unimported.**
+  For `Bool`, `Bytes`, `Char`, `Decimal`, `Map`, `Option`, `Result`, and `Set`, the `E3034` help names
+  the import (`import Std.Result as Result`) instead of explaining variants; every other type keeps
+  the variant help. `typesNamingModules` is that list, and a program spec checks that
+  `test-fixtures/stdlib/TypesNamingModules.pudu` imports exactly those modules under those names and
+  compiles without a diagnostic.
 
 ## Grill Log
 
@@ -134,3 +150,13 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Universal `toText` typing (#347)
+
+`memberType` answers `toText` as `fn() -> Str` for `Array`, `Str`, `Map`, `Set`, `Range`, and
+`Buckets` before their closed tables; `methodType` answers it when a nominal type declares no such
+field or method; `rigidMethod` answers it when no bound provides one; and any other type (tuple,
+function, unit) answers it rather than `E3005`. `Char` and `Bytes` keep their own entries.
+
+Resolved Grill Log: typed as the universal method only where nothing declared answers, so an
+implementation's own signature governs its calls; the evaluator makes the same choice at run time.

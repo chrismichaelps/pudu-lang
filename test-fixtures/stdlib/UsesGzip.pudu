@@ -105,6 +105,7 @@ export fn main() -> Int {
       target: "/api/data",
       headers: [("accept-encoding", "gzip, deflate, br")],
       body: "",
+      binaryBody: None
     },
     path: "/api/data",
     params: mapOf([]),
@@ -129,6 +130,7 @@ export fn main() -> Int {
       target: "/api/data",
       headers: [("accept-encoding", "identity")],
       body: "",
+      binaryBody: None
     },
     path: "/api/data",
     params: mapOf([]),

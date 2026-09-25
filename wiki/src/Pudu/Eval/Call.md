@@ -56,6 +56,8 @@ readPath       :: CallNeeds -> ...
 - Built-in string methods on `StrValue` receivers are fast-dispatched directly in
   `evaluateCall` via `callStringMethodFast`, bypassing `receiverOwners` queries and
   avoiding intermediate `StringMethodValue` heap closure allocations.
+- `scopeTo` classifies every frame it attaches to a linked declaration as module scope. Calls then
+  carry that exact boundary into nested literals instead of inheriting the calling module's depth.
 
 ### Linkage
 
@@ -90,6 +92,10 @@ constructor.
   read query on the environment with no dependency on closures or task execution.
 - **Q:** Why fast-path `MemberExpression` on `StrValue` in `evaluateCall`?
   **A:** Repeated text method calls in tight loops (such as text scanning and tokenization) incurred significant heap allocation from intermediate `StringMethodValue` closures and redundant environment trait queries, leading to GC-induced superlinear scaling pauses.
+- **Q:** Why does `scopeTo` store `length environment` beside the frames? **A:** A linked
+  declaration's scoped environment is wholly module scope. _Rationale:_ recording that fact once
+  keeps nested literal capture correct across root, dependency, and interactive callers.
+  _Rejected:_ relying on whatever boundary the caller currently has.
 
 ## Referenced by
 
@@ -155,12 +161,25 @@ dispatching via pure builtin dispatch without effect capabilities.
 Resolved Grill Log: Include WordMapMembersBuiltin in `isHashingBuiltin` so it dispatches through
 pure primitive dispatch rather than falling through to effect dispatch with E7012.
 
+## Masked thread start
+
+`spawnThread` forks its thread with asynchronous exceptions masked and unmasks them only inside the
+`try` that records the thread's outcome. A thread cancelled in the instant between being forked and
+entering its body therefore still writes its outcome slot, which is what lets `threadCancel` wait on
+that slot and a later join answer rather than wait forever.
+
+Resolved Grill Log: Fork unmasked and install the handler first thing in the body? No. _Rationale:_ an
+interrupt delivered before the handler is installed kills the thread without a report, and a join on
+it never returns. _Rejected:_ unmasked fork.
+
 ## Buffer and SwissTable call dispatch
 
 Include `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `BufferScanU64Builtin`,
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
 `SwissTableSizeBuiltin` in `isHashingBuiltin` so they are routed through pure primitive dispatch.
+`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, `JsonEncodeBuiltin`, and `XmlDecodeBuiltin` are included on
+the same grounds: each answer depends only on the arguments.
 
 Resolved Grill Log: Route buffer and flat map operations through the pure builtin dispatcher
 before effect handling to preserve compiler constant-folding and effect isolation.
@@ -182,6 +201,11 @@ in `isBuiltinImmediate` so they evaluate immediately without task scheduling or 
 - **Q:** Route bitmap boolean algebra through immediate evaluation? **A:** Yes; bitmap bitwise operations are pure register bit operations without runtime side-effects.
 - **Q:** Are sorting and binary search operations immediate builtins? **A:** Yes; permutation index generation and binary search lookups operate on deterministic unboxed memory without external capabilities or thread yielding.
 
+## Places
 
+A call records the place each `&mut` argument, bare name, and receiver was taken from as a `Lent`. When the function it reaches declares `&mut` parameters, the body runs under `withFrameKeeping` and each such parameter's final value is stored back into its place after the body finishes, including through `return` and `?`. A receiver chosen by an element is read through its place so its index is evaluated once. See [[ADR-0022-lending-a-place]].
 
+## Universal `toText` dispatch (#347)
 
+`dispatchCall` and `applyFunction` call a `TextMethodValue` through `callDisplay` with its receiver
+first, so `value.toText()` and `display(value)` share one rendering.

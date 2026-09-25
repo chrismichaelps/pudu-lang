@@ -134,6 +134,29 @@ testExhaustiveness = do
     , "  seen"
     , "}"
     ]
+  derefWrite <- codes
+    [ "module M"
+    , "fn bump(score: &mut Int) -> () {"
+    , "  *score = *score + 1"
+    , "}"
+    ]
+  fieldWrite <- codes
+    [ "module M"
+    , "type Tally = { mut count: Int }"
+    , "fn run() -> Int {"
+    , "  var tally = Tally{count: 1}"
+    , "  tally.count = 2"
+    , "  tally.count"
+    , "}"
+    ]
+  elementWrite <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  var items = [1, 2]"
+    , "  items[0] = 5"
+    , "  items[0]"
+    , "}"
+    ]
   nestedBooleans <- codes
     [ "module M"
     , "fn run(value: Result[Bool, Int]) -> Int {"
@@ -191,6 +214,9 @@ testExhaustiveness = do
     , counterexample "a write to a captured name is refused" (capturedWrite === ["E3076"])
     , counterexample "a closure writes its own bindings" (ownWrite === [])
     , counterexample "a write outside any closure is untouched" (outerWrite === [])
+    , counterexample "a write through an exclusive reference is accepted" (derefWrite === [])
+    , counterexample "a write to a mut field of a var is accepted" (fieldWrite === [])
+    , counterexample "a write to an element of a var array is accepted" (elementWrite === [])
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])

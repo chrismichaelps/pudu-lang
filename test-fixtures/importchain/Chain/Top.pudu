@@ -1,0 +1,5 @@
+module Chain.Top
+
+import Chain.Middle as Middle
+
+export fn doubled() -> Int { Middle.grown() * 2 }

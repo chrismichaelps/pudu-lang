@@ -1,0 +1,93 @@
+module UsesUiMenuBar
+
+import Std.Env as Env
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Desktop as Desktop
+import Std.Ui.Keymap {Binds}
+import Std.Ui.Keymap as Keymap
+import Std.Ui.Menu as Menu
+
+/// `bar()` with `keys()`, as `Menu.native` writes it.
+const RECORDS: Str = "menu\t0\tFile\ncommand\t1\tnew\t\tNew\nseparator\t1\ncommand\t1\tsave\tcmd+s\tSave\nmenu\t0\tEdit\ncommand\t1\tundo\t\tUndo\ncommand\t1\tredo\tcmd+shift+z\tRe do\nmenu\t1\tFind\ncommand\t2\tfind\tf5\tFind…\n"
+
+/// What the platform's bar holds for `RECORDS`: `f5` holds neither Command nor
+/// Control, so it is shown by no key equivalent.
+const INSTALLED: Str = "menu\t0\tFile\ncommand\t1\tnew\t\tNew\nseparator\t1\ncommand\t1\tsave\tcmd+s\tSave\nmenu\t0\tEdit\ncommand\t1\tundo\t\tUndo\ncommand\t1\tredo\tcmd+shift+z\tRe do\nmenu\t1\tFind\ncommand\t2\tfind\t\tFind…\n"
+
+fn bar() -> Array[Menu.Menu] {
+  [
+    Menu.menu("File", [Menu.command("New", "new"), Menu.Separator, Menu.command("Save", "save")]),
+    Menu.menu("Edit", [
+        Menu.command("Undo", "undo"),
+        Menu.command("Re\tdo", "redo"),
+        Menu.Submenu(Menu.menu("Find", [Menu.command("Find…", "find")]))
+      ])
+  ]
+}
+
+fn keys() -> Keymap.Keymap {
+  Keymap.keymap().bind("mod+s", "save", "Save").bind("cmd+shift+z", "redo", "Redo").bind("f5", "find", "Find")
+}
+
+fn records() -> Int {
+  var held = 0
+  // Depth first, `mod` resolved to `cmd`, unbound commands with no chord, and
+  // a tab in a title turned into a space.
+  if Menu.native(&bar(), &keys()) == RECORDS { held = held + 1 }
+  if Menu.native(&[], &keys()) == "" { held = held + 1 }
+  held
+}
+
+fn signals() -> Int {
+  var held = 0
+  if Desktop.decodeSignals("menu\tsave\n") == [Desktop.Chosen("save")] { held = held + 1 }
+  // A choice that names nothing is skipped.
+  if Desktop.decodeSignals("menu\t\n").length() == 0 { held = held + 1 }
+  if Desktop.decodeSignals("chord\tcmd+s\nmenu\tfind\n") == [Desktop.Shortcut("cmd+s"), Desktop.Chosen("find")] {
+    held = held + 1
+  }
+  held
+}
+
+/// A session the runtime never issued is refused, on every target.
+fn forged() -> Int {
+  let fake = Desktop.Session{token: -1, extent: Canvas.size(20, 10)}
+  var held = 0
+  match Desktop.install(&fake, &bar(), &keys()) {
+    case Err(Desktop.SessionClosed) => { held = held + 1 }
+    case Err(Desktop.UnsupportedPlatform) => { held = held + 1 }
+    case _ => {}
+  }
+  match Desktop.installed(&fake) {
+    case Err(Desktop.SessionClosed) => { held = held + 1 }
+    case Err(Desktop.UnsupportedPlatform) => { held = held + 1 }
+    case _ => {}
+  }
+  held
+}
+
+/// Opens a real window, installs the bar, and reads back what the platform's
+/// menu bar holds.
+fn live() -> Result[Int, Desktop.DesktopError] {
+  let plan = Desktop.plan("Pudu Menus", 200, 100, false, 20000) ?
+  let session = Desktop.open(&plan) ?
+  var held = 0
+  if Desktop.install(&session, &bar(), &keys()) == Ok(()) {
+    let _pumped = Desktop.pump(&session, 50)
+    if Desktop.installed(&session) == Ok(INSTALLED) { held = held + 1 }
+  }
+  Desktop.close(&session) ?
+  Ok(held)
+}
+
+fn main() -> Int {
+  var held = records() * 100 + signals() * 10 + forged()
+  // A window is opened only when a run promises one may be.
+  if Env.variableOr("PUDU_DESKTOP_DRIVE", "") == "1" {
+    held = match live() {
+      case Ok(count) => held * 10 + count
+      case Err(_) => -2
+    }
+  }
+  held
+}

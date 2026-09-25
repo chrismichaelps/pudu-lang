@@ -29,14 +29,14 @@ export type TomlError
   | Unterminated(Int)
   | Duplicate(Str)
   | Malformed(Int, Str)
+  | TooDeep(Int)
 
 /// The value under a key of a table, or nothing when there is none.
 export fn field(value: &Toml, name: Str) -> Option[Toml] {
-  var found: Option[Toml] = None
   for entry in Option.unwrapOr(asTable(value), []) {
-    if entry[0] == name && Option.isNone(&found) { found = Some(entry[1]) }
+    if entry[0] == name { return Some(entry[1]) }
   }
-  found
+  None
 }
 
 /// The value at a position of a list, or nothing when there is none.

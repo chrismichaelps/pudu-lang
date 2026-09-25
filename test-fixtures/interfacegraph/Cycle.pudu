@@ -1,0 +1,11 @@
+module Cycle
+
+import Node {Node, depth}
+import Wrap {wrap, unwrap}
+
+fn main() -> Int {
+  let root = Node{label: 1, parent: None}
+  let child = Node{label: 2, parent: Some(wrap(root))}
+  let grandchild = Node{label: 3, parent: Some(wrap(child))}
+  depth(grandchild) * 10 + unwrap(wrap(grandchild)).label
+}

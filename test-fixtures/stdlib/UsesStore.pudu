@@ -136,6 +136,20 @@ export fn main() -> Int {
   let alreadyListed = orEmpty(Store.forParents(&notes, "body", &[Some("x")]))
   if !Query.textOf(&alreadyListed).contains("body, body") { held = held + 1 }
 
+  // A column of bytes arrives from the server as `\x` and hexadecimal digits,
+  // and is carried as the bytes it spells. Text that is not that form is kept
+  // as text, and the same text in a column of text is text.
+  let binary = Db.asDriverRows(
+      &Db.Rows {
+      columns: [Db.Column{name: "data", oid: 17}, Db.Column{name: "note", oid: 25}],
+      rows: [[Some("\\x00ff07"), Some("\\x00")], [Some("\\xzz"), None]],
+      tag: "SELECT 2"
+    }
+  )
+  if binary.rows[0][0] == Driver.BytesValue(bytesOf([0u8, 255u8, 7u8])) { held = held + 1 }
+  if binary.rows[0][1] == Driver.TextValue("\\x00") { held = held + 1 }
+  if binary.rows[1][0] == Driver.TextValue("\\xzz") { held = held + 1 }
+
   // A refusal says which layer refused.
   if Store.explain(&Store.Statement(Query.BadName("a b"))).contains("a b") { held = held + 1 }
   if Store.explain(&Store.Refused("no connection")).contains("no connection") { held = held + 1 }

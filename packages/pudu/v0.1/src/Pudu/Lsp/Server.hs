@@ -11,18 +11,20 @@ module Pudu.Lsp.Server
   , serverCapabilities
   ) where
 
-import Control.Exception (SomeException, displayException, evaluate, try)
-import Control.Monad (unless)
+import Control.Concurrent.MVar (newMVar, withMVar)
+import Control.Exception (IOException, evaluate, try)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
+import System.FilePath (normalise)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileResult (..))
-import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (..)
@@ -34,20 +36,24 @@ import Pudu.Diagnostic
   , diagnosticSpan
   )
 import Pudu.Format (FormatResult (..), formatSource)
+import Pudu.Lsp.Analysis (analyse, analyseIn, analyseOver, documentSourceRoot, fileUriPath)
 import Pudu.Lsp.CodeAction (codeActionsAt)
-import Pudu.Lsp.Completion (completionAt)
-import Pudu.Lsp.Definition (definitionAt)
+import Pudu.Lsp.Completion (completionAt, completionRepaired)
+import Pudu.Lsp.Definition (definitionAcross, definitionAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
+  , allDocuments
   , analysisOf
   , documentOf
+  , documentGeneration
   , emptyDocuments
   , forgetDocument
+  , nextGeneration
   , rememberAnalysis
-  , setWorkspaceRoot
+  , setWorkspaceFolders
   , uriOf
-  , workspaceRoot
+  , workspaceFolders
   )
 import Pudu.Lsp.Feature
   ( documentSymbols
@@ -57,10 +63,12 @@ import Pudu.Lsp.Feature
 import Pudu.Lsp.Highlight (documentHighlightAt)
 import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.InlayHints (inlayHintsAt)
+import Pudu.Lsp.ModuleCatalog (moduleCatalog)
+import Pudu.Lsp.RepairCache (RepairCache, cachedAnalyse, newRepairCache)
+import Pudu.Lsp.Scheduler (schedule)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
-  ( Incoming (..)
-  , Message (..)
+  ( Message (..)
   , errorResponse
   , frame
   , notification
@@ -73,12 +81,10 @@ import Pudu.Lsp.Protocol
 import Pudu.Lsp.References (referencesAt)
 import Pudu.Lsp.Rename (prepareRenameAt, renameAt)
 import Pudu.Lsp.SemanticTokens (semanticTokensFull, semanticTokensLegend)
-import Pudu.Lsp.SignatureHelp (signatureHelpAt)
+import Pudu.Lsp.SignatureHelp (signatureHelpAt, signatureHelpRepaired)
 import Pudu.Lsp.WorkspaceSymbols (workspaceSymbolsAt)
-import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
-import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
+import Pudu.Source (spanEnd, spanStart, unOffset)
 import System.Exit (ExitCode (ExitFailure), exitWith)
-import System.FilePath ((</>), takeDirectory)
 import System.IO
   ( BufferMode (NoBuffering)
   , Handle
@@ -90,184 +96,223 @@ import System.IO
   , stdout
   )
 
-{-| Compile one document's text as the program it is.
-
-    The compile is the ordinary one, so an editor sees exactly what `pudu check`
-    would print — the same codes, spans, and help — and `pudu doc` and the
-    editor agree about every signature. A second implementation for the editor
-    would drift from the first within a release. -}
-analyse :: Text -> Text -> IO Analysis
-analyse uri content = do
-  root <- resolveSourceRoot Nothing uri
-  analyseIn root uri content
-
-analyseIn :: FilePath -> Text -> Text -> IO Analysis
-analyseIn root uri content = do
-  source <- newSource (SourceName (pathOf uri)) content
-  program <- compileProgramSource root source
-  pure
-    Analysis
-      { analysisText = content
-      , analysisSource = source
-      , analysisDiagnostics = programDiagnostics program
-      , analysisFileIndex = fromMaybe mempty (rootCompileResult program >>= compileDocs)
-      , analysisProgramIndex = programDocs program
-      , analysisResolution = rootCompileResult program >>= compileResolution
-      , analysisTypes = rootCompileResult program >>= compileTypes
-      }
-
-{-| Determine the project root for compilation.
-
-    When the client declared a workspace root at initialization, that root is
-    authoritative. Otherwise, walk up looking for repository/project boundary
-    markers (`pudu.cabal`, `.git`, or `lib`), falling back to the file's directory. -}
-resolveSourceRoot :: Maybe FilePath -> Text -> IO FilePath
-resolveSourceRoot (Just root) _ = pure root
-resolveSourceRoot Nothing uri = do
-  working <- getCurrentDirectory
-  case Text.stripPrefix "file://" uri of
-    Nothing -> pure working
-    Just path -> do
-      let docDir = takeDirectory (Text.unpack (decodeUri path))
-      findProjectRoot docDir docDir (8 :: Int)
- where
-  findProjectRoot fallback current depth
-    | depth <= 0 = pure fallback
-    | otherwise = do
-        hasCabal <- doesFileExist (current </> "pudu.cabal")
-        hasGit <- doesDirectoryExist (current </> ".git")
-        hasLib <- doesDirectoryExist (current </> "lib")
-        if hasCabal || hasGit || hasLib
-          then pure current
-          else
-            let parent = takeDirectory current
-             in if parent == current then pure fallback else findProjectRoot fallback parent (depth - 1)
-
-pathOf :: Text -> Text
-pathOf uri = maybe uri decodeUri (Text.stripPrefix "file://" uri)
-
-{-| Turn `%20` and friends back into the scalars they stand for. -}
-decodeUri :: Text -> Text
-decodeUri input = either (const input) id (Encoding.decodeUtf8' (ByteString.pack (go input)))
- where
-  go rest = case Text.uncons rest of
-    Nothing -> []
-    Just ('%', remaining)
-      | Text.length hex == 2, Just value <- hexValue hex ->
-          fromIntegral value : go (Text.drop 2 remaining)
-     where
-      hex = Text.take 2 remaining
-    Just (scalar, remaining) -> ByteString.unpack (Encoding.encodeUtf8 (Text.singleton scalar)) <> go remaining
-
-  hexValue hex = case Text.foldl' step (Just 0) hex of
-    Just value -> Just value
-    Nothing -> Nothing
-  step accumulated scalar = do
-    total <- accumulated
-    digit <- hexDigit scalar
-    pure (total * 16 + digit)
-  hexDigit scalar
-    | scalar >= '0' && scalar <= '9' = Just (fromEnum scalar - fromEnum '0')
-    | scalar >= 'a' && scalar <= 'f' = Just (fromEnum scalar - fromEnum 'a' + 10)
-    | scalar >= 'A' && scalar <= 'F' = Just (fromEnum scalar - fromEnum 'A' + 10)
-    | otherwise = Nothing
-
 runServer :: IO ()
 runServer = do
   hSetBinaryMode stdin True
   hSetBinaryMode stdout True
   hSetBuffering stdout NoBuffering
-  store <- newIORef emptyDocuments
-  loop store
+  catalogs <- newIORef Map.empty
+  repairs <- newRepairCache
+  writing <- newMVar ()
+  let session = Session catalogs repairs
+      -- Replies and cancellations are written from two threads; each frame
+      -- is written whole.
+      write body = withMVar writing (const (emit stdout body))
+      logLine line = TextIO.hPutStrLn stderr ("pudu lsp: " <> line) >> hFlush stderr
+      step documents message = do
+        invalidateCatalogs catalogs message
+        prepare session documents message
+  ended <- schedule (readMessage stdin) write logLine step emptyDocuments
+  case ended of
+    Right () -> pure ()
+    Left _ -> exitWith (ExitFailure 1)
 
-loop :: IORef Documents -> IO ()
-loop store = do
-  incoming <- readMessage stdin
-  case incoming of
-    EndOfStream -> pure ()
-    NotForServer -> loop store
-    Unreadable reason -> do
-      TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
-      hFlush stderr
-      loop store
-    Unframed reason -> do
-      TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
-      hFlush stderr
-      exitWith (ExitFailure 1)
-    Received message -> do
-      documents <- readIORef store
-      outcome <- try (prepare documents message)
-      case outcome of
-        Right (documents', replies) -> do
-          writeIORef store documents'
-          mapM_ (emit stdout) replies
-        Left failure -> mapM_ (emit stdout) =<< excuse message failure
-      unless (isExit message) (loop store)
+{-| The modules each source root offers an import, found once and kept until a
+    file is saved, created, or removed — the only events that change them. -}
+type Catalogs = IORef (Map FilePath [Text])
 
-prepare :: Documents -> Message -> IO (Documents, [Text])
-prepare documents message = do
-  documents' <- refresh documents message
-  let (documents'', replies) = answer documents' message
-  mapM_ (evaluate . Text.length) replies
-  pure (documents'', replies)
+{-| What the session keeps beside the documents: work that is expensive to
+    redo and valid until something changes. -}
+data Session = Session
+  { sessionCatalogs :: !Catalogs
+  , sessionRepairs :: !(IORef RepairCache)
+  }
 
-excuse :: Message -> SomeException -> IO [Text]
-excuse message failure = do
-  TextIO.hPutStrLn stderr ("pudu lsp: " <> subject <> " failed; " <> detail)
-  hFlush stderr
-  pure $ case message of
-    Request identity _ _ -> [errorResponse identity internalError detail]
-    Notification _ _ -> []
+invalidateCatalogs :: Catalogs -> Message -> IO ()
+invalidateCatalogs catalogs message = case message of
+  Notification method _
+    | method `elem` ["textDocument/didSave", "workspace/didChangeWatchedFiles", "workspace/didCreateFiles", "workspace/didDeleteFiles", "workspace/didRenameFiles"] ->
+        writeIORef catalogs Map.empty
+  _ -> pure ()
+
+{-| The catalog for the source root a document compiles under, built on first
+    use. -}
+catalogFor :: Catalogs -> Documents -> Json -> IO [Text]
+catalogFor catalogs documents parameters = do
+  root <- rootOf documents parameters
+  known <- readIORef catalogs
+  case Map.lookup root known of
+    Just found -> pure found
+    Nothing -> do
+      found <- moduleCatalog root
+      _ <- evaluate (length found)
+      writeIORef catalogs (Map.insert root found known)
+      pure found
+
+prepare :: Session -> Documents -> Message -> IO (Documents, [Text])
+prepare session documents message = do
+  (documents', touched) <- refresh documents message
+  (documents'', replies) <- case message of
+    Request identity "textDocument/completion" parameters -> do
+      items <-
+        completionRepaired (repaired documents' parameters) (catalogFor (sessionCatalogs session) documents' parameters)
+          documents' parameters
+      pure (documents', [response identity items])
+    Request identity "textDocument/definition" parameters -> do
+      found <- case (uriOf parameters, located documents' parameters) of
+        (Just uri, Just (value, offset)) -> definitionAcross (textOfFile documents') uri value offset
+        _ -> pure JsonNull
+      pure (documents', [response identity found])
+    Request identity "textDocument/signatureHelp" parameters -> do
+      help <- case located documents' parameters of
+        Just (value, offset) -> signatureHelpRepaired (repaired documents' parameters) value offset
+        Nothing -> pure JsonNull
+      pure (documents', [response identity help])
+    _ -> pure (answer documents' message)
+  -- Another open document whose program read the one that changed was
+  -- analysed again, and what it reports may have changed with it.
+  let republished = [publish uri (diagnosticEntries (analysisOf uri documents'')) | uri <- touched]
+  mapM_ (evaluate . Text.length) (replies <> republished)
+  pure (documents'', replies <> republished)
  where
-  subject = case message of
-    Request _ method _ -> method
-    Notification method _ -> method
-  detail = Text.strip (Text.pack (displayException failure))
+  -- A repaired text compiled for this state of the documents is not compiled
+  -- again while the state holds.
+  repaired current parameters =
+    cachedAnalyse (sessionRepairs session) (documentGeneration current) (fromMaybe "" (uriOf parameters))
+      (reanalyse current parameters)
 
-refresh :: Documents -> Message -> IO Documents
+{-| Compile other text as the document a request names, for an answer the text
+    as written cannot give. Nothing is stored: the editor's copy stays the one
+    every other answer is read from. The source root is the written
+    document's, so a repaired or probe text reaches the same modules. -}
+reanalyse :: Documents -> Json -> Text -> IO Analysis
+reanalyse documents parameters content = do
+  let uri = fromMaybe "" (uriOf parameters)
+  root <- rootOf documents parameters
+  analyseOver (overlayFor documents uri) root uri content
+
+{-| The text of the file at `path`: the editor's copy when it is open, since it
+    holds edits the disk has not seen, and otherwise the disk's, read as UTF-8.
+    Nothing when neither can be read. -}
+textOfFile :: Documents -> FilePath -> IO (Maybe Text)
+textOfFile documents path =
+  case [analysisText value | (uri, value) <- allDocuments documents, fmap normalise (fileUriPath uri) == Just (normalise path)] of
+    open : _ -> pure (Just open)
+    [] -> do
+      read' <- try (ByteString.readFile path) :: IO (Either IOException ByteString.ByteString)
+      pure (either (const Nothing) (either (const Nothing) Just . Encoding.decodeUtf8') read')
+
+{-| The text of every open document except `uri`, by the normalised path of
+    its file: what a compile reads in place of the disk, because the editor's
+    copy of an open file is authoritative. -}
+overlayFor :: Documents -> Text -> Map FilePath Text
+overlayFor documents uri =
+  Map.fromList
+    [ (normalise path, analysisText value)
+    | (other, value) <- allDocuments documents
+    , other /= uri
+    , Just path <- [fileUriPath other]
+    ]
+
+{-| The source root of the document a request names, from the text the editor
+    holds for it. -}
+rootOf :: Documents -> Json -> IO FilePath
+rootOf documents parameters =
+  let uri = fromMaybe "" (uriOf parameters)
+      written = maybe "" analysisText (documentOf documents parameters)
+   in documentSourceRoot (workspaceFolders documents) uri written
+
+{-| Take in what a message says the files now hold, and analyse again every
+    open document whose program read a file that changed. The documents
+    analysed again beside the one the message named are returned, so their
+    diagnostics can be published too.
+
+    An edit to an open module changes what its importers see; closing it hands
+    authority back to the disk; a file changed on disk while closed — saved by
+    another tool, created, deleted — changes it too. A save of an open file
+    changes nothing: its buffer was already what everything read. -}
+refresh :: Documents -> Message -> IO (Documents, [Text])
 refresh documents message = case message of
   Request _ "initialize" parameters ->
-    pure $ case extractWorkspaceRoot parameters of
-      Just root -> setWorkspaceRoot root documents
-      Nothing -> documents
+    pure (setWorkspaceFolders (extractWorkspaceFolders parameters) documents, [])
   Notification "textDocument/didOpen" parameters ->
     case (uriOf parameters, openedText parameters) of
       (Just uri, Just content) -> store uri content
-      _ -> pure documents
+      _ -> pure (documents, [])
   Notification "textDocument/didChange" parameters ->
     case (uriOf parameters, changedText parameters) of
       (Just uri, Just content) -> store uri content
-      _ -> pure documents
-  _ -> pure documents
+      _ -> pure (documents, [])
+  Notification "textDocument/didClose" parameters -> case uriOf parameters of
+    Just uri -> dependentsOf (forgetDocument uri documents) [uri]
+    Nothing -> pure (documents, [])
+  Notification "workspace/didChangeWatchedFiles" parameters ->
+    dependentsOf (nextGeneration documents)
+      [ uri
+      | Just (JsonArray changes) <- [lookupField "changes" parameters]
+      , change <- changes
+      , Just uri <- [lookupField "uri" change >>= textOf]
+      , Nothing <- [analysisOf uri documents]
+      ]
+  Notification method _
+    | method `elem` ["workspace/didCreateFiles", "workspace/didDeleteFiles", "workspace/didRenameFiles"] ->
+        pure (nextGeneration documents, [])
+  _ -> pure (documents, [])
  where
   store uri content = do
-    root <- resolveSourceRoot (workspaceRoot documents) uri
-    analysed <- analyseIn root uri content
-    pure (rememberAnalysis uri analysed documents)
+    analysed <- analyseDocument documents uri content
+    dependentsOf (rememberAnalysis uri analysed documents) [uri]
 
-extractWorkspaceRoot :: Json -> Maybe FilePath
-extractWorkspaceRoot params =
-  case lookupField "rootUri" params >>= textOf of
-    Just uri | Just path <- Text.stripPrefix "file://" uri ->
-      Just (Text.unpack (decodeUri path))
-    _ -> case lookupField "workspaceFolders" params of
-      Just (JsonArray (folder : _)) ->
-        case lookupField "uri" folder >>= textOf of
-          Just uri | Just path <- Text.stripPrefix "file://" uri ->
-            Just (Text.unpack (decodeUri path))
-          _ -> Nothing
-      _ -> case lookupField "rootPath" params >>= textOf of
-        Just path | not (Text.null path) -> Just (Text.unpack path)
-        _ -> Nothing
+{-| Analyse again every open document other than `changed` whose program read
+    one of `changed`'s files. -}
+dependentsOf :: Documents -> [Text] -> IO (Documents, [Text])
+dependentsOf documents changed = go documents [] stale
+ where
+  paths = Set.fromList [normalise path | uri <- changed, Just path <- [fileUriPath uri]]
+  stale =
+    [ uri
+    | (uri, value) <- allDocuments documents
+    , uri `notElem` changed
+    , not (Set.disjoint paths (analysisDependencies value))
+    ]
+  go current touched pending = case pending of
+    [] -> pure (current, reverse touched)
+    uri : rest -> case analysisOf uri current of
+      Nothing -> go current touched rest
+      Just value -> do
+        analysed <- analyseDocument current uri (analysisText value)
+        go (rememberAnalysis uri analysed current) (uri : touched) rest
 
-isExit :: Message -> Bool
-isExit message = case message of
-  Notification "exit" _ -> True
-  _ -> False
+{-| Analyse a document's text under its own source root, reading the other open
+    documents in place of the disk. -}
+analyseDocument :: Documents -> Text -> Text -> IO Analysis
+analyseDocument documents uri content = do
+  root <- documentSourceRoot (workspaceFolders documents) uri content
+  analyseOver (overlayFor documents uri) root uri content
 
+{-| Every folder the editor opened: each workspace folder, and the older
+    single `rootUri` or `rootPath` when a client sends only that. -}
+extractWorkspaceFolders :: Json -> [FilePath]
+extractWorkspaceFolders params =
+  distinct (folders <> rootUri <> rootPath)
+ where
+  folders = case lookupField "workspaceFolders" params of
+    Just (JsonArray entries) -> [path | entry <- entries, Just path <- [lookupField "uri" entry >>= textOf >>= fileUriPath]]
+    _ -> []
+  rootUri = [path | Just path <- [lookupField "rootUri" params >>= textOf >>= fileUriPath]]
+  rootPath = [Text.unpack path | Just path <- [lookupField "rootPath" params >>= textOf], not (Text.null path)]
+  distinct = foldr (\path kept -> if path `elem` kept then kept else path : kept) []
+
+{-| Write one framed message as UTF-8.
+
+    The handle is in binary mode, where writing text keeps only the low byte of
+    each scalar. The frame's length counts UTF-8 bytes, so text written that way
+    is shorter than its header says whenever it holds anything beyond ASCII —
+    a documentation comment with a dash is enough — and the client then waits
+    for bytes that never come. The frame is encoded before it is written. -}
 emit :: Handle -> Text -> IO ()
 emit handle body = do
-  TextIO.hPutStr handle (frame body)
+  ByteString.hPut handle (Encoding.encodeUtf8 (frame body))
   hFlush handle
 
 answer :: Documents -> Message -> (Documents, [Text])
@@ -315,9 +360,6 @@ handler method = case method of
 methodNotFound :: Int
 methodNotFound = -32601
 
-internalError :: Int
-internalError = -32603
-
 serverCapabilities :: Json
 serverCapabilities =
   JsonObject
@@ -347,7 +389,7 @@ serverCapabilities =
           , ("documentFormattingProvider", JsonBool True)
           , ("codeActionProvider", JsonBool True)
           , ( "completionProvider"
-            , JsonObject [("triggerCharacters", JsonArray [JsonText "."])]
+            , JsonObject [("triggerCharacters", JsonArray [JsonText ".", JsonText "{", JsonText ","])]
             )
           ]
       )
@@ -395,6 +437,9 @@ hover documents parameters = case located documents parameters of
   Nothing -> JsonNull
   Just (value, offset) -> hoverAt value offset
 
+{-| The declaration in this document a name resolves to. The server answers
+    definition through `definitionAcross`, which also reaches other modules'
+    files; this is the answer from the document alone. -}
 definition :: Documents -> Json -> Json
 definition documents parameters = case (uriOf parameters, located documents parameters) of
   (Just uri, Just (value, offset)) -> definitionAt uri value offset

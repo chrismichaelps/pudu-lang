@@ -1,11 +1,14 @@
 module Std.App.Database
 
 import Std.App.Config as Config
+import Std.App.Health as Health
 import Std.App.Stage as Lifecycle
 import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
 import Std.Db.Postgres as Postgres
 import Std.Db.Row as Row
 import Std.Db.Sqlite as Sqlite
+import Std.Db.Store as Store
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -159,6 +162,62 @@ export fn transaction(
 ) -> Result[Driver.Rows, Driver.Error] {
   let client = available(database) ?
   Driver.transaction(&client, action)
+}
+
+/// Bring the schema to what the program holds, through this database's driver.
+///
+/// Answers how many migrations ran. A database that is not started is refused
+/// rather than opened, like every other call here.
+export fn migrate(
+  database: &Database,
+  migrations: &Array[Migrate.Migration]
+) -> Result[Int, Migrate.MigrationError] {
+  let client = Result.mapErr(available(database), fn(problem: Driver.Error) -> Migrate.MigrationError {
+      Migrate.Refused("the database", problem.message)
+    }) ?
+  Migrate.apply(&client, &database.driver, migrations)
+}
+
+/// This database as a store reads and writes it. A database that is not
+/// started is refused rather than opened.
+export fn storeTarget(database: &Database) -> Result[Store.Target, Driver.Error] {
+  let client = available(database) ?
+  Ok(Store.through(&client, &database.driver))
+}
+
+/// A stage that migrates when the application starts and has nothing to undo
+/// when it stops. Placed after the database's own stage, so the connection is
+/// open before it runs and still open when it finishes.
+export fn migrationStage(
+  database: &Database,
+  name: Str,
+  migrations: &Array[Migrate.Migration]
+) -> Lifecycle.Stage {
+  let resource = *database
+  let held = *migrations
+  Lifecycle.create(name,
+    fn() -> Result[(), Str] {
+      match migrate(&resource, &held) {
+        case Ok(_) => Ok(())
+        case Err(problem) => Err(Migrate.explain(&problem))
+      }
+    },
+    fn() -> Result[(), Str] { Ok(()) })
+}
+
+/// A readiness check that asks the database a question.
+///
+/// It runs `select 1` through the started client, so an instance whose
+/// database is not started or not answering is taken out of rotation rather
+/// than sent requests it will fail. It belongs among readiness checks and
+/// never among liveness checks: a database outage is not a reason to restart
+/// a program that is otherwise well, and a liveness check that asked would
+/// restart every instance at once.
+export fn readiness(database: &Database, name: Str) -> Health.Readiness {
+  let resource = *database
+  Health.readiness(name, fn() -> Health.Verdict {
+      Health.fromTruth(Result.isOk(&execute(&resource, "select 1")))
+    })
 }
 
 fn databaseFailure(problem: Driver.Error) -> QueryError { DatabaseFailure(problem) }

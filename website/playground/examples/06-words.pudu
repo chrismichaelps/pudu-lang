@@ -1,0 +1,38 @@
+// Counting words
+// Arrays, maps, and sorting: the most frequent words in a passage.
+module Main
+
+import Std.Io as Io
+import Std.List as List
+import Std.Map as Map
+
+const PASSAGE: Str = "the pudu is the smallest deer in the world and the pudu lives in the forests of chile and argentina where the forest is dense"
+
+fn counted(words: &Array[Str]) -> Map[Str, Int] {
+  var counts: Map[Str, Int] = mapOf([])
+  for word in *words {
+    let seen = match counts.get(word) {
+      case Some(count) => count
+      case None => 0
+    }
+    counts = counts.insert(word, seen + 1)
+  }
+  counts
+}
+
+fn main() -> Int {
+  let words = PASSAGE.split(" ")
+  let counts = counted(&words)
+  let ranked = List.sortBy(&Map.toArray(&counts), fn(left: (Str, Int), right: (Str, Int)) -> Bool {
+      if left[1] != right[1] { left[1] > right[1] } else { left[0] < right[0] }
+    })
+  let _total = Io.writeLine("{words.length()} words, {ranked.length()} different")
+  var shown = 0
+  for entry in ranked {
+    if shown < 5 {
+      let _said = Io.writeLine("{entry[1]}  {entry[0]}")
+      shown = shown + 1
+    }
+  }
+  0
+}

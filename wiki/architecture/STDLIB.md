@@ -10,7 +10,8 @@ aliases: [Standard Library, Stdlib Design]
 
 A value has methods from exactly two places: the closed sets the compiler wires into `Array`,
 `Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes. Everything else is a
-module function taking the value as an argument.
+module function taking the value as an argument. One method is universal: every value answers
+`toText()` with the text `display` writes, unless its type declares a `toText` of its own.
 
 That is why `text.contains("an")` works and `Option.unwrapOr(value, fallback)` does not become
 `value.unwrapOr(fallback)`: `Str` is a built-in with a method set, and `Option` is an ordinary sum
@@ -192,6 +193,8 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Net` | addresses, TCP, UDP |
 | `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
+| `Std.Site` | building a web application into the files and routing a host serves |
+| `Std.Ip` | IPv4 and IPv6 addresses, classification, network prefixes, allowlists |
 
 ### Concurrency
 
@@ -238,6 +241,12 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
 | `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
 | `Std.Tree` | 40 | a value with trees beneath it: three orders, paths, pruning, grafting, and growing |
+| `Std.Cron` | 7 | five-field schedules, macros, month and weekday names, the next firing minute in UTC |
+| `Std.Stats` | 16 | mean, median, percentiles, variance, deviation, covariance, correlation, histograms, a streaming accumulator |
+| `Std.Checksum` | 9 | CRC-32, CRC-32C, CRC-64, FNV-1a at runtime speed, chained over chunks |
+| `Std.Human` | 10 | byte sizes and durations read and written, ordinals, plurals, relative time |
+| `Std.Dotenv` | 8 | environment files: quoting, escapes, earlier-key expansion, rendering back |
+| `Std.Term` | 21 | terminal colour and styles, stripping sequences, visible width, cursor control |
 | `Std.Mappable` | 3 | a trait over the container itself, so one definition serves several |
 | `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
 | `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
@@ -259,8 +268,9 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Http.Message` | 11 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
-| `Std.Json` | 19 | a `Json` value, a decoder with positions in its errors, compact and pretty encoding |
+| `Std.Json` | 21 | a `Json` value, a native-first decoder with positions in its errors, JSON Lines folding, compact and pretty encoding |
 | `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
+| `Std.Ip` | 36 | strict address parsing, RFC 5952 rendering, classification, networks, allowlists |
 | `Std.Order` | 27 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
@@ -276,7 +286,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
 | `Std.Bytes` | 45 | compact bytes, binary reads/writes, slicing, hex, and base64 |
-| `Std.Csv` | 12 | quoted separated rows, tables, records, and rendering |
+| `Std.Csv` | 15 | quoted separated rows, streamed file rows, tables, records, and rendering |
 | `Std.Path` | 23 | host-aware lexical construction, decomposition, and containment |
 | `Std.Uuid` | 12 | byte-backed v4/v7 identifiers with explicit entropy and time |
 | `Std.Bench` | 12 | repeated measurements, summaries, ratios, and rendering |
@@ -290,6 +300,16 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
+| `Std.Ui.Canvas` | 43 | bounded exact-pixel rendering by bands and spans, opaque-cover culling, damage repaint |
+| `Std.Ui.Layout` | 46 | declarative views and text, two-pass placement, scrolling windows, accessibility, damage extents |
+| `Std.Ui.Screen` | 31 | routed input, text entry, clamped scrolling, focus rings, unchanged views skipped, damage repaint |
+| `Std.Ui.Text` | 22 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged and clipped glyphs |
+| `Std.Audio` | 42 | exact 16-bit PCM bytes, frame-counted time, gain, mix, resampling, channel maps, bounded WAV |
+| `Std.Audio.Graph` | 21 | stateless pull-model nodes: clips, integer tones, gain, mixes, sample-accurate ramps |
+| `Std.Video` | 19 | exact fractional rates and timestamps, non-overlapping picture tracks, audio alignment |
+| `Std.Fs` | 19 | atomic replacement, claimed temporary names, permissions, metadata, link-aware containment |
+| `Std.Process` | 47 | runs, streams, deadlines, pipelines, stated environments and directories, scoped programs |
+| `Std.Crypto` | 59 | SHA-2, SHA-3, BLAKE2b, HMAC, constant-time comparison, derivation, sealing, fresh key material |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |
@@ -695,6 +715,9 @@ dependencies are its own files plus the compiler it is built with, and that is t
 
 ## Active completion queue
 
+The cross-cutting release order is maintained in [[First Release Readiness]]. It distinguishes
+missing modules from existing surfaces that still lack lifetime, limit, or validation evidence.
+
 - ~~**`Std.HashMap` and `Hash`.**~~ Shipped; see [[ADR-0015]]. The remaining note is kept only as
   the record of what had to be settled first: equality/hash coherence and a
   constant-time indexed bucket representation must be specified beside `Eq` and `Ord` before the
@@ -715,7 +738,8 @@ dependencies are its own files plus the compiler it is built with, and that is t
   standard library remains shipped and cannot be shadowed by dependency resolution.
 - **Large-input evidence.** File, network, CSV/TOML/JSON, HTTP, and database readers need streaming
   fixtures whose maximum residency is bounded independently of input size; a buffered convenience
-  wrapper never serves as that evidence.
+  wrapper never serves as that evidence. `test/residency.py` provides it for `Std.Io.foldLines`,
+  `Std.Io.countBytes`, and `Std.Csv.foldRows`; network, TOML, JSON, HTTP, and database readers remain.
 
 ## The library is a gate
 
@@ -810,7 +834,7 @@ were implemented without tests or review; they are not a new production-readines
 
 [[Std Db ConnectionString]] parses explicit PostgreSQL URIs; [[Std App Database]] owns the pool as an application stage and exposes bound queries to handlers. PostgreSQL SSLRequest/TLS transport is still pending; the URI API requires explicit plaintext mode.
 
-The public extension seam is [[Std Db Driver]], independent of PostgreSQL session and OID types. [[Std App Database]] accepts developer-supplied drivers or an explicit driver array. [[Std Db Postgres]] is the first bundled adapter; SQL dialects remain driver-specific. Existing query builders, stores and migrations are PostgreSQL-specific pending adapter migration.
+The public extension seam is [[Std Db Driver]], independent of PostgreSQL session and OID types. [[Std App Database]] accepts developer-supplied drivers or an explicit driver array. [[Std Db Postgres]] is the first bundled adapter; SQL dialects remain driver-specific. [[Std Db Migrate]] applies migrations and [[Std Db Store]] saves and loads kept values through any driver; each also keeps its PostgreSQL session form.
 
 [[Std Db Sqlite]] is a second bundled adapter: one serialized embedded connection, prepared bindings, typed rows and explicit close. App database construction selects PostgreSQL or SQLite from the URI and accepts additional developer-supplied drivers. MySQL and other native adapters remain open work.
 

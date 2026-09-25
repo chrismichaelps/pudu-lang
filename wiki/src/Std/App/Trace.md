@@ -41,6 +41,9 @@ is a field nobody chose, which is how a trace comes to carry a password.
 
 **The clock is given rather than read**, as everywhere else here, so a span's duration is a
 comparison of values and a trace can be built in a test without time passing.
+
+**Hexadecimal is read with a bound.** The flags reader answers nothing for digits spelling more than an
+`Int` holds rather than overflowing; `parse` already admits only two flag digits.
 ## Grill Log
 - **Q:** Refuse a request whose trace header cannot be read? **A:** No — and this is the one place
   here where malformed input is not refused. _Rationale:_ the header is a diagnostic, and a service

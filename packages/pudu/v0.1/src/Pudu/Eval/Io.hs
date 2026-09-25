@@ -2,20 +2,32 @@
 module Pudu.Eval.Io
   ( IoOutcome (..)
   , appendTextFile
+  , canonicalPathAt
+  , createDirectoryExclusiveAt
+  , createSymbolicLinkAt
+  , createTemporaryFileIn
   , createDirectoryAt
   , environmentPairs
   , exitWith
+  , fileSizeAt
   , homeDirectoryPath
+  , isSymbolicLinkAt
   , listDirectoryAt
   , monotonicMilliseconds
   , pathSeparators
+  , permissionsMaskAt
   , programArguments
   , readStandardLine
   , readTextFile
+  , removeEmptyDirectoryAt
   , removeFileAt
+  , renamePathAt
   , searchPathSeparatorText
+  , setPermissionsMaskAt
   , temporaryDirectoryPath
+  , testDirectoryExists
   , testFileExists
+  , trySynchronous
   , writeStandardError
   , writeStandardErrorPart
   , writeStandardOutput
@@ -24,24 +36,66 @@ module Pudu.Eval.Io
   ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (IOException, try)
+import Control.Exception
+  ( IOException
+  , SomeAsyncException
+  , SomeException
+  , fromException
+  , try
+  , tryJust
+  )
+import qualified Data.ByteString as ByteString
 import Data.Text (Text)
+import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import GHC.Clock (getMonotonicTime)
 import System.Directory
-  ( createDirectoryIfMissing
+  ( canonicalizePath
+  , createDirectory
+  , createDirectoryIfMissing
+  , createFileLink
   , doesDirectoryExist
   , doesFileExist
+  , emptyPermissions
+  , executable
+  , getFileSize
+  , getPermissions
   , getTemporaryDirectory
   , listDirectory
+  , pathIsSymbolicLink
+  , readable
+  , removeDirectory
   , removeFile
+  , renamePath
+  , searchable
+  , setOwnerExecutable
+  , setOwnerReadable
+  , setOwnerSearchable
+  , setOwnerWritable
+  , setPermissions
+  , writable
   )
 import System.Environment (getArgs, getEnvironment, lookupEnv)
 import qualified System.FilePath as FilePath
 import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
-import System.IO (hFlush, hIsEOF, hPutStrLn, stderr, stdin, stdout)
+import System.IO (Handle, hClose, hFlush, hIsEOF, openBinaryTempFile, stderr, stdin, stdout)
+import System.IO.Error (doesNotExistErrorType, mkIOError)
+
+{-| An action's failure as a value, for every failure the action itself raised.
+
+    An asynchronous exception — an interrupt, a thread being killed, a timeout
+    firing — is re-raised instead. It did not come from the action, and turning
+    it into a value is how Ctrl-C became an ordinary failure a server loop
+    retried: a process blocked in accept answered `user interrupt` as though a
+    connection had failed, and kept running. -}
+trySynchronous :: IO a -> IO (Either SomeException a)
+trySynchronous = tryJust synchronousOnly
+ where
+  synchronousOnly problem = case fromException problem :: Maybe SomeAsyncException of
+    Just _ -> Nothing
+    Nothing -> Just problem
 
 {-| @Eval.Io.Outcome — what an effect produced, or why it did not.
 
@@ -62,12 +116,21 @@ data IoOutcome a
     already shown what it printed. Buffering that hid a prompt would be a
     correctness problem, not a performance one. -}
 writeStandardOutput :: Text -> IO (IoOutcome ())
-writeStandardOutput text = attempt $ do
-  TextIO.hPutStrLn stdout text
-  hFlush stdout
+writeStandardOutput text = attempt (writeWholeLine stdout text)
 
 writeStandardError :: Text -> IO (IoOutcome ())
-writeStandardError text = attempt (hPutStrLn stderr (Text.unpack text))
+writeStandardError text = attempt (writeWholeLine stderr text)
+
+{-| A line and its line break as one write.
+
+    Standard error is unbuffered, and a line handed over one character at a time
+    is written that way, so two threads reporting at once produced one line of
+    both interleaved. Encoded first and written as one run of bytes, a line
+    holds the handle for the whole of it. -}
+writeWholeLine :: Handle -> Text -> IO ()
+writeWholeLine handle text = do
+  ByteString.hPut handle (Encoding.encodeUtf8 (text <> "\n"))
+  hFlush handle
 
 {-| Write text and leave the line open, so a prompt, a progress report, or a
     line assembled from several writes is possible at all. Flushed for the same
@@ -126,6 +189,93 @@ listDirectoryAt path = attempt (map Text.pack <$> listDirectory path)
     the check and the write. -}
 createDirectoryAt :: FilePath -> IO (IoOutcome ())
 createDirectoryAt path = attempt (createDirectoryIfMissing True path)
+
+{-| Whether a path names a directory, following a link to one. -}
+testDirectoryExists :: FilePath -> IO Bool
+testDirectoryExists = doesDirectoryExist
+
+{-| A path renamed, replacing the destination.
+
+    Within one filesystem the destination names the old contents or the new and
+    never a mixture, which is the one step an atomic replacement is built on. -}
+renamePathAt :: FilePath -> FilePath -> IO (IoOutcome ())
+renamePathAt from to = attempt (renamePath from to)
+
+{-| A new empty file in a directory, named and created in one step.
+
+    The operating system chooses the name and creates the file exclusively, so
+    no other process can claim the name between its choice and its creation. The
+    name is the prefix, random digits, and `.tmp`: the digits are placed before
+    a template's extension, so giving the template its own extension is what
+    keeps the prefix intact when the prefix itself contains a dot. -}
+createTemporaryFileIn :: FilePath -> FilePath -> IO (IoOutcome Text)
+createTemporaryFileIn directory prefix = attempt $ do
+  (path, handle) <- openBinaryTempFile directory (prefix <> ".tmp")
+  hClose handle
+  pure (Text.pack path)
+
+{-| A directory created only if nothing has the name, without its parents.
+
+    Failing on an existing name is the point: the attempt is what claims it. -}
+createDirectoryExclusiveAt :: FilePath -> IO (IoOutcome ())
+createDirectoryExclusiveAt path = attempt (createDirectory path)
+
+{-| An empty directory removed; one with contents is refused. -}
+removeEmptyDirectoryAt :: FilePath -> IO (IoOutcome ())
+removeEmptyDirectoryAt path = attempt (removeDirectory path)
+
+{-| What a path permits, as a mask: readable 1, writable 2, executable 4,
+    searchable 8. -}
+permissionsMaskAt :: FilePath -> IO (IoOutcome Integer)
+permissionsMaskAt path = attempt $ do
+  granted <- getPermissions path
+  pure
+    ( weight readable 1 granted
+        + weight writable 2 granted
+        + weight executable 4 granted
+        + weight searchable 8 granted
+    )
+ where
+  weight test amount value = if test value then amount else 0
+
+{-| A path's permissions set from the same mask `permissionsMaskAt` answers. -}
+setPermissionsMaskAt :: FilePath -> Integer -> IO (IoOutcome ())
+setPermissionsMaskAt path mask =
+  attempt
+    ( setPermissions path
+        ( setOwnerReadable (flag 1)
+            . setOwnerWritable (flag 2)
+            . setOwnerExecutable (flag 4)
+            . setOwnerSearchable (flag 8)
+            $ emptyPermissions
+        )
+    )
+ where
+  flag amount = (mask `div` amount) `mod` 2 == 1
+
+{-| Whether a path is itself a symbolic link, without following it. -}
+isSymbolicLinkAt :: FilePath -> IO (IoOutcome Bool)
+isSymbolicLinkAt path = attempt (pathIsSymbolicLink path)
+
+{-| A symbolic link at `link` naming `target`. -}
+createSymbolicLinkAt :: FilePath -> FilePath -> IO (IoOutcome ())
+createSymbolicLinkAt target link = attempt (createFileLink target link)
+
+{-| A path with every link and relative step resolved.
+
+    Refused when the path does not exist, because a location that does not
+    exist has no links to resolve and a containment check made on its spelling
+    would trust exactly what it exists to distrust. -}
+canonicalPathAt :: FilePath -> IO (IoOutcome Text)
+canonicalPathAt path = attempt $ do
+  present <- testFileExists path
+  if present
+    then Text.pack <$> canonicalizePath path
+    else ioError (mkIOError doesNotExistErrorType "canonicalPath" Nothing (Just path))
+
+{-| A file's size in bytes. -}
+fileSizeAt :: FilePath -> IO (IoOutcome Integer)
+fileSizeAt path = attempt (getFileSize path)
 
 programArguments :: IO [Text]
 programArguments = map Text.pack <$> getArgs

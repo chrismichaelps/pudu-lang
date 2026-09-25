@@ -1,0 +1,179 @@
+module Std.App.Idempotency
+
+import Std.App.Problem as Problem
+import Std.Crypto as Crypto
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Sync as Sync
+
+/// One key's state: the request it was first used with, and the answer once
+/// one exists. `answer` is `None` while the first request is still running.
+export type Held = { fingerprint: Str, answer: Option[Http.Response], until: Int }
+
+/// Keys seen within `lifetime` milliseconds, at most `capacity` of them.
+export type Store = { entries: Map[Str, Held], lifetime: Int, capacity: Int }
+
+/// What to do with a request carrying a key.
+export type Decision
+  = Proceed
+  | Replay(Http.Response)
+  | Mismatched
+  | Pending
+  | Full
+
+/// A store shared by the requests of one service.
+export type Shared = { lock: Sync.Mutex, held: Sync.Cell[Store] }
+
+/// The request header carrying the key.
+export const HEADER: Str = "Idempotency-Key"
+
+/// The response header marking a replayed answer.
+export const REPLAYED: Str = "Idempotent-Replayed"
+
+/// An empty store.
+export fn store(lifetime: Int, capacity: Int) -> Store {
+  Store{entries: mapOf([]), lifetime: lifetime, capacity: capacity}
+}
+
+/// An empty store shared behind a lock.
+export fn shared(lifetime: Int, capacity: Int) -> Shared {
+  Shared{lock: Sync.mutex(), held: Sync.cell(store(lifetime, capacity))}
+}
+
+/// What to do with a request using `key` whose body hashes to `fingerprint`.
+///
+/// An expired entry counts as absent. A new key when the store is at
+/// capacity after expiry is `Full`.
+export fn decide(held: &Store, key: Str, fingerprint: Str, now: Int) -> Decision {
+  match held.entries.get(key) {
+    case Some(entry) if entry.until > now => {
+      if entry.fingerprint != fingerprint { return Mismatched }
+      match entry.answer {
+        case Some(answer) => Replay(answer)
+        case None => Pending
+      }
+    }
+    case _ => if live(held, now) >= held.capacity { Full } else { Proceed }
+  }
+}
+
+/// The store with `key` recorded as running.
+export fn begin(held: &Store, key: Str, fingerprint: Str, now: Int) -> Store {
+  let pruned = prune(held, now)
+  let entry = Held{fingerprint: fingerprint, answer: None, until: now + held.lifetime}
+  Store{..pruned, entries: pruned.entries.insert(key, entry)}
+}
+
+/// The store with the answer for `key` recorded.
+///
+/// A 5xx answer releases the key instead, so a retry runs the request again.
+export fn finish(held: &Store, key: Str, answer: &Http.Response, now: Int) -> Store {
+  if answer.status.code >= 500 { return release(held, key) }
+  match held.entries.get(key) {
+    case Some(entry) => {
+      let done = Held{..entry, answer: Some(*answer), until: now + held.lifetime}
+      Store{..*held, entries: held.entries.insert(key, done)}
+    }
+    case None => *held
+  }
+}
+
+/// The store without `key`.
+export fn release(held: &Store, key: Str) -> Store {
+  Store{..*held, entries: held.entries.remove(key)}
+}
+
+/// The store without expired entries.
+export fn prune(held: &Store, now: Int) -> Store {
+  var kept: Map[Str, Held] = mapOf([])
+  for (key, entry) in held.entries {
+    if entry.until > now { kept = kept.insert(key, entry) }
+  }
+  Store{..*held, entries: kept}
+}
+
+/// Entries not yet expired.
+export fn live(held: &Store, now: Int) -> Int {
+  var count = 0
+  for (_, entry) in held.entries {
+    if entry.until > now { count = count + 1 }
+  }
+  count
+}
+
+/// The key a request carries, if any.
+export fn keyOf(request: &Route.Request) -> Option[Str] {
+  match Route.header(request, HEADER) {
+    case Some(key) if key.trim().length() > 0 => Some(key.trim())
+    case _ => None
+  }
+}
+
+/// A hash of the method, path, and body: the same key reused for a
+/// different request has a different fingerprint.
+export fn fingerprintOf(request: &Route.Request) -> Str {
+  let method = Http.methodName(&request.message.method)
+  Crypto.sha256Hex(method + " " + request.path + "\n" + request.message.body)
+}
+
+/// A step answering a repeated key with the stored answer.
+///
+/// Requests without a key, and `GET`, `HEAD`, and `OPTIONS` requests, pass
+/// through. A key reused with a different request is 422, a key whose first
+/// request is still running is 409, and a full store is 503; each is a
+/// problem body. A replay carries `Idempotent-Replayed: true`.
+export fn guarded(target: Shared, clock: fn() -> Int) -> Route.Middleware {
+  |request, next| {
+    if isSafe(&request.message.method) { return next(request) }
+    let key = match keyOf(&request) {
+      case Some(found) => found
+      case None => { return next(request) }
+    }
+    let fingerprint = fingerprintOf(&request)
+    let now = clock()
+    let decided = Sync.withLock(&target.lock, || {
+        let seen = snapshot(&target)
+        let decision = decide(&seen, key, fingerprint, now)
+        if decision == Proceed { replace(&target, begin(&seen, key, fingerprint, now)) }
+        decision
+      })
+    match decided {
+      case Ok(Proceed) => {
+        let answer = next(request)
+        let settled = Sync.withLock(&target.lock, || {
+            replace(&target, finish(&snapshot(&target), key, &answer, clock()))
+          })
+        if let Err(_) = settled { return refusal(500, "idempotency store unavailable") }
+        answer
+      }
+      case Ok(Replay(answer)) => {
+        Http.Response{..answer, headers: answer.headers.push((REPLAYED, "true"))}
+      }
+      case Ok(Mismatched) => refusal(422, "this key was used with a different request")
+      case Ok(Pending) => refusal(409, "a request with this key is still running")
+      case Ok(Full) => refusal(503, "too many keys are held; retry later")
+      case Err(_) => refusal(500, "idempotency store unavailable")
+    }
+  }
+}
+
+fn snapshot(target: &Shared) -> Store {
+  match Sync.get(&target.held) {
+    case Ok(found) => found
+    case Err(_) => store(0, 0)
+  }
+}
+
+fn replace(target: &Shared, next: Store) {
+  let _ = Sync.set(&target.held, next)
+}
+
+fn refusal(code: Int, detail: Str) -> Http.Response {
+  Problem.respond(&Problem.detailed(code, detail))
+}
+
+const SAFE_METHODS: Set[Str] = setOf(["GET", "HEAD", "OPTIONS"])
+
+fn isSafe(method: &Http.Method) -> Bool {
+  SAFE_METHODS.contains(Http.methodName(method))
+}

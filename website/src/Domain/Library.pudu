@@ -1,0 +1,194 @@
+module Domain.Library
+
+/// A part of the standard library a reader looks for by what it is for.
+///
+/// `modules` lists the modules a section opens with. A module whose name
+/// continues one of those, such as `Std.Http.Server.Route` under `Std.Http`, is
+/// shown beneath it rather than as a row of its own, so the page reads as a
+/// map of families instead of a list of every file.
+export type Section = { id: Str, title: Str, lead: Str, modules: Array[Str] }
+
+export const SECTIONS: Array[Section] = [
+  Section{id: "core", title: "Core values", lead: "The types every program uses: optional values, results, characters, comparisons, and the traits behind them.", modules: [
+      "Std.Option", "Std.Result", "Std.Bool", "Std.Char", "Std.Tuple", "Std.Function", "Std.Order", "Std.Show", "Std.Num", "Std.Mappable"
+    ] },
+  Section{id: "text", title: "Text", lead: "Searching, building, parsing, and formatting text.", modules: [
+      "Std.Text", "Std.Fmt", "Std.Regex", "Std.Glob", "Std.Diff", "Std.Intern", "Std.Semver", "Std.Uuid", "Std.Validate", "Std.Human"
+    ] },
+  Section{id: "numbers", title: "Numbers", lead: "Arithmetic past the operators: exact decimals, bit manipulation, randomness, and numeric columns.", modules: [
+      "Std.Math", "Std.Decimal", "Std.Bits", "Std.Random", "Std.Column", "Std.Stats"
+    ] },
+  Section{id: "collections", title: "Collections", lead: "Arrays, maps, sets, and the specialised structures for when the ordinary ones are not the right shape. Collections never change in place: every operation answers a new value.", modules: [
+      "Std.List", "Std.Map", "Std.Set", "Std.Iter", "Std.NonEmpty", "Std.Deque", "Std.Heap", "Std.HashMap", "Std.SortedMap", "Std.LinkedMap", "Std.FlatMap", "Std.IntMap", "Std.IntSet", "Std.EnumMap", "Std.BiMap", "Std.MultiMap", "Std.MultiKeyMap", "Std.Tree", "Std.PrefixTrie", "Std.Graph", "Std.DisjointSet", "Std.FenwickTree", "Std.IntervalTree", "Std.RingBuffer", "Std.LruCache", "Std.BitSet", "Std.BitVector", "Std.BloomFilter", "Std.RadixSort"
+    ] },
+  Section{id: "system", title: "Files, processes, and time", lead: "Everything that talks to the machine a program runs on.", modules: [
+      "Std.Io", "Std.Fs", "Std.Path", "Std.Env", "Std.Args", "Std.Process", "Std.Signal", "Std.Time", "Std.Log", "Std.Out", "Std.Term", "Std.Cron"
+    ] },
+  Section{id: "formats", title: "Data formats", lead: "Reading and writing the formats programs exchange.", modules: [
+      "Std.Json", "Std.Csv", "Std.Toml", "Std.Yaml", "Std.Xml", "Std.Mime", "Std.Dotenv"
+    ] },
+  Section{id: "bytes", title: "Bytes, hashing, and compression", lead: "Binary data, encodings, non-cryptographic hashes, and archives.", modules: [
+      "Std.Bytes", "Std.Buffer", "Std.ByteOrder", "Std.Hex", "Std.Varint", "Std.Adler32", "Std.Murmur3", "Std.SipHash", "Std.Checksum", "Std.Compress.Gzip", "Std.Archive.Tar", "Std.Archive.Zip"
+    ] },
+  Section{id: "web", title: "Networking and the web", lead: "Sockets, TLS, HTTP clients and servers, HTML, and mail.", modules: [
+      "Std.Net", "Std.Tls", "Std.Url", "Std.Http", "Std.Html", "Std.Site", "Std.Ip", "Std.Mail"
+    ] },
+  Section{id: "applications", title: "Applications and databases", lead: "The pieces a service is assembled from: configuration, health, sessions, jobs, and SQL databases.", modules: [
+      "Std.App", "Std.Db", "Std.Crypto", "Std.RateLimiter"
+    ] },
+  Section{id: "concurrency", title: "Concurrency", lead: "Parallel workers, the channels between them, and the state they share.", modules: [
+      "Std.Concurrent", "Std.Channel", "Std.Sync"
+    ] },
+  Section{id: "media", title: "Interfaces, audio, and video", lead: "Drawing, layout, desktop windows, and exact audio and video timing, written in Pudu itself.", modules: [
+      "Std.Ui", "Std.Audio", "Std.Video"
+    ] },
+  Section{id: "testing", title: "Testing and measuring", lead: "Suites that `pudu test` runs, generated properties, and benchmarks.", modules: [
+      "Std.Test", "Std.Bench"
+    ] }
+]
+
+/// One sentence for each module a section opens with.
+export const SUMMARIES: Map[Str, Str] = mapOf([
+    ("Std.Option", "A value that may be absent: Some(value) or None."),
+    ("Std.Result", "Work that may fail: Ok(value) or Err(problem)."),
+    ("Std.Bool", "Combining truth values across arrays."),
+    ("Std.Char", "Single characters: classes, case, and digits."),
+    ("Std.Tuple", "Pairs and the functions that take them apart."),
+    ("Std.Function", "Functions as values: composition, identity, and application."),
+    ("Std.Order", "Comparisons, orderings, and sort predicates."),
+    ("Std.Show", "Rendering values as text."),
+    ("Std.Num", "The traits behind arithmetic."),
+    ("Std.Mappable", "Containers whose values can be replaced."),
+    ("Std.Text", "Searching, splitting, trimming, and reading numbers from text."),
+    ("Std.Fmt", "Padding, alignment, and number formatting."),
+    ("Std.Regex", "Regular expressions with a step limit."),
+    ("Std.Glob", "Shell-style wildcard patterns."),
+    ("Std.Diff", "Line differences and unified diff hunks."),
+    ("Std.Intern", "Pools that store each distinct text once."),
+    ("Std.Semver", "Semantic versions: parsing and comparison."),
+    ("Std.Uuid", "Universally unique identifiers."),
+    ("Std.Validate", "Checking form input field by field."),
+    ("Std.Math", "Numeric functions for whole and floating numbers."),
+    ("Std.Decimal", "Exact decimal arithmetic and rounding."),
+    ("Std.Bits", "Bitwise operations and bit counts for every integer width."),
+    ("Std.Random", "Seeded pseudo-random numbers."),
+    ("Std.Column", "Element-wise arithmetic over numeric columns."),
+    ("Std.List", "Arrays: sorting, grouping, searching, and folding."),
+    ("Std.Map", "Ordered maps from keys to values."),
+    ("Std.Set", "Ordered sets."),
+    ("Std.Iter", "Sequences a for loop can walk."),
+    ("Std.NonEmpty", "Arrays that always hold at least one element."),
+    ("Std.Deque", "Double-ended queues."),
+    ("Std.Heap", "Priority queues."),
+    ("Std.HashMap", "Maps spread across hashed buckets."),
+    ("Std.SortedMap", "Maps kept in key order with range queries."),
+    ("Std.LinkedMap", "Maps that remember insertion order."),
+    ("Std.FlatMap", "Maps from 64-bit keys in one flat table."),
+    ("Std.IntMap", "Maps keyed by whole numbers."),
+    ("Std.IntSet", "Sets of whole numbers."),
+    ("Std.EnumMap", "Maps over a fixed domain of keys."),
+    ("Std.BiMap", "Maps that look up in both directions."),
+    ("Std.MultiMap", "Maps holding several values under one key."),
+    ("Std.MultiKeyMap", "Maps keyed by more than one part."),
+    ("Std.Tree", "Labelled trees addressed by path."),
+    ("Std.PrefixTrie", "Tries for lookups by key prefix."),
+    ("Std.Graph", "Directed graphs and their traversals."),
+    ("Std.DisjointSet", "Union-find over connected components."),
+    ("Std.FenwickTree", "Prefix sums that update in place of a rebuild."),
+    ("Std.IntervalTree", "Finding the intervals that overlap a point or range."),
+    ("Std.RingBuffer", "Fixed-capacity circular buffers."),
+    ("Std.LruCache", "Caches that discard the least recently used entry."),
+    ("Std.BitSet", "Sparse sets of numeric identifiers."),
+    ("Std.BitVector", "Dense vectors of bits."),
+    ("Std.BloomFilter", "Probabilistic membership tests."),
+    ("Std.RadixSort", "Sorting 64-bit integers by their digits."),
+    ("Std.Io", "Standard input and output, files, and streaming readers."),
+    ("Std.Fs", "Atomic writes, temporary files, permissions, and metadata."),
+    ("Std.Path", "Building and taking apart file paths."),
+    ("Std.Env", "Arguments, environment variables, and the clock."),
+    ("Std.Args", "Command-line options, checked and typed."),
+    ("Std.Process", "Starting other programs and talking to them."),
+    ("Std.Signal", "Requests from outside the program to stop."),
+    ("Std.Time", "Dates, times, durations, and their text forms."),
+    ("Std.Log", "Structured, levelled logging."),
+    ("Std.Out", "Printing values with a chosen layout."),
+    ("Std.Json", "JSON documents and JSON Lines."),
+    ("Std.Csv", "CSV, read one record at a time."),
+    ("Std.Toml", "TOML configuration."),
+    ("Std.Yaml", "YAML documents."),
+    ("Std.Xml", "XML documents and their attributes."),
+    ("Std.Mime", "Media types and their parameters."),
+    ("Std.Bytes", "Byte arrays, slices, hex, and base64."),
+    ("Std.Buffer", "Contiguous, fixed-length byte buffers."),
+    ("Std.ByteOrder", "Big- and little-endian integers."),
+    ("Std.Hex", "Hexadecimal digits and bytes."),
+    ("Std.Varint", "LEB128 variable-length integers."),
+    ("Std.Adler32", "The Adler-32 checksum."),
+    ("Std.Checksum", "CRC-32, CRC-32C, CRC-64, and FNV-1a checksums, computed incrementally."),
+    ("Std.Cron", "Cron schedules: parsing them and finding the next time they fire."),
+    ("Std.Dotenv", "Reading environment files of KEY=value assignments."),
+    ("Std.Human", "Sizes, durations, ordinals, and relative times as people write them."),
+    ("Std.Ip", "IP addresses and networks: parsing, rendering, and membership."),
+    ("Std.Site", "Building a static site, with its routing, for the host that serves it."),
+    ("Std.Stats", "Summary statistics of numeric samples."),
+    ("Std.Term", "Colours and styles for terminal output."),
+    ("Std.Murmur3", "The MurmurHash3 hash."),
+    ("Std.SipHash", "The SipHash keyed hash."),
+    ("Std.Compress.Gzip", "Gzip compression and decompression."),
+    ("Std.Archive.Tar", "Reading and writing tar archives."),
+    ("Std.Archive.Zip", "Reading and writing zip archives."),
+    ("Std.Net", "TCP sockets: listening, connecting, reading, and writing."),
+    ("Std.Tls", "Verified TLS connections."),
+    ("Std.Url", "Parsing and building URLs."),
+    ("Std.Http", "HTTP messages, clients, and servers with routing and limits."),
+    ("Std.Html", "HTML built as values and escaped by construction."),
+    ("Std.Mail", "Email addresses, messages, and SMTP delivery."),
+    ("Std.App", "An application as a value: settings, stages, health, sessions, and jobs."),
+    ("Std.Db", "SQL for SQLite and PostgreSQL: queries, migrations, and stores."),
+    ("Std.Crypto", "Hashes, message authentication, key derivation, and encryption."),
+    ("Std.RateLimiter", "Token-bucket rate limiting."),
+    ("Std.Concurrent", "Starting parallel workers and joining them."),
+    ("Std.Channel", "Bounded channels between workers."),
+    ("Std.Sync", "Mutexes and shared cells."),
+    ("Std.Ui", "Server events, a software canvas, layout, text, and desktop windows."),
+    ("Std.Audio", "Exact PCM audio, processing graphs, and device playback."),
+    ("Std.Video", "Exact video timing and tracks."),
+    ("Std.Test", "Test suites and generated properties."),
+    ("Std.Bench", "Measuring how long code takes.")
+  ])
+
+/// The modules shown beneath a section's module: every module whose name
+/// continues it and that no section lists on its own.
+export fn childrenOf(parent: Str, modules: &Array[Str]) -> Array[Str] {
+  var found: Array[Str] = []
+  for name in *modules {
+    if name.startsWith(parent + ".") && !listed(name) { found = found.push(name) }
+  }
+  found
+}
+
+/// The modules no section reaches, so a module added to the library is still
+/// shown somewhere before it is given a place.
+export fn unplaced(modules: &Array[Str]) -> Array[Str] {
+  var found: Array[Str] = []
+  for name in *modules {
+    if !listed(name) && !underListed(name) { found = found.push(name) }
+  }
+  found
+}
+
+fn listed(name: Str) -> Bool {
+  for section in SECTIONS {
+    if section.modules.contains(name) { return true }
+  }
+  false
+}
+
+fn underListed(name: Str) -> Bool {
+  for section in SECTIONS {
+    for parent in section.modules {
+      if name.startsWith(parent + ".") { return true }
+    }
+  }
+  false
+}

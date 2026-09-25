@@ -1,0 +1,9 @@
+module Wrap
+
+import Node {Node}
+
+export type Wrap = { node: Node }
+
+export fn wrap(node: Node) -> Wrap { Wrap{node} }
+
+export fn unwrap(value: Wrap) -> Node { value.node }

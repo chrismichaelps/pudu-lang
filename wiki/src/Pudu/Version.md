@@ -76,3 +76,14 @@ all clauses evaluate to true.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Pudu CLI]] · [[Pudu REPL]] · [[Compiler Program]] · [[pudu-cabal]]
+
+## Source digest (#352)
+
+- `sourceDigest` is the SHA-256 [[Version Digest]] spliced in at compile time over the compiler's
+  sources; `identityText` is `version+digest`, the name a bundle's products are filed under.
+- `digestIn bytes` finds the literal `PUDU-SOURCE-DIGEST:` + 64 lowercase hex + `;` in an
+  executable's bytes, skipping malformed candidates; its own needle is assembled from two pieces so
+  it never matches itself.
+
+Resolved Grill Log: compare runtimes by what they were built from rather than by the version they
+report; read the digest from bytes so a runtime for another platform can be asked.

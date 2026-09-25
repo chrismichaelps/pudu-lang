@@ -4,27 +4,40 @@ import Std.Http.Server as Server
 import Std.Io as Io
 import Config as Config
 import Error as SiteError
-import Service.Catalog as Catalog
+import Site as Site
+import Web.LiveReload as LiveReload
 import Web.Routes as Web
 
 fn main() -> Int {
   match Config.load() {
     case Err(problem) => fail(&problem)
     case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
+      match Site.load(&settings) {
         case Err(problem) => fail(&problem)
-        case Ok(catalog) => serve(&settings, &catalog)
+        case Ok(site) => serve(&settings, &site)
       }
     }
   }
 }
 
-fn serve(settings: &Config.Config, catalog: &Catalog.Catalog) -> Int {
+fn serve(settings: &Config.Config, site: &Site.Site) -> Int {
   match Server.start(settings.host, settings.port) {
     case Err(_) => fail(&SiteError.ListenFailed)
     case Ok(live) => {
       let _announced = Io.writeLine("Pudu docs listening on http://" + settings.host + ":" + show(Server.portOf(&live)))
-      let result = Server.run(&Server.server(&Web.routes(settings.siteUrl, catalog)), &live, settings.connections)
+      if site.playground.enabled {
+        let _playground = Io.writeLine("Playground runs programs with runner " + settings.playground.runner)
+      }
+      let routed = Server.server(&Web.routes(site)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536)
+      // Run under `pudu run --watch`, every page follows the files it was made from.
+      let served = match LiveReload.fromEnvironment() {
+        case Some(watch) => {
+          let _following = Io.writeLine("Pages reload when a watched file changes (start " + watch.start + ")")
+          routed.using(LiveReload.middleware(&watch))
+        }
+        case None => routed
+      }
+      let result = Server.run(&served, &live, settings.connections)
       let _stopped = Server.stop(&live)
       match result {
         case Ok(_) => 0

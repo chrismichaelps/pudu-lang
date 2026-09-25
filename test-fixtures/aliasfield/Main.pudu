@@ -1,0 +1,13 @@
+module Main
+
+import Lib.Holder as Holder
+import Lib.Names as Names
+
+/// An alias reached through another module's record is what it stands for: the
+/// field takes text and a function, and has their members.
+fn main() -> Int {
+  let held = Holder.Holder{name: "pudu", admits: fn(reader: Str) -> Int { reader.length() }}
+  let named = Holder.Holder{name: Names.named(), admits: held.admits}
+  let admits = named.admits
+  held.name.length() * 10 + admits("abc")
+}

@@ -293,6 +293,14 @@ testOperators = do
   unaryNeg <- submit emptySession "-42"
   unaryNot <- submit emptySession "!false"
   rangeExpr <- submit emptySession "1..4"
+  inclusiveRange <- submit emptySession "1..=4"
+  openRange <- submit emptySession "2.."
+  rangeLength <- submit emptySession "(1..4).length()"
+  rangeToArray <- submit emptySession "(1..4).toArray()"
+  arraySetup <- submit emptySession "let values = [10, 20, 30, 40]"
+  arraySlice <- submit (resultSession arraySetup) "values[1..3]"
+  openSlice <- submit (resultSession arraySetup) "values[2..]"
+  slicePastEnd <- submit (resultSession arraySetup) "values[2..9]"
   orphanedShift <- submit emptySession "<< 100"
   varSetup <- submit emptySession "var counter = 10"
   gluedShift <- submit (resultSession varSetup) "<< 100"
@@ -309,7 +317,22 @@ testOperators = do
     , counterexample "string concatenation joins" (valueOf stringConcat === "\"foobar\"")
     , counterexample "unary negation works" (valueOf unaryNeg === "-42")
     , counterexample "unary not works" (valueOf unaryNot === "true")
-    , counterexample "range produces a tuple" (valueOf rangeExpr === "(1, 2, 3)")
+    , counterexample "a range is a range, not the values between its ends"
+        (valueOf rangeExpr === "1..4")
+    , counterexample "an inclusive range keeps its spelling"
+        (valueOf inclusiveRange === "1..=4")
+    , counterexample "a range with no end is written with none"
+        (valueOf openRange === "2..")
+    , counterexample "a range answers for its own extent"
+        (valueOf rangeLength === "3")
+    , counterexample "a range hands back its values only when asked"
+        (valueOf rangeToArray === "[1, 2, 3]")
+    , counterexample "slicing an array reads the stretch a range names"
+        (valueOf arraySlice === "[20, 30]")
+    , counterexample "a slice with no end runs to the end of the value"
+        (valueOf openSlice === "[30, 40]")
+    , counterexample "slicing past the end is E7004"
+        (codesOf slicePastEnd === ["E7004"])
     , counterexample "orphaned shift in empty session emits E1040" (codesOf orphanedShift === ["E1040"])
     , counterexample "orphaned shift after statement emits E1040 and does not glue" (codesOf gluedShift === ["E1040"])
     , counterexample "counter remains 10 and was not mutated by rejected operator" (valueOf counterPreserved === "10")

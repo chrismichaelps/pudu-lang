@@ -2,6 +2,7 @@ module Std.Http
 
 import Std.Option as Option
 import Std.Text as Text
+import Std.Url as Url
 
 /// A request method.
 ///
@@ -35,11 +36,16 @@ export type Status = { code: Int, reason: Str }
 /// Transport is not here because it needs the foreign interface; everything a
 /// caller decides before sending is, so a request can be built, inspected, and
 /// tested without one.
+///
+/// `binaryBody`, when present, is the exact bytes carried, and takes precedence
+/// over `body`, the way a response's does: a body that is not UTF-8 text — an
+/// uploaded image, a compressed payload — has no honest text form.
 export type Request = {
   method: Method,
   target: Str,
   headers: Array[(Str, Str)],
-  body: Str
+  body: Str,
+  binaryBody: Option[Bytes]
 }
 
 /// A response, with nothing about how it arrived.
@@ -215,27 +221,36 @@ export fn reasonFor(code: Int) -> Str {
 
 /// A request with a method and a target and nothing else.
 export fn request(method: Method, target: Str) -> Request {
-  Request{method: method, target: target, headers: [], body: ""}
+  Request{method: method, target: target, headers: [], body: "", binaryBody: None}
 }
 
 /// A request with one header added, keeping any it already had.
 export fn withHeader(value: &Request, name: Str, held: Str) -> Request {
-  Request {
-    method: value.method,
-    target: value.target,
-    headers: value.headers.push((name, held)),
-    body: value.body
-  }
+  Request{..*value, headers: value.headers.push((name, held))}
 }
 
-/// A request with a body, and the length header that goes with it.
+/// A request with a text body, and the length header that goes with it.
+///
+/// The length counts the body's UTF-8 bytes, which is what goes on the wire.
+/// A byte body set earlier is replaced.
 export fn withBody(value: &Request, body: Str) -> Request {
-  let sized = withHeader(value, "content-length", show(body.length()))
-  Request {
-    method: sized.method,
-    target: sized.target,
-    headers: sized.headers,
-    body: body
+  let sized = withHeader(value, "content-length", show(body.toBytes().length()))
+  Request{..sized, body: body, binaryBody: None}
+}
+
+/// A request carrying exact bytes as its body, and the length header that goes
+/// with them.
+export fn withBytes(value: &Request, payload: &Bytes) -> Request {
+  let sized = withHeader(value, "content-length", show(payload.length()))
+  Request{..sized, body: "", binaryBody: Some(*payload)}
+}
+
+/// A request's body as bytes, with a byte body taking precedence over the text
+/// one.
+export fn requestBytes(value: &Request) -> Bytes {
+  match value.binaryBody {
+    case Some(payload) => payload
+    case None => value.body.toBytes()
   }
 }
 
@@ -817,63 +832,14 @@ fn sortPreferences(items: &Array[Preference]) -> Array[Preference] {
   out
 }
 
+/// A form field written the way a component is, except that a space is a plus.
+/// A literal percent sign is itself escaped, so every `%20` came from a space.
 fn formEncode(value: Str) -> Str {
-  var out = ""
-  for character in value.chars() {
-    if isFormSafe(character) { out = out + character.toText() }
-      else {
-      if character == ' ' { out = out + "+" } else { out = out + "%" + hexTwo(character.code()) }
-    }
-  }
-  out
+  Url.encodeComponent(value).split("%20").join("+")
 }
 
-fn formDecode(value: Str) -> Str {
-  var out = ""
-  var index = 0
-  let size = value.length()
-  while index < size {
-    let character = value.charAt(index)
-    if character == '+' { out = out + " " }
-      else {
-      if character == '%' && index + 2 < size {
-        let decoded = Option.andThen(
-          hexPairOf(value.slice(index + 1, index + 3)),
-          fn(code) => charFromCode(code)
-        )
-        if let Some(found) = decoded {
-          out = out + found.toText()
-          index = index + 2
-        } else {
-          out = out + character.toText()
-        }
-      } else { out = out + character.toText() }
-    }
-    index = index + 1
-  }
-  out
-}
-
-fn isFormSafe(value: Char) -> Bool {
-  (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
-  (value >= '0' && value <= '9') ||
-  value == '-' || value == '_' || value == '.' || value == '~'
-}
-
-fn hexTwo(value: Int) -> Str {
-  let digits = "0123456789ABCDEF"
-  digits.slice(value / 16, value / 16 + 1) + digits.slice(value % 16, value % 16 + 1)
-}
-
-fn hexPairOf(text: Str) -> Option[Int] {
-  var total = 0
-  for character in text.toLower().chars() {
-    let found = "0123456789abcdef".indexOf(character.toText())
-    if found < 0 { return None }
-    total = total * 16 + found
-  }
-  Some(total)
-}
+/// A form field read back; a component already reads a plus as a space.
+fn formDecode(value: Str) -> Str { Url.decodeComponent(value) }
 
 /// The body as bytes, with a binary body taking precedence over the text one.
 ///

@@ -1,0 +1,53 @@
+module Lambdas
+
+/// The function literal, in both spellings and every position a value goes.
+///
+/// A literal is a value, so the interesting question is not how it is written
+/// but whether it behaves like one everywhere a value is admitted: stored in a
+/// record, held in an array, returned from a function, called where it was
+/// made. Each answer below is a number, and `main` adds them so one wrong
+/// answer moves the total.
+
+type Op = { name: Str, run: fn(Int) -> Int }
+
+/// A function that answers with a function, which is what makes the literal
+/// worth having: the returned closure holds `f` after the call that made it.
+fn twice(f: fn(Int) -> Int) -> fn(Int) -> Int { |x| f(f(x)) }
+
+fn adder(n: Int) -> fn(Int) -> Int { |x| x + n }
+
+fn apply(f: fn(Int) -> Int, value: Int) -> Int { f(value) }
+
+export fn main() -> Int {
+  let short = |x| x * 2
+  let annotated = |x: Int| -> Int { x * 3 }
+  let long = fn(x: Int) => x * 4
+  let block = fn(x: Int) -> Int { x * 5 }
+  let empty = || 6
+
+  let branching = |x| if x > 0 { 1 } else { 0 }
+  let matching = |x| match x {
+    case 0 => 10
+    case _ => 20
+  }
+
+  let curried = |a| |b| a + b
+  let captured = 7
+  let reads = |x| x + captured
+
+  let ops = [Op{name: "inc", run: |x| x + 1}, Op{name: "sq", run: |x| x * x}]
+  var fromOps = 0
+  for op in ops {
+    fromOps = fromOps + op.run(3)
+  }
+
+  let pair = ("chosen", |x| x - 1)
+  let (_, held) = pair
+
+  short(1) + annotated(1) + long(1) + block(1) + empty()
+    + branching(5) + branching(0 - 5) + matching(0) + matching(1)
+    + curried(2)(3) + reads(1)
+    + twice(|x| x + 3)(1) + adder(10)(5) + apply(|x| x, 1)
+    + fromOps + held(1)
+    + (|x| x + 100)(1)
+}

@@ -35,7 +35,8 @@ export fn main() -> Int {
         Route.get("/health", health),
         Route.get("/users/:id", showUser),
         Route.get("/files/*rest", showFile),
-        Route.post("/users", createUser)
+        Route.post("/users", createUser),
+        Route.post("/bytes", countBytes)
       ]),
     nothingHere
   )
@@ -130,7 +131,7 @@ export fn main() -> Int {
 
     let listening = Server.server(&routed)
     let worker = Concurrent.start(fn() -> () {
-        let _served = Server.run(&listening, &live, 2)
+        let _served = Server.run(&listening, &live, 3)
         ()
       })
     if Result.isOk(&worker) { held = held + 1 }
@@ -152,10 +153,50 @@ export fn main() -> Int {
     if posted.contains("201") { held = held + 1 }
     if posted.contains("hello") { held = held + 1 }
 
+    // A body that is not UTF-8 reaches the handler as its exact bytes, so an
+    // uploaded file arrives intact rather than as empty text.
+    let binary = fetchBytes(
+      port,
+        &ByteSeq.join(&[
+          ByteSeq.fromText("POST /bytes HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 3\r\n\r\n"),
+          ByteSeq.fromArray(&[255u8, 0u8, 254u8])
+        ])
+    )
+    if binary.contains("201") && binary.contains("3 bytes ending 254") { held = held + 1 }
+
     let _stopped = Server.stop(&live)
     if let Ok(started) = worker {
       let _joined = Concurrent.join(&started)
       held = held + 1
+    }
+  }
+
+  // A handler that fails while running is answered 500, and what wraps it sees
+  // that answer.
+  let failing = Route.routing(&[
+      Route.get("/boom", fn(_request: Route.Request) -> Http.Response { Reply.text(200, nameAt(5)) }),
+      Route.get("/fine", fn(_request: Route.Request) -> Http.Response { Reply.text(200, "fine") })
+    ])
+  let stampedFailure = Server.handlerOf(&Server.server(&failing).using(stamping("outer")))(requestFor(Http.Get, "/boom"))
+  if stampedFailure.status.code == 500 && headerOf(&stampedFailure, "X-Step-outer") == "yes" {
+    held = held + 1
+  }
+
+  // A server with one worker goes on answering after its handler failed twice.
+  if let Ok(fragile) = Server.start("127.0.0.1", 0) {
+    let lonePort = Server.portOf(&fragile)
+    let lone = Server.Server{..Server.server(&failing), workers: 1}
+    let loneWorker = Concurrent.start(fn() -> () {
+        let _served = Server.run(&lone, &fragile, 3)
+        ()
+      })
+    let first = fetch(lonePort, "GET /boom HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    let second = fetch(lonePort, "GET /boom HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    let third = fetch(lonePort, "GET /fine HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    if first.contains("500") && second.contains("500") && third.contains("fine") { held = held + 1 }
+    let _stopped = Server.stop(&fragile)
+    if let Ok(started) = loneWorker {
+      let _joined = Concurrent.join(&started)
     }
   }
 
@@ -179,6 +220,16 @@ fn createUser(request: Route.Request) -> Http.Response {
   Reply.text(201, Route.body(&request))
 }
 
+/// How many bytes a request body carried, and its last byte.
+fn countBytes(request: Route.Request) -> Http.Response {
+  let payload = Route.bodyBytes(&request)
+  let last = match payload.at(payload.length() - 1) {
+    case Some(value) => show(value)
+    case None => "none"
+  }
+  Reply.text(201, show(payload.length()) + " bytes ending " + last)
+}
+
 fn nothingHere(_request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }
 
 fn runSearch(request: Route.Request) -> Http.Response {
@@ -193,7 +244,8 @@ fn bodied(method: Http.Method, target: Str, content: Str) -> Route.Request {
       method: base.message.method,
       target: base.message.target,
       headers: base.message.headers.push(("Content-Type", "application/sql")),
-      body: content
+      body: content,
+      binaryBody: None
     },
     path: base.path,
     params: base.params,
@@ -216,7 +268,7 @@ fn stamping(name: Str) -> Route.Middleware {
 }
 
 fn requestFor(method: Http.Method, target: Str) -> Route.Request {
-  let message = Http.Request{method: method, target: target, headers: [], body: ""}
+  let message = Http.Request{method: method, target: target, headers: [], body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: pathOf(target),
@@ -251,7 +303,8 @@ fn withHeader(request: Route.Request, name: Str, value: Str) -> Route.Request {
       method: request.message.method,
       target: request.message.target,
       headers: request.message.headers.push((name, value)),
-      body: request.message.body
+      body: request.message.body,
+      binaryBody: None
     },
     path: request.path,
     params: request.params,
@@ -274,6 +327,22 @@ fn headerOf(answer: &Http.Response, name: Str) -> Str {
     if entry[0] == name { found = entry[1] }
   }
   found
+}
+
+/// A name by position, which fails for a position past the two it has.
+fn nameAt(position: Int) -> Str {
+  let names = ["zero", "one"]
+  names[position]
+}
+
+/// Send raw request bytes and read everything that comes back.
+fn fetchBytes(port: Int, request: &Bytes) -> Str {
+  let outcome = Net.withConnection("127.0.0.1", port, fn(connection: Net.Connection) -> Result[Str, Net.NetError] {
+      Net.send(&connection, request) ?
+      let whole = Net.receiveAll(&connection) ?
+      Ok(Result.unwrapOr(ByteSeq.toText(&whole), ""))
+    })
+  Result.unwrapOr(outcome, "")
 }
 
 /// Send a raw request and read everything that comes back.

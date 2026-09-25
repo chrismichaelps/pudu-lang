@@ -5,10 +5,37 @@ module Std.Crypto
 /// numbers, and only rendering turns them into hexadecimal.
 export type Digest = { words: Array[UInt32] }
 
-/// The SHA-256 digest of text, taken over its UTF-8 bytes.
-export fn sha256(message: Str) -> Digest { sha256Bytes(&utf8(message)) }
+/// The SHA-256 digest of text, taken over its UTF-8 bytes, computed by the
+/// runtime's implementation.
+///
+/// 104 KB at `-O2`: under 1 ms here, 4.5 s with the rounds in `sha256Bytes`.
+export fn sha256(message: Str) -> Digest { wordsOf(&sha256Of(message.toBytes())) }
 
-/// The SHA-256 digest of bytes.
+/// The thirty-two bytes of a digest as the eight big-endian words `Digest` holds.
+fn wordsOf(digest: &Bytes) -> Digest {
+  var words: Array[UInt32] = []
+  var word = 0u32
+  var count = 0
+  for octet in digest.toArray() {
+    word = (word << 8) | widen(octet)
+    count = count + 1
+    if count % 4 == 0 {
+      words = words.push(word)
+      word = 0u32
+    }
+  }
+  Digest{words: words}
+}
+
+fn widen(octet: UInt8) -> UInt32 {
+  match convertInteger[UInt32](octet) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+/// The SHA-256 digest of bytes, given one to a word, computed by the rounds
+/// below. Reference implementation checked against `sha256` by the fixtures.
 export fn sha256Bytes(message: &Array[UInt32]) -> Digest {
   let padded = pad(message)
   var state = initialState()
@@ -390,6 +417,47 @@ export fn hmacSha256Text(key: Str, message: Str) -> Bytes {
 /// and substituting the one to hand produces a value that is not the one the
 /// other side will compute.
 export fn sha512(message: &Bytes) -> Bytes { sha512Of(*message) }
+
+/// The SHA3-256 digest of bytes.
+///
+/// A sponge construction unrelated to SHA-2, so a weakness found in one family
+/// does not carry to the other. A protocol that names SHA3-256 cannot be
+/// answered with SHA-256.
+export fn sha3_256(message: &Bytes) -> Bytes { sha3_256Of(*message) }
+
+/// The SHA3-512 digest of bytes.
+export fn sha3_512(message: &Bytes) -> Bytes { sha3_512Of(*message) }
+
+/// The BLAKE2b digest of bytes at 32 bytes.
+///
+/// Faster than SHA-2 in software at the same security margin, which is why
+/// content addressing and integrity checks over large files reach for it.
+export fn blake2b256(message: &Bytes) -> Bytes { blake2b256Of(*message) }
+
+/// The BLAKE2b digest of bytes at 64 bytes.
+export fn blake2b512(message: &Bytes) -> Bytes { blake2b512Of(*message) }
+
+/// The keyed digest over SHA-512, for protocols defined over it.
+export fn hmacSha512(key: &Bytes, message: &Bytes) -> Bytes { hmacSha512Of(*key, *message) }
+
+/// Whether two byte sequences are equal, in time that depends only on their
+/// lengths.
+///
+/// For a tag, a token, or a digest received from outside and compared with one
+/// computed here. A comparison that returned at the first differing byte would
+/// tell a guesser how many leading bytes were right.
+export fn bytesMatch(left: &Bytes, right: &Bytes) -> Bool { constantTimeEqual(*left, *right) }
+
+/// A fresh key of the length `seal` needs, from the operating system's secure
+/// source.
+export fn newKey() -> Result[Bytes, Str] { secureRandomBytes(keyLength()) }
+
+/// A fresh nonce of the length `seal` needs, from the same secure source.
+///
+/// Drawn rather than counted, so a program sealing many messages under one key
+/// repeats a nonce only with vanishing probability instead of by a bookkeeping
+/// mistake.
+export fn newNonce() -> Result[Bytes, Str] { secureRandomBytes(nonceLength()) }
 
 /// A key derived from a password, slowly and on purpose.
 ///

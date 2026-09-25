@@ -1,5 +1,6 @@
 module Std.Url
 
+import Std.Option as Option
 import Std.Text as Text
 /// The parts of a URL, each already decoded.
 export type Url = {
@@ -151,42 +152,37 @@ export fn defaultPort(scheme: Str) -> Option[Int] { SCHEME_PORTS.get(scheme) }
 /// Text with the characters a URL cannot carry replaced by percent escapes.
 /// Unreserved characters are left alone, which keeps a readable URL readable.
 export fn encodeComponent(value: Str) -> Str {
-  var out = ""
-  for character in value.chars() {
-    if isUnreserved(character) { out = out + character.toText() }
-      else { out = out + percent(character) }
-  }
-  out
+  var pieces: Array[Str] = []
+  for octet in value.toBytes().toArray() { pieces = pieces.push(COMPONENT_BYTES[octetValue(octet)]) }
+  pieces.join("")
 }
 
 /// Text with its percent escapes read back.
-/// An escape that is not two hex digits is left as written, because a caller
-/// showing the result is better served by the original than by a guess.
+/// Escapes name UTF-8 bytes, so `%C3%A9` reads back as one `é`. An escape that
+/// is not two hex digits is left as written, and text whose escapes do not
+/// spell UTF-8 is returned unchanged, because a caller showing the result is
+/// better served by the original than by a guess.
 export fn decodeComponent(value: Str) -> Str {
-  var out = ""
+  // Text with neither an escape nor a plus holds nothing to read back, and
+  // most keys and values are that text.
+  if !value.contains("%") && !value.contains("+") { return value }
+  let octets = value.toBytes().toArray()
+  let size = octets.length()
+  var decoded: Array[UInt8] = []
   var index = 0
-  let size = value.length()
   while index < size {
-    let character = value.charAt(index)
-    if character == '%' && index + 2 < size {
-      match hexPair(value.slice(index + 1, index + 3)) {
-        case Some(code) => {
-          match charFromCode(code) {
-            case Some(found) => {
-              out = out + found.toText()
-              index = index + 2
-            }
-            case None => { out = out + character.toText() }
-          }
-        }
-        case None => { out = out + character.toText() }
-      }
+    let octet = octets[index]
+    let high = if index + 2 < size { HEX_OF_BYTE[octetValue(octets[index + 1])] } else { -1 }
+    let low = if index + 2 < size { HEX_OF_BYTE[octetValue(octets[index + 2])] } else { -1 }
+    if octet == 37u8 && high >= 0 && low >= 0 {
+      decoded = decoded.push(Option.unwrapOr(convertInteger[UInt8](high * 16 + low), 0u8))
+      index = index + 3
     } else {
-      if character == '+' { out = out + " " } else { out = out + character.toText() }
+      decoded = decoded.push(if octet == 43u8 { 32u8 } else { octet })
+      index = index + 1
     }
-    index = index + 1
   }
-  out
+  Option.unwrapOr(bytesOf(decoded).toText(), value)
 }
 
 /// Query pairs written back as text.
@@ -223,26 +219,48 @@ export fn parseQuery(source: Str) -> Array[(Str, Str)] {
 }
 
 /// The host and its port, or a report that the port is not a number.
+///
+/// User information before an `@` is not part of the host and is not kept:
+/// a URL carrying credentials is read for where it points, and handing the
+/// credentials on inside a field named for the host is how they end up in a
+/// log. A host written in brackets is an IPv6 address, whose colons are its
+/// own, so the port is only what follows the closing bracket.
 fn splitPort(authority: Str) -> Result[(Str, Option[Int]), UrlError] {
-  let colon = authority.indexOf(":")
-  if colon < 0 { Ok((authority.toLower(), None)) } else {
-    let written = authority.slice(colon + 1, authority.length())
-    match Text.countOf(written) {
-      case Some(number) => Ok((authority.slice(0, colon).toLower(), Some(number)))
-      case None => Err(BadPort(written))
-    }
+  let pieces = authority.split("@")
+  let hostAndPort = pieces[pieces.length() - 1]
+  if hostAndPort.isEmpty() { return Err(NoHost) }
+  if hostAndPort.startsWith("[") {
+    let close = hostAndPort.indexOf("]")
+    if close < 0 { return Err(NoHost) }
+    let host = hostAndPort.slice(0, close + 1).toLower()
+    let after = hostAndPort.slice(close + 1, hostAndPort.length())
+    if after.isEmpty() { return Ok((host, None)) }
+    if !after.startsWith(":") { return Err(BadPort(after)) }
+    return portAfter(host, after.slice(1, after.length()))
+  }
+  let colon = hostAndPort.indexOf(":")
+  if colon < 0 { Ok((hostAndPort.toLower(), None)) } else {
+    portAfter(hostAndPort.slice(0, colon).toLower(), hostAndPort.slice(colon + 1, hostAndPort.length()))
+  }
+}
+
+fn portAfter(host: Str, written: Str) -> Result[(Str, Option[Int]), UrlError] {
+  match Text.countOf(written) {
+    case Some(number) => Ok((host, Some(number)))
+    case None => Err(BadPort(written))
   }
 }
 
 /// The position of the first character from a set, or the whole length.
+/// One native search per character in the set, rather than a lookup per
+/// character of the value.
 fn firstOf(value: Str, characters: Str) -> Int {
-  var index = 0
-  let size = value.length()
-  while index < size {
-    if characters.contains(value.charAt(index).toText()) { return index }
-    index = index + 1
+  var first = value.length()
+  for character in characters.chars() {
+    let found = value.indexOf(character.toText())
+    if found >= 0 && found < first { first = found }
   }
-  size
+  first
 }
 
 /// A path with each segment encoded, keeping the separators.
@@ -264,25 +282,48 @@ fn isUnreserved(value: Char) -> Bool {
   value == '-' || value == '_' || value == '.' || value == '~'
 }
 
-/// One character written as a percent escape of its bytes.
-/// Only the ASCII range is escaped byte for byte; anything above it is escaped
-/// from its scalar value, which is what a reader of the result will decode.
-fn percent(value: Char) -> Str {
-  let code = value.code()
-  if code < 256 { "%" + hexByte(code) } else { "%" + hexByte(code / 256) + "%" + hexByte(code % 256) }
-}
+/// What each UTF-8 byte of a component is written as, indexed by the byte: an
+/// unreserved ASCII character as itself, every other byte as its escape.
+const COMPONENT_BYTES: Array[Str] = componentBytes()
 
-fn hexByte(value: Int) -> Str {
+fn componentBytes() -> Array[Str] {
   let digits = "0123456789ABCDEF"
-  digits.slice(value / 16, value / 16 + 1) + digits.slice(value % 16, value % 16 + 1)
+  var table: Array[Str] = []
+  var value = 0
+  while value < 256 {
+    var written = "%" + digits.charAt(value / 16).toText() + digits.charAt(value % 16).toText()
+    if value < 128 {
+      if let Some(character) = charFromCode(value) {
+        if isUnreserved(character) { written = character.toText() }
+      }
+    }
+    table = table.push(written)
+    value = value + 1
+  }
+  table
 }
 
-fn hexPair(text: Str) -> Option[Int] {
-  var total = 0
-  for character in text.toLower().chars() {
-    let found = "0123456789abcdef".indexOf(character.toText())
-    if found < 0 { return None }
-    total = total * 16 + found
+/// The value of each byte as a hexadecimal digit of either case, or -1 for a
+/// byte that is not one, indexed by the byte.
+const HEX_OF_BYTE: Array[Int] = hexOfByte()
+
+fn hexOfByte() -> Array[Int] {
+  let digits = "0123456789abcdef"
+  var table: Array[Int] = []
+  var value = 0
+  while value < 256 {
+    var found = -1
+    if value < 128 {
+      if let Some(character) = charFromCode(value) {
+        found = digits.indexOf(character.toText().toLower())
+      }
+    }
+    table = table.push(found)
+    value = value + 1
   }
-  Some(total)
+  table
+}
+
+fn octetValue(octet: UInt8) -> Int {
+  Option.unwrapOr(convertInteger[Int](octet), 0)
 }

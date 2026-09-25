@@ -1,6 +1,7 @@
 module Std.Process
 
 import Std.Concurrent as Concurrent
+import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -187,17 +188,57 @@ fn textOrNothing(piece: &Bytes) -> Str {
   }
 }
 
+/// How many bytes a character takes, read from the byte it starts with.
+///
+/// The high bits of a UTF-8 lead byte say the length: `0xxxxxxx` stands alone,
+/// `110xxxxx` starts two bytes, `1110xxxx` three, and `11110xxx` four.
+fn characterWidth(lead: UInt8) -> Int {
+  if (lead & 128u8) == 0u8 { return 1 }
+  if (lead & 224u8) == 192u8 { return 2 }
+  if (lead & 240u8) == 224u8 { return 3 }
+  4
+}
+
+/// How many of a run's last bytes begin a character the run does not finish.
+///
+/// A read ends wherever the pipe's buffer did, which can be partway through a
+/// character. Those bytes are not text yet; they are held back and read again
+/// at the front of the next piece. Continuation bytes are `10xxxxxx`, so the
+/// start of the last character is at most three bytes from the end.
+fn unfinishedTail(octets: &Bytes) -> Int {
+  let length = octets.length()
+  var back = 1
+  while back <= 3 && back <= length {
+    let octet = Option.unwrapOr(octets.at(length - back), 0u8)
+    if (octet & 192u8) != 128u8 {
+      return if characterWidth(octet) > back { back } else { 0 }
+    }
+    back = back + 1
+  }
+  0
+}
+
 /// Everything a stream carries, read until it ends, failing if a read does.
+///
+/// Each piece is decoded as it arrives, less the start of a character the piece
+/// cut short, which waits for the rest. A piece decoded on its own would lose
+/// both halves of that character and every other character read with them.
 fn collect(running: &Started, next: Chunks) -> Result[Str, Str] {
   var collected = ""
+  var pending = "".toBytes()
   var reading = true
   while reading {
     match next(running) ? {
-      case Some(piece) => { collected = collected + textOrNothing(&piece) }
+      case Some(piece) => {
+        let buffered = pending.concat(piece)
+        let whole = buffered.length() - unfinishedTail(&buffered)
+        collected = collected + textOrNothing(&buffered.take(whole))
+        pending = buffered.drop(whole)
+      }
       case None => { reading = false }
     }
   }
-  Ok(collected)
+  Ok(collected + textOrNothing(&pending))
 }
 
 /// Everything a program writes, read until it stops writing.
@@ -331,4 +372,92 @@ fn readAllErrors(running: &Started) -> Str {
     case Ok(text) => text
     case Err(_) => ""
   }
+}
+
+/// How a program is to be started: what runs, its arguments, the variables it
+/// is given, whether it also sees this program's environment, and the directory
+/// it starts in.
+///
+/// A record changed through `Launching` rather than a call taking five
+/// positional arguments, so a launch reads as what it changes from the default.
+export type Launch = {
+  program: Str,
+  arguments: Array[Str],
+  variables: Array[(Str, Str)],
+  inherits: Bool,
+  directory: Str
+}
+
+/// A launch of a program with arguments, inheriting this program's environment
+/// and directory.
+export fn launch(program: Str, arguments: &Array[Str]) -> Launch {
+  Launch{program: program, arguments: *arguments, variables: [], inherits: true, directory: ""}
+}
+
+/// A launch with one thing changed, each answering a launch.
+export trait Launching {
+  fn withVariable(self: &Self, name: Str, value: Str) -> Self
+  fn isolated(self: &Self) -> Self
+  fn inDirectory(self: &Self, directory: Str) -> Self
+}
+
+impl Launching for Launch {
+  /// The same launch giving the program a variable, overriding one it would
+  /// inherit under the same name.
+  fn withVariable(self: &Self, name: Str, value: Str) -> Self {
+    Launch{..*self, variables: self.variables.push((name, value))}
+  }
+
+  /// The same launch giving the program only the variables it states, so it
+  /// cannot see a secret this program happens to hold.
+  fn isolated(self: &Self) -> Self { Launch{..*self, inherits: false} }
+
+  /// The same launch starting the program in a directory.
+  fn inDirectory(self: &Self, directory: Str) -> Self { Launch{..*self, directory: directory} }
+}
+
+/// Start a launch and answer without waiting for it.
+///
+/// A variable name that is empty or holds `=` is refused before anything
+/// starts, because the operating system would split or drop it silently.
+export fn begin(plan: &Launch) -> Result[Started, Str] {
+  for pair in plan.variables {
+    if pair[0].isEmpty() || pair[0].contains("=") {
+      return Err("invalid environment variable name: " + pair[0])
+    }
+  }
+  let token =
+  spawnProgramWith(plan.program, plan.arguments, plan.variables, plan.inherits, plan.directory) ?
+  Ok(Started{token: token})
+}
+
+/// Run a launch to completion with text on its input.
+///
+/// The error stream is read on its own worker while output is read here, so a
+/// program writing a lot to both cannot stall on a full pipe nobody is reading.
+export fn runLaunch(plan: &Launch, standardInput: Str) -> Result[Finished, Str] {
+  let running = begin(plan) ?
+  if !standardInput.isEmpty() { writeText(&running, standardInput) ? }
+  closeInput(&running) ?
+  let held = running
+  let gathered = Sync.cell("")
+  let reader = Concurrent.start(fn() -> () {
+      let _kept = Sync.set(&gathered, readAllErrors(&held))
+    })
+  let written = drain(&running) ?
+  let left = wait(&running) ?
+  let _joined = joined(&reader)
+  Ok(Finished{status: left, output: written, errors: Result.unwrapOr(Sync.get(&gathered), "")})
+}
+
+/// An action given a started program that is stopped when the action returns.
+///
+/// Stopped whether the action succeeded or failed and whether or not the
+/// program had already finished, so a program cannot outlive the code that
+/// started it. The action's own answer is what is returned.
+export fn withStarted[T](plan: &Launch, action: fn(&Started) -> Result[T, Str]) -> Result[T, Str] {
+  let running = begin(plan) ?
+  let outcome = action(&running)
+  let _stopped = stop(&running)
+  outcome
 }

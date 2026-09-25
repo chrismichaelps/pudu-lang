@@ -1,0 +1,85 @@
+module Service.Docs
+
+import Std.Io as Io
+import Std.List as List
+import Std.Text as Text
+import Error as SiteError
+
+/// One page of the language documentation, as the Markdown it was written in.
+export type Page = { slug: Str, file: Str, title: Str, lines: Array[Str] }
+
+/// Every documentation page, in reading order.
+export type Docs = { pages: Array[Page] }
+
+/// The pages a directory holds.
+///
+/// Each file is named for its place and its address, `02-basics.md`: the number
+/// orders the pages and is left out of the address, so a page can move without
+/// its address changing. The title is the page's first `# ` heading. Pages are
+/// read once, before any request, so a page that cannot be read stops the site
+/// from starting rather than answering a reader with nothing.
+export fn load(directory: Str) -> Result[Docs, SiteError.SiteError] {
+  let names = match Io.list(directory) {
+    case Ok(found) => found
+    case Err(_) => { return Err(SiteError.DocsUnreadable(directory)) }
+  }
+  var markdown: Array[Str] = []
+  for name in names {
+    if name.endsWith(".md") { markdown = markdown.push(name) }
+  }
+  let ordered = List.sortBy(&markdown, fn(left: Str, right: Str) -> Bool { left < right })
+  var pages: Array[Page] = []
+  for name in ordered {
+    let path = directory + "/" + name
+    let text = match Io.read(path) {
+      case Ok(content) => content
+      case Err(_) => { return Err(SiteError.DocsUnreadable(path)) }
+    }
+    let lines = text.split("\n")
+    let slug = slugOf(name)
+    pages = pages.push(Page{slug: slug, file: name, title: titleOf(&lines, slug), lines: lines})
+  }
+  if pages.length() == 0 { return Err(SiteError.DocsUnreadable(directory)) }
+  Ok(Docs{pages: pages})
+}
+
+/// The page at an address, when there is one.
+export fn find(docs: &Docs, slug: Str) -> Option[Page] {
+  for page in docs.pages {
+    if page.slug == slug { return Some(page) }
+  }
+  None
+}
+
+/// The pages before and after one, for reading the documentation in order.
+export fn neighbours(docs: &Docs, slug: Str) -> (Option[Page], Option[Page]) {
+  var index = 0
+  let count = docs.pages.length()
+  while index < count {
+    if docs.pages[index].slug == slug {
+      let before = if index > 0 { Some(docs.pages[index - 1]) } else { None }
+      let after = if index + 1 < count { Some(docs.pages[index + 1]) } else { None }
+      return (before, after)
+    }
+    index = index + 1
+  }
+  (None, None)
+}
+
+/// A file's address: its name without the extension or the ordering number.
+fn slugOf(name: Str) -> Str {
+  let base = name.take(name.length() - 3)
+  let dash = base.indexOf("-")
+  if dash > 0 {
+    if let Some(_) = Text.wholeOf(base.take(dash)) { return base.drop(dash + 1) }
+  }
+  base
+}
+
+/// A page's first `# ` heading, or its address when it has none.
+fn titleOf(lines: &Array[Str], fallback: Str) -> Str {
+  for line in *lines {
+    if line.startsWith("# ") { return Text.trimEnd(line.drop(2)).trim() }
+  }
+  fallback
+}

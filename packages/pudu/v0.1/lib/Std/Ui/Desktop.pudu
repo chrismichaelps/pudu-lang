@@ -1,0 +1,438 @@
+module Std.Ui.Desktop
+
+import Std.Num {Integer}
+import Std.Ui.Accessible as Accessible
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Gesture as Gesture
+import Std.Ui.Keymap as Keymap
+import Std.Ui.Layout as Layout
+import Std.Ui.Menu as Menu
+import Std.Ui.Screen as Screen
+
+/// Why a desktop session could not do what was requested.
+export type DesktopError
+  = EmptyCaption
+  | InvalidExtent(Int, Int)
+  | InvalidPixelBudget(Int)
+  | PixelBudgetExceeded(Int, Int, Int)
+  | InvalidPumpDuration(Int)
+  | SurfaceExtentMismatch(Int, Int, Int, Int)
+  | SurfaceMalformed(Canvas.CanvasError)
+  | UnsupportedPlatform
+  | SessionClosed
+  | PlatformFailure(Str)
+
+/// Why a driven window stopped before the person closed it.
+export type DriveError
+  = Window(DesktopError)
+  | Frame(Screen.ScreenError)
+
+/// Something the window reported since the last drain.
+///
+/// `Shortcut` carries a chord held with Command or Control, written
+/// `cmd+shift+z` with modifiers in the order cmd, ctrl, alt, shift.
+/// `Pointer` carries each phase of the primary button with its time in
+/// milliseconds, for `Std.Ui.Gesture`. `Chosen` names a command chosen from
+/// the menu bar `install` put in place.
+export type Signal
+  = Input(Screen.Input)
+  | Shortcut(Str)
+  | Resized(Canvas.Size)
+  | Pointer(Gesture.Phase, Canvas.Point, Int)
+  | Chosen(Str)
+
+/// Everything decided before a native window resource is acquired.
+export type WindowPlan = {
+  caption: Str,
+  extent: Canvas.Size,
+  resizable: Bool,
+  maxPixels: Int
+}
+
+/// One evaluation-owned connection to a real desktop window.
+///
+/// The token has no meaning outside the runtime. Copying this value does not
+/// copy the window; closing through either copy invalidates both.
+export type Session = { token: Int, extent: Canvas.Size }
+
+/// A checked window plan with an explicit framebuffer budget.
+export fn plan(
+  caption: Str,
+  width: Int,
+  height: Int,
+  resizable: Bool,
+  maxPixels: Int
+) -> Result[WindowPlan, DesktopError] {
+  if caption.isEmpty() {
+    Err(EmptyCaption)
+  } else if width <= 0 || height <= 0 {
+    Err(InvalidExtent(width, height))
+  } else if maxPixels < 0 {
+    Err(InvalidPixelBudget(maxPixels))
+  } else {
+    let pixels = width.toBigInt() * height.toBigInt()
+    if pixels > maxPixels.toBigInt() {
+      Err(PixelBudgetExceeded(width, height, maxPixels))
+    } else {
+      Ok(WindowPlan {
+          caption: caption,
+          extent: Canvas.size(width, height),
+          resizable: resizable,
+          maxPixels: maxPixels
+        })
+    }
+  }
+}
+
+/// Acquire a real platform window for this evaluation.
+export fn open(target: &WindowPlan) -> Result[Session, DesktopError] {
+  validate(target) ?
+  match desktopOpen(
+    target.caption,
+    target.extent.width,
+    target.extent.height,
+    target.resizable
+  ) {
+    case Ok(token) => Ok(Session{token: token, extent: target.extent})
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Replace the pixels shown by a session with one exact Canvas surface.
+export fn present(target: &Session, surface: &Canvas.Surface) -> Result[(), DesktopError] {
+  let extent = match Canvas.surfaceSize(surface) {
+    case Ok(value) => value
+    case Err(problem) => { return Err(SurfaceMalformed(problem)) }
+  }
+  if extent != target.extent {
+    Err(SurfaceExtentMismatch(
+        target.extent.width,
+        target.extent.height,
+        extent.width,
+        extent.height
+      ))
+  } else {
+    let pixels = match Canvas.rgbaBytes(surface) {
+      case Ok(value) => value
+      case Err(problem) => { return Err(SurfaceMalformed(problem)) }
+    }
+    match desktopPresent(target.token, extent.width, extent.height, pixels) {
+      case Ok(_) => Ok(())
+      case Err(message) => Err(classified(message))
+    }
+  }
+}
+
+/// Pump platform events for at most `milliseconds`.
+///
+/// `true` reports that the person requested the window to close. The caller
+/// still closes the session, which keeps destruction ordered and testable.
+export fn pump(target: &Session, milliseconds: Int) -> Result[Bool, DesktopError] {
+  if milliseconds < 0 {
+    Err(InvalidPumpDuration(milliseconds))
+  } else {
+    match desktopPump(target.token, milliseconds) {
+      case Ok(requested) => Ok(requested)
+      case Err(message) => Err(classified(message))
+    }
+  }
+}
+
+/// Everything the window reported since the last drain, in order.
+export fn signals(target: &Session) -> Result[Array[Signal], DesktopError] {
+  match desktopInputs(target.token) {
+    case Ok(text) => Ok(decodeSignals(text))
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Signals from the adapter's records: tab-separated fields, one record per
+/// line. A record that is unknown or malformed is skipped.
+export fn decodeSignals(text: Str) -> Array[Signal] {
+  var found = []
+  for line in text.lines() {
+    let fields = line.split("\t")
+    if fields.length() < 2 { continue }
+    let kind = fields[0]
+    if kind == "text" {
+      found = found.push(Input(Screen.TypedText(line.drop(5))))
+      continue
+    }
+    if kind == "chord" {
+      found = found.push(Shortcut(fields[1]))
+      continue
+    }
+    if kind == "menu" {
+      if fields[1].length() > 0 { found = found.push(Chosen(fields[1])) }
+      continue
+    }
+    if kind == "key" {
+      if let Some(key) = keyNamed(fields[1]) { found = found.push(Input(Screen.KeyPressed(key))) }
+      continue
+    }
+    let numbers = numbersOf(&fields)
+    if kind == "press" && numbers.length() == 2 {
+      found = found.push(Input(Screen.Pressed(Canvas.point(numbers[0], numbers[1]))))
+    }
+    if kind == "scroll" && numbers.length() == 3 {
+      found = found.push(Input(Screen.Scrolled(Canvas.point(numbers[0], numbers[1]), numbers[2])))
+    }
+    if kind == "resize" && numbers.length() == 2 {
+      found = found.push(Resized(Canvas.size(numbers[0], numbers[1])))
+    }
+    if numbers.length() == 3 {
+      let at = Canvas.point(numbers[0], numbers[1])
+      if kind == "down" { found = found.push(Pointer(Gesture.Down, at, numbers[2])) }
+      if kind == "move" { found = found.push(Pointer(Gesture.Move, at, numbers[2])) }
+      if kind == "up" { found = found.push(Pointer(Gesture.Up, at, numbers[2])) }
+    }
+  }
+  found
+}
+
+/// Tell assistive clients what the window shows: every meaningful node of
+/// `layout`, with the control tagged `focus` focused.
+///
+/// Replaces the tree the window had; a person using a screen reader hears
+/// the new one at once.
+export fn expose(target: &Session, layout: &Layout.Layout, focus: Option[Str]) -> Result[(), DesktopError] {
+  match desktopAccessibility(target.token, Accessible.snapshot(layout, focus)) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// What the platform itself reports for the window's accessibility tree, in
+/// reading order, with the platform's roles.
+export fn exposed(target: &Session) -> Result[Array[Accessible.Exposed], DesktopError] {
+  let text = match desktopAccessibilityReport(target.token) {
+    case Ok(found) => found
+    case Err(message) => { return Err(classified(message)) }
+  }
+  match Accessible.decode(text) {
+    case Ok(found) => Ok(found)
+    case Err(Accessible.MalformedRecord(index)) => Err(PlatformFailure("the platform reported a malformed accessibility record " + show(index)))
+    case Err(Accessible.OrphanedRecord(index)) => Err(PlatformFailure("the platform reported an accessibility record without its parent " + show(index)))
+  }
+}
+
+/// Make `bar` the platform's menu bar, behind an application menu holding
+/// Quit, with each command's shortcut from `keys` shown. A chosen command
+/// arrives as `Chosen`; Quit as a close request.
+export fn install(target: &Session, bar: &Array[Menu.Menu], keys: &Keymap.Keymap) -> Result[(), DesktopError] {
+  match desktopMenu(target.token, Menu.native(bar, keys)) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// The records the platform's menu bar holds, in `Menu.native`'s form.
+export fn installed(target: &Session) -> Result[Str, DesktopError] {
+  match desktopMenuReport(target.token) {
+    case Ok(found) => Ok(found)
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Runs `screen` in the window until the person closes it.
+///
+/// Each turn pumps for at most `frameMillis`, hands every input to the
+/// screen, offers every shortcut to `onShortcut` (a new state re-renders,
+/// `None` ignores it), and presents only when a frame changed. Every frame
+/// presented is exposed to assistive clients with its layout and focus.
+/// Chosen menu commands are ignored; `driveCommands` routes them. Answers the
+/// screen as it was when the window closed; the caller still closes the
+/// session.
+export fn drive[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  onShortcut: fn(S, Str) -> Option[S]
+) -> Result[Screen.Screen[S], DriveError] {
+  running(target, screen, frameMillis, onShortcut, fn(_state: S, _name: Str) -> Option[S] { None })
+}
+
+/// Installs `bar` and runs `screen` as `drive` does, sending every bound
+/// chord and every chosen menu command to `apply` by command name.
+export fn driveCommands[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  bar: &Array[Menu.Menu],
+  keys: &Keymap.Keymap,
+  apply: fn(S, Str) -> S
+) -> Result[Screen.Screen[S], DriveError] {
+  let resolved = Keymap.forPlatform(keys, true)
+  match install(target, bar, &resolved) {
+    case Ok(_) => {}
+    case Err(problem) => { return Err(Window(problem)) }
+  }
+  running(target, screen, frameMillis, Keymap.handler(&resolved, apply), fn(state: S, name: Str) -> Option[S] { Some(apply(state, name)) })
+}
+
+fn running[S](
+  target: &Session,
+  screen: &Screen.Screen[S],
+  frameMillis: Int,
+  onShortcut: fn(S, Str) -> Option[S],
+  onCommand: fn(S, Str) -> Option[S]
+) -> Result[Screen.Screen[S], DriveError] {
+  if frameMillis < 0 { return Err(Window(InvalidPumpDuration(frameMillis))) }
+  shown(target, screen) ?
+  var held = *screen
+  loop {
+    let closing = match pump(target, frameMillis) {
+      case Ok(requested) => requested
+      case Err(problem) => { return Err(Window(problem)) }
+    }
+    if closing { break }
+    let arrived = match signals(target) {
+      case Ok(found) => found
+      case Err(problem) => { return Err(Window(problem)) }
+    }
+    var changed = false
+    for signal in arrived {
+      let next = match signal {
+        case Input(input) => Screen.handle(&held, input)
+        case Shortcut(chord) => {
+          match onShortcut(Screen.stateOf(&held), chord) {
+            case Some(state) => Screen.restated(&held, state)
+            case None => Ok(held)
+          }
+        }
+        case Chosen(name) => {
+          match onCommand(Screen.stateOf(&held), name) {
+            case Some(state) => Screen.restated(&held, state)
+            case None => Ok(held)
+          }
+        }
+        case Resized(_) => Ok(held)
+        case Pointer(_, _, _) => Ok(held)
+      }
+      held = match next {
+        case Ok(found) => found
+        case Err(problem) => { return Err(Frame(problem)) }
+      }
+      if Screen.damagedOf(&held).length() > 0 { changed = true }
+    }
+    if changed { shown(target, &held) ? }
+  }
+  Ok(held)
+}
+
+/// Release a desktop session. A second close is reported as `SessionClosed`.
+export fn close(target: &Session) -> Result[(), DesktopError] {
+  match desktopClose(target.token) {
+    case Ok(_) => Ok(())
+    case Err(message) => Err(classified(message))
+  }
+}
+
+/// Open, present, pump, and close a real window within a bounded interval.
+///
+/// The session is closed on every ordinary failure after acquisition.
+export fn showFor(
+  target: &WindowPlan,
+  surface: &Canvas.Surface,
+  milliseconds: Int
+) -> Result[Bool, DesktopError] {
+  if milliseconds < 0 { return Err(InvalidPumpDuration(milliseconds)) }
+  let session = open(target) ?
+  match present(&session, surface) {
+    case Err(problem) => {
+      let _closed = close(&session)
+      Err(problem)
+    }
+    case Ok(_) =>
+    match pump(&session, milliseconds) {
+      case Err(problem) => {
+        let _closed = close(&session)
+        Err(problem)
+      }
+      case Ok(requested) => {
+        close(&session) ?
+        Ok(requested)
+      }
+    }
+  }
+}
+
+/// Adapter key names, in the order of `keyNamed`'s keys.
+const KEY_NAMES: Array[Str] = ["next", "previous", "activate", "dismiss", "erase"]
+
+fn keyNamed(name: Str) -> Option[Screen.Key] {
+  let keys = [Screen.Next, Screen.Previous, Screen.Activate, Screen.Dismiss, Screen.Erase]
+  let index = KEY_NAMES.indexOf(name)
+  if index < 0 { None } else { Some(keys[index]) }
+}
+
+fn numbersOf(fields: &Array[Str]) -> Array[Int] {
+  var found = []
+  var index = 1
+  while index < fields.length() {
+    match integer(fields[index]) {
+      case Some(value) => { found = found.push(value) }
+      case None => { return [] }
+    }
+    index = index + 1
+  }
+  found
+}
+
+fn integer(text: Str) -> Option[Int] {
+  let negative = text.startsWith("-")
+  let digits = if negative { text.drop(1) } else { text }
+  if digits.length() == 0 || digits.length() > 9 { return None }
+  var total = 0
+  for symbol in digits {
+    let code = symbol.code()
+    if code < 48 || code > 57 { return None }
+    total = total * 10 + code - 48
+  }
+  Some(if negative { 0 - total } else { total })
+}
+
+fn shown[S](target: &Session, screen: &Screen.Screen[S]) -> Result[(), DriveError] {
+  match present(target, &Screen.surfaceOf(screen)) {
+    case Ok(_) => {}
+    case Err(problem) => { return Err(Window(problem)) }
+  }
+  match expose(target, &Screen.layoutOf(screen), Screen.focusOf(screen)) {
+    case Ok(_) => Ok(())
+    case Err(problem) => Err(Window(problem))
+  }
+}
+
+fn validate(target: &WindowPlan) -> Result[(), DesktopError] {
+  if target.caption.isEmpty() {
+    Err(EmptyCaption)
+  } else if target.extent.width <= 0 || target.extent.height <= 0 {
+    Err(InvalidExtent(target.extent.width, target.extent.height))
+  } else if target.maxPixels < 0 {
+    Err(InvalidPixelBudget(target.maxPixels))
+  } else if target.extent.width.toBigInt() * target.extent.height.toBigInt() >
+  target.maxPixels.toBigInt()
+  {
+    Err(PixelBudgetExceeded(
+        target.extent.width,
+        target.extent.height,
+        target.maxPixels
+      ))
+  } else {
+    Ok(())
+  }
+}
+
+/// The error each fixed runtime message names. Any other message is a platform
+/// failure carrying the text the adapter reported.
+const RUNTIME_ERRORS: Map[Str, DesktopError] = mapOf([
+    ("desktop presentation is unsupported on this platform", UnsupportedPlatform),
+    ("desktop session is closed or unknown", SessionClosed)
+  ])
+
+fn classified(message: Str) -> DesktopError {
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
+  }
+}

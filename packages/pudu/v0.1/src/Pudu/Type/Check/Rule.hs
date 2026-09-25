@@ -5,6 +5,8 @@ module Pudu.Type.Check.Rule
   , binaryType
   , awaitType
   , elementType
+  , rangeType
+  , sliceType
   , enclosingFunctionType
   , enclosingReturnType
   , instantiate
@@ -16,6 +18,7 @@ module Pudu.Type.Check.Rule
   , qualifiedMemberType
   , selfName
   , tryType
+  , typesNamingModules
   , unaryType
   ) where
 
@@ -29,7 +32,7 @@ import Pudu.FloatLiteral
 import Pudu.Source (Span)
 import Pudu.Semantic.Prelude (preludeTypeNames)
 import Pudu.IntegerLiteral
-  ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
+  ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
@@ -78,6 +81,7 @@ literalType spanValue literal = case literal of
     Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
       constrainIntegerLiteral spanValue parsedIntegerValue (integerSuffixType <$> parsedIntegerSuffix)
     Nothing -> pure ErrorType
+  Tree.ResolvedInteger kind _ -> pure (NominalType (NominalId Nothing (integerKindName kind)) [])
   Tree.FloatValue text -> case parseFloatLiteral text of
     Just ParsedFloat{parsedFloatFits = True, parsedFloatWidth} ->
       pure (NominalType (NominalId Nothing (floatWidthType parsedFloatWidth)) [])
@@ -175,15 +179,31 @@ qualifiedMemberType declared spanValue target member = case target of
             if selfIsValue == Nothing && namesType declared owner
                  && not (declaresVariant declared owner member)
               then do
-                report "E3034" spanValue (owner <> " has no " <> member)
-                  ( Just
-                      ( "a type is written before a dot only to name a variant it declares; "
-                          <> "a method is called on the value rather than through its type"
-                      )
-                  )
+                report "E3034" spanValue (owner <> " has no " <> member) (Just (typeMemberHelp owner))
                 pure (Just ErrorType)
               else pure Nothing
   _ -> pure Nothing
+
+{-| What to do about a member written after a type.
+
+    A type that shares its name with a standard-library module is almost
+    always that module left unimported: `Result.unwrapOr` is a call into
+    `Std.Result` once `import Std.Result as Result` is written, and without it
+    `Result` names the type. The help says so rather than explaining variants
+    to somebody who never meant one. -}
+typeMemberHelp :: Text -> Text
+typeMemberHelp owner
+  | owner `elem` typesNamingModules =
+      "Std." <> owner <> " is a module; to call its functions, import it under this name: import Std."
+        <> owner <> " as " <> owner
+  | otherwise =
+      "a type is written before a dot only to name a variant it declares; "
+        <> "a method is called on the value rather than through its type"
+
+{-| The types the language provides whose names are also standard-library
+    modules. -}
+typesNamingModules :: [Text]
+typesNamingModules = ["Bool", "Bytes", "Char", "Decimal", "Map", "Option", "Result", "Set"]
 
 {-| Whether this name is a type this program knows.
 
@@ -469,9 +489,6 @@ binaryType spanValue operator left right
   | operator == "in" = do
       _ <- unify spanValue (NominalType "Set" [left]) right
       pure boolType
-  | operator `elem` ["..", "..="] = do
-      unified <- unify spanValue left right
-      pure (NominalType "Range" [unified])
   {-| A shift's count is a position, not a second operand of the same type. It
       answers "how far", which is a plain count whatever the value's width is,
       and requiring the two to match would mean writing `1u8 << 3u8` and make a
@@ -623,6 +640,13 @@ memberType spanValue targetType member = do
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
+    {-| Every value answers `toText`. The built-in collections and text have
+        closed method tables with no such entry, so it is answered here, before
+        them; `Char` and `Bytes` keep their own, and `Bytes` answers `Option`
+        because not every byte sequence is text. -}
+    NominalType owner _
+      | member == textMember, owner `elem` ["Array", "Str", "Map", "Set", "Range", "Buckets"] ->
+          pure textMethodType
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
     NominalType "Bytes" [] -> bytesMethodType spanValue member
@@ -630,6 +654,7 @@ memberType spanValue targetType member = do
     NominalType "Char" [] -> charMethodType spanValue member
     NominalType "Map" [key, held] -> mapMethodType spanValue member key held
     NominalType "Set" [element] -> setMethodType spanValue member element
+    NominalType "Range" [element] -> rangeMethodType spanValue member element
     {-| A field of a generic record carries the arguments the value was built
         with, not the declaration's rigid parameters: reading `value` from a
         `Boxed[Int]` gives `Int`. -}
@@ -654,6 +679,7 @@ memberType spanValue targetType member = do
       bounds <- rigidBoundsOf name
       rigidMethod spanValue name bounds member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
+    _ | member == textMember -> pure textMethodType
     _ -> do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
@@ -684,6 +710,92 @@ mapMethodType spanValue member key held = case member of
  where
   mapType = NominalType "Map" [key, held]
   arrayOf element = NominalType "Array" [element]
+
+{-| The type of a range, from the ends that were written.
+
+    Each end is a platform integer, which is the type an index is and therefore
+    the type a range is useful at. Both ends may be absent: `..` is the whole of
+    whatever it is applied to, and it is still a `Range[Int]` so that one rule
+    types every spelling. -}
+rangeType :: Span -> Maybe Type -> Maybe Type -> Checker Type
+rangeType spanValue lower upper = do
+  {-| The two ends meet each other before either meets `Int`, so a range written
+      between two values of one wrong type is one mistake and one diagnostic
+      rather than the same complaint about each end. Once they have met, holding
+      one of them to `Int` holds both. -}
+  case (lower, upper) of
+    (Just low, Just high) -> do
+      unified <- unify spanValue low high
+      _ <- unify spanValue integerType unified
+      pure ()
+    (Just low, Nothing) -> unify spanValue integerType low >> pure ()
+    (Nothing, Just high) -> unify spanValue integerType high >> pure ()
+    (Nothing, Nothing) -> pure ()
+  pure (NominalType "Range" [integerType])
+
+{-| The type of a slice: the value that was sliced.
+
+    A stretch of an array is an array, a stretch of text is text, and a stretch
+    of bytes is bytes. A tuple is refused, because its members may differ and
+    the type of a stretch of one depends on which stretch — which is a number
+    the checker does not have. -}
+sliceType :: Span -> Type -> Checker Type
+sliceType spanValue targetType = do
+  resolved <- zonk targetType
+  case resolved of
+    ErrorType -> pure ErrorType
+    VariableType _ -> freshVariable
+    ReferenceTypeValue _ referent -> sliceType spanValue referent
+    NominalType "Array" [element] -> pure (NominalType "Array" [element])
+    NominalType "Str" [] -> pure stringType
+    NominalType "Bytes" [] -> pure bytesType
+    _ -> do
+      report "E3006" spanValue ("a " <> renderType resolved <> " cannot be sliced")
+        (Just "slice an array, a string, or a byte sequence")
+      pure ErrorType
+
+{-| Built-in range methods, typed exactly.
+
+    A range is two numbers and a rule for reading them, so most of these are
+    arithmetic and answer without walking anything. The ones that hand back the
+    values themselves answer with an array, because that is what they are: a
+    range counts upward by one, and nothing that skips or reverses is one. -}
+rangeMethodType :: Span -> Text -> Type -> Checker Type
+rangeMethodType spanValue member element = case member of
+  "length" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "isBounded" -> pure (FunctionTypeValue False [] boolType)
+  "isInclusive" -> pure (FunctionTypeValue False [] boolType)
+  "contains" -> pure (FunctionTypeValue False [element] boolType)
+  "start" -> pure (FunctionTypeValue False [] (optionOf element))
+  "end" -> pure (FunctionTypeValue False [] (optionOf element))
+  "toArray" -> pure (FunctionTypeValue False [] (arrayOf element))
+  "reverse" -> pure (FunctionTypeValue False [] (arrayOf element))
+  "step" -> pure (FunctionTypeValue False [integerType] (arrayOf element))
+  "sum" -> pure (FunctionTypeValue False [] element)
+  "map" -> do
+    result <- freshVariable
+    pure (FunctionTypeValue False [FunctionTypeValue False [element] result] (arrayOf result))
+  "filter" ->
+    pure
+      ( FunctionTypeValue False
+          [FunctionTypeValue False [element] boolType]
+          (arrayOf element)
+      )
+  "reduce" -> do
+    carried <- freshVariable
+    pure
+      ( FunctionTypeValue False
+          [FunctionTypeValue False [carried, element] carried, carried]
+          carried
+      )
+  _ -> do
+    report "E3005" spanValue ("Range has no method " <> member)
+      (Just "check the method name against the documented range methods")
+    pure ErrorType
+ where
+  arrayOf held = NominalType "Array" [held]
+  optionOf held = NominalType "Option" [held]
 
 {-| Built-in set methods, typed exactly. -}
 setMethodType :: Span -> Text -> Type -> Checker Type
@@ -873,6 +985,15 @@ nullLiteralType spanValue = do
         (Just "open unsafe(null) { ... }; null is a foreign-interface value, not an ordinary one")
       pure ErrorType
 
+{-| The method every value answers when its type declares none by that name:
+    the value rendered as `display` renders it. A declared `toText` — a field,
+    an implementation, or a bound's — is found first and wins. -}
+textMember :: Text
+textMember = "toText"
+
+textMethodType :: Type
+textMethodType = FunctionTypeValue False [] stringType
+
 {-| A method reached through a bound: the receiver is a parameter, and the trait
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
@@ -881,6 +1002,7 @@ rigidMethod :: Span -> Text -> [NominalId] -> Text -> Checker Type
 rigidMethod spanValue name bounds member = do
   providers <- filterM provides bounds
   case providers of
+    [] | member == textMember -> pure textMethodType
     [] -> do
       report "E3005" spanValue (name <> " has no method " <> member)
         (Just "add a trait bound that declares the method")
@@ -915,6 +1037,8 @@ methodType spanValue owner member = do
   found <- lookupName key
   case (providers, found) of
     (_ : _, _) -> ambiguous spanValue owner member providers
+    (_, Nothing)
+      | member == textMember -> pure textMethodType
     (_, Nothing) -> do
       report "E3005" spanValue (nominalName owner <> " has no field or method " <> member)
         (Just "check the name against the type declaration and its implementations")

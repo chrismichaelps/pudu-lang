@@ -1,6 +1,10 @@
 module UsesHtmlBuild
 
 import Std.Html.Build as H
+import Std.Html.Compose as Compose
+import Std.Html as Html
+import Std.Result as Result
+import Std.Sync as Sync
 
 /// Every export of `Std.Html.Build`, checked by what it renders.
 ///
@@ -12,6 +16,16 @@ fn rendered(node: &H.Node) -> Str { H.render(node) }
 /// Anything that builds accepts the same attributes, named by the trait rather
 /// than by the node type, so the trait itself is exercised.
 fn classed[T: H.Building](node: &T, name: Str) -> T { node.class(name) }
+
+fn countedHtml(calls: &Sync.Counter, view: Html.Html) -> Html.Html {
+  let _counted = Sync.increment(calls, 1)
+  view
+}
+
+fn countedNode(calls: &Sync.Counter, node: H.Node) -> H.Node {
+  let _counted = Sync.increment(calls, 1)
+  node
+}
 
 export fn main() -> Int {
   var held = 0
@@ -101,8 +115,65 @@ export fn main() -> Int {
   if rendered(&H.tag("custom-thing")) == "<custom-thing></custom-thing>" { held = held + 1 }
 
   // A whole document carries the doctype; a fragment does not.
-  if H.document(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
+  if H.document(&H.html()) == "<!DOCTYPE html><html></html>" { held = held + 1 }
   if !rendered(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
+
+  let htmlCalls = Sync.counter(0)
+  let skippedHtml = Html.whenBuilt(false, fn() -> Html.Html {
+      countedHtml(&htmlCalls, Html.text("skipped"))
+    })
+  if Html.render(&skippedHtml).isEmpty()
+    && Result.unwrapOr(Sync.count(&htmlCalls), -1) == 0 {
+    held = held + 1
+  }
+  let builtHtml = Html.whenBuilt(true, fn() -> Html.Html {
+      countedHtml(&htmlCalls, Html.trusted("<em>built</em>"))
+    })
+  if Html.render(&builtHtml) == "<em>built</em>"
+    && Result.unwrapOr(Sync.count(&htmlCalls), -1) == 1 {
+    held = held + 1
+  }
+  let _eagerHtml = Html.when(false, countedHtml(&htmlCalls, Html.text("eager")))
+  if Result.unwrapOr(Sync.count(&htmlCalls), -1) == 2 { held = held + 1 }
+
+  let nodeCalls = Sync.counter(0)
+  let baseNode = H.div().says("before")
+  let skippedNode = baseNode.whenBuilt(false, fn() -> H.Node {
+      countedNode(&nodeCalls, H.em().says("skipped"))
+    })
+  if rendered(&skippedNode) == rendered(&baseNode)
+    && Result.unwrapOr(Sync.count(&nodeCalls), -1) == 0 {
+    held = held + 1
+  }
+  let builtNode = baseNode.whenBuilt(true, fn() -> H.Node {
+      countedNode(&nodeCalls, H.em().raw("<b>built</b>"))
+    })
+  if rendered(&builtNode) == "<div>before<em><b>built</b></em></div>"
+    && rendered(&baseNode) == "<div>before</div>"
+    && Result.unwrapOr(Sync.count(&nodeCalls), -1) == 1 {
+    held = held + 1
+  }
+  let _eagerNode = baseNode.when(false, countedNode(&nodeCalls, H.em()))
+  if Result.unwrapOr(Sync.count(&nodeCalls), -1) == 2 { held = held + 1 }
+
+  let contentCalls = Sync.counter(0)
+  let baseContent = Compose.content().paragraph("before")
+  let skippedContent = baseContent.whenBuilt(false, fn() -> Html.Html {
+      countedHtml(&contentCalls, Html.text("skipped"))
+    })
+  if Html.render(&skippedContent.fragment()) == Html.render(&baseContent.fragment())
+    && Result.unwrapOr(Sync.count(&contentCalls), -1) == 0 {
+    held = held + 1
+  }
+  let builtContent = baseContent.whenBuilt(true, fn() -> Html.Html {
+      countedHtml(&contentCalls, Html.trusted("<strong>built</strong>"))
+    })
+  if Html.render(&builtContent.fragment()) == "<p>before</p><strong>built</strong>"
+    && Result.unwrapOr(Sync.count(&contentCalls), -1) == 1 {
+    held = held + 1
+  }
+  let _eagerContent = baseContent.when(false, countedHtml(&contentCalls, Html.text("eager")))
+  if Result.unwrapOr(Sync.count(&contentCalls), -1) == 2 { held = held + 1 }
 
   // Every tag function names the element it is called after.
   held = held + namedCorrectly()

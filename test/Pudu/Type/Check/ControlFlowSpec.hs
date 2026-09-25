@@ -1,6 +1,7 @@
 {-| @Test.Type.Check.ControlFlowSpec — control flow, branches, loop iteration, and error cascading -}
 module Pudu.Type.Check.ControlFlowSpec
   ( controlFlowProperties
+  , testBlockScope
   , testControlFlow
   , testExportedSignatures
   , testIterationTypes
@@ -20,12 +21,63 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 controlFlowProperties :: [(String, IO Property)]
 controlFlowProperties =
   [ ("control flow unifies its branches", testControlFlow)
+  , ("a block's bindings end with the block", testBlockScope)
   , ("exported signatures must be annotated", testExportedSignatures)
   , ("a type error reports once and does not cascade", testNoCascade)
   , ("an earlier phase's error suppresses type checking", testPhaseOrder)
   , ("? unwraps a Result inside a Result-returning function", testTry)
   , ("a for loop binds at the element type of what it iterates", testIterationTypes)
   ]
+
+testBlockScope :: IO Property
+testBlockScope = do
+  blockValue <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let shadow = 1"
+    , "  let inner = {"
+    , "    let shadow = \"text\""
+    , "    shadow.length()"
+    , "  }"
+    , "  shadow + inner"
+    , "}"
+    ]
+  branch <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> Int {"
+    , "  let shadow = 1"
+    , "  if flag {"
+    , "    let shadow = \"text\""
+    , "    print(shadow)"
+    , "  }"
+    , "  shadow + 1"
+    , "}"
+    ]
+  loop <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let shadow = 1"
+    , "  for item in [\"a\"] {"
+    , "    let shadow = item"
+    , "  }"
+    , "  shadow"
+    , "}"
+    ]
+  expired <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  if true {"
+    , "    let gone = 1"
+    , "  }"
+    , "  gone"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "a block expression's shadow ends with it" (blockValue === [])
+    , counterexample "a branch's shadow ends with it" (branch === [])
+    , counterexample "a loop body's shadow ends with it" (loop === [])
+    , counterexample "a name declared only in an ended block is unresolved" (expired === ["E2010"])
+    ]
 
 testControlFlow :: IO Property
 testControlFlow = do

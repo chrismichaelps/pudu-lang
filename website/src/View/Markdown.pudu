@@ -1,0 +1,294 @@
+module View.Markdown
+
+import Std.Html.Build as H
+import Std.List as List
+import Std.Map as Map
+import Std.Text as Text
+import View.MarkdownHtml as Html
+import View.MarkdownInline as Inline
+import View.Syntax as Syntax
+
+/// A heading a page holds, for the list of contents beside it.
+export type Heading = { level: Int, text: Str, anchor: Str }
+
+/// A page read from Markdown: its title, the sentence that describes it, the
+/// blocks to show, and the headings a reader can jump to.
+export type Document = {
+  title: Str,
+  summary: Str,
+  blocks: Array[H.Node],
+  headings: Array[Heading]
+}
+
+/// What the lines read so far are building, so a blank line or a line of
+/// another kind can close it.
+type Pending = { paragraph: Array[Str], items: Array[Str], ordered: Bool, quote: Array[Str] }
+
+/// A page of Markdown as a document.
+///
+/// The subset is the one documentation is written in: headings, paragraphs,
+/// fenced code, lists, quotations, tables, and rules, with code spans, strong
+/// and emphasised text, and links inside a line. The first `# ` heading is the
+/// page's title rather than a block, because the page shows it above
+/// everything else. Every other heading gets an anchor made from its words, so
+/// a link to a section keeps working when the page around it changes.
+export fn parse(source: &Array[Str]) -> Document {
+  parseWithTitle(source, true, false, &Html.none())
+}
+
+/// Safe Markdown blocks for an embedded body whose headings remain visible.
+export fn parseBody(source: &Array[Str]) -> Document {
+  parseWithTitle(source, false, false, &Html.none())
+}
+
+/// A package's Markdown file, as GitHub shows it: the documentation's subset,
+/// HTML blocks rebuilt from an allowlist, and relative links and images
+/// resolved against `targets`.
+export fn parseReadme(source: &Array[Str], targets: &Html.Targets) -> Document {
+  parseWithTitle(source, true, true, targets)
+}
+
+fn parseWithTitle(source: &Array[Str], extractTitle: Bool, readsHtml: Bool, targets: &Html.Targets) -> Document {
+  var blocks: Array[H.Node] = []
+  var headings: Array[Heading] = []
+  var anchors: Map[Str, Int] = Map.empty()
+  var held = nothingPending()
+  var title = ""
+  var summary = ""
+  var index = 0
+  let count = source.length()
+  while index < count {
+    let bare = Text.trimEnd(source[index]).trim()
+    if bare.startsWith("```") {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      let language = bare.drop(3).trim()
+      var code: Array[Str] = []
+      index = index + 1
+      while index < count && !Text.trimEnd(source[index]).trim().startsWith("```") {
+        code = code.push(Text.trimEnd(source[index]))
+        index = index + 1
+      }
+      blocks = blocks.push(codeBlock(language, &code))
+    } else if bare.isEmpty() {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+    } else if readsHtml && Html.opensBlock(bare) {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      var block: Array[Str] = []
+      while index < count && !source[index].trim().isEmpty() {
+        block = block.push(source[index])
+        index = index + 1
+      }
+      blocks = blocks.concat(Html.render(block.join("\n"), targets))
+      continue
+    } else if let Some(heading) = headingOf(bare) {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      if extractTitle && heading[0] == 1 && title.isEmpty() {
+        title = plainText(heading[1])
+      } else {
+        let anchor = uniqueAnchor(&anchors, heading[1])
+        anchors = anchors.insert(anchor, 1)
+        headings = headings.push(Heading{level: heading[0], text: plainText(heading[1]), anchor: anchor})
+        blocks = blocks.push(headingNode(heading[0], anchor, heading[1], targets))
+      }
+    } else if bare == "---" {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      blocks = blocks.push(H.hr())
+    } else if bare.startsWith("|") && index + 1 < count && separatorRow(source[index + 1]) {
+      blocks = flush(blocks, &held, targets)
+      held = nothingPending()
+      let header = cellsOf(bare)
+      index = index + 2
+      var rows: Array[Array[Str]] = []
+      while index < count && source[index].trim().startsWith("|") {
+        rows = rows.push(cellsOf(source[index].trim()))
+        index = index + 1
+      }
+      blocks = blocks.push(table(&header, &rows, targets))
+      continue
+    } else if bare.startsWith(">") {
+      if held.paragraph.length() > 0 || held.items.length() > 0 {
+        blocks = flush(blocks, &held, targets)
+        held = nothingPending()
+      }
+      held = Pending{..held, quote: held.quote.push(bare.drop(1).trim())}
+    } else if let Some(item) = listItem(bare) {
+      let switching = held.items.length() > 0 && held.ordered != item[0]
+      if held.paragraph.length() > 0 || held.quote.length() > 0 || switching {
+        blocks = flush(blocks, &held, targets)
+        held = nothingPending()
+      }
+      held = Pending{..held, items: held.items.push(item[1]), ordered: item[0]}
+    } else if held.items.length() > 0 && source[index].startsWith(" ") {
+      // A list item wrapped onto an indented line keeps its words. Without
+      // this the rest of the sentence closes the list and becomes a paragraph
+      // of its own, which is how a wrapped item read before.
+      let last = held.items.length() - 1
+      held = Pending{..held, items: List.set(&held.items, last, held.items[last] + " " + bare)}
+    } else {
+      if held.items.length() > 0 || held.quote.length() > 0 {
+        blocks = flush(blocks, &held, targets)
+        held = nothingPending()
+      }
+      if summary.isEmpty() { summary = plainText(bare) }
+      held = Pending{..held, paragraph: held.paragraph.push(bare)}
+    }
+    index = index + 1
+  }
+  blocks = flush(blocks, &held, targets)
+  Document{title: title, summary: summary, blocks: blocks, headings: headings}
+}
+
+/// Text with its inline markup taken out, for a title, a description, or an
+/// anchor, where markup would be read as the characters it is made of.
+export fn plainText(text: Str) -> Str {
+  text.replace("`", "").replace("**", "").replace("*", "")
+}
+
+fn nothingPending() -> Pending { Pending{paragraph: [], items: [], ordered: false, quote: []} }
+
+/// The blocks with whatever was still being built closed onto them.
+fn flush(out: Array[H.Node], held: &Pending, targets: &Html.Targets) -> Array[H.Node] {
+  var blocks = out
+  if held.paragraph.length() > 0 {
+    blocks = blocks.push(H.p().holding(Inline.renderWith(held.paragraph.join(" "), targets)))
+  }
+  if held.items.length() > 0 {
+    var rendered: Array[H.Node] = []
+    for item in held.items { rendered = rendered.push(H.li().holding(Inline.renderWith(item, targets))) }
+    blocks = blocks.push(if held.ordered { H.ol().holding(rendered) } else { H.ul().holding(rendered) })
+  }
+  if held.quote.length() > 0 {
+    blocks = blocks.push(H.blockquote().holding([H.p().holding(Inline.renderWith(held.quote.join(" "), targets))]))
+  }
+  blocks
+}
+
+/// A heading's level and words, when the line is a heading.
+fn headingOf(bare: Str) -> Option[(Int, Str)] {
+  var level = 0
+  var rest = bare
+  while rest.startsWith("#") && level < 5 {
+    level = level + 1
+    rest = rest.drop(1)
+  }
+  if level == 0 || level > 4 || !rest.startsWith(" ") { return None }
+  Some((level, rest.trim()))
+}
+
+fn headingNode(level: Int, anchor: Str, text: Str, targets: &Html.Targets) -> H.Node {
+  let content = Inline.renderWith(text, targets)
+  if level == 2 {
+    H.h2().id(anchor).holding(content)
+  } else if level == 3 {
+    H.h3().id(anchor).holding(content)
+  } else {
+    H.h4().id(anchor).holding(content)
+  }
+}
+
+/// An anchor for a heading, made distinct from the anchors already on the page.
+fn uniqueAnchor(anchors: &Map[Str, Int], text: Str) -> Str {
+  let base = slugOf(text)
+  if !Map.containsKey(anchors, base) { return base }
+  var suffix = 2
+  while Map.containsKey(anchors, base + "-" + show(suffix)) { suffix = suffix + 1 }
+  base + "-" + show(suffix)
+}
+
+/// Lower-case letters and digits, with a single dash where anything else was.
+fn slugOf(text: Str) -> Str {
+  var pieces: Array[Str] = []
+  var dashed = false
+  for character in plainText(text).toLower().chars() {
+    let kept = (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9')
+    if kept {
+      pieces = pieces.push(character.toText())
+      dashed = false
+    } else if !dashed && pieces.length() > 0 {
+      pieces = pieces.push("-")
+      dashed = true
+    }
+  }
+  var slug = pieces.join("")
+  if slug.endsWith("-") { slug = slug.take(slug.length() - 1) }
+  if slug.isEmpty() { "section" } else { slug }
+}
+
+/// A fenced block: a copy button the page's script reveals, the language as a
+/// label, and the code, painted when `View.Syntax` paints its language.
+fn codeBlock(language: Str, code: &Array[Str]) -> H.Node {
+  let text = code.join("\n")
+  let painted = match Syntax.painted(language, text) {
+    case Some(nodes) => H.code().holding(nodes)
+    case None => H.code().says(text)
+  }
+  let body = if language.isEmpty() { painted } else { painted.class("language-" + language) }
+  let copy = H.button().class("code-copy").kind("button").flag("hidden").at("aria-label", "Copy the code").says("Copy")
+  let label = if language.isEmpty() { [] } else { [H.span().class("code-label").at("aria-hidden", "true").says(language)] }
+  H.figure().class("code-figure").holding(label.concat([copy, H.pre().class("code-block").holding([body])]))
+}
+
+/// An item's words and whether its list is numbered, when the line is an item.
+fn listItem(bare: Str) -> Option[(Bool, Str)] {
+  if bare.startsWith("- ") || bare.startsWith("* ") { return Some((false, bare.drop(2).trim())) }
+  let dot = bare.indexOf(". ")
+  if dot > 0 && dot < 4 {
+    if let Some(_) = Text.wholeOf(bare.take(dot)) { return Some((true, bare.drop(dot + 2).trim())) }
+  }
+  None
+}
+
+/// Whether a line is the row of dashes that ends a table's header.
+fn separatorRow(line: Str) -> Bool {
+  let bare = line.trim()
+  if !bare.startsWith("|") || !bare.contains("-") { return false }
+  for character in bare.chars() {
+    if character != '|' && character != '-' && character != ':' && character != ' ' { return false }
+  }
+  true
+}
+
+/// A row's cells. A pipe written `\\|` belongs to its cell, even inside code,
+/// so a table can show an operator that contains one.
+fn cellsOf(bare: Str) -> Array[Str] {
+  var inner = bare
+  if inner.startsWith("|") { inner = inner.drop(1) }
+  if inner.endsWith("|") && !inner.endsWith("\\|") { inner = inner.take(inner.length() - 1) }
+  var cells: Array[Str] = []
+  var cell = ""
+  var escaped = false
+  for character in inner.chars() {
+    if escaped {
+      cell = if character == '|' { cell + "|" } else { cell + "\\" + character.toText() }
+      escaped = false
+    } else if character == '\\' {
+      escaped = true
+    } else if character == '|' {
+      cells = cells.push(cell.trim())
+      cell = ""
+    } else {
+      cell = cell + character.toText()
+    }
+  }
+  if escaped { cell = cell + "\\" }
+  cells.push(cell.trim())
+}
+
+fn table(header: &Array[Str], rows: &Array[Array[Str]], targets: &Html.Targets) -> H.Node {
+  var headCells: Array[H.Node] = []
+  for cell in *header { headCells = headCells.push(H.th().holding(Inline.renderWith(cell, targets))) }
+  var body: Array[H.Node] = []
+  for row in *rows {
+    var cells: Array[H.Node] = []
+    for cell in row { cells = cells.push(H.td().holding(Inline.renderWith(cell, targets))) }
+    body = body.push(H.tr().holding(cells))
+  }
+  H.div().class("table-wrap").holding([
+      H.table().holding([H.thead().holding([H.tr().holding(headCells)]), H.tbody().holding(body)])
+    ])
+}

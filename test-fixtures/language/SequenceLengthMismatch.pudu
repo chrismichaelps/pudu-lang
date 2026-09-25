@@ -1,0 +1,9 @@
+module SequenceLengthMismatch
+
+/// A sequence pattern names a length. A sequence of another length is reported
+/// where the binding is, with the pattern the reader wrote beside it.
+export fn main() -> Int {
+  let values = [1, 2]
+  let [first, second, third] = values
+  first + second + third
+}

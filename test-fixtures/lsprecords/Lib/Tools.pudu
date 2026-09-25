@@ -1,0 +1,3 @@
+module Lib.Tools
+
+export type Point = { x: Int, label: Str }

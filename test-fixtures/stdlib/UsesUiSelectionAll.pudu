@@ -1,0 +1,54 @@
+module UsesUiSelectionAll
+
+import Std.Ui.Screen as Screen
+import Std.Ui.Selection as Selection
+
+fn main() -> Int {
+  var held = 0
+  let empty = Selection.selection(10)
+
+  // One row, then a range from the anchor, then a toggle out of the range.
+  let one = Selection.single(&empty, 3)
+  if Selection.selected(&one) == [3] && one.anchor == Some(3) { held = held + 1 }
+  let range = Selection.extend(&one, 6)
+  if Selection.selected(&range) == [3, 4, 5, 6] && range.anchor == Some(3) && range.focus == Some(6) { held = held + 1 }
+  let backwards = Selection.extend(&range, 1)
+  if Selection.selected(&backwards) == [1, 2, 3] { held = held + 1 }
+  let toggled = Selection.toggle(&range, 5)
+  if Selection.selected(&toggled) == [3, 4, 6] && !Selection.isSelected(&toggled, 5) && Selection.isSelected(&toggled, 6) {
+    held = held + 1
+  }
+
+  // Extending with no anchor chooses one row; out-of-range rows change nothing or clear.
+  if Selection.selected(&Selection.extend(&empty, 2)) == [2] { held = held + 1 }
+  if Selection.toggle(&one, 99) == one && Selection.selected(&Selection.single(&one, -1)).length() == 0 { held = held + 1 }
+
+  // Keyboard movement clamps to the list and can extend.
+  let first = Selection.move(&empty, 1, false)
+  if Selection.selected(&first) == [0] && Selection.selected(&Selection.move(&empty, -1, false)) == [9] { held = held + 1 }
+  let grown = Selection.move(&Selection.move(&first, 1, true), 1, true)
+  if Selection.selected(&grown) == [0, 1, 2] && Selection.selected(&Selection.move(&first, -5, false)) == [0] {
+    held = held + 1
+  }
+
+  // All, none, and a shrinking list.
+  if Selection.selected(&Selection.all(&one)).length() == 10 && Selection.selected(&Selection.clear(&range)).length() == 0 {
+    held = held + 1
+  }
+  let shrunk = Selection.resized(&range, 5)
+  if Selection.selected(&shrunk) == [3, 4] && shrunk.focus == None && shrunk.anchor == Some(3) { held = held + 1 }
+
+  // Row activations and keymap commands.
+  if Selection.selected(&Selection.activated(&empty, &Screen.Activated("row.7"), "row.")) == [7] { held = held + 1 }
+  if Selection.activated(&empty, &Screen.Activated("other"), "row.") == empty { held = held + 1 }
+  if Selection.selected(&Selection.commanded(&one, "select.extendNext")) == [3, 4] && Selection.selected(&Selection.commanded(&one, "select.previous")) == [2] {
+    held = held + 1
+  }
+  if Selection.selected(&Selection.commanded(&one, "select.all")).length() == 10 && Selection.commanded(&one, "select.none") == Selection.clear(&one) {
+    held = held + 1
+  }
+  if Selection.commanded(&one, "copy") == one && Selection.selected(&Selection.commanded(&one, "select.extendPrevious")) == [2, 3] {
+    held = held + 1
+  }
+  held
+}

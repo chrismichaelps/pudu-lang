@@ -184,8 +184,31 @@ testRecords = do
     , "type User = { id: Int, name: Str }"
     , "fn run(user: User) -> Str { user.missing }"
     ]
+  -- A chain whose first call fails reports it once. Each later call used to
+  -- check the chain before it twice, so four calls reported it eight times.
+  unknownChain <- codes
+    [ "module M"
+    , "type Box = { value: Int }"
+    , "fn run() -> Int {"
+    , "  let made = Box{value: 1}.first().second().third().fourth()"
+    , "  0"
+    , "}"
+    ]
+  fieldCall <- codes
+    [ "module M"
+    , "type Holder = { apply: fn(Int) -> Int }"
+    , "fn run(held: Holder) -> Int { held.apply(3) }"
+    ]
+  wrongFieldCall <- codes
+    [ "module M"
+    , "type Holder = { apply: fn(Int) -> Int }"
+    , "fn run(held: Holder) -> Str { held.apply(3) }"
+    ]
   pure $ conjoin
     [ built === []
+    , counterexample "an unknown member early in a chain is reported once" (unknownChain === ["E3005"])
+    , counterexample "a function held in a field is called" (fieldCall === [])
+    , counterexample "a field call is typed by the function the field holds" (wrongFieldCall === ["E3001"])
     , wrongField === ["E3001"]
     , missingField === ["E3008"]
     , unknownField === ["E3005"]
@@ -225,11 +248,42 @@ testVariants = do
     , "  }"
     , "}"
     ]
+  qualified <- codes
+    [ "module M"
+    , "type Outcome = | Ok(Int) | Err(Str)"
+    , "fn run(value: Outcome) -> Int {"
+    , "  match value {"
+    , "    case Outcome.Ok(inner) => inner"
+    , "    case Outcome.Err(_) => 0"
+    , "  }"
+    , "}"
+    ]
+  missingQualified <- codes
+    [ "module M"
+    , "type First = | Shared(Int) | Empty"
+    , "type Second = | Other(Int)"
+    , "fn run(value: First) -> Int {"
+    , "  if let Second.Shared(inner) = value { inner } else { 0 }"
+    , "}"
+    ]
+  missingNamedQualified <- codes
+    [ "module M"
+    , "type First = | Shared{ value: Int } | Empty"
+    , "type Second = | Other{ value: Int }"
+    , "fn run(subject: First) -> Int {"
+    , "  if let Second.Shared{value} = subject { value } else { 0 }"
+    , "}"
+    ]
   pure $ conjoin
     [ constructed === []
     , wrongPayload === ["E3001"]
     , matched === []
     , counterexample "arms unify to one type" (wrongArm === ["E3001"])
+    , counterexample "a valid type-qualified pattern keeps its owner" (qualified === [])
+    , counterexample "a missing type-qualified positional variant is E3034"
+        (missingQualified === ["E3034"])
+    , counterexample "a missing type-qualified named variant is one E3034"
+        (missingNamedQualified === ["E3034"])
     ]
 
 testNamedVariants :: IO Property
@@ -359,6 +413,15 @@ testPreludeData = do
     , "type Mine = | Ok(Str) | Err(Str)"
     , "fn run() -> Mine { Ok(\"text\") }"
     ]
+  unimported <- compile $ Text.unlines
+    [ "module M"
+    , "fn run(parsed: Result[Int, Str]) -> Int { Result.unwrapOr(parsed, 0) }"
+    ]
+  throughType <- compile $ Text.unlines
+    [ "module M"
+    , "fn run(value: Int) -> Int { Int.toInt32(value) }"
+    ]
+  let helpsOf compiled = map diagnosticHelp (compileDiagnostics compiled)
   pure $ conjoin
     [ counterexample "Some builds an Option" (option === "Option[Int]")
     , counterexample "None needs no declaration" (none === [])
@@ -366,6 +429,20 @@ testPreludeData = do
     , counterexample "a constructor checks its payload" (wrongPayload === ["E3001"])
     , counterexample "a generic sum instantiates per use" (generic === [])
     , counterexample "a module may declare its own Ok" (shadowed === [])
+    , counterexample "a member through Result is E3034"
+        (codesOf unimported === ["E3034"])
+    , counterexample "a type named like a module advises importing the module"
+        ( helpsOf unimported
+            === [Just "Std.Result is a module; to call its functions, import it under this name: import Std.Result as Result"]
+        )
+    , counterexample "a type with no module keeps the variant help"
+        ( helpsOf throughType
+            === [ Just
+                    ( "a type is written before a dot only to name a variant it declares; "
+                        <> "a method is called on the value rather than through its type"
+                    )
+                ]
+        )
     ]
 
 testDiscardedResult :: IO Property

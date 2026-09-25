@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.1",
+  "tag": "v0.1.1",
+  "url": "https://github.com/chrismichaelps/pudu-lang/releases/tag/v0.1.1",
+  "published": "2026-09-23",
+  "prerelease": true,
+  "releasesUrl": "https://github.com/chrismichaelps/pudu-lang/releases",
+  "downloads": [
+    {
+      "os": "Linux",
+      "arch": "x86-64",
+      "note": "Intel or AMD 64-bit",
+      "target": "linux-amd64",
+      "file": "pudu-0.1.1-linux-amd64.tar.gz",
+      "bytes": 10386092,
+      "size": "10.4 MB",
+      "url": "https://github.com/chrismichaelps/pudu-lang/releases/download/v0.1.1/pudu-0.1.1-linux-amd64.tar.gz",
+      "checksum": "a3243d668d3973cadc842162f3b06086bf5281cc8ee26b691a355840fdbc3383"
+    },
+    {
+      "os": "macOS",
+      "arch": "ARM64",
+      "note": "Apple silicon",
+      "target": "darwin-arm64",
+      "file": "pudu-0.1.1-darwin-arm64.tar.gz",
+      "bytes": 17051777,
+      "size": "17.1 MB",
+      "url": "https://github.com/chrismichaelps/pudu-lang/releases/download/v0.1.1/pudu-0.1.1-darwin-arm64.tar.gz",
+      "checksum": "3ae7a69d8ef8255dfefb28dfd77e4dc5cdfe7fce635df9dbb952e13886a6b242"
+    }
+  ]
+}

@@ -25,6 +25,14 @@ message is answered rather than raised — a server told nonsense is working cor
 so — while a listener that failed stays a `ServerError`. Closing the listener is what ends the
 accept loop, because accepting does not answer until a connection arrives; the flag says the
 failure was asked for.
+
+A head that is not UTF-8 is answered 400 and the connection closed. A body that is UTF-8 arrives as
+the request's text body; any other body arrives as its exact bytes in `binaryBody` with the text body
+empty, so a binary upload reaches the handler intact rather than as empty text it could not tell apart
+from a request that sent nothing. Framing comes from [[Std Http Safe]]: a request stating its length two
+ways, or a transfer encoding that does not end in `chunked`, is refused before any body is read, and
+a chunked body is refused because this server does not read one, so no unread body bytes are left on
+a kept-alive connection to be parsed as the next request.
 ## Grill Log
 - **Q:** Rebuild the chain of steps per request? **A:** No. _Rationale:_ it is the same for every
   request, and rebuilding would put the server's whole configuration in its hot path. _Rejected:_

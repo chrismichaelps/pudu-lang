@@ -61,6 +61,14 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - Network connect/send/receive effects carry a millisecond operation timeout; negative retains the
   unbounded low-level primitive and non-negative expiry returns the stable host failure text that
   `Std.Net` and `Std.Tls` classify as their operation-timeout variants.
+- Desktop open/present/pump/close effects delegate to an evaluation-local [[Eval Desktop]] store.
+  They accept only explicit tokens and byte payloads, and remain forbidden during constant folding.
+- Bounded device playback delegates to [[Eval Audio Device]]. The effect receives an admitted PCM
+  format, exact bytes, queue bounds, and a finite deadline; it returns the acknowledged frame count
+  and owns no persistent evaluator token.
+- Persistent audio effects delegate to the evaluation-local [[Eval Audio Stream]] store. They keep
+  native identity out of values, preserve Pudu token values exactly until lookup, bound writes
+  and draining close, and project negotiated format plus telemetry as scalar arrays.
 
 ## Grill Log
 
@@ -70,6 +78,12 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - **Q:** Leave a timed-out stream token usable? **A:** No. _Rationale:_ a partial write or interrupted
   TLS record leaves the next operation unable to know its position. _Rejected:_ retrying on an
   indeterminate stream.
+- **Q:** Implement a one-off host demo outside the effect boundary? **A:** No. _Rationale:_ desktop
+  resources need the same typed failure and constant-folding refusal as other device effects.
+  _Rejected:_ a CLI-only window shortcut.
+- **Q:** Let audio playback bypass effect refusal because its input is already bytes? **A:** No.
+  _Rationale:_ device access is observable even when its samples are pure. _Rejected:_ dispatching
+  it with the pure byte primitives.
 
 ## Referenced by
 

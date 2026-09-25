@@ -65,9 +65,13 @@ for a destructor that takes the struct by value. Pointer values remain inaccessi
 expressions. Nested aggregate shape, size, alignment, packing, and target ABI classification must be
 represented faithfully; a flat list of scalar widths is not a general substitute for aggregate shape.
 
-These constraints require revision and acceptance of issue #227's proposed design before its syntax
-can be presented as supported. An explicit C wrapper returning an opaque owned handle remains a
-usable binding strategy for libraries whose by-value ownership cannot yet be represented.
+[[ADR-0021-a-value-the-library-owns]] now accepts a nested aggregate declaration, target-derived
+natural C layout, explicit identity paths, and generation-qualified claims. That decision is the
+implementation contract, not a claim of support: its syntax must remain rejected until parser,
+checker, runtime, native bridge, diagnostics, and conformance evidence land together. An explicit C
+wrapper returning an opaque owned handle remains the usable binding strategy meanwhile and for
+packed, over-aligned, union, bit-field, flexible-member, or target-vector layouts the first slice
+deliberately refuses.
 
 ## Buffer decisions to resolve
 
@@ -131,4 +135,5 @@ before assigning a throughput claim. No benchmarks were run in the hardening pas
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/STDLIB]] · [[2026-09-04-ffi-hardening]]
+[[architecture/_MOC]] · [[architecture/STDLIB]] · [[2026-09-04-ffi-hardening]] ·
+[[2026-09-20-owned-foreign-values]]

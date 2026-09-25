@@ -7,13 +7,14 @@ aliases: [website View Home]
 ---
 # Website View Home
 
-Renders the search-first home page, concrete query links, and ranked result list. The first viewport
-exposes the working search surface instead of a marketing hero. Query examples follow Hoogle's
-useful discovery pattern while using Pudu names and type syntax. The module panel identifies the
-Pudu language version that generated its catalogue.
-Below the primary search, short code-first sections explain the first useful program, the language's
-typed control of failure and references, and the compiler's Haskell foundation. This follows the useful
-information order of established language home pages without copying their claims or wording.
+Renders the home page and the ranked result list. The page opens with the shared `hero-banner`
+(the component the package catalogue opens with), with a roaming pudu behind its top edge
+([[website View Pudu]]): the release pill, one sentence on what Pudu is,
+Start learning and Download actions, the API search box, and concrete example queries. Below it, the
+type-shape example sits beside its explanation and the module panel follows on its own row. When the
+package snapshot holds projects, up to six appear as cards (name, description, latest release, stars)
+with links to the catalogue and the Dependencies chapter; with none, the section is absent. Short
+code-first sections then explain the first program, typed failure and references, and the library.
 
 Resolved Grill Log: keep the result density close to a reference index while preserving touch targets.
 The result page delegates to the bounded dynamic view so static, local, test, and Lambda paths render

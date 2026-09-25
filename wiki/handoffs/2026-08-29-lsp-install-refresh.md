@@ -28,7 +28,7 @@ the action majors match the official releases, and CI finishes without the Node 
 
 | Agent | Issue | Role | Config | Worktree | Branch | Ownership | Avoid | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `forensic_review_150` | #150 | Read-only Forensic Guardian | `~/.codex/config.toml` | read-only `/private/tmp/pudu-lsp-install` | none | Independent diff and vault-parity review | All edits, commits, pushes, and unrelated worktrees | Complete — clear, no findings |
+| `forensic_review_150` | #150 | Read-only Forensic Guardian | read-only reviewer profile | read-only `/private/tmp/pudu-lsp-install` | none | Independent diff and vault-parity review | All edits, commits, pushes, and unrelated worktrees | Complete — clear, no findings |
 
 ## Grill Log
 

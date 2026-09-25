@@ -2,6 +2,7 @@ module Db.Tasks
 
 import Std.App.Database as Database
 import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
 import Std.Db.Row as Row
 import Std.Option as Option
 import Std.Result as Result
@@ -22,18 +23,22 @@ export type Task = { id: Int, title: Str, done: Bool }
 /// distinction nothing reads.
 export type StoreError = { message: Str }
 
-/// The schema, applied at start-up.
+/// The schema, brought up to date at start-up.
 ///
 /// Stated here rather than in a file beside the program, because the example
 /// runs from a single command and a reader following it should not have to
-/// find a second file to know what a row looks like.
+/// find a second file to know what a row looks like. Each change is a numbered
+/// migration that records itself as it commits, so a restart against the same
+/// database runs nothing, and a later change is a further migration rather
+/// than an edit to this one.
 export fn migrate(db: &Database.Database) -> Result[(), StoreError] {
-  let made = Database.execute(
-    db,
-    "CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"
+  let tasks = Migrate.migration(
+    1,
+    "tasks",
+      &["CREATE TABLE task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"]
   )
-  match made {
-    case Err(problem) => Err(StoreError{message: problem.message})
+  match Database.migrate(db, &[tasks]) {
+    case Err(problem) => Err(StoreError{message: Migrate.explain(&problem)})
     case Ok(_) => Ok(())
   }
 }
@@ -51,16 +56,17 @@ export fn find(db: &Database.Database, id: Int) -> Result[Option[Task], StoreErr
 
 /// Add a task and answer the one that was added, so a caller need not read it
 /// back to learn the identifier the database chose.
+///
+/// `RETURNING` answers the row this statement wrote. Reading the newest row
+/// afterwards would answer somebody else's whenever two requests add at once.
 export fn add(db: &Database.Database, title: Str) -> Result[Task, StoreError] {
-  let written = Database.query(db, "INSERT INTO task (title, done) VALUES (?, 0)", &[Driver.TextValue(title)])
-  match written {
-    case Err(problem) => Err(StoreError{message: problem.message})
-    case Ok(_) => {
-      let recent = read(db, "SELECT id, title, done FROM task ORDER BY id DESC LIMIT 1", &[]) ?
-      if recent.length() == 0 { Err(StoreError{message: "the task was written and could not be read back"}) } else {
-        Ok(recent[0])
-      }
-    }
+  let written = read(
+    db,
+    "INSERT INTO task (title, done) VALUES (?, 0) RETURNING id, title, done",
+      &[Driver.TextValue(title)]
+  ) ?
+  if written.length() == 0 { Err(StoreError{message: "the task was written and could not be read back"}) } else {
+    Ok(written[0])
   }
 }
 

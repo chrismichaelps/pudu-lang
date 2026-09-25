@@ -151,7 +151,7 @@ impl Declaring for Metrics {
         refused: self.refused
       }
     } else {
-        *self
+      *self
     }
   }
 }
@@ -166,7 +166,7 @@ fn declaring(
   limit: Int
 ) -> Metrics {
   if Map.containsKey(&base.declared, name) {
-      *base
+    *base
   } else {
     Metrics {
       declared: Map.insert(
@@ -255,7 +255,7 @@ impl Recording for Metrics {
           }
         })
     } else {
-        *self
+      *self
     }
   }
 }
@@ -372,7 +372,7 @@ fn changed(
       }
     }
   } else {
-      *base
+    *base
   }
 }
 

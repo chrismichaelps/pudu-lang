@@ -212,7 +212,7 @@ fn plainRequest() -> Route.Request { requestWith(&[("Host", "x")]) }
 
 fn requestWith(headers: &Array[(Str, Str)]) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: Http.Get, target: "/live", headers: *headers, body: ""},
+    message: Http.Request{method: Http.Get, target: "/live", headers: *headers, body: "", binaryBody: None},
     path: "/live",
     params: mapOf([]),
     query: mapOf([]),

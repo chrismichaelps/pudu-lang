@@ -4,10 +4,11 @@ import Std.Env as Env
 import Std.Http as Http
 import Std.Io as Io
 import Std.Option as Option
+import Std.Site as Build
 import Config as Config
 import Error as SiteError
 import Seo as Seo
-import Service.Catalog as Catalog
+import Site as Site
 import Web.Routes as Web
 
 /// Every page the site has, written to disk.
@@ -34,77 +35,41 @@ fn main() -> Int {
     let _said = Io.writeErrorLine("usage: prerender <output directory>")
     return 1
   }
-  match Config.load() {
-    case Err(problem) => failed(&problem)
-    case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
-        case Err(problem) => failed(&problem)
-        case Ok(catalog) => {
-          // The pages, and the two files that are not pages: a crawler asks for
-          // both before it asks for anything else, and neither belongs in the
-          // sitemap that one of them points at.
-          var routes = Seo.paths(&catalog)
-          routes = routes.push("/robots.txt")
-          routes = routes.push("/sitemap.xml")
+  let settings = match Config.load() {
+    case Ok(loaded) => loaded
+    case Err(problem) => { return failed(&problem) }
+  }
+  let site = match Site.load(&settings) {
+    case Ok(loaded) => loaded
+    case Err(problem) => { return failed(&problem) }
+  }
+  // The pages, and the two files that are not pages: a crawler asks for both
+  // before it asks for anything else, and neither belongs in the sitemap that
+  // one of them points at.
+  var routes = Seo.paths(&site.catalog, &site.docs, &site.playground.examples, &site.packages)
+  routes = routes.push("/robots.txt")
+  routes = routes.push("/sitemap.xml")
 
-          var written = 0
-          var refused = 0
-          for route in routes {
-            let response = Web.render(settings.siteUrl, &catalog, route)
-            if response.status.code != 200 {
-              // A route that does not answer is reported rather than written.
-              // Written, it would be a page serving whatever the error rendered
-              // as, which reads as a working page with wrong content — and the
-              // sitemap would point a crawler at it.
-              let _said = Io.writeErrorLine(
-                "prerender: " + route + " answered " + show(response.status.code))
-              refused = refused + 1
-            } else {
-              match write(into, route, &response) {
-                case Ok(_) => { written = written + 1 }
-                case Err(problem) => {
-                  let _said = Io.writeErrorLine("prerender: " + route + ": " + problem)
-                  refused = refused + 1
-                }
-              }
-            }
-          }
-
-          let _reported = Io.writeLine(
-            "prerendered " + show(written) + " pages into " + into)
-          if refused > 0 {
-            let _also = Io.writeErrorLine(
-              "prerender: " + show(refused) + " routes did not render")
-            1
-          } else {
-            0
-          }
-        }
-      }
+  // Rendered on every core through the one build step any Pudu site uses.
+  // Files whose bytes are already there are left alone, so a rebuild writes,
+  // and a deployment uploads, only what changed.
+  let layout = Build.Options{output: into, publicDirectory: "", workers: 8, target: Build.Static, fallback: None}
+  let report = match Build.build(&layout, &routes, |route: Str| Web.render(&site, route)) {
+    case Ok(done) => done
+    case Err(problem) => {
+      let _said = Io.writeErrorLine("prerender: " + Build.explain(&problem))
+      return 1
     }
   }
-}
-
-/// Where a route's page goes.
-///
-/// A path becomes a directory holding an `index.html`, which is what lets a
-/// static host answer `/modules` for a request that named no file. The two that
-/// are files rather than pages keep their own names, since a crawler asks for
-/// `/robots.txt` and not for `/robots.txt/index.html`.
-///
-/// The route is written as it is rather than decoded first. A name carrying a
-/// character a URL escapes reaches the host escaped, so the file has to be named
-/// the escaped way or the host looks for something that is not there.
-fn write(into: Str, route: Str, response: &Http.Response) -> Result[(), Str] {
-  let target = if route == "/" {
-    into + "/index.html"
-  } else if route == "/robots.txt" || route == "/sitemap.xml" {
-    into + route
-  } else {
-    into + route + "/index.html"
+  // A route that does not answer is reported rather than written. Written, it
+  // would be a page serving whatever the error rendered as, which reads as a
+  // working page with wrong content — and the sitemap would point a crawler
+  // at it.
+  for refusal in report.refused {
+    let _said = Io.writeErrorLine("prerender: " + refusal.path + " " + refusal.reason)
   }
-  Io.makeDirectory(Io.directoryOf(target)) ?
-  Io.write(target, response.body)
+  let _reported = Io.writeLine("prerendered into " + into + ": " + Build.summary(&report))
+  if Build.succeeded(&report) { 0 } else { 1 }
 }
 
 fn failed(problem: &SiteError.SiteError) -> Int {

@@ -5,6 +5,15 @@ export type SiteError
   | CatalogueUnreadable(Str)
   | CatalogueInvalid
   | CatalogueEmpty
+  | PackagesInvalid(Str)
+  | DocsUnreadable(Str)
+  | DocumentUnreadable(Str)
+  | ReleasesUnreadable(Str)
+  | ReleaseNotesUnreadable(Str)
+  | ReleasesInvalid
+  | ReleasesEmpty
+  | ExamplesUnreadable(Str)
+  | PlaygroundMisconfigured(Str)
   | ListenFailed
 
 export fn explain(problem: &SiteError) -> Str {
@@ -13,6 +22,15 @@ export fn explain(problem: &SiteError) -> Str {
     case CatalogueUnreadable(path) => "the API catalogue could not be read at " + path
     case CatalogueInvalid => "the API catalogue is not valid generated documentation"
     case CatalogueEmpty => "the API catalogue contains no public declarations"
+    case PackagesInvalid(path) => "the package pages' data at " + path + " is not a valid package snapshot"
+    case DocsUnreadable(path) => "the documentation pages could not be read at " + path
+    case DocumentUnreadable(path) => "a published document could not be read at " + path
+    case ReleasesUnreadable(path) => "the published releases could not be read at " + path
+    case ReleaseNotesUnreadable(version) => "the release notes for " + version + " could not be read"
+    case ReleasesInvalid => "the published releases are not a valid release document"
+    case ReleasesEmpty => "the published releases carry no archive to download"
+    case ExamplesUnreadable(path) => "the playground examples could not be read at " + path
+    case PlaygroundMisconfigured(reason) => "the playground is misconfigured: " + reason
     case ListenFailed => "the website listener could not start"
   }
 }

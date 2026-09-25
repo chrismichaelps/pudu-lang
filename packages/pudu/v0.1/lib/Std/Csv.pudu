@@ -1,5 +1,8 @@
 module Std.Csv
 
+import Std.Bytes as ByteSeq
+import Std.Io as Io
+import Std.Io {IoError, NotText, Reader}
 import Std.Map as Map
 import Std.Option as Option
 
@@ -10,6 +13,13 @@ import Std.Option as Option
 export type CsvError
   = Unterminated(Int)
   | Ragged(Int, Int, Int)
+
+/// Why the rows of a file could not all be read.
+/// A file that cannot be read and text that is not rows call for different
+/// answers, so the two causes stay apart.
+export type CsvReadError
+  = Unreadable(IoError)
+  | Malformed(CsvError)
 
 /// A table read with its first row taken as the names of its columns.
 export type Table = {
@@ -37,72 +47,240 @@ export fn parse(source: Str) -> Result[Array[Array[Str]], CsvError] {
 /// The same, for a text whose fields are separated by something else.
 /// A tab is the other common answer, and a file that chose one is not
 /// improved by a reader that assumes the other.
+///
+/// A one-byte delimiter is read by the runtime's `csvRecords`, which searches
+/// the text's bytes for the next quote, delimiter, or newline and hands back
+/// finished rows. Any other delimiter, and a text whose last field is never
+/// closed, is read by `scanWith`, which names where that field began.
 export fn parseWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] {
-  if source.isEmpty() {
-    Ok([])
-  } else {
-    var rows: Array[Array[Str]] = []
-    var fields: Array[Str] = []
-    var current = ""
-    var quoted = false
-    var index = 0
-    var started = 0
-    var failure: Option[CsvError] = None
-    var pending = false
-    while index < source.length() && Option.isNone(&failure) {
-      let character = source.slice(index, index + 1)
-      if quoted {
-        if character == QUOTE {
-          // A doubled quote inside a quoted field is one quote, which is how
-          // the format writes a quote that does not end the field.
-          if index + 1 < source.length() && source.slice(index + 1, index + 2) == QUOTE {
-            current = current + QUOTE
-            index = index + 1
-          } else {
-            quoted = false
-          }
+  if source.isEmpty() { return Ok([]) }
+  if isPlain(delimiter) == false { return scanWith(source, delimiter) }
+  let ended = if source.endsWith("\n") { source } else { source + "\n" }
+  let buffer = ended.toBytes()
+  let Some(scanned) = csvRecords(buffer, delimiter) else { return scanWith(source, delimiter) }
+  if scanned[1] < buffer.length() { return scanWith(source, delimiter) }
+  Ok(scanned[0])
+}
+
+/// The rows of a text read one character at a time.
+///
+/// This is the reader for a delimiter the runtime's scan does not take, and
+/// the one that names where an unterminated field began. The characters are
+/// taken once as an array and walked by index, and each field is gathered as
+/// pieces joined when the field ends, so no character is found by walking the
+/// text before it.
+fn scanWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] {
+  let characters = source.chars()
+  let size = characters.length()
+  var rows: Array[Array[Str]] = []
+  var fields: Array[Str] = []
+  var current: Array[Str] = []
+  var quoted = false
+  var index = 0
+  var started = 0
+  var pending = false
+  while index < size {
+    let character = characters[index].toText()
+    if quoted {
+      if character == QUOTE {
+        // A doubled quote inside a quoted field is one quote, which is how
+        // the format writes a quote that does not end the field.
+        if index + 1 < size && characters[index + 1].toText() == QUOTE {
+          current = current.push(QUOTE)
+          index = index + 1
         } else {
-          current = current + character
+          quoted = false
         }
       } else {
-        if character == QUOTE {
-          quoted = true
-          started = index
-          pending = true
-        } else {
-          if character == delimiter {
-            fields = fields.push(current)
-            current = ""
-            pending = true
-          } else {
-            if character == "\n" {
-              fields = fields.push(trimReturn(current))
-              rows = rows.push(fields)
-              fields = []
-              current = ""
-              pending = false
-            } else {
-              current = current + character
-              pending = true
-            }
-          }
-        }
+        current = current.push(character)
       }
-      index = index + 1
-    }
-    if quoted { failure = Some(Unterminated(started)) }
-    if pending || current.length() > 0 {
-      fields = fields.push(trimReturn(current))
+    } else if character == QUOTE {
+      quoted = true
+      started = index
+      pending = true
+    } else if character == delimiter {
+      fields = fields.push(current.join(""))
+      current = []
+      pending = true
+    } else if character == "\n" {
+      fields = fields.push(trimReturn(current.join("")))
       rows = rows.push(fields)
+      fields = []
+      current = []
+      pending = false
+    } else {
+      current = current.push(character)
+      pending = true
     }
-    if let Some(reason) = failure { Err(reason) } else { Ok(rows) }
+    index = index + 1
   }
+  if quoted { return Err(Unterminated(started)) }
+  if pending || current.length() > 0 {
+    fields = fields.push(trimReturn(current.join("")))
+    rows = rows.push(fields)
+  }
+  Ok(rows)
 }
 
 /// A file written where a carriage return precedes each newline still holds
 /// one row per newline, so the return is not part of the last field.
 fn trimReturn(field: Str) -> Str {
   if field.endsWith("\r") { field.take(field.length() - 1) } else { field }
+}
+
+/// A fold over a file's rows part way through: the bytes read after the last
+/// complete record, and, for a delimiter the runtime's scan does not take, the
+/// lines of a record whose quoted field is still open. `offset` counts the
+/// characters before the unread remainder and `start` those before the open
+/// record, so a field left open names the position `parse` would name for the
+/// whole text.
+type Reading[T] = {
+  total: T,
+  pending: Array[Bytes],
+  pieces: Array[Str],
+  quotes: Int,
+  offset: Int,
+  start: Int,
+  failure: Option[CsvReadError]
+}
+
+/// Combine every row of a comma-separated file into one value, holding one
+/// chunk and one record at a time.
+///
+/// The rows are the ones `parse` gives for the whole text, including a quoted
+/// field that holds a newline. Rows before a failure have already reached
+/// `step`; after it, the rest of the file is read without further work.
+export fn foldRows[T](path: Str, seed: T, step: fn(T, Array[Str]) -> T) -> Result[T, CsvReadError] {
+  foldRowsWith(path, COMMA, seed, step)
+}
+
+/// The same, for a file whose fields are separated by something else.
+export fn foldRowsWith[T](
+  path: Str,
+  delimiter: Str,
+  seed: T,
+  step: fn(T, Array[Str]) -> T
+) -> Result[T, CsvReadError] {
+  let plain = isPlain(delimiter)
+  let initial = Reading{total: seed, pending: [], pieces: [], quotes: 0, offset: 0, start: 0, failure: None}
+  let read = Io.withReader(path, fn(reader: Reader) -> Result[Reading[T], IoError] {
+      Io.foldChunks(&reader, initial, fn(state: Reading[T], chunk: Bytes) -> Reading[T] {
+          if plain { readRecords(state, chunk, delimiter, step) } else { readChunk(state, chunk, delimiter, step) }
+        })
+    })
+  match read {
+    case Err(reason) => Err(Unreadable(reason))
+    case Ok(state) => {
+      if plain { finishRecords(state, delimiter, step) } else { finish(state, delimiter, step) }
+    }
+  }
+}
+
+/// Every record a chunk completes, found by the runtime's scan over the
+/// remainder of the last chunk and this one.
+fn readRecords[T](state: Reading[T], chunk: Bytes, delimiter: Str, step: fn(T, Array[Str]) -> T) -> Reading[T] {
+  if Option.isSome(&state.failure) { return state }
+  let buffer = ByteSeq.join(&state.pending.push(chunk))
+  let Some(scanned) = csvRecords(buffer, delimiter) else { return Reading{..state, failure: Some(Unreadable(NotText))} }
+  var total = state.total
+  for row in scanned[0] { total = step(total, row) }
+  Reading{..state, total: total, pending: [buffer.drop(scanned[1])], offset: state.offset + scanned[2]}
+}
+
+/// The last record, which no newline ended, read as if one had.
+fn finishRecords[T](state: Reading[T], delimiter: Str, step: fn(T, Array[Str]) -> T) -> Result[T, CsvReadError] {
+  if let Some(reason) = state.failure { return Err(reason) }
+  let rest = ByteSeq.join(&state.pending)
+  if rest.length() == 0 { return Ok(state.total) }
+  let ended = rest.concat(ByteSeq.fromText("\n"))
+  let Some(scanned) = csvRecords(ended, delimiter) else { return Err(Unreadable(NotText)) }
+  var total = state.total
+  for row in scanned[0] { total = step(total, row) }
+  if scanned[1] == ended.length() { return Ok(total) }
+  let Some(text) = rest.toText() else { return Err(Unreadable(NotText)) }
+  match scanWith(text, delimiter) {
+    case Err(reason) => Err(Malformed(shifted(reason, state.offset)))
+    case Ok(_) => Err(Malformed(Unterminated(state.offset)))
+  }
+}
+
+/// Every line a chunk completes, decoded once as the block before its last
+/// newline. Cutting at a newline byte never divides an encoded character.
+fn readChunk[T](state: Reading[T], chunk: Bytes, delimiter: Str, step: fn(T, Array[Str]) -> T) -> Reading[T] {
+  if Option.isSome(&state.failure) { return state }
+  let fromEnd = chunk.reverse().indexOf(ByteSeq.fromText("\n"))
+  if fromEnd < 0 { return Reading{..state, pending: state.pending.push(chunk)} }
+  let cut = chunk.length() - fromEnd - 1
+  let block = ByteSeq.join(&state.pending.push(chunk.take(cut)))
+  let Some(text) = block.toText() else { return Reading{..state, failure: Some(Unreadable(NotText))} }
+  let lines = text.split("\n")
+  gather(Reading{..state, pending: [chunk.drop(cut + 1)]}, &lines, delimiter, step)
+}
+
+/// Lines added to the record being read, for a delimiter the runtime's scan
+/// does not take.
+///
+/// Every quote either opens or closes a quoted field, or pairs with its
+/// neighbour as an escaped quote, so a record is complete exactly when it
+/// holds an even number of quotes. The state is held in locals for the whole
+/// run of lines and written back once.
+fn gather[T](state: Reading[T], lines: &Array[Str], delimiter: Str, step: fn(T, Array[Str]) -> T) -> Reading[T] {
+  if Option.isSome(&state.failure) { return state }
+  var total = state.total
+  var pieces = state.pieces
+  var quotes = state.quotes
+  var offset = state.offset
+  var start = state.start
+  for line in lines {
+    if pieces.length() == 0 { start = offset }
+    pieces = pieces.push(line)
+    quotes = quotes + line.split(QUOTE).length() - 1
+    if quotes % 2 == 0 {
+      match scanWith(pieces.join("\n"), delimiter) {
+        case Ok(rows) => {
+          for row in rows { total = step(total, row) }
+          if rows.length() == 0 { total = step(total, [""]) }
+        }
+        case Err(reason) => {
+          return Reading{..state, total: total, failure: Some(Malformed(shifted(reason, start)))}
+        }
+      }
+      pieces = []
+      quotes = 0
+    }
+    offset = offset + line.length() + 1
+  }
+  Reading{..state, total: total, pieces: pieces, quotes: quotes, offset: offset, start: start}
+}
+
+/// The last line, which no newline ended, and a quoted field still open.
+fn finish[T](state: Reading[T], delimiter: Str, step: fn(T, Array[Str]) -> T) -> Result[T, CsvReadError] {
+  let rest = ByteSeq.join(&state.pending)
+  var last = state
+  if rest.length() > 0 && Option.isNone(&state.failure) {
+    let Some(line) = rest.toText() else { return Err(Unreadable(NotText)) }
+    last = gather(state, &[line], delimiter, step)
+  }
+  if let Some(reason) = last.failure { return Err(reason) }
+  if last.pieces.length() == 0 { return Ok(last.total) }
+  match scanWith(last.pieces.join("\n"), delimiter) {
+    case Err(reason) => Err(Malformed(shifted(reason, last.start)))
+    case Ok(_) => Err(Malformed(Unterminated(last.start)))
+  }
+}
+
+/// A delimiter the runtime's scan takes: one byte, and not a quote or a line
+/// ending.
+fn isPlain(delimiter: Str) -> Bool {
+  delimiter.toBytes().length() == 1 && delimiter != QUOTE && delimiter != "\n" && delimiter != "\r"
+}
+
+/// A failure found in one record, placed in the whole text.
+fn shifted(reason: CsvError, by: Int) -> CsvError {
+  match reason {
+    case Unterminated(at) => Unterminated(at + by)
+    case _ => reason
+  }
 }
 
 /// A table whose first row names its columns.
@@ -196,18 +374,13 @@ export fn render(rows: &Array[Array[Str]]) -> Str { renderWith(rows, COMMA) }
 
 /// The same, separated by something else.
 export fn renderWith(rows: &Array[Array[Str]], delimiter: Str) -> Str {
-  var out = ""
+  var lines: Array[Str] = []
   for row in rows {
-    var line = ""
-    var index = 0
-    while index < row.length() {
-      if index > 0 { line = line + delimiter }
-      line = line + renderField(row[index], delimiter)
-      index = index + 1
-    }
-    out = out + line + "\n"
+    var rendered: Array[Str] = []
+    for field in row { rendered = rendered.push(renderField(field, delimiter)) }
+    lines = lines.push(rendered.join(delimiter) + "\n")
   }
-  out
+  lines.join("")
 }
 
 /// A table written with its column names as the first row.

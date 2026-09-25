@@ -1,0 +1,61 @@
+// JSON and CSV
+// Reading a JSON document into a record, writing one back, and totalling a CSV table by column.
+module Main
+
+import Std.Csv as Csv
+import Std.Io as Io
+import Std.Json as Json
+import Std.Map as Map
+import Std.Option as Option
+import Std.Text as Text
+
+type User = { name: Str, age: Int }
+
+const DOCUMENT: Str = "[\{\"name\": \"Ada\", \"age\": 36\}, \{\"name\": \"Grace\", \"age\": 45\}, \{\"name\": \"Nobody\"\}]"
+
+const SHEET: Str = "name,team,points\nada,red,12\ngrace,blue,30\n\"lin, jr\",red,8\n"
+
+// Each ? leaves with None when a field is missing or has the wrong kind.
+fn userFrom(value: &Json.Json) -> Option[User] {
+  let name = Json.asText(&Json.field(value, "name") ?) ?
+  let age = Json.asInt(&Json.field(value, "age") ?) ?
+  Some(User{name: name, age: age})
+}
+
+fn userJson(user: &User) -> Json.Json {
+  Json.object(&[("name", Json.Text(user.name)), ("nextBirthday", Json.Number(user.age + 1))])
+}
+
+fn main() -> Int {
+  let entries = match Json.decode(DOCUMENT) {
+    case Ok(Json.List(items)) => items
+    case Ok(_) => { return 1 }
+    case Err(problem) => {
+      let _explained = Io.writeLine(Json.explain(&problem))
+      return 1
+    }
+  }
+  var users: Array[User] = []
+  for entry in entries {
+    match userFrom(&entry) {
+      case Some(user) => { users = users.push(user) }
+      case None => { let _skipped = Io.writeLine("skipped an entry without a name and an age") }
+    }
+  }
+  let _read = Io.writeLine("read {users.length()} users")
+  let _written = Io.writeLine(Json.encodePretty(&Json.list(&users.map(|user: User| userJson(&user)))))
+
+  let table = match Csv.parseTable(SHEET) {
+    case Ok(held) => held
+    case Err(_) => { return 1 }
+  }
+  var totals: Map[Str, Int] = mapOf([])
+  for row in Csv.records(&table) {
+    let team = Map.getOr(&row, "team", "none")
+    let points = Option.unwrapOr(Text.wholeOf(Map.getOr(&row, "points", "0")), 0)
+    totals = totals.insert(team, Map.getOr(&totals, team, 0) + points)
+  }
+  let _totals = Io.writeLine("points by team: {totals}")
+  let _names = Io.writeLine("names: {Option.unwrapOr(Csv.column(&table, "name"), [])}")
+  0
+}

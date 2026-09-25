@@ -1,0 +1,3 @@
+module A.Wanted
+
+export fn chosen() -> Int { 1 }

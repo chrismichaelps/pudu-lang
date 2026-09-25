@@ -36,20 +36,11 @@ data TypeInterface = TypeInterface
   , interfaceExportedValues :: ![Text]
   }
 
-data ImportTypes = ImportTypes
-  { importedInterfaces :: ![TypeInterface]
-  , importedNames :: !(Map Text NominalId)
-  , importedValues :: !(Map Text Text)
-  , importedTraits :: !(Set NominalId)
-  , importedQualifiers :: !(Set Text)
-  }
-
 interfaceSkeleton :: Module -> TypeInterface
-importsFor
-  :: Map ModuleName TypeInterface
-  -> Module
-  -> ImportTypes
 ```
+
+A consumer's import projection (`ImportTypes`, `importsFor`) and everything prepared once per graph
+live in [[Type Interface Graph]].
 
 ### Governance
 
@@ -79,7 +70,7 @@ importsFor
 ### Linkage
 
 - **Requires:** [[Syntax Tree]], [[Syntax Name]], [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Check Method]], [[Diagnostic Model]], [[architecture/SEMANTICS]].
-- **Consumed by:** [[Compiler Program]], [[Type Check]], [[Type Formation]], [[Type Check Method]].
+- **Consumed by:** [[Type Interface Graph]], [[Compiler Program]], [[Type Check Install]], [[Type Check Import]].
 
 ## Algorithm
 
@@ -122,4 +113,4 @@ DEPTH 0.76 (DEEP). It hides export projection, body stripping, canonical identit
 
 ## Referenced by
 
-[[src/Pudu/Type/_MOC]] · [[Compiler Program]] · [[Type Check]] · [[Type Formation]] · [[Type Check Method]]
+[[src/Pudu/Type/_MOC]] · [[Type Interface Graph]] · [[Compiler Program]] · [[Type Check]] · [[Type Formation]] · [[Type Check Method]]

@@ -1,0 +1,585 @@
+module Std.Audio
+
+import Std.Buffer as Buffer
+import Std.Bytes as Bytes
+import Std.Num {Integer}
+import Std.Option as Option
+
+/// The shape of a PCM stream: frames per second and samples per frame.
+export type Format = { sampleRate: Int, channels: Int }
+
+/// Interleaved signed 16-bit PCM held as its little-endian bytes.
+///
+/// One frame holds one sample per channel. The bytes are the samples exactly
+/// as a WAV document stores them, so writing and reading a document copies runs
+/// of bytes instead of visiting samples, and a sample outside 16 bits cannot be
+/// represented at all.
+export type Pcm = { format: Format, data: Bytes }
+
+/// A duration in seconds as a reduced fraction.
+export type Seconds = { numerator: Int, denominator: Int }
+
+/// What was wrong with a WAV document's structure.
+export type WavProblem
+  = MissingRiff
+  | MissingWave
+  | MissingFormat
+  | MissingData
+  | Truncated
+  | InconsistentFormat
+
+/// Why audio could not be built, transformed, encoded, or decoded.
+export type AudioError
+  = InvalidSampleRate(Int)
+  | InvalidChannels(Int)
+  | InvalidTime(Int, Int)
+  | InvalidGain(Int)
+  | NegativeFrames(Int)
+  | TooManySamples(Int, Int)
+  | MisalignedSamples(Int, Int)
+  | SampleOutOfRange(Int, Int)
+  | FormatMismatch
+  | SliceTooLarge(Int, Int)
+  | MalformedWav(WavProblem)
+  | UnsupportedWav(Int, Int)
+  | InvalidChannelMap(Int)
+
+/// The lowest sample rate a format may state.
+const MIN_SAMPLE_RATE: Int = 8000
+
+/// The highest sample rate a format may state.
+const MAX_SAMPLE_RATE: Int = 384000
+
+/// The most channels a format may state.
+const MAX_CHANNELS: Int = 8
+
+/// The most frames one render slice may request.
+///
+/// A renderer asked for more than it prepared for cannot keep its promise to
+/// return exactly the frames requested without allocating on the render path.
+const MAX_SLICE_FRAMES: Int = 4096
+
+/// The most samples a buffer may hold unless a caller states a larger budget.
+const DEFAULT_SAMPLE_BUDGET: Int = 16777216
+
+/// Unity gain in the Q15 fixed-point scale `gain` uses.
+const UNITY_GAIN: Int = 32768
+
+/// The largest gain accepted: four times unity.
+const MAX_GAIN: Int = 131072
+
+/// Every octet value indexed by itself, so a byte is looked up rather than
+/// converted and checked for every sample written.
+const OCTETS: Array[UInt8] = [
+  0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8,
+  12u8, 13u8, 14u8, 15u8, 16u8, 17u8, 18u8, 19u8, 20u8, 21u8, 22u8, 23u8,
+  24u8, 25u8, 26u8, 27u8, 28u8, 29u8, 30u8, 31u8, 32u8, 33u8, 34u8, 35u8,
+  36u8, 37u8, 38u8, 39u8, 40u8, 41u8, 42u8, 43u8, 44u8, 45u8, 46u8, 47u8,
+  48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 58u8, 59u8,
+  60u8, 61u8, 62u8, 63u8, 64u8, 65u8, 66u8, 67u8, 68u8, 69u8, 70u8, 71u8,
+  72u8, 73u8, 74u8, 75u8, 76u8, 77u8, 78u8, 79u8, 80u8, 81u8, 82u8, 83u8,
+  84u8, 85u8, 86u8, 87u8, 88u8, 89u8, 90u8, 91u8, 92u8, 93u8, 94u8, 95u8,
+  96u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8, 103u8, 104u8, 105u8, 106u8, 107u8,
+  108u8, 109u8, 110u8, 111u8, 112u8, 113u8, 114u8, 115u8, 116u8, 117u8, 118u8, 119u8,
+  120u8, 121u8, 122u8, 123u8, 124u8, 125u8, 126u8, 127u8, 128u8, 129u8, 130u8, 131u8,
+  132u8, 133u8, 134u8, 135u8, 136u8, 137u8, 138u8, 139u8, 140u8, 141u8, 142u8, 143u8,
+  144u8, 145u8, 146u8, 147u8, 148u8, 149u8, 150u8, 151u8, 152u8, 153u8, 154u8, 155u8,
+  156u8, 157u8, 158u8, 159u8, 160u8, 161u8, 162u8, 163u8, 164u8, 165u8, 166u8, 167u8,
+  168u8, 169u8, 170u8, 171u8, 172u8, 173u8, 174u8, 175u8, 176u8, 177u8, 178u8, 179u8,
+  180u8, 181u8, 182u8, 183u8, 184u8, 185u8, 186u8, 187u8, 188u8, 189u8, 190u8, 191u8,
+  192u8, 193u8, 194u8, 195u8, 196u8, 197u8, 198u8, 199u8, 200u8, 201u8, 202u8, 203u8,
+  204u8, 205u8, 206u8, 207u8, 208u8, 209u8, 210u8, 211u8, 212u8, 213u8, 214u8, 215u8,
+  216u8, 217u8, 218u8, 219u8, 220u8, 221u8, 222u8, 223u8, 224u8, 225u8, 226u8, 227u8,
+  228u8, 229u8, 230u8, 231u8, 232u8, 233u8, 234u8, 235u8, 236u8, 237u8, 238u8, 239u8,
+  240u8, 241u8, 242u8, 243u8, 244u8, 245u8, 246u8, 247u8, 248u8, 249u8, 250u8, 251u8,
+  252u8, 253u8, 254u8, 255u8
+]
+
+/// A format with a sample rate from 8,000 to 384,000 and one to eight channels.
+export fn format(sampleRate: Int, channels: Int) -> Result[Format, AudioError] {
+  if sampleRate < MIN_SAMPLE_RATE || sampleRate > MAX_SAMPLE_RATE {
+    Err(InvalidSampleRate(sampleRate))
+  } else if channels < 1 || channels > MAX_CHANNELS {
+    Err(InvalidChannels(channels))
+  } else {
+    Ok(Format{sampleRate: sampleRate, channels: channels})
+  }
+}
+
+/// Silent audio of a whole number of frames.
+export fn silence(shape: &Format, frames: Int) -> Result[Pcm, AudioError] {
+  formatAdmitted(shape) ?
+  if frames < 0 {
+    Err(NegativeFrames(frames))
+  } else if frames > DEFAULT_SAMPLE_BUDGET / shape.channels {
+    Err(TooManySamples(frames * shape.channels, DEFAULT_SAMPLE_BUDGET))
+  } else {
+    Ok(Pcm{format: *shape, data: zeros(frames * shape.channels)})
+  }
+}
+
+/// Audio from interleaved samples, refusing a partial frame or a sample that
+/// does not fit in 16 bits.
+export fn fromSamples(shape: &Format, values: Array[Int]) -> Result[Pcm, AudioError] {
+  formatAdmitted(shape) ?
+  let count = values.length()
+  if count % shape.channels != 0 {
+    Err(MisalignedSamples(count, shape.channels))
+  } else if count > DEFAULT_SAMPLE_BUDGET {
+    Err(TooManySamples(count, DEFAULT_SAMPLE_BUDGET))
+  } else {
+    var octets: Array[UInt8] = []
+    var index = 0
+    for sample in values {
+      if sample < -32768 || sample > 32767 { return Err(SampleOutOfRange(index, sample)) }
+      octets = pushedWord(octets, sample)
+      index = index + 1
+    }
+    Ok(Pcm{format: *shape, data: bytesOf(octets)})
+  }
+}
+
+/// The interleaved samples of audio, one integer per sample.
+///
+/// This is the operation that costs a value per sample, named so a reader can
+/// see it; `sampleAt` reads one sample without it.
+export fn samples(source: &Pcm) -> Array[Int] {
+  let buffer = Buffer.fromBytes(source.data)
+  let total = Bytes.length(&source.data) - Bytes.length(&source.data) % 2
+  var found: Array[Int] = []
+  var at = 0
+  while at + 4 <= total {
+    let pair = pairAt(&buffer, at)
+    found = found.push(signed(pair % 65536)).push(signed(pair / 65536))
+    at = at + 4
+  }
+  if at < total { found = found.push(signed(word16At(&source.data, at))) }
+  found
+}
+
+/// How many frames audio holds.
+export fn frameCount(source: &Pcm) -> Int {
+  if source.format.channels < 1 {
+    0
+  } else {
+    Bytes.length(&source.data) / (2 * source.format.channels)
+  }
+}
+
+/// One sample, or nothing outside the audio.
+export fn sampleAt(source: &Pcm, frame: Int, channel: Int) -> Option[Int] {
+  let channels = source.format.channels
+  if frame < 0 || channel < 0 || channel >= channels || frame >= frameCount(source) {
+    None
+  } else {
+    Some(signed(word16At(&source.data, (frame * channels + channel) * 2)))
+  }
+}
+
+/// The exact duration of a number of frames, as a reduced fraction of a second.
+///
+/// Time is counted in frames and converted only at the edge, so a position
+/// after hours of playback is exactly where it should be rather than where
+/// repeated binary fractions of a second drifted to.
+export fn seconds(shape: &Format, frames: Int) -> Result[Seconds, AudioError] {
+  formatAdmitted(shape) ?
+  if frames < 0 {
+    Err(NegativeFrames(frames))
+  } else {
+    let divisor = greatestCommonDivisor(frames, shape.sampleRate)
+    Ok(Seconds{numerator: frames / divisor, denominator: shape.sampleRate / divisor})
+  }
+}
+
+/// The frame at a time given in seconds as a fraction, rounded down.
+export fn framesAt(shape: &Format, numerator: Int, denominator: Int) -> Result[Int, AudioError] {
+  formatAdmitted(shape) ?
+  if denominator <= 0 || numerator < 0 {
+    Err(InvalidTime(numerator, denominator))
+  } else {
+    let exact = numerator.toBigInt() * shape.sampleRate.toBigInt() / denominator.toBigInt()
+    if let Some(frames) = convertInteger[Int](exact) {
+      Ok(frames)
+    } else {
+      Err(InvalidTime(numerator, denominator))
+    }
+  }
+}
+
+/// Audio scaled by a Q15 gain, where 32,768 is unity.
+///
+/// Each product is rounded half away from zero and saturated to 16 bits, so
+/// gain is symmetric for positive and negative samples and never wraps. Unity
+/// and zero gain touch no samples.
+export fn gain(source: &Pcm, amount: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  if amount < 0 || amount > MAX_GAIN {
+    Err(InvalidGain(amount))
+  } else if amount == UNITY_GAIN {
+    Ok(*source)
+  } else if amount == 0 {
+    Ok(Pcm{format: source.format, data: zeros(Bytes.length(&source.data) / 2)})
+  } else {
+    let buffer = Buffer.fromBytes(source.data)
+    let length = Bytes.length(&source.data)
+    var octets: Array[UInt8] = []
+    var at = 0
+    while at + 4 <= length {
+      let pair = pairAt(&buffer, at)
+      octets = pushedWord(octets, saturated(roundedQ15(signed(pair % 65536) * amount)))
+      octets = pushedWord(octets, saturated(roundedQ15(signed(pair / 65536) * amount)))
+      at = at + 4
+    }
+    if at < length {
+      let last = signed(word16At(&source.data, at))
+      octets = pushedWord(octets, saturated(roundedQ15(last * amount)))
+    }
+    Ok(Pcm{format: source.format, data: bytesOf(octets)})
+  }
+}
+
+/// Two streams summed sample by sample, saturating to 16 bits.
+///
+/// The shorter stream is treated as silence after it ends, so mixing a short
+/// sound into a long bed keeps the bed's length; the bed's remaining bytes are
+/// carried without visiting their samples.
+export fn mix(first: &Pcm, second: &Pcm) -> Result[Pcm, AudioError] {
+  admitted(first) ?
+  admitted(second) ?
+  if first.format != second.format {
+    Err(FormatMismatch)
+  } else {
+    let firstBytes = Bytes.length(&first.data)
+    let secondBytes = Bytes.length(&second.data)
+    let shared = if firstBytes < secondBytes { firstBytes } else { secondBytes }
+    let firstBuffer = Buffer.fromBytes(first.data)
+    let secondBuffer = Buffer.fromBytes(second.data)
+    var octets: Array[UInt8] = []
+    var at = 0
+    while at + 4 <= shared {
+      let left = pairAt(&firstBuffer, at)
+      let right = pairAt(&secondBuffer, at)
+      octets = pushedWord(octets, saturated(signed(left % 65536) + signed(right % 65536)))
+      octets = pushedWord(octets, saturated(signed(left / 65536) + signed(right / 65536)))
+      at = at + 4
+    }
+    if at < shared {
+      let sum = signed(word16At(&first.data, at)) + signed(word16At(&second.data, at))
+      octets = pushedWord(octets, saturated(sum))
+    }
+    let longer = if firstBytes > secondBytes { &first.data } else { &second.data }
+    let tail = Bytes.slice(longer, shared, Bytes.length(longer))
+    Ok(Pcm{format: first.format, data: Bytes.concat(&bytesOf(octets), &tail)})
+  }
+}
+
+/// Exactly `frames` frames starting at `start`, silent past the end.
+///
+/// This is the pull contract a render slice keeps: the caller receives the
+/// number of frames it asked for, never fewer, and the request is bounded.
+export fn slice(source: &Pcm, start: Int, frames: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  if start < 0 {
+    Err(NegativeFrames(start))
+  } else if frames < 0 {
+    Err(NegativeFrames(frames))
+  } else if frames > MAX_SLICE_FRAMES {
+    Err(SliceTooLarge(frames, MAX_SLICE_FRAMES))
+  } else {
+    let width = 2 * source.format.channels
+    let available = Bytes.length(&source.data)
+    let from = if start < available / width { start * width } else { available }
+    let wanted = frames * width
+    let to = if from + wanted < available { from + wanted } else { available }
+    let taken = Bytes.slice(&source.data, from, to)
+    let padding = zeros((wanted - (to - from)) / 2)
+    Ok(Pcm{format: source.format, data: Bytes.concat(&taken, &padding)})
+  }
+}
+
+/// One stream followed by another of the same format.
+export fn append(first: &Pcm, second: &Pcm) -> Result[Pcm, AudioError] {
+  admitted(first) ?
+  admitted(second) ?
+  let total = (Bytes.length(&first.data) + Bytes.length(&second.data)) / 2
+  if first.format != second.format {
+    Err(FormatMismatch)
+  } else if total > DEFAULT_SAMPLE_BUDGET {
+    Err(TooManySamples(total, DEFAULT_SAMPLE_BUDGET))
+  } else {
+    Ok(Pcm{format: first.format, data: Bytes.concat(&first.data, &second.data)})
+  }
+}
+
+/// A canonical 16-bit PCM WAV document.
+///
+/// Forty-four header bytes followed by the sample bytes, with every size field
+/// derived from the samples so the document cannot disagree with itself.
+export fn encodeWav(source: &Pcm) -> Result[Bytes, AudioError] {
+  admitted(source) ?
+  let channels = source.format.channels
+  let dataBytes = Bytes.length(&source.data)
+  Ok(Bytes.join(&[
+        Bytes.fromText("RIFF"),
+        word32(36 + dataBytes),
+        Bytes.fromText("WAVEfmt "),
+        word32(16),
+        word16(1),
+        word16(channels),
+        word32(source.format.sampleRate),
+        word32(source.format.sampleRate * channels * 2),
+        word16(channels * 2),
+        word16(16),
+        Bytes.fromText("data"),
+        word32(dataBytes),
+        source.data
+      ]))
+}
+
+/// Audio from a 16-bit PCM WAV document, within the default sample budget.
+export fn decodeWav(document: &Bytes) -> Result[Pcm, AudioError] {
+  decodeWavWithin(document, DEFAULT_SAMPLE_BUDGET)
+}
+
+/// Audio from a 16-bit PCM WAV document holding at most `maxSamples` samples.
+///
+/// Chunks are walked by their declared sizes inside the RIFF bounds, unknown
+/// chunks are skipped with their padding byte, the format must precede the
+/// data, and every size is checked against the bytes present. The samples are
+/// then taken as one slice of the document.
+export fn decodeWavWithin(document: &Bytes, maxSamples: Int) -> Result[Pcm, AudioError] {
+  let total = Bytes.length(document)
+  if total < 12 || !fourcc(document, 0, "RIFF") {
+    return Err(MalformedWav(MissingRiff))
+  }
+  if !fourcc(document, 8, "WAVE") { return Err(MalformedWav(MissingWave)) }
+  let declared = word32At(document, 4) + 8
+  if declared > total { return Err(MalformedWav(Truncated)) }
+  var offset = 12
+  var shape: Option[Format] = None
+  while offset + 8 <= declared {
+    let size = word32At(document, offset + 4)
+    let body = offset + 8
+    if body + size > declared { return Err(MalformedWav(Truncated)) }
+    if fourcc(document, offset, "fmt ") {
+      if size < 16 { return Err(MalformedWav(InconsistentFormat)) }
+      let tag = word16At(document, body)
+      let channels = word16At(document, body + 2)
+      let rate = word32At(document, body + 4)
+      let byteRate = word32At(document, body + 8)
+      let blockAlign = word16At(document, body + 12)
+      let bits = word16At(document, body + 14)
+      if tag != 1 || bits != 16 { return Err(UnsupportedWav(tag, bits)) }
+      let admittedShape = format(rate, channels) ?
+      if blockAlign != channels * 2 || byteRate != rate * channels * 2 {
+        return Err(MalformedWav(InconsistentFormat))
+      }
+      shape = Some(admittedShape)
+    } else if fourcc(document, offset, "data") {
+      if let Some(found) = shape {
+        if size % (found.channels * 2) != 0 {
+          return Err(MisalignedSamples(size / 2, found.channels))
+        }
+        if size / 2 > maxSamples { return Err(TooManySamples(size / 2, maxSamples)) }
+        return Ok(Pcm{format: found, data: Bytes.slice(document, body, body + size)})
+      } else {
+        return Err(MalformedWav(MissingFormat))
+      }
+    }
+    offset = body + size + size % 2
+  }
+  Err(MalformedWav(MissingData))
+}
+
+/// Audio at another sample rate by linear interpolation in exact arithmetic.
+///
+/// Output frame `j` reads the input at position `j * from / to`, a fraction of
+/// frames; the sample between two input frames is interpolated by that fraction
+/// and rounded half away from zero, and a position past the last input frame
+/// holds the last sample. Every host produces the same samples, and converting
+/// to the same rate returns the audio unchanged.
+export fn resample(source: &Pcm, sampleRate: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let target = format(sampleRate, source.format.channels) ?
+  if sampleRate == source.format.sampleRate {
+    Ok(*source)
+  } else {
+    let channels = source.format.channels
+    let inputFrames = frameCount(source)
+    let outputFrames = inputFrames * sampleRate / source.format.sampleRate
+    if outputFrames * channels > DEFAULT_SAMPLE_BUDGET {
+      return Err(TooManySamples(outputFrames * channels, DEFAULT_SAMPLE_BUDGET))
+    }
+    let values = samples(source)
+    let from = source.format.sampleRate
+    var out: Array[Int] = []
+    var frame = 0
+    while frame < outputFrames {
+      let scaled = frame * from
+      let base = scaled / sampleRate
+      let remainder = scaled % sampleRate
+      let next = if base + 1 < inputFrames { base + 1 } else { base }
+      var channel = 0
+      while channel < channels {
+        let first = values[base * channels + channel]
+        let second = values[next * channels + channel]
+        out = out.push(first + roundedRatio((second - first) * remainder, sampleRate))
+        channel = channel + 1
+      }
+      frame = frame + 1
+    }
+    fromSamples(&target, out)
+  }
+}
+
+/// Mono audio averaging every channel of each frame, rounded half away from zero.
+export fn downmix(source: &Pcm) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let channels = source.format.channels
+  let mono = format(source.format.sampleRate, 1) ?
+  if channels == 1 {
+    Ok(*source)
+  } else {
+    let values = samples(source)
+    var out: Array[Int] = []
+    var at = 0
+    while at < values.length() {
+      var sum = 0
+      var channel = 0
+      while channel < channels {
+        sum = sum + values[at + channel]
+        channel = channel + 1
+      }
+      out = out.push(roundedRatio(sum, channels))
+      at = at + channels
+    }
+    fromSamples(&mono, out)
+  }
+}
+
+/// Mono audio copied into every channel of a wider format.
+export fn upmix(source: &Pcm, channels: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let wide = format(source.format.sampleRate, channels) ?
+  if source.format.channels != 1 {
+    Err(FormatMismatch)
+  } else {
+    var out: Array[Int] = []
+    for sample in samples(source) {
+      var channel = 0
+      while channel < channels {
+        out = out.push(sample)
+        channel = channel + 1
+      }
+    }
+    fromSamples(&wide, out)
+  }
+}
+
+/// Audio whose channel `k` is the source's channel `order[k]`, so channels are
+/// reordered, duplicated, or dropped by naming them.
+export fn remap(source: &Pcm, order: &Array[Int]) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let channels = source.format.channels
+  let shape = format(source.format.sampleRate, order.length()) ?
+  for picked in order {
+    if picked < 0 || picked >= channels { return Err(InvalidChannelMap(picked)) }
+  }
+  let values = samples(source)
+  var out: Array[Int] = []
+  var at = 0
+  while at < values.length() {
+    for picked in order { out = out.push(values[at + picked]) }
+    at = at + channels
+  }
+  fromSamples(&shape, out)
+}
+
+fn roundedRatio(numerator: Int, denominator: Int) -> Int {
+  if numerator >= 0 {
+    (numerator * 2 + denominator) / (denominator * 2)
+  } else {
+    -((-numerator * 2 + denominator) / (denominator * 2))
+  }
+}
+
+fn formatAdmitted(shape: &Format) -> Result[(), AudioError] {
+  format(shape.sampleRate, shape.channels) ?
+  Ok(())
+}
+
+fn admitted(source: &Pcm) -> Result[(), AudioError] {
+  formatAdmitted(&source.format) ?
+  let length = Bytes.length(&source.data)
+  if length % (2 * source.format.channels) != 0 {
+    Err(MisalignedSamples(length / 2, source.format.channels))
+  } else if length / 2 > DEFAULT_SAMPLE_BUDGET {
+    Err(TooManySamples(length / 2, DEFAULT_SAMPLE_BUDGET))
+  } else {
+    Ok(())
+  }
+}
+
+fn zeros(sampleCount: Int) -> Bytes { Bytes.repeat(&bytesOf([0u8, 0u8]), sampleCount) }
+
+fn pushedWord(octets: Array[UInt8], sample: Int) -> Array[UInt8] {
+  let word = if sample < 0 { sample + 65536 } else { sample }
+  octets.push(OCTETS[word % 256]).push(OCTETS[word / 256])
+}
+
+fn signed(word: Int) -> Int { if word >= 32768 { word - 65536 } else { word } }
+
+fn roundedQ15(product: Int) -> Int {
+  if product >= 0 { (product + 16384) / 32768 } else { -((16384 - product) / 32768) }
+}
+
+fn saturated(value: Int) -> Int {
+  if value > 32767 { 32767 } else if value < -32768 { -32768 } else { value }
+}
+
+fn greatestCommonDivisor(first: Int, second: Int) -> Int {
+  var a = first
+  var b = second
+  while b != 0 {
+    let rest = a % b
+    a = b
+    b = rest
+  }
+  if a == 0 { 1 } else { a }
+}
+
+/// Two adjacent samples read as one little-endian 32-bit word: the low half is
+/// the first sample and the high half the second, so one native read serves two
+/// samples.
+fn pairAt(buffer: &Buffer.Buffer, at: Int) -> Int {
+  Option.unwrapOr(convertInteger[Int](Option.unwrapOr(Buffer.readU32(buffer, at), 0u32)), 0)
+}
+
+fn word16(value: Int) -> Bytes {
+  Bytes.putU16Le(Option.unwrapOr(convertInteger[UInt16](value), 0u16))
+}
+
+fn word32(value: Int) -> Bytes {
+  Bytes.putU32Le(Option.unwrapOr(convertInteger[UInt32](value), 0u32))
+}
+
+fn octetAt(document: &Bytes, index: Int) -> Int {
+  if let Some(value) = Bytes.at(document, index) {
+    Option.unwrapOr(convertInteger[Int](value), 0)
+  } else {
+    0
+  }
+}
+
+fn word16At(document: &Bytes, index: Int) -> Int {
+  octetAt(document, index) + octetAt(document, index + 1) * 256
+}
+
+fn word32At(document: &Bytes, index: Int) -> Int {
+  word16At(document, index) + word16At(document, index + 2) * 65536
+}
+
+fn fourcc(document: &Bytes, index: Int, expected: Str) -> Bool {
+  index + 4 <= Bytes.length(document) &&
+  Bytes.slice(document, index, index + 4) == Bytes.fromText(expected)
+}

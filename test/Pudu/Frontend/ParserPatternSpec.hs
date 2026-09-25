@@ -7,7 +7,8 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.State (peekKind, runParser)
 import Pudu.Frontend.Syntax
-  ( FieldPattern (..)
+  ( ArrayRest (..)
+  , FieldPattern (..)
   , Literal (..)
   , Located (..)
   , Pattern (..)
@@ -26,6 +27,7 @@ parserPatternProperties =
   , ("tuples group and nest", testTuples)
   , ("record patterns bind fields and admit a rest", testRecords)
   , ("alternation and ranges parse", testAlternationRanges)
+  , ("sequence patterns name elements from either end", testSequences)
   , ("invalid pattern starts emit E1050 once", testRecovery)
   , ("hostile pattern nesting shares the budget", testHostileNesting)
   ]
@@ -51,6 +53,37 @@ testAtoms = do
     , shape nullValue === "null"
     , codes negative === []
     , counterexample "spans cover the sign" (spanOffsets negative === (0, 2))
+    ]
+
+{-| A sequence pattern names elements from the front, from the back, or both,
+    with `..` standing for whatever they did not take. -}
+testSequences :: IO Property
+testSequences = do
+  fixed <- parse "[a, b]"
+  rested <- parse "[first, ..rest]"
+  ignored <- parse "[first, ..]"
+  written <- parse "[first, .._]"
+  fromBack <- parse "[..front, last]"
+  around <- parse "[first, ..middle, last]"
+  restOnly <- parse "[..all]"
+  nested <- parse "[(a, b), ..rest]"
+  bare <- parse "[]"
+  twoRests <- codes <$> parse "[..a, ..b]"
+  pure $ conjoin
+    [ counterexample "a fixed length names every element" (shape fixed === "[a,b]")
+    , counterexample "a rest binds what the named elements left"
+        (shape rested === "[first,..rest]")
+    , counterexample "a bare rest skips what it covers" (shape ignored === "[first,..]")
+    , counterexample "an underscored rest reads as the bare one"
+        (shape written === "[first,..]")
+    , counterexample "elements may be named from the back" (shape fromBack === "[..front,last]")
+    , counterexample "elements may be named from both ends"
+        (shape around === "[first,..middle,last]")
+    , counterexample "a rest may stand alone" (shape restOnly === "[..all]")
+    , counterexample "elements nest" (shape nested === "[(a,b),..rest]")
+    , counterexample "an empty sequence pattern parses" (shape bare === "[]")
+    , counterexample "two rests leave no way to say which holds what"
+        (twoRests === ["E1050"])
     ]
 
 testConstructors :: IO Property
@@ -157,6 +190,10 @@ patternShape (Located _ value) = case value of
   RangePattern lower inclusive upper ->
     literalShape lower <> (if inclusive then "..=" else "..") <> literalShape upper
   TuplePattern members -> "(" <> Text.intercalate "," (map patternShape members) <> ")"
+  ArrayPattern prefix rest suffix ->
+    "[" <> Text.intercalate ","
+      (map patternShape prefix <> foldMap (pure . restShape) rest <> map patternShape suffix)
+      <> "]"
   ConstructorPattern path arguments ->
     moduleNameText path
       <> if null arguments then Text.empty
@@ -168,6 +205,11 @@ patternShape (Located _ value) = case value of
   AlternativePattern alternatives -> Text.intercalate "|" (map patternShape alternatives)
   InvalidPattern -> "invalid"
 
+restShape :: ArrayRest -> Text
+restShape rest = case rest of
+  IgnoredRest _ -> ".."
+  BoundRest name -> ".." <> locatedValue name
+
 fieldShape :: Located FieldPattern -> Text
 fieldShape (Located _ field) =
   locatedValue (fieldPatternName field)
@@ -176,6 +218,7 @@ fieldShape (Located _ field) =
 literalShape :: Literal -> Text
 literalShape value = case value of
   IntegerValue text -> text
+  ResolvedInteger _ number -> Text.pack (show number)
   FloatValue text -> text
   DecimalValue text -> text
   StringValue text -> text

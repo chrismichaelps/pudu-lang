@@ -54,30 +54,6 @@ export fn directory(path: Str) -> TarEntry {
   }
 }
 
-/// Formats an integer as an ASCII octal string into an octet array of fixed width.
-fn formatOctal(val: Int, width: Int) -> Array[UInt8] {
-  var digits: Array[UInt8] = []
-  var num = val
-  var count = 0
-  while count < width - 1 {
-    let rem = num % 8
-    let asciiDigit = match convertInteger[UInt8](48 + rem) {
-      case Some(digit) => digit
-      case None => 48u8
-    }
-    digits = digits.push(asciiDigit)
-    num = num / 8
-    count = count + 1
-  }
-  var reversed: Array[UInt8] = []
-  var i = digits.length() - 1
-  while i >= 0 {
-    reversed = reversed.push(digits.get(i))
-    i = i - 1
-  }
-  reversed.push(0u8)
-}
-
 /// One byte as a whole number.
 ///
 /// A byte always fits in `Int`, so the widening cannot fail and the fallback
@@ -90,174 +66,153 @@ fn byteValue(value: UInt8) -> Int {
   }
 }
 
-/// Parses an octal ASCII number from a byte slice.
-fn parseOctal(source: &Bytes, offset: Int, length: Int) -> Option[Int] {
+/// `count` zero bytes.
+fn zeros(count: Int) -> Array[UInt8] {
+  var out: Array[UInt8] = []
+  var index = 0
+  while index < count {
+    out = out.push(0u8)
+    index = index + 1
+  }
+  out
+}
+
+/// The text of a header field up to its first NUL, or nothing when it is not UTF-8.
+fn fieldText(header: &Bytes, start: Int, width: Int) -> Option[Str] {
+  let field = header.slice(start, start + width)
+  let end = field.indexOf(bytesOf([0u8]))
+  match ByteSeq.toText(&(if end < 0 { field } else { field.take(end) })) {
+    case Ok(txt) => Some(txt)
+    case Err(_) => None
+  }
+}
+
+/// An octal number field, read the way `parseOctal` reads one.
+fn octalField(header: &Bytes, start: Int, width: Int) -> Option[Int] {
+  let text = fieldText(header, start, width) ?
   var result = 0
   var started = false
-  var i = 0
-  while i < length {
-    let code = byteValue(source.at(offset + i) ?)
-    if code == 0 || code == 32 {
+  for character in text.chars() {
+    if character == ' ' {
       if started { return Some(result) }
-    } else if code >= 48 && code <= 55 {
+    } else if character >= '0' && character <= '7' {
       started = true
-      result = result * 8 + (code - 48)
+      result = result * 8 + (character.code() - 48)
     } else {
       return None
     }
-    i = i + 1
   }
   Some(result)
 }
 
-/// Calculates the unsigned byte sum of a 512-byte header with checksum bytes treated as spaces (32).
-fn computeHeaderChecksum(block: &Array[UInt8]) -> Int {
+/// The unsigned sum of a header's bytes with the checksum field counted as spaces.
+fn headerChecksum(header: &Bytes) -> Int {
   var sum = 0
-  var i = 0
-  while i < 512 {
-    let b = if i >= 148 && i < 156 { 32 } else { byteValue(block.get(i)) }
-    sum = sum + b
-    i = i + 1
+  for octet in header.slice(0, 148).concat(header.slice(156, 512)).toArray() { sum = sum + byteValue(octet) }
+  sum + 256
+}
+
+/// The value of one record of a pax extended header, whose records are
+/// `<length> <key>=<value>` lines.
+fn paxRecord(payload: &Bytes, key: Str) -> Option[Str] {
+  let text = match ByteSeq.toText(payload) {
+    case Ok(held) => held
+    case Err(_) => { return None }
   }
+  var found: Option[Str] = None
+  for line in text.split("\n") {
+    let space = line.indexOf(" ")
+    if space > 0 {
+      let record = line.drop(space + 1)
+      if record.startsWith(key + "=") { found = Some(record.drop(key.length() + 1)) }
+    }
+  }
+  found
+}
+
+/// A path as the USTAR `prefix` and `name` fields: unchanged when it fits in
+/// 100 bytes, otherwise split at the last `/` that leaves a name of at most
+/// 100 bytes and a prefix of at most 155.
+fn splitPath(path: Str) -> (Str, Str) {
+  let bytes = path.toBytes()
+  if bytes.length() <= 100 { return ("", path) }
+  let parts = path.split("/")
+  var index = parts.length() - 1
+  while index > 0 {
+    let prefix = parts.slice(0, index).join("/")
+    let name = parts.slice(index, parts.length()).join("/")
+    if name.toBytes().length() <= 100 && prefix.toBytes().length() <= 155 { return (prefix, name) }
+    index = index - 1
+  }
+  ("", path)
+}
+
+/// A number as an octal field: `width - 1` digits with leading zeros, then NUL.
+fn octalBytes(value: Int, width: Int) -> Bytes {
+  var digits = ""
+  var rest = value
+  var count = 0
+  while count < width - 1 {
+    digits = show(rest % 8) + digits
+    rest = rest / 8
+    count = count + 1
+  }
+  (digits + "\u{0}").toBytes()
+}
+
+/// The unsigned sum of some bytes.
+fn byteSum(bytes: &Bytes) -> Int {
+  var sum = 0
+  for octet in bytes.toArray() { sum = sum + byteValue(octet) }
   sum
 }
 
-/// One byte of an array replaced, leaving its length unchanged.
-///
-/// `Array` grows and shrinks rather than being written through, so a fixed
-/// block is filled by taking a position out and putting the wanted byte back
-/// in its place.
-fn withByteAt(block: Array[UInt8], index: Int, value: UInt8) -> Array[UInt8] {
-  block.remove(index).insert(index, value)
+/// Bytes cut or padded with NUL to exactly `width`.
+fn padded(bytes: &Bytes, width: Int, zero: &Bytes) -> Bytes {
+  if bytes.length() >= width { bytes.take(width) } else { bytes.concat(zero.take(width - bytes.length())) }
 }
 
-/// Serializes a TarEntry into its 512-byte USTAR header block.
-fn buildHeader(item: &TarEntry) -> Array[UInt8] {
-  var block: Array[UInt8] = []
-  var i = 0
-  while i < 512 {
-    block = block.push(0u8)
-    i = i + 1
+/// The 512-byte USTAR header of an entry. The checksum is the sum of the
+/// bytes written, since every other byte of the header is NUL.
+fn headerBytes(item: &TarEntry, zero: &Bytes) -> Bytes {
+  let split = splitPath(item.path)
+  let name = padded(&split[1].toBytes(), 100, zero)
+  let prefix = padded(&split[0].toBytes(), 155, zero)
+  let link = padded(&item.linkName.toBytes(), 100, zero)
+  let numbers = octalBytes(item.mode, 8).concat(octalBytes(0, 8)).concat(octalBytes(0, 8)).concat(octalBytes(item.size, 12)).concat(octalBytes(item.mtime, 12))
+  let kind = match item.typeFlag {
+    case File => "0"
+    case Directory => "5"
+    case Symlink => "2"
   }
-
-  let pathBytes = item.path.toBytes().toArray()
-  var p = 0
-  while p < pathBytes.length() && p < 100 {
-    block = withByteAt(block, p, pathBytes.get(p))
-    p = p + 1
-  }
-
-  let modeOct = formatOctal(item.mode, 8)
-  var m = 0
-  while m < 8 {
-    block = withByteAt(block, 100 + m, modeOct.get(m))
-    m = m + 1
-  }
-
-  let sizeOct = formatOctal(item.size, 12)
-  var s = 0
-  while s < 12 {
-    block = withByteAt(block, 124 + s, sizeOct.get(s))
-    s = s + 1
-  }
-
-  let mtimeOct = formatOctal(item.mtime, 12)
-  var t = 0
-  while t < 12 {
-    block = withByteAt(block, 136 + t, mtimeOct.get(t))
-    t = t + 1
-  }
-
-  let typeByte = match item.typeFlag {
-    case File => 48u8
-    case Directory => 53u8
-    case Symlink => 50u8
-  }
-  block = withByteAt(block, 156, typeByte)
-
-  let linkBytes = item.linkName.toBytes().toArray()
-  var l = 0
-  while l < linkBytes.length() && l < 100 {
-    block = withByteAt(block, 157 + l, linkBytes.get(l))
-    l = l + 1
-  }
-
-  let magic = "ustar".toBytes().toArray()
-  var mg = 0
-  while mg < magic.length() {
-    block = withByteAt(block, 257 + mg, magic.get(mg))
-    mg = mg + 1
-  }
-  block = withByteAt(block, 262, 0u8)
-  block = withByteAt(block, 263, 48u8)
-  block = withByteAt(block, 264, 48u8)
-
-  let chk = computeHeaderChecksum(&block)
-  let chkOct = formatOctal(chk, 7)
-  var c = 0
-  while c < 7 {
-    block = withByteAt(block, 148 + c, chkOct.get(c))
-    c = c + 1
-  }
-  block = withByteAt(block, 155, 32u8)
-
-  block
+  let magic = "ustar\u{0}00".toBytes()
+  let sum = byteSum(&name) + byteSum(&numbers) + 256 + byteSum(&kind.toBytes()) + byteSum(&link) + byteSum(&magic) + byteSum(&prefix)
+  ByteSeq.join(&[
+      name,
+      numbers,
+      octalBytes(sum, 7),
+      " ".toBytes(),
+      kind.toBytes(),
+      link,
+      magic,
+      zero.take(80),
+      prefix,
+      zero.take(12)
+    ])
 }
 
 /// Encodes an array of tar entries into a complete POSIX USTAR byte archive.
 export fn writeArchive(entries: Array[TarEntry]) -> Bytes {
-  var allBytes: Array[UInt8] = []
-
-  var idx = 0
-  while idx < entries.length() {
-    let headerBlock = buildHeader(&entries[idx])
-    var h = 0
-    while h < 512 {
-      allBytes = allBytes.push(headerBlock[h])
-      h = h + 1
-    }
-
-    let payload = entries[idx].data.toArray()
-    var b = 0
-    while b < payload.length() {
-      allBytes = allBytes.push(payload[b])
-      b = b + 1
-    }
-
-    let padBytes = if payload.length() % 512 != 0 {
-      512 - (payload.length() % 512)
-    } else {
-      0
-    }
-    var p = 0
-    while p < padBytes {
-      allBytes = allBytes.push(0u8)
-      p = p + 1
-    }
-
-    idx = idx + 1
+  let zero = bytesOf(zeros(512))
+  var pieces: Array[Bytes] = []
+  for item in entries {
+    pieces = pieces.push(headerBytes(&item, &zero))
+    pieces = pieces.push(item.data)
+    let rest = item.data.length() % 512
+    if rest != 0 { pieces = pieces.push(zero.take(512 - rest)) }
   }
-
-  var term = 0
-  while term < 1024 {
-    allBytes = allBytes.push(0u8)
-    term = term + 1
-  }
-
-  ByteSeq.fromArray(&allBytes)
-}
-
-/// Checks whether a 512-byte slice represents a zero terminator block.
-fn isZeroBlock(source: &Bytes, offset: Int) -> Bool {
-  var i = 0
-  while i < 512 {
-    match source.at(offset + i) {
-      case Some(b) => { if b != 0u8 { return false } }
-      case None => { return true }
-    }
-    i = i + 1
-  }
-  true
+  pieces = pieces.push(zero).push(zero)
+  ByteSeq.join(&pieces)
 }
 
 /// Decodes all TarEntries from a POSIX USTAR archive byte stream.
@@ -265,84 +220,58 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
   var entries: Array[TarEntry] = []
   var offset = 0
   var reachedEnd = false
+  var pendingPath: Option[Str] = None
   let totalLen = archive.length()
+  let zeroBlock = bytesOf(zeros(512))
 
   while offset + 512 <= totalLen {
-    if isZeroBlock(archive, offset) {
+    let header = archive.slice(offset, offset + 512)
+    if header == zeroBlock {
       reachedEnd = true
       break
     }
 
-    var rawHeader: Array[UInt8] = []
-    var h = 0
-    while h < 512 {
-      match archive.at(offset + h) {
-        case Some(b) => { rawHeader = rawHeader.push(b) }
-        case None => { return Err(UnexpectedEof) }
-      }
-      h = h + 1
-    }
-
-    let recordedChecksum = match parseOctal(archive, offset + 148, 8) {
+    let recordedChecksum = match octalField(&header, 148, 8) {
       case Some(sum) => sum
       case None => { return Err(InvalidChecksum) }
     }
-    let calculatedChecksum = computeHeaderChecksum(&rawHeader)
-    if recordedChecksum != calculatedChecksum {
+    if recordedChecksum != headerChecksum(&header) {
       return Err(InvalidChecksum)
     }
 
-    var pathBytes: Array[UInt8] = []
-    var p = 0
-    while p < 100 {
-      let b = rawHeader.get(p)
-      if b == 0u8 { break }
-      pathBytes = pathBytes.push(b)
-      p = p + 1
+    let namePart = match fieldText(&header, 0, 100) {
+      case Some(txt) => txt
+      case None => { return Err(CorruptHeader) }
     }
-    let pathBlock = ByteSeq.fromArray(&pathBytes)
-    let entryPath = match ByteSeq.toText(&pathBlock) {
-      case Ok(txt) => txt
-      case Err(_) => { return Err(CorruptHeader) }
+    let prefixPart = match fieldText(&header, 345, 155) {
+      case Some(txt) => if header.slice(257, 262) == "ustar".toBytes() { txt } else { "" }
+      case None => { return Err(CorruptHeader) }
     }
+    let entryPath = if prefixPart.isEmpty() { namePart } else { prefixPart + "/" + namePart }
 
-    let modeVal = match parseOctal(archive, offset + 100, 8) {
-      case Some(m) => m
-      case None => 420
-    }
+    let modeVal = Option.unwrapOr(octalField(&header, 100, 8), 420)
 
-    let sizeVal = match parseOctal(archive, offset + 124, 12) {
+    let sizeVal = match octalField(&header, 124, 12) {
       case Some(s) => s
       case None => { return Err(CorruptHeader) }
     }
 
-    let mtimeVal = match parseOctal(archive, offset + 136, 12) {
-      case Some(t) => t
-      case None => 0
-    }
+    let mtimeVal = Option.unwrapOr(octalField(&header, 136, 12), 0)
 
-    let typeCode = byteValue(rawHeader.get(156))
+    let typeCode = byteValue(Option.unwrapOr(header.at(156), 0u8))
+    let extended = typeCode == 120
+    let global = typeCode == 103
     let entryType = if typeCode == 53 {
       Directory
     } else if typeCode == 50 {
       Symlink
-    } else {
+    } else if typeCode == 48 || typeCode == 0 || extended || global {
       File
+    } else {
+      return Err(UnsupportedType)
     }
 
-    var linkBytes: Array[UInt8] = []
-    var l = 0
-    while l < 100 {
-      let b = rawHeader.get(157 + l)
-      if b == 0u8 { break }
-      linkBytes = linkBytes.push(b)
-      l = l + 1
-    }
-    let linkBlock = ByteSeq.fromArray(&linkBytes)
-    let linkStr = match ByteSeq.toText(&linkBlock) {
-      case Ok(txt) => txt
-      case Err(_) => ""
-    }
+    let linkStr = Option.unwrapOr(fieldText(&header, 157, 100), "")
 
     let dataStart = offset + 512
     if dataStart + sizeVal > totalLen {
@@ -350,15 +279,20 @@ export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
     }
     let payload = archive.slice(dataStart, dataStart + sizeVal)
 
-    entries = entries.push(TarEntry {
-        path: entryPath,
-        mode: modeVal,
-        size: sizeVal,
-        mtime: mtimeVal,
-        typeFlag: entryType,
-        linkName: linkStr,
-        data: payload
-      })
+    if extended {
+      pendingPath = paxRecord(&payload, "path")
+    } else if !global {
+      entries = entries.push(TarEntry {
+          path: Option.unwrapOr(pendingPath, entryPath),
+          mode: modeVal,
+          size: sizeVal,
+          mtime: mtimeVal,
+          typeFlag: entryType,
+          linkName: linkStr,
+          data: payload
+        })
+      pendingPath = None
+    }
 
     let padBytes = if sizeVal % 512 != 0 {
       512 - (sizeVal % 512)

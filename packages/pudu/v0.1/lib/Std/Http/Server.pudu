@@ -10,6 +10,7 @@ import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Reply {text}
 import Std.Http.Server.Route as Route
 import Std.Http.Server.Route {dispatch}
+import Std.Io as Io
 import Std.Net as Net
 import Std.Net.Read as Read
 import Std.Option as Option
@@ -66,7 +67,9 @@ export fn server(base: &Route.Router) -> Server {
 /// configuration inside its hot path.
 export fn handlerOf(target: &Server) -> Route.Handler {
   let routed = target.router
-  var next: Route.Handler = fn(request: Route.Request) -> Http.Response { dispatch(&routed, request) }
+  var next: Route.Handler = fn(request: Route.Request) -> Http.Response {
+    contained(fn(asked: Route.Request) -> Http.Response { dispatch(&routed, asked) }, request)
+  }
   var index = target.middleware.length() - 1
   while index >= 0 {
     let outer = target.middleware[index]
@@ -75,6 +78,48 @@ export fn handlerOf(target: &Server) -> Route.Handler {
     index = index - 1
   }
   next
+}
+
+/// A handler's answer, or a 500 when the handler failed while running.
+///
+/// A handler runs on a thread of its own, and a failure there is reported to
+/// the thread that joins it rather than ending that thread. Without this, a
+/// route that failed — an index out of range, a value no arm matched — ended
+/// the worker serving it: the client was never answered, nothing was logged,
+/// and after as many failures as there were workers the server answered
+/// nobody. The route's failure is contained inside the middleware, so what
+/// wraps it sees the 500 and reports it; the whole chain is contained again
+/// where a connection is served, so a failing middleware cannot end a worker
+/// either.
+fn contained(handle: Route.Handler, request: Route.Request) -> Http.Response {
+  let held: Sync.Cell[Option[Http.Response]] = Sync.cell(None)
+  let asked = request
+  let started = Concurrent.start(fn() -> () {
+      let _kept = Sync.set(&held, Some(handle(asked)))
+    })
+  let outcome = match started {
+    case Ok(runner) => Result.mapErr(Concurrent.join(&runner), fn(problem: Concurrent.ConcurrentError) -> Str { show(problem) })
+    case Err(problem) => Err("the handler could not start: " + show(problem))
+  }
+  match outcome {
+    case Ok(_) => {
+      match Result.unwrapOr(Sync.get(&held), None) {
+        case Some(answer) => answer
+        case None => failedRequest(&request, "the handler gave no answer")
+      }
+    }
+    case Err(reason) => failedRequest(&request, reason)
+  }
+}
+
+/// The answer to a request whose handler failed, with the failure written to
+/// the error stream beside the request it belonged to.
+fn failedRequest(request: &Route.Request, reason: Str) -> Http.Response {
+  let _said = Io.writeErrorLine(
+    "http: " + Http.methodName(&request.message.method) + " " + request.message.target
+      + " from " + request.peer + " failed: " + reason
+  )
+  withLength(&closing(&text(500, "internal server error")))
 }
 
 /// A request built from what a connection carried, or the reason it was not
@@ -91,7 +136,7 @@ fn readRequest(
   let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
   let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
-  let head = Result.unwrapOr(ByteSeq.toText(&pair[0]), "")
+  let Ok(head) = ByteSeq.toText(&pair[0]) else { return Err(badRequest("the head is not UTF-8 text")) }
   let parsed = Message.parseHead(head)
   if let Err(problem) = parsed { return Err(badRequest(Message.explain(&problem))) }
   let message = Result.unwrapOr(parsed, emptyRequest())
@@ -110,11 +155,12 @@ fn readRequest(
     if let Err(_) = more { return Err(badRequest("the body did not arrive")) }
     payload = carried.concat(Result.unwrapOr(more, ByteSeq.empty()))
   }
-  let whole = Http.Request {
-    method: message.method,
-    target: message.target,
-    headers: message.headers,
-    body: Result.unwrapOr(ByteSeq.toText(&payload), "")
+  // A body that is UTF-8 text arrives as text; any other body — an uploaded
+  // image, a compressed payload — arrives as its exact bytes, with the text body
+  // empty. `Route.bodyBytes` answers the bytes either way.
+  let whole = match ByteSeq.toText(&payload) {
+    case Ok(body) => Http.Request{..message, body: body, binaryBody: None}
+    case Err(_) => Http.Request{..message, body: "", binaryBody: Some(payload)}
   }
   Ok(
     Route.Request {
@@ -146,7 +192,9 @@ fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler
     false
   } else {
     let request = Result.unwrapOr(read, emptyServerRequest())
-    let answer = handle(request)
+    // The route is already contained inside the chain; the chain needs it
+    // again only when it holds middleware of its own that could fail.
+    let answer = if target.middleware.length() == 0 { handle(request) } else { contained(handle, request) }
     let keeping = wantsKeepAlive(&request.message)
     let framed = withLength(&answer)
     let selected = if request.message.method == Http.Head { Http.Response{..framed, body: "", binaryBody: None} } else { framed }
@@ -393,7 +441,7 @@ fn badRequest(reason: Str) -> Http.Response { text(400, reason) }
 fn tooLarge() -> Http.Response { text(413, "the body is larger than this server accepts") }
 
 fn emptyRequest() -> Http.Request {
-  Http.Request{method: Http.Get, target: "/", headers: [], body: ""}
+  Http.Request{method: Http.Get, target: "/", headers: [], body: "", binaryBody: None}
 }
 
 fn emptyServerRequest() -> Route.Request {

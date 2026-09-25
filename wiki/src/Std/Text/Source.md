@@ -36,6 +36,11 @@ must preserve sorted offsets, initial zero, and source bounds.
 Uses built-in bytes, text, arrays, maps, and failure carriers. Intended for explicit import by
 compiler and parser clients. No foreign calls, hidden IO, or host primitives are introduced.
 
+This is the admitted byte-oriented view for parser and diagnostic workloads. General Unicode text
+parsers should carry the unread `Str` remainder, whose native slices share storage, instead of
+introducing a second public `StringView` with competing byte/scalar coordinates. The source buffer
+remains necessary where malformed UTF-8 and exact byte locations must survive.
+
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[architecture/FFI-SELF-HOSTING]]

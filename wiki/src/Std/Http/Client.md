@@ -43,6 +43,11 @@ allowance has arrived; checking only after an unbounded `receiveAll` would repor
 the peer had already selected the caller's memory use. The body bound is checked again after HTTP
 framing is removed.
 
+**A request goes out as bytes.** The request is rendered with `Message.renderRequestBytes` and sent
+with the byte form of the transport, and an absent `Content-Length` is filled from the byte length of
+`Http.requestBytes`, so a byte body is transmitted exactly and a text body is measured in UTF-8
+octets. A redirect that keeps its body keeps a byte body as well.
+
 **HTTP transfer framing is not response content.** A chunked answer is decoded before it is handed
 to the caller and before its body is compared with the caller's limit. Returning chunk sizes and
 delimiters in `Response.body` is not a merely inconvenient representation: a JSON parser sees text
@@ -84,6 +89,8 @@ to emit every malformed framing, redirect, credential, and size-limit case this 
 the controlled fixture can, and remains the release-blocking behavioral evidence.
 
 ## Grill Log
+
+- **Q:** Decide completion by re-reading everything received? **A:** No; the head is parsed once when its blank line arrives, and each later piece costs a length comparison, or for a chunked body a look at its last bytes and one decode when they end a chunk stream. _Rationale:_ joining and re-parsing after every piece made a 1.3 MB body take 20 s. _Rejected:_ `responseComplete` per piece.
 - **Q:** Keep the authorization header across a redirect, since the caller set it deliberately?
   **A:** No. _Rationale:_ the caller set it for the host they named, not for whichever host that one
   points at. _Rejected:_ carrying credentials through a redirect; carrying them within a site.

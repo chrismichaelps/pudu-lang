@@ -144,6 +144,18 @@ declareBuiltinConstructors = do
       not a digest; the other three are. -}
   bindName "sha256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
   bindName "sha512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "sha3_256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "sha3_512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "blake2b256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "blake2b512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  {-| Checksums, wired in for the reason the digests are: a table step per
+      byte is more than the evaluator can afford over a transfer. The
+      algorithm is a code because a wired-in signature cannot name the sum
+      `Std.Checksum` would declare; that module is the typed surface. -}
+  bindName "checksumOf"
+    (monotype (FunctionTypeValue False [integerType, NominalType "UInt64" [], bytesType] (NominalType "UInt64" [])))
+  bindName "hmacSha512Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
+  bindName "constantTimeEqual" (monotype (FunctionTypeValue False [bytesType, bytesType] boolType))
   bindName "verifyRsaSha256"
     (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType] boolType))
   bindName "verifyEcdsaSha256"
@@ -165,6 +177,20 @@ declareBuiltinConstructors = do
   bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "deriveKey"
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  bindName "audioToneBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [integerType, integerType, integerType, integerType, integerType, integerType]
+            (NominalType "Option" [bytesType])
+        )
+    )
+  bindName "audioRampBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [bytesType, integerType, integerType, integerType, integerType, integerType, integerType]
+            (NominalType "Option" [bytesType])
+        )
+    )
   mapM_ (\name -> bindName name
     (polytype [("K", 0)] [] (FunctionTypeValue False [wordMapType, wordMapType] wordMapType)))
     ["wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"]
@@ -273,10 +299,44 @@ declareBuiltinConstructors = do
     (polytype [("V", 0)] [] (FunctionTypeValue False [] (NominalType "Buckets" [RigidType "V"])))
   bindName "bytesOf"
     (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
+  {-| The complete separated records at the front of a buffer, with the bytes
+      and characters they span, or nothing when a record is not valid text.
+      `Std.Csv` reads through it; see `Pudu.Eval.Csv`. -}
+  bindName "csvRecords"
+    ( monotype
+        ( FunctionTypeValue False [bytesType, NominalType "Str" []]
+            ( NominalType "Option"
+                [ TupleTypeValue
+                    [ NominalType "Array" [NominalType "Array" [NominalType "Str" []]]
+                    , integerType
+                    , integerType
+                    ]
+                ]
+            )
+        )
+    )
+  {-| The value a JSON text holds, or nothing when the native decoder leaves
+      the text to `Std.Json.decode`'s own reading; see `Pudu.Eval.Json`. -}
+  bindName "jsonDecode"
+    (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdJsonId []])))
+  {-| A `Std.Json` value written as text, compact or pretty; see `Pudu.Eval.Json`. -}
+  bindName "jsonEncode"
+    ( monotype
+        ( FunctionTypeValue False
+            [ReferenceTypeValue False (NominalType stdJsonId []), boolType]
+            (NominalType "Str" [])
+        )
+    )
+  {-| A document's root element, or nothing when the native reader leaves the
+      document to `Std.Xml.decode`'s own reading; see `Pudu.Eval.Xml`. -}
+  bindName "xmlDecode"
+    (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
+  stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
+  stdXmlTagId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Xml"]))) "Tag"
   flatMapType v = NominalType stdFlatMapId [v]
   borrowFlatMap v = ReferenceTypeValue False (flatMapType v)
   optionOf = NominalType "Option" [RigidType "T"]
@@ -303,6 +363,14 @@ effectSignatures =
   , ("appendFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
   , ("fileExists", monotype (FunctionTypeValue False [stringType] boolType))
   , ("spawnProgram", monotype (FunctionTypeValue False [stringType, arrayOf stringType] (resultOf integerType)))
+  , ( "spawnProgramWith"
+    , monotype
+        ( FunctionTypeValue
+            False
+            [stringType, arrayOf stringType, arrayOf (TupleTypeValue [stringType, stringType]), boolType, stringType]
+            (resultOf integerType)
+        )
+    )
   , ("childReadChunk", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
   , ("childReadErrorChunk", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
   , ("childWriteChunk", monotype (FunctionTypeValue False [integerType, bytesType] (resultOf unitTypeValue)))
@@ -315,6 +383,17 @@ effectSignatures =
   , ("removeFile", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
   , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("renamePath", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("createTemporaryFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf stringType)))
+  , ("createDirectoryExclusive", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("removeEmptyDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("permissionsOf", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("setPermissionsOf", monotype (FunctionTypeValue False [stringType, integerType] (resultOf unitTypeValue)))
+  , ("pathIsSymbolicLink", monotype (FunctionTypeValue False [stringType] (resultOf boolType)))
+  , ("createSymbolicLink", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("canonicalPath", monotype (FunctionTypeValue False [stringType] (resultOf stringType)))
+  , ("fileSize", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("directoryExists", monotype (FunctionTypeValue False [stringType] boolType))
   , ("openReader", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
   , ("openWriter", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
   , ("openAppender", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
@@ -363,6 +442,25 @@ effectSignatures =
   , ("cellGet", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (RigidType "T"))))
   , ("cellSwap", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf (RigidType "T"))))
   , ("secureRandomBytes", monotype (FunctionTypeValue False [integerType] (resultOf bytesType)))
+  , ("desktopOpen", monotype (FunctionTypeValue False [stringType, integerType, integerType, boolType] (resultOf integerType)))
+  , ("desktopPresent", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType] (resultOf unitTypeValue)))
+  , ("desktopPump", monotype (FunctionTypeValue False [integerType, integerType] (resultOf boolType)))
+  , ("desktopInputs", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
+  , ("desktopClipboardRead", monotype (FunctionTypeValue False [] (resultOf stringType)))
+  , ("desktopClipboardWrite", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("desktopAccessibility", monotype (FunctionTypeValue False [integerType, stringType] (resultOf unitTypeValue)))
+  , ("desktopAccessibilityReport", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
+  , ("desktopMenu", monotype (FunctionTypeValue False [integerType, stringType] (resultOf unitTypeValue)))
+  , ("desktopMenuReport", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
+  , ("desktopClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("audioDevicePlay", monotype (FunctionTypeValue False [integerType, integerType, bytesType, integerType, integerType, integerType] (resultOf integerType)))
+  , ("audioStreamOpen", monotype (FunctionTypeValue False [integerType, integerType, integerType, integerType] (resultOf (arrayOf integerType))))
+  , ("audioStreamWrite", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType, integerType] (resultOf (arrayOf integerType))))
+  , ("audioStreamPause", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("audioStreamResume", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("audioStreamVolume", monotype (FunctionTypeValue False [integerType, floatType] (resultOf unitTypeValue)))
+  , ("audioStreamSnapshot", monotype (FunctionTypeValue False [integerType] (resultOf (arrayOf integerType))))
+  , ("audioStreamClose", monotype (FunctionTypeValue False [integerType, boolType, integerType] (resultOf unitTypeValue)))
   , ("arguments", monotype (FunctionTypeValue False [] (arrayOf stringType)))
   , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
   , ("temporaryPath", monotype (FunctionTypeValue False [] stringType))

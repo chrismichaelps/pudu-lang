@@ -5,56 +5,115 @@ import Std.Option as Option
 import Domain.Entry as Domain
 import Domain.Search as Query
 
-export fn find(entries: &Array[Domain.Entry], query: Str, limit: Int) -> Array[Domain.Hit] {
-  let wanted = Query.parse(query)
-  if !Query.hasIntent(&wanted) || limit <= 0 { return [] }
-  let groups = List.map(entries, fn(entry: Domain.Entry) -> Array[Domain.Hit] {
-      let score = scoreOf(&entry, &wanted)
-      Option.toArray(if score > 0 { Some(Domain.Hit{entry: entry, score: score}) } else { None })
-    })
-  let found = List.flatten(&groups)
-  let ordered = List.sortBy(&found, fn(left: Domain.Hit, right: Domain.Hit) -> Bool {
-      if left.score == right.score {
-        Domain.qualifiedName(&left.entry) < Domain.qualifiedName(&right.entry)
-      } else { left.score > right.score }
-    })
-  List.take(&ordered, limit)
+/// An entry with every text a query is compared against, written the way the
+/// comparison reads it: lowered, and the signature normalised as a type.
+///
+/// A query compares each of these against every entry, so preparing them per
+/// query lowered three thousand names, signatures, and documentation blocks
+/// for every search, and that was nearly all a search cost.
+export type Indexed = {
+  entry: Domain.Entry,
+  qualifiedName: Str,
+  name: Str,
+  moduleName: Str,
+  leaf: Str,
+  qualified: Str,
+  signature: Str,
+  typeShape: Str,
+  prose: Str
 }
 
-fn scoreOf(entry: &Domain.Entry, query: &Query.Query) -> Int {
-  let name = entry.name.toLower()
-  let moduleName = entry.moduleName.toLower()
-  let qualified = Domain.qualifiedName(entry).toLower()
-  let signature = entry.signature.toLower()
-  if !moduleAllowed(moduleName, query.moduleFilter) { return 0 }
-  if !kindAllowed(entry, query.kindFilter) { return 0 }
+/// The catalogue as a query reads it, prepared once before the first request,
+/// in qualified-name order: the tie-break every ranking ends with.
+export type Index = { entries: Array[Indexed] }
+
+export fn index(entries: &Array[Domain.Entry]) -> Index {
+  var prepared: Array[Indexed] = []
+  for entry in entries {
+    let qualifiedName = Domain.qualifiedName(&entry)
+    prepared = prepared.push(Indexed {
+        entry: entry,
+        qualifiedName: qualifiedName,
+        name: entry.name.toLower(),
+        moduleName: entry.moduleName.toLower(),
+        leaf: Query.moduleLeaf(entry.moduleName),
+        qualified: qualifiedName.toLower(),
+        signature: entry.signature.toLower(),
+        typeShape: Query.normalizeType(entry.signature),
+        // Documentation is matched on its summary line alone. A declaration's
+        // full reference text names the types and neighbours it discusses, so
+        // matching any line of it would rank a page that merely mentions a term
+        // alongside the page that defines it; the summary is also all the
+        // compact runtime index carries, so a deployed search and a local one
+        // answer alike.
+        prose: if entry.documentation.isEmpty() { "" } else { entry.documentation[0].toLower() }
+      })
+  }
+  Index{entries: List.sortBy(&prepared, fn(left: Indexed, right: Indexed) -> Bool { left.qualifiedName < right.qualifiedName })}
+}
+
+/// The entries matching `query`, best first, at most `limit` of them.
+///
+/// A score takes one of a few values, and the index is already in the order
+/// ties are broken by, so hits are taken score by score, highest first, in the
+/// index's order: no hit is compared with another.
+export fn ranked(prepared: &Index, query: Str, limit: Int) -> Array[Domain.Hit] {
+  let wanted = Query.parse(query)
+  if !Query.hasIntent(&wanted) || limit <= 0 { return [] }
+  var found: Array[Domain.Hit] = []
+  var distinct: Set[Int] = setOf([])
+  for candidate in prepared.entries {
+    let score = scoreOf(&candidate, &wanted)
+    if score > 0 {
+      found = found.push(Domain.Hit{entry: candidate.entry, score: score})
+      distinct = distinct.insert(score)
+    }
+  }
+  let descending = List.sortBy(&distinct.toArray(), fn(left: Int, right: Int) -> Bool { left > right })
+  var hits: Array[Domain.Hit] = []
+  for score in descending {
+    for hit in found {
+      if hits.length() >= limit { return hits }
+      if hit.score == score { hits = hits.push(hit) }
+    }
+  }
+  hits
+}
+
+/// `ranked` over entries not yet prepared, for a caller that searches once.
+export fn find(entries: &Array[Domain.Entry], query: Str, limit: Int) -> Array[Domain.Hit] {
+  ranked(&index(entries), query, limit)
+}
+
+fn scoreOf(entry: &Indexed, query: &Query.Query) -> Int {
+  if !moduleAllowed(entry, query.moduleFilter) { return 0 }
+  if !kindAllowed(&entry.entry, query.kindFilter) { return 0 }
 
   let termPoints = termsScore(entry, &query.terms)
   if query.terms.length() > 0 && termPoints == 0 { return 0 }
-  let typeScore = typeScoreOf(signature, query.typeShape)
+  let typeScore = typeScoreOf(entry.typeShape, query.typeShape)
   if query.typeShape != None && typeScore == 0 { return 0 }
 
   let written = query.terms.join(" ")
-  if query.exact && query.terms.length() > 0 && name != written && qualified != written {
+  if query.exact && query.terms.length() > 0 && entry.name != written && entry.qualified != written {
     return 0
   }
-  if query.typeShape == None && query.terms.length() == 1
-    && Query.moduleLeaf(entry.moduleName) == query.terms[0] {
+  if query.typeShape == None && query.terms.length() == 1 && entry.leaf == query.terms[0] {
     return 1400 + termPoints
   }
-  if qualified == written { return 1320 + typeScore }
-  if name == written { return 1280 + typeScore }
-  if query.terms.length() == 1 && name.startsWith(written) { return 1100 + typeScore }
+  if entry.qualified == written { return 1320 + typeScore }
+  if entry.name == written { return 1280 + typeScore }
+  if query.terms.length() == 1 && entry.name.startsWith(written) { return 1100 + typeScore }
   if termPoints > 0 { return 700 + termPoints + typeScore }
   if typeScore > 0 { return typeScore }
   if query.moduleFilter != None || query.kindFilter != None { return 200 }
   0
 }
 
-fn moduleAllowed(moduleName: Str, filter: Option[Str]) -> Bool {
+fn moduleAllowed(entry: &Indexed, filter: Option[Str]) -> Bool {
   match filter {
     case None => true
-    case Some(wanted) => moduleName == wanted || Query.moduleLeaf(moduleName) == wanted
+    case Some(wanted) => entry.moduleName == wanted || entry.leaf == wanted
   }
 }
 
@@ -65,7 +124,7 @@ fn kindAllowed(entry: &Domain.Entry, filter: Option[Str]) -> Bool {
   }
 }
 
-fn termsScore(entry: &Domain.Entry, terms: &Array[Str]) -> Int {
+fn termsScore(entry: &Indexed, terms: &Array[Str]) -> Int {
   var score = 0
   for term in terms {
     let matched = termScore(entry, term)
@@ -75,34 +134,22 @@ fn termsScore(entry: &Domain.Entry, terms: &Array[Str]) -> Int {
   score
 }
 
-/// What one term is worth against one declaration, highest match first.
-///
-/// Documentation is matched on its summary line alone. A declaration's full
-/// reference text names the types and neighbours it discusses, so matching any
-/// line of it would rank a page that merely mentions a term alongside the page
-/// that defines it. The summary is also the only documentation the compact
-/// runtime index carries, so ranking the same way here keeps a deployed search
-/// and a local one from answering differently.
-fn termScore(entry: &Domain.Entry, term: Str) -> Int {
-  let name = entry.name.toLower()
-  let qualified = Domain.qualifiedName(entry).toLower()
-  let moduleName = entry.moduleName.toLower()
-  if name == term { return 180 }
-  if qualified == term { return 175 }
-  if name.startsWith(term) { return 150 }
-  if name.contains(term) { return 120 }
-  if Query.moduleLeaf(entry.moduleName) == term { return 110 }
-  if moduleName.contains(term) { return 90 }
-  if entry.signature.toLower().contains(term) { return 60 }
-  if entry.documentation.length() > 0 && entry.documentation[0].toLower().contains(term) { return 30 }
+fn termScore(entry: &Indexed, term: Str) -> Int {
+  if entry.name == term { return 180 }
+  if entry.qualified == term { return 175 }
+  if entry.name.startsWith(term) { return 150 }
+  if entry.name.contains(term) { return 120 }
+  if entry.leaf == term { return 110 }
+  if entry.moduleName.contains(term) { return 90 }
+  if entry.signature.contains(term) { return 60 }
+  if entry.prose.contains(term) { return 30 }
   0
 }
 
-fn typeScoreOf(signature: Str, query: Option[Str]) -> Int {
+fn typeScoreOf(available: Str, query: Option[Str]) -> Int {
   match query {
     case None => 0
     case Some(wanted) => {
-      let available = Query.normalizeType(signature)
       if available == wanted { 1000 }
         else if available.contains(wanted) { 850 }
         else { 0 }

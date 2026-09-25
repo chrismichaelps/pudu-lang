@@ -1,0 +1,9 @@
+module Other
+
+export type Box = { value: Int }
+
+export trait Wrong {
+  fn wrongMethod(self: &Self) -> Int { 0 }
+}
+
+impl Wrong for Box {}

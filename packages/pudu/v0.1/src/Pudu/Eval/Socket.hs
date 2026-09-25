@@ -27,7 +27,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Network.Socket as Net
 import qualified Network.Socket.ByteString as NetBytes
-import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
 import qualified System.Timeout as Timeout
 
 {-| Every endpoint one evaluation has open. The store is shared by captured
@@ -63,9 +63,7 @@ addressFor passive host port = do
           , Net.addrFlags = if passive then [Net.AI_PASSIVE] else []
           }
       wanted = if passive && null host then Nothing else Just host
-  found <-
-    try (Net.getAddrInfo (Just hints) wanted (Just (show port)))
-      :: IO (Either SomeException [Net.AddrInfo])
+  found <- trySynchronous (Net.getAddrInfo (Just hints) wanted (Just (show port)))
   pure $ case found of
     Left problem -> Left (Text.pack (show problem))
     Right [] -> Left (Text.pack ("no address for " <> host <> ":" <> show port))
@@ -84,7 +82,7 @@ listenOn store host port backlog = do
     Left problem -> pure (IoFailed problem)
     Right address -> do
       attempted <-
-        try
+        trySynchronous
           ( bracketOnError
               (Net.openSocket address)
               Net.close
@@ -95,7 +93,6 @@ listenOn store host port backlog = do
                   pure socket
               )
           )
-          :: IO (Either SomeException Net.Socket)
       case attempted of
         Left problem -> pure (IoFailed (Text.pack (show problem)))
         Right socket -> IoDone <$> remember store socket
@@ -103,11 +100,11 @@ listenOn store host port backlog = do
 {-| Wait for the next connection and answer the token naming it. -}
 acceptOn :: SocketStore -> Int -> IO (IoOutcome Int)
 acceptOn store token = withSocket store token $ \socket -> do
-  attempted <- try (Net.accept socket) :: IO (Either SomeException (Net.Socket, Net.SockAddr))
+  attempted <- trySynchronous (Net.accept socket)
   case attempted of
     Left problem -> pure (IoFailed (Text.pack (show problem)))
     Right (connection, _) -> do
-      _ <- try (Net.setSocketOption connection Net.NoDelay 1) :: IO (Either SomeException ())
+      _ <- trySynchronous (Net.setSocketOption connection Net.NoDelay 1)
       IoDone <$> remember store connection
 
 {-| Open a connection to somewhere else. -}
@@ -128,7 +125,7 @@ connectToWithin store host port millis = do
             (Net.openSocket address)
             Net.close
             ( \socket -> do
-                _ <- try (Net.setSocketOption socket Net.NoDelay 1) :: IO (Either SomeException ())
+                _ <- trySynchronous (Net.setSocketOption socket Net.NoDelay 1)
                 Net.connect socket (Net.addrAddress address)
                 pure socket
             )
@@ -197,7 +194,7 @@ shutdownWriteAt store token = withSocket store token $ \socket -> do
 {-| Who is at the other end, as text. -}
 peerOf :: SocketStore -> Int -> IO (IoOutcome Text)
 peerOf store token = withSocket store token $ \socket -> do
-  attempted <- try (Net.getPeerName socket) :: IO (Either SomeException Net.SockAddr)
+  attempted <- trySynchronous (Net.getPeerName socket)
   pure $ case attempted of
     Left problem -> IoFailed (Text.pack (show problem))
     Right address -> IoDone (Text.pack (show address))
@@ -209,7 +206,7 @@ peerOf store token = withSocket store token $ \socket -> do
     machine may already hold. The choice is only knowable by asking. -}
 localPortOf :: SocketStore -> Int -> IO (IoOutcome Int)
 localPortOf store token = withSocket store token $ \socket -> do
-  attempted <- try (Net.getSocketName socket) :: IO (Either SomeException Net.SockAddr)
+  attempted <- trySynchronous (Net.getSocketName socket)
   pure $ case attempted of
     Left problem -> IoFailed (Text.pack (show problem))
     Right address -> pure' (portOf address)
@@ -237,7 +234,7 @@ closeSocketAt store token = do
   case taken of
     Nothing -> pure (IoDone ())
     Just socket -> do
-      attempted <- try (Net.close socket) :: IO (Either SomeException ())
+      attempted <- trySynchronous (Net.close socket)
       pure $ case attempted of
         Left problem -> IoFailed (Text.pack (show problem))
         Right () -> IoDone ()
@@ -250,7 +247,7 @@ closeSocketStore store = do
   mapM_ closeQuietly (IntMap.elems table)
  where
   closeQuietly socket = do
-    _ <- try (Net.close socket) :: IO (Either SomeException ())
+    _ <- trySynchronous (Net.close socket)
     pure ()
 
 withSocket :: SocketStore -> Int -> (Net.Socket -> IO (IoOutcome a)) -> IO (IoOutcome a)
@@ -275,8 +272,8 @@ addressForRaw passive host port = do
 
 attemptWithin :: Integer -> IO a -> IO (Either SomeException (Maybe a))
 attemptWithin millis action
-  | millis < 0 = fmap (fmap Just) (try action)
-  | otherwise = try (Timeout.timeout (microseconds millis) action)
+  | millis < 0 = fmap (fmap Just) (trySynchronous action)
+  | otherwise = trySynchronous (Timeout.timeout (microseconds millis) action)
 
 microseconds :: Integer -> Int
 microseconds millis =

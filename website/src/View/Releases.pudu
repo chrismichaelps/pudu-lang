@@ -1,0 +1,51 @@
+module View.Releases
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Service.Releases as Releases
+import View.Layout as Layout
+import View.Markdown as Markdown
+
+/// What each release changed, as the notes it was published with.
+export fn page(siteUrl: Str, release: &Releases.Release) -> Html.Html {
+  let read = Markdown.parse(&release.notes)
+  let opening = [
+    Layout.banner("page-banner", "Releases", "Release notes", "What each release of Pudu changed. The notes here are the ones the release itself was published with.", []),
+    H.div().class("release-header").holding([
+        H.h2().class("release-version").says("Pudu " + release.version),
+        H.p().class("release-meta").holding(meta(release)),
+        H.p().class("release-links").holding([
+            H.a().class("button").href("/download").says("Download " + release.version),
+            H.a().class("release-forge").href(release.url).at("rel", "external noopener noreferrer").says("On GitHub")
+          ])
+      ])
+  ]
+  let article = H.article().class("doc releases").holding(opening.concat(read.blocks).concat([older(release)]))
+  Layout.page(
+    siteUrl,
+    "Pudu release notes",
+    "What each release of Pudu changed, and what is still missing, from the notes each release was published with.",
+    "/releases",
+    true,
+    None,
+    article.html()
+  )
+}
+
+fn meta(release: &Releases.Release) -> Array[H.Node] {
+  let published = [H.span().says("Published " + release.published)]
+  if release.prerelease {
+    published.concat([H.span().class("release-tag").says("pre-release")])
+  } else {
+    published
+  }
+}
+
+/// Where the releases this page does not carry can be read.
+fn older(release: &Releases.Release) -> H.Node {
+  H.p().class("release-older").holding([
+      H.span().says("Every release, with its archives and checksums, is listed on the "),
+      H.a().href(release.releasesUrl).at("rel", "external noopener noreferrer").says("releases page"),
+      H.span().says(".")
+    ])
+}

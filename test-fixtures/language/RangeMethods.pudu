@@ -1,0 +1,76 @@
+module RangeMethods
+
+import Std.Option as Option
+
+/// Every question a range answers, and what each answers at the edges.
+///
+/// The arithmetic ones — `length`, `contains`, `isEmpty` — answer without
+/// walking anything, so they answer the same way for four values and for four
+/// billion. The ones that hand back the values need both ends; what they do
+/// when a range has only one is checked in the fixtures that expect a refusal.
+
+export fn main() -> Int {
+  let span = 1..5
+  let inclusive = 1..=5
+  let empty = 3..3
+  let reversed = 5..1
+  let openUpper = 2..
+  let openLower =..5
+  let openBoth =..
+
+  let extents = span.length() + inclusive.length() + empty.length() + reversed.length()
+
+  let emptiness =
+  (if empty.isEmpty() { 1 } else { 0 })
+    + (if reversed.isEmpty() { 1 } else { 0 })
+    + (if span.isEmpty() { 0 } else { 1 })
+
+  let bounded =
+  (if span.isBounded() { 1 } else { 0 })
+    + (if openUpper.isBounded() { 0 } else { 1 })
+    + (if openLower.isBounded() { 0 } else { 1 })
+    + (if openBoth.isBounded() { 0 } else { 1 })
+
+  let inclusivity =
+  (if inclusive.isInclusive() { 1 } else { 0 })
+    + (if span.isInclusive() { 0 } else { 1 })
+
+  // A missing end excludes nothing, so an unbounded range still answers this.
+  let membership =
+  (if span.contains(1) { 1 } else { 0 })
+    + (if span.contains(4) { 1 } else { 0 })
+    + (if span.contains(5) { 0 } else { 1 })
+    + (if inclusive.contains(5) { 1 } else { 0 })
+    + (if span.contains(0) { 0 } else { 1 })
+    + (if empty.contains(3) { 0 } else { 1 })
+    + (if openUpper.contains(1000000) { 1 } else { 0 })
+    + (if openUpper.contains(1) { 0 } else { 1 })
+    + (if openLower.contains(0) { 1 } else { 0 })
+    + (if openBoth.contains(0 - 99) { 1 } else { 0 })
+
+  let ends =
+  Option.unwrapOr(span.start(), 0) + Option.unwrapOr(span.end(), 0)
+    + Option.unwrapOr(openUpper.start(), 0)
+    + Option.unwrapOr(openUpper.end(), 100)
+    + Option.unwrapOr(openLower.start(), 7)
+    + Option.unwrapOr(openBoth.end(), 1)
+
+  let listed = span.toArray()
+  let backwards = span.reverse()
+  let everyOther = (0..10).step(2)
+  let everyOne = (0..3).step(1)
+  let strideBeyond = (0..3).step(10)
+
+  let squares = span.map(|n| n * n)
+  let evens = span.filter(|n| n % 2 == 0)
+  let joined = span.reduce(|carried, n| carried + n, 0)
+  let widened = span.map(|n| "{n}")
+  let counted = span.reduce(|carried, _each| carried + 1, 0)
+
+  extents + emptiness + bounded + inclusivity + membership + ends
+    + listed.length() + listed[0] + listed[3]
+    + backwards[0] + backwards.length()
+    + everyOther.length() + everyOne.length() + strideBeyond.length()
+    + squares[3] + evens.length() + joined + widened.length() + counted
+    + span.sum() + inclusive.sum() + empty.sum()
+}

@@ -1,0 +1,107 @@
+module Test.PackageSearch
+
+import Std.Http as Http
+import Std.Io as Io
+import Std.Test as Test
+import Domain.Entry as Domain
+import Service.PackageSearch as PackageSearch
+import Service.Packages as Packages
+import View.Packages.Suggest as Suggest
+
+fn entry(moduleName: Str, kind: Str, name: Str, signature: Str) -> Packages.PublicDeclaration {
+  Packages.PublicDeclaration{moduleName: moduleName, kind: kind, name: name, signature: signature}
+}
+
+fn names(found: &Array[PackageSearch.Found]) -> Array[Str] {
+  found.map(|held: PackageSearch.Found| held.entry.name)
+}
+
+fn projectNames(found: &Array[Packages.Project]) -> Array[Str] {
+  found.map(|held: Packages.Project| held.name)
+}
+
+fn handleNames(found: &Array[Packages.Profile]) -> Array[Str] {
+  found.map(|held: Packages.Profile| held.handle)
+}
+
+export fn main() -> Int {
+  let fixture = match Packages.load("website/test/fixtures/packages") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+  let seed = fixture.projects[0]
+  let parsing = Packages.Project{..seed, name: "@bruno/parsing", handle: "@bruno", project: "parsing", description: "Parser combinators", keywords: ["parsing"], searchEntries: [
+      entry("Parsing", "fn", "reparse", "Str -> Str"),
+      entry("Parsing", "fn", "parseAll", "Str -> Array[Node]"),
+      entry("Parsing", "fn", "parse", "Str -> Node"),
+      entry("Parsing.Parse", "fn", "run", "Parser -> Int"),
+      entry("Parsing", "fn", "count", "Str -> Int"),
+      entry("Parsing", "fn", "render", "Int -> Str"),
+      entry("Parsing", "fn", "twice", "Int -> Int")
+    ] }
+  var many: Array[Packages.PublicDeclaration] = []
+  var index = 0
+  while index < 12 {
+    many = many.push(entry("Wide", "fn", "item" + show(index), "Int"))
+    index = index + 1
+  }
+  let wide = Packages.Project{..seed, name: "@carmen/wide", handle: "@carmen", project: "wide", description: "Many small functions", keywords: [], searchEntries: many}
+  let packages = Packages.Packages{..fixture, projects: fixture.projects.concat([parsing, wide]), handles: fixture.handles.concat([
+        Packages.Profile{handle: "@bruno", name: "Bruno Díaz", avatar: "", avatarUrl: "", githubUrl: "", kind: "user"}
+      ]) }
+
+  let exactFirst = names(&PackageSearch.declarations(&packages, "parse", ""))
+  let shape = names(&PackageSearch.declarations(&packages, "Value -> Str", ""))
+  let resultFirst = names(&PackageSearch.declarations(&packages, "Str -> Int", ""))
+  let browsing = names(&PackageSearch.declarations(&packages, "", "@alice/json-kit"))
+  let suggested = PackageSearch.suggest(&packages, "item", "")
+  let library = [
+    Domain.Entry{name: "length", kind: "fn", moduleName: "Std.Str", signature: "Str -> Int", documentation: []},
+    Domain.Entry{name: "parse", kind: "fn", moduleName: "Std.Json", signature: "Str -> Result[Json, JsonError]", documentation: []},
+    Domain.Entry{name: "show", kind: "fn", moduleName: "Std.Show", signature: "Int -> Str", documentation: []}
+  ]
+  let libraryShape = PackageSearch.library(&library, "Str -> Int")
+  let libraryReply = Suggest.reply(&packages, &library, "parse", "")
+  let libraryFiltered = Suggest.reply(&packages, &library, "parse", "@alice/json-kit")
+  let reply = Suggest.reply(&packages, &library, "json", "")
+  let filtered = Suggest.reply(&packages, &library, "", "@alice/json-kit")
+  var long = ""
+  while long.length() < 500 { long = long + "a" }
+  let overlong = Suggest.reply(&packages, &library, long, "")
+
+  let suite = Test.suite("package search", &[
+      Test.equals("identifiers split on everything but letters, digits, and _", &PackageSearch.identifiers("JsonKit.Value.Value -> Array[my_type]"), &["JsonKit", "Value", "Value", "Array", "my_type"]),
+      Test.that("arrows, brackets, and capitalised pairs are shapes", PackageSearch.isShape("Str -> Int") && PackageSearch.isShape("Array[T]") && PackageSearch.isShape("Array Value")),
+      Test.not("a single name, even capitalised, is a name query", PackageSearch.isShape("Value") || PackageSearch.isShape("textOf") || PackageSearch.isShape("json kit")),
+      Test.equals("names rank exact, prefix, containment, then module", &exactFirst, &["parse", "parseAll", "reparse", "one", "run"]),
+      Test.equals("a qualified suffix finds its declaration", &names(&PackageSearch.declarations(&packages, "Value.textOf", "")), &["textOf"]),
+      Test.equals("shapes match types across module qualification", &shape, &["textOf"]),
+      Test.that("a shape prefers signatures whose result it names", resultFirst.length() >= 2 && resultFirst[0] == "count" && resultFirst.contains("render")),
+      Test.that("an absent type matches nothing", PackageSearch.declarations(&packages, "Socket -> Str", "").isEmpty()),
+      Test.equals("a filter with no query browses that project in order", &browsing, &["one", "textOf", "Value"]),
+      Test.equals("a filter narrows name matches to its project", &names(&PackageSearch.declarations(&packages, "r", "@bruno/parsing")).length(), &7),
+      Test.equals("an unknown filter never widens to every project", &PackageSearch.declarations(&packages, "parse", "@alice/missing").length(), &0),
+      Test.equals("an @ prefix names handles", &handleNames(&PackageSearch.handles(&packages, "@br")), &["@bruno"]),
+      Test.equals("a bare handle or display name names its owner", &handleNames(&PackageSearch.handles(&packages, "bruno díaz")), &["@bruno"]),
+      Test.equals("an owner prefix names that owner's projects", &projectNames(&PackageSearch.projects(&packages, "@al")), &["@alice/json-kit"]),
+      Test.equals("@owner/prefix names matching projects only", &projectNames(&PackageSearch.projects(&packages, "@bruno/pa")), &["@bruno/parsing"]),
+      Test.that("@owner/prefix with no such project names none", PackageSearch.projects(&packages, "@bruno/zz").isEmpty()),
+      Test.equals("title-case words still name projects by description", &projectNames(&PackageSearch.projects(&packages, "JSON Helpers")), &["@alice/json-kit"]),
+      Test.equals("a title-case display name names its owner", &handleNames(&PackageSearch.handles(&packages, "Bruno Díaz")), &["@bruno"]),
+      Test.equals("a repeated type counts once in a shape", &names(&PackageSearch.declarations(&packages, "Int -> Int", ""))[0], &"twice"),
+      Test.that("a shape query suggests no project or handle", PackageSearch.projects(&packages, "Str -> Int").isEmpty() && PackageSearch.handles(&packages, "Str -> Int").isEmpty()),
+      Test.that("an empty query without a filter suggests nothing", PackageSearch.suggest(&packages, "  ", "").declarations.isEmpty() && PackageSearch.suggest(&packages, "", "").projects.isEmpty()),
+      Test.that("suggestions are bounded while totals count every match", suggested.declarations.length() == PackageSearch.DECLARATION_LIMIT && suggested.declarationTotal == 12),
+      Test.that("a filtered suggestion lists no projects or handles", PackageSearch.suggest(&packages, "json", "@alice/json-kit").projects.isEmpty() && PackageSearch.suggest(&packages, "alice", "@alice/json-kit").handles.isEmpty()),
+      Test.that("the reply is JSON", reply.status.code == 200 && Http.header(&reply.headers, "content-type") == Some("application/json") && reply.body.startsWith("\{")),
+      Test.that("the reply links projects and declarations by site path", reply.body.contains("\"href\":\"/@alice/json-kit\"") && reply.body.contains("\"href\":\"/@alice/json-kit/docs#JsonKit-Value-fn-textOf\"") && reply.body.contains("\"mark\":\"ƒ\"")),
+      Test.that("the reply points to the full results for its filter", filtered.body.contains("\"more\":\"/packages/search?q=&filter=%40alice%2Fjson-kit\"") && filtered.body.contains("\"name\":\"Value\"")),
+      Test.that("a shape ranks the standard library by its result type", libraryShape.length() == 2 && libraryShape[0].entry.name == "length"),
+      Test.that("the reply adds standard library declarations linked to their docs", libraryReply.body.contains("\"library\":[\{\"name\":\"parse\"") && libraryReply.body.contains("\"href\":\"/docs/Std.Json/fn/parse\"") && libraryReply.body.contains("\"libraryMore\":\"/search?q=parse\"")),
+      Test.that("a search inside a project leaves the standard library out", libraryFiltered.body.contains("\"library\":[]")),
+      Test.that("the reply cuts an overlong query", !overlong.body.contains(long) && overlong.body.contains(long.take(200)))
+    ])
+  let report = Test.run(&suite)
+  for failure in report.failures { let _shown = Io.writeErrorLine(failure) }
+  Test.report(&report)
+}

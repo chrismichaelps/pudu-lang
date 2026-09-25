@@ -17,7 +17,9 @@ basic and literal strings, reading one escape, and deciding what an unquoted wor
 A literal string has no escapes at all, which is what makes it the right way to write a path whose
 separator is a backslash. A multi-line string drops a line ending that follows its opening marks.
 A whole number is read in the base its marker names with separators removed; anything with a
-fractional part or an exponent keeps its source text, so nothing is rounded on the way through. A
+fractional part or an exponent keeps its source text, so nothing is rounded on the way through.
+Digits naming more than an `Int` holds, in any base, are not a whole number: the check comes before
+each multiplication, and the word is kept as written rather than stopping the program reading it. A
 date or time is recognised by shape and kept as text, because which of the format's four it is, is a
 question [[Std Time Format]] answers.
 ## Grill Log

@@ -1,13 +1,19 @@
 module Function
 
+import Std.Bytes as ByteSeq
 import Std.Http as Http
 import Std.Http.Server.Lambda as Lambda
+import Std.Http.Server.Route as Route
 import Std.Io as Io
 import Std.Json as Json
 import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
+import Service.Packages as Packages
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import Service.Search as Search
 import Web.Dynamic as Web
 
 const SEARCH_INDEX_PATH: Str = "website/data/search-index.pudu-data"
@@ -19,34 +25,140 @@ const SEARCH_INDEX_PATH: Str = "website/data/search-index.pudu-data"
 /// checks. There is no second description of a page anywhere: what a platform
 /// changes is how a request arrives, and that is all this module is.
 ///
-/// The catalogue is read once, before the first invocation is taken, because a
-/// platform freezes the process between requests rather than ending it — so work
-/// done here is done once per cold start and work done per request is done every
-/// time. Reading three thousand declarations per request is the difference
-/// between a page and a timeout.
+/// The catalogue and the playground's examples are read once, before the first
+/// invocation is taken, because a platform freezes the process between
+/// requests rather than ending it — so work done here is done once per cold
+/// start and work done per request is done every time. Reading three thousand
+/// declarations per request is the difference between a page and a timeout.
 fn main() -> Int {
-  match Config.load() {
+  match Config.loadServing() {
     case Err(problem) => couldNotStart(&problem)
-    case Ok(settings) => {
-      match Catalog.loadSearch(SEARCH_INDEX_PATH) {
-        case Err(problem) => couldNotStart(&problem)
-        case Ok(catalog) => {
-          let siteUrl = settings.siteUrl
-          let held = catalog
-          let served = Lambda.serveEnvironment(fn(event: Json.Json) -> Result[Str, Str] {
-              Ok(answered(&Web.render(siteUrl, &held, pathIn(&event))))
-            })
-          match served {
-            case Ok(_) => 0
-            case Err(problem) => {
-              let _said = Io.writeLine(Lambda.explain(&problem))
-              1
-            }
-          }
+    case Ok(serving) => {
+      let settings = serving[0]
+      if let Some(problem) = serving[1] {
+        let _reported = Io.writeErrorLine("playground switched off: " + SiteError.explain(&problem))
+      }
+      let catalog = match Catalog.loadSearch(SEARCH_INDEX_PATH) {
+        case Ok(loaded) => loaded
+        case Err(problem) => { return couldNotStart(&problem) }
+      }
+      let examples = match Examples.load(settings.playground.examplesPath) {
+        case Ok(loaded) => loaded
+        case Err(problem) => { return couldNotStart(&problem) }
+      }
+      let packages = match Packages.loadCompact(settings.packagesPath) {
+        case Ok(loaded) => loaded
+        case Err(problem) => { return couldNotStart(&problem) }
+      }
+      // A function holds the platform's credentials in its environment and
+      // files. It runs a program itself only confined: the program is given an
+      // emptied environment, and the runtime refuses it files, programs,
+      // connections, and foreign calls. Any other isolation it cannot provide,
+      // so told to use one it serves the playground switched off and says why.
+      let local = settings.playground.runner == Config.RUNNER_LOCAL
+      let playground = if local && settings.playground.isolation != Config.ISOLATION_CONFINED {
+        let _reported = Io.writeErrorLine("playground switched off: a serverless function runs programs only with PUDU_PLAYGROUND_ISOLATION=confined, or through a runner's URL")
+        Config.switchedOff()
+      } else {
+        settings.playground
+      }
+      let edge = Web.Dynamic {
+        siteUrl: settings.siteUrl,
+        catalog: catalog,
+        search: Search.index(&catalog.entries),
+        packages: packages,
+        playground: Playground.configured(&playground, &examples),
+        gates: Playground.gatesFor(&playground)
+      }
+      let served = Lambda.serveEnvironment(fn(event: Json.Json) -> Result[Str, Str] {
+          Ok(answered(&Web.answer(&edge, requestOf(&event))))
+        })
+      match served {
+        case Ok(_) => 0
+        case Err(problem) => {
+          let _said = Io.writeLine(Lambda.explain(&problem))
+          1
         }
       }
     }
   }
+}
+
+/// The request an invocation carries, as the routes read one.
+///
+/// The method, headers, and body are read from the request document as well
+/// as the path: the playground is posted to, and a function that knew only
+/// paths would answer every post as though it were a page being asked for.
+export fn requestOf(event: &Json.Json) -> Route.Request {
+  let request = requestIn(event)
+  let target = pathIn(event)
+  let method = firstText(&request, &["method", "httpMethod"])
+  let stated = if method.isEmpty() { nestedMethod(&request) } else { method }
+  let headers = headersIn(&request)
+  let raw = Option.unwrapOr(textAt(&request, "body"), "")
+  let encoded = Option.unwrapOr(textAt(&request, "encoding"), "") == "base64"
+    || Option.unwrapOr(flagAt(&request, "isBase64Encoded"), false)
+  let message = if encoded {
+    match ByteSeq.decodeBase64(raw) {
+      case Ok(bytes) => {
+        match ByteSeq.toText(&bytes) {
+          case Ok(text) => Http.Request{method: Http.methodFrom(upper(stated)), target: target, headers: headers, body: text, binaryBody: None}
+          case Err(_) => Http.Request{method: Http.methodFrom(upper(stated)), target: target, headers: headers, body: "", binaryBody: Some(bytes)}
+        }
+      }
+      case Err(_) => Http.Request{method: Http.methodFrom(upper(stated)), target: target, headers: headers, body: "", binaryBody: None}
+    }
+  } else {
+    Http.Request{method: Http.methodFrom(upper(stated)), target: target, headers: headers, body: raw, binaryBody: None}
+  }
+  Route.Request {
+    message: message,
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "platform"
+  }
+}
+
+fn upper(method: Str) -> Str { if method.isEmpty() { "GET" } else { method.toUpper() } }
+
+/// The method in the shape an HTTP API gateway nests it.
+fn nestedMethod(request: &Json.Json) -> Str {
+  match Json.path(request, &["requestContext", "http", "method"]) {
+    case Some(found) => Option.unwrapOr(Json.asText(&found), "")
+    case None => ""
+  }
+}
+
+/// The request's headers, with their names in lower case.
+///
+/// A platform may send a header as text or as a list of texts; a list is
+/// joined the way HTTP joins repeated headers.
+fn headersIn(request: &Json.Json) -> Array[(Str, Str)] {
+  let held = match Json.field(request, "headers") {
+    case Some(value) => value
+    case None => { return [] }
+  }
+  var found: Array[(Str, Str)] = []
+  for entry in Option.unwrapOr(Json.asObject(&held), []) {
+    let name = entry[0].toLower()
+    match Json.asText(&entry[1]) {
+      case Some(value) => { found = found.push((name, value)) }
+      case None => {
+        var joined: Array[Str] = []
+        for member in Option.unwrapOr(Json.asList(&entry[1]), []) {
+          if let Some(value) = Json.asText(&member) { joined = joined.push(value) }
+        }
+        if joined.length() > 0 { found = found.push((name, joined.join(", "))) }
+      }
+    }
+  }
+  found
+}
+
+fn flagAt(event: &Json.Json, name: Str) -> Option[Bool] {
+  let held = Json.field(event, name) ?
+  Json.asBool(&held)
 }
 
 /// The path and query an invocation is asking for.

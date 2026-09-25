@@ -1,0 +1,109 @@
+module UsesUiDrawAll
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Draw as Draw
+
+const WHITE: Canvas.Color = Canvas.Color{red: 255u8, green: 255u8, blue: 255u8, alpha: 255u8}
+const INK: Canvas.Color = Canvas.Color{red: 10u8, green: 20u8, blue: 30u8, alpha: 255u8}
+
+fn blank() -> Canvas.Canvas {
+  match Canvas.canvas(12, 12, WHITE) {
+    case Ok(found) => found
+    case Err(_) => panic("canvas")
+  }
+}
+
+/// Which of `points` are inked after drawing, as a string of 1s and 0s.
+fn inked(drawn: Result[Canvas.Canvas, Draw.DrawError], points: Array[(Int, Int)]) -> Str {
+  let painted = match drawn {
+    case Ok(found) => found
+    case Err(_) => { return "refused" }
+  }
+  let surface = match Canvas.render(&painted) {
+    case Ok(found) => found
+    case Err(_) => { return "unrendered" }
+  }
+  var out = ""
+  for (x, y) in points {
+    out = out + match Canvas.pixelAt(&surface, Canvas.point(x, y)) {
+      case Ok(Some(color)) => if color == INK { "1" } else { "0" }
+      case _ => "?"
+    }
+  }
+  out
+}
+
+fn main() -> Int {
+  var held = 0
+  let canvas = blank()
+
+  // A one-pixel horizontal stroke covers its row between its ends and nothing else.
+  let thin = Draw.line(&canvas, Canvas.point(1, 5), Canvas.point(9, 5), 1, INK)
+  if inked(thin, [(1, 5), (5, 5), (9, 5), (10, 5), (5, 4), (5, 6)]) == "111000" { held = held + 1 }
+
+  // A three-pixel stroke covers the rows either side.
+  let wide = Draw.line(&canvas, Canvas.point(1, 5), Canvas.point(9, 5), 3, INK)
+  if inked(wide, [(5, 4), (5, 5), (5, 6), (5, 3), (5, 7)]) == "11100" { held = held + 1 }
+
+  // A diagonal is symmetric about the segment.
+  let diagonal = Draw.line(&canvas, Canvas.point(0, 0), Canvas.point(9, 9), 1, INK)
+  if inked(diagonal, [(0, 0), (4, 4), (9, 9), (4, 0), (0, 4)]) == "11100" { held = held + 1 }
+
+  // A zero-length stroke is a round dot.
+  let dot = Draw.line(&canvas, Canvas.point(5, 5), Canvas.point(5, 5), 3, INK)
+  if inked(dot, [(4, 4), (5, 5), (6, 6), (7, 5), (5, 3)]) == "11100" { held = held + 1 }
+
+  // A polyline joins its points; an outline strokes inward.
+  let bent = Draw.polyline(&canvas, &[Canvas.point(1, 1), Canvas.point(8, 1), Canvas.point(8, 8)], 1, INK)
+  if inked(bent, [(4, 1), (8, 4), (4, 4)]) == "110" { held = held + 1 }
+  let boxed = Draw.outline(&canvas, Canvas.rect(1, 1, 6, 4), 1, INK)
+  if inked(boxed, [(1, 1), (6, 4), (1, 3), (3, 2), (7, 1)]) == "11100" { held = held + 1 }
+
+  // Refusals.
+  if inked(Draw.line(&canvas, Canvas.point(0, 0), Canvas.point(1, 1), 0, INK), []) == "refused" { held = held + 1 }
+  match Draw.polyline(&canvas, &[Canvas.point(0, 0)], 1, INK) {
+    case Err(problem) => { if Draw.explain(&problem) == "too few points: 1" { held = held + 1 } }
+    case Ok(_) => {}
+  }
+  if Draw.explain(&Draw.InvalidWidth(0)) == "stroke width 0 is below 1" { held = held + 1 }
+
+  // A gradient starts and ends exactly on its colors and passes through the middle.
+  let black = Canvas.Color{red: 0u8, green: 0u8, blue: 0u8, alpha: 255u8}
+  match Draw.linearGradient(&canvas, Canvas.rect(0, 0, 11, 2), black, WHITE, true) {
+    case Ok(painted) => {
+      match Canvas.render(&painted) {
+        case Ok(surface) => {
+          let left = Canvas.pixelAt(&surface, Canvas.point(0, 1))
+          let middle = Canvas.pixelAt(&surface, Canvas.point(5, 0))
+          let right = Canvas.pixelAt(&surface, Canvas.point(10, 1))
+          if left == Ok(Some(black)) && right == Ok(Some(WHITE)) { held = held + 1 }
+          if middle == Ok(Some(Canvas.Color{red: 128u8, green: 128u8, blue: 128u8, alpha: 255u8})) { held = held + 1 }
+        }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+  // A triangle fills its interior; a concave shape leaves its notch empty.
+  let triangle = Draw.polygon(&canvas, &[Canvas.point(0, 0), Canvas.point(10, 0), Canvas.point(0, 10)], INK)
+  if inked(triangle, [(1, 1), (4, 4), (7, 1), (8, 1), (6, 6)]) == "11100" { held = held + 1 }
+  let notched = Draw.polygon(&canvas, &[
+      Canvas.point(0, 0),
+      Canvas.point(10, 0),
+      Canvas.point(10, 10),
+      Canvas.point(5, 4),
+      Canvas.point(0, 10)
+    ], INK)
+  if inked(notched, [(1, 1), (9, 8), (8, 8), (5, 8), (5, 2)]) == "11001" { held = held + 1 }
+  if inked(Draw.polygon(&canvas, &[Canvas.point(0, 0), Canvas.point(1, 1)], INK), []) == "refused" { held = held + 1 }
+  match Draw.linearGradient(&canvas, Canvas.rect(0, 0, 3, 1), black, WHITE, false) {
+    case Ok(painted) => {
+      match Canvas.render(&painted) {
+        case Ok(surface) => { if Canvas.pixelAt(&surface, Canvas.point(2, 0)) == Ok(Some(black)) { held = held + 1 } }
+        case Err(_) => {}
+      }
+    }
+    case Err(_) => {}
+  }
+  held
+}

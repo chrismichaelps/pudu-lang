@@ -1,0 +1,77 @@
+module UsesHtmlSafeStream
+
+import Std.Bytes as ByteSeq
+import Std.Html as Html
+import Std.Html.Stream as Stream
+import Std.Result as Result
+
+fn textOf(bytes: &Bytes) -> Str { Result.unwrapOr(ByteSeq.toText(bytes), "") }
+
+fn destination(value: Str) -> Html.Destination {
+  Result.unwrapOr(Html.destination(value), Html.trustedDestination("/refused"))
+}
+
+export fn main() -> Int {
+  var held = 0
+  let css = Stream.trustedCss("body\{color:black;\}")
+  let preload = destination("/app.css?a=1&b=2")
+  let prepared = Stream.prepareHead(
+    "</title><script>run()</script>&",
+      &[("description", "a \" onload=\"run() & more")],
+      &css,
+      &[preload]
+  )
+  let head = textOf(&Stream.headBytes(&prepared))
+
+  if head.contains("<title>&lt;/title&gt;&lt;script&gt;run()&lt;/script&gt;&amp;</title>") {
+    held = held + 1
+  }
+  if head.contains("content=\"a &quot; onload=&quot;run() &amp; more\"") { held = held + 1 }
+  if head.contains("href=\"/app.css?a=1&amp;b=2\"") { held = held + 1 }
+  if head.contains("<style>body\{color:black;\}</style>") { held = held + 1 }
+  if Stream.headBytes(&prepared) == Stream.headBytes(&prepared) { held = held + 1 }
+  if let Err(Html.BadScheme(_)) = Html.destination("javascript:run()") { held = held + 1 }
+
+  let plain = Html.text("</div><img src=x onerror=run()>")
+  let placeholder = Result.unwrapOr(Stream.placeholder("Orders1", &plain), ByteSeq.empty())
+  if textOf(&placeholder)
+    == "<div id=\"pudu-s-Orders1\">&lt;/div&gt;&lt;img src=x onerror=run()&gt;</div>" {
+    held = held + 1
+  }
+
+  let trusted = Html.trusted("<strong>loading</strong>")
+  let trustedPlaceholder = Result.unwrapOr(
+    Stream.placeholder("Orders2", &trusted),
+    ByteSeq.empty()
+  )
+  if textOf(&trustedPlaceholder).contains("<strong>loading</strong>") { held = held + 1 }
+
+  let resolved = Result.unwrapOr(Stream.replacement("Orders1", &plain), ByteSeq.empty())
+  if textOf(&resolved).contains("&lt;img src=x onerror=run()&gt;") { held = held + 1 }
+  if textOf(&resolved).contains("getElementById(\"pudu-s-Orders1\")") { held = held + 1 }
+
+  let failed = Result.unwrapOr(Stream.errorReplacement("Orders1", &Html.text("<&")), ByteSeq.empty())
+  if textOf(&failed).contains("&lt;&amp;")
+    && textOf(&failed).contains("data-pudu-error\",\"true") {
+    held = held + 1
+  }
+
+  if Result.isOk(&Stream.suspended("Orders3", &Html.text("wait"), &Html.text("done"))) {
+    held = held + 1
+  }
+  if let Err(problem) = Stream.placeholder("x\" onload=\"run", &plain) {
+    if problem.boundaryId.contains("onload") { held = held + 1 }
+  }
+  if Result.isErr(&Stream.replacement("x</script><script>run", &plain)) { held = held + 1 }
+  if Result.isErr(&Stream.errorReplacement("x\nrun", &plain)) { held = held + 1 }
+  if Result.isErr(&Stream.placeholder("", &plain)) { held = held + 1 }
+  if Result.isErr(&Stream.placeholder("user-feed", &plain)) { held = held + 1 }
+
+  let legacy = Stream.renderSuspended("orders", &"loading".toBytes(), &"done".toBytes())
+  if textOf(&legacy[0]) == "<div id=\"pudu-s-orders\">loading</div>"
+    && textOf(&legacy[1]).contains("pudu-t-orders") {
+    held = held + 1
+  }
+
+  held
+}

@@ -90,6 +90,32 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]
 
+## Device-audio effect tag
+
+`AudioDevicePlayBuiltin` names the single bounded device-playback effect. Its public spelling is
+`audioDevicePlay`; the tag carries no target framework or persistent native handle.
+
+Resolved Grill Log: keep bounded playback as one explicit effect tag so constant folding refuses it
+and malformed dynamic calls follow the ordinary effect-arity diagnostic path.
+
+## Audio preparation kernels
+
+`audioToneBytes` and `audioRampBytes` are pure closed primitives delegated to [[Eval Audio Kernel]].
+They are admitted during constant evaluation, return optional bytes on boundary failure, and do not
+reach a device.
+
+Resolved Grill Log: keep these in pure dispatch, distinct from `audioDevicePlay`; deterministic byte
+generation is not an effect merely because its result may later reach a speaker.
+
+## Cryptographic primitive dispatch
+
+Pure dispatch covers SHA3-256/512, BLAKE2b-256/512, HMAC-SHA512, and constant-time byte equality.
+Argument shape is checked at the same runtime boundary as SHA-2; no effect capability or algorithm
+name string participates in selection.
+
+Resolved Grill Log: use closed builtin tags and exact byte arguments so algorithm identity remains
+visible to typing and a malformed dynamic call cannot fall through to effect dispatch.
+
 ## Sequence-native higher-order operations
 
 Array map traverses the sequence directly and returns that result sequence. Filter folds the
@@ -178,7 +204,17 @@ Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
 `SwissTableSizeBuiltin` through pure built-in evaluators in [[Eval Buffer]] and [[Eval SwissTable]].
+`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, `JsonEncodeBuiltin`, and `XmlDecodeBuiltin` are dispatched
+the same way to [[Eval Csv]], [[Eval Json]], and [[Eval Xml]].
 
 Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.
 
+## Native checksum dispatch (#343)
 
+`checksumOf(kind: Int, previous: UInt64, source: Bytes) -> UInt64` is a pure built-in: codes 0–4
+select CRC-32 (IEEE), CRC-32C, CRC-64/ECMA-182 as xz uses it, FNV-1a 32, and FNV-1a 64 in
+[[Eval Checksum]]. [[Std Checksum]] is its only caller and the typed surface.
+
+Resolved Grill Log: a code rather than a named sum because a wired-in signature cannot name a type a
+library declares; an unknown code or a `previous` outside `UInt64` aborts with `E7001` rather than
+answering a checksum of nothing.

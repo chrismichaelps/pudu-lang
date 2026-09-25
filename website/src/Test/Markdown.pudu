@@ -1,0 +1,149 @@
+module Test.Markdown
+
+import Std.Html.Build as H
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+import Std.Test as Test
+import Service.Packages as Packages
+import View.Markdown as Markdown
+import View.MarkdownHtml as MarkdownHtml
+import View.MarkdownInline as Inline
+import View.Packages.Frame as Frame
+import View.Syntax as Syntax
+
+/// Targets a fixture package file resolves against.
+const TARGETS: MarkdownHtml.Targets = MarkdownHtml.Targets{pages: "/@alice/json-kit/source/", files: "https://raw.githubusercontent.com/alice/json-kit/abc123/"}
+
+/// A package README written for GitHub, with hostile markup mixed in.
+fn readme() -> Array[Str] {
+  [
+    "# Json Kit",
+    "",
+    "<p align=\"center\">",
+    "  <img src=\"public/logo.png\" alt=\"Json Kit\" width=\"120\" onerror=\"alert(1)\">",
+    "</p>",
+    "",
+    "<p align=\"CENTER\"><a href=\"CONTRIBUTING.md\" onclick=\"steal()\">Contributing</a> | <a href=\"javascript:alert(1)\">Run</a> | <a href=\"https://example.com/\">Site</a></p>",
+    "",
+    "<div style=\"position:fixed\"><script>alert(\"script\")</script><iframe src=\"https://evil.example\">framed</iframe><blink>kept words</blink> Fish &amp; chips &lt;b&gt;</div>",
+    "",
+    "<img src=\"data:image/png;base64,AAAA\"><img src=\"../secret.png\"><img alt=\"no source\">",
+    "",
+    "A paragraph with ![badge](./badge.svg) and [![build](https://img.example/b.svg)](https://ci.example/) and [the guide](docs/guide.md).",
+    "",
+    "Written as an address, <https://example.com/> stays prose."
+  ]
+}
+
+/// How many fixture cases the painter paints exactly as the playground does.
+///
+/// `syntax.js` leaves an apostrophe bare where `Std.Html` writes `&#39;`; the
+/// two are the same HTML, so the comparison reads them alike.
+fn paintedAlike(fixture: Str) -> (Int, Int) {
+  let cases = match Json.decode(fixture) {
+    case Ok(held) => held
+    case Err(_) => Json.Null
+  }
+  var total = 0
+  var alike = 0
+  var index = 0
+  while let Some(item) = Json.at(&cases, index) {
+    let input = Option.unwrapOr(Option.andThen(Json.field(&item, "input"), |held: Json.Json| Json.asText(&held)), "")
+    let wanted = Option.unwrapOr(Option.andThen(Json.field(&item, "html"), |held: Json.Json| Json.asText(&held)), "")
+    let rendered = H.render(&H.span().holding(Syntax.pudu(input)))
+    let inner = rendered.drop(6).take(rendered.length() - 13).replace("&#39;", "'")
+    total = total + 1
+    if inner == wanted { alike = alike + 1 }
+    index = index + 1
+  }
+  (total, alike)
+}
+
+/// Runs the suite.
+fn main() -> Int {
+  let read = Markdown.parseReadme(&readme(), &TARGETS)
+  let html = H.render(&H.div().holding(read.blocks))
+  let docs = Markdown.parse(&["An image ![logo](logo.png) and [a file](NOTES.md) stay as written."])
+  let docsHtml = H.render(&H.div().holding(docs.blocks))
+  let inline = H.render(&H.p().holding(Inline.render("![remote](https://img.example/a.png)")))
+  let stylesheet = match Io.read("website/public/site.css") {
+    case Ok(text) => text
+    case Err(_) => ""
+  }
+  let packages = match Packages.load("website/test/fixtures/packages") {
+    case Ok(loaded) => loaded
+    case Err(_) => Packages.empty()
+  }
+  let fixture = Packages.find(&packages, "@alice", "json-kit")
+  let latestCommit = match Option.andThen(fixture, |project: Packages.Project| Packages.latestRelease(&project)) {
+    case Some(release) => release.commit
+    case None => ""
+  }
+  let atTop = match fixture {
+    case Some(project) => Frame.fileTargets(&project, "")
+    case None => MarkdownHtml.none()
+  }
+  let inDocs = match fixture {
+    case Some(project) => Frame.fileTargets(&project, "docs/")
+    case None => MarkdownHtml.none()
+  }
+  let local = match fixture {
+    case Some(project) => Frame.fileTargets(&Packages.Project{..project, repository: "https://gitlab.example/alice/json-kit"}, "")
+    case None => MarkdownHtml.none()
+  }
+  let parity = paintedAlike(Result.unwrapOr(Io.read("website/test/fixtures/syntax.json"), ""))
+  let shellHtml = H.render(&H.span().holding(Syntax.shell("# build it\ncabal install exe:pudu --installdir=\"$HOME/.local/bin\" && pudu version | tee $\{LOG\}")))
+  let fenced = H.render(&H.div().holding(Markdown.parse(&["```pudu", "fn main() -> Int { 0 }", "```", "", "```", "plain <b>", "```", "", "```toml", "name = \"x\"", "```"]).blocks))
+  let owner = Some(Packages.Profile{handle: "@alice", name: "Alice", avatar: "/packages/avatars/alice.png", avatarUrl: "", githubUrl: "", kind: "User"})
+  let banner = H.render(&Frame.bannerAvatar(&owner, "@alice", "48"))
+  let row = H.render(&Frame.avatar(&owner, "@alice", "32"))
+  let checks = Test.suite("Website.Markdown", &[
+      Test.that("the painter reads every parity case", parity[0] >= 12),
+      Test.equals("Pudu is painted exactly as the playground paints it", &parity[1], &parity[0]),
+      Test.that("a shell comment, command, option, and operator are painted", shellHtml.contains("<span class=\"tok-comment\"># build it</span>") && shellHtml.contains("<span class=\"tok-function\">cabal</span>") && shellHtml.contains("<span class=\"tok-type\">--installdir=</span>") && shellHtml.contains("<span class=\"tok-operator\">&amp;&amp;</span>")),
+      Test.that("a shell string, variable, and piped command are painted", shellHtml.contains("<span class=\"tok-string\">&quot;$HOME/.local/bin&quot;</span>") && shellHtml.contains("<span class=\"tok-interpolation\">$\{LOG\}</span>") && shellHtml.contains("<span class=\"tok-function\">tee</span>")),
+      Test.that("a Pudu block is painted with the playground's classes", fenced.contains("<code class=\"language-pudu\"><span class=\"tok-keyword\">fn</span>")),
+      Test.that("a block in another language stays plain and escaped", fenced.contains("<code>plain &lt;b&gt;</code>") && fenced.contains("<code class=\"language-toml\">name = &quot;x&quot;</code>")),
+      Test.that("every block carries a hidden copy button", fenced.split("class=\"code-copy\" type=\"button\" hidden=\"hidden\"").length() == 4),
+      Test.that("a banner avatar loads at once and first", banner.contains("loading=\"eager\"") && banner.contains("fetchpriority=\"high\"")),
+      Test.that("a row's avatar waits until it scrolls near", row.contains("loading=\"lazy\"") && !row.contains("fetchpriority")),
+      Test.that("an avatar with an image hides the mark while it loads", stylesheet.contains(".package-avatar:has(.package-avatar-image)\{background:var(--soft)\}") && stylesheet.contains(".package-avatar:has(.package-avatar-image):before\{content:none\}")),
+      Test.that("a copy button stays hidden until its script shows it", stylesheet.contains(".code-copy[hidden]\{display:none\}")),
+      Test.equals("the README's title is taken from its first heading", &read.title, &"Json Kit"),
+      Test.that("a centred HTML block keeps its alignment as a class", html.contains("<p class=\"md-align-center\">")),
+      Test.that("an alignment is read whatever its case", html.contains("<p class=\"md-align-center\"><a")),
+      Test.that("a relative image loads from the release's file on GitHub", html.contains("src=\"https://raw.githubusercontent.com/alice/json-kit/abc123/public/logo.png\"")),
+      Test.that("an image keeps its alt text and numeric width", html.contains("alt=\"Json Kit\"") && html.contains("width=\"120\"")),
+      Test.that("a relative link opens the package's source tab", html.contains("href=\"/@alice/json-kit/source/CONTRIBUTING.md\"")),
+      Test.that("a web address is kept as written", html.contains("href=\"https://example.com/\"")),
+      Test.that("event handlers are dropped", !html.contains("onerror") && !html.contains("onclick") && !html.contains("steal")),
+      Test.that("a javascript target is refused and its text kept", !html.contains("javascript:") && html.contains(">Run</a>")),
+      Test.that("a script and a frame are dropped with what they hold", !html.contains("<script") && !html.contains("alert(") && !html.contains("<iframe") && !html.contains("framed")),
+      Test.that("an inline style is dropped", !html.contains("style=") && !html.contains("position:fixed")),
+      Test.that("an unknown element loses its tags and keeps its words", !html.contains("<blink") && html.contains("kept words")),
+      Test.that("entities decode once and the text stays text", html.contains("Fish &amp; chips &lt;b&gt;")),
+      Test.that("data and climbing image sources leave no image", !html.contains("data:image") && !html.contains("secret.png") && !html.contains("no source")),
+      Test.that("a Markdown image resolves like an HTML one", html.contains("<img src=\"https://raw.githubusercontent.com/alice/json-kit/abc123/badge.svg\" alt=\"badge\"")),
+      Test.that("a badge links through its image", html.contains("<a href=\"https://ci.example/\"><img src=\"https://img.example/b.svg\" alt=\"build\"")),
+      Test.that("a relative Markdown link opens the source tab", html.contains("href=\"/@alice/json-kit/source/docs/guide.md\"")),
+      Test.that("an address in angle brackets stays prose", html.contains("&lt;https://example.com/&gt; stays prose")),
+      Test.that("the documentation refuses relative images and links", !docsHtml.contains("<img") && !docsHtml.contains("href=") && docsHtml.contains("![logo](logo.png)")),
+      Test.that("the documentation still shows a remote image", inline.contains("<img src=\"https://img.example/a.png\" alt=\"remote\"")),
+      Test.that("a fixture package resolves files at its latest commit", !latestCommit.isEmpty() && atTop.files == "https://raw.githubusercontent.com/alice/json-kit/" + latestCommit + "/"),
+      Test.equals("a fixture package resolves pages to its source tab", &atTop.pages, &"/@alice/json-kit/source/"),
+      Test.that("a file in a directory resolves beside itself", inDocs.pages.endsWith("/source/docs/") && inDocs.files.endsWith("/" + latestCommit + "/docs/")),
+      Test.that("a repository off GitHub refuses relative images", local.files.isEmpty() && !local.pages.isEmpty()),
+      Test.that("below 900px the overview stretches its columns to the page", stylesheet.contains("@media(max-width:900px)\{.package-columns\{display:flex;flex-direction:column-reverse;align-items:stretch;")),
+      Test.that("README images never exceed their column", stylesheet.contains(".package-readme-body img\{max-width:100%;height:auto;")),
+      Test.that("README alignment classes exist", stylesheet.contains(".md-align-center\{text-align:center\}") && stylesheet.contains(".md-align-right\{text-align:right\}")),
+      Test.that("the install panel keeps its copy buttons at their width", stylesheet.contains(".install-copy\{flex:none;")),
+      Test.that("the install panel's version row wraps", stylesheet.contains(".install-version\{display:flex;flex-wrap:wrap;") && stylesheet.contains(".install-version select\{max-width:100%;"))
+    ])
+  let report = Test.run(&checks)
+  for failure in Test.failuresOf(&report) {
+    let _reported = Io.writeErrorLine(failure)
+  }
+  Test.report(&report)
+}

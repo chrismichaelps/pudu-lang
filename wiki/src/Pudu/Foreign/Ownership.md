@@ -92,6 +92,9 @@ all leases reach zero, then performs cleanup outside STM.
   the whole acquisition without partially leasing the others.
 - Cleanup failures during teardown are contained because no Pudu continuation remains to receive a
   recoverable result; explicit release failures still surface through the ordinary foreign call.
+  An asynchronous exception raised while a cleanup runs is not a cleanup failure: every remaining
+  cleanup still runs, and the first such exception is then re-raised so an interrupt during teardown
+  stops the program.
 
 ## Grill Log
 

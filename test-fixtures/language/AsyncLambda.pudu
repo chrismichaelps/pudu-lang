@@ -1,0 +1,8 @@
+module AsyncLambda
+
+/// The short spelling preserves the same cold-task and await semantics as an
+/// asynchronous `fn` literal.
+export async fn main() -> Int {
+  let increment = async |n| n + 1
+  increment(41).await
+}

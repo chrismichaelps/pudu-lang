@@ -98,5 +98,26 @@ export fn main() -> Int {
   if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders%?sslmode=disable") { held = held + 1 }
   if let Err(_) = ConnectionString.parse("postgres://ada@localhost/or%00ders?sslmode=disable") { held = held + 1 }
 
+  // How long opening may take, in whole seconds as libpq spells it, and a
+  // default when the URI does not say. Zero is waiting forever there and is
+  // refused here, as is a limit that is not a number, is repeated, or is past
+  // an hour.
+  if let Ok(settings) = ConnectionString.parse("postgres://ada@localhost/orders?connect_timeout=3&sslmode=disable") {
+    if settings.connectMillis == 3000 { held = held + 1 }
+  }
+  if let Ok(settings) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable") {
+    if settings.connectMillis == Session.DEFAULT_CONNECT_MILLISECONDS { held = held + 1 }
+  }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&connect_timeout=0") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&connect_timeout=soon") {
+    held = held + 1
+  }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&connect_timeout=3&connect_timeout=4") {
+    held = held + 1
+  }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&connect_timeout=3601") {
+    held = held + 1
+  }
+
   held
 }

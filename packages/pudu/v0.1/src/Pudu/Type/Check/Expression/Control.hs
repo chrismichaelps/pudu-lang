@@ -2,12 +2,10 @@
 module Pudu.Type.Check.Expression.Control
   ( checkArms
   , lambdaType
-  , checkCapturedAssignment
   , aroundLoop
   , literalIndex
   ) where
 
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
@@ -25,7 +23,6 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , bindName
-  , capturedFromOutside
   , enterLoop
   , freshVariable
   , inTypeScope
@@ -33,11 +30,11 @@ import Pudu.Type.Env
   , insideClosure
   , integerLiteralCheckpoint
   , leaveLoop
-  , report
   , validateIntegerLiteralsSince
   , withoutLoops
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Place (checkAnswer, checkParameterTypes, noteUnwrittenParameters)
 import Pudu.Type.Check.Rule (selfName)
 import Pudu.Type.Formation (formOptionalType)
 import Pudu.Type.Unify (unify, zonk)
@@ -103,6 +100,8 @@ lambdaType
 lambdaType checkParam checkBlock checkExpr declared rigid value =
   withoutLoops $ insideClosure $ inTypeScopeWith $ do
     inputs <- mapM checkParam (functionParameters value)
+    checkParameterTypes value
+    noteUnwrittenParameters value inputs
     result <- formOptionalType declared rigid (functionReturn value)
     let signature = FunctionTypeValue (functionAsync value) inputs result
     bindName selfName (monotype signature)
@@ -114,26 +113,8 @@ lambdaType checkParam checkBlock checkExpr declared rigid value =
           ExpressionBody expression -> checkExpr expression
         _ <- unify bodySpan result actual
         pure ()
+    checkAnswer value result
     zonk signature
-
-{-| Refuse an assignment to a name the closure only captured. -}
-checkCapturedAssignment :: Text -> Located Expression -> Checker ()
-checkCapturedAssignment operator (Located spanValue expression)
-  | operator /= "=" = pure ()
-  | otherwise = case expression of
-      NameExpression names | [name] <- NonEmpty.toList names -> do
-        captured <- capturedFromOutside name
-        if captured
-          then
-            report "E3076" spanValue
-              ("assignment to " <> name <> " does not leave this closure")
-              ( Just
-                  ( "a closure holds its own copy of what it captured; return the "
-                      <> "value instead, or carry it in what the closure answers"
-                  )
-              )
-          else pure ()
-      _ -> pure ()
 
 {-| Check a loop body with that loop on the stack, reporting whether any
     `break` left it. -}

@@ -43,6 +43,85 @@ const recentSource = readFileSync(
 const uri = "file:///pudu-fixtures/session.pudu";
 const recentUri = "file:///pudu-fixtures/RecentLanguage.pudu";
 const foreignUri = "file:///pudu-fixtures/ForeignSession.pudu";
+const contextUri = "file:///pudu-fixtures/CompletionContext.pudu";
+const contextSource = [
+  "module CompletionContext",
+  "type State = Ready | Loading | Failed",
+  "type Other = Unrelated | AlsoUnrelated",
+  "fn choose(state: State) -> Int {",
+  "  match state {",
+  "    case Ready => 1",
+  "    case Loading => 2",
+  "    case Failed => 3",
+  "  }",
+  "}",
+  "fn identity[T](value: T) -> T { value }",
+  "",
+].join("\n");
+const scopeUri = "file:///pudu-fixtures/ScopeSession.pudu";
+const scopeSource = [
+  "module ScopeSession",
+  "type Item = SomeItem(Int) | NoItem",
+  "fn main(item: Item) -> Int {",
+  "  if true {",
+  "    let expired = 1",
+  "  }",
+  "  match item {",
+  "    case SomeItem(payload) => payload",
+  "    case NoItem => 0",
+  "  }",
+  "}",
+  "",
+].join("\n");
+const methodUri = "file:///pudu-fixtures/MethodSession.pudu";
+const methodSource = [
+  "module MethodSession",
+  "trait Sized { fn size(self: &Self) -> Int { 1 } }",
+  "type Box = { value: Int }",
+  "impl Sized for Box {}",
+  "fn direct(box: Box) -> Int { box.size() }",
+  "fn bounded[T: Sized](item: T) -> Int { item.size() }",
+  "",
+].join("\n");
+const qualifierUri = "file:///pudu-fixtures/QualifierSession.pudu";
+const qualifierSource = [
+  "module QualifierSession",
+  "import\tStd.Io",
+  "fn main() -> Result[(), Str] {",
+  '  Io.writeLine("a")',
+  "}",
+  "",
+].join("\n");
+const selectionUri = "file:///pudu-fixtures/SelectionWriting.pudu";
+const selectionSource = "module SelectionWriting\nimport Std.Io { wr\n";
+const receiverUri = "file:///pudu-fixtures/ReceiverSession.pudu";
+const receiverSource = [
+  "module ReceiverSession",
+  'fn produce(n: Int) -> Str { "hi" }',
+  "fn main() -> Int { produce(1 ).length() }",
+  "",
+].join("\n");
+const unclosedUri = "file:///pudu-fixtures/UnclosedSession.pudu";
+const unclosedSource = [
+  "module UnclosedSession",
+  "type State = Ready | Loading | Failed",
+  "fn main(state: State) -> Int {",
+  '  let text = "hi"',
+  "  match state {",
+  "    case ",
+  "",
+].join("\n");
+// Real files: each is rooted by its own path and module name, whatever the
+// session's root, so sibling programs read their own modules.
+const fixtureFile = relative => new URL(`../test-fixtures/${relative}`, import.meta.url);
+const oneUri = fixtureFile("lspworkspace/one/src/Main.pudu").href;
+const twoUri = fixtureFile("lspworkspace/two/src/Main.pudu").href;
+const recordUri = fixtureFile("lsprecords/Main.pudu").href;
+const fixtureText = relative => readFileSync(fixtureFile(relative), "utf8");
+const overlayMainUri = fixtureFile("lspoverlay/Main.pudu").href;
+const overlayLibUri = fixtureFile("lspoverlay/Lib.pudu").href;
+const importUri = "file:///pudu-fixtures/ImportWriting.pudu";
+const importSource = "module ImportWriting\nimport Std.I\n";
 const foreignSource = [
   "module ForeignSession",
   'export foreign "c" {',
@@ -55,12 +134,35 @@ const foreignSource = [
   "",
 ].join("\n");
 
+// A program that imports a module and documents a function with text beyond
+// ASCII. Every reply about it carries that text, and a reply is framed by its
+// length in UTF-8 bytes, so a server writing anything but UTF-8 sends frames
+// shorter than their headers and the client waits forever.
+const importingUri = "file:///pudu-fixtures/Importing.pudu";
+const importingSource = [
+  "module Importing",
+  "import Std.Io as Io",
+  "/// Greets a reader — in any language: ¡hola, 世界! 🦌",
+  "fn greet(name: Str) -> Str { name }",
+  "fn main() -> Int {",
+  "  let _said = Io.writeLine(greet(\"pudu\"))",
+  "  0",
+  "}",
+  "",
+].join("\n");
+
 const messages = [
   { id: 1, method: "initialize", params: { processId: null, rootUri: null, capabilities: {} } },
   { method: "initialized", params: {} },
   {
     method: "textDocument/didOpen",
     params: { textDocument: { uri, languageId: "pudu", version: 1, text: source } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: contextUri, languageId: "pudu", version: 1, text: contextSource },
+    },
   },
   {
     method: "textDocument/didOpen",
@@ -75,9 +177,183 @@ const messages = [
     },
   },
   {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: importingUri, languageId: "pudu", version: 1, text: importingSource },
+    },
+  },
+  {
     id: 2,
     method: "textDocument/hover",
     params: { textDocument: { uri }, position: { line: 1, character: 4 } },
+  },
+  // Completion straight after `Io.`, where `Io` names an imported module.
+  {
+    id: 21,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: importingUri }, position: { line: 5, character: 17 } },
+  },
+  {
+    id: 22,
+    method: "textDocument/hover",
+    params: { textDocument: { uri: importingUri }, position: { line: 3, character: 4 } },
+  },
+  {
+    id: 23,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: contextUri }, position: { line: 6, character: 11 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: importUri, languageId: "pudu", version: 1, text: importSource },
+    },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: scopeUri, languageId: "pudu", version: 1, text: scopeSource },
+    },
+  },
+  {
+    id: 26,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: scopeUri }, position: { line: 8, character: 19 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: methodUri, languageId: "pudu", version: 1, text: methodSource },
+    },
+  },
+  {
+    id: 27,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: methodUri }, position: { line: 4, character: 33 } },
+  },
+  {
+    id: 28,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: methodUri }, position: { line: 5, character: 45 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: qualifierUri, languageId: "pudu", version: 1, text: qualifierSource },
+    },
+  },
+  {
+    id: 29,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: qualifierUri }, position: { line: 3, character: 5 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: selectionUri, languageId: "pudu", version: 1, text: selectionSource },
+    },
+  },
+  {
+    id: 30,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: selectionUri }, position: { line: 1, character: 18 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: receiverUri, languageId: "pudu", version: 1, text: receiverSource },
+    },
+  },
+  {
+    id: 31,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: receiverUri }, position: { line: 2, character: 33 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: unclosedUri, languageId: "pudu", version: 1, text: unclosedSource },
+    },
+  },
+  {
+    id: 32,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: unclosedUri }, position: { line: 5, character: 9 } },
+  },
+  ...[
+    [oneUri, "lspworkspace/one/src/Main.pudu"],
+    [twoUri, "lspworkspace/two/src/Main.pudu"],
+    [recordUri, "lsprecords/Main.pudu"],
+  ].map(([fileUri, relative]) => ({
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: fileUri, languageId: "pudu", version: 1, text: fixtureText(relative) },
+    },
+  })),
+  {
+    id: 33,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: oneUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    id: 34,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: twoUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    id: 35,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: recordUri }, position: { line: 7, character: 4 } },
+  },
+  // An importer reads the open, unsaved text of what it imports, and the disk
+  // again once that module is closed.
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: overlayMainUri,
+        languageId: "pudu",
+        version: 1,
+        text: fixtureText("lspoverlay/Main.pudu"),
+      },
+    },
+  },
+  {
+    id: 36,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: overlayLibUri,
+        languageId: "pudu",
+        version: 1,
+        text: "module Lib\n\nexport fn after() -> Int { 1 }\n",
+      },
+    },
+  },
+  {
+    id: 37,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
+  },
+  { method: "textDocument/didClose", params: { textDocument: { uri: overlayLibUri } } },
+  {
+    id: 38,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: overlayMainUri }, position: { line: 5, character: 4 } },
+  },
+  {
+    id: 25,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: importUri }, position: { line: 1, character: 12 } },
+  },
+  {
+    id: 24,
+    method: "textDocument/completion",
+    params: { textDocument: { uri: contextUri }, position: { line: 10, character: 29 } },
   },
   {
     id: 3,
@@ -388,6 +664,134 @@ assert(sigHelp?.signatures && sigHelp.signatures.length > 0, "signatureHelp did 
 // Workspace symbols
 const wsSyms = replyTo(19)?.result;
 assert(Array.isArray(wsSyms) && wsSyms.some(s => s.name === "double"), "workspace symbols did not find double");
+
+// A module named before a dot offers that module's declarations.
+const moduleOffered = replyTo(21)?.result;
+const moduleItems = Array.isArray(moduleOffered) ? moduleOffered : (moduleOffered?.items ?? []);
+const moduleLabels = moduleItems.map(entry => entry.label);
+for (const expected of ["writeLine", "read", "write"]) {
+  assert(moduleLabels.includes(expected), `completion after Io. did not offer ${expected}`);
+}
+assert(!moduleLabels.includes("isOk"), "completion after Io. offered another module's declarations");
+
+const patternOffered = replyTo(23)?.result;
+const patternItems = Array.isArray(patternOffered) ? patternOffered : (patternOffered?.items ?? []);
+const patternLabels = patternItems.map(entry => entry.label);
+for (const expected of ["Loading", "Failed", "_"]) {
+  assert(patternLabels.includes(expected), `pattern completion did not offer ${expected}`);
+}
+for (const unrelated of ["Ready", "Unrelated", "AlsoUnrelated", "fn"]) {
+  assert(!patternLabels.includes(unrelated), `pattern completion offered unrelated ${unrelated}`);
+}
+
+const typeOffered = replyTo(24)?.result;
+const typeItems = Array.isArray(typeOffered) ? typeOffered : (typeOffered?.items ?? []);
+const typeLabels = typeItems.map(entry => entry.label);
+assert(typeLabels.includes("T"), "type-position completion omitted the lexical type parameter T");
+assert(!typeLabels.includes("let"), "type-position completion offered a value keyword");
+
+// A sibling arm's pattern name and an ended block's binding are out of scope.
+const scopeOffered = replyTo(26)?.result;
+const scopeLabels = (Array.isArray(scopeOffered) ? scopeOffered : (scopeOffered?.items ?? [])).map(
+  entry => entry.label,
+);
+assert(scopeLabels.includes("item"), "scope completion omitted the parameter item");
+for (const gone of ["payload", "expired"]) {
+  assert(!scopeLabels.includes(gone), `scope completion offered out-of-scope ${gone}`);
+}
+
+// A default method and a bound's member are what the checker would accept.
+for (const [id, what] of [[27, "an inherited default"], [28, "a bound's member"]]) {
+  const offered = replyTo(id)?.result;
+  const labels = (Array.isArray(offered) ? offered : (offered?.items ?? [])).map(entry => entry.label);
+  assert(labels.includes("size"), `method completion omitted ${what}: ${JSON.stringify(labels)}`);
+}
+
+// A bare import, even after a tab, binds the last segment of its path.
+const qualifierOffered = replyTo(29)?.result;
+const qualifierLabels = (
+  Array.isArray(qualifierOffered) ? qualifierOffered : (qualifierOffered?.items ?? [])
+).map(entry => entry.label);
+assert(
+  qualifierLabels.includes("writeLine"),
+  `a bare import's qualifier was not completed: ${JSON.stringify(qualifierLabels)}`,
+);
+
+// A selection being written is offered the module's exports and nothing private.
+const selectionOffered = replyTo(30)?.result;
+const selectionLabels = (
+  Array.isArray(selectionOffered) ? selectionOffered : (selectionOffered?.items ?? [])
+).map(entry => entry.label);
+assert(
+  selectionLabels.includes("writeLine"),
+  `an unfinished selection was not offered Std.Io's exports: ${JSON.stringify(selectionLabels)}`,
+);
+
+// A call's result is the receiver, not its last argument.
+const receiverOffered = replyTo(31)?.result;
+const receiverLabels = (
+  Array.isArray(receiverOffered) ? receiverOffered : (receiverOffered?.items ?? [])
+).map(entry => entry.label);
+assert(receiverLabels.includes("length"), `a call result offered no Str members: ${JSON.stringify(receiverLabels)}`);
+
+// An unclosed match still knows its subject's variants.
+const unclosedOffered = replyTo(32)?.result;
+const unclosedLabels = (
+  Array.isArray(unclosedOffered) ? unclosedOffered : (unclosedOffered?.items ?? [])
+).map(entry => entry.label);
+for (const variant of ["Ready", "Loading", "Failed"]) {
+  assert(unclosedLabels.includes(variant), `an unclosed match did not offer ${variant}: ${JSON.stringify(unclosedLabels)}`);
+}
+
+// Sibling programs each read their own Lib, and an imported record completes.
+const labelsOf = id => {
+  const offered = replyTo(id)?.result;
+  return (Array.isArray(offered) ? offered : (offered?.items ?? [])).map(entry => entry.label);
+};
+assert(labelsOf(33).includes("fromOne") && !labelsOf(33).includes("fromTwo"), `program one read the wrong Lib: ${JSON.stringify(labelsOf(33))}`);
+assert(labelsOf(34).includes("fromTwo") && !labelsOf(34).includes("fromOne"), `program two read the wrong Lib: ${JSON.stringify(labelsOf(34))}`);
+assert(
+  labelsOf(35).includes("x") && !labelsOf(35).includes("unrelated"),
+  `an imported record's fields were not completed: ${JSON.stringify(labelsOf(35))}`,
+);
+
+// The importer follows its dependency's buffer, and its diagnostics follow too.
+assert(labelsOf(36).includes("before"), `the disk module was not read: ${JSON.stringify(labelsOf(36))}`);
+assert(
+  labelsOf(37).includes("after") && !labelsOf(37).includes("before"),
+  `an unsaved dependency edit was not seen: ${JSON.stringify(labelsOf(37))}`,
+);
+assert(labelsOf(38).includes("before"), `closing the dependency did not restore the disk: ${JSON.stringify(labelsOf(38))}`);
+const positionOf = id => frames.findIndex(frame => frame.id === id);
+const mainPublished = frames
+  .map((frame, index) => ({ frame, index }))
+  .filter(({ frame }) => frame.method === "textDocument/publishDiagnostics" && frame.params.uri === overlayMainUri);
+assert(
+  mainPublished.some(({ frame, index }) => index > positionOf(36) && index < positionOf(37) && frame.params.diagnostics.length > 0),
+  "the importer's diagnostics were not published again when its dependency changed",
+);
+assert(
+  mainPublished.some(({ frame, index }) => index > positionOf(37) && index < positionOf(38) && frame.params.diagnostics.length === 0),
+  "the importer's diagnostics were not published again when its dependency closed",
+);
+
+// An import being written does not parse, and is still offered the library.
+const importOffered = replyTo(25)?.result;
+const importItems = Array.isArray(importOffered) ? importOffered : (importOffered?.items ?? []);
+const stdIo = importItems.find(entry => entry.label === "Std.Io");
+assert(stdIo, "an unfinished import was not offered Std.Io");
+assert(
+  stdIo.textEdit?.range?.start?.character === 7 && stdIo.textEdit?.range?.end?.character === 12,
+  `the import edit did not replace the written path: ${JSON.stringify(stdIo.textEdit)}`,
+);
+assert(!importItems.some(entry => entry.label === "fn"), "an import position offered a keyword");
+
+// Text beyond ASCII arrives as it was written.
+const unicodeHover = JSON.stringify(replyTo(22)?.result ?? null);
+assert(
+  unicodeHover.includes("— in any language: ¡hola, 世界! 🦌"),
+  `hover lost text beyond ASCII: ${unicodeHover}`,
+);
 
 // Code actions
 const codeActions = replyTo(20)?.result;

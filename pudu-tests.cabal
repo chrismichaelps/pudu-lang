@@ -1,0 +1,135 @@
+cabal-version:      3.12
+name:               pudu-tests
+version:            0.1.1
+synopsis:           Repository regression suite for the Pudu language
+description:        Repository-only compiler, runtime, tooling, and standard-library regression tests.
+category:           Testing
+maintainer:         chrismichaelps
+license:            Apache-2.0 WITH LLVM-exception
+license-file:       LICENSE
+author:             Chris M. Perez Santiago
+copyright:          (c) 2026 Chris M. Perez Santiago
+build-type:         Simple
+extra-source-files: test-fixtures/**/*.pudu
+                    test-fixtures/**/*.toml
+
+source-repository head
+  type:             git
+  location:         https://github.com/chrismichaelps/pudu-lang.git
+
+common warnings
+  default-language: GHC2024
+  default-extensions:
+    NamedFieldPuns
+    OverloadedStrings
+    StrictData
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+
+test-suite pudu-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  ghc-options:      -threaded -rtsopts
+  cxx-sources:      packages/pudu/v0.1/cbits/pudu_ffi_cpp_fixture.cpp
+  cxx-options:      -std=c++11
+  if os(darwin)
+    ghc-options:    -optl-Wl,-export_dynamic
+  else
+    ghc-options:    -optl-Wl,--export-dynamic
+  other-modules:
+    Pudu.Cli.InitSpec
+    Pudu.PackageSpec
+    Pudu.Cli.LintSpec
+    Pudu.LintSpec
+    Pudu.DecimalLiteralSpec
+    Pudu.VersionSpec
+    Pudu.DiagnosticSpec
+    Pudu.FormatSpec
+    Pudu.Lsp.JsonSpec
+    Pudu.Lsp.ServerSpec
+    Pudu.Diagnostic.RenderSpec
+    Pudu.Cache.PersistSpec
+    Pudu.Lsp.SchedulerSpec
+    Pudu.Compiler.LiteralsSpec
+    Pudu.Compiler.ProgramSpec
+    Pudu.Compiler.Program.Common
+    Pudu.Compiler.Program.CacheSpec
+    Pudu.Compiler.Program.GraphSpec
+    Pudu.Compiler.Program.TypeBoundarySpec
+    Pudu.Compiler.Program.ForeignSpec
+    Pudu.Compiler.Program.LanguageSpec
+    Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.EvalSpec
+    Pudu.Compiler.Program.Eval.DataSpec
+    Pudu.Compiler.Program.Eval.ProtocolSpec
+    Pudu.Compiler.Program.Eval.ServiceSpec
+    Pudu.Compiler.Program.Eval.RuntimeSpec
+    Pudu.Foreign.SlotSpec
+    Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.Foreign.ResultSpec
+    Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.ExpandSpec
+    Pudu.Frontend.LexerSpec
+    Pudu.Frontend.Lexer.NumberSymbolSpec
+    Pudu.Frontend.Lexer.QuotedSpec
+    Pudu.Frontend.Lexer.ScannerSpec
+    Pudu.Frontend.ParserStateNameSpec
+    Pudu.Frontend.ParserImportSpec
+    Pudu.Frontend.ParserBindingSpec
+    Pudu.Frontend.ParserBlockSpec
+    Pudu.Frontend.ParserFunctionSpec
+    Pudu.Frontend.ParserModuleSpec
+    Pudu.Frontend.ParserPatternSpec
+    Pudu.Frontend.ParserTypeDeclarationSpec
+    Pudu.Frontend.ParserExpressionSpec
+    Pudu.Frontend.ParserExpression.Common
+    Pudu.Frontend.ParserExpression.PrecedenceSpec
+    Pudu.Frontend.ParserExpression.PrimarySpec
+    Pudu.Frontend.ParserExpression.ControlSpec
+    Pudu.Frontend.ParserExpression.RecoverySpec
+    Pudu.Frontend.ParserTypeSpec
+    Pudu.Frontend.SyntaxSpec
+    Pudu.Frontend.TokenSpec
+    Pudu.EvalSpec
+    Pudu.Eval.Common
+    Pudu.Eval.ArithmeticSpec
+    Pudu.Eval.BindingFlowSpec
+    Pudu.Eval.DataSpec
+    Pudu.Eval.FunctionClosureSpec
+    Pudu.Eval.SystemSpec
+    Pudu.DocSpec
+    Pudu.Repl.AnswerSpec
+    Pudu.Repl.SessionSpec
+    Pudu.Repl.Session.Common
+    Pudu.Repl.Session.CommandSpec
+    Pudu.Repl.Session.ContextSpec
+    Pudu.Repl.Session.EvaluationSpec
+    Pudu.Semantic.ResolveSpec
+    Pudu.Type.CheckSpec
+    Pudu.Type.Check.Common
+    Pudu.Type.Check.PrimitiveSpec
+    Pudu.Type.Check.DataSpec
+    Pudu.Type.Check.ControlFlowSpec
+    Pudu.Type.Check.PatternSpec
+    Pudu.Type.Check.PlaceSpec
+    Pudu.Type.Check.FunctionGenericSpec
+    Pudu.Type.Check.TraitSpec
+    Pudu.Type.Check.SystemSpec
+    Pudu.Type.Check.ImportSpec
+    Pudu.Type.InterfaceSpec
+  build-depends:
+    base >=4.20 && <4.23,
+    bytestring >=0.11 && <0.13,
+    containers >=0.7 && <0.8,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    pudu ==0.1.1,
+    QuickCheck >=2.15 && <2.17,
+    temporary >=1.3 && <1.4,
+    process >=1.6 && <1.7,
+    text >=2.1 && <2.2

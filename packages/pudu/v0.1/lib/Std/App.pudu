@@ -3,6 +3,7 @@ module Std.App
 import Std.App.Config as Config
 import Std.App.Health as Health
 import Std.App.Metrics as Metrics
+import Std.App.OpenApi as OpenApi
 import Std.App.Stage as Lifecycle
 import Std.Http as Http
 import Std.Http.Server.Guard as Guard
@@ -180,6 +181,21 @@ export fn reporting(
       })
   )
   App{..*base, router: mounted}
+}
+
+/// The application publishing its API description at `path`.
+///
+/// Refused when the description is inconsistent, when it describes an
+/// operation the router does not serve, or when the router serves a route it
+/// does not describe. Routes added after this call are not checked, which is
+/// where operational endpoints such as health reports belong.
+export fn describing(base: &App, doc: &OpenApi.Document, path: Str) -> Result[App, AppError] {
+  let problems = OpenApi.problems(doc)
+  if problems.length() > 0 { return Err(Configuration(problems.join("; "))) }
+  let (missing, stale) = OpenApi.undocumented(doc, &base.router)
+  if missing.length() > 0 { return Err(Configuration("undescribed routes: " + missing.join(", "))) }
+  if stale.length() > 0 { return Err(Configuration("described but not served: " + stale.join(", "))) }
+  Ok(App{..*base, router: Route.adding(&base.router, OpenApi.route(doc, path))})
 }
 
 /// A health report as the answer something outside the process receives.

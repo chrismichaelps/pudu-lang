@@ -33,6 +33,20 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 
 ### Governance
 
+- The short function literal `|x| body` builds the same node `fn(x) => body` builds. A bar in
+  **operand position** is never the operator nor a variant separator, which is what makes the
+  spelling unambiguous where it is read. `||` is the literal that declares no parameters. A line
+  beginning with a literal's bar starts a statement rather than continuing the line above — decided
+  by the lookahead that tells a parameter list from an alternation — because a literal written as a
+  block's result is where a literal most often goes, and reading it as a bitwise or reported an
+  unresolved parameter name somewhere else entirely.
+
+- A range is parsed as a form with **two optional ends** rather than through the binary operator
+  table. Whether an end is written is decided by the token that follows, and only a token that could
+  begin an expression is read as one, which is what lets `items[2..]` read the bracket as the range
+  ending. A range does not chain: `1..2..3` names no value and is `E1062`, and `..=` with no end is
+  `E1063`.
+
 - `#{` is a prefix expression routed to [[Parser Expression Aggregate]]. A bare `#` is not an
   expression and reports the missing `{` at the parser boundary.
 - Keyword `in` enters the binary table at comparison precedence. The `for` parser consumes its own

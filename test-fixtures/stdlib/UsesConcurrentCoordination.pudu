@@ -1,0 +1,207 @@
+module UsesConcurrentCoordination
+
+import Std.Concurrent.Cancel as Cancel
+import Std.Concurrent as Concurrent
+import Std.Concurrent.Coordinate as Coordinate
+import Std.Concurrent.Future as Future
+import Std.Concurrent.Pool as Pool
+import Std.Concurrent.Retry as Retry
+import Std.Random as Random
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn crash() -> Int { panic("boom") }
+
+fn counted(target: &Sync.Counter) -> Int { Result.unwrapOr(Sync.count(target), -1) }
+
+/// Holds a permit while tracking how many holders overlap.
+fn overlapping(inside: Sync.Counter, widest: Sync.Counter) -> fn() -> Int {
+  fn() -> Int {
+    let now = Result.unwrapOr(Sync.increment(&inside, 1), 0)
+    if now > Result.unwrapOr(Sync.count(&widest), 0) { let _raised = Sync.increment(&widest, now - Result.unwrapOr(Sync.count(&widest), 0)) }
+    let _slept = Concurrent.sleep(5)
+    let _left = Sync.increment(&inside, -1)
+    now
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // A pool refuses a count below one before starting anything.
+  if Result.isErr(&Pool.pool(0, 4)) && Result.isErr(&Pool.pool(2, 0)) { held = held + 1 }
+
+  // Every submitted job runs once, a crashing job takes nothing else down,
+  // and shutdown reports the crash.
+  let pooled: Result[Pool.Pool, Concurrent.ConcurrentError] = Pool.pool(2, 2)
+  if let Ok(workers) = pooled {
+    if Pool.size(&workers) == 2 { held = held + 1 }
+    let ran = Sync.counter(0)
+    var index = 0
+    while index < 10 {
+      let _queued = Pool.submit(&workers, fn() -> () { let _n = Sync.increment(&ran, 1) })
+      index = index + 1
+    }
+    let _crashing = Pool.submit(&workers, fn() -> () { let _dead = crash() })
+    let valued = Pool.submitFor(&workers, fn() -> Int { 6 * 7 })
+    let broken = Pool.submitFor(&workers, fn() -> Int { crash() })
+    let after = Pool.submitFor(&workers, fn() -> Int { 1 })
+    if Result.unwrapOr(Pool.queued(&workers), -1) >= 0 { held = held + 1 }
+    if let Ok(pending) = valued {
+      if Future.wait(&pending) == Ok(42) { held = held + 1 }
+    }
+    if let Ok(pending) = broken {
+      if Result.isErr(&Future.wait(&pending)) { held = held + 1 }
+    }
+    if let Ok(pending) = after {
+      if Future.wait(&pending) == Ok(1) { held = held + 1 }
+    }
+    if Result.isErr(&Pool.shutdown(&workers)) && counted(&ran) == 10 { held = held + 1 }
+    if Result.isErr(&Pool.submit(&workers, fn() -> () { () })) { held = held + 1 }
+  }
+  if let Ok(quiet) = Pool.pool(1, 1) {
+    if Result.isOk(&Pool.shutdown(&quiet)) { held = held + 1 }
+  }
+
+  // A bounded queue holds producers back: with the only worker held, the
+  // queue fills and the next submit waits until the worker is released.
+  if let Ok(narrow) = Pool.pool(1, 1) {
+    let gate = Coordinate.latch(1)
+    let _blocking = Pool.submit(&narrow, fn() -> () { let _held = Coordinate.waitLatch(&gate) })
+    let _waiting = Pool.submit(&narrow, fn() -> () { () })
+    let submitted = Sync.counter(0)
+    let producer = Concurrent.start(fn() -> () {
+        let _third = Pool.submit(&narrow, fn() -> () { () })
+        let _n = Sync.increment(&submitted, 1)
+      })
+    let _slept = Concurrent.sleep(40)
+    if counted(&submitted) == 0 { held = held + 1 }
+    let _opened = Coordinate.countDown(&gate)
+    if let Ok(worker) = producer { let _joined = Concurrent.join(&worker) }
+    if counted(&submitted) == 1 && Result.isOk(&Pool.shutdown(&narrow)) { held = held + 1 }
+  }
+
+  // A semaphore lends its permits and refuses one more release than it lent,
+  // without blocking.
+  let permits: Coordinate.Semaphore = Coordinate.semaphore(2)
+  if Coordinate.available(&permits) == Ok(2) { held = held + 1 }
+  let _taken = Coordinate.acquire(&permits)
+  if Coordinate.available(&permits) == Ok(1) { held = held + 1 }
+  let returned: Result[(), Coordinate.CoordinateError] = Coordinate.release(&permits)
+  if Result.isOk(&returned) && Coordinate.release(&permits) == Err(Coordinate.Overreleased) { held = held + 1 }
+  if Coordinate.available(&permits) == Ok(2) { held = held + 1 }
+
+  // A crash inside a permit still returns the permit.
+  let single = Coordinate.semaphore(1)
+  match Coordinate.withPermit(&single, fn() -> Int { crash() }) {
+    case Err(Coordinate.Failed(_)) => { held = held + 1 }
+    case _ => ()
+  }
+  if Coordinate.available(&single) == Ok(1) && Coordinate.withPermit(&single, fn() -> Int { 3 }) == Ok(3) { held = held + 1 }
+
+  // One permit shared by four threads is never held by two at once.
+  let inside = Sync.counter(0)
+  let widest = Sync.counter(0)
+  let contenders = Concurrent.parallel(&[
+      fn() -> () { let _r = Coordinate.withPermit(&single, overlapping(inside, widest)) },
+      fn() -> () { let _r = Coordinate.withPermit(&single, overlapping(inside, widest)) },
+      fn() -> () { let _r = Coordinate.withPermit(&single, overlapping(inside, widest)) },
+      fn() -> () { let _r = Coordinate.withPermit(&single, overlapping(inside, widest)) }
+    ])
+  if Result.isOk(&contenders) && counted(&widest) == 1 { held = held + 1 }
+
+  // A latch wakes every waiter at once, and opens at once for a count below one.
+  let gate: Coordinate.Latch = Coordinate.latch(2)
+  let woken = Sync.counter(0)
+  let waiter = fn() -> () {
+    let _through = Coordinate.waitLatch(&gate)
+    let _n = Sync.increment(&woken, 1)
+  }
+  var waiters: Array[Concurrent.Task] = []
+  for made in [Concurrent.start(waiter), Concurrent.start(waiter), Concurrent.start(waiter)] {
+    if let Ok(worker) = made { waiters = waiters.push(worker) }
+  }
+  if Coordinate.waitLatchWithin(&gate, 10) == Ok(false) && !Coordinate.isOpen(&gate) { held = held + 1 }
+  let _one = Coordinate.countDown(&gate)
+  let _two = Coordinate.countDown(&gate)
+  let _extra = Coordinate.countDown(&gate)
+  let _all = Concurrent.joinAll(&waiters)
+  if counted(&woken) == 3 && Coordinate.isOpen(&gate) && Coordinate.waitLatchWithin(&gate, 10) == Ok(true) { held = held + 1 }
+  if Coordinate.isOpen(&Coordinate.latch(0)) { held = held + 1 }
+
+  // A wait group returns once its work is done, then refuses more; an
+  // unmatched done is refused; an empty group is idle at once.
+  let group: Coordinate.WaitGroup = Coordinate.waitGroup()
+  let _added = Coordinate.add(&group, 3)
+  let finishedWork = Sync.counter(0)
+  let worker = fn() -> () {
+    let _slept = Concurrent.sleep(5)
+    let _n = Sync.increment(&finishedWork, 1)
+    let _d = Coordinate.done(&group)
+  }
+  let _workers = Concurrent.parallel(&[worker, worker, worker])
+  if Result.isOk(&Coordinate.waitGroupIdle(&group)) && counted(&finishedWork) == 3 { held = held + 1 }
+  if Coordinate.add(&group, 1) == Err(Coordinate.Finished) { held = held + 1 }
+  if Coordinate.done(&Coordinate.waitGroup()) == Err(Coordinate.Overreleased) { held = held + 1 }
+  if Result.isOk(&Coordinate.waitGroupIdle(&Coordinate.waitGroup())) { held = held + 1 }
+
+  // A once runs its initialiser once across racing callers; a crashing
+  // initialiser leaves it unset for the next caller.
+  let shared: Coordinate.Once[Int] = Coordinate.once()
+  let inits = Sync.counter(0)
+  let resolver = fn() -> () {
+    let _v = Coordinate.resolve(&shared, fn() -> Int {
+        let _n = Sync.increment(&inits, 1)
+        11
+      })
+  }
+  let _resolved = Concurrent.parallel(&[resolver, resolver, resolver, resolver])
+  if counted(&inits) == 1 && Coordinate.peek(&shared) == Some(11) { held = held + 1 }
+  let fragile: Coordinate.Once[Int] = Coordinate.once()
+  let firstTry = Coordinate.resolve(&fragile, fn() -> Int { crash() })
+  if Result.isErr(&firstTry) && Coordinate.peek(&fragile) == None && Coordinate.resolve(&fragile, fn() -> Int { 5 }) == Ok(5) { held = held + 1 }
+  if Coordinate.explain(&Coordinate.Overreleased) == "released more than was taken" { held = held + 1 }
+
+  // Backoff saturates at the cap instead of overflowing, and never goes
+  // negative for a policy that would be refused.
+  let flat: Retry.Jitter = Retry.NoJitter
+  let policy = Retry.Policy{attempts: 3, initialMillis: 1, maxMillis: 4, multiplier: 2, jitter: flat}
+  if Retry.ceiling(&policy, 1) == 1 && Retry.ceiling(&policy, 3) == 4 && Retry.ceiling(&policy, 50) == 4 { held = held + 1 }
+  let huge = Retry.Policy{..Retry.standard(), multiplier: 1000000000, maxMillis: 9000000000000000000}
+  if Retry.ceiling(&huge, 400) == 9000000000000000000 { held = held + 1 }
+  let negative = Retry.Policy{..policy, maxMillis: -5}
+  if Retry.ceiling(&negative, 3) == 0 && Result.isErr(&Retry.validate(&negative)) { held = held + 1 }
+  if Result.isErr(&Retry.validate(&Retry.Policy{..policy, attempts: 0})) && Result.isErr(&Retry.validate(&Retry.Policy{..policy, multiplier: 0})) {
+    held = held + 1
+  }
+  if Retry.standard().attempts == 5 && Result.isOk(&Retry.validate(&Retry.standard())) { held = held + 1 }
+
+  // Jitter stays under the ceiling, and equal jitter keeps at least half.
+  let generator = Random.fromSeed(7u64)
+  let full = Retry.delay(&Retry.Policy{..policy, jitter: Retry.FullJitter}, 3, &generator)
+  let equal = Retry.delay(&Retry.Policy{..policy, jitter: Retry.EqualJitter}, 3, &generator)
+  if Retry.delay(&policy, 3, &generator)[1] == 4 && full[1] >= 0 && full[1] <= 4 && equal[1] >= 2 && equal[1] <= 4 { held = held + 1 }
+
+  // Retrying succeeds on a later attempt, gives up with the last failure,
+  // stops for a failure it must not retry, and refuses a bad policy.
+  let tries = Sync.counter(0)
+  let third = Retry.run(&policy, fn(attempt: Int) -> Result[Int, Str] {
+      let _n = Sync.increment(&tries, 1)
+      if attempt < 3 { Err("not yet") } else { Ok(attempt) }
+    })
+  if third == Ok(3) && counted(&tries) == 3 { held = held + 1 }
+  let exhausted: Result[Int, Retry.RetryError[Str]] = Retry.run(&policy, fn(_attempt: Int) -> Result[Int, Str] { Err("never") })
+  if exhausted == Err(Retry.GaveUp(3, "never")) { held = held + 1 }
+  let fatal = Retry.runWhen(&policy, fn(problem: Str) -> Bool { problem != "fatal" }, fn(_attempt: Int) -> Result[Int, Str] { Err("fatal") })
+  if fatal == Err(Retry.GaveUp(1, "fatal")) { held = held + 1 }
+  match Retry.run(&Retry.Policy{..policy, attempts: 0}, fn(_attempt: Int) -> Result[Int, Str] { Ok(1) }) {
+    case Err(Retry.Invalid(_)) => { held = held + 1 }
+    case _ => ()
+  }
+  let halted = Cancel.token()
+  let _halt = Cancel.cancel(&halted, "shutting down")
+  let stopped = Retry.runCancellable(&policy, &halted, fn(_problem: Str) -> Bool { true }, fn(_attempt: Int) -> Result[Int, Str] { Ok(1) })
+  if stopped == Err(Retry.Stopped(Cancel.Requested("shutting down"))) { held = held + 1 }
+
+  held
+}

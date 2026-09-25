@@ -58,9 +58,8 @@ testDereference = do
     ])
   nonReference <- codes (userProgram <> ["fn run(user: User) -> User { *user }"])
   mutableBorrow <- codes (userProgram <>
-    [ "fn run(user: User) -> User {"
-    , "  let borrowed = &mut user"
-    , "  *borrowed"
+    [ "fn run(user: &mut User) -> User {"
+    , "  *user"
     , "}"
     ])
   derefType <- typeOfIn
@@ -108,7 +107,7 @@ testMarkers = do
   sharedBorrow <- codes (markerProgram <> ["fn run(p: Point) -> &Point { copies(&p) }"])
   ownedText <- codes (markerProgram <> ["fn run() -> Str { copies(\"owned\") }"])
   owningRecord <- codes (markerProgram <> ["fn run(h: Handle) -> Handle { copies(h) }"])
-  exclusiveBorrow <- codes (markerProgram <> ["fn run(p: Point) -> &mut Point { copies(&mut p) }"])
+  exclusiveBorrow <- codes (markerProgram <> ["fn run(p: &mut Point) -> Int { copies(p).x }"])
   collection <- codes (markerProgram <> ["fn run(xs: Array[Int]) -> Array[Int] { copies(xs) }"])
   sendableText <- codes (markerProgram <> ["fn run() -> Str { sends(\"text\") }"])
   sharedText <- codes (markerProgram <> ["fn run() -> Str { shares(\"text\") }"])
@@ -128,7 +127,7 @@ testMarkers = do
     , counterexample "a shared borrow copies" (sharedBorrow === [])
     , counterexample "owned text does not copy" (ownedText === ["E3012"])
     , counterexample "a record holding text does not copy" (owningRecord === ["E3012"])
-    , counterexample "an exclusive borrow never copies" (exclusiveBorrow === ["E3012"])
+    , counterexample "an exclusive borrow never copies" (exclusiveBorrow === ["E3012", "E3084"])
     , counterexample "a growable collection does not copy" (collection === ["E3012"])
     , counterexample "text crosses into a task" (sendableText === [])
     , counterexample "text is shareable" (sharedText === [])

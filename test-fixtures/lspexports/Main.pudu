@@ -1,0 +1,10 @@
+module Main
+
+import A.Wanted {chosen}
+import Lib as L
+import Z.Other as Z
+
+fn main() -> Int {
+  let state: L.State = L.Ready
+  chosen() + L.publicFn()
+}

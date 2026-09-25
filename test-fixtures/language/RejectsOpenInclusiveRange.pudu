@@ -1,0 +1,8 @@
+module RejectsOpenInclusiveRange
+
+/// `..` with no end runs as far as the value it is applied to. `..=` with no
+/// end includes nothing in particular, so it is refused where it is written.
+export fn main() -> Int {
+  let values = [1, 2, 3]
+  values[1..=].length()
+}

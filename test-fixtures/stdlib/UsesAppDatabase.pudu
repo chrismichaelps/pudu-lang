@@ -3,6 +3,7 @@ module UsesAppDatabase
 import Std.App.Config as Config
 import Std.App.Database as Database
 import Std.App.Database {DatabaseFailure, MappingFailure}
+import Std.App.Health as Health
 import Std.Db.Driver as Driver
 import Std.Db.Driver {IntegerValue, Named, TextValue}
 import Std.Db.Row as Row
@@ -338,6 +339,23 @@ export fn main() -> Int {
   // And a column holding text is not bytes, which a reader that handed back the
   // encoding would answer instead.
   if Result.isErr(&Row.bytes(&sample, 0, "name")) { held = held + 1 }
+
+  // A readiness check asks the database, so an instance whose database is not
+  // started or not answering is taken out of rotation. The check shares the
+  // resource it was made from, so starting the database afterwards is what it
+  // sees.
+  if let Ok(local) = Database.create("sqlite::memory:", 1) {
+    let check = Database.readiness(&local, "database")
+    if check.name == "database" && (check.judge)() == Health.Unwell { held = held + 1 }
+    let _started = Database.start(&local)
+    if (check.judge)() == Health.Well { held = held + 1 }
+    let _stopped = Database.stop(&local)
+  }
+  // A database that is started but refuses the question is not ready either.
+  if let Ok(refusing) = Database.withDriver(fake(Sync.cell("")), "fake://here/app", 1) {
+    let _started = Database.start(&refusing)
+    if Health.ready(&[Database.readiness(&refusing, "database")]).verdict == Health.Unwell { held = held + 1 }
+  }
 
   held
 }

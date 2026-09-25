@@ -1,0 +1,5 @@
+[package]
+name = "@alice/json-kit"
+version = "2.0.0"
+description = "JSON helpers"
+keywords = ["json"]

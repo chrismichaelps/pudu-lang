@@ -1,0 +1,255 @@
+module UsesAppWiringAll
+
+import Std.App as App
+import Std.App.Config as Config
+import Std.App.Events as Events
+import Std.App.OpenApi as OpenApi
+import Std.App.Problem as Problem
+import Std.App.Work as Work
+import Std.Cron as Cron
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Sync as Sync
+
+fn accept(_happened: Events.Event) -> Result[(), Str] { Ok(()) }
+
+fn refuse(_happened: Events.Event) -> Result[(), Str] { Err("mail server down") }
+
+fn events() -> Int {
+  var held = 0
+  let placed = Events.event("order.created", "e1", 1000, Json.Object([("order", Json.Number(7))]))
+
+  // Patterns: exact, a dotted prefix, and everything.
+  if Events.matches("order.created", "order.created") && Events.matches("order.*", "order.paid") {
+    held = held + 1
+  }
+  if Events.matches("*", "user.joined") && !Events.matches("order.*", "orders.created") { held = held + 1 }
+
+  // Delivery follows subscription order and reports each refusal by name.
+  let seen = Sync.counter(0)
+  let counting = |_happened| {
+    let _ = Sync.increment(&seen, 1)
+    Ok(())
+  }
+  let wired = Events.bus().on("order.*", "ledger", counting).on("order.created", "mailer", refuse)
+    .on("user.*", "crm", accept)
+  if Events.audience(&wired, "order.created") == ["ledger", "mailer"] { held = held + 1 }
+  let result = Events.publish(&wired, &placed)
+  if result.delivered == 1 && result.failures == [("mailer", "mail server down")] { held = held + 1 }
+  if Sync.count(&seen) == Ok(1) { held = held + 1 }
+
+  // The outbox delivers after commit, keeps a refused event, and buries it at the limit.
+  let staged = Events.stage(&Events.outbox(2), placed)
+  if Events.pendingOf(&Events.discard(&staged)).length() == 0 { held = held + 1 }
+  let (once, first) = Events.drain(&staged, &wired)
+  if Events.pendingOf(&once).length() == 1 && first.delivered == 1 { held = held + 1 }
+  let (twice, _) = Events.drain(&once, &wired)
+  if Events.pendingOf(&twice).length() == 0 && Events.deadOf(&twice) == [placed] { held = held + 1 }
+  let quiet = Events.bus().on("*", "ledger", accept)
+  let (clean, delivered) = Events.drain(&staged, &quiet)
+  if Events.pendingOf(&clean).length() == 0 && delivered.failures.length() == 0 { held = held + 1 }
+
+  // An event survives a durable round trip.
+  if Events.fromJson(&Events.toJson(&placed)) == Some(placed) { held = held + 1 }
+  if Events.fromJson(&Json.Object([("topic", Json.Text("x"))])) == None { held = held + 1 }
+  held
+}
+
+fn orderSchema() -> OpenApi.Schema {
+  OpenApi.Record([
+      OpenApi.field("id", OpenApi.Whole),
+      OpenApi.field("status", OpenApi.OneOf(["open", "paid"])),
+      OpenApi.optional("note", OpenApi.Nullable(OpenApi.Text)),
+      OpenApi.Property{..OpenApi.field("lines", OpenApi.ListOf(OpenApi.Fraction)), description: "unit prices"}
+    ])
+}
+
+fn described() -> OpenApi.Document {
+  let show = OpenApi.Operation {
+    ..OpenApi.operation(Http.Get, "/orders/:id", "showOrder"),
+    summary: "One order",
+    tags: ["orders"],
+    answers: [OpenApi.answer(200, "The order", Some(OpenApi.Named("Order"))), OpenApi.answer(404, "No such order", None)]
+  }
+  let create = OpenApi.Operation {
+    ..OpenApi.operation(Http.Post, "/orders", "createOrder"),
+    body: Some(OpenApi.Named("Order")),
+    parameters: [OpenApi.parameter("Idempotency-Key", OpenApi.InHeader, OpenApi.Text)],
+    answers: [OpenApi.answer(201, "Created", Some(OpenApi.Named("Order"))), OpenApi.answer(422, "Invalid", None)],
+    secured: true
+  }
+  OpenApi.document("Orders", "1.2.0").describe(show).describe(create).schema("Order", orderSchema())
+    .server("https://api.example.test")
+}
+
+fn at(value: &Json.Json, path: Array[Str]) -> Option[Json.Json] {
+  var current = *value
+  for key in path {
+    current = Json.field(&current, key) ?
+  }
+  Some(current)
+}
+
+fn openApi() -> Int {
+  var held = 0
+  let doc = described()
+  let json = OpenApi.toJson(&doc)
+
+  // A consistent document has no problems.
+  if OpenApi.problems(&doc).length() == 0 { held = held + 1 }
+  if at(&json, ["openapi"]) == Some(Json.Text(OpenApi.SPEC_VERSION)) { held = held + 1 }
+
+  // Router segments become template segments with a required path parameter.
+  let param = at(&json, ["paths", "/orders/\{id\}", "get", "parameters"])
+  if param == Some(Json.List([Json.Object([("name", Json.Text("id")), ("in", Json.Text("path")), ("required", Json.Boolean(true)), ("schema", Json.Object([("type", Json.Text("string"))]))])])) {
+    held = held + 1
+  }
+
+  // A failure answer without a body is a problem body, and the schema is published once.
+  let missing = at(&json, ["paths", "/orders/\{id\}", "get", "responses", "404", "content", Problem.MEDIA_TYPE, "schema", "$ref"])
+  if missing == Some(Json.Text("#/components/schemas/Problem")) { held = held + 1 }
+  if at(&json, ["components", "schemas", OpenApi.PROBLEM_SCHEMA, "type"]) == Some(Json.Text("object")) {
+    held = held + 1
+  }
+
+  // Record, enum, nullable, list, and described members.
+  let order = at(&json, ["components", "schemas", "Order"])
+  match order {
+    case Some(shape) => {
+      if at(&shape, ["required"]) == Some(Json.List([Json.Text("id"), Json.Text("status"), Json.Text("lines")])) {
+        held = held + 1
+      }
+      if at(&shape, ["properties", "status", "enum"]) == Some(Json.List([Json.Text("open"), Json.Text("paid")])) {
+        held = held + 1
+      }
+      if at(&shape, ["properties", "lines", "items", "type"]) == Some(Json.Text("number")) { held = held + 1 }
+      if at(&shape, ["properties", "lines", "description"]) == Some(Json.Text("unit prices")) { held = held + 1 }
+      match at(&shape, ["properties", "note", "anyOf"]) {
+        case Some(Json.List(options)) => { if options.length() == 2 { held = held + 1 } }
+        case _ => {}
+      }
+    }
+    case None => {}
+  }
+
+  // Security and request bodies.
+  if at(&json, ["components", "securitySchemes", "bearer", "scheme"]) == Some(Json.Text("bearer")) {
+    held = held + 1
+  }
+  if at(&json, ["paths", "/orders", "post", "requestBody", "required"]) == Some(Json.Boolean(true)) {
+    held = held + 1
+  }
+  if at(&json, ["servers"]) == Some(Json.List([Json.Object([("url", Json.Text("https://api.example.test"))])])) {
+    held = held + 1
+  }
+
+  // Inconsistencies are named.
+  let broken = doc.describe(OpenApi.Operation {
+      ..OpenApi.operation(Http.Get, "/items/:sku", "showOrder"),
+      parameters: [],
+      answers: [OpenApi.answer(200, "Item", Some(OpenApi.Named("Item")))]
+    }).describe(OpenApi.Operation{..OpenApi.operation(Http.Delete, "/x", "drop"), answers: []})
+  if OpenApi.problems(&broken) == [
+    "operation id 'showOrder' is repeated",
+    "showOrder has no parameter for :sku",
+    "showOrder refers to undeclared schema Item",
+    "drop declares no answers"
+  ] {
+    held = held + 1
+  }
+
+  // The document is checked against the router in both directions.
+  let routes = Route.routing(&[
+      Route.get("/orders/:id", |_request| Reply.text(200, "order")),
+      Route.get("/admin", |_request| Reply.text(200, "admin"))
+    ])
+  if OpenApi.undocumented(&doc, &routes) == (["GET /admin"], ["POST /orders"]) { held = held + 1 }
+
+  // The route serves the encoded document.
+  let served = OpenApi.route(&doc, "/openapi.json")
+  let answer = served.handler(Route.Request {
+      message: Http.Request{method: Http.Get, target: "/openapi.json", headers: [], body: "", binaryBody: None},
+      path: "/openapi.json",
+      params: mapOf([]),
+      query: mapOf([]),
+      peer: "test"
+    })
+  if answer.body == Json.encode(&json) && served.pattern == "/openapi.json" { held = held + 1 }
+  held
+}
+
+fn application() -> Int {
+  var held = 0
+  let handler = |_request| Reply.text(200, "ok")
+  let served = Route.routing(&[Route.get("/orders/:id", handler), Route.post("/orders", handler)])
+  let base = App.over("orders", &Config.empty(), &served)
+
+  // A description matching the router is published beside it.
+  match App.describing(&base, &described(), "/openapi.json") {
+    case Ok(built) => {
+      if App.routerOf(&built).routes.length() == 3 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // A route nobody described refuses the build.
+  let extra = App.serving(&base, &Route.adding(&served, Route.get("/secret", handler)))
+  match App.describing(&extra, &described(), "/openapi.json") {
+    case Err(App.Configuration(reason)) => { if reason == "undescribed routes: GET /secret" { held = held + 1 } }
+    case _ => {}
+  }
+
+  // An operation nothing serves refuses the build.
+  let fewer = App.serving(&base, &Route.routing(&[Route.get("/orders/:id", handler)]))
+  match App.describing(&fewer, &described(), "/openapi.json") {
+    case Err(App.Configuration(reason)) => {
+      if reason == "described but not served: POST /orders" { held = held + 1 }
+    }
+    case _ => {}
+  }
+
+  // The problem step composes with the others.
+  let wrapped = App.wrapping(&base, Problem.uniform)
+  if App.stepsOf(&wrapped).length() == App.stepsOf(&base).length() + 1 { held = held + 1 }
+  held
+}
+
+/// 2021-01-01T00:00:00Z.
+const ORIGIN: Int = 1609459200000
+
+fn nothing() -> Result[(), Str] { Ok(()) }
+
+fn calendar() -> Int {
+  var held = 0
+  let hourly = match Cron.parse("0 * * * *") {
+    case Ok(found) => found
+    case Err(_) => { return 0 }
+  }
+
+  // A job that has never run is due at the first firing minute from the origin.
+  let fresh = Work.job("hourly", Work.Calendar(hourly, ORIGIN), nothing)
+  if Work.isDue(&fresh, 0) { held = held + 1 }
+
+  // After a run it waits for the next firing minute.
+  let ran = Work.Job{..fresh, history: Work.Record{..Work.nothingYet(), runs: 1, lastBegan: 0}}
+  if !Work.isDue(&ran, 1800000) && Work.isDue(&ran, 3600000) { held = held + 1 }
+
+  // A schedule that never fires is never due.
+  match Cron.parse("0 0 30 2 *") {
+    case Ok(never) => {
+      if !Work.isDue(&Work.job("never", Work.Calendar(never, ORIGIN), nothing), 86400000) { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Calendar and interval jobs share one schedule and one clock.
+  let mixed = Work.schedule(&[fresh, Work.job("tick", Work.EveryFromStart(1000), nothing)])
+  if Work.dueAt(&mixed, 1000) == ["hourly", "tick"] { held = held + 1 }
+  held
+}
+
+fn main() -> Int {
+  events() * 1000000 + openApi() * 10000 + application() * 100 + calendar()
+}

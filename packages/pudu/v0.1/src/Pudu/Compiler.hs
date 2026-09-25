@@ -5,27 +5,37 @@ module Pudu.Compiler
   , FrontendResult (..)
   , compileFrontendWith
   , emptyCompileContext
+  , recoveredSyntax
   , runCompile
   , runCompileWith
   , runFrontend
   ) where
 
+import Pudu.Compiler.Literals (resolveLiterals)
 import Pudu.Diagnostic (Diagnostic, hasErrors, sortDiagnostics)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Frontend.Syntax (ModuleName)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
-import Pudu.Eval.Program (evaluateModule)
+import Pudu.Eval.Frozen (Frozen)
+import Pudu.Eval.Program (foldModule)
 import Pudu.Frontend.Expand (expandModule)
-import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, resolveModuleWith)
+import Pudu.Semantic
+  ( ExportIndex
+  , Resolution
+  , emptyExportIndex
+  , resolveModule
+  , resolveModuleWith
+  , writableReferences
+  )
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
-import Pudu.Type.Interface (TypeInterface, importsFor)
+import Pudu.Type.Value (NominalId, Scheme)
+import Pudu.Type.Interface.Graph (InterfaceGraph, emptyInterfaceGraph, importsFor)
 import Data.Text (Text)
 import Pudu.Source (Source, Span)
 
@@ -42,6 +52,10 @@ data FrontendResult = FrontendResult
 data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
+  {-| The tree tooling reads positions against: the parsed module whenever the
+      parser admitted one, even when a later phase rejected it. It is never
+      linked or evaluated; `compileModule` alone is the executable product. -}
+  , compileSyntax :: !(Maybe Module)
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   {-| What inference settled on for each integer literal this module wrote.
@@ -49,21 +63,29 @@ data CompileResult = CompileResult
       A literal written without a suffix is not a platform `Int` merely because
       it was written plainly, and only the checker knows what it became. The
       evaluator reads this to build the literal as the type it is. -}
-  , compileIntegerKinds :: !(Map Span Text)
+  , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
+  {-| The methods this module's declarations provide, by owner, as the checker
+      declared them. Only this module's own: a program's are the union of its
+      modules'. -}
+  , compileMethods :: ![(NominalId, Text, Scheme)]
+  {-| The constants folding computed that are plain data, which linking binds
+      instead of evaluating their initializers again. -}
+  , compileFolded :: ~(Map Text Frozen)
   }
   deriving stock (Eq, Show)
 
 data CompileContext = CompileContext
   { contextExports :: !ExportIndex
-  , contextTypes :: !(Map ModuleName TypeInterface)
+  {-| The program's interfaces, prepared once for every module to check against. -}
+  , contextTypes :: !InterfaceGraph
   , contextStrictImports :: !Bool
   }
   deriving stock (Eq, Show)
 
 emptyCompileContext :: CompileContext
-emptyCompileContext = CompileContext emptyExportIndex Map.empty False
+emptyCompileContext = CompileContext emptyExportIndex emptyInterfaceGraph False
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
 
@@ -89,11 +111,14 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
           pure CompileResult
             { compileTokens = frontendTokens
             , compileModule = Nothing
+            , compileSyntax = Nothing
             , compileResolution = Nothing
             , compileTypes = Nothing
             , compileIntegerKinds = Map.empty
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
+            , compileMethods = []
+            , compileFolded = Map.empty
             }
         Just original ->
           let (parsed, expansionDiagnostics) = expandModule original
@@ -105,19 +130,20 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 sortDiagnostics
                   (frontendDiagnostics <> expansionDiagnostics <> resolutionDiagnostics)
               (typing, typeDiagnostics) =
-                if hasErrors resolved then (Nothing, []) else typedResult context parsed
+                if hasErrors resolved then (Nothing, []) else typedResult context resolution parsed
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
-                constantDiagnostics <-
+                (constantDiagnostics, folded) <-
                   if hasErrors typed
-                    then pure []
+                    then pure ([], Map.empty)
                     else foldConstants (maybe Map.empty moduleIntegerKinds typing) parsed
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just parsed
+                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) parsed)
+                    , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types
                     , compileIntegerKinds =
@@ -125,6 +151,8 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                     , compileDocs =
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
+                    , compileMethods = maybe [] moduleMethods typing
+                    , compileFolded = folded
                     }
 
 {-| Evaluate the module's constants at compile time.
@@ -137,11 +165,12 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Map Span Text -> Module -> IO [Diagnostic]
+foldConstants :: Map Span Text -> Module -> IO ([Diagnostic], Map Text Frozen)
 foldConstants integerKinds parsed
-  | any hasInitializer (moduleDeclarations parsed) =
-      outcomeDiagnostics <$> evaluateModule integerKinds parsed
-  | otherwise = pure []
+  | any hasInitializer (moduleDeclarations parsed) = do
+      (outcome, folded) <- foldModule integerKinds parsed
+      pure (outcomeDiagnostics outcome, folded)
+  | otherwise = pure ([], Map.empty)
  where
   hasInitializer (Located _ declaration) = case declaration of
     BindingDeclaration {} -> True
@@ -149,11 +178,21 @@ foldConstants integerKinds parsed
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}
-typedResult :: CompileContext -> Module -> (Maybe ModuleTypes, [Diagnostic])
-typedResult context parsed =
+typedResult :: CompileContext -> Resolution -> Module -> (Maybe ModuleTypes, [Diagnostic])
+typedResult context resolution parsed =
   let imported = importsFor (contextTypes context) parsed
-      (checked, diagnostics) = checkTypesDetailed imported parsed
+      (checked, diagnostics) = checkTypesDetailed imported (writableReferences resolution) parsed
    in (Just checked, diagnostics)
+
+{-| The lexer's tokens and the tree the parser recovered, whatever its
+    diagnostics said. Tooling reads a position against this tree when the text
+    does not parse; it is never resolved, checked, linked, or evaluated, and a
+    recovery node in it is a hole, not a construct. -}
+recoveredSyntax :: Source -> ([Token], Maybe Module)
+recoveredSyntax source =
+  let LexResult{lexTokens} = lexSource source
+      ParseResult{parseModuleValue} = parseModule source lexTokens
+   in (lexTokens, parseModuleValue)
 
 runFrontend :: Source -> FrontendResult
 runFrontend source =

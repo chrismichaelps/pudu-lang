@@ -26,6 +26,9 @@ Exports:
 
 Header inspection is $O(H)$ over incoming request headers. Budget enforcement evaluates byte length in $O(1)$. SWR headers use standard string formatting. The TCP initial congestion window constant assumes standard RFC 6928 `initcwnd = 10` segments (~14.6 KB).
 
+An `rtt` hint arrives from the client, so digits spelling more than an `Int` holds are held at the
+largest one instead of overflowing: a round trip that long is as slow as any other that long.
+
 ## Grill Log
 
 - **Q:** Why enforce a 14 KB budget on early flush? **A:** Exceeding 14.6 KB requires a second TCP round trip before the browser can parse and render the document head. On high-latency 2G/3G connections (300-800ms RTT), staying under 14 KB delivers the first render cycle in a single round trip.

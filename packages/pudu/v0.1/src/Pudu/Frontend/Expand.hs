@@ -166,6 +166,9 @@ expandStatement macros depth (Located statementSpan statement) = case statement 
               <$> expandExpression macros depth subject
               <*> expandBlock macros depth fallback
           )
+  LetPatternStatement bindingKind pattern' annotation subject ->
+    Located statementSpan . LetPatternStatement bindingKind pattern' annotation
+      <$> expandExpression macros depth subject
   _ -> pure (Located statementSpan statement)
 
 expandExpression :: Map Text Macro -> Int -> Located Expression -> Expand (Located Expression)
@@ -195,6 +198,13 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
       ( IndexExpression
           <$> expandExpression macros depth target
           <*> expandExpression macros depth index
+      )
+  RangeExpression lower inclusive upper ->
+    rebuild
+      ( RangeExpression
+          <$> mapM (expandExpression macros depth) lower
+          <*> pure inclusive
+          <*> mapM (expandExpression macros depth) upper
       )
   TryExpression target -> rebuild (TryExpression <$> expandExpression macros depth target)
   AwaitExpression target -> rebuild (AwaitExpression <$> expandExpression macros depth target)
