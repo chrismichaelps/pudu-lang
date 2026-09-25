@@ -168,6 +168,9 @@ export fn routes(site: &Site.Site) -> Route.Router {
           Route.get("/assets/download/*module", fn(asked: Route.Request) -> Http.Response {
               scriptModule(Constants.DOWNLOAD_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
             }),
+          Route.get("/assets/pudu/*module", fn(asked: Route.Request) -> Http.Response {
+              scriptModule(Constants.PUDU_SCRIPTS_DIRECTORY, Option.unwrapOr(Route.param(&asked, "module"), ""))
+            }),
           Route.get("/assets/packages/files/:icon", fn(asked: Route.Request) -> Http.Response {
               let icon = Option.unwrapOr(Route.param(&asked, "icon"), "")
               if !["pudu.png", "markdown.svg", "toml.svg", "json.svg", "yaml.svg", "js.svg", "css.svg", "html.svg", "text.svg"].contains(icon) { return Reply.text(404, "asset not found") }

@@ -7,6 +7,7 @@ import Seo as Seo
 import Service.Search as Search
 import View.Layout as Layout
 import View.MarkdownInline as Inline
+import View.Pudu as Pudu
 
 /// Ranked search results shared by local and serverless routes.
 export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html {
@@ -25,7 +26,7 @@ export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html 
 /// The shared dynamic fallback page.
 export fn missing(siteUrl: Str, path: Str) -> Html.Html {
   Layout.page(siteUrl, "Not found", "The requested Pudu page does not exist.", path, false, None, H.article().class("doc").holding([
-        Layout.banner("page-banner", "404", "That page is not here.", "No page matches " + path + ".", []),
+        Pudu.around(Pudu.SHY, true, Layout.banner("page-banner", "404", "That page is not here.", "No page matches " + path + ".", [])),
         H.p().holding([H.a().href("/").says("Return to search")])
       ]).html())
 }

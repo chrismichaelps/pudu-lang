@@ -14,6 +14,8 @@ the package catalogue, search results, owner profiles, project pages, documentat
 download, releases, policy, and missing pages. Its diagonal lines and warm corner shape are the
 page's one decoration; below it, section titles are sentence case over a two-pixel ink rule, radii
 stay at 10px or less, and shadows belong to the banner's search field and to popovers (`--lift`).
+A pudu may peek over a banner's top edge from a `pudu-host`, one layer below it; its parts are
+filled from the `--pudu-*` tokens, and a small screen draws it smaller ([[Pudu mascot script]]).
 The logo's four two-tone pairs (`--tone-0` to `--tone-3` with `-soft` halves) mark owners and draw the
 short rule before section labels such as `kind`.
 

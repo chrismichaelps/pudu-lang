@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — A pudu behind the banner
+
+- [[Pudu mascot script]] draws a small two-tone pudu behind a page's banner: it roams the home
+  banner's edge, hides from the pointer on the missing page, and asks on the donation page, perking
+  up when the donate link is hovered or focused. [[website View Pudu]] places it.
+
 ## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
 
 - [[Std Ui Preferences]] saves typed settings atomically in the platform's per-user directory.
