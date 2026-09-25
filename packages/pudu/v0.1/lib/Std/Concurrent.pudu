@@ -73,6 +73,17 @@ export fn parallel(actions: &Array[fn() -> ()]) -> Result[(), ConcurrentError] {
   if let Some(reason) = failure { Err(reason) } else { joined }
 }
 
+/// Run an action on a thread of its own and wait for it.
+///
+/// A crash inside the action ends only its thread and is answered here as
+/// `Failed`, so a caller holding a lock, a permit, or a promise can still let
+/// go of it. This is the boundary every waiting construct in
+/// `Std.Concurrent.*` puts around caller code.
+export fn contain(action: fn() -> ()) -> Result[(), ConcurrentError] {
+  let worker = start(action) ?
+  join(&worker)
+}
+
 /// Wait, without holding the machine while waiting.
 export fn sleep(millis: Int) -> Result[(), ConcurrentError] {
   Result.mapErr(sleepMillis(millis), causeOf)

@@ -1,0 +1,112 @@
+module Std.Concurrent.Pool
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Concurrent.Future as Future
+import Std.Sync as Sync
+
+/// A fixed set of workers draining a bounded queue.
+///
+/// The bound is the back-pressure: `submit` waits while the queue is full, so
+/// producers run at the workers' pace. A worker never runs a job on its own
+/// thread; it runs each inside `Concurrent.contain`, so a crashing job ends
+/// only itself and the worker takes the next one.
+export type Pool = {
+  jobs: Channel.Channel[Job],
+  workers: Array[Concurrent.Task],
+  crash: Sync.Cell[Option[Concurrent.ConcurrentError]],
+  guard: Sync.Mutex
+}
+
+/// What a worker runs, and whom it tells when the job crashed.
+type Job = { run: fn() -> (), crashed: fn(Concurrent.ConcurrentError) -> () }
+
+/// A pool of `workers` threads over a queue holding at most `queue` jobs.
+/// Every worker starts or none is left running: when one cannot start, the
+/// queue is closed and the workers already started are joined.
+export fn pool(workers: Int, queue: Int) -> Result[Pool, Concurrent.ConcurrentError] {
+  if workers < 1 { return Err(Concurrent.Other("worker count must be positive")) }
+  if queue < 1 { return Err(Concurrent.Other("queue bound must be positive")) }
+  let jobs: Channel.Channel[Job] = Channel.channel(queue)
+  var started: Array[Concurrent.Task] = []
+  var index = 0
+  while index < workers {
+    match Concurrent.start(fn() -> () { drain(&jobs) }) {
+      case Ok(worker) => { started = started.push(worker) }
+      case Err(problem) => {
+        let _closed = Channel.close(&jobs)
+        let _joined = Concurrent.joinAll(&started)
+        return Err(problem)
+      }
+    }
+    index = index + 1
+  }
+  let noCrash: Option[Concurrent.ConcurrentError] = None
+  Ok(Pool{jobs: jobs, workers: started, crash: Sync.cell(noCrash), guard: Sync.mutex()})
+}
+
+/// Queue a job, waiting while the queue is full. A crash in the job is
+/// reported by `shutdown`.
+export fn submit(target: &Pool, job: fn() -> ()) -> Result[(), Concurrent.ConcurrentError] {
+  let crash = target.crash
+  let guard = target.guard
+  enqueue(target, Job{run: job, crashed: fn(problem: Concurrent.ConcurrentError) -> () {
+        let _kept = Sync.withLock(&guard, fn() -> () {
+            if let Ok(None) = Sync.get(&crash) { let _set = Sync.set(&crash, Some(problem)) }
+          })
+      } })
+}
+
+/// Queue a job and answer the future of its value; a crash settles the
+/// future with the crash.
+export fn submitFor[T](target: &Pool, job: fn() -> T) -> Result[Future.Future[T], Concurrent.ConcurrentError] {
+  let pending: Future.Future[T] = Future.promise()
+  enqueue(target, Job {
+      run: fn() -> () { let _kept = Future.fulfil(&pending, job()) },
+      crashed: fn(problem: Concurrent.ConcurrentError) -> () { let _failed = Future.fail(&pending, problem) }
+    }) ?
+  Ok(pending)
+}
+
+/// How many jobs are waiting for a worker.
+export fn queued(source: &Pool) -> Result[Int, Concurrent.ConcurrentError] {
+  match Channel.pending(&source.jobs) {
+    case Ok(count) => Ok(count)
+    case Err(problem) => Err(Concurrent.Other(show(problem)))
+  }
+}
+
+/// How many workers the pool runs.
+export fn size(source: &Pool) -> Int { source.workers.length() }
+
+/// Refuse further jobs, run every queued one, and join every worker. Answers
+/// the first crash among jobs submitted without a future.
+export fn shutdown(target: &Pool) -> Result[(), Concurrent.ConcurrentError] {
+  let _closed = Channel.close(&target.jobs)
+  Concurrent.joinAll(&target.workers) ?
+  match Sync.get(&target.crash) {
+    case Ok(Some(problem)) => Err(problem)
+    case Ok(None) => Ok(())
+    case Err(problem) => Err(Concurrent.Other(show(problem)))
+  }
+}
+
+fn enqueue(target: &Pool, job: Job) -> Result[(), Concurrent.ConcurrentError] {
+  match Channel.send(&target.jobs, job) {
+    case Ok(_) => Ok(())
+    case Err(Channel.Closed) => Err(Concurrent.Other("the pool is shut down"))
+    case Err(problem) => Err(Concurrent.Other(show(problem)))
+  }
+}
+
+fn drain(jobs: &Channel.Channel[Job]) {
+  var going = true
+  while going {
+    match Channel.receive(jobs) {
+      case Ok(Some(job)) => {
+        if let Err(problem) = Concurrent.contain(job.run) { (job.crashed)(problem) }
+      }
+      case _ => { going = false }
+    }
+  }
+}
