@@ -31,6 +31,24 @@ tags: [changelog]
   [[Std Ui Keymap]].
 - [[architecture/NATIVE-UI]] gains a desktop concept-coverage table naming every remaining gap, and
   the UI pages describe the reference framework in neutral terms.
+## 2026-09-24 — Problem bodies, cursor pages, and idempotent retries (#323)
+
+- [[Std App Problem]] gives every refusal one RFC 9457 body; `uniform` rewrites plain failures and
+  validation reports become 422 with per-field errors.
+- [[Std App Page]] pages listings by keyset cursor with refused oversize limits and `Link` headers.
+- [[Std App Idempotency]] replays the stored answer for a repeated `Idempotency-Key`, refuses a key
+  reused for another body, and releases a key after a 5xx.
+- [[architecture/WEB]] gains an API-contracts table and the joints through which every application
+  module enters `Std.App`.
+## 2026-09-24 — Schedules, statistics, environment files, and terminal styling (#321)
+
+- [[Std Cron]] parses five-field schedules and macros and answers whether a minute fires and the
+  next firing minute in UTC; an impossible date answers `None`.
+- [[Std Stats]] adds mean, median, percentiles, variance, deviation, covariance, correlation,
+  histograms, summaries, and a constant-state streaming accumulator; too little data answers `None`.
+- [[Std Dotenv]] reads environment files into ordered entries with quoting, escapes, and earlier-key
+  expansion, and renders entries back to text that reads the same.
+- [[Std Term]] writes terminal colour and style sequences, strips them, and controls the cursor.
 
 ## 2026-09-24 — A bundle carries its compiled products (#319)
 

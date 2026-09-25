@@ -53,6 +53,9 @@ window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
 
 `UsesUiAppShellAll` packs `90804`: preferences (9), menus (8), and focus trapping (4).
 
+`UsesAppContractsAll` packs three counts into `171518`: 17 problem-body checks, 15 cursor-page
+checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

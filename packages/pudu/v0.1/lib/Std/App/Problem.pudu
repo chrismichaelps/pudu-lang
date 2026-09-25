@@ -1,0 +1,198 @@
+module Std.App.Problem
+
+import Std.Http as Http
+import Std.Http.Message as Message
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Validate as Validate
+
+/// A problem-details body (RFC 9457).
+///
+/// `kind` is the `type` member: a URI naming the problem class, `about:blank`
+/// when the status alone says it. `extensions` are further members written
+/// after the standard ones, in order.
+export type Problem = {
+  kind: Str,
+  title: Str,
+  status: Int,
+  detail: Str,
+  instance: Str,
+  extensions: Array[(Str, Json.Json)]
+}
+
+/// Why a body could not be read as a problem.
+export type ProblemError
+  = NotJson(Str)
+  | NotAnObject
+  | MissingStatus
+
+/// The media type a problem is served as.
+export const MEDIA_TYPE: Str = "application/problem+json"
+
+const STANDARD_MEMBERS: Set[Str] = setOf(["type", "title", "status", "detail", "instance"])
+
+const TITLES: Map[Int, Str] = mapOf([
+    (400, "Bad Request"),
+    (401, "Unauthorized"),
+    (403, "Forbidden"),
+    (404, "Not Found"),
+    (405, "Method Not Allowed"),
+    (406, "Not Acceptable"),
+    (409, "Conflict"),
+    (410, "Gone"),
+    (412, "Precondition Failed"),
+    (413, "Content Too Large"),
+    (415, "Unsupported Media Type"),
+    (422, "Unprocessable Content"),
+    (428, "Precondition Required"),
+    (429, "Too Many Requests"),
+    (500, "Internal Server Error"),
+    (501, "Not Implemented"),
+    (502, "Bad Gateway"),
+    (503, "Service Unavailable"),
+    (504, "Gateway Timeout")
+  ])
+
+/// A problem of type `about:blank` whose title is the status's reason phrase.
+export fn status(code: Int) -> Problem {
+  Problem {
+    kind: "about:blank",
+    title: titleOf(code),
+    status: code,
+    detail: "",
+    instance: "",
+    extensions: []
+  }
+}
+
+/// A problem with its own type URI and title.
+export fn typed(kind: Str, code: Int, title: Str) -> Problem {
+  Problem{..status(code), kind: kind, title: title}
+}
+
+/// `status(code)` carrying `detail`.
+export fn detailed(code: Int, detail: Str) -> Problem {
+  Problem{..status(code), detail: detail}
+}
+
+/// The problem with one more extension member. A name used by a standard
+/// member or an earlier extension replaces nothing and is ignored.
+export fn withExtension(problem: &Problem, name: Str, value: Json.Json) -> Problem {
+  if STANDARD_MEMBERS.contains(name) { return *problem }
+  for (existing, _) in problem.extensions {
+    if existing == name { return *problem }
+  }
+  Problem{..*problem, extensions: problem.extensions.push((name, value))}
+}
+
+/// A 422 problem whose `errors` member maps each faulty field to what it
+/// was expected to be.
+export fn fromReport(report: &Validate.Report) -> Problem {
+  var fields = []
+  for name in Validate.faultyFields(report) {
+    let expected = Validate.failuresFor(report, name).map(|text| Json.Text(text))
+    fields = fields.push((name, Json.List(expected)))
+  }
+  let base = detailed(422, "{Validate.failureCount(report)} field(s) failed validation")
+  withExtension(&base, "errors", Json.Object(fields))
+}
+
+/// The problem as a JSON object: standard members first, empty ones omitted,
+/// then extensions.
+export fn toJson(problem: &Problem) -> Json.Json {
+  var members = [("type", Json.Text(problem.kind)), ("title", Json.Text(problem.title))]
+  members = members.push(("status", Json.Number(problem.status)))
+  if problem.detail.length() > 0 { members = members.push(("detail", Json.Text(problem.detail))) }
+  if problem.instance.length() > 0 {
+    members = members.push(("instance", Json.Text(problem.instance)))
+  }
+  Json.Object(members.concat(problem.extensions))
+}
+
+/// The problem as a response with its status and `application/problem+json`.
+export fn respond(problem: &Problem) -> Http.Response {
+  Message.respond(problem.status, MEDIA_TYPE, Json.encode(&toJson(problem)))
+}
+
+/// Reads a problem body, as a client receiving one does.
+///
+/// Missing string members read as empty, a missing `type` as `about:blank`,
+/// and every non-standard member becomes an extension.
+export fn parse(body: Str) -> Result[Problem, ProblemError] {
+  let value = match Json.decode(body) {
+    case Ok(found) => found
+    case Err(reason) => { return Err(NotJson(Json.explain(&reason))) }
+  }
+  let members = match value {
+    case Json.Object(found) => found
+    case _ => { return Err(NotAnObject) }
+  }
+  let code = match Json.field(&value, "status") {
+    case Some(Json.Number(found)) => found
+    case _ => { return Err(MissingStatus) }
+  }
+  var extensions = []
+  for (name, member) in members {
+    if !STANDARD_MEMBERS.contains(name) { extensions = extensions.push((name, member)) }
+  }
+  Ok(Problem {
+      kind: textMember(&value, "type", "about:blank"),
+      title: textMember(&value, "title", ""),
+      status: code,
+      detail: textMember(&value, "detail", ""),
+      instance: textMember(&value, "instance", ""),
+      extensions: extensions
+    })
+}
+
+/// A step that turns every 4xx or 5xx response not already a problem into
+/// one, keeping its status and using its body as `detail` and the request
+/// path as `instance`. A 5xx body is dropped and only the reason phrase
+/// remains, so an internal message never reaches a client.
+export fn uniform(request: Route.Request, next: Route.Handler) -> Http.Response {
+  let path = request.path
+  let answered = next(request)
+  let code = answered.status.code
+  if code < 400 || isProblem(&answered) { return answered }
+  let detail = if code >= 500 { "" } else { answered.body.trim() }
+  let problem = Problem{..status(code), detail: detail, instance: path}
+  let carried = answered.headers.filter(|header| !isContentHeader(header))
+  let rendered = respond(&problem)
+  Http.Response{..rendered, headers: carried.concat(rendered.headers)}
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &ProblemError) -> Str {
+  match problem {
+    case NotJson(reason) => "not JSON: {reason}"
+    case NotAnObject => "a problem body must be a JSON object"
+    case MissingStatus => "a problem body must carry a numeric status"
+  }
+}
+
+fn titleOf(code: Int) -> Str {
+  match TITLES.get(code) {
+    case Some(found) => found
+    case None => if code >= 500 { "Server Error" } else { "Client Error" }
+  }
+}
+
+fn textMember(value: &Json.Json, name: Str, fallback: Str) -> Str {
+  match Json.field(value, name) {
+    case Some(Json.Text(found)) => found
+    case _ => fallback
+  }
+}
+
+fn isProblem(response: &Http.Response) -> Bool {
+  for (name, value) in response.headers {
+    if name.toLower() == "content-type" && value.startsWith(MEDIA_TYPE) { return true }
+  }
+  false
+}
+
+fn isContentHeader(header: (Str, Str)) -> Bool {
+  let (raw, _) = header
+  let name = raw.toLower()
+  name == "content-type" || name == "content-length"
+}

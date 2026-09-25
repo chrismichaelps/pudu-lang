@@ -102,6 +102,9 @@ tags: [moc, module, stdlib]
 - [[Std App Password]] — a password kept in a form that proves it without holding it.
 - [[Std App Secret]] — secrets protected from unintended disclosure with explicit redaction.
 - [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
+- [[Std App Problem]] — RFC 9457 problem bodies, validation reports as 422, and a uniform failure step.
+- [[Std App Page]] — keyset cursor pagination with bounded sizes and `Link` headers.
+- [[Std App Idempotency]] — replayed answers for repeated `Idempotency-Key` requests.
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
@@ -134,6 +137,10 @@ tags: [moc, module, stdlib]
 - [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
+- [[Std Cron]] — five-field schedule expressions, matching, and the next firing minute in UTC.
+- [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
+- [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
+- [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.

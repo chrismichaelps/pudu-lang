@@ -1,0 +1,67 @@
+module UsesStatsAll
+
+import Std.Stats as Stats
+
+const SAMPLE: Array[Float] = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+
+fn near(found: Option[Float], wanted: Float) -> Bool {
+  match found {
+    case Some(value) => value - wanted < 0.000000001 && wanted - value < 0.000000001
+    case None => false
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // Location.
+  if near(Stats.mean(&SAMPLE), 5.0) { held = held + 1 }
+  if near(Stats.median(&SAMPLE), 4.5) { held = held + 1 }
+  if near(Stats.median(&[3.0, 1.0, 2.0]), 2.0) { held = held + 1 }
+  if near(Stats.percentile(&SAMPLE, 0.0), 2.0) { held = held + 1 }
+  if near(Stats.percentile(&SAMPLE, 100.0), 9.0) { held = held + 1 }
+  if near(Stats.percentile(&[10.0, 20.0], 25.0), 12.5) { held = held + 1 }
+
+  // Spread: population divides by n, sample by n - 1.
+  if near(Stats.populationVariance(&SAMPLE), 4.0) { held = held + 1 }
+  if near(Stats.variance(&SAMPLE), 32.0 / 7.0) { held = held + 1 }
+  if near(Stats.deviation(&[1.0, 3.0]), 1.4142135623730951) { held = held + 1 }
+
+  // Paired values.
+  if near(Stats.covariance(&[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]), 2.0) { held = held + 1 }
+  if near(Stats.correlation(&[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]), 1.0) { held = held + 1 }
+  if near(Stats.correlation(&[1.0, 2.0, 3.0], &[6.0, 4.0, 2.0]), -1.0) { held = held + 1 }
+
+  // Buckets over [0, 10): the upper bound is excluded.
+  if Stats.histogram(&SAMPLE, 0.0, 10.0, 5) == [0, 1, 5, 1, 1] { held = held + 1 }
+  if Stats.histogram(&[10.0, -1.0], 0.0, 10.0, 2) == [0, 0] { held = held + 1 }
+
+  // A summary is one pass.
+  match Stats.summarize(&SAMPLE) {
+    case Some(summary) => {
+      if summary.count == 8 && summary.minimum == 2.0 && summary.maximum == 9.0 { held = held + 1 }
+      if near(Some(summary.mean), 5.0) { held = held + 1 }
+    }
+    case None => {}
+  }
+
+  // The running accumulator reaches the same answers without the sample.
+  var state = Stats.running()
+  for value in SAMPLE { state = Stats.observe(&state, value) }
+  if near(Stats.runningMean(&state), 5.0) { held = held + 1 }
+  if near(Stats.runningVariance(&state), 32.0 / 7.0) { held = held + 1 }
+  if state.minimum == 2.0 && state.maximum == 9.0 { held = held + 1 }
+
+  // No answer is invented for too little data.
+  let empty: Array[Float] = []
+  if Stats.mean(&empty) == None && Stats.median(&empty) == None { held = held + 1 }
+  if Stats.variance(&[1.0]) == None && Stats.populationVariance(&empty) == None { held = held + 1 }
+  if Stats.percentile(&SAMPLE, 101.0) == None { held = held + 1 }
+  if Stats.covariance(&[1.0], &[1.0, 2.0]) == None { held = held + 1 }
+  if Stats.correlation(&[1.0, 1.0], &[1.0, 2.0]) == None { held = held + 1 }
+  if Stats.histogram(&SAMPLE, 0.0, 10.0, 0).length() == 0 { held = held + 1 }
+  if Stats.summarize(&empty) == None { held = held + 1 }
+  if Stats.runningMean(&Stats.running()) == None { held = held + 1 }
+
+  held
+}

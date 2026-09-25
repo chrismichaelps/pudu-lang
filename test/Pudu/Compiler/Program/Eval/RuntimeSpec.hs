@@ -72,12 +72,28 @@ testRuntimeEvaluation = do
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   places <- runEntry "test-fixtures/stdlib/UsesPlaces.pudu"
+  schedules <- runEntry "test-fixtures/stdlib/UsesCronAll.pudu"
+  statistics <- runEntry "test-fixtures/stdlib/UsesStatsAll.pudu"
+  settings <- runEntry "test-fixtures/stdlib/UsesDotenvAll.pudu"
+  styled <- runEntry "test-fixtures/stdlib/UsesTermAll.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
           `?`, through methods, trait-qualified calls, and a place lent on. -}
       counterexample "a place is written, lent, and handed back on every exit"
         (places === Just "18")
+    {-| Every schedule export: macros, names, steps, the day-field union, a
+        date that never occurs, and each refusal's message. -}
+    , counterexample "a schedule fires at the minutes its fields name"
+        (schedules === Just "18")
+    {-| Every statistic against a stated answer, and no answer invented for a
+        sample too small to have one. -}
+    , counterexample "statistics answer for enough data and refuse too little"
+        (statistics === Just "27")
+    , counterexample "an environment file reads, expands, renders back, and refuses by line"
+        (settings === Just "17")
+    , counterexample "terminal styles write the sequences they name and strip back to text"
+        (styled === Just "13")
     , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}

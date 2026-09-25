@@ -55,6 +55,7 @@ testServiceEvaluation = do
   scheduled <- runEntry "test-fixtures/stdlib/UsesWork.pudu"
   spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   cached <- runEntry "test-fixtures/stdlib/UsesCache.pudu"
+  contracts <- runEntry "test-fixtures/stdlib/UsesAppContractsAll.pudu"
   pure $ conjoin
     [ {-| Checked against a server written in the fixture that speaks the wire
           protocol, so what the client sends is observable: that a value is sent
@@ -442,4 +443,11 @@ testServiceEvaluation = do
     , counterexample
         "an application saves settings, offers menus, and traps focus in dialogs"
         (shell === Just "90804")
+    {-| Problem bodies, cursor pages, and idempotency keys, read as three
+        counts packed into one number: 17 problem checks, 15 page checks, and
+        18 idempotency checks, including a middleware run against a shared store
+        that calls its handler once per key. -}
+    , counterexample
+        "failures, pages, and repeated requests answer by one contract"
+        (contracts === Just "171518")
     ]

@@ -145,6 +145,30 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Secrets handling? | **Ready** | [[Std App Secret]]: opaque container types prevent accidental logging or trace exposure; explicit redaction (`[REDACTED]`), masked suffix display, and constant-time equality comparisons. |
 | Audit trail? | **Ready** | [[Std App Audit]]: structured append-only audit trail with tamper-evident cryptographic hash chaining (SHA-256), outcome classification, secrets redaction, and SIEM NDJSON export. |
 
+## API contracts
+
+| Question | Verdict | Where it stands |
+|---|---|---|
+| One failure body for every refusal? | **Ready** | [[Std App Problem]]: RFC 9457 problem details. `uniform` rewrites any plain 4xx/5xx and drops 5xx text; validation reports become 422 with per-field `errors`. |
+| Can a client retry a payment safely? | **Ready** | [[Std App Idempotency]]: a repeated `Idempotency-Key` replays the stored answer, a key reused for a different body is refused, and a 5xx releases the key. Decide-and-begin is one locked step. |
+| Listings that stay stable under inserts? | **Ready** | [[Std App Page]]: keyset cursors, refused (not clamped) oversize limits, `Link: rel="next"`, and a `size + 1` fetch helper for stores. |
+| A machine-readable API description? | **Absent** | Queued in #323 with events, an outbox, and calendar schedules. |
+
+## How the pieces connect
+
+Every application module joins [[Std App]] at one of three points, so a capability is either a line
+in the program's composition or absent:
+
+| Joint | Written as | Modules |
+|---|---|---|
+| A step around every handler | `App.wrapping(app, step)` | [[Std App Problem]] `uniform`, [[Std App Idempotency]] `guarded`, [[Std Http Server Guard]], [[Std App Access]], [[Std App Tenant]] |
+| Routes | `App.serving(app, router)` | [[Std App Health]], handlers using [[Std App Page]] and [[Std App Bind]] |
+| A stage that starts and stops | `App.using(app, stage)` | [[Std App Database]], pools, workers |
+| A value handlers read | passed in the composition | [[Std App Config]], [[Std App Metrics]], [[Std App Cache]], [[Std App Flag]], [[Std App Locale]] |
+
+Nothing is discovered by scanning or registered as a side effect: what a service does is readable
+from the function that builds its `App`.
+
 ## Everything else an organisation asks
 
 | Question | Verdict | Where it stands |
