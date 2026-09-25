@@ -2,3 +2,10 @@ packages: .
 index-state: 2026-08-15T18:36:33Z
 tests: True
 optimization: False
+
+-- Every package, dependencies included, puts each function in its own section,
+-- so linking the executable keeps only what the compiler reaches. Most of the
+-- web, database, and cryptography stack it links is never called from any one
+-- path, and without this the executable carries all of it.
+package *
+  split-sections: True
