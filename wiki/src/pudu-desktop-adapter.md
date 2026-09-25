@@ -16,7 +16,9 @@ RGBA frame for drawing, pumps the application event queue for a bounded interval
 request, and releases the window. While pumping it records presses, scrolls, named keys (next,
 previous, activate, dismiss, erase), printable text, Command/Control chords, and resizes as
 tab-separated lines in a bounded queue that `pudu_desktop_inputs` drains, plus `down`, `move`, and
-`up` records with millisecond timestamps for the primary button. `pudu_desktop_clipboard_read` and
+`up` records with millisecond timestamps for the primary button, and `menu` records for commands
+chosen from the menu bar [[Pudu Desktop Menu]] installs. Closing a window that installed the bar
+clears it. `pudu_desktop_clipboard_read` and
 `pudu_desktop_clipboard_write` read and replace the general pasteboard's plain text. Key presses are consumed
 rather than forwarded, so an unhandled key never plays the system alert. The frame view answers assistive clients with the children [[Pudu Desktop Access]] builds. The adapter is compiled only for macOS.
 
@@ -46,4 +48,4 @@ the process and filesystem implementations.
 
 ## Referenced by
 
-[[Eval Desktop]] · [[Native Application UI]] · [[Pudu Desktop Access]] · [[Pudu Desktop Host]]
+[[Eval Desktop]] · [[Native Application UI]] · [[Pudu Desktop Access]] · [[Pudu Desktop Host]] · [[Pudu Desktop Menu]]

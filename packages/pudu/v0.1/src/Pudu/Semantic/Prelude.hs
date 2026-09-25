@@ -86,7 +86,7 @@ effectValueNames =
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "secureRandomBytes"
-  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopClose", "audioDevicePlay"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"
   , "audioStreamVolume", "audioStreamSnapshot", "audioStreamClose"
   , "arguments", "environment", "temporaryPath", "userHome"

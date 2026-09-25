@@ -78,7 +78,8 @@ digest builtin, preserving total naming and exhaustive dispatch.
 
 `DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, `DesktopInputsBuiltin`,
 `DesktopClipboardReadBuiltin`, `DesktopClipboardWriteBuiltin`, `DesktopAccessibilityBuiltin`,
-`DesktopAccessibilityReportBuiltin`, and `DesktopCloseBuiltin` name the
+`DesktopAccessibilityReportBuiltin`, `DesktopMenuBuiltin`, `DesktopMenuReportBuiltin`, and
+`DesktopCloseBuiltin` name the
 desktop operations beneath [[Std Ui Desktop]]. Separate constructors keep arity and
 failure attribution exhaustive; no string-selected operation or framework symbol enters the
 language.

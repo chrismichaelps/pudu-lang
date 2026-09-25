@@ -90,6 +90,39 @@ export fn commandOf(event: &Screen.Event) -> Option[Str] {
   }
 }
 
+/// The bar as the records the desktop adapter builds the platform's menu bar
+/// from, depth first: `menu`, depth, title; `command`, depth, name, chord,
+/// title; `separator`, depth.
+///
+/// The chord is the command's first binding with `mod` resolved to `cmd`, the
+/// only native menu bar being Apple's.
+export fn native(bar: &Array[Menu], keys: &Keymap.Keymap) -> Str {
+  let resolved = Keymap.forPlatform(keys, true)
+  var out = ""
+  for one in bar { out = out + nativeMenu(&one, 0, &resolved) }
+  out
+}
+
+fn nativeMenu(one: &Menu, depth: Int, keys: &Keymap.Keymap) -> Str {
+  var out = "menu\t{depth}\t{plain(one.title)}\n"
+  for item in one.items {
+    match item {
+      case Command(title, name) => {
+        let chords = Keymap.chordsFor(keys, name)
+        let chord = if chords.length() == 0 { "" } else { chords[0] }
+        out = out + "command\t{depth + 1}\t{plain(name)}\t{chord}\t{plain(title)}\n"
+      }
+      case Separator => { out = out + "separator\t{depth + 1}\n" }
+      case Submenu(inner) => { out = out + nativeMenu(&inner, depth + 1, keys) }
+    }
+  }
+  out
+}
+
+/// Text with the characters that would end a record or shift a field turned
+/// into spaces.
+fn plain(text: Str) -> Str { text.replace("\t", " ").replace("\r", " ").replace("\n", " ") }
+
 fn commandsIn(one: &Menu) -> Array[Str] {
   var found = []
   for item in one.items {

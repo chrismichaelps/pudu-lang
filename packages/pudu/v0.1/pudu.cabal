@@ -312,6 +312,7 @@ library
   if os(osx)
     c-sources:      cbits/pudu_desktop.m
                     cbits/pudu_desktop_access.m
+                    cbits/pudu_desktop_menu.m
                     cbits/pudu_audio.c
                     cbits/pudu_audio_stream.c
     cc-options:     -fobjc-arc

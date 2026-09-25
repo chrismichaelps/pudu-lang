@@ -18,6 +18,10 @@
 @property(nonatomic, strong) PuduFrameView *frameView;
 @property(nonatomic) BOOL closeRequested;
 @property(nonatomic, strong) NSMutableData *inputs;
+/* What the installed menu bar's items call, or nil when this window installed none. */
+@property(nonatomic, strong) id menuTarget;
+/* Appends one input record, dropped past the queue's limit. */
+- (void)record:(NSString *)line;
 @end
 
 #endif
