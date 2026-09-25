@@ -18,6 +18,23 @@ tags: [changelog]
 - [[website Domain Library]] places `Std.Checksum`, `Std.Cron`, `Std.Dotenv`, `Std.Human`, `Std.Ip`,
   `Std.Site`, `Std.Stats`, and `Std.Term` in their sections.
 
+## 2026-09-25 — Text reads itself as a number (#349)
+
+- [[grammar/pudu]]: `Str` answers `toInt()`, `toFloat()`, and `toDecimal()`, each an `Option` for
+  the whole text; text could not be read as a float at all before.
+- [[Eval Builtin TextNumber]] holds the readers: `Int`'s bounds checked, floats correctly rounded
+  with `inf`, `nan`, and overflow refused, decimals keeping their scale.
+- The book's text chapter shows them. [[Uses Text To Number]] (14 checks) and
+  [[Rejects Text To Number Misuse]] cover them.
+
+## 2026-09-25 — Routes before pages, for every host (#357)
+
+- [[Std Site]] `Route`: function routes (optionally by method), headers, and redirects in one
+  pattern language, written as Build Output routes for Vercel and as `_headers` and `_redirects`
+  for Netlify and Cloudflare Pages, each validated first.
+- [[website Prerender]] declares the site's routes and writes the Build Output routing itself;
+  `build-vercel.sh` no longer writes a route table by hand. [[Uses Site All]] grows to 40 checks.
+
 ## 2026-09-25 — A build step for any Pudu web application (#351)
 
 - [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with

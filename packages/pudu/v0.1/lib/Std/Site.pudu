@@ -9,18 +9,33 @@ import Std.Io as Io
 /// the pages are the same for all of them.
 export type Target = Static | Vercel | Netlify | CloudflarePages
 
+/// A rule the host applies before it looks for a page, written in one pattern
+/// language for every host: a path, where a trailing `*` matches the rest.
+///
+/// `ToFunction` sends matching requests to the fallback function before any
+/// file is considered — an API, a form post, a search — optionally only for
+/// some methods (none listed means all). `Header` adds a response header to
+/// matching files, such as a cache policy. `Redirect` answers with a
+/// redirect, permanent (308) or temporary (307).
+export type Route
+  = ToFunction{pattern: Str, methods: Array[Str]}
+  | Header{pattern: Str, name: Str, value: Str}
+  | Redirect{pattern: Str, location: Str, permanent: Bool}
+
 /// How a site is built.
 ///
 /// `output` is where the build writes; `publicDirectory` holds files copied
 /// as they are (stylesheets, images, fonts), or is empty for none; `workers`
 /// is how many pages render at once; `fallback` names the function a request
-/// no page answers is sent to, on a host that runs one.
+/// no page answers is sent to, on a host that runs one; `routes` are the rules
+/// applied before pages are looked for.
 export type Options = {
   output: Str,
   publicDirectory: Str,
   workers: Int,
   target: Target,
-  fallback: Option[Str]
+  fallback: Option[Str],
+  routes: Array[Route]
 }
 
 /// A path that was not written, and why.
@@ -80,7 +95,8 @@ export fn options() -> Options {
     publicDirectory: "public",
     workers: 8,
     target: target,
-    fallback: None
+    fallback: None,
+    routes: []
   }
 }
 
@@ -246,17 +262,85 @@ fn copyPublic(settings: &Options, root: Str) -> Result[Int, SiteError] {
   Ok(copied)
 }
 
-/// The routing a host that reads a Build Output configuration needs: files
-/// first, then any page by its directory, then the dynamic function or the
+/// Text as a JSON string literal.
+fn jsonText(value: Str) -> Str {
+  var out = "\""
+  for here in value.chars() {
+    if here == '"' {
+      out = out + "\\\""
+    } else if here == '\\' {
+      out = out + "\\\\"
+    } else if here.code() < 32 {
+      out = out + " "
+    } else {
+      out = out + here.toText()
+    }
+  }
+  out + "\""
+}
+
+/// A route pattern as the anchored regular expression a Build Output
+/// configuration matches: every character literal except a trailing `*`,
+/// which captures the rest.
+export fn patternRegex(pattern: Str) -> Str {
+  var out = "^"
+  var index = 0
+  let chars = pattern.chars()
+  for here in chars {
+    if here == '*' && index == chars.length() - 1 {
+      out = out + "(.*)"
+    } else if ".+?^$()[]\{\}|\\*".contains(here.toText()) {
+      out = out + "\\" + here.toText()
+    } else {
+      out = out + here.toText()
+    }
+    index = index + 1
+  }
+  out + "$"
+}
+
+fn routeJson(route: &Route, fallback: Option[Str]) -> Option[Str] {
+  match route {
+    case Header{pattern, name, value} =>
+    Some("\{ \"src\": " + jsonText(patternRegex(pattern)) + ", \"headers\": \{ " + jsonText(name) + ": " + jsonText(value) + " \}, \"continue\": true \}")
+    case Redirect{pattern, location, permanent} =>
+    Some("\{ \"src\": " + jsonText(patternRegex(pattern)) + ", \"status\": " + (if permanent { "308" } else { "307" }) + ", \"headers\": \{ \"Location\": " + jsonText(location) + " \} \}")
+    case ToFunction{pattern, methods} => {
+      let name = fallback ?
+      let methodsJson = if methods.isEmpty() { "" } else { ", \"methods\": [" + methods.map(jsonText).join(", ") + "]" }
+      Some("\{ \"src\": " + jsonText(patternRegex(pattern)) + methodsJson + ", \"dest\": " + jsonText("/" + name) + " \}")
+    }
+  }
+}
+
+/// The routing a host that reads a Build Output configuration needs: the
+/// declared routes (redirects, headers, then those sent to the function),
+/// files, any page by its directory, then the fallback function or the
 /// site's `404.html`. Derived from the layout rather than from a list of
-/// pages, so a page added later needs no new route.
-export fn vercelConfig(fallback: Option[Str], hasNotFound: Bool) -> Str {
-  var routes = [
-    "\{ \"handle\": \"filesystem\" \}",
-    "\{ \"src\": \"^/(.+?)/?$\", \"dest\": \"/$1/index.html\", \"check\": true \}"
-  ]
+/// pages, so a page added later needs no new route. A `ToFunction` route
+/// without a fallback function has nowhere to go and is left out.
+export fn vercelConfig(fallback: Option[Str], hasNotFound: Bool, declared: &Array[Route]) -> Str {
+  var routes: Array[Str] = []
+  for kind in [0, 1, 2] {
+    for route in declared {
+      let order = match route {
+        case Redirect{..} => 0
+        case Header{..} => 1
+        case ToFunction{..} => 2
+      }
+      if order == kind {
+        match routeJson(&route, fallback) {
+          case Some(text) => { routes = routes.push(text) }
+          case None => {}
+        }
+      }
+    }
+  }
+  routes = routes.push("\{ \"handle\": \"filesystem\" \}")
+  routes = routes.push("\{ \"src\": \"^/$\", \"dest\": \"/index.html\", \"check\": true \}")
+  routes = routes.push("\{ \"src\": \"^/(.+?)/?$\", \"dest\": \"/$1/index.html\", \"check\": true \}")
   match fallback {
-    case Some(name) => { routes = routes.push("\{ \"src\": \"/(.*)\", \"dest\": \"/" + name + "\" \}") }
+    case Some(name) => { routes = routes.push("\{ \"src\": \"/(.*)\", \"dest\": " + jsonText("/" + name) + " \}") }
     case None => {
       if hasNotFound {
         routes = routes.push("\{ \"src\": \"/(.*)\", \"status\": 404, \"dest\": \"/404.html\" \}")
@@ -264,6 +348,43 @@ export fn vercelConfig(fallback: Option[Str], hasNotFound: Bool) -> Str {
     }
   }
   "\{\n  \"version\": 3,\n  \"routes\": [\n    " + routes.join(",\n    ") + "\n  ]\n\}\n"
+}
+
+/// The `_headers` file static hosts read: each pattern, then its headers
+/// indented beneath it. Empty when no route sets a header.
+export fn headersFile(declared: &Array[Route]) -> Str {
+  var out = ""
+  for route in declared {
+    match route {
+      case Header{pattern, name, value} => { out = out + pattern + "\n  " + name + ": " + value + "\n" }
+      case _ => {}
+    }
+  }
+  out
+}
+
+/// The `_redirects` file static hosts read: one `from to status` line per
+/// redirect. Empty when no route redirects.
+export fn redirectsFile(declared: &Array[Route]) -> Str {
+  var out = ""
+  for route in declared {
+    match route {
+      case Redirect{pattern, location, permanent} => {
+        out = out + pattern + " " + location + " " + (if permanent { "308" } else { "307" }) + "\n"
+      }
+      case _ => {}
+    }
+  }
+  out
+}
+
+/// A host configuration file, written when it has something in it.
+fn writeConfig(path: Str, contents: Str) -> Result[(), SiteError] {
+  if contents.isEmpty() { return Ok(()) }
+  match writeIfChanged(path, &contents.toBytes()) {
+    case Ok(_) => Ok(())
+    case Err(reason) => Err(Unwritable(path, reason))
+  }
 }
 
 fn validate(settings: &Options) -> Result[(), SiteError] {
@@ -276,6 +397,35 @@ fn validate(settings: &Options) -> Result[(), SiteError] {
       }
     }
     case None => {}
+  }
+  for route in settings.routes {
+    let pattern = match route {
+      case ToFunction{pattern, ..} => pattern
+      case Header{pattern, ..} => pattern
+      case Redirect{pattern, ..} => pattern
+    }
+    if !pattern.startsWith("/") || pattern.contains(" ") || pattern.take(pattern.length() - 1).contains("*") {
+      return Err(BadOptions("'" + pattern + "' is not a route pattern: a path, with at most a trailing '*'"))
+    }
+    match route {
+      case Header{name, value, ..} => {
+        if name.isEmpty() || name.contains(":") || name.contains(" ") || name.contains("\n") || value.contains("\n") {
+          return Err(BadOptions("'" + name + "' is not a header a host can be told to add"))
+        }
+      }
+      case ToFunction{methods, ..} => {
+        for method in methods {
+          if method.isEmpty() || method != method.toUpper() || method.contains(" ") || method.contains("\"") {
+            return Err(BadOptions("'" + method + "' is not a request method"))
+          }
+        }
+      }
+      case Redirect{location, ..} => {
+        if location.isEmpty() || location.contains(" ") || location.contains("\n") {
+          return Err(BadOptions("'" + location + "' is not a redirect location"))
+        }
+      }
+    }
   }
   Ok(())
 }
@@ -315,13 +465,14 @@ export fn build(settings: &Options, paths: &Array[Str], render: fn(Str) -> Http.
   let copied = copyPublic(settings, root) ?
   match settings.target {
     case Vercel => {
-      let config = vercelConfig(settings.fallback, Io.exists(root + "/404.html"))
-      match writeIfChanged(settings.output + "/config.json", &config.toBytes()) {
-        case Ok(_) => {}
-        case Err(reason) => { return Err(Unwritable(settings.output + "/config.json", reason)) }
-      }
+      let config = vercelConfig(settings.fallback, Io.exists(root + "/404.html"), &settings.routes)
+      writeConfig(settings.output + "/config.json", config) ?
     }
-    case _ => {}
+    case Netlify | CloudflarePages => {
+      writeConfig(root + "/_headers", headersFile(&settings.routes)) ?
+      writeConfig(root + "/_redirects", redirectsFile(&settings.routes)) ?
+    }
+    case Static => {}
   }
   Ok(Report{rendered: paths.length(), written: written, unchanged: unchanged, copied: copied, refused: refused})
 }
