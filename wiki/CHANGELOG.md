@@ -13,6 +13,15 @@ tags: [changelog]
 - linux-amd64: executable 58 MB → 27.8 MB, archive 10.4 MB → 7.3 MB. The archive's compiler runs a
   program from an empty environment, and a bundle built from it passes the bundle gate.
 
+## 2026-09-25 — Text reads itself as a number (#349)
+
+- [[grammar/pudu]]: `Str` answers `toInt()`, `toFloat()`, and `toDecimal()`, each an `Option` for
+  the whole text; text could not be read as a float at all before.
+- [[Eval Builtin TextNumber]] holds the readers: `Int`'s bounds checked, floats correctly rounded
+  with `inf`, `nan`, and overflow refused, decimals keeping their scale.
+- The book's text chapter shows them. [[Uses Text To Number]] (14 checks) and
+  [[Rejects Text To Number Misuse]] cover them.
+
 ## 2026-09-25 — Routes before pages, for every host (#357)
 
 - [[Std Site]] `Route`: function routes (optionally by method), headers, and redirects in one

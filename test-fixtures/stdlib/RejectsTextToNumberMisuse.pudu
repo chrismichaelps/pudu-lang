@@ -1,0 +1,7 @@
+module RejectsTextToNumberMisuse
+
+fn main() -> Int {
+  let port: Int = "8080".toInt()
+  let wide = "1.5".toFloat(10)
+  0
+}
