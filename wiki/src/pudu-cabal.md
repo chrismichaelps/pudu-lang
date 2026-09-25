@@ -163,3 +163,7 @@ the digest is computed while the compiler is compiled.
 ## Native checksums (#343)
 
 Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new dependency.
+
+## Runtime packs (#355)
+
+Registers `Pudu.Cli.RuntimePack`; it uses the already-linked `zlib` and the package HTTP client.
