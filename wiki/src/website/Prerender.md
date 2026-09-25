@@ -14,3 +14,12 @@ starting a server or making loopback requests.
 
 Resolved Grill Log: the sitemap path source and prerender path source are identical, and any route
 that fails to answer with HTTP 200 makes the build fail instead of publishing an error page.
+
+## Built through Std.Site (#351)
+
+The pages are written by [[Std Site]] `build` rather than a loop of its own: eight at a time, with
+the file for each path decided by its response (an HTML response is a directory's `index.html`, so
+`/module/Std.Json` is a page; `robots.txt` and `sitemap.xml` are written at their paths), and a file
+whose bytes are already current left alone. Measured on 4 cores: 91 s before, 26 s after, with the
+3,705 files byte-identical; a rebuild with nothing changed writes none. Refused paths are reported
+one per line and fail the build.

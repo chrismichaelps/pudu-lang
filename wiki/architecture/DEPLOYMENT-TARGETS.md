@@ -56,11 +56,11 @@ pudu build src/Main.pudu -o dist/server --runtime dist/pudu-musl-x86_64
 
 Two things about it are worth knowing.
 
-**The runtime must be the same version of Pudu as the compiler.** A bundle carries source, and a
-runtime of another version would check it by different rules than the ones it was just admitted
-under. Nothing in the build can see the version of a binary it cannot run, so that agreement is the
-caller's to keep. Build both from one checkout, or record which release a downloaded runtime came
-from.
+**The runtime should be built from the same sources as the compiler.** Every executable carries a
+digest of the sources it was built from, readable from its bytes without running it. When the named
+runtime's digest is the compiler's, the bundle carries the checked products and starts from them;
+when it differs, the build says so and the program is checked from source at every start. Build both
+from one checkout or one release to get the fast start.
 
 **A runtime that already carries a program is replaced, not appended to.** The trailer is read from
 the end of the file, so appending to a built artefact would work and would keep the previous
@@ -78,10 +78,13 @@ starts, and compiles them. Three consequences:
   needs an `emptyDir` mounted at it. `scratch` has no `/tmp` and no shell to create one.
 - **Certificate authorities are required for `Std.Tls`**, which verifies against the host trust
   store. Without them every HTTPS connection fails to verify, which reads as a broken server.
-- **Starting costs what interpreting the program costs.** Measured on an Apple M-series host with an
-  `-O2` runtime: 145 ms for a program importing nothing, 413 ms for one importing five library
-  modules (eleven modules carried). A daemon pays that once. A serverless function pays it on every
-  cold start.
+- **Starting costs reading what was checked, not checking it again.** A bundle carries the checked
+  products its build made, and a runtime built from the same sources starts from them. Measured on a
+  4-core x86_64 Linux host with an `-O2` runtime: 11 ms for a program importing nothing, 37–45 ms for
+  one carrying 22 modules, about 95 ms for the project website's 77-module function. Without the
+  products the same 22-module program takes 360 ms, which is what every cross-built bundle paid until
+  products were carried onto named runtimes (#352). A daemon pays the start once; a serverless
+  function pays it on every cold start, which is why the products matter there most.
 
 That last figure is the argument for the platforms that run a daemon. Cloud Run, Fly.io, Render,
 Railway and AWS App Runner all run a compiled daemon directly, and `deploy/Dockerfile` is what they
@@ -108,6 +111,15 @@ for it and decides, so one build runs in both places.
 
 Vercel's Build Output API names this runtime `provided.al2023` and starts the artefact as `bootstrap`.
 `website/scripts/build-vercel.sh` emits that.
+
+## The static half of a web application
+
+Pages that do not depend on a request are files, and [[Std Site]] writes them
+([[ADR-0024-building-a-web-application-for-any-host]]). An application names its paths and the
+`render` its server already uses; `Site.build` renders them on a worker pool and writes each where
+the chosen host serves it — `Static`, `Vercel` (with Build Output routes derived from the layout),
+`Netlify`, or `CloudflarePages` — rewriting only files whose bytes changed. The target is read from
+the host's build environment, so one program builds correctly on a laptop and in the host's CI.
 
 ## What this does not yet do
 

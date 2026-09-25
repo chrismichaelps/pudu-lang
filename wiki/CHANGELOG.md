@@ -13,6 +13,25 @@ tags: [changelog]
   labels required and legacy encrypted headers refused; `withLabel` selects by what a caller expects.
 - [[Uses Base32 Pem All]] reaches every export (30 checks); the API coverage floor rises to 3524.
 
+## 2026-09-25 — A build step for any Pudu web application (#351)
+
+- [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with
+  a layout and routing per host, fast by rendering in parallel and rewriting only what changed.
+- [[Std Site]]: `build` renders on a worker pool, places each response by its content type, refuses
+  unsafe paths and failed pages, copies a public directory, and writes Vercel's Build Output routes
+  derived from the layout; `Static`, `Netlify`, and `CloudflarePages` need none.
+- [[website Prerender]] builds through it: 91 s → 26 s on four cores for 3,705 byte-identical pages,
+  and a rebuild with nothing changed writes nothing. [[Uses Site All]] (28 checks).
+
+## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
+
+- [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time
+  and readable from its bytes; [[Pudu Version]] `identityText` files products under version and digest.
+- [[Pudu Bundle]] `sharesSources` lets `pudu build --runtime` carry products to a runtime from the
+  same sources — including one for another platform — so a cross-built function starts in 37 ms
+  instead of 360 ms (22 modules). A runtime from other sources receives none, and the build says so.
+- [[architecture/DEPLOYMENT-TARGETS]] carries the measured start figures.
+
 ## 2026-09-25 — Checksums at runtime speed (#343)
 
 - [[Eval Checksum]] and the pure built-in `checksumOf`: CRC-32, CRC-32C, CRC-64 (ECMA-182 as xz), and

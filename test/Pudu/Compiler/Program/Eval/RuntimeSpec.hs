@@ -80,6 +80,7 @@ testRuntimeEvaluation = do
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   armored <- runEntry "test-fixtures/stdlib/UsesBase32PemAll.pudu"
+  built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
   written <- runEntry "test-fixtures/stdlib/UsesToText.pudu"
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
@@ -124,6 +125,11 @@ testRuntimeEvaluation = do
         refusal including an encrypted legacy header. -}
     , counterexample "base32 and PEM read strictly and write what they read"
         (armored === Just "30")
+    {-| Pages written where hosts serve them, unsafe paths and failed pages
+        refused, unchanged files left alone, one worker and eight agreeing,
+        and each host's layout and routing. -}
+    , counterexample "a site builds for its host and rewrites only what changed"
+        (built === Just "28")
     {-| Each checksum's published check value, chunked updates equal to the
         whole, and a one-bit change moving every one. -}
     , counterexample "checksums match their published values and chain over chunks"

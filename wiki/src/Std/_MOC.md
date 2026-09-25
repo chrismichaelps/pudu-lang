@@ -161,6 +161,7 @@ tags: [moc, module, stdlib]
 - [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
+- [[Std Site]] — the build step a web application calls: pages in parallel, per-host layout and routing.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Ip]] — IPv4 and IPv6 addresses, canonical rendering, classification, and network prefixes.
 - [[Std Math]] — generic total numeric algorithms.
