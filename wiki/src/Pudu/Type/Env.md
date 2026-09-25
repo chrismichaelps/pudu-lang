@@ -98,6 +98,8 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Why `isMethodKey`? **A:** Declared and imported methods are recorded apart from ordinary names, and only that record can tell a method from a module function filed at the same qualified key.
+
 - **Q:** Is one table of variants keyed by name enough? **A:** No; variants are held keyed by their owning type as well. _Rationale:_ a name-keyed table has one entry per name across every module in the graph, so two modules declaring a variant of the same name overwrite one another and the survivor depends on load order. Keyed by owner there is no collision to resolve, and a caller that already knows the type — which a pattern does, once its name has been resolved through the scope — asks a question with one answer. _Rejected:_ a name-keyed table with a tie-break; erroring on a duplicate name, which would refuse two modules that never meet.
 
 - **Q:** Why a second map rather than a fourth component on `declaredVariants`? **A:** Because most variants have no names. _Rationale:_ absence is the answer for every positional variant, and a `Maybe` in a four-tuple would make every reader of the payload destructure a field they do not want. _Rejected:_ widening the existing tuple.

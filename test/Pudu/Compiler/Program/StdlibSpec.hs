@@ -88,6 +88,7 @@ testStandardLibrary = do
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   numberMisuse <- codes "test-fixtures/stdlib/RejectsTextToNumberMisuse.pudu"
   textMisuse <- codes "test-fixtures/stdlib/RejectsToTextMisuse.pudu"
+  aliasedMethod <- codes "test-fixtures/stdlib/RejectsAliasedModuleMethod.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
     , counterexample "a program may shadow a standard module" (shadows === [])
@@ -95,6 +96,7 @@ testStandardLibrary = do
         (numberMisuse === ["E3001", "E3003"])
     , counterexample "toText answers text and takes nothing, and a literal's members are checked"
         (textMisuse === ["E3001", "E3003", "E3005", "E3001"])
+    , counterexample "a module imported under a built-in type's name lends it no methods" (aliasedMethod === ["E3005"])
     , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)

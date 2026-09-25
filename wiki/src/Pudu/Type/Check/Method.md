@@ -96,6 +96,8 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 
 ## Grill Log
 
+- **Q:** Where does a method of a built-in type come from? **A:** Only from a declared method: `isMethodKey` answers whether a key is one an imported module's impl provided or one this module declared. _Rationale:_ a built-in type's key has no module in it, so `import Std.Option as Option` put the module's `map` at `Option.map`, and `maybe().map(f)` checked and then failed when run. _Rejected:_ renaming built-in keys, which every impl and qualified call relies on.
+
 - **Q:** Should methods live at module scope? **A:** No; they are keyed by their target type. _Rationale:_ two types may implement the same trait, and a flat scope would make one shadow the other. _Rejected:_ flat method names; a global method table keyed by name alone.
 - **Q:** Field or method when both spell the same name? **A:** The method, in callee position only. _Rationale:_ `value.name()` reads as a call, and a field holding a function can still be called by parenthesizing it. _Rejected:_ field always wins, which makes a method unreachable; method always wins, which hides a field.
 - **Q:** What should `methodScheme` return when bounds are ambiguous? **A:** `Just (monotype ErrorType)`, not `Nothing`. _Rationale:_ `checkCallee` falls through to `checkExpression` on `Nothing`, which re-enters `rigidMethod` and reports `E3013` a second time. Returning an error scheme keeps the call site typed as an error and stops the duplicate. _Rejected:_ returning `Nothing`, which duplicated the diagnostic; suppressing `E3013` in `rigidMethod`, which would lose the diagnostic for non-call member access.

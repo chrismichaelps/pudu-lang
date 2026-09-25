@@ -47,6 +47,7 @@ import Pudu.Type.Env
   , freshVariable
   , ambiguousProviders
   , lookupField
+  , isMethodKey
   , lookupName
   , lookupVariantFields
   , qualifiesSomething
@@ -1047,7 +1048,12 @@ methodType :: Span -> NominalId -> Text -> Checker Type
 methodType spanValue owner member = do
   let key = nominalKey owner <> "." <> member
   providers <- ambiguousProviders key
-  found <- lookupName key
+  named <- lookupName key
+  -- A built-in type's key has no module in it, so a module imported under the
+  -- type's own name (`import Std.Option as Option`) puts its functions at the
+  -- very key a method would have. Only a declared method answers here.
+  method <- if nominalModule owner == Nothing then isMethodKey key else pure True
+  let found = if method then named else Nothing
   case (providers, found) of
     (_ : _, _) -> ambiguous spanValue owner member providers
     (_, Nothing)

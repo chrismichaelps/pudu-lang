@@ -1,0 +1,13 @@
+module RejectsAliasedModuleMethod
+
+import Std.Option as Option
+
+// A module imported under a built-in type's name lends that type no methods:
+// `Option.map` is the module's function, not a method of an `Option` value.
+fn maybe() -> Option[Int] { Some(3) }
+
+fn main() -> Int {
+  let doubled = maybe().map(|n: Int| n * 2)
+  let kept = Option.map(maybe(), |n: Int| n + 1)
+  0
+}

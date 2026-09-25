@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — A module named like a built-in type lends it no methods
+
+- [[Type Check Method]] and `Rule.methodType`: a member of a built-in type is a method only when a
+  declared or imported impl provides it (`isMethodKey` in [[Type Env]]). With
+  `import Std.Option as Option`, `maybe().map(f)` is now `E3005` at check time instead of a failure
+  when run; `Option.map(maybe(), f)` and trait methods such as `Mappable.mapped` are unchanged.
+  Fixture `RejectsAliasedModuleMethod`.
+
 ## 2026-09-25 — Releases carry their API reference (#369)
 
 - [[Cli ReleaseCatalogue]]: `pudu release` attaches `pudu-api.json` — the package's exported,

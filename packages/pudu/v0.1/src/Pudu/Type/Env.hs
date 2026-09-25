@@ -42,6 +42,7 @@ module Pudu.Type.Env
   , lookupName
   , qualifiesSomething
   , isImportedMethod
+  , isMethodKey
   , lookupVariant
   , lookupVariantIn
   , lookupVariantFields
@@ -100,7 +101,7 @@ import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, renderType )
+  ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -618,6 +619,19 @@ bindImportedMethod name scheme = do
   bindName name scheme
   Checker $ \state ->
     ((), state{stateImportedMethods = Set.insert name (stateImportedMethods state)})
+
+{-| Whether a qualified key names a method: one an imported module's impl
+    provided, or one this module's impls or trait members declared. A
+    built-in type's key is its bare name, so `Option.map` is also where a
+    module imported as `Option` keeps its `map` function; only this table tells
+    the two apart. -}
+isMethodKey :: Text -> Checker Bool
+isMethodKey key =
+  Checker $ \state ->
+    ( Set.member key (stateImportedMethods state)
+        || any (\(owner, name, _) -> nominalKey owner <> "." <> name == key) (stateDeclaredMethodsRev state)
+    , state
+    )
 
 isImportedMethod :: Text -> Checker Bool
 isImportedMethod name =

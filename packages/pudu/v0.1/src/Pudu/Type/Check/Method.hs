@@ -50,6 +50,7 @@ import Pudu.Type.Env
   , recordMethodProvider
   , lookupName
   , isImportedMethod
+  , isMethodKey
   , report
   , rigidBoundsOf
   , rigidSatisfies
@@ -407,6 +408,12 @@ methodScheme spanValue receiver member = case receiver of
     let key = nominalKey owner <> "." <> member
     providers <- ambiguousProviders key
     case providers of
+      -- A built-in type's key has no module in it, so a module imported under
+      -- the type's own name puts its functions at the key a method would have;
+      -- only a declared method answers for the type.
+      [] | nominalModule owner == Nothing -> do
+        method <- isMethodKey key
+        if method then lookupName key else pure Nothing
       [] -> lookupName key
       _ -> do
         report "E3013" spanValue
