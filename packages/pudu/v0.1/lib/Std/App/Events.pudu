@@ -1,0 +1,163 @@
+module Std.App.Events
+
+import Std.Json as Json
+
+/// Something that happened, named by a dotted topic such as `order.created`.
+export type Event = { topic: Str, id: Str, at: Int, payload: Json.Json }
+
+/// A subscriber: the topic pattern it listens on, its name for reports, and
+/// its handler. A pattern is an exact topic, a prefix ending in `.*`, or `*`.
+export type Subscriber = {
+  pattern: Str,
+  name: Str,
+  handle: fn(Event) -> Result[(), Str]
+}
+
+/// Subscribers in the order they were added; delivery follows that order.
+export type Bus = { subscribers: Array[Subscriber] }
+
+/// What one publish did: how many subscribers took the event, and which
+/// refused it with what reason.
+export type Delivery = { delivered: Int, failures: Array[(Str, Str)] }
+
+/// Events staged inside a unit of work, delivered only after it commits.
+///
+/// `attempts` counts deliveries tried per event id; an event failing
+/// `limit` times moves to `dead`.
+export type Outbox = {
+  pending: Array[Event],
+  attempts: Map[Str, Int],
+  dead: Array[Event],
+  limit: Int
+}
+
+/// An event.
+export fn event(topic: Str, id: Str, at: Int, payload: Json.Json) -> Event {
+  Event{topic: topic, id: id, at: at, payload: payload}
+}
+
+/// A bus with no subscribers.
+export fn bus() -> Bus { Bus{subscribers: []} }
+
+/// Adding subscribers reads top to bottom: `Events.bus().on(...).on(...)`.
+export trait Subscribing {
+  fn on(self: &Self, pattern: Str, name: Str, handle: fn(Event) -> Result[(), Str]) -> Self
+}
+
+impl Subscribing for Bus {
+  /// The bus with one more subscriber.
+  fn on(self: &Self, pattern: Str, name: Str, handle: fn(Event) -> Result[(), Str]) -> Self {
+    Bus{subscribers: self.subscribers.push(Subscriber{pattern: pattern, name: name, handle: handle})}
+  }
+}
+
+/// Whether `pattern` selects `topic`.
+export fn matches(pattern: Str, topic: Str) -> Bool {
+  if pattern == "*" || pattern == topic { return true }
+  if pattern.endsWith(".*") {
+    let prefix = pattern.take(pattern.length() - 1)
+    return topic.startsWith(prefix)
+  }
+  false
+}
+
+/// The names of the subscribers an event on `topic` reaches.
+export fn audience(target: &Bus, topic: Str) -> Array[Str] {
+  var names = []
+  for one in target.subscribers {
+    if matches(one.pattern, topic) { names = names.push(one.name) }
+  }
+  names
+}
+
+/// Delivers an event to every matching subscriber.
+///
+/// One subscriber's failure does not stop the others; it is reported.
+export fn publish(target: &Bus, happened: &Event) -> Delivery {
+  var delivered = 0
+  var failures = []
+  for one in target.subscribers {
+    if matches(one.pattern, happened.topic) {
+      match one.handle(*happened) {
+        case Ok(_) => { delivered = delivered + 1 }
+        case Err(reason) => { failures = failures.push((one.name, reason)) }
+      }
+    }
+  }
+  Delivery{delivered: delivered, failures: failures}
+}
+
+/// An empty outbox moving an event to `dead` after `limit` failed deliveries.
+export fn outbox(limit: Int) -> Outbox {
+  Outbox{pending: [], attempts: mapOf([]), dead: [], limit: limit}
+}
+
+/// The outbox with one more event awaiting commit.
+export fn stage(box: &Outbox, happened: Event) -> Outbox {
+  Outbox{..*box, pending: box.pending.push(happened)}
+}
+
+/// The outbox with everything staged since the last drain discarded, as
+/// when the unit of work rolls back.
+export fn discard(box: &Outbox) -> Outbox {
+  Outbox{..*box, pending: []}
+}
+
+/// Publishes every pending event in order after a commit.
+///
+/// An event any subscriber refused stays pending for the next drain until it
+/// has failed `limit` times, then moves to `dead`. Returns the outbox after
+/// the drain and the combined delivery.
+export fn drain(box: &Outbox, target: &Bus) -> (Outbox, Delivery) {
+  var kept = []
+  var attempts = box.attempts
+  var dead = box.dead
+  var delivered = 0
+  var failures = []
+  for happened in box.pending {
+    let result = publish(target, &happened)
+    delivered = delivered + result.delivered
+    failures = failures.concat(result.failures)
+    if result.failures.length() == 0 {
+      attempts = attempts.remove(happened.id)
+    } else {
+      let tried = match attempts.get(happened.id) {
+        case Some(count) => count + 1
+        case None => 1
+      }
+      if tried >= box.limit {
+        dead = dead.push(happened)
+        attempts = attempts.remove(happened.id)
+      } else {
+        kept = kept.push(happened)
+        attempts = attempts.insert(happened.id, tried)
+      }
+    }
+  }
+  (Outbox{..*box, pending: kept, attempts: attempts, dead: dead}, Delivery{delivered: delivered, failures: failures})
+}
+
+/// Events awaiting delivery.
+export fn pendingOf(box: &Outbox) -> Array[Event] { box.pending }
+
+/// Events that exhausted their attempts.
+export fn deadOf(box: &Outbox) -> Array[Event] { box.dead }
+
+/// The event as a JSON object, for a durable outbox table or a log line.
+export fn toJson(happened: &Event) -> Json.Json {
+  Json.Object([
+      ("topic", Json.Text(happened.topic)),
+      ("id", Json.Text(happened.id)),
+      ("at", Json.Number(happened.at)),
+      ("payload", happened.payload)
+    ])
+}
+
+/// An event read back from `toJson`.
+export fn fromJson(value: &Json.Json) -> Option[Event] {
+  let topic = Json.asText(&Json.field(value, "topic") ?) ?
+  let id = Json.asText(&Json.field(value, "id") ?) ?
+  let at = Json.asInt(&Json.field(value, "at") ?) ?
+  let payload = Json.field(value, "payload") ?
+  Some(Event{topic: topic, id: id, at: at, payload: payload})
+}

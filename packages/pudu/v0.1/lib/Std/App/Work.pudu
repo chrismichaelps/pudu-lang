@@ -13,7 +13,9 @@ module Std.App.Work
 /// this module's to make, but running the schedule without deciding it is the
 /// mistake this note exists to name.
 
+import Std.Cron as Cron
 import Std.Option as Option
+import Std.Time as Time
 
 /// When a job is due again.
 ///
@@ -21,10 +23,15 @@ import Std.Option as Option
 /// scheduler offering one is wrong for half the jobs it is given. Measured
 /// from the end, a job that overruns simply runs less often; measured from the
 /// start, it keeps its cadence and the skipped turns absorb the overrun.
+///
+/// `Calendar(schedule, origin)` runs at the minutes a schedule names. The
+/// caller's clock counts from `origin`, the wall-clock epoch milliseconds at
+/// which it read zero, so calendar jobs share one clock with interval jobs.
 export type Due
   = After(Int)
   | EveryFromEnd(Int)
   | EveryFromStart(Int)
+  | Calendar(Cron.Schedule, Int)
 
 /// What a job has done so far.
 ///
@@ -140,6 +147,13 @@ export fn isDue(one: &Job, now: Int) -> Bool {
     case After(delay) => one.history.runs == 0 && now >= delay
     case EveryFromEnd(interval) => now - lastPoint(one, false) >= interval
     case EveryFromStart(interval) => now - lastPoint(one, true) >= interval
+    case Calendar(calendar, origin) => {
+      let since = if one.history.runs == 0 { origin - 1 } else { origin + one.history.lastBegan }
+      match Cron.next(&calendar, &Time.instantOf(since)) {
+        case Some(firing) => Time.toMillis(&firing) <= origin + now
+        case None => false
+      }
+    }
   }
 }
 
