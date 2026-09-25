@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — 0.1.2 pre-release preparation
+
+- Version 0.1.2 in the package and test manifests, the README, the About page, the catalogue, and
+  the website suite; release notes in `packages/pudu/v0.1/release-notes/0.1.2.md`. The release plan
+  marks it a pre-release, as every `0.x` version is.
+
 ## 2026-09-25 — A solid language server and editor extension (#366)
 
 - [[Type Env]] `settleIntegerLiteral`: a method call on an integer literal is checked as a
