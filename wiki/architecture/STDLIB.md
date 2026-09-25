@@ -192,6 +192,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Net` | addresses, TCP, UDP |
 | `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
+| `Std.Ip` | IPv4 and IPv6 addresses, classification, network prefixes, allowlists |
 
 ### Concurrency
 
@@ -266,6 +267,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
 | `Std.Json` | 21 | a `Json` value, a native-first decoder with positions in its errors, JSON Lines folding, compact and pretty encoding |
 | `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
+| `Std.Ip` | 36 | strict address parsing, RFC 5952 rendering, classification, networks, allowlists |
 | `Std.Order` | 27 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |

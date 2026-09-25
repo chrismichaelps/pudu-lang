@@ -11,7 +11,18 @@ tags: [changelog]
   decimal place, `parseDuration` and `duration` that round-trip (and read what `Time.describe`
   writes), `ordinal`, `plural`, and `relative`. Every step of reading is checked against `Int`, and a
   fraction that does not come to whole bytes or milliseconds is refused.
-- [[Uses Human All]] reaches every export (44 checks); the API coverage floor rises to 3518.
+- [[Uses Human All]] reaches every export (44 checks); the API coverage floor rises to 3554.
+
+## 2026-09-25 — Internet addresses and network prefixes (#339)
+
+- [[Std Ip]]: IPv4 and IPv6 addresses in one value, strict parsing (no leading zeros, one `::`,
+  no zone suffix), RFC 5952 rendering, bytes both ways, IPv4-mapped unmapping, neighbours, and
+  classification (loopback, private, link-local, multicast, unspecified, documentation, shared,
+  public).
+- Networks read strictly (host bits past the prefix are refused), masked explicitly with
+  `networkOf`, and asked `contains`, `overlaps`, `first`, `last`, `netmask`, and `within` — the
+  allowlist question, which unmaps a dual-stack peer first.
+- [[Uses Ip All]] reaches every export (55 checks); the API coverage floor rises to 3544.
 
 ## 2026-09-25 — Scopes that cancel siblings and outlive none (#336)
 

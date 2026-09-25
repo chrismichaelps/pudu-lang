@@ -159,6 +159,7 @@ tags: [moc, module, stdlib]
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
+- [[Std Ip]] — IPv4 and IPv6 addresses, canonical rendering, classification, and network prefixes.
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.
 - [[Std IntMap]] — high-performance bitwise Patricia Trie integer map inspired by Haskell Data.IntMap.
