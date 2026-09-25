@@ -13,6 +13,14 @@ tags: [changelog]
 - linux-amd64: executable 58 MB → 27.8 MB, archive 10.4 MB → 7.3 MB. The archive's compiler runs a
   program from an empty environment, and a bundle built from it passes the bundle gate.
 
+## 2026-09-25 — Base32 and PEM (#345)
+
+- [[Std Base32]]: RFC 4648 standard (padded or not), extended-hex, and Crockford alphabets; decoding
+  refuses foreign digits, impossible lengths, and altered trailing bits.
+- [[Std Pem]]: armored blocks written at 64 columns and read from bundles in order, with matching END
+  labels required and legacy encrypted headers refused; `withLabel` selects by what a caller expects.
+- [[Uses Base32 Pem All]] reaches every export (30 checks); the API coverage floor rises to 3524.
+
 ## 2026-09-25 — Text reads itself as a number (#349)
 
 - [[grammar/pudu]]: `Str` answers `toInt()`, `toFloat()`, and `toDecimal()`, each an `Option` for
