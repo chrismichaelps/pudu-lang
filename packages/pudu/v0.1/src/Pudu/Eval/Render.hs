@@ -63,6 +63,7 @@ renderValue value = case value of
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
   BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
   BucketsMethodValue method _ -> "<store method " <> bucketsMethodName method <> ">"
+  TextMethodValue _ -> "<method toText>"
   ForeignHandleValue name address _ ->
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
   ForeignValue binding ->
@@ -127,3 +128,4 @@ valueKind value = case value of
   CharMethodValue _ _ -> "character method"
   BytesMethodValue _ _ -> "byte method"
   BucketsMethodValue _ _ -> "store method"
+  TextMethodValue _ -> "text method"

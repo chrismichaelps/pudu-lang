@@ -39,6 +39,7 @@ comparableValue value = case value of
   RangeMethodValue _ _ -> False
   BytesMethodValue _ _ -> False
   BucketsMethodValue _ _ -> False
+  TextMethodValue _ -> False
   MapValue entries ->
     all (\(key, held) -> comparableValue (unOrdValue key) && comparableValue held) (Map.toAscList entries)
   SetValue members -> all (comparableValue . unOrdValue) (Set.toAscList members)

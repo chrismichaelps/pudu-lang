@@ -204,3 +204,8 @@ in `isBuiltinImmediate` so they evaluate immediately without task scheduling or 
 ## Places
 
 A call records the place each `&mut` argument, bare name, and receiver was taken from as a `Lent`. When the function it reaches declares `&mut` parameters, the body runs under `withFrameKeeping` and each such parameter's final value is stored back into its place after the body finishes, including through `return` and `?`. A receiver chosen by an element is read through its place so its index is evaluated once. See [[ADR-0022-lending-a-place]].
+
+## Universal `toText` dispatch (#347)
+
+`dispatchCall` and `applyFunction` call a `TextMethodValue` through `callDisplay` with its receiver
+first, so `value.toText()` and `display(value)` share one rendering.

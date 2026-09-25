@@ -95,3 +95,7 @@ is ignored by rendering but retained in value equality and runtime liveness chec
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]
+
+## Text method rendering (#347)
+
+A `TextMethodValue` renders as `<method toText>` and is described as a "text method".

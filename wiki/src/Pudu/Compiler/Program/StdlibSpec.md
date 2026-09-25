@@ -51,3 +51,8 @@ DEPTH 0.62 (DEEP). It crosses source discovery, interfaces, resolution, and type
 ## Referenced by
 
 [[src/Pudu/Compiler/Program/_MOC]] · [[Type Check Pattern]]
+
+## Universal `toText` refusals (#347)
+
+`RejectsToTextMisuse` asserts `["E3001", "E3003"]`: the result is text, and the method takes no
+arguments.

@@ -93,3 +93,7 @@ DEPTH 0.50 (MEDIUM). One total order and one honest refusal.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Keyed]]
+
+## Text method comparability (#347)
+
+`TextMethodValue` is not comparable, as no partially applied method is.
