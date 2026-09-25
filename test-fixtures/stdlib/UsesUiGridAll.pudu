@@ -1,0 +1,45 @@
+module UsesUiGridAll
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Grid as Grid
+import Std.Ui.Layout as Layout
+
+fn cell(name: Str) -> Layout.View {
+  Layout.box().tall(20).means(Layout.Button).named(name)
+}
+
+fn frameNamed(placed: &Layout.Layout, name: Str) -> Canvas.Rect {
+  let missing = Canvas.rect(-1, -1, -1, -1)
+  match Layout.nodeNamed(placed, name) {
+    case Some(node) => {
+      match Layout.frameOf(placed, node) {
+        case Some(frame) => frame
+        case None => missing
+      }
+    }
+    case None => missing
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  let view = Grid.grid(3, &[cell("a"), cell("b"), cell("c"), cell("d"), cell("e")], 10)
+  match Layout.place(&view, Canvas.size(320, 200)) {
+    case Ok(placed) => {
+      // Three equal columns of 100 with 10 between; the second row lines up.
+      if frameNamed(&placed, "a") == Canvas.rect(0, 0, 100, 20) && frameNamed(&placed, "c") == Canvas.rect(220, 0, 100, 20) {
+        held = held + 1
+      }
+      if frameNamed(&placed, "d") == Canvas.rect(0, 30, 100, 20) && frameNamed(&placed, "e") == Canvas.rect(110, 30, 100, 20) {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  if Grid.rowsFor(5, 3) == 2 && Grid.rowsFor(6, 3) == 2 && Grid.rowsFor(0, 3) == 0 && Grid.rowsFor(4, 0) == 4 { held = held + 1 }
+  if Grid.cellAt(4, 3) == (1, 1) && Grid.cellAt(2, 0) == (2, 0) { held = held + 1 }
+  if Grid.columnsFitting(320, 100, 10) == 3 && Grid.columnsFitting(50, 100, 10) == 1 && Grid.columnsFitting(320, 0, 10) == 1 {
+    held = held + 1
+  }
+  held
+}

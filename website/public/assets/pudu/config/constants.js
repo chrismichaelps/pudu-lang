@@ -1,6 +1,7 @@
 // The drawing's own units: its view box is 200 by 150 and the banner's top
 // edge crosses it at REST_LINE.
 export const VIEW_WIDTH = 200;
+export const VIEW_HEIGHT = 150;
 export const REST_LINE = 130;
 
 // How far the body sits below its resting pose, in drawing units.
@@ -39,6 +40,7 @@ export const TIMING = {
   duckFast: 200,
   sink: 460,
   look: 380,
+  follow: 200,
   blink: 150,
   flick: 260,
   sniff: 420,

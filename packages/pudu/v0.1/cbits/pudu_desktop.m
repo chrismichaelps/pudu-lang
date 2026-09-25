@@ -241,6 +241,11 @@ static NSString *pudu_printable(NSString *characters) {
   return kept;
 }
 
+/* Milliseconds since system start at which the event happened. */
+static long pudu_millis(NSEvent *event) {
+  return (long)(event.timestamp * 1000.0);
+}
+
 /* Records what a person did in the host's window. Answers whether the
    event was consumed, so key presses never reach AppKit's responder chain,
    which would answer an unhandled key with the system alert sound. */
@@ -254,6 +259,13 @@ static BOOL pudu_record_input(PuduWindowHost *host, NSEvent *event) {
   switch (event.type) {
     case NSEventTypeLeftMouseDown:
       [host record:[NSString stringWithFormat:@"press\t%ld\t%ld", x, y]];
+      [host record:[NSString stringWithFormat:@"down\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
+      return NO;
+    case NSEventTypeLeftMouseDragged:
+      [host record:[NSString stringWithFormat:@"move\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
+      return NO;
+    case NSEventTypeLeftMouseUp:
+      [host record:[NSString stringWithFormat:@"up\t%ld\t%ld\t%ld", x, y, pudu_millis(event)]];
       return NO;
     case NSEventTypeScrollWheel: {
       long delta = (long)event.scrollingDeltaY;
@@ -339,6 +351,41 @@ int64_t pudu_desktop_inputs(void *handle, uint8_t *buffer, size_t capacity) {
       host.inputs.length = 0;
     }
     return (int64_t)held;
+  }
+}
+
+int64_t pudu_desktop_clipboard_read(uint8_t *buffer, size_t capacity) {
+  if (!pudu_on_main_thread()) {
+    return -2;
+  }
+  @autoreleasepool {
+    NSString *text = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+    if (text == nil) {
+      return -5;
+    }
+    NSData *bytes = [text dataUsingEncoding:NSUTF8StringEncoding];
+    if (buffer != NULL && bytes.length <= capacity) {
+      memcpy(buffer, bytes.bytes, bytes.length);
+    }
+    return (int64_t)bytes.length;
+  }
+}
+
+int32_t pudu_desktop_clipboard_write(const uint8_t *text, size_t length) {
+  if (!pudu_on_main_thread()) {
+    return -2;
+  }
+  if (text == NULL && length > 0) {
+    return -1;
+  }
+  @autoreleasepool {
+    NSString *value = [[NSString alloc] initWithBytes:text length:length encoding:NSUTF8StringEncoding];
+    if (value == nil) {
+      return -1;
+    }
+    NSPasteboard *board = [NSPasteboard generalPasteboard];
+    [board clearContents];
+    return [board setString:value forType:NSPasteboardTypeString] ? 0 : -4;
   }
 }
 

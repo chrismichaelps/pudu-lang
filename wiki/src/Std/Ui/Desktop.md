@@ -22,7 +22,9 @@ operations rather than a second presenter.
 without a window. `drive(session, screen, frameMillis, onShortcut)` runs a screen until the person
 closes the window: inputs go to `Screen.handle`, shortcuts to `onShortcut` (a returned state
 re-renders through `Screen.restated`), and a frame is presented only when a turn damaged it.
-`DriveError` separates window failures from frame failures.
+`DriveError` separates window failures from frame failures. `Pointer(phase, point, millis)` carries
+each down, move, and up of the primary button for [[Std Ui Gesture]]; `drive` passes presses to the
+screen and leaves pointer phases to programs that recognize gestures.
 
 Every operation returns `Result`. Invalid dimensions, titles, durations, malformed surfaces,
 closed or invented tokens, wrong-thread access, unsupported targets, and platform failures remain

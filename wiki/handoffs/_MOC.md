@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-24-desktop-and-framework]] — issues #321–#323 standard library, application framework, and desktop toolkit (active).
 - [[2026-09-23-init-package-release]] — issue #302 generated package project, release, and download chain (complete).
 
 - [[2026-09-22-package-website]] — issue #297 public package snapshot, catalog, project pages,

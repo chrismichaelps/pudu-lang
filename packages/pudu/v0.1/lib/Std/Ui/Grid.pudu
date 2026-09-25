@@ -1,0 +1,47 @@
+module Std.Ui.Grid
+
+import Std.Ui.Layout as Layout
+
+/// `cells` in rows of `columns`, reading order left to right then down.
+///
+/// Every column takes an equal share of the width and every cell in a row
+/// shares that row's height; a short last row is padded with empty cells
+/// so its columns line up with the rows above. Fewer than one column is
+/// treated as one.
+export fn grid(columns: Int, cells: &Array[Layout.View], spacing: Int) -> Layout.View {
+  let width = if columns < 1 { 1 } else { columns }
+  var rows = []
+  var index = 0
+  while index < cells.length() {
+    var row = []
+    var column = 0
+    while column < width {
+      let cell = if index + column < cells.length() { cells[index + column] } else { Layout.box() }
+      row = row.push(cell.growing(1))
+      column = column + 1
+    }
+    rows = rows.push(Layout.row(row).spaced(spacing).aligned(Layout.Stretch))
+    index = index + width
+  }
+  Layout.column(rows).spaced(spacing).aligned(Layout.Stretch)
+}
+
+/// How many rows `count` cells fill at `columns` per row.
+export fn rowsFor(count: Int, columns: Int) -> Int {
+  let width = if columns < 1 { 1 } else { columns }
+  if count <= 0 { 0 } else { (count + width - 1) / width }
+}
+
+/// The row and column of cell `index`.
+export fn cellAt(index: Int, columns: Int) -> (Int, Int) {
+  let width = if columns < 1 { 1 } else { columns }
+  (index / width, index % width)
+}
+
+/// The number of columns of at least `minimum` pixels that fit in `width`
+/// with `spacing` between them; never fewer than one.
+export fn columnsFitting(width: Int, minimum: Int, spacing: Int) -> Int {
+  if minimum <= 0 { return 1 }
+  let fitting = (width + spacing) / (minimum + spacing)
+  if fitting < 1 { 1 } else { fitting }
+}

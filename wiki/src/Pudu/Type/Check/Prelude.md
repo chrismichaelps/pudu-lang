@@ -66,6 +66,8 @@ algorithm identity; no unchecked algorithm selector is admitted.
 - `desktopPresent(Int, Int, Int, Bytes) -> Result[(), Str]`
 - `desktopPump(Int, Int) -> Result[Bool, Str]`
 - `desktopInputs(Int) -> Result[Str, Str]`
+- `desktopClipboardRead() -> Result[Str, Str]`
+- `desktopClipboardWrite(Str) -> Result[(), Str]`
 - `desktopClose(Int) -> Result[(), Str]`
 
 Resolved Grill Log: the token is meaningful only to the evaluation-local owner; the public wrapper

@@ -1,5 +1,7 @@
 module Std.Ui.Controls
 
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Gesture as Gesture
 import Std.Ui.Layout as Layout
 import Std.Ui.Screen as Screen
 import Std.Ui.Theme as Theme
@@ -77,6 +79,40 @@ export fn progress(title: Str, percent: Int, width: Int, theme: &Theme.Theme) ->
     ])
     .means(Layout.Image)
     .named(title + " " + show(clamped) + " percent")
+}
+
+/// A horizontal track `width` pixels wide filled to where `value` sits
+/// between `low` and `high`, read aloud as the title and value.
+export fn slider(tag: Str, title: Str, value: Int, low: Int, high: Int, width: Int, theme: &Theme.Theme) -> Layout.View {
+  let span = if high > low { high - low } else { 1 }
+  let clamped = if value < low { low } else { if value > high { high } else { value } }
+  let filled = width * (clamped - low) / span
+  Layout.row([
+      Layout.box().sized(filled, theme.spacing).filled(theme.palette.accent),
+      Layout.box().sized(theme.spacing, theme.spacing * 2).filled(theme.palette.text),
+      Layout.box().sized(width - filled, theme.spacing).filled(theme.palette.border)
+    ])
+    .aligned(Layout.Center)
+    .means(Layout.Button)
+    .named(title + " " + show(clamped))
+    .tagged(tag)
+}
+
+/// The value a gesture on a slider whose track occupies `frame` sets: a
+/// tap, a drag, or a drag's end at horizontal position `x` maps linearly
+/// onto `low` to `high`. Any other gesture, or a tap outside the track,
+/// leaves `value`.
+export fn slid(value: Int, gesture: &Gesture.Gesture, frame: &Canvas.Rect, low: Int, high: Int) -> Int {
+  let (start, at) = match gesture {
+    case Gesture.Tap(point) => (point, point)
+    case Gesture.Dragged(origin, point) => (origin, point)
+    case Gesture.DragEnded(origin, point) => (origin, point)
+    case _ => { return value }
+  }
+  if !Gesture.inside(frame, start) { return value }
+  if frame.width <= 0 { return value }
+  let offset = if at.x < frame.x { 0 } else { if at.x > frame.x + frame.width { frame.width } else { at.x - frame.x } }
+  low + (high - low) * offset / frame.width
 }
 
 /// A text field showing `value`, or `placeholder` in muted text when empty.

@@ -101,6 +101,8 @@ data Builtin
   | DesktopPresentBuiltin
   | DesktopPumpBuiltin
   | DesktopInputsBuiltin
+  | DesktopClipboardReadBuiltin
+  | DesktopClipboardWriteBuiltin
   | DesktopCloseBuiltin
   | AudioDevicePlayBuiltin
   | AudioStreamOpenBuiltin
@@ -302,6 +304,8 @@ builtinName value = case value of
   DesktopPresentBuiltin -> "desktopPresent"
   DesktopPumpBuiltin -> "desktopPump"
   DesktopInputsBuiltin -> "desktopInputs"
+  DesktopClipboardReadBuiltin -> "desktopClipboardRead"
+  DesktopClipboardWriteBuiltin -> "desktopClipboardWrite"
   DesktopCloseBuiltin -> "desktopClose"
   AudioDevicePlayBuiltin -> "audioDevicePlay"
   AudioStreamOpenBuiltin -> "audioStreamOpen"

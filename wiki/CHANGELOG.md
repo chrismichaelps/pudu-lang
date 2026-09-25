@@ -31,6 +31,19 @@ tags: [changelog]
   banner's edge, hides from the pointer on the missing page, and asks on the donation page, perking
   up when the donate link is hovered or focused. [[website View Pudu]] places it.
 
+## 2026-09-24 — Pointer gestures, sliders, and the clipboard (#322)
+
+- The macOS adapter reports down, move, and up phases with timestamps and reads and replaces the
+  clipboard's text ([[Pudu Desktop Adapter]], [[Eval Desktop]]).
+- [[Std Ui Gesture]] recognizes taps, long presses, and drags; [[Std Ui Controls]] adds `slider` and
+  `slid`; [[Std Ui Clipboard]] reads and writes text with typed failures.
+- [[Std Ui Selection]] chooses list rows singly, by range from an anchor, and by toggle, and follows
+  keyboard movement and keymap commands.
+- [[Std Ui Grid]] places cells in equal flexible columns and lines up a short last row.
+- [[Std Ui Draw]] strokes lines, polylines, and outlines, painting exactly the pixels whose centres lie
+  within half the width, computed in integers, and fills linear gradients that end exactly on their
+  colors and polygons by the even-odd rule.
+
 ## 2026-09-24 — Saved settings, menus, and focus held in dialogs (#322)
 
 - [[Std Ui Preferences]] saves typed settings atomically in the platform's per-user directory.

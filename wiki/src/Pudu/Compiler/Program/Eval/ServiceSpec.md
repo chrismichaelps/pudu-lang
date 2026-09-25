@@ -56,8 +56,13 @@ window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
 `UsesAppContractsAll` packs three counts into `171518`: 17 problem-body checks, 15 cursor-page
 checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
 
+`UsesUiGestureAll` packs `7020602`: gestures (7), pointer decoding (2), slider (6), clipboard (2).
+
 `UsesAppWiringAll` packs `11160404`: events and outbox (11), API description (16), application
 describing refusals (4), and calendar jobs (4).
+
+`UsesUiSelectionAll` holds 15 list-selection checks `UsesUiGridAll` 5 grid checks, and `UsesUiDrawAll`
+15 exact-pixel stroke, gradient, and polygon checks.
 
 ## Grill Log
 
