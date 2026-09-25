@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Packages appear without a redeploy (#367)
+
+- [[website Service LivePackages]] lays GitHub over the build snapshot in the function: a package
+  published since the build is listed and has overview, releases, and owner pages; known packages
+  take live counts and newer releases. Admission is the build's tag-and-`pudu.toml` rule.
+- [[website Service LiveSource]] remembers GitHub answers in `Std.App.IsrCache` (fresh, then stale on
+  failure), goes quiet for a minute after a refusal or timeout, and sends `GITHUB_TOKEN` only to the API.
+- [[website Web Dynamic]] and [[website Prerender]]: `/packages` and its pages route to the function;
+  package answers carry `s-maxage` with `stale-while-revalidate`; a missing package is cached 60 s.
+- [[website live packages suite]] covers admission, refresh, outage, stale service, and edge caching
+  against a stand-in GitHub; CI runs it.
+
 ## 2026-09-25 — Building for another host without a toolchain (#355)
 
 - [[Cli RuntimePack]]: `pudu build --target linux-musl-x86_64 | lambda-x86_64` fetches the release's

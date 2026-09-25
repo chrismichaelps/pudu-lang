@@ -56,3 +56,5 @@ render through the shared Markdown pipeline as anchored headings, a code block, 
 The rendered result page must expose the query syntax it accepts.
 The catalogue gate also requires every public declaration to carry at least one documentation line,
 including implementation members whose text is inherited from their trait contract.
+
+Since #367 its dynamic fixtures carry `LivePackages.offline()`, so they exercise the snapshot path; the live path is covered by [[website live packages suite]].

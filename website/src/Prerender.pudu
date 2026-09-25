@@ -73,6 +73,12 @@ fn main() -> Int {
       Build.ToFunction{pattern: "/playground", methods: ["POST"]},
       Build.ToFunction{pattern: "/api/playground/run", methods: []},
       Build.ToFunction{pattern: "/api/playground/assist", methods: []},
+      // The listing is answered by the function, which lays GitHub over the
+      // snapshot, so a package published since this build is listed. A new
+      // package's own pages have no file here and reach the function as the
+      // fallback; a known package's pages stay static.
+      Build.ToFunction{pattern: "/packages", methods: []},
+      Build.ToFunction{pattern: "/packages/page/*", methods: []},
       Build.ToFunction{pattern: "/packages/search", methods: []},
       Build.ToFunction{pattern: "/packages/suggest", methods: []},
       Build.ToFunction{pattern: "/playground/shared", methods: []},

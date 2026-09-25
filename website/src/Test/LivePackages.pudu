@@ -1,0 +1,182 @@
+module Test.LivePackages
+
+import Std.Http as Http
+import Std.Io as Io
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+import Std.Test as Test
+import Domain.Playground as Play
+import Service.Catalog as Catalog
+import Service.LivePackages as LivePackages
+import Service.LiveSource as LiveSource
+import Service.Packages as Packages
+import Service.Playground.Examples as Examples
+import Service.Playground as Playground
+import Service.Search as Search
+import Web.Dynamic as DynamicWeb
+
+const API: Str = "https://api.github.com/repos/"
+const RAW: Str = "https://raw.githubusercontent.com/"
+
+/// A stand-in GitHub: a fixed table of answers, a switch that takes it down,
+/// a count of every request that reached it, and a clock the test moves.
+type Stand = { calls: Sync.Counter, down: Sync.Cell[Bool], clock: Sync.Cell[Int] }
+
+fn stand() -> Stand { Stand{calls: Sync.counter(0), down: Sync.cell(false), clock: Sync.cell(1000)} }
+
+fn origin(held: &Stand, answers: &Array[(Str, Str)]) -> LiveSource.Origin {
+  let counter = held.calls
+  let down = held.down
+  let clock = held.clock
+  let table = *answers
+  LiveSource.Origin {
+    fetch: fn(target: Str) -> LiveSource.Answer {
+      let _counted = Sync.increment(&counter, 1)
+      if Result.unwrapOr(Sync.get(&down), false) { return LiveSource.Unavailable }
+      for pair in table {
+        if pair[0] == target { return LiveSource.Found(pair[1]) }
+      }
+      LiveSource.Absent
+    },
+    clock: fn() -> Int { Result.unwrapOr(Sync.get(&clock), 0) }
+  }
+}
+
+fn calls(held: &Stand) -> Int { Result.unwrapOr(Sync.count(&held.calls), -1) }
+
+fn advance(held: &Stand, seconds: Int) -> () {
+  let _moved = Sync.set(&held.clock, Result.unwrapOr(Sync.get(&held.clock), 0) + seconds)
+}
+
+fn repository(owner: Str, name: Str, pushed: Str, stars: Int, archived: Str) -> Str {
+  "\{\"name\":\"" + name + "\",\"owner\":\{\"login\":\"" + owner + "\",\"type\":\"User\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/1\",\"html_url\":\"https://github.com/" + owner + "\"\},\"description\":\"from search\",\"html_url\":\"https://github.com/" + owner + "/" + name + "\",\"stargazers_count\":" + show(stars) + ",\"forks_count\":3,\"open_issues_count\":1,\"pushed_at\":\"" + pushed + "\",\"private\":false,\"archived\":" + archived + ",\"topics\":[\"pudu-package\",\"fresh\"],\"license\":\{\"spdx_id\":\"MIT\"\}\}"
+}
+
+fn manifest(name: Str, version: Str) -> Str {
+  "[package]\nname = \"" + name + "\"\nversion = \"" + version + "\"\ndescription = \"Fresh things\"\nkeywords = [\"fresh\"]\n\n[dependencies]\n\"@alice/json-kit\" = \"^2.0.0\"\n"
+}
+
+fn github() -> Array[(Str, Str)] {
+  let items = [
+    repository("bruno", "fresh-pkg", "2026-09-25T10:00:00Z", 5, "false"),
+    repository("alice", "json-kit", "2026-09-24T00:00:00Z", 2000, "false"),
+    repository("carol", "impostor", "2026-09-25T09:00:00Z", 1, "false"),
+    repository("dora", "shelved", "2026-09-25T08:00:00Z", 1, "true"),
+    repository("Eve", "Bad_Name", "2026-09-25T07:00:00Z", 1, "false")
+  ]
+  [
+    (LivePackages.SEARCH_URL, "\{\"total_count\":5,\"incomplete_results\":false,\"items\":[" + items.join(",") + "]\}"),
+    (API + "bruno/fresh-pkg/tags?per_page=100", "[\{\"name\":\"latest\",\"commit\":\{\"sha\":\"c0\"\}\},\{\"name\":\"v0.1.0\",\"commit\":\{\"sha\":\"c1\"\}\},\{\"name\":\"v0.2.0\",\"commit\":\{\"sha\":\"c2\"\}\}]"),
+    (RAW + "bruno/fresh-pkg/v0.2.0/pudu.toml", manifest("@bruno/fresh-pkg", "0.2.0")),
+    (RAW + "bruno/fresh-pkg/v0.2.0/README.md", "# Fresh Package\n\nPublished after the build.\n"),
+    (API + "alice/json-kit/tags?per_page=100", "[\{\"name\":\"v2.1.0\",\"commit\":\{\"sha\":\"a9\"\}\}]"),
+    (RAW + "alice/json-kit/v2.1.0/pudu.toml", manifest("@alice/json-kit", "2.1.0")),
+    (API + "carol/impostor/tags?per_page=100", "[\{\"name\":\"v1.0.0\",\"commit\":\{\"sha\":\"b1\"\}\}]"),
+    (RAW + "carol/impostor/v1.0.0/pudu.toml", manifest("@alice/json-kit", "1.0.0"))
+  ]
+}
+
+fn names(packages: &Packages.Packages) -> Array[Str] { packages.projects.map(|held: Packages.Project| held.name) }
+
+fn edge(packages: &Packages.Packages, live: &LivePackages.Live) -> DynamicWeb.Dynamic {
+  DynamicWeb.Dynamic {
+    siteUrl: "https://pudu.example",
+    catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: []},
+    search: Search.index(&[]),
+    packages: *packages,
+    live: *live,
+    playground: Playground.using(&Playground.disabled("not in this suite"), &Examples.Examples{entries: []}, &Play.defaultLimits()),
+    gates: Playground.openGates()
+  }
+}
+
+fn cacheOf(response: &Http.Response) -> Str { Option.unwrapOr(Http.header(&response.headers, "cache-control"), "") }
+
+export fn main() -> Int {
+  let snapshot = match Packages.loadCompact("website/test/fixtures/packages") {
+    case Ok(value) => value
+    case Err(_) => { return 1 }
+  }
+
+  // GitHub answering: a new package enters, a known one is refreshed.
+  let up = stand()
+  let live = LivePackages.over(LiveSource.over(origin(&up, &github())))
+  let view = LivePackages.current(&live, &snapshot)
+  let fresh = Packages.find(&view.packages, "@bruno", "fresh-pkg")
+  let known = Packages.find(&view.packages, "@alice", "json-kit")
+  let firstCalls = calls(&up)
+  let again = LivePackages.current(&live, &snapshot)
+  let memoCalls = calls(&up)
+  advance(&up, 60)
+  let _rebuilt = LivePackages.current(&live, &snapshot)
+  let rememberedCalls = calls(&up)
+  advance(&up, 120)
+  let _expired = LivePackages.current(&live, &snapshot)
+  let refetchCalls = calls(&up)
+
+  // GitHub failing after it answered: the remembered answer is served, and
+  // GitHub is left alone for the quiet window.
+  let _down = Sync.set(&up.down, true)
+  advance(&up, 300)
+  let staleView = LivePackages.current(&live, &snapshot)
+  let failedCalls = calls(&up)
+  advance(&up, 31)
+  let _quiet = LivePackages.current(&live, &snapshot)
+  let quietCalls = calls(&up)
+
+  // GitHub never answering: the snapshot, unchanged.
+  let outage = stand()
+  let _never = Sync.set(&outage.down, true)
+  let dark = LivePackages.current(&LivePackages.over(LiveSource.over(origin(&outage, &github()))), &snapshot)
+
+  let routed = edge(&snapshot, &LivePackages.over(LiveSource.over(origin(&stand(), &github()))))
+  let page = DynamicWeb.render(&routed, "/@bruno/fresh-pkg")
+  let releasesPage = DynamicWeb.render(&routed, "/@bruno/fresh-pkg/releases")
+  let listing = DynamicWeb.render(&routed, "/packages")
+  let owner = DynamicWeb.render(&routed, "/@bruno")
+  let unknown = DynamicWeb.render(&routed, "/@bruno/not-published")
+  let impostor = DynamicWeb.render(&routed, "/@carol/impostor")
+  let notHandle = DynamicWeb.render(&routed, "/bruno/fresh-pkg")
+  let offline = edge(&snapshot, &LivePackages.offline())
+  let offlineListing = DynamicWeb.render(&offline, "/packages")
+  let offlinePage = DynamicWeb.render(&offline, "/@bruno/fresh-pkg")
+
+  let suite = Test.suite("live packages", &[
+      Test.that("a package published after the build is listed", view.live && names(&view.packages).contains("@bruno/fresh-pkg")),
+      Test.that("its newest version tag and manifest give its release", match fresh {
+          case Some(held) => held.latest == Some("0.2.0") && held.releases[0].tag == "v0.2.0" && held.releases[0].commit == "c2" && held.releases[0].dependencies == [("@alice/json-kit", "^2.0.0")]
+          case None => false
+        }),
+      Test.that("its manifest, README, and search result describe it", match fresh {
+          case Some(held) => held.description == "Fresh things" && held.keywords == ["fresh"] && held.license == "MIT" && held.root == "FreshPkg" && held.readme.contains("Published after the build")
+          case None => false
+        }),
+      Test.that("its new owner gains a profile", Packages.profile(&view.packages, "@bruno") != None),
+      Test.that("a known package takes GitHub's counts and its newer release", match known {
+          case Some(held) => held.stars == 2000 && held.latest == Some("2.1.0") && held.releases[0].version == "2.1.0" && held.releases.length() == 4 && held.files.isEmpty()
+          case None => false
+        }),
+      Test.equals("a manifest naming another package, an archived repository, and a name the build refuses stay out", &names(&view.packages), &["@alice/json-kit", "@bruno/fresh-pkg"]),
+      Test.equals("the merged index is reused within its window", &memoCalls, &firstCalls),
+      Test.equals("a rebuild inside the listing's freshness asks GitHub nothing", &rememberedCalls, &firstCalls),
+      Test.equals("an expired listing is asked for once, and fresh release answers are reused", &refetchCalls, &(firstCalls + 1)),
+      Test.that("a failing GitHub leaves the remembered index served", staleView.live && names(&staleView.packages).contains("@bruno/fresh-pkg")),
+      Test.equals("a failure makes GitHub quiet for a window rather than asked per request", &quietCalls, &failedCalls),
+      Test.that("GitHub unavailable from the start serves the snapshot", !dark.live && names(&dark.packages) == names(&snapshot)),
+      Test.equals("only 200 and 404 speak for a repository", &[LiveSource.classify(200, "x") == LiveSource.Found("x"), LiveSource.classify(404, "") == LiveSource.Absent, LiveSource.classify(403, "") == LiveSource.Unavailable, LiveSource.classify(429, "") == LiveSource.Unavailable, LiveSource.classify(502, "") == LiveSource.Unavailable], &[true, true, true, true, true]),
+      Test.that("slugs are lower-case words joined by single hyphens", LivePackages.slug("fresh-pkg") && !LivePackages.slug("Bad_Name") && !LivePackages.slug("-x") && !LivePackages.slug("a--b") && !LivePackages.slug("")),
+      Test.that("the function renders a new package's page, cached at the edge", page.status.code == 200 && page.body.contains("fresh-pkg") && page.body.contains("Fresh Package") && cacheOf(&page) == DynamicWeb.LIVE_CACHE),
+      Test.that("the function renders a new package's releases", releasesPage.status.code == 200 && releasesPage.body.contains("0.2.0")),
+      Test.that("the listing includes the new package", listing.status.code == 200 && listing.body.contains("/@bruno/fresh-pkg") && listing.body.contains("/@alice/json-kit") && cacheOf(&listing) == DynamicWeb.LIVE_CACHE),
+      Test.that("the new owner's profile answers", owner.status.code == 200 && owner.body.contains("/@bruno/fresh-pkg")),
+      Test.that("an unlisted package is missing, briefly cached, and not indexed", unknown.status.code == 404 && cacheOf(&unknown) == "public, max-age=0, s-maxage=60" && Http.header(&unknown.headers, "X-Robots-Tag") == Some("noindex")),
+      Test.equals("an impostor has no page", &impostor.status.code, &404),
+      Test.equals("a path without a handle is no package", &notHandle.status.code, &404),
+      Test.that("without GitHub the listing is the snapshot, cached briefly", offlineListing.status.code == 200 && !offlineListing.body.contains("fresh-pkg") && cacheOf(&offlineListing) == DynamicWeb.SNAPSHOT_CACHE),
+      Test.equals("without GitHub a new package waits for it", &offlinePage.status.code, &404)
+    ])
+  let report = Test.run(&suite)
+  for failure in report.failures { let _shown = Io.writeErrorLine(failure) }
+  Test.report(&report)
+}

@@ -17,3 +17,17 @@ reply the local router uses, so the function imports no static-page routes.
 Resolved Grill Log: Vercel serves all known canonical pages and assets from static output before this
 function. Package search holds the small public project document in memory, while source and canonical package pages remain static. The bounded router therefore refuses unknown paths rather than carrying the full static route
 graph into every cold start.
+
+## Live package routes (#367)
+
+`Dynamic` carries a [[website Service LivePackages]] overlay. `/packages`, `/packages/page/:page`,
+`/packages/search`, and `/packages/suggest` answer from the snapshot with GitHub laid over it, and
+`/@owner/repo`, `/@owner/repo/releases`, and `/@owner` answer for packages the build has not seen
+(they arrive through the platform fallback because no static file exists). A path without `@` stays
+missing. Package answers carry `public, max-age=0, s-maxage=120, stale-while-revalidate=86400` when
+GitHub contributed and `s-maxage=30, stale-while-revalidate=600` when only the snapshot did; a
+missing package is cached 60 s so a new publication is not hidden for long.
+
+Resolved Grill Log: the CDN absorbs reader traffic and revalidates in the background, so a function
+instance asks GitHub at most once per freshness window; an arbitrary `@owner/repo` never causes a
+GitHub request because only the merged index is consulted.

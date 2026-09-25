@@ -13,3 +13,5 @@ adapter-free Vercel Build Output assembly, compressed upload, and production dep
 Resolved Grill Log: commands name the ordinary and Lambda runtime artifacts plus the matching loader;
 the guide does not imply that a macOS executable can run on Vercel or that deployment publishes the
 private book.
+
+Since #367 the guide states that packages reach the site through the function's cached GitHub overlay ([[website Service LivePackages]]) without a deployment, and that an optional `GITHUB_TOKEN` on the function raises its rate limit.
