@@ -1,0 +1,124 @@
+module Std.Pem
+
+import Std.Bytes as Bytes
+
+/// One armored block: what it holds, named by its label, and the bytes.
+///
+/// The label is what says how to read the bytes — `CERTIFICATE`,
+/// `PRIVATE KEY`, `PUBLIC KEY` — so a reader asks for the label it expects
+/// rather than trusting the first block it finds.
+export type Block = { label: Str, content: Bytes }
+
+/// Why text is not a well-formed armored block.
+export type PemError
+  = NoBlock
+  | BadLabel(Str)
+  | Unterminated(Str)
+  | MismatchedEnd(Str, Str)
+  | BadBody(Str)
+
+const BEGIN: Str = "-----BEGIN "
+const END: Str = "-----END "
+const DASHES: Str = "-----"
+const LINE_WIDTH: Int = 64
+
+/// A sentence saying what was wrong with the text.
+export fn explain(problem: &PemError) -> Str {
+  match problem {
+    case NoBlock => "no '-----BEGIN' line was found"
+    case BadLabel(label) => "'" + label + "' is not a label: printable ASCII, no leading, trailing, or doubled spaces, no hyphens at either end"
+    case Unterminated(label) => "the " + label + " block has no END line"
+    case MismatchedEnd(opened, closed) => "a " + opened + " block ends as " + closed
+    case BadBody(label) => "the " + label + " block's body is not base64"
+  }
+}
+
+/// RFC 7468 labels: printable ASCII other than `-` at either end, with single
+/// spaces between words. An empty label is admitted, as the grammar admits it.
+fn validLabel(label: Str) -> Bool {
+  if label.startsWith(" ") || label.endsWith(" ") || label.contains("  ") { return false }
+  if label.startsWith("-") || label.endsWith("-") { return false }
+  for here in label.chars() {
+    if here.code() < 32 || here.code() > 126 { return false }
+  }
+  true
+}
+
+/// A block written as armored text: a BEGIN line, the base64 body wrapped at
+/// sixty-four columns, an END line, each ending in a newline.
+///
+/// A label that could not be read back is refused rather than written, since
+/// text that `decode` rejects is not an encoding of anything.
+export fn encode(block: &Block) -> Result[Str, PemError] {
+  if !validLabel(block.label) { return Err(BadLabel(block.label)) }
+  let body = Bytes.encodeBase64(&block.content)
+  var lines: Array[Str] = [BEGIN + block.label + DASHES]
+  var rest = body
+  while !rest.isEmpty() {
+    lines = lines.push(rest.take(LINE_WIDTH))
+    rest = rest.drop(LINE_WIDTH)
+  }
+  lines = lines.push(END + block.label + DASHES)
+  Ok(lines.join("\n") + "\n")
+}
+
+/// Every armored block in the text, in order.
+///
+/// Text between blocks is ignored, which is where a certificate bundle keeps
+/// its comments. Inside a block, whitespace in the body is ignored and
+/// anything else must be base64; header lines (`Proc-Type:` and the like)
+/// are refused as a bad body, because they mark the legacy encrypted form
+/// that this reader does not decrypt and must not hand back as plain bytes.
+export fn decodeAll(text: Str) -> Result[Array[Block], PemError] {
+  var blocks: Array[Block] = []
+  var label = ""
+  var body: Array[Str] = []
+  var inside = false
+  for raw in text.lines() {
+    let line = raw.trim()
+    if !inside {
+      if line.startsWith(BEGIN) && line.endsWith(DASHES) && line.length() >= BEGIN.length() + DASHES.length() {
+        label = line.drop(BEGIN.length()).take(line.length() - BEGIN.length() - DASHES.length())
+        if !validLabel(label) { return Err(BadLabel(label)) }
+        body = []
+        inside = true
+      }
+    } else if line.startsWith(END) {
+      let closed = if line.endsWith(DASHES) && line.length() >= END.length() + DASHES.length() {
+        line.drop(END.length()).take(line.length() - END.length() - DASHES.length())
+      } else {
+        line
+      }
+      if closed != label { return Err(MismatchedEnd(label, closed)) }
+      let content = match Bytes.decodeBase64(body.join("")) {
+        case Ok(found) => found
+        case Err(_) => { return Err(BadBody(label)) }
+      }
+      blocks = blocks.push(Block{label: label, content: content})
+      inside = false
+    } else if line.contains(":") {
+      return Err(BadBody(label))
+    } else {
+      body = body.push(line.replace(" ", "").replace("\t", ""))
+    }
+  }
+  if inside { return Err(Unterminated(label)) }
+  if blocks.isEmpty() { return Err(NoBlock) }
+  Ok(blocks)
+}
+
+/// The first armored block in the text.
+export fn decode(text: Str) -> Result[Block, PemError] {
+  let blocks = decodeAll(text) ?
+  Ok(blocks[0])
+}
+
+/// The content of every block carrying the label, in order — the
+/// certificates of a bundle, say, skipping a key stored beside them.
+export fn withLabel(blocks: &Array[Block], label: Str) -> Array[Bytes] {
+  var out: Array[Bytes] = []
+  for block in blocks {
+    if block.label == label { out = out.push(block.content) }
+  }
+  out
+}

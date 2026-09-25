@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  armored <- runEntry "test-fixtures/stdlib/UsesBase32PemAll.pudu"
   numbersRead <- runEntry "test-fixtures/stdlib/UsesTextToNumber.pudu"
   built <- runEntry "test-fixtures/stdlib/UsesSiteAll.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesChecksumAll.pudu"
@@ -121,6 +122,10 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| The RFC 4648 vectors in three alphabets, and PEM bundles, with every
+        refusal including an encrypted legacy header. -}
+    , counterexample "base32 and PEM read strictly and write what they read"
+        (armored === Just "30")
     {-| Whole numbers at Int's bounds, floats with points and exponents, and
         decimals keeping their scale, each refusing text that is more than the
         number, and writing then reading answering the value written. -}
