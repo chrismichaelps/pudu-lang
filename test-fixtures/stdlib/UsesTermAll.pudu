@@ -1,0 +1,67 @@
+module UsesTermAll
+
+import Std.Term as Term
+
+fn main() -> Int {
+  var held = 0
+  let loud = Term.Style{..Term.plain(), bold: true, foreground: Some(Term.RED)}
+
+  // Flags come first, then colours, joined into one sequence.
+  let painted = Term.paint("hi", &loud)
+  if painted == "\u{1b}[1;31mhi\u{1b}[0m" { held = held + 1 }
+
+  // A style that changes nothing writes nothing.
+  if Term.paint("hi", &Term.plain()) == "hi" { held = held + 1 }
+
+  // Stripping recovers the text and its width.
+  if Term.strip(painted) == "hi" && Term.visibleLength(painted) == 2 { held = held + 1 }
+
+  // Bright, palette, and 24-bit colours.
+  let bright = Term.Style{..Term.plain(), foreground: Some(Term.Named(9))}
+  if Term.paint("x", &bright) == "\u{1b}[91mx\u{1b}[0m" { held = held + 1 }
+  let palette = Term.Style{..Term.plain(), background: Some(Term.Palette(200))}
+  if Term.paint("x", &palette) == "\u{1b}[48;5;200mx\u{1b}[0m" { held = held + 1 }
+  let exact = Term.Style{..Term.plain(), foreground: Some(Term.Rgb(1, 2, 300))}
+  if Term.paint("x", &exact) == "\u{1b}[38;2;1;2;255mx\u{1b}[0m" { held = held + 1 }
+
+  // Every flag.
+  let all = Term.Style {
+    ..Term.plain(),
+    dim: true,
+    italic: true,
+    underline: true,
+    inverse: true,
+    strike: true
+  }
+  if Term.paint("x", &all) == "\u{1b}[2;3;4;7;9mx\u{1b}[0m" { held = held + 1 }
+
+  // The named colours are the first nine.
+  let named = [
+    Term.BLACK,
+    Term.RED,
+    Term.GREEN,
+    Term.YELLOW,
+    Term.BLUE,
+    Term.MAGENTA,
+    Term.CYAN,
+    Term.WHITE,
+    Term.GRAY
+  ]
+  if named[8] == Term.Named(8) && named[2] == Term.Named(2) { held = held + 1 }
+
+  // Disabled painting leaves text alone.
+  if Term.paintIf(false, "hi", &loud) == "hi" && Term.paintIf(true, "hi", &loud) == painted {
+    held = held + 1
+  }
+
+  // Cursor and line control.
+  if Term.clearLine() == "\u{1b}[2K\r" { held = held + 1 }
+  if Term.cursorUp(3) == "\u{1b}[3A" && Term.cursorUp(0) == "" { held = held + 1 }
+  if Term.hideCursor() == "\u{1b}[?25l" && Term.showCursor() == "\u{1b}[?25h" { held = held + 1 }
+
+  // The environment decides; either answer is a boolean.
+  let decided = Term.colorEnabled()
+  if decided || !decided { held = held + 1 }
+
+  held
+}

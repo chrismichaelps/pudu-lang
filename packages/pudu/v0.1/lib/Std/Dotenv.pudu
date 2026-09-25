@@ -1,0 +1,212 @@
+module Std.Dotenv
+
+import Std.Char as Char
+
+/// Why an environment file was refused. Line numbers start at 1.
+export type DotenvError
+  = MissingEquals(Int)
+  | InvalidKey(Int, Str)
+  | Unterminated(Int)
+  | Unreadable(Str, Str)
+
+/// One assignment, in file order.
+export type Entry = { key: Str, value: Str }
+
+/// Parses `KEY=value` lines.
+///
+/// Blank lines and lines starting with `#` are skipped, and a leading
+/// `export ` is ignored. An unquoted value is trimmed and ends at ` #`.
+/// A single-quoted value is literal. A double-quoted value may span lines,
+/// reads the escapes `\n`, `\r`, `\t`, `\"`, `\\`, `\$`, and expands
+/// `${NAME}` from keys assigned earlier in the same text; unquoted values
+/// expand the same way. An unknown `${NAME}` expands to nothing.
+export fn parse(text: Str) -> Result[Array[Entry], DotenvError] {
+  let lines = text.lines()
+  var entries = []
+  var known: Map[Str, Str] = mapOf([])
+  var index = 0
+  while index < lines.length() {
+    let number = index + 1
+    var line = lines[index].trim()
+    index = index + 1
+    if line.length() == 0 || line.startsWith("#") { continue }
+    if line.startsWith("export ") { line = line.drop(7).trim() }
+    let equals = line.indexOf("=")
+    if equals < 0 { return Err(MissingEquals(number)) }
+    let key = line.take(equals).trim()
+    if !validKey(key) { return Err(InvalidKey(number, key)) }
+    let raw = line.drop(equals + 1).trim()
+    let value = if raw.startsWith("'") {
+      let rest = raw.drop(1)
+      let close = rest.indexOf("'")
+      if close < 0 { return Err(Unterminated(number)) }
+      rest.take(close)
+    } else {
+      if raw.startsWith("\"") {
+        var body = raw.drop(1)
+        while !closesDouble(body) {
+          if index >= lines.length() { return Err(Unterminated(number)) }
+          body = body + "\n" + lines[index]
+          index = index + 1
+        }
+        unescaped(body, &known)
+      } else {
+        let comment = raw.indexOf(" #")
+        let bare = if comment < 0 { raw } else { raw.take(comment).trim() }
+        expanded(bare, &known)
+      }
+    }
+    known = known.insert(key, value)
+    entries = entries.push(Entry{key: key, value: value})
+  }
+  Ok(entries)
+}
+
+/// Reads and parses the file at `path`.
+export fn load(path: Str) -> Result[Array[Entry], DotenvError] {
+  match readFile(path) {
+    case Ok(text) => parse(text)
+    case Err(reason) => Err(Unreadable(path, reason))
+  }
+}
+
+/// The entries as a map; a key assigned twice keeps its last value.
+export fn toMap(entries: &Array[Entry]) -> Map[Str, Str] {
+  var found: Map[Str, Str] = mapOf([])
+  for entry in entries { found = found.insert(entry.key, entry.value) }
+  found
+}
+
+/// The last value assigned to `key`.
+export fn lookup(entries: &Array[Entry], key: Str) -> Option[Str] {
+  var found = None
+  for entry in entries {
+    if entry.key == key { found = Some(entry.value) }
+  }
+  found
+}
+
+/// Entries written back as text that `parse` reads to the same entries.
+///
+/// A value that is empty or made only of letters, digits, and `_-./:@` is
+/// written bare; any other value is double-quoted with its escapes written.
+export fn render(entries: &Array[Entry]) -> Str {
+  var out = ""
+  for entry in entries {
+    out = out + entry.key + "=" + quoted(entry.value) + "\n"
+  }
+  out
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &DotenvError) -> Str {
+  match problem {
+    case MissingEquals(line) => "line {line}: expected KEY=value"
+    case InvalidKey(line, key) => "line {line}: invalid key '{key}'"
+    case Unterminated(line) => "line {line}: quoted value is not closed"
+    case Unreadable(path, reason) => "cannot read {path}: {reason}"
+  }
+}
+
+fn validKey(key: Str) -> Bool {
+  if key.length() == 0 { return false }
+  var first = true
+  for symbol in key {
+    let allowed = symbol == '_' || symbol == '.' || Char.isAsciiUpper(symbol)
+      || Char.isAsciiLower(symbol) || (!first && Char.isDigit(symbol))
+    if !allowed { return false }
+    first = false
+  }
+  true
+}
+
+fn closesDouble(body: Str) -> Bool {
+  var escaped = false
+  for symbol in body {
+    if escaped {
+      escaped = false
+    } else {
+      if symbol == '\\' { escaped = true }
+      if symbol == '"' { return true }
+    }
+  }
+  false
+}
+
+fn unescaped(body: Str, known: &Map[Str, Str]) -> Str {
+  var out = ""
+  var pending = ""
+  var escaped = false
+  for symbol in body {
+    if escaped {
+      out = out + escapeOf(symbol)
+      escaped = false
+    } else {
+      if symbol == '\\' {
+        out = out + expanded(pending, known)
+        pending = ""
+        escaped = true
+      } else {
+        if symbol == '"' { break }
+        pending = pending + symbol.toText()
+      }
+    }
+  }
+  out + expanded(pending, known)
+}
+
+const ESCAPES: Map[Char, Str] = mapOf([('n', "\n"), ('r', "\r"), ('t', "\t")])
+
+fn escapeOf(symbol: Char) -> Str {
+  match ESCAPES.get(symbol) {
+    case Some(found) => found
+    case None => symbol.toText()
+  }
+}
+
+fn expanded(text: Str, known: &Map[Str, Str]) -> Str {
+  var out = ""
+  var rest = text
+  loop {
+    let open = rest.indexOf("$\{")
+    if open < 0 { break }
+    let tail = rest.drop(open + 2)
+    let close = tail.indexOf("\}")
+    if close < 0 { break }
+    let name = tail.take(close)
+    let replacement = match known.get(name) {
+      case Some(found) => found
+      case None => ""
+    }
+    out = out + rest.take(open) + replacement
+    rest = tail.drop(close + 1)
+  }
+  out + rest
+}
+
+const RENDERED: Map[Char, Str] = mapOf([
+    ('\n', "\\n"),
+    ('\r', "\\r"),
+    ('\t', "\\t"),
+    ('"', "\\\""),
+    ('\\', "\\\\"),
+    ('$', "\\$")
+  ])
+
+fn quoted(value: Str) -> Str {
+  var bare = true
+  for symbol in value {
+    let plain = Char.isAsciiUpper(symbol) || Char.isAsciiLower(symbol) || Char.isDigit(symbol)
+      || "_-./:@".contains(symbol.toText())
+    if !plain { bare = false }
+  }
+  if bare { return value }
+  var out = "\""
+  for symbol in value {
+    out = out + match RENDERED.get(symbol) {
+      case Some(found) => found
+      case None => symbol.toText()
+    }
+  }
+  out + "\""
+}
