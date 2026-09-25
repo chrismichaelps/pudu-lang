@@ -202,40 +202,71 @@ fn projectFrom(directory: Str, value: &Json.Json, compact: Bool) -> Result[Proje
   for item in Option.unwrapOr(Option.andThen(Json.field(value, "releases"), |held: Json.Json| Json.asList(&held)), []) {
     releases = [releaseFrom(&item)].concat(releases)
   }
-  let files = if compact { [] } else { match latest {
-      case Some(version) => filesUnder(directory + "/files/" + name + "/" + version) ?
-      case None => []
-    } }
-  let catalog = if compact { None } else { match Catalog.load(directory + "/docs/" + name + ".json") {
-      case Ok(held) => Some(held)
-      case Err(_) => None
-    } }
-  let discussionData = if compact { Json.Null } else {
-    let path = directory + "/discussions/" + name + ".json"
-    if Io.exists(path) { discussionDocument(directory, name) ? } else { Json.Null }
-  }
+  let discussionData = if compact { Json.Null } else { discussionsOf(directory, name) ? }
   let discussionSource = if discussionData == Json.Null { value } else { &discussionData }
-  Ok(Project {
-      name: name,
-      handle: if slash > 0 { name.take(slash) } else { name },
-      project: if slash > 0 { name.drop(slash + 1) } else { "" },
-      description: text(value, "description"),
-      keywords: texts(value, "keywords"),
-      license: text(value, "license"),
-      root: text(value, "root"),
-      readme: text(value, "readme"),
-      repository: text(value, "repository"),
-      stars: whole(value, "stars"),
-      forks: whole(value, "forks"),
-      openIssues: whole(value, "openIssues"),
-      tickets: if compact { [] } else { discussions(discussionSource, "tickets") },
-      contributions: if compact { [] } else { discussions(discussionSource, "contributions") },
-      searchEntries: publicDeclarations(value),
-      latest: latest,
-      releases: releases,
-      files: files,
-      catalog: catalog
-    })
+  let record = Project {
+    name: name,
+    handle: if slash > 0 { name.take(slash) } else { name },
+    project: if slash > 0 { name.drop(slash + 1) } else { "" },
+    description: text(value, "description"),
+    keywords: texts(value, "keywords"),
+    license: text(value, "license"),
+    root: text(value, "root"),
+    readme: text(value, "readme"),
+    repository: text(value, "repository"),
+    stars: whole(value, "stars"),
+    forks: whole(value, "forks"),
+    openIssues: whole(value, "openIssues"),
+    tickets: if compact { [] } else { discussions(discussionSource, "tickets") },
+    contributions: if compact { [] } else { discussions(discussionSource, "contributions") },
+    searchEntries: publicDeclarations(value),
+    latest: latest,
+    releases: releases,
+    files: [],
+    catalog: None
+  }
+  if compact { Ok(record) } else { Ok(Project{..record, files: releaseFiles(directory, &record) ?, catalog: catalogOf(directory, name)}) }
+}
+
+fn releaseFiles(directory: Str, project: &Project) -> Result[Array[Str], SiteError.SiteError] {
+  match project.latest {
+    case Some(version) => filesUnder(directory + "/files/" + project.name + "/" + version)
+    case None => Ok([])
+  }
+}
+
+fn catalogOf(directory: Str, name: Str) -> Option[Catalog.Catalog] {
+  match Catalog.load(directory + "/docs/" + name + ".json") {
+    case Ok(held) => Some(held)
+    case Err(_) => None
+  }
+}
+
+fn discussionsOf(directory: Str, name: Str) -> Result[Json.Json, SiteError.SiteError] {
+  if Io.exists(directory + "/discussions/" + name + ".json") { discussionDocument(directory, name) } else { Ok(Json.Null) }
+}
+
+/// A compactly loaded project with what its pages read from the snapshot's
+/// directory: the latest release's files, its API catalogue, and its recent
+/// discussions. Read when a page asks rather than for every project at start,
+/// so a cold start costs the index alone. Whatever the directory lacks stays
+/// empty rather than failing the page.
+export fn detailed(packages: &Packages, project: &Project) -> Project {
+  let files = match releaseFiles(packages.directory, project) {
+    case Ok(held) => held
+    case Err(_) => []
+  }
+  let records = match discussionsOf(packages.directory, project.name) {
+    case Ok(held) => held
+    case Err(_) => Json.Null
+  }
+  Project {
+    ..*project,
+    files: files,
+    catalog: catalogOf(packages.directory, project.name),
+    tickets: if records == Json.Null { project.tickets } else { discussions(&records, "tickets") },
+    contributions: if records == Json.Null { project.contributions } else { discussions(&records, "contributions") }
+  }
 }
 
 /// The snapshot `generate-packages.mjs` wrote, or no packages when the

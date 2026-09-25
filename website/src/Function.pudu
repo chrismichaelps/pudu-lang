@@ -10,6 +10,8 @@ import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
+import Service.LivePackages as LivePackages
+import Service.LiveSource as LiveSource
 import Service.Packages as Packages
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
@@ -67,6 +69,10 @@ fn main() -> Int {
         catalog: catalog,
         search: Search.index(&catalog.entries),
         packages: packages,
+        // Package answers are the snapshot with GitHub laid over it. GitHub
+        // is asked lazily, remembered per instance, and never needed: when it
+        // fails the snapshot is served.
+        live: LivePackages.over(LiveSource.fromEnvironment()),
         playground: Playground.configured(&playground, &examples),
         gates: Playground.gatesFor(&playground)
       }

@@ -6,6 +6,7 @@ import Std.Http.Server.Route as Route
 import Std.Option as Option
 import Std.Text as Text
 import Service.Catalog as Catalog
+import Service.LivePackages as LivePackages
 import Service.Packages as Packages
 import Service.Playground.Admission as Admission
 import Service.Playground as Playground
@@ -13,6 +14,7 @@ import Service.Search as Search
 import View.Dynamic as DynamicView
 import View.Packages.Catalog as PackageCatalog
 import View.Packages.Suggest as PackageSuggest
+import Web.PackagePages as PackagePages
 import Web.Playground as PlaygroundWeb
 
 /// What the serverless function serves: the requests that are not static
@@ -23,12 +25,15 @@ export type Dynamic = {
   /// The catalogue as search reads it, prepared once per cold start.
   search: Search.Index,
   packages: Packages.Packages,
+  /// GitHub laid over `packages`, so a package published since the build is
+  /// listed and has a page without another deployment.
+  live: LivePackages.Live,
   playground: Playground.Playground,
   gates: Playground.Gates
 }
 
-/// The function's routes: search, the playground's dynamic addresses, and a
-/// no-index answer for everything else.
+/// The function's routes: search, the playground's dynamic addresses, the
+/// package listing, every package page, and a no-index answer for everything else.
 ///
 /// The platform stands in front of the function and states the reader's
 /// address in `x-forwarded-for`, so that is who a run is counted against.
@@ -45,17 +50,26 @@ export fn routes(edge: &Dynamic) -> Route.Router {
       Reply.page(200, DynamicView.results(held.siteUrl, &held.search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
     })
   let packageSearch = Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
-      if !Packages.present(&held.packages) { return missing(held.siteUrl, asked.path) }
+      let view = LivePackages.current(&held.live, &held.packages)
+      if !Packages.present(&view.packages) { return missing(held.siteUrl, asked.path) }
       let query = Option.unwrapOr(Route.queryParam(&asked, "q"), "")
       let filter = Option.unwrapOr(Route.queryParam(&asked, "filter"), "")
       let page = Option.unwrapOr(Text.wholeOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), 0)
-      if page < 1 || page > PackageCatalog.resultPagesFiltered(&held.packages, query, filter) { return missing(held.siteUrl, asked.path) }
-      Reply.page(200, PackageCatalog.pageNumberFiltered(held.siteUrl, &held.packages, query, page, filter))
+      if page < 1 || page > PackageCatalog.resultPagesFiltered(&view.packages, query, filter) { return missing(held.siteUrl, asked.path) }
+      edgeCached(&view, Reply.page(200, PackageCatalog.pageNumberFiltered(held.siteUrl, &view.packages, query, page, filter)))
     })
   let packageSuggest = Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
-      PackageSuggest.reply(&held.packages, &held.catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+      let view = LivePackages.current(&held.live, &held.packages)
+      edgeCached(&view, PackageSuggest.reply(&view.packages, &held.catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), "")))
     })
-  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch, packageSuggest])), fn(asked: Route.Request) -> Http.Response {
+  let listing = Route.get("/packages", fn(asked: Route.Request) -> Http.Response { listed(&held, asked.path, 1) })
+  let listingPage = Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
+      let page = Option.unwrapOr(Text.wholeOf(Option.unwrapOr(Route.param(&asked, "page"), "")), 0)
+      if page < 2 { return missing(held.siteUrl, asked.path) }
+      listed(&held, asked.path, page)
+    })
+  Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([search, packageSearch, packageSuggest, listing, listingPage])), fn(asked: Route.Request) -> Http.Response {
+      if asked.path.startsWith("/@") { return packagePage(&held, asked) }
       missing(held.siteUrl, asked.path)
     })
 }
@@ -74,6 +88,51 @@ export fn render(edge: &Dynamic, target: Str) -> Http.Response {
       query: Route.queryOf(target),
       peer: "platform"
     })
+}
+
+/// The listing as it stands now. The static listing is never served: the
+/// platform sends `/packages` here so it includes packages published since the build.
+fn listed(edge: &Dynamic, path: Str, page: Int) -> Http.Response {
+  let view = LivePackages.current(&edge.live, &edge.packages)
+  if page > PackageCatalog.pages(view.packages.projects.length()) { return packageMissing(edge.siteUrl, path) }
+  edgeCached(&view, Reply.page(200, PackageCatalog.pageNumber(edge.siteUrl, &view.packages, "", page)))
+}
+
+/// Every page under `/@owner`. The platform sends all of them here rather
+/// than serving files written at build time, so a page shows the package as
+/// the merged index has it now. The index is consulted only once a request is
+/// known to be a package page, and an arbitrary `@owner/repo` never causes
+/// GitHub requests of its own: only a project the index lists has a page.
+fn packagePage(edge: &Dynamic, asked: Route.Request) -> Http.Response {
+  let view = LivePackages.current(&edge.live, &edge.packages)
+  let held = *edge
+  let pages = PackagePages.Pages {
+    siteUrl: edge.siteUrl,
+    packages: view.packages,
+    detail: fn(project: Packages.Project, tab: Str, file: Str) -> Packages.Project { LivePackages.detail(&held.live, &held.packages, &project, tab, file) },
+    missing: fn(path: Str) -> Http.Response { packageMissing(held.siteUrl, path) }
+  }
+  let answered = Route.dispatch(&Route.withFallback(&Route.routing(&PackagePages.routes(&pages)), fn(other: Route.Request) -> Http.Response { packageMissing(held.siteUrl, other.path) }), asked)
+  if answered.status.code == 200 { edgeCached(&view, answered) } else { answered }
+}
+
+/// The CDN keeps a package answer and refreshes it in the background, so
+/// readers are answered from the edge while the function asks GitHub at most
+/// once per window. An answer made without GitHub is kept briefly so the edge
+/// recovers soon after GitHub does.
+export fn edgeCached(view: &LivePackages.View, response: Http.Response) -> Http.Response {
+  let policy = if view.live { LIVE_CACHE } else { SNAPSHOT_CACHE }
+  Http.Response{..response, headers: response.headers.push(("cache-control", policy))}
+}
+
+export const LIVE_CACHE: Str = "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
+export const SNAPSHOT_CACHE: Str = "public, max-age=0, s-maxage=60, stale-while-revalidate=600"
+export const MISSING_CACHE: Str = "public, max-age=0, s-maxage=60"
+
+/// A package page that does not exist yet may exist in a minute.
+fn packageMissing(siteUrl: Str, path: Str) -> Http.Response {
+  let response = missing(siteUrl, path)
+  Http.Response{..response, headers: response.headers.push(("cache-control", MISSING_CACHE))}
 }
 
 fn missing(siteUrl: Str, path: Str) -> Http.Response {

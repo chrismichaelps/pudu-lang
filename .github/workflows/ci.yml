@@ -81,7 +81,7 @@ jobs:
         run: |
           "$PUDU" check $(find website/src -name '*.pudu')
           "$PUDU" fmt --check website/src website/playground/examples
-          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu
+          "$PUDU" test website/src/Test/Website.pudu website/src/Test/Playground.pudu website/src/Test/PackageSearch.pudu website/src/Test/Markdown.pudu website/src/Test/LivePackages.pudu
       - name: Verify package discovery lists every topic result past the search cap
         run: node --test website/scripts/packages/discover.test.mjs
       - name: Verify the playground paints Pudu as the documentation does
