@@ -19,7 +19,7 @@ Every started task has a runtime token and an observable join result; worker fai
 - **Q:** Treat these handles as detached fire-and-forget work? **A:** No. _Rationale:_ unjoined work
   leaks lifetime and failure. _Rejected:_ silent thread exceptions; claiming scheduler fairness.
 ## Referenced by
-[[src/Std/_MOC]] · [[Eval Concurrent]] · [[architecture/SEMANTICS]] · [[Std Concurrent Future]] · [[Std Concurrent Cancel]] · [[Std Concurrent Pool]] · [[Std Concurrent Coordinate]] · [[Std Concurrent Retry]] · [[Uses Concurrent]] · [[Uses Concurrent Futures]] · [[Uses Concurrent Coordination]]
+[[src/Std/_MOC]] · [[Eval Concurrent]] · [[architecture/SEMANTICS]] · [[Std Concurrent Future]] · [[Std Concurrent Cancel]] · [[Std Concurrent Pool]] · [[Std Concurrent Coordinate]] · [[Std Concurrent Retry]] · [[Std Concurrent Scope]] · [[Uses Concurrent]] · [[Uses Concurrent Futures]] · [[Uses Concurrent Coordination]]
 
 ## Bounded batch execution
 

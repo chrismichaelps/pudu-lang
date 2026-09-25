@@ -48,4 +48,4 @@ Cooperative cancellation and deadlines. A running thread cannot be interrupted, 
 
 ## Referenced by
 
-[[src/Std/_MOC]] · [[Std Concurrent]] · [[Std Concurrent Future]] · [[Std Concurrent Retry]] · [[Uses Concurrent Futures]] · [[Uses Concurrent Coordination]]
+[[src/Std/_MOC]] · [[Std Concurrent]] · [[Std Concurrent Future]] · [[Std Concurrent Retry]] · [[Std Concurrent Scope]] · [[Uses Concurrent Futures]] · [[Uses Concurrent Coordination]]

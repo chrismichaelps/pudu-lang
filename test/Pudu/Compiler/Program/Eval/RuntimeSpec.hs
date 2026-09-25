@@ -78,6 +78,7 @@ testRuntimeEvaluation = do
   styled <- runEntry "test-fixtures/stdlib/UsesTermAll.pudu"
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
+  siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
@@ -107,6 +108,13 @@ testRuntimeEvaluation = do
         saturates instead of overflowing. -}
     , counterexample "coordination survives crashes, over-release, and contention"
         (coordinated === Just "39")
+    {-| Values in order, an empty scope, a typed failure and a crash each
+        cancelling a sibling that would otherwise wait forever, a cancelled
+        parent reaching every action, every action finished on return, and the
+        causing failure kept over one that follows the cancellation. -}
+    , counterexample
+        "a scope cancels its siblings on the first failure and outlives none of them"
+        (siblings === Just "7")
     , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}
