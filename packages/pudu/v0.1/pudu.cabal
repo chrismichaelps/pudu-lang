@@ -63,6 +63,7 @@ library
     Pudu.Cli.Package
     Pudu.Cli.Progress
     Pudu.Cli.Publish
+    Pudu.Cli.ReleaseCatalogue
     Pudu.Cli.RuntimePack
     Pudu.Package.Concurrent
     Pudu.Package.Credentials

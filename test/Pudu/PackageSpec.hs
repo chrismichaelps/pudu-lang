@@ -24,6 +24,8 @@ import Pudu.Package.Identity
   )
 import qualified Data.ByteString as ByteString
 import Pudu.Cli.Publish (formBody)
+import Pudu.Cli.ReleaseCatalogue (catalogueSources, normalizeCatalogue)
+import qualified Pudu.Lsp.Json as Json
 import Pudu.Package.Concurrent (forConcurrently)
 import Pudu.Package.Credentials (Credential (..), credentialsPath, loadCredential, removeCredential, saveCredential)
 import Pudu.Package.Http (Request (..), Url (..), parseUrl, send)
@@ -68,6 +70,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 packageProperties :: [(String, IO Property)]
 packageProperties =
   [ ("package versions order and render as released", pure testVersions)
+  , ("a release's API reference is the website's catalogue", pure testReleaseCatalogue)
   , ("package requirements accept what they say", pure testRequirements)
   , ("package names and install arguments are read or refused", pure testIdentity)
   , ("a package lock reads back what it wrote", pure testLockRoundTrip)
@@ -92,6 +95,20 @@ packageProperties =
   , ("a failed install changes neither the lock nor deps/", testFailedInstallChangesNothing)
   , ("clean, locked, and offline installs give the same lock and files", testRepeatableInstalls)
   ]
+
+testReleaseCatalogue :: Property
+testReleaseCatalogue = conjoin
+  [ counterexample "only exported declarations, once each, sorted" (fmap Json.encode catalogue === Just expected)
+  , counterexample "a document without its list is refused" (normalizeCatalogue (Json.object []) exports === Nothing)
+  , counterexample "sources leave out tests and non-Pudu files" (catalogueSources ["src/A.pudu", "test/T.pudu", "tests/U.pudu", "README.md", "src/B/C.pudu"] === ["src/A.pudu", "src/B/C.pudu"])
+  ]
+ where
+  entry moduleName kind name signature doc = Json.object [("module", Json.JsonText moduleName), ("kind", Json.JsonText kind), ("name", Json.JsonText name), ("signature", Json.JsonText signature), ("doc", Json.JsonArray (map Json.JsonText doc))]
+  document = Json.object [("entries", Json.JsonArray [entry "Kit" "fn" "zeta" "() -> Int" ["Last."], entry "Kit" "fn" "hidden" "() -> Int" ["Private."], entry "Kit" "fn" "alpha" "Int -> Int" ["First."], entry "Kit" "fn" "alpha" "Int -> Int" ["First."]])]
+  exported moduleName name = Json.object [("module", Json.JsonText moduleName), ("name", Json.JsonText name)]
+  exports = Json.object [("version", Json.JsonText "0.1.2"), ("exports", Json.JsonArray [exported "Kit" "alpha", exported "Kit" "zeta"])]
+  catalogue = normalizeCatalogue document exports
+  expected = Json.encode (Json.object [("schemaVersion", Json.JsonNumber 1), ("languageVersion", Json.JsonText "0.1.2"), ("entries", Json.JsonArray [entry "Kit" "fn" "alpha" "Int -> Int" ["First."], entry "Kit" "fn" "zeta" "() -> Int" ["Last."]])])
 
 testVersions :: Property
 testVersions = conjoin

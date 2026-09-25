@@ -10,8 +10,9 @@
     tree, names every module it would ship outside the package's root, checks
     the project, runs its tests, creates the annotated tag
     `v<version>`, and pushes it to `origin`. With a token it then creates the
-    GitHub release with the notes and adds the `pudu-package` topic, which is
-    what makes the package findable. `search <words>` lists packages from
+    GitHub release with the notes, attaches the package's API reference as
+    `pudu-api.json`, and adds the `pudu-package` topic, which is what makes the
+    package findable. `search <words>` lists packages from
     GitHub search. The API is `PUDU_GITHUB_API`, or `https://api.github.com`. -}
 module Pudu.Cli.Publish
   ( publishCommands
@@ -31,6 +32,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text.IO as TextIO
+import Pudu.Cli.ReleaseCatalogue (catalogueAsset, releaseCatalogue)
 import Pudu.Compiler.Manifest (Manifest (..), findManifestRoot, readManifest)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import qualified Pudu.Lsp.Json as Json
@@ -242,22 +244,32 @@ release base api root manifest version notesFile = do
   TextIO.putStrLn ("tagged " <> tag <> " at " <> Text.take 7 commit <> " and pushed it to origin")
   stored <- loadCredential base
   case (stored, package) of
-    (Just credential, Registered owner name) -> announce api (credentialToken credential) owner name tag version notes
+    (Just credential, Registered owner name) -> announce api (credentialToken credential) root owner name tag version notes
     _ -> TextIO.putStrLn ("sign in with pudu login so releases also add the " <> packageTopic <> " topic that lists the package")
   TextIO.putStrLn ("released " <> renderPackageId package <> " " <> version <> " — install with: pudu install " <> renderPackageId package <> "@" <> version)
 
-{-| Create the GitHub release for a tag and make sure the repository carries
-    the package topic. Either step failing is reported, not fatal: the tag is
-    already the release. -}
-announce :: Text -> Text -> Text -> Text -> Text -> Text -> Text -> IO ()
-announce api token owner name tag version notes = do
+{-| Create the GitHub release for a tag, attach its API reference, and make
+    sure the repository carries the package topic. Each step failing is
+    reported, not fatal: the tag is already the release. -}
+announce :: Text -> Text -> FilePath -> Text -> Text -> Text -> Text -> Text -> IO ()
+announce api token root owner name tag version notes = do
   let repository = api <> "/repos/" <> owner <> "/" <> name
   created <- send (apiRequest "POST" (repository <> "/releases") (Just token) (Just (Json.object [("tag_name", JsonText tag), ("name", JsonText version), ("body", JsonText notes)])))
-  case created of
-    Right response | responseStatus response `elem` [200, 201] -> TextIO.putStrLn ("created the GitHub release " <> tag)
-    Right response | responseStatus response == 422 -> pure ()
-    Right response -> hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack (messageOf response))
-    Left problem -> hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack problem)
+  uploadTo <- case created of
+    Right response | responseStatus response `elem` [200, 201] -> do
+      TextIO.putStrLn ("created the GitHub release " <> tag)
+      pure (field "upload_url" response)
+    -- The release exists already, as it does when a release is run again.
+    Right response | responseStatus response == 422 -> do
+      existing <- send (apiRequest "GET" (repository <> "/releases/tags/" <> tag) (Just token) Nothing)
+      pure (either (const "") (field "upload_url") existing)
+    Right response -> do
+      hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack (messageOf response))
+      pure ""
+    Left problem -> do
+      hPutStrLn stderr ("pudu release: the GitHub release was not created: " <> Text.unpack problem)
+      pure ""
+  unless (Text.null uploadTo) (attachCatalogue token root uploadTo)
   current <- send (apiRequest "GET" (repository <> "/topics") (Just token) Nothing)
   let topics = case current of
         Right response | responseStatus response == 200 -> case jsonOf response >>= lookupField "names" of
@@ -269,6 +281,25 @@ announce api token owner name tag version notes = do
     case replaced of
       Right response | responseStatus response == 200 -> TextIO.putStrLn ("added the " <> packageTopic <> " topic, which lists the package")
       _ -> hPutStrLn stderr ("pudu release: add the topic " <> Text.unpack packageTopic <> " to the repository on GitHub so the package is listed")
+
+{-| Attach the release's API reference, which the website shows on the
+    package's Docs tab. GitHub names an upload address with a URI template
+    (`.../assets{?name,label}`); the template part is replaced by the name. An
+    asset already attached under the name is left as it is. -}
+attachCatalogue :: Text -> FilePath -> Text -> IO ()
+attachCatalogue token root template = do
+  self <- getExecutablePath
+  built <- releaseCatalogue self root
+  case built of
+    Left problem -> hPutStrLn stderr ("pudu release: the API reference was not attached: " <> Text.unpack problem)
+    Right body -> do
+      let target = Text.takeWhile (/= '{') template <> "?name=" <> catalogueAsset
+      sent <- send (Request "POST" target (headersFor (Just token) <> [("Content-Type", "application/json")]) body)
+      case sent of
+        Right response | responseStatus response `elem` [200, 201] -> TextIO.putStrLn ("attached " <> catalogueAsset <> ", the API reference the package's page shows")
+        Right response | responseStatus response == 422 -> TextIO.putStrLn (catalogueAsset <> " is already attached to the release")
+        Right response -> hPutStrLn stderr ("pudu release: the API reference was not attached: " <> Text.unpack (messageOf response))
+        Left problem -> hPutStrLn stderr ("pudu release: the API reference was not attached: " <> Text.unpack problem)
 
 {-| Name on stderr each module the release would ship outside the package's root.
 

@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Releases carry their API reference (#369)
+
+- [[Cli ReleaseCatalogue]]: `pudu release` attaches `pudu-api.json` — the package's exported,
+  documented declarations in the website's catalogue shape — to the GitHub release, so the package's
+  Docs tab shows the release's API reference without waiting for a site build.
+- Checked by a unit test of the normalization and a release run against a stand-in GitHub that
+  received the asset at the release's upload address.
+
 ## 2026-09-25 — 0.1.2 published
 
 - `v0.1.2` is published as a pre-release with the smaller archives: linux-amd64 5.4 MB (from 10.4 MB)

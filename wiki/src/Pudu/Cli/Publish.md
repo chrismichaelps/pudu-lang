@@ -25,3 +25,8 @@ See [[architecture/PACKAGES]] · [[Package GitHubIndex]].
 - **Q:** Where does a token come from without an OAuth application? **A:** The GitHub CLI's, when it is signed in. _Rationale:_ one sign-in for both tools. _Rejected:_ asking for a password.
 
 Resolved Grill Log: behaviour covered by `test/package-registry.py`.
+
+After creating the GitHub release, `announce` attaches the package's API reference as `pudu-api.json`
+through [[Cli ReleaseCatalogue]], at the upload address the release names (or, when the release
+already exists, the address read from it by tag). A failure is reported and not fatal, like the
+release and topic steps (#369).

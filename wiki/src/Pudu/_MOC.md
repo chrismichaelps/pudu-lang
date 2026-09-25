@@ -30,6 +30,7 @@ tags: [moc, module]
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu Version]] — Cabal-derived version reporting, language constraints, and semver checking.
 - [[Cli RuntimePack]] — the release's musl runtime, fetched, verified, and kept for `pudu build --target`.
+- [[Cli ReleaseCatalogue]] — the API reference `pudu release` attaches to a GitHub release as `pudu-api.json`.
 - [[Version Digest]] — the compile-time digest of the compiler's own sources.
 - [[Pudu Bundle]] — self-contained executable packaging, module serialization, and temporary isolation.
 - [[src/Pudu/Foreign/_MOC|Foreign modules]] — reaching a library written elsewhere: what may cross, and how a call is carried.
