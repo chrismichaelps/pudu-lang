@@ -35,6 +35,8 @@ modules ([[Std Concurrent Future]], [[Std Concurrent Cancel]], [[Std Concurrent 
 refusals beside the successful paths. Every check is written so its answer does not depend on which
 thread got there first.
 
+[[Uses Base32 Pem All]] (30) registers [[Std Base32]] and [[Std Pem]].
+
 [[Uses Checksum All]] (15) registers [[Std Checksum]] against published check values.
 
 [[Uses Human All]] (44) registers [[Std Human]]: byte sizes, durations, ordinals, plurals, and relative
@@ -63,6 +65,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], [[Uses Text To Number]], [[Uses Human All]], [[Uses Checksum All]], [[Uses To Text]], [[Uses Site All]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Base32 Pem All]], [[Uses Ip All]], [[Uses To Text]], [[Uses Human All]], [[Uses Checksum All]], [[Uses Site All]], [[Uses Text To Number]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]
