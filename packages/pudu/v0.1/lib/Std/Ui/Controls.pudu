@@ -1,0 +1,161 @@
+module Std.Ui.Controls
+
+import Std.Ui.Layout as Layout
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+
+/// A button showing `title`, activated by press or `Activate` while focused.
+export fn button(tag: Str, title: Str, theme: &Theme.Theme) -> Layout.View {
+  Layout.row([Layout.text(title).inked(theme.palette.onAccent)])
+    .padded(theme.spacing)
+    .filled(theme.palette.accent)
+    .means(Layout.Button)
+    .named(title)
+    .tagged(tag)
+}
+
+/// A secondary button: surface-colored with accent text.
+export fn quietButton(tag: Str, title: Str, theme: &Theme.Theme) -> Layout.View {
+  Layout.row([Layout.text(title).inked(theme.palette.accent)])
+    .padded(theme.spacing)
+    .filled(theme.palette.surface)
+    .means(Layout.Button)
+    .named(title)
+    .tagged(tag)
+}
+
+/// A switch labelled `title`, read aloud with its state.
+export fn toggle(tag: Str, title: Str, on: Bool, theme: &Theme.Theme) -> Layout.View {
+  let knob = Layout.box().sized(theme.spacing * 2, theme.spacing * 2)
+    .filled(if on { theme.palette.onAccent } else { theme.palette.surface })
+  let track = Layout.row(if on { [Layout.spacer(), knob] } else { [knob, Layout.spacer()] })
+    .sized(theme.spacing * 5, theme.spacing * 2)
+    .filled(if on { theme.palette.accent } else { theme.palette.border })
+  Layout.row([Layout.text(title).inked(theme.palette.text), Layout.spacer(), track])
+    .spaced(theme.spacing)
+    .means(Layout.Toggle)
+    .named(title + (if on { ", on" } else { ", off" }))
+    .tagged(tag)
+}
+
+/// A value with decrement and increment buttons tagged `tag + ".down"` and
+/// `tag + ".up"`.
+export fn stepper(tag: Str, title: Str, value: Int, theme: &Theme.Theme) -> Layout.View {
+  Layout.row([
+      Layout.text(title + ": " + show(value)).inked(theme.palette.text).means(Layout.Label).named(title + " " + show(value)),
+      Layout.spacer(),
+      quietButton(tag + ".down", "-", theme).named("Decrease " + title),
+      quietButton(tag + ".up", "+", theme).named("Increase " + title)
+    ])
+    .spaced(theme.spacing)
+}
+
+/// One button per option, tagged `tag + "." + index`; the selected one is
+/// filled with the accent and read as selected.
+export fn picker(tag: Str, options: &Array[Str], selected: Int, theme: &Theme.Theme) -> Layout.View {
+  var segments = []
+  var index = 0
+  for option in options {
+    let chosen = index == selected
+    let segment = if chosen { button(tag + "." + show(index), option, theme) } else {
+      quietButton(tag + "." + show(index), option, theme)
+    }
+    segments = segments.push(segment.named(option + (if chosen { ", selected" } else { "" })))
+    index = index + 1
+  }
+  Layout.row(segments).spaced(theme.spacing / 2)
+}
+
+/// A horizontal bar `width` pixels wide filled to `percent` (0 to 100),
+/// read aloud as the title and percentage.
+export fn progress(title: Str, percent: Int, width: Int, theme: &Theme.Theme) -> Layout.View {
+  let clamped = if percent < 0 { 0 } else { if percent > 100 { 100 } else { percent } }
+  let filled = width * clamped / 100
+  Layout.row([
+      Layout.box().sized(filled, theme.spacing).filled(theme.palette.accent),
+      Layout.box().sized(width - filled, theme.spacing).filled(theme.palette.border)
+    ])
+    .means(Layout.Image)
+    .named(title + " " + show(clamped) + " percent")
+}
+
+/// A text field showing `value`, or `placeholder` in muted text when empty.
+export fn field(tag: Str, title: Str, value: Str, placeholder: Str, theme: &Theme.Theme) -> Layout.View {
+  let shown = if value.isEmpty() {
+    Layout.text(placeholder).inked(theme.palette.mutedText)
+  } else {
+    Layout.text(value).inked(theme.palette.text)
+  }
+  Layout.row([shown])
+    .padded(theme.spacing)
+    .filled(theme.palette.surface)
+    .means(Layout.Field)
+    .named(title)
+    .tagged(tag)
+}
+
+/// A field that shows one bullet per character and never reads its value
+/// aloud.
+export fn secureField(tag: Str, title: Str, value: Str, theme: &Theme.Theme) -> Layout.View {
+  field(tag, title, "\u{2022}".repeat(value.length()), "", theme)
+}
+
+/// A heading drawn at twice the text scale.
+export fn heading(title: Str, theme: &Theme.Theme) -> Layout.View {
+  Layout.text(title).inked(theme.palette.text).scaled(2).means(Layout.Heading).named(title)
+}
+
+/// A label in muted text.
+export fn caption(text: Str, theme: &Theme.Theme) -> Layout.View {
+  Layout.text(text).inked(theme.palette.mutedText)
+}
+
+/// `on` flipped when `event` activated `tag`.
+export fn toggled(on: Bool, event: &Screen.Event, tag: Str) -> Bool {
+  match event {
+    case Screen.Activated(found) if found == tag => !on
+    case _ => on
+  }
+}
+
+/// `value` moved by `step` when the stepper `tag` was pressed, held within
+/// `low` and `high`.
+export fn stepped(value: Int, event: &Screen.Event, tag: Str, low: Int, high: Int, step: Int) -> Int {
+  let moved = match event {
+    case Screen.Activated(found) if found == tag + ".up" => value + step
+    case Screen.Activated(found) if found == tag + ".down" => value - step
+    case _ => value
+  }
+  if moved < low { low } else { if moved > high { high } else { moved } }
+}
+
+/// The option index a picker event selected, or `selected` unchanged.
+export fn picked(selected: Int, event: &Screen.Event, tag: Str, count: Int) -> Int {
+  match event {
+    case Screen.Activated(found) if found.startsWith(tag + ".") => {
+      let rest = found.drop(tag.length() + 1)
+      var index = 0
+      while index < count {
+        if show(index) == rest { return index }
+        index = index + 1
+      }
+      selected
+    }
+    case _ => selected
+  }
+}
+
+/// `value` after a typed or erased event on field `tag`, never longer than
+/// `limit` characters.
+export fn edited(value: Str, event: &Screen.Event, tag: Str, limit: Int) -> Str {
+  match event {
+    case Screen.Typed(found, text) if found == tag => {
+      let joined = value + text
+      if joined.length() > limit { joined.take(limit) } else { joined }
+    }
+    case Screen.Erased(found) if found == tag => {
+      if value.isEmpty() { value } else { value.take(value.length() - 1) }
+    }
+    case _ => value
+  }
+}

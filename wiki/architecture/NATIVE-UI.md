@@ -100,17 +100,18 @@ A row marked **Absent** is queued work, not an exclusion.
 | Stacks, layers, padding, alignment, scrolling | [[Std Ui Layout]] | **Ready** |
 | Grids | — | **Absent** |
 | Text measure, wrap, draw | [[Std Ui Text]] | **Ready** (bitmap face); shaping, bidirectional text, and input methods absent |
-| Buttons, fields, toggles as roles | [[Std Ui Layout]] roles | **Ready**; sliders, steppers, pickers, progress, secure fields **Absent** |
+| Controls: buttons, toggles, steppers, pickers, progress, fields, secure fields | [[Std Ui Controls]] | **Ready**; sliders **Absent** until pointer motion |
 | Long lists | [[Std Ui Virtual]] | **Ready**; selection model **Absent** |
-| Navigation stack, split view, tabs | — | **Absent** |
-| Sheets, alerts, confirmations | — | **Absent** |
+| Navigation stack, split view, tabs | [[Std Ui Navigation]] | **Ready** |
+| Sheets, alerts, confirmations | [[Std Ui Navigation]] `presenting` | **Ready**: presses blocked, focus trapped |
 | Drawing | [[Std Ui Canvas]] rectangles, clipping, blending | **Partial**: paths, strokes, gradients absent |
 | Animation | [[Std Ui Motion]] curves, springs, retargeting | **Ready** |
 | Gestures | press through `Screen.Pressed` | **Partial**: drag, long press, magnify need pointer move and release |
 | Keyboard focus | [[Std Ui Screen]] focus order and ring | **Ready** |
-| Keyboard shortcuts | [[Std Ui Keymap]] | **Ready**; menu bar **Absent** |
+| Keyboard shortcuts | [[Std Ui Keymap]] | **Ready** |
+| Menus and commands | [[Std Ui Menu]] in-window bar | **Ready**; the platform's native menu bar **Absent** |
 | Undo and redo | [[Std Ui History]] | **Ready** |
-| Persisted preferences | — | **Absent** |
+| Persisted preferences | [[Std Ui Preferences]] | **Ready**, atomic replace |
 | Clipboard, drag and drop | — | **Absent** (adapter work) |
 | Accessibility semantics | [[Std Ui Layout]] semantics, required names | **Partial**: export to the platform accessibility tree absent |
 | Multiple windows, documents, settings window | multiple sessions | **Partial**: no document or settings space yet |

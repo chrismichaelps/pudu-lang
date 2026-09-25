@@ -1,0 +1,131 @@
+module Std.Ui.Menu
+
+import Std.Ui.Controls as Controls
+import Std.Ui.Keymap as Keymap
+import Std.Ui.Layout as Layout
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+
+/// One entry of a menu: a command by name, a separator, or a nested menu.
+export type Item
+  = Command(Str, Str)
+  | Separator
+  | Submenu(Menu)
+
+/// A titled list of items.
+export type Menu = { title: Str, items: Array[Item] }
+
+/// A menu.
+export fn menu(title: Str, items: Array[Item]) -> Menu { Menu{title: title, items: items} }
+
+/// A command item: its title and the command it runs.
+export fn command(title: Str, name: Str) -> Item { Command(title, name) }
+
+/// Every command a menu bar can run, depth first, in order.
+export fn commandsOf(bar: &Array[Menu]) -> Array[Str] {
+  var found = []
+  for one in bar { found = found.concat(commandsIn(&one)) }
+  found
+}
+
+/// What is wrong with a menu bar: an empty menu, a command listed twice,
+/// and a keymap binding whose command no menu offers.
+export fn problems(bar: &Array[Menu], keys: &Keymap.Keymap) -> Array[Str] {
+  var found = []
+  for one in bar {
+    if one.items.length() == 0 { found = found.push("menu '{one.title}' is empty") }
+  }
+  var seen: Set[Str] = setOf([])
+  let listed = commandsOf(bar)
+  for name in listed {
+    if seen.contains(name) { found = found.push("command '{name}' appears twice") }
+    seen = seen.insert(name)
+  }
+  for binding in keys.bindings {
+    if !seen.contains(binding.command) {
+      found = found.push("{binding.chord} runs '{binding.command}', which no menu offers")
+    }
+  }
+  found
+}
+
+/// The menu bar as a row of titles, tagged `menu.<title>`, with the menu
+/// named by `open` dropped down beneath: commands tagged `command.<name>`
+/// and labelled with their shortcut.
+export fn view(bar: &Array[Menu], open: &Option[Str], keys: &Keymap.Keymap, apple: Bool, theme: &Theme.Theme) -> Layout.View {
+  var titles = []
+  var dropped = Layout.box()
+  for one in bar {
+    let isOpen = open == &Some(one.title)
+    let control = if isOpen {
+      Controls.button("menu." + one.title, one.title, theme).named(one.title + " menu, open")
+    } else {
+      Controls.quietButton("menu." + one.title, one.title, theme).named(one.title + " menu")
+    }
+    titles = titles.push(control)
+    if isOpen { dropped = itemsView(&one, keys, apple, theme) }
+  }
+  Layout.column([Layout.row(titles).filled(theme.palette.surface), dropped]).aligned(Layout.Start)
+}
+
+/// Which menu is open after `event`: a title toggles its menu, a command or
+/// `Dismissed` closes it.
+export fn opened(open: &Option[Str], event: &Screen.Event) -> Option[Str] {
+  match event {
+    case Screen.Activated(tag) if tag.startsWith("menu.") => {
+      let title = tag.drop(5)
+      if open == &Some(title) { None } else { Some(title) }
+    }
+    case Screen.Activated(tag) if tag.startsWith("command.") => None
+    case Screen.Dismissed => None
+    case _ => *open
+  }
+}
+
+/// The command an event ran from a menu, if any.
+export fn commandOf(event: &Screen.Event) -> Option[Str] {
+  match event {
+    case Screen.Activated(tag) if tag.startsWith("command.") => Some(tag.drop(8))
+    case _ => None
+  }
+}
+
+fn commandsIn(one: &Menu) -> Array[Str] {
+  var found = []
+  for item in one.items {
+    match item {
+      case Command(_, name) => { found = found.push(name) }
+      case Submenu(inner) => { found = found.concat(commandsIn(&inner)) }
+      case Separator => {}
+    }
+  }
+  found
+}
+
+fn itemsView(one: &Menu, keys: &Keymap.Keymap, apple: Bool, theme: &Theme.Theme) -> Layout.View {
+  var rows = []
+  for item in one.items {
+    match item {
+      case Command(title, name) => {
+        let chords = Keymap.chordsFor(keys, name)
+        let shortcut = if chords.length() == 0 { "" } else { Keymap.label(chords[0], apple) }
+        let spoken = if shortcut.isEmpty() { title } else { title + ", " + shortcut }
+        rows = rows.push(
+          Layout.row([
+              Layout.text(title).inked(theme.palette.text),
+              Layout.spacer(),
+              Layout.text(shortcut).inked(theme.palette.mutedText)
+            ])
+            .padded(theme.spacing)
+            .spaced(theme.spacing * 2)
+            .means(Layout.Button)
+            .named(spoken)
+            .tagged("command." + name)
+        )
+      }
+      case Separator => { rows = rows.push(Layout.box().tall(1).filled(theme.palette.border)) }
+      case Submenu(inner) => { rows = rows.push(itemsView(&inner, keys, apple, theme)) }
+    }
+  }
+  Layout.column(rows).aligned(Layout.Stretch).filled(theme.palette.surface).means(Layout.Group)
+}

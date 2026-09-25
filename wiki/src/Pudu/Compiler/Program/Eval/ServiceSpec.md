@@ -49,6 +49,10 @@ example's device-queue fields cannot drift from its decoder or admitted bounds u
 restating (10), theme (8), motion (8), history (6), list windowing (7), and keymap (9). Driving a real
 window runs only under `PUDU_DESKTOP_DRIVE=1`, because CI has no display.
 
+`UsesUiControlsAll` packs `1215`: controls (12) and navigation with modal presentation (15).
+
+`UsesUiAppShellAll` packs `90804`: preferences (9), menus (8), and focus trapping (4).
+
 `UsesAppContractsAll` packs three counts into `171518`: 17 problem-body checks, 15 cursor-page
 checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
 

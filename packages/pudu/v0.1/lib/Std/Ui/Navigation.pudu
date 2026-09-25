@@ -1,0 +1,192 @@
+module Std.Ui.Navigation
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Controls as Controls
+import Std.Ui.Layout as Layout
+import Std.Ui.Screen as Screen
+import Std.Ui.Theme as Theme
+
+/// Pages pushed on top of a root page; the last is shown.
+export type Stack[P] = { root: P, above: Array[P] }
+
+/// Tabs by tag and title, one selected.
+export type Tabs = { items: Array[(Str, Str)], selected: Str }
+
+/// A choice in a modal: its tag, its title, and whether it destroys data.
+export type Choice = { tag: Str, title: Str, destructive: Bool }
+
+/// What is presented over the current view.
+///
+/// `Sheet(id)` asks the program to show its own content for `id`; `Alert`
+/// and `Confirm` are drawn by `presenting`. `Confirm` always offers a
+/// cancel choice tagged `cancel`.
+export type Presented
+  = Nothing
+  | Sheet(Str)
+  | Alert(Str, Str, Array[Choice])
+  | Confirm(Str, Str, Choice)
+
+/// A stack showing only `root`.
+export fn stack[P](root: P) -> Stack[P] { Stack{root: root, above: []} }
+
+/// The stack with `page` shown on top.
+export fn push[P](held: &Stack[P], page: P) -> Stack[P] {
+  Stack{..*held, above: held.above.push(page)}
+}
+
+/// The stack with its top page removed; the root is never removed.
+export fn pop[P](held: &Stack[P]) -> Stack[P] {
+  let count = held.above.length()
+  if count == 0 { *held } else { Stack{..*held, above: held.above.slice(0, count - 1)} }
+}
+
+/// The stack showing only its root.
+export fn popToRoot[P](held: &Stack[P]) -> Stack[P] { Stack{..*held, above: []} }
+
+/// The page shown.
+export fn top[P](held: &Stack[P]) -> P {
+  let count = held.above.length()
+  if count == 0 { held.root } else { held.above[count - 1] }
+}
+
+/// Whether a back action has somewhere to go.
+export fn canGoBack[P](held: &Stack[P]) -> Bool { held.above.length() > 0 }
+
+/// How many pages are stacked, the root included.
+export fn depth[P](held: &Stack[P]) -> Int { held.above.length() + 1 }
+
+/// Tabs with the first selected; an empty list selects nothing.
+export fn tabs(items: &Array[(Str, Str)]) -> Tabs {
+  let first = if items.length() == 0 { "" } else {
+    let (tag, _) = items[0]
+    tag
+  }
+  Tabs{items: *items, selected: first}
+}
+
+/// The tabs after `event`: activating a tab's control, tagged
+/// `"tab." + tag`, selects it.
+export fn chose(held: &Tabs, event: &Screen.Event) -> Tabs {
+  match event {
+    case Screen.Activated(found) if found.startsWith("tab.") => {
+      let wanted = found.drop(4)
+      for (tag, _) in held.items {
+        if tag == wanted { return Tabs{..*held, selected: tag} }
+      }
+      *held
+    }
+    case _ => *held
+  }
+}
+
+/// A tab bar above `content`, the selected tab filled with the accent.
+export fn tabbed(held: &Tabs, content: Layout.View, theme: &Theme.Theme) -> Layout.View {
+  var bar = []
+  for (tag, title) in held.items {
+    let control = if tag == held.selected {
+      Controls.button("tab." + tag, title, theme).named(title + ", selected tab")
+    } else {
+      Controls.quietButton("tab." + tag, title, theme).named(title + " tab")
+    }
+    bar = bar.push(control)
+  }
+  Layout.column([Layout.row(bar).spaced(theme.spacing / 2).padded(theme.spacing), content.growing(1)])
+    .aligned(Layout.Stretch)
+    .filled(theme.palette.background)
+}
+
+/// A sidebar `sidebarWidth` pixels wide beside `detail`, divided by a
+/// border line.
+export fn split(sidebar: Layout.View, detail: Layout.View, sidebarWidth: Int, theme: &Theme.Theme) -> Layout.View {
+  Layout.row([
+      sidebar.wide(sidebarWidth).filled(theme.palette.surface),
+      Layout.box().wide(1).filled(theme.palette.border),
+      detail.growing(1)
+    ])
+    .aligned(Layout.Stretch)
+    .filled(theme.palette.background)
+}
+
+/// A back button tagged `back`, shown only when the stack can go back.
+export fn backButton[P](held: &Stack[P], theme: &Theme.Theme) -> Layout.View {
+  if canGoBack(held) { Controls.quietButton("back", "\u{2039} Back", theme).named("Back") } else {
+    Layout.box()
+  }
+}
+
+/// The stack after `event`: `back` or `Dismissed` pops.
+export fn navigated[P](held: &Stack[P], event: &Screen.Event) -> Stack[P] {
+  match event {
+    case Screen.Activated("back") => pop(held)
+    case Screen.Dismissed => pop(held)
+    case _ => *held
+  }
+}
+
+/// An ordinary choice.
+export fn choice(tag: Str, title: Str) -> Choice { Choice{tag: tag, title: title, destructive: false} }
+
+/// A choice that destroys data, drawn in the danger color.
+export fn destructive(tag: Str, title: Str) -> Choice { Choice{tag: tag, title: title, destructive: true} }
+
+/// What is presented after `event`: any choice in an alert or confirmation,
+/// `cancel`, or `Dismissed` closes it; a sheet closes on `Dismissed`.
+export fn presentedAfter(current: &Presented, event: &Screen.Event) -> Presented {
+  match (*current, *event) {
+    case (Nothing, _) => Nothing
+    case (_, Screen.Dismissed) => Nothing
+    case (Sheet(_), _) => *current
+    case (_, Screen.Activated(found)) => if tagsOf(current).contains(found) { Nothing } else { *current }
+    case _ => *current
+  }
+}
+
+/// `base` with `current` drawn over it: a dimmed scrim and a centered card.
+/// `sheet` supplies the content for a `Sheet`.
+export fn presenting(base: Layout.View, current: &Presented, sheet: fn(Str) -> Layout.View, theme: &Theme.Theme) -> Layout.View {
+  let card = match current {
+    case Nothing => { return base }
+    case Sheet(id) => sheet(id)
+    case Alert(title, message, choices) => dialog(title, message, choices, theme)
+    case Confirm(title, message, confirm) => {
+      dialog(title, message, [confirm, choice("cancel", "Cancel")], theme)
+    }
+  }
+  // A group rather than decoration: hit testing passes through decoration,
+  // and the scrim must stop presses reaching the view beneath.
+  let scrim = Layout.box().growing(1).filled(Theme.mix(theme.palette.background, Canvas.rgb(0u8, 0u8, 0u8), 50))
+    .means(Layout.Group)
+  let centered = Layout.column([
+      Layout.spacer(),
+      Layout.row([Layout.spacer(), card.filled(theme.palette.surface).padded(theme.spacing * 2).trapping(), Layout.spacer()]),
+      Layout.spacer()
+    ])
+  Layout.layer([base, scrim, centered]).aligned(Layout.Stretch)
+}
+
+fn dialog(title: Str, message: Str, choices: Array[Choice], theme: &Theme.Theme) -> Layout.View {
+  var buttons = [Layout.spacer()]
+  for one in choices {
+    let control = if one.destructive {
+      Controls.button(one.tag, one.title, &Theme.withAccent(theme, theme.palette.danger))
+    } else {
+      Controls.quietButton(one.tag, one.title, theme)
+    }
+    buttons = buttons.push(control)
+  }
+  Layout.column([
+      Controls.heading(title, theme),
+      Controls.caption(message, theme),
+      Layout.row(buttons).spaced(theme.spacing)
+    ])
+    .spaced(theme.spacing)
+    .means(Layout.Group)
+}
+
+fn tagsOf(current: &Presented) -> Array[Str] {
+  match current {
+    case Alert(_, _, choices) => choices.map(|one| one.tag)
+    case Confirm(_, _, confirm) => [confirm.tag, "cancel"]
+    case _ => []
+  }
+}

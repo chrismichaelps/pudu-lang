@@ -24,6 +24,8 @@ testServiceEvaluation = do
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
   desktop <- runEntry "test-fixtures/stdlib/UsesUiDesktop.pudu"
   toolkit <- runEntry "test-fixtures/stdlib/UsesUiToolkitAll.pudu"
+  controls <- runEntry "test-fixtures/stdlib/UsesUiControlsAll.pudu"
+  shell <- runEntry "test-fixtures/stdlib/UsesUiAppShellAll.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -430,6 +432,18 @@ testServiceEvaluation = do
     , counterexample
         "a desktop app decodes input, themes, animates, undoes, windows lists, and binds shortcuts"
         (toolkit === Just "100808060709")
+    {-| Controls read aloud with their state and updated only by their own
+        events (12), and navigation: stacks, tabs, a split view, and modal
+        presentation that blocks presses on the view beneath (15). -}
+    , counterexample
+        "desktop controls, navigation, and modals behave and are read aloud"
+        (controls === Just "1215")
+    {-| Settings saved and read back through nested directories (9), a menu
+        bar validated against the keymap and read aloud with shortcuts (8),
+        and focus held inside a presented dialog (4). -}
+    , counterexample
+        "an application saves settings, offers menus, and traps focus in dialogs"
+        (shell === Just "90804")
     {-| Problem bodies, cursor pages, and idempotency keys, read as three
         counts packed into one number: 17 problem checks, 15 page checks, and
         18 idempotency checks, including a middleware run against a shared store
