@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-25 — Text reads itself as a number (#349)
+
+- [[grammar/pudu]]: `Str` answers `toInt()`, `toFloat()`, and `toDecimal()`, each an `Option` for
+  the whole text; text could not be read as a float at all before.
+- [[Eval Builtin TextNumber]] holds the readers: `Int`'s bounds checked, floats correctly rounded
+  with `inf`, `nan`, and overflow refused, decimals keeping their scale.
+- The book's text chapter shows them. [[Uses Text To Number]] (14 checks) and
+  [[Rejects Text To Number Misuse]] cover them.
+
 ## 2026-09-25 — Internet addresses and network prefixes (#339)
 
 - [[Std Ip]]: IPv4 and IPv6 addresses in one value, strict parsing (no leading zeros, one `::`,

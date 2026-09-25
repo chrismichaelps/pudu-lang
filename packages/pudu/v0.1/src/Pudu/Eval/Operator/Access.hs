@@ -232,6 +232,9 @@ stringMethods =
   , ("chars", StringChars)
   , ("lines", StringLines)
   , ("reverse", StringReverse)
+  , ("toInt", StringToInt)
+  , ("toFloat", StringToFloat)
+  , ("toDecimal", StringToDecimal)
   ]
 
 {-| Method names paired with their method tags. -}

@@ -140,6 +140,20 @@ fn main() -> Int {
 }
 ```
 
+Text also reads itself as a number. `toInt()`, `toFloat()`, and `toDecimal()` each answer an `Option`, and each reads the whole text: a sign, the digits, and nothing more, so trim first when the text may carry spaces.
+
+```pudu
+module ReadingNumbers
+
+fn main() -> Int {
+  let ratio = "0.25".toFloat()
+  let limit = "1e3".toFloat()
+  let price = "19.90".toDecimal()
+  let refused = "12 apples".toInt()
+  if ratio == Some(0.25) && limit == Some(1000.0) && price == Some(19.90d) && refused == None { 0 } else { 1 }
+}
+```
+
 Going the other way, any value placed inside text is written as text: `"{3000}"` is `"3000"`.
 
 ## Std.Text

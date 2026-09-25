@@ -38,6 +38,8 @@ thread got there first.
 [[Uses Ip All]] (55) registers [[Std Ip]]: canonical rendering, each refusal, and the mapped-peer
 allowlist regression.
 
+[[Uses Text To Number]] (14) registers `toInt`, `toFloat`, and `toDecimal` on text.
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one
@@ -52,6 +54,6 @@ branches, and cryptographic expectations originate outside the implementation be
 
 ## Referenced by
 
-Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], and the other runtime fixtures it registers.
+Consumes [[Uses Crypto All]], [[Uses Concurrent]], [[Uses Concurrent Futures]], [[Uses Concurrent Coordination]], [[Uses Concurrent Scope]], [[Uses Ip All]], [[Uses Text To Number]], and the other runtime fixtures it registers.
 
 [[src/_MOC]] · [[architecture/DELIVERY]]

@@ -25,6 +25,7 @@ tags: [moc, module]
 - [[Eval Audio Stream]] — evaluation-owned persistent playback, controls, telemetry, and media clock.
 - [[Eval Audio Kernel]] — compiled exact waveform and automation loops for bounded PCM slices.
 - [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
+- [[Eval Builtin TextNumber]] — reading the number a whole text spells, for `toInt`, `toFloat`, and `toDecimal`.
 - [[Eval Frozen]] — constant values that are plain data, bound at link instead of evaluated again.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.

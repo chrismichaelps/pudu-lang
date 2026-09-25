@@ -71,6 +71,7 @@ import Pudu.Type.Value
   , capabilityList
   , capabilityName
   , decimalType
+  , floatType
   , stringType
   )
 import Pudu.DecimalLiteral (parseDecimalLiteral)
@@ -285,6 +286,7 @@ builtinMethodNames =
   , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
   , "map", "filter", "reduce", "at", "toArray", "toText", "toBytes", "join"
+  , "toInt", "toFloat", "toDecimal"
   ]
 
 {-| The key the enclosing function's return type is filed under.
@@ -858,6 +860,9 @@ stringMethodType spanValue member = case member of
   "lines" -> pure (FunctionTypeValue False [] (arrayOf stringType))
   "toBytes" -> pure (FunctionTypeValue False [] bytesType)
   "reverse" -> pure (FunctionTypeValue False [] stringType)
+  "toInt" -> pure (FunctionTypeValue False [] (NominalType "Option" [integerType]))
+  "toFloat" -> pure (FunctionTypeValue False [] (NominalType "Option" [floatType]))
+  "toDecimal" -> pure (FunctionTypeValue False [] (NominalType "Option" [decimalType]))
   _ -> do
     report "E3005" spanValue ("Str has no method " <> member)
       (Just "check the method name against the documented text methods")

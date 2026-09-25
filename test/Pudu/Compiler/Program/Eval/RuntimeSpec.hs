@@ -79,6 +79,7 @@ testRuntimeEvaluation = do
   awaited <- runEntry "test-fixtures/stdlib/UsesConcurrentFutures.pudu"
   coordinated <- runEntry "test-fixtures/stdlib/UsesConcurrentCoordination.pudu"
   siblings <- runEntry "test-fixtures/stdlib/UsesConcurrentScope.pudu"
+  numbersRead <- runEntry "test-fixtures/stdlib/UsesTextToNumber.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
     [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
@@ -116,6 +117,11 @@ testRuntimeEvaluation = do
     , counterexample
         "a scope cancels its siblings on the first failure and outlives none of them"
         (siblings === Just "7")
+    {-| Whole numbers at Int's bounds, floats with points and exponents, and
+        decimals keeping their scale, each refusing text that is more than the
+        number, and writing then reading answering the value written. -}
+    , counterexample "text reads back as the number it spells, or as nothing"
+        (numbersRead === Just "14")
     {-| Addresses and networks in both families: canonical rendering, every
         refusal, and a mapped IPv4 peer still held by an IPv4 allowlist. -}
     , counterexample "addresses parse strictly, render canonically, and match networks"
