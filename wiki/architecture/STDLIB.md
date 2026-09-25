@@ -195,6 +195,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Net` | addresses, TCP, UDP |
 | `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
+| `Std.Site` | building a web application into the files and routing a host serves |
 | `Std.Ip` | IPv4 and IPv6 addresses, classification, network prefixes, allowlists |
 
 ### Concurrency

@@ -14,6 +14,16 @@ tags: [changelog]
 - The book's text chapter shows them. [[Uses Text To Number]] (14 checks) and
   [[Rejects Text To Number Misuse]] cover them.
 
+## 2026-09-25 — A build step for any Pudu web application (#351)
+
+- [[ADR-0024-building-a-web-application-for-any-host]]: one build step the application calls, with
+  a layout and routing per host, fast by rendering in parallel and rewriting only what changed.
+- [[Std Site]]: `build` renders on a worker pool, places each response by its content type, refuses
+  unsafe paths and failed pages, copies a public directory, and writes Vercel's Build Output routes
+  derived from the layout; `Static`, `Netlify`, and `CloudflarePages` need none.
+- [[website Prerender]] builds through it: 91 s → 26 s on four cores for 3,705 byte-identical pages,
+  and a rebuild with nothing changed writes nothing. [[Uses Site All]] (28 checks).
+
 ## 2026-09-25 — Checked products travel to runtimes built from the same sources (#352)
 
 - [[Version Digest]]: every compiler carries a SHA-256 of its own sources, spliced in at compile time

@@ -1,0 +1,145 @@
+module UsesSiteAll
+
+import Std.Env as Env
+import Std.Fs as Fs
+import Std.Http as Http
+import Std.Io as Io
+import Std.Site as Site
+
+fn page(code: Int, body: Str) -> Http.Response {
+  Http.Response{status: Http.status(code), headers: [], body: body, binaryBody: None}
+}
+
+fn render(path: Str) -> Http.Response {
+  if path == "/missing" {
+    page(404, "not here")
+  } else if path == "/logo.png" {
+    Http.Response{status: Http.status(200), headers: [], body: "", binaryBody: Some(bytesOf([137u8, 80u8, 78u8, 71u8]))}
+  } else {
+    page(200, "<p>" + path + "</p>")
+  }
+}
+
+fn renderChanged(path: Str) -> Http.Response {
+  if path == "/docs" { page(200, "<p>changed</p>") } else { render(path) }
+}
+
+fn settingsFor(root: Str, target: Site.Target, workers: Int) -> Site.Options {
+  Site.Options{output: root, publicDirectory: root + "-public", workers: workers, target: target, fallback: None}
+}
+
+fn text(path: Str) -> Str {
+  match Io.read(path) {
+    case Ok(found) => found
+    case Err(_) => "<absent>"
+  }
+}
+
+fn refusal(settings: &Site.Options) -> Str {
+  match Site.build(settings, &["/"], render) {
+    case Ok(_) => "built"
+    case Err(problem) => Site.explain(&problem)
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  let scratch = match Fs.temporaryDirectoryIn(Env.temporaryDirectory(), "pudu-site-") {
+    case Ok(found) => found
+    case Err(_) => { return 0 }
+  }
+
+  // Paths become the files static hosts serve for them.
+  if Site.fileFor("/", "") == Ok("index.html") && Site.fileFor("/docs", "") == Ok("docs/index.html") { held = held + 1 }
+  if Site.fileFor("/docs/intro/", "") == Ok("docs/intro/index.html") && Site.fileFor("/robots.txt", "") == Ok("robots.txt") { held = held + 1 }
+  if Site.fileFor("/404", "") == Ok("404.html") && Site.fileFor("/a/v1.2/", "") == Ok("a/v1.2/index.html") && Site.fileFor("/.well-known", "") == Ok(".well-known/index.html") { held = held + 1 }
+  if Site.fileFor("/caf%C3%A9", "") == Ok("caf%C3%A9/index.html") && Site.fileFor("/module/Std.Http", "") == Ok("module/Std.Http/index.html") && Site.fileFor("/feed.XML", "") == Ok("feed.XML") { held = held + 1 }
+
+  // The response decides: a page is a directory, anything else is its file.
+  if Site.fileFor("/module/Std.Json", "text/html; charset=utf-8") == Ok("module/Std.Json/index.html") && Site.fileFor("/module/Std.Json", "") == Ok("module/Std.Json") { held = held + 1 }
+  if Site.fileFor("/robots.txt", "text/plain") == Ok("robots.txt") && Site.fileFor("/data", "application/json") == Ok("data") && Site.fileFor("/module/Std.Html", "TEXT/HTML") == Ok("module/Std.Html/index.html") { held = held + 1 }
+
+  // Anything that could leave the output, or is not a file name, is refused.
+  let escapes = ["docs", "/../etc/passwd", "/a/./b", "//double", "/a\\b", "/q?x=1", "/f#top", "/tab\there"]
+  var refusedAll = true
+  for candidate in escapes {
+    match Site.fileFor(candidate, "text/html") {
+      case Ok(_) => { refusedAll = false }
+      case Err(_) => {}
+    }
+  }
+  if refusedAll { held = held + 1 }
+
+  // A static build: pages where they are served, non-200 and unsafe paths refused.
+  let root = scratch + "/static"
+  let _made = Io.makeDirectory(root + "-public/css")
+  let _style = Io.write(root + "-public/css/site.css", "body \{\}")
+  let _icon = Io.write(root + "-public/favicon.ico", "icon")
+  let paths = ["/", "/docs", "/docs/intro/", "/robots.txt", "/404", "/logo.png", "/missing", "/../escape"]
+  match Site.build(&settingsFor(root, Site.Static, 4), &paths, render) {
+    case Ok(report) => {
+      if report.rendered == 8 && report.written == 6 && report.unchanged == 0 && report.copied == 2 { held = held + 1 }
+      if report.refused.length() == 2 && report.refused[0].path == "/missing" && report.refused[0].reason == "answered 404" && report.refused[1].path == "/../escape" { held = held + 1 }
+      if !Site.succeeded(&report) && Site.summary(&report) == "8 pages: 6 written, 0 unchanged, 2 refused; 2 public files copied" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  if text(root + "/index.html") == "<p>/</p>" && text(root + "/docs/intro/index.html") == "<p>/docs/intro/</p>" && text(root + "/404.html") == "<p>/404</p>" { held = held + 1 }
+  if text(root + "/css/site.css") == "body \{\}" && !Io.exists(root + "/missing/index.html") && !Io.exists(scratch + "/escape/index.html") { held = held + 1 }
+  match Io.readAllBytes(root + "/logo.png") {
+    case Ok(bytes) => { if bytes.toArray() == [137u8, 80u8, 78u8, 71u8] { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // A rebuild writes only what changed.
+  let current = ["/", "/docs", "/docs/intro/", "/robots.txt"]
+  match Site.build(&settingsFor(root, Site.Static, 4), &current, render) {
+    case Ok(report) => { if report.written == 0 && report.unchanged == 4 && report.copied == 0 && Site.succeeded(&report) { held = held + 1 } }
+    case Err(_) => {}
+  }
+  match Site.build(&settingsFor(root, Site.Static, 4), &current, renderChanged) {
+    case Ok(report) => { if report.written == 1 && report.unchanged == 3 && text(root + "/docs/index.html") == "<p>changed</p>" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // One worker and many write the same files.
+  let serial = scratch + "/serial"
+  let parallel = scratch + "/parallel"
+  let many = ["/a", "/b", "/c", "/d", "/e", "/f", "/g", "/h", "/i", "/j"]
+  let _one = Site.build(&settingsFor(serial, Site.Static, 1), &many, render)
+  let _eight = Site.build(&settingsFor(parallel, Site.Static, 8), &many, render)
+  var same = true
+  for path in many {
+    if text(serial + path + "/index.html") != text(parallel + path + "/index.html") || text(serial + path + "/index.html") == "<absent>" { same = false }
+  }
+  if same { held = held + 1 }
+
+  // A host that reads a Build Output configuration gets pages and routing.
+  let hosted = scratch + "/vercel"
+  let withFunction = Site.Options{..settingsFor(hosted, Site.Vercel, 4), fallback: Some("dynamic")}
+  match Site.build(&withFunction, &["/", "/docs"], render) {
+    case Ok(report) => { if report.written == 2 && Site.pagesDirectory(&withFunction) == hosted + "/static" { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let config = text(hosted + "/config.json")
+  if text(hosted + "/static/docs/index.html") == "<p>/docs</p>" && config.contains("\"handle\": \"filesystem\"") && config.contains("\"dest\": \"/dynamic\"") { held = held + 1 }
+  if Site.vercelConfig(None, true).contains("\"status\": 404, \"dest\": \"/404.html\"") && !Site.vercelConfig(None, false).contains("404") { held = held + 1 }
+  if Site.vercelConfig(None, false).contains("\"version\": 3") && Site.vercelConfig(Some("api"), true).contains("\"dest\": \"/api\"") { held = held + 1 }
+
+  // Defaults, host detection, and options that cannot work.
+  let defaults = Site.options()
+  if defaults.workers == 8 && defaults.publicDirectory == "public" && defaults.fallback == None && defaults.target == Site.targetFromEnvironment() { held = held + 1 }
+  if Site.defaultOutput(Site.Vercel) == ".vercel/output" && Site.defaultOutput(Site.Netlify) == "dist" && Site.defaultOutput(Site.CloudflarePages) == "dist" && Site.defaultOutput(Site.Static) == "dist" { held = held + 1 }
+  if Site.pagesDirectory(&settingsFor("out", Site.Netlify, 1)) == "out" && Site.pagesDirectory(&settingsFor("out", Site.CloudflarePages, 1)) == "out" { held = held + 1 }
+  if refusal(&settingsFor(scratch + "/x", Site.Static, 0)) == "the build options are not usable: at least one worker is needed" { held = held + 1 }
+  if refusal(&Site.Options{..settingsFor(scratch + "/x", Site.Vercel, 1), fallback: Some("a/b")}) == "the build options are not usable: 'a/b' is not a function name" { held = held + 1 }
+  if refusal(&settingsFor("", Site.Static, 1)) == "the build options are not usable: the output directory is empty" { held = held + 1 }
+  let problem: Site.SiteError = Site.Unwritable("out", "denied")
+  if Site.explain(&problem) == "could not write out: denied" { held = held + 1 }
+  let refusedPage: Site.Refusal = Site.Refusal{path: "/x", reason: "answered 500"}
+  let empty: Site.Report = Site.Report{rendered: 1, written: 0, unchanged: 0, copied: 0, refused: [refusedPage]}
+  if !Site.succeeded(&empty) { held = held + 1 }
+
+  let _cleaned = Fs.removeTree(scratch)
+  held
+}
