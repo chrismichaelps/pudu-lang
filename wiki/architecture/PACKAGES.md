@@ -327,7 +327,16 @@ slice fits ([[Package topic discovery]]). Builds are incremental ([[Package snap
   with no archive download; only its live counts and discussions are re-read.
 
 When the remaining rate limit falls to a reserve, changed packages keep their previous entry and are
-refreshed by the next build rather than failing it. Readers never cause GitHub requests.
+refreshed by the next build rather than failing it.
+
+The snapshot is the baseline, not the ceiling (#367). The serverless function lays a cached GitHub
+overlay on it ([[website Service LivePackages]]): one topic search sorted by update finds packages
+published since the build, admitted by the same tag-and-manifest rule, and refreshes counts and
+newer releases of known ones. The listing, search, suggestions, and new packages' pages answer from
+that overlay behind an edge cache (`s-maxage` with `stale-while-revalidate`), so a new package
+appears within minutes without a deployment. Readers cause at most one GitHub refresh per freshness
+window per function instance; a GitHub failure serves the remembered answer or the snapshot.
+Known packages' own pages stay static until the next build.
 
 | Address | Shows |
 | --- | --- |
@@ -481,6 +490,11 @@ entries and changes nothing else. Moving a local directory to a package is pushi
   site is static and answers from a CDN; GitHub's rate limits and outages must not take package pages
   down.
   _Rejected:_ a live proxy in the site's function.
+- **Q:** How does a package published after the build appear? **A:** A cached, bounded GitHub overlay
+  in the function for the listing, search, and pages the build did not write (#367). _Rationale:_
+  publication should not wait on a deployment; edge caching and the snapshot fallback keep the
+  outage and rate-limit guarantees above. _Rejected:_ a per-request proxy, and a webhook-triggered
+  rebuild as the only path.
 
 ## Referenced by
 

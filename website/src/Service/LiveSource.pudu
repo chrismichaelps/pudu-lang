@@ -1,0 +1,127 @@
+module Service.LiveSource
+
+import Std.App.IsrCache as IsrCache
+import Std.Bytes as ByteSeq
+import Std.Env as Env
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Sync as Sync
+import Std.Time as Time
+
+/// What one GitHub address answered. `Absent` is a definite 404, which is
+/// remembered like an answer; `Unavailable` is anything that says nothing
+/// about the repository (a refusal, a rate limit, a timeout, a server error).
+export type Answer
+  = Found(Str)
+  | Absent
+  | Unavailable
+
+/// Where answers come from and what time it is, in seconds. Both are values so
+/// a test serves a stand-in GitHub and moves its own clock.
+export type Origin = { fetch: fn(Str) -> Answer, clock: fn() -> Int }
+
+/// How long an answer is served without asking again, then how long it is
+/// still served when asking again fails.
+export type Freshness = { fresh: Int, stale: Int }
+
+/// Answers remembered per address for the life of one function instance.
+/// `quietUntil` is shared by every address: after one failure GitHub is not
+/// asked again for `QUIET_SECONDS`, so a rate limit or an outage costs one slow
+/// request per window rather than one per page view.
+export type Source = { origin: Origin, cache: IsrCache.IsrCache, quietUntil: Sync.Cell[Int] }
+
+const CAPACITY: Int = 512
+const QUIET_SECONDS: Int = 60
+const ABSENT: Str = "absent"
+const FOUND: Str = "found"
+const DEADLINE_MILLIS: Int = 4000
+const BODY_BYTES: Int = 2097152
+const API_ORIGIN: Str = "https://api.github.com/"
+
+export fn over(origin: Origin) -> Source {
+  Source{origin: origin, cache: IsrCache.create(CAPACITY), quietUntil: Sync.cell(0)}
+}
+
+/// A source that never answers: the snapshot alone.
+export fn offline() -> Source {
+  over(Origin{fetch: fn(_target: Str) -> Answer { Unavailable }, clock: fn() -> Int { 0 }})
+}
+
+export fn now(source: &Source) -> Int {
+  let clock = source.origin.clock
+  clock()
+}
+
+/// The answer for an address, from memory while it is fresh, from GitHub once
+/// it is not, and from memory again while it is stale and GitHub fails.
+export fn read(source: &Source, target: Str, freshness: &Freshness) -> Answer {
+  let moment = now(source)
+  let remembered = IsrCache.get(&source.cache, target, moment)
+  match remembered {
+    case IsrCache.Fresh(content, kind) => { return decoded(&content, kind) }
+    case _ => ()
+  }
+  let quiet = match Sync.get(&source.quietUntil) {
+    case Ok(until) => until
+    case Err(_) => 0
+  }
+  let asked = if moment < quiet { Unavailable } else {
+    let fetch = source.origin.fetch
+    fetch(target)
+  }
+  match asked {
+    case Found(body) => {
+      IsrCache.put(&source.cache, target, &ByteSeq.fromText(body), FOUND, &[], freshness.fresh, freshness.stale, moment)
+      Found(body)
+    }
+    case Absent => {
+      IsrCache.put(&source.cache, target, &ByteSeq.fromText(""), ABSENT, &[], freshness.fresh, freshness.stale, moment)
+      Absent
+    }
+    case Unavailable => {
+      if moment >= quiet { let _quiet = Sync.set(&source.quietUntil, moment + QUIET_SECONDS) }
+      match remembered {
+        case IsrCache.Stale(content, kind) => decoded(&content, kind)
+        case _ => Unavailable
+      }
+    }
+  }
+}
+
+fn decoded(content: &Bytes, kind: Str) -> Answer {
+  if kind == ABSENT { return Absent }
+  match ByteSeq.toText(content) {
+    case Ok(body) => Found(body)
+    case Err(_) => Unavailable
+  }
+}
+
+/// GitHub over HTTPS. The token, when the platform provides one, is sent only
+/// to the API origin: raw file reads are public and not rate limited by it.
+export fn github(token: Str) -> Origin {
+  Origin {
+    fetch: fn(target: Str) -> Answer { ask(target, token) },
+    clock: fn() -> Int { Time.toSeconds(&Time.currentInstant()) }
+  }
+}
+
+export fn fromEnvironment() -> Source { over(github(Env.variableOr("GITHUB_TOKEN", ""))) }
+
+fn ask(target: Str, token: Str) -> Answer {
+  let bounds = Client.limits().within(DEADLINE_MILLIS).reading(BODY_BYTES).following(2)
+  var headers: Array[(Str, Str)] = [("accept", "application/vnd.github+json"), ("user-agent", "pudu-website"), ("x-github-api-version", "2022-11-28")]
+  if !token.isEmpty() && target.startsWith(API_ORIGIN) { headers = headers.push(("authorization", "Bearer " + token)) }
+  let request = Http.Request{method: Http.Get, target: target, headers: headers, body: "", binaryBody: None}
+  match Client.send(&request, &bounds) {
+    case Ok(answer) => classify(answer.status.code, answer.body)
+    case Err(_) => Unavailable
+  }
+}
+
+/// Only 200 and 404 say something about the repository; every other status is
+/// GitHub being unable to say, and must not replace a remembered answer.
+export fn classify(code: Int, body: Str) -> Answer {
+  if code == 200 { return Found(body) }
+  if code == 404 { return Absent }
+  Unavailable
+}

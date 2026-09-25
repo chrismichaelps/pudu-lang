@@ -22,9 +22,18 @@ See [[architecture/PACKAGES]] · [[website Site]] · [[src/website/_MOC]].
 
 - **Q:** Where do stars, tickets, and contributions come from? **A:** The build snapshot copies the repository's star count and the latest public issues and pull requests from GitHub. _Rationale:_ no page asks GitHub at request time.
 
-- **Q:** Fetch GitHub data per request? **A:** No; load a generated snapshot once. _Rationale:_ package pages remain available during a GitHub outage.
+- **Q:** Fetch GitHub data per request? **A:** No; load a generated snapshot once. _Rationale:_ package pages remain available during a GitHub outage. Since #367 the function lays a cached GitHub overlay on this snapshot ([[website Service LivePackages]]); the snapshot stays the baseline and the fallback.
 
 - **Q:** Require release trees in the search function? **A:** No; use a compact loader there and the full loader for static pages. _Rationale:_ the function bundle carries only the project index.
 
 Resolved Grill Log: only public GitHub documents enter the snapshot; the service admits files by its generated listing and serves no unlisted path.
 Discussion records are read-only and bounded; a requested number must match a record in that project's snapshot.
+
+## Detail on demand (#367)
+
+`detailed` fills a compactly loaded project with its latest release's files, API catalogue, and
+discussions from the snapshot directory, tolerating any that are absent. The full loader uses the
+same helpers and still fails on a missing release tree.
+
+Resolved Grill Log: the function loads the compact index at start and reads one project's detail when
+one of its pages is asked for, so cold starts do not grow with the number of packages.

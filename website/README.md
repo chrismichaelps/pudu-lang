@@ -33,6 +33,12 @@ what `/download` offers. The archives are read at build time rather than per req
 the CDN waits for no API and a rate limit at the forge cannot take the download page down; the cost
 is that a new release reaches the page on the next deployment. Run it again after publishing one.
 
+Packages are different: the build's snapshot is the baseline, and the function lays GitHub's
+`topic:pudu-package` search over it, so a newly published package is listed and has its page within
+minutes, without a deployment. Answers are cached at the edge and per function instance; when GitHub
+refuses or times out the snapshot is served. Give the function a `GITHUB_TOKEN` environment variable
+(no scopes needed) to raise its API rate limit.
+
 Set `PUDU_SITE_URL` to the public HTTPS origin before a production
 build so canonical URLs, Open Graph URLs, `robots.txt`, and `sitemap.xml` agree.
 

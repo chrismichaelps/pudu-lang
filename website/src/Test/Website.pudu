@@ -13,6 +13,7 @@ import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
 import Service.Documents as Documents
+import Service.LivePackages as LivePackages
 import Service.Packages as Packages
 import Service.Playground.Admission as Admission
 import Service.Playground.Examples as Examples
@@ -305,13 +306,13 @@ export fn main() -> Int {
   let longSearch = Web.render(&longSite, "/packages/search?q=json")
   let filteredSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fmissing")
   let knownFilterSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fjson-0")
-  let filteredDynamicSearch = DynamicWeb.render(&DynamicWeb.Dynamic{packages: longSite.packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, "/packages/search?q=json&filter=%40alice%2Fmissing")
+  let filteredDynamicSearch = DynamicWeb.render(&DynamicWeb.Dynamic{packages: longSite.packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, "/packages/search?q=json&filter=%40alice%2Fmissing")
   let suggestRoute = Web.render(&site, "/packages/suggest?q=json")
-  let suggestDynamic = DynamicWeb.render(&DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, "/packages/suggest?q=&filter=%40alice%2Fjson-kit")
+  let suggestDynamic = DynamicWeb.render(&DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, "/packages/suggest?q=&filter=%40alice%2Fjson-kit")
   let shapeSearch = Web.render(&site, "/packages/search?q=Value+-%3E+Str")
   let longSearchNext = Web.render(&longSite, "/packages/search?q=json&page=2")
   let longSearchBeyond = Web.render(&longSite, "/packages/search?q=json&page=999")
-  let longDynamic = DynamicWeb.Dynamic{..DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates()}, packages: longSite.packages}
+  let longDynamic = DynamicWeb.Dynamic{..DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, packages: longSite.packages}
   let longDynamicSearchNext = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=2")
   let longDynamicSearchBeyond = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=999")
   var longTickets: Array[Packages.Discussion] = []
@@ -367,7 +368,8 @@ export fn main() -> Int {
     catalog: searchCatalog,
     search: Search.index(&searchCatalog.entries),
     playground: site.playground,
-    gates: Playground.openGates()
+    gates: Playground.openGates(),
+    live: LivePackages.offline()
   }
   let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
   let leanProjects = packages.projects.map(|project: Packages.Project| Packages.Project{..project, catalog: None})

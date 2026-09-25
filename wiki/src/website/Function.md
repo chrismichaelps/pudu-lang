@@ -17,3 +17,12 @@ Resolved Grill Log: the serverless graph contains only dynamic search and not-fo
 package loader reads the compact project index without requiring release trees. Static
 documentation is already emitted to the edge. Search ranking, result HTML, and response policy remain
 shared with the local server and tests, while omitting unrelated page and asset modules from startup.
+
+## Live packages (#367)
+
+The function builds its `Web.Dynamic` with `LivePackages.over(LiveSource.fromEnvironment())`, which
+reads `GITHUB_TOKEN` when the platform sets it. Nothing is fetched at start: GitHub is asked lazily by
+the first package request and remembered per instance ([[website Service LiveSource]]).
+
+Resolved Grill Log: start-up must not depend on GitHub; a cold start that cannot reach it still
+serves the compact snapshot.

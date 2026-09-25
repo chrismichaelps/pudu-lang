@@ -35,3 +35,10 @@ The script no longer writes `config.json`. It passes the Build Output directory 
 [[website Prerender]], which writes the pages and the routing through [[Std Site]]: the same
 redirect, asset cache policies, function routes, and page rewrites as the table this script used to
 print, derived from the rendered files rather than listed.
+
+## Package detail in the function (#367)
+
+The function bundle carries the snapshot's `files/`, `docs/`, and `discussions/` beside
+`packages.json`, because the function now answers every package page.
+
+Resolved Grill Log: avatars stay static files; everything a package page reads travels with the function.

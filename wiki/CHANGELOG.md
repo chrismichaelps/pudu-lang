@@ -16,6 +16,21 @@ tags: [changelog]
 - [[VS Code Grammar]] colours interpolations as embedded Pudu; the extension is 0.5.0.
 - Compiler object and interface files are no longer tracked, and `.gitignore` keeps them out.
 
+## 2026-09-25 — Packages appear without a redeploy (#367)
+
+- [[website Service LivePackages]] lays GitHub over the build snapshot in the function: a package
+  published since the build is listed and has overview, releases, and owner pages; known packages
+  take live counts and newer releases. Admission is the build's tag-and-`pudu.toml` rule.
+- [[website Service LiveSource]] remembers GitHub answers in `Std.App.IsrCache` (fresh, then stale on
+  failure), goes quiet for a minute after a refusal or timeout, and sends `GITHUB_TOKEN` only to the API.
+- [[website Web Dynamic]], [[website Web PackagePages]], and [[website Prerender]]: `/packages`, its
+  pages, and every page under `/@owner` are answered by the function, so a known package's pages show
+  a new release as soon as the listing does. Package answers carry `s-maxage` with
+  `stale-while-revalidate`; a missing package is cached 60 s. The prerender no longer writes package
+  pages, which stay in the sitemap.
+- [[website live packages suite]] covers admission, refresh, outage, stale service, and edge caching
+  against a stand-in GitHub; CI runs it.
+
 ## 2026-09-25 — The reference shows the new documentation, and the book covers deploying (#364)
 
 - `website/data/api.json` is regenerated from the current library, so the reference renders the

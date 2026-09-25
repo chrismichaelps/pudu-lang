@@ -1,0 +1,116 @@
+module Web.PackagePages
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Text as Text
+import Std.Url as Url
+import Service.Packages as Packages
+import View.Packages.Catalog as PackageCatalog
+import View.Packages.Discussion as PackageDiscussion
+import View.Packages.Project as PackageProject
+import View.Packages.Reference as PackageReference
+import View.Packages.Source as PackageSource
+
+/// What the package pages are rendered from. `packages` is the index a page
+/// finds its project in; `detail` fills a found project with what one tab
+/// shows (`overview`, `releases`, `source` with its file, `docs`, `tickets`,
+/// `contributions`), so an index that holds only what listing needs can still
+/// answer every tab. The complete local site passes a project through unchanged.
+export type Pages = {
+  siteUrl: Str,
+  packages: Packages.Packages,
+  detail: fn(Packages.Project, Str, Str) -> Packages.Project,
+  missing: fn(Str) -> Http.Response
+}
+
+/// Every page under `/@owner`: projects, their tabs, and owner profiles. The
+/// routes are tried in order, so the longer patterns come first.
+export fn routes(pages: &Pages) -> Array[Route.Route] {
+  let held = *pages
+  [
+    Route.get("/:handle/:project/source/*file", fn(asked: Route.Request) -> Http.Response {
+        source(&held, &asked, Url.decodeComponent(Option.unwrapOr(Route.param(&asked, "file"), "")))
+      }),
+    Route.get("/:handle/:project/source", fn(asked: Route.Request) -> Http.Response { source(&held, &asked, "") }),
+    Route.get("/:handle/:project/docs", fn(asked: Route.Request) -> Http.Response {
+        let Some(project) = found(&held, &asked, "docs", "") else { return missing(&held, &asked) }
+        Reply.page(200, PackageReference.page(held.siteUrl, &held.packages, &project))
+      }),
+    Route.get("/:handle/:project/releases", fn(asked: Route.Request) -> Http.Response {
+        let Some(project) = found(&held, &asked, "releases", "") else { return missing(&held, &asked) }
+        Reply.page(200, PackageProject.releases(held.siteUrl, &held.packages, &project))
+      }),
+    Route.get("/:handle/:project/tickets/page/:page", fn(asked: Route.Request) -> Http.Response {
+        discussion(&held, &asked, "tickets", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+      }),
+    Route.get("/:handle/:project/tickets/:number", fn(asked: Route.Request) -> Http.Response {
+        discussion(&held, &asked, "tickets", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+      }),
+    Route.get("/:handle/:project/tickets", fn(asked: Route.Request) -> Http.Response { discussion(&held, &asked, "tickets", "", 1) }),
+    Route.get("/:handle/:project/contributions/page/:page", fn(asked: Route.Request) -> Http.Response {
+        discussion(&held, &asked, "contributions", "", pageOf(Option.unwrapOr(Route.param(&asked, "page"), "")))
+      }),
+    Route.get("/:handle/:project/contributions/:number", fn(asked: Route.Request) -> Http.Response {
+        discussion(&held, &asked, "contributions", Option.unwrapOr(Route.param(&asked, "number"), ""), 1)
+      }),
+    Route.get("/:handle/:project/contributions", fn(asked: Route.Request) -> Http.Response { discussion(&held, &asked, "contributions", "", 1) }),
+    Route.get("/:handle/:project", fn(asked: Route.Request) -> Http.Response {
+        let Some(project) = found(&held, &asked, "overview", "") else { return missing(&held, &asked) }
+        Reply.page(200, PackageProject.overview(held.siteUrl, &held.packages, &project))
+      }),
+    Route.get("/:handle/page/:page", fn(asked: Route.Request) -> Http.Response {
+        let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
+        if page < 2 { return missing(&held, &asked) }
+        match PackageCatalog.profilePage(held.siteUrl, &held.packages, Option.unwrapOr(Route.param(&asked, "handle"), ""), page) {
+          case Some(shown) => Reply.page(200, shown)
+          case None => missing(&held, &asked)
+        }
+      }),
+    Route.get("/:handle", fn(asked: Route.Request) -> Http.Response {
+        match PackageCatalog.profile(held.siteUrl, &held.packages, Option.unwrapOr(Route.param(&asked, "handle"), "")) {
+          case Some(page) => Reply.page(200, page)
+          case None => missing(&held, &asked)
+        }
+      })
+  ]
+}
+
+fn pageOf(raw: Str) -> Int { Option.unwrapOr(Text.wholeOf(raw), 0) }
+
+fn missing(pages: &Pages, asked: &Route.Request) -> Http.Response {
+  let answer = pages.missing
+  answer(asked.path)
+}
+
+/// The project a request names, filled for one tab. Only `@owner` handles name
+/// projects, so no other path reaches the index.
+fn found(pages: &Pages, asked: &Route.Request, tab: Str, file: Str) -> Option[Packages.Project] {
+  let handle = Option.unwrapOr(Route.param(asked, "handle"), "")
+  if !handle.startsWith("@") { return None }
+  let project = Packages.find(&pages.packages, handle, Option.unwrapOr(Route.param(asked, "project"), "")) ?
+  let fill = pages.detail
+  Some(fill(project, tab, file))
+}
+
+fn source(pages: &Pages, asked: &Route.Request, file: Str) -> Http.Response {
+  let Some(project) = found(pages, asked, "source", file) else { return missing(pages, asked) }
+  match PackageSource.page(pages.siteUrl, &pages.packages, &project, file) {
+    case Some(page) => Reply.page(200, page)
+    case None => missing(pages, asked)
+  }
+}
+
+fn discussion(pages: &Pages, asked: &Route.Request, kind: Str, number: Str, page: Int) -> Http.Response {
+  let Some(project) = found(pages, asked, kind, number) else { return missing(pages, asked) }
+  let records = if kind == "tickets" { project.tickets } else { project.contributions }
+  if number.isEmpty() {
+    if page < 1 || page > PackageDiscussion.pages(records.length()) || (asked.path.contains("/page/") && page < 2) { return missing(pages, asked) }
+    return Reply.page(200, PackageDiscussion.listingPage(pages.siteUrl, &pages.packages, &project, kind, page))
+  }
+  match Packages.discussion(&records, number) {
+    case Some(record) => Reply.page(200, PackageDiscussion.detail(pages.siteUrl, &pages.packages, &project, kind, &record))
+    case None => missing(pages, asked)
+  }
+}
