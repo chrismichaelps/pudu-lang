@@ -28,7 +28,7 @@ export fn page(siteUrl: Str) -> Html.Html {
             H.span().says(".")
           ]),
         H.h2().says("Where Pudu stands"),
-        H.p().says("Pudu is pre-release, at version 0.1.1. Programs run on an interpreter, dependencies are GitHub packages or local directories, and the language and its standard library may still change before the first release. macOS and Linux x86-64 are tested; Windows is not yet."),
+        H.p().says("Pudu is pre-release, at version 0.1.2. Programs run on an interpreter, dependencies are GitHub packages or local directories, and the language and its standard library may still change before the first release. macOS and Linux x86-64 are tested; Windows is not yet."),
         H.h2().says("Why Haskell matters"),
         H.p().holding([
             H.a().href(Constants.HASKELL_URL).at("rel", "external noopener noreferrer").says("Haskell"),
