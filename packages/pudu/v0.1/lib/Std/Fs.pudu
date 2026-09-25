@@ -21,6 +21,12 @@ export type Metadata = {
 }
 
 /// Why a filesystem operation did not do what it was asked.
+///
+/// `Failed` wraps whatever `Std.Io` made of the underlying message, so it reads
+/// like any other `Io.IoError`. `OutsideBase` is `resolveInside`'s own refusal,
+/// carrying the path that tried to escape. `NamesExhausted` means every random
+/// name a temporary directory tried was already taken, which in practice means
+/// something else is creating names in the same pattern at the same time.
 export type FsError
   = Failed(Io.IoError)
   | OutsideBase(Str)
@@ -35,6 +41,18 @@ const HEX_DIGITS: Str = "0123456789abcdef"
 ///
 /// On one filesystem the destination names either the old contents or the new,
 /// never a mixture, which is what makes `writeAtomically` possible.
+///
+/// ## Examples
+///
+/// ```
+/// // Inside a temporary directory holding "note.txt":
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   Fs.rename(Path.join(dir, "note.txt"), Path.join(dir, "renamed.txt")) ?
+///   print("old is gone: " + show(!Io.exists(Path.join(dir, "note.txt"))))
+///   print("new is there: " + show(Io.exists(Path.join(dir, "renamed.txt"))))
+///   Ok(())
+/// })
+/// ```
 export fn rename(from: Str, to: Str) -> Result[(), FsError] {
   refused(renamePath(from, to), from)
 }
@@ -72,6 +90,18 @@ export fn writeTextAtomically(path: Str, text: Str) -> Result[(), FsError] {
 ///
 /// Created and named in one step by the operating system, so there is no gap
 /// between choosing a name and claiming it for another program to fill.
+///
+/// The file is created empty; write to it with `Std.Io` or `writeAtomically`.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let scratch = Fs.temporaryFileIn(dir, "scratch-") ?
+///   print("created: " + show(Io.exists(scratch)))
+///   Ok(())
+/// })
+/// ```
 export fn temporaryFileIn(directory: Str, prefix: Str) -> Result[Str, FsError] {
   refused(createTemporaryFile(directory, prefix), directory)
 }
@@ -80,6 +110,16 @@ export fn temporaryFileIn(directory: Str, prefix: Str) -> Result[Str, FsError] {
 ///
 /// Creating a directory fails when the name is taken, so a name is claimed by
 /// the attempt itself; a collision tries another name, up to sixteen.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let sub = Fs.temporaryDirectoryIn(dir, "sub-") ?
+///   print("created: " + show(Io.exists(sub)))
+///   Ok(())
+/// })
+/// ```
 export fn temporaryDirectoryIn(parent: Str, prefix: Str) -> Result[Str, FsError] {
   var attempt = 0
   while attempt < NAME_ATTEMPTS {
@@ -101,6 +141,16 @@ export fn temporaryDirectoryIn(parent: Str, prefix: Str) -> Result[Str, FsError]
 ///
 /// Removed whether the action succeeded or failed, so a failing program does not
 /// leave directories behind; the action's own failure is the one reported.
+///
+/// ## Examples
+///
+/// ```
+/// // After this call returns, the directory it made is gone, whether or not
+/// // the action failed.
+/// Fs.withTemporaryDirectory("build-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   Fs.writeTextAtomically(Path.join(dir, "out.txt"), "done")
+/// })
+/// ```
 export fn withTemporaryDirectory[T](
   prefix: Str,
   action: fn(Str) -> Result[T, FsError]
@@ -117,6 +167,17 @@ export fn withTemporaryDirectory[T](
 ///
 /// A symbolic link is removed as a link and never followed, so removing a tree
 /// that contains a link to somewhere else removes only the link.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let sub = Fs.temporaryDirectoryIn(dir, "sub-") ?
+///   Fs.removeTree(sub) ?
+///   print("gone: " + show(!Io.exists(sub)))
+///   Ok(())
+/// })
+/// ```
 export fn removeTree(path: Str) -> Result[(), FsError] {
   let link = refused(pathIsSymbolicLink(path), path) ?
   if !link && directoryExists(path) {
@@ -129,6 +190,18 @@ export fn removeTree(path: Str) -> Result[(), FsError] {
 }
 
 /// What a path permits.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let file = Path.join(dir, "note.txt")
+///   Fs.writeTextAtomically(file, "hi") ?
+///   let allowed = Fs.permissions(file) ?
+///   print("readable: " + show(allowed.readable))
+///   Ok(())
+/// })
+/// ```
 export fn permissions(path: Str) -> Result[Permissions, FsError] {
   let mask = refused(permissionsOf(path), path) ?
   Ok(Permissions {
@@ -140,6 +213,25 @@ export fn permissions(path: Str) -> Result[Permissions, FsError] {
 }
 
 /// A path's permissions set to exactly the flags given.
+///
+/// What a request actually changes is bounded by the filesystem and the user
+/// running the program; a search bit on a system with no such notion, or a
+/// restriction the program's own owner is exempt from, is not an error, just a
+/// flag that made no difference.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let file = Path.join(dir, "note.txt")
+///   Fs.writeTextAtomically(file, "hi") ?
+///   let readOnly = Fs.Permissions{
+///     readable: true, writable: false, executable: false, searchable: false
+///   }
+///   Fs.setPermissions(file, &readOnly) ?
+///   Ok(())
+/// })
+/// ```
 export fn setPermissions(path: Str, wanted: &Permissions) -> Result[(), FsError] {
   let mask = (if wanted.readable { 1 } else { 0 }) + (if wanted.writable { 2 } else { 0 }) +
   (if wanted.executable { 4 } else { 0 }) + (if wanted.searchable { 8 } else { 0 })
@@ -147,6 +239,18 @@ export fn setPermissions(path: Str, wanted: &Permissions) -> Result[(), FsError]
 }
 
 /// What is known about a path: its size, kind, and permissions.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let file = Path.join(dir, "note.txt")
+///   Fs.writeTextAtomically(file, "hello") ?
+///   let info = Fs.metadata(file) ?
+///   print("size: " + show(info.size) + " directory: " + show(info.isDirectory))
+///   Ok(())
+/// })
+/// ```
 export fn metadata(path: Str) -> Result[Metadata, FsError] {
   let link = refused(pathIsSymbolicLink(path), path) ?
   let directory = directoryExists(path)
@@ -156,11 +260,41 @@ export fn metadata(path: Str) -> Result[Metadata, FsError] {
 }
 
 /// A symbolic link at `link` that names `target`.
+///
+/// Fails when something already sits at `link`; a link is claimed the way a
+/// file is, not overwritten the way `rename` overwrites a destination.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let file = Path.join(dir, "note.txt")
+///   Fs.writeTextAtomically(file, "hi") ?
+///   Fs.linkTo(file, Path.join(dir, "alias.txt")) ?
+///   let viaLink = Io.read(Path.join(dir, "alias.txt")) ?
+///   print("via link: " + viaLink)
+///   Ok(())
+/// })
+/// ```
 export fn linkTo(target: Str, link: Str) -> Result[(), FsError] {
   refused(createSymbolicLink(target, link), link)
 }
 
 /// A path with every symbolic link and relative step resolved.
+///
+/// The path must exist. Two paths that name the same file by different routes
+/// come back equal, which is what makes it the way to compare paths for
+/// identity rather than for spelling.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   let real = Fs.canonical(dir) ?
+///   print("absolute: " + show(Path.isAbsolute(real)))
+///   Ok(())
+/// })
+/// ```
 export fn canonical(path: Str) -> Result[Str, FsError] {
   refused(canonicalPath(path), path)
 }
@@ -171,6 +305,23 @@ export fn canonical(path: Str) -> Result[Str, FsError] {
 /// that points elsewhere is caught rather than trusted because of how its name
 /// reads. The path must exist, because a location that does not exist yet has
 /// no links to resolve.
+///
+/// ## Examples
+///
+/// ```
+/// Fs.withTemporaryDirectory("doc-", fn(dir: Str) -> Result[(), Fs.FsError] {
+///   Fs.writeTextAtomically(Path.join(dir, "note.txt"), "hi") ?
+///   match Fs.resolveInside(dir, "note.txt") {
+///     case Ok(_) => print("inside: accepted")
+///     case Err(_) => print("inside: refused")
+///   }
+///   match Fs.resolveInside(dir, "../../../../etc/passwd") {
+///     case Ok(_) => print("escape: accepted")
+///     case Err(_) => print("escape: refused")
+///   }
+///   Ok(())
+/// })
+/// ```
 export fn resolveInside(base: Str, path: Str) -> Result[Str, FsError] {
   let realBase = canonical(base) ?
   let realTarget = canonical(Path.resolve(base, path)) ?
