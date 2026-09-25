@@ -119,6 +119,11 @@ data Value
   | RangeMethodValue !RangeMethod !Value
   | BytesMethodValue !BytesMethod !Value
   | BucketsMethodValue !BucketsMethod !Value
+  {-| `value.toText()` for a value whose type answers no `toText` of its own:
+      the receiver, bound, rendered as `display` renders it when called. Every
+      value has one, so a program never needs to know which built-in types
+      carry a text method before asking for text. -}
+  | TextMethodValue !Value
   {-| A function that is somebody else's, reached through the boundary the
       declaration describes.
 
@@ -424,3 +429,4 @@ shapeRank value = case value of
   ForeignHandleValue _ _ _ -> 26
   RangeValue{} -> 27
   RangeMethodValue _ _ -> 28
+  TextMethodValue _ -> 29

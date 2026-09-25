@@ -1,0 +1,55 @@
+module UsesToText
+
+type Point = { x: Int, y: Int }
+type Shape = Circle(Int) | Empty
+type Money = { cents: Int }
+
+trait Written {
+  fn toText(self: &Self) -> Str
+}
+
+// A type's own `toText` is found before the one every value answers.
+impl Written for Money {
+  fn toText(self: &Self) -> Str { "$" + display(self.cents / 100) }
+}
+
+fn generic[T](value: T) -> Str { value.toText() }
+
+fn main() -> Int {
+  var held = 0
+  let count: Int = 42
+  let small = 7u8
+
+  // Scalars read as interpolation writes them.
+  if count.toText() == "42" && small.toText() == "7" && (-3).toText() == "-3" { held = held + 1 }
+  if 1.5.toText() == "1.5" && true.toText() == "true" && 2.50d.toText() == "2.50" { held = held + 1 }
+  if "plain".toText() == "plain" && 'c'.toText() == "c" && ().toText() == "()" { held = held + 1 }
+
+  // Collections, ranges, and tuples; text inside keeps its quotes.
+  if [1, 2].toText() == "[1, 2]" && ["a"].toText() == "[\"a\"]" { held = held + 1 }
+  if mapOf([("a", 1)]).toText() == "\{\"a\": 1\}" && #{3, 1}.toText() == "#\{1, 3\}" { held = held + 1 }
+  if (0..3).toText() == "0..3" && (1, "a").toText() == "(1, \"a\")" { held = held + 1 }
+
+  // Records and variants, including the wired-in carriers.
+  let point = Point{x: 1, y: 2}
+  let other = Point{x: 3, y: 4}
+  let price = Money{cents: 1250}
+  let dollar = Money{cents: 100}
+  if point.toText() == "Point\{x: 1, y: 2\}" && Circle(3).toText() == "Circle(3)" && Empty.toText() == "Empty" { held = held + 1 }
+  if Some(5).toText() == "Some(5)" && Ok(1).toText() == "Ok(1)" { held = held + 1 }
+
+  // The same text interpolation places.
+  if other.toText() == "{other}" && count.toText() == "{count}" { held = held + 1 }
+
+  // A declared toText wins; a generic parameter answers too.
+  if price.toText() == "$12" && generic(9) == "9" && generic(dollar) == "$1" { held = held + 1 }
+
+  // The method is a value that carries its receiver.
+  let render = count.toText
+  if render() == "42" { held = held + 1 }
+
+  // Bytes keep their own, which can refuse.
+  if "hi".toBytes().toText() == Some("hi") && bytesOf([255u8]).toText() == None { held = held + 1 }
+
+  held
+}

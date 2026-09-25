@@ -155,11 +155,13 @@ tags: [moc, module, stdlib]
 - [[Std Stats]] — descriptive statistics, percentiles, correlation, histograms, and a streaming accumulator.
 - [[Std Base32]] — RFC 4648 standard and extended-hex base32, and Crockford's, read strictly.
 - [[Std Pem]] — armored certificate and key blocks, read and written.
+- [[Std Human]] — byte sizes and durations read and written, ordinals, plurals, and relative time.
 - [[Std Dotenv]] — environment files read into ordered entries, expanded, and rendered back.
 - [[Std Term]] — terminal colour and styling sequences, stripping, and cursor control.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
+- [[Std Ip]] — IPv4 and IPv6 addresses, canonical rendering, classification, and network prefixes.
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.
 - [[Std IntMap]] — high-performance bitwise Patricia Trie integer map inspired by Haskell Data.IntMap.
