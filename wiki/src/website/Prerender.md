@@ -40,3 +40,12 @@ static file and reach the function as the fallback. Known package pages, files, 
 Resolved Grill Log: `Std.Site` patterns are a path with at most a trailing `*`, so project overview
 pages cannot be routed generically without also sending their source and docs tabs, which need the
 full snapshot the function does not carry; they remain static until the next build.
+
+## Package pages answered by the function (#367, step 1)
+
+`/@*` is sent to the function with the listing, and `answeredLive` removes `/@…`, `/packages`, and
+`/packages/page/…` from the written pages; the sitemap still lists them. `Std.Site` already accepts
+`/@*`: a trailing `*` is a plain prefix and `@` is literal in the generated pattern.
+
+Resolved Grill Log: the snapshot stays the data baseline the function reads; a written package page
+would be a stale copy no route sends a reader to, so none is written.

@@ -77,6 +77,11 @@ if [[ "${PUDU_PACKAGES_FROM_GITHUB:-1}" != "0" ]]; then
     packages_path="$packages_data"
     mkdir -p "$function_dir/website/data/packages"
     cp "$packages_data/packages.json" "$function_dir/website/data/packages/packages.json"
+    # The function answers every package page, so it carries what those pages
+    # read: the latest release's files, API catalogues, and discussions.
+    for part in files docs discussions; do
+      if [[ -d "$packages_data/$part" ]]; then cp -R "$packages_data/$part" "$function_dir/website/data/packages/$part"; fi
+    done
     if [[ -d "$packages_data/avatars" ]]; then
       mkdir -p "$output/static/packages"
       cp -R "$packages_data/avatars" "$output/static/packages/avatars"

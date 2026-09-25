@@ -24,3 +24,10 @@ declaration matches come from it alone and no project rows are listed; paginatio
 Resolved Grill Log: route handlers translate only; catalogue lookup and ranking remain services.
 Same-kind, same-name declarations are passed to one symbol-family view rather than discarded or
 assigned unstable ordinal URLs. The kind segment also separates case-folding type/function paths.
+
+## Package pages shared (#367)
+
+The `/@owner` routes moved to [[website Web PackagePages]], which this router serves with the fully
+loaded snapshot and an identity `detail` step, so the function renders the same pages.
+
+Resolved Grill Log: one package route list serves both hosts; this module keeps only its own 404 view.
