@@ -1,0 +1,137 @@
+module Std.App.Page
+
+import Std.Bytes as Bytes
+import Std.Json as Json
+import Std.Text as Text
+import Std.Url as Url
+
+/// What a client asked for: at most `size` items after the item whose key
+/// the cursor names, or from the start.
+export type Request = { size: Int, after: Option[Str] }
+
+/// One page: its items and the cursor for the page after it, absent on the
+/// last page.
+export type Page[T] = { items: Array[T], next: Option[Str] }
+
+/// Why a page request was refused.
+export type PageError
+  = SizeNotANumber(Str)
+  | SizeOutOfRange(Int, Int)
+  | CursorMalformed(Str)
+
+/// Reads `limit` and `cursor` from a query.
+///
+/// A missing `limit` is `defaultSize`; a limit below 1 or above `maxSize` is
+/// refused rather than clamped, so a client learns its request was not what
+/// it was served.
+export fn request(query: &Map[Str, Str], defaultSize: Int, maxSize: Int) -> Result[Request, PageError] {
+  let size = match query.get("limit") {
+    case None => defaultSize
+    case Some(text) => {
+      match digits(text) {
+        case Some(found) => found
+        case None => { return Err(SizeNotANumber(text)) }
+      }
+    }
+  }
+  if size < 1 || size > maxSize { return Err(SizeOutOfRange(size, maxSize)) }
+  let after = match query.get("cursor") {
+    case None => None
+    case Some(token) => Some(decodeCursor(token) ?)
+  }
+  Ok(Request{size: size, after: after})
+}
+
+/// An opaque cursor for `key`: URL-safe base64 without padding.
+export fn encodeCursor(key: Str) -> Str {
+  Bytes.encodeBase64Url(&Bytes.fromText(key))
+}
+
+/// The key a cursor names.
+export fn decodeCursor(token: Str) -> Result[Str, PageError] {
+  let raw = match Bytes.decodeBase64Url(token) {
+    case Ok(found) => found
+    case Err(_) => { return Err(CursorMalformed(token)) }
+  }
+  match Bytes.toText(&raw) {
+    case Ok(key) if key.length() > 0 => Ok(key)
+    case _ => Err(CursorMalformed(token))
+  }
+}
+
+/// The page of `items` a request selects.
+///
+/// `items` must be ordered by `keyOf` ascending with unique keys. Items whose
+/// key is not after the cursor's are skipped, so a page stays stable when
+/// earlier items are inserted or removed between requests.
+export fn select[T](items: &Array[T], keyOf: fn(T) -> Str, wanted: &Request) -> Page[T] {
+  var chosen = []
+  var more = false
+  for item in items {
+    let key = keyOf(item)
+    let admitted = match wanted.after {
+      case Some(cursor) => Text.before(cursor, key)
+      case None => true
+    }
+    if admitted {
+      if chosen.length() == wanted.size {
+        more = true
+        break
+      }
+      chosen = chosen.push(item)
+    }
+  }
+  let next = if more && chosen.length() > 0 {
+    Some(encodeCursor(keyOf(chosen[chosen.length() - 1])))
+  } else {
+    None
+  }
+  Page{items: chosen, next: next}
+}
+
+/// A page built from a fetch that asked a store for `size + 1` rows: the
+/// extra row, if present, proves a next page exists and is dropped.
+export fn fromFetched[T](fetched: &Array[T], keyOf: fn(T) -> Str, wanted: &Request) -> Page[T] {
+  if fetched.length() <= wanted.size { return Page{items: *fetched, next: None} }
+  let items = fetched.slice(0, wanted.size)
+  Page{items: items, next: Some(encodeCursor(keyOf(items[wanted.size - 1])))}
+}
+
+/// The `Link` header (RFC 8288) pointing at the next page, carrying the
+/// request's size; absent on the last page.
+export fn linkHeader[T](base: Str, page: &Page[T], wanted: &Request) -> Option[(Str, Str)] {
+  let token = page.next ?
+  let separator = if base.contains("?") { "&" } else { "?" }
+  let target = base + separator + "limit=" + show(wanted.size) + "&cursor="
+    + Url.encodeComponent(token)
+  Some(("Link", "<" + target + ">; rel=\"next\""))
+}
+
+/// `{"items": [...], "next": "..."}`, with `next` null on the last page.
+export fn toJson[T](page: &Page[T], render: fn(T) -> Json.Json) -> Json.Json {
+  let next = match page.next {
+    case Some(token) => Json.Text(token)
+    case None => Json.Null
+  }
+  Json.Object([("items", Json.List(page.items.map(render))), ("next", next)])
+}
+
+/// A one-line description of a refusal.
+export fn explain(problem: &PageError) -> Str {
+  match problem {
+    case SizeNotANumber(text) => "limit must be a whole number, got '{text}'"
+    case SizeOutOfRange(size, most) => "limit {size} is outside 1-{most}"
+    case CursorMalformed(_) => "cursor is not one this service issued"
+  }
+}
+
+fn digits(text: Str) -> Option[Int] {
+  if text.length() == 0 || text.length() > 9 { return None }
+  var total = 0
+  for symbol in text {
+    let code = symbol.code()
+    if code < 48 || code > 57 { return None }
+    total = total * 10 + code - 48
+  }
+  Some(total)
+}

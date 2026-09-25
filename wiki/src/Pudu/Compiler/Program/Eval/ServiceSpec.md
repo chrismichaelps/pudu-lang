@@ -45,6 +45,9 @@ acceptance gates; the latter must also prove controls, telemetry, and a progress
 The Media Studio configuration fixture is also evaluated here with an exact count of eight, so the
 example's device-queue fields cannot drift from its decoder or admitted bounds unnoticed.
 
+`UsesAppContractsAll` packs three counts into `171518`: 17 problem-body checks, 15 cursor-page
+checks, and 18 idempotency checks, the last including the middleware against a shared locked store.
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

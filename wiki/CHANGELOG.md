@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-24 — Problem bodies, cursor pages, and idempotent retries (#323)
+
+- [[Std App Problem]] gives every refusal one RFC 9457 body; `uniform` rewrites plain failures and
+  validation reports become 422 with per-field errors.
+- [[Std App Page]] pages listings by keyset cursor with refused oversize limits and `Link` headers.
+- [[Std App Idempotency]] replays the stored answer for a repeated `Idempotency-Key`, refuses a key
+  reused for another body, and releases a key after a 5xx.
+- [[architecture/WEB]] gains an API-contracts table and the joints through which every application
+  module enters `Std.App`.
+
 ## 2026-09-24 — A bundle carries its compiled products (#319)
 
 - `pudu build` compiles through a cache held in memory and carries its entries in the bundle; a
