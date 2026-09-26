@@ -286,7 +286,7 @@ a:hover{color:var(--brand)}
 .package-search-help-panel .package-search-help-keys{margin:12px 0 0;max-width:none;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem;line-height:1.5}
 .package-search-filter,.package-search-active-filter{flex:0 0 auto;max-width:210px;overflow:hidden;padding:5px 9px;border:0;border-radius:6px;background:var(--ink);color:#fff;font:600 .82rem/1.2 var(--mono);text-decoration:none;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .package-search-filter:after{content:" ×";opacity:.7}.package-search-filter:hover,.package-search-active-filter:hover{background:#000;color:#fff}
-.package-suggest{position:fixed;z-index:40;max-height:min(470px,70vh);overflow:auto;border:1px solid var(--line-strong);border-radius:10px;background:#fff;box-shadow:var(--lift);text-align:left}
+.package-suggest{position:fixed;z-index:40;max-height:min(470px,70vh);overflow:auto;border:1px solid var(--line-strong);border-radius:10px;background:#fff;color:var(--ink);box-shadow:var(--lift);text-align:left}
 .package-suggest[hidden]{display:none}
 .package-suggest-status{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .package-suggest-list{margin:0;padding:6px;list-style:none}
@@ -303,7 +303,7 @@ a:hover{color:var(--brand)}
 .package-suggest-more{grid-column:1;color:var(--brand-dark);font-weight:700}
 .package-suggest-row[data-kind=more]{grid-template-columns:minmax(0,1fr) auto;margin-top:4px;border-top:1px solid var(--line);border-radius:0 0 7px 7px}
 .package-suggest mark{padding:0 1px;border-radius:2px;background:var(--tone-0-soft);color:inherit}
-.package-suggest-message{margin:0;padding:14px 16px;color:var(--muted);font-size:.92rem}
+.package-suggest .package-suggest-message{margin:0;max-width:none;padding:14px 16px;color:var(--muted);font-size:.92rem}
 .package-suggest[data-state=error] .package-suggest-message{color:#9b2c1a}
 
 /* Owner and project marks: a GitHub avatar over the logo's two-tone letter halves with its round counter. */

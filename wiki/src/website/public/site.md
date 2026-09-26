@@ -24,7 +24,8 @@ and placed by script. A project's banner instead draws its corner as a radial gr
 overflow visible, so the install disclosure can open below it above the page. Inside a banner,
 labels, leads, facts, and links are light; the install and package-search help panels restore ink text.
 The help title and key hints are scoped to outrank `.hero-banner p`, which otherwise leaves them light
-on white.
+on white. The suggestion box also restores ink text, and its loading, empty, and error message is
+scoped to outrank `.hero-banner p` for the same reason.
 
 API search results and module pages are ledgers too: a monospace name with its kind and module at the
 right, the signature beneath without a box, then the summary. The documentation index lists chapters
