@@ -22,7 +22,9 @@ short rule before section labels such as `kind`.
 The banner clips its overflow for the corner shape, so suggestion and help panels are fixed-position
 and placed by script. A project's banner instead draws its corner as a radial gradient and leaves
 overflow visible, so the install disclosure can open below it above the page. Inside a banner,
-labels, leads, facts, and links are light; the install panel restores ink text.
+labels, leads, facts, and links are light; the install and package-search help panels restore ink text.
+The help title and key hints are scoped to outrank `.hero-banner p`, which otherwise leaves them light
+on white.
 
 API search results and module pages are ledgers too: a monospace name with its kind and module at the
 right, the signature beneath without a box, then the summary. The documentation index lists chapters

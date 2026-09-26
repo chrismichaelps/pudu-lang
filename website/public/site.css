@@ -277,13 +277,13 @@ a:hover{color:var(--brand)}
 .package-search-help>summary{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid var(--line-strong);border-radius:50%;color:var(--muted);font-size:.82rem;font-weight:700;list-style:none;cursor:pointer}
 .package-search-help>summary::-webkit-details-marker{display:none}
 .package-search-help[open]>summary{border-color:var(--ink);color:var(--ink)}
-.package-search-help-panel{position:fixed;z-index:45;width:min(320px,calc(100vw - 32px));padding:14px 16px;border:1px solid var(--line-strong);border-radius:10px;background:#fff;box-shadow:var(--lift);font-size:.9rem}
-.package-search-help-title{margin:0 0 8px;font-weight:700}
+.package-search-help-panel{position:fixed;z-index:45;width:min(320px,calc(100vw - 32px));padding:14px 16px;border:1px solid var(--line-strong);border-radius:10px;background:#fff;color:var(--ink);box-shadow:var(--lift);font-size:.9rem}
+.package-search-help-panel .package-search-help-title{margin:0 0 8px;max-width:none;color:var(--ink);font-size:.9rem;font-weight:700}
 .package-search-help-panel ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}
 .package-search-help-panel li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px}
 .package-search-help-panel code{font:.82rem var(--mono);color:var(--ink)}
-.package-search-help-panel span,.package-search-help-keys{color:var(--muted)}
-.package-search-help-keys{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);font-size:.8rem;line-height:1.5}
+.package-search-help-panel span,.package-search-help-panel .package-search-help-keys{color:var(--muted)}
+.package-search-help-panel .package-search-help-keys{margin:12px 0 0;max-width:none;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem;line-height:1.5}
 .package-search-filter,.package-search-active-filter{flex:0 0 auto;max-width:210px;overflow:hidden;padding:5px 9px;border:0;border-radius:6px;background:var(--ink);color:#fff;font:600 .82rem/1.2 var(--mono);text-decoration:none;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .package-search-filter:after{content:" ×";opacity:.7}.package-search-filter:hover,.package-search-active-filter:hover{background:#000;color:#fff}
 .package-suggest{position:fixed;z-index:40;max-height:min(470px,70vh);overflow:auto;border:1px solid var(--line-strong);border-radius:10px;background:#fff;box-shadow:var(--lift);text-align:left}
