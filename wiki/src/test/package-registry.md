@@ -26,6 +26,8 @@ The stand-in answers with ETags and `304 Not Modified`, understands `created:` r
 records every request. After the first snapshot, the suite checks the incremental cases:
 - A second build reuses the unchanged package: no archive and no manifest reads, with not-modified
   answers.
+- A reused package whose snapshot lost its declaration search facts rebuilds its API catalogue from
+  the carried files, without fetching the archive again.
 - A starved budget (`PUDU_GITHUB_RESERVE` above the reported limit) keeps the previous release
   instead of failing.
 - A new `v1.2.0` tag refreshes the package and reads only that tag's manifest.

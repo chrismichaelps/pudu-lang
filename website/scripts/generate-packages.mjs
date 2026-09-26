@@ -27,7 +27,7 @@
 //
 // Usage: node generate-packages.mjs [--api URL] [--out path] [--cache path] [--pudu path]
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
@@ -150,6 +150,35 @@ function catalogue(directory, sources, target) {
   }
 }
 
+function catalogueSources(directory) {
+  return walk(directory).map((full) => relative(directory, full).split("\\").join("/")).filter((path) => path.endsWith(".pudu") && !/^tests?\//.test(path)).sort();
+}
+
+/** The compact declaration search facts of an API catalogue document. */
+function catalogueEntries(target) {
+  return JSON.parse(readFileSync(target, "utf8")).entries.map((entry) => ({ moduleName: entry.module, kind: entry.kind, name: entry.name, signature: entry.signature }));
+}
+
+/** Builds the API catalogue for `sources` under `directory`, retrying a
+ * transient `pudu doc` failure; the search facts, or [] with a warning.
+ * Attempts are spaced out: the failure arrives in episodes, so an immediate
+ * retry usually meets the same one. */
+function buildCatalogue(directory, sources, target, label) {
+  if (sources.length === 0) return [];
+  mkdirSync(dirname(target), { recursive: true });
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    if (attempt > 1) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+    try {
+      catalogue(directory, sources, target);
+      return catalogueEntries(target);
+    } catch (problem) {
+      rmSync(target, { force: true });
+      if (attempt === 3) console.warn(`no API reference for ${label}: ${problem.message}`);
+    }
+  }
+  return [];
+}
+
 async function avatarOf(owner, url) {
   try {
     const image = await fetch(url, { signal: AbortSignal.timeout(30000) });
@@ -207,8 +236,17 @@ async function reuse(prior, repository, owner, repo) {
   cache.carry(join("docs", `${prior.name}.json`), out);
   if (github.remaining() > RESERVE) await writeDiscussions(owner, repo, prior.name);
   else cache.carry(join("discussions", `${prior.name}.json`), out);
+  let searchEntries = prior.searchEntries ?? [];
+  if (searchEntries.length === 0) {
+    // A previous build may have carried files without an API catalogue (a
+    // transient `pudu doc` failure); rebuild it from the carried files
+    // rather than repeating the empty index.
+    const directory = join(out, "files", prior.name, prior.latest);
+    searchEntries = buildCatalogue(directory, catalogueSources(directory), join(out, "docs", `${prior.name}.json`), `${prior.name}@${prior.latest}`);
+  }
   return {
     ...prior,
+    searchEntries,
     repository: repository.html_url,
     stars: repository.stargazers_count ?? prior.stars,
     forks: repository.forks_count ?? prior.forks,
@@ -273,17 +311,7 @@ async function project(repository) {
   const source = latest.manifest.source || "src";
   latest.modules = files.filter((path) => path.startsWith(`${source}/`) && path.endsWith(".pudu")).map((path) => path.slice(source.length + 1, -5).split("/").join("."));
   const readmePath = files.find((path) => /^readme(\.md)?$/i.test(path));
-  const docsTarget = join(out, "docs", `${name}.json`);
-  mkdirSync(dirname(docsTarget), { recursive: true });
-  try {
-    catalogue(directory, files.filter((path) => path.endsWith(".pudu") && !/^tests?\//.test(path)), docsTarget);
-  } catch (problem) {
-    rmSync(docsTarget, { force: true });
-    console.warn(`no API reference for ${name}@${latest.version}: ${problem.message}`);
-  }
-  const searchEntries = existsSync(docsTarget)
-    ? JSON.parse(readFileSync(docsTarget, "utf8")).entries.map((entry) => ({ moduleName: entry.module, kind: entry.kind, name: entry.name, signature: entry.signature }))
-    : [];
+  const searchEntries = buildCatalogue(directory, files.filter((path) => path.endsWith(".pudu") && !/^tests?\//.test(path)), join(out, "docs", `${name}.json`), `${name}@${latest.version}`);
   const words = (value) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
   await writeDiscussions(owner, repo, name);
   cache.remember(name, key);

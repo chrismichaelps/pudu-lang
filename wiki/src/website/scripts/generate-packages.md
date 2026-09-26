@@ -32,6 +32,12 @@ it keeps that entry until the next build. A new package with no entry is skipped
 owner's avatar is carried over while GitHub reports the same image URL. The build ends with one line:
 refreshed, reused, and deferred counts, requests made, answers not modified, and archives downloaded.
 
+The API catalogue is built with retries (three attempts, spaced out because the failure arrives in
+episodes) because `pudu doc` can fail transiently on a package's full source set; only the last
+failure warns. A reused package whose previous entry carries
+no declaration search facts rebuilds its catalogue from the carried files instead of repeating the
+empty index, so one failed build can no longer hide a package's declarations from search forever.
+
 See [[architecture/PACKAGES]] · [[website Service Packages]].
 
 ## Grill Log

@@ -346,6 +346,14 @@ def main():
         check("an unchanged package is reused on the next build without its archive", again.returncode == 0 and not any("/tarball/" in path for path in fetched) and not any("/contents/" in path for path in fetched) and "1 reused" in again.stdout, again.stdout + again.stderr)
         check("the next build asks conditionally and GitHub answers not modified", len(answered) >= 4 and "not modified" in again.stdout, again.stdout)
         check("a reused package keeps its releases, files, and API catalogue", rewritten.get("projects", [{}])[0].get("releases") == projects[0]["releases"] and (snapshot / "files" / "@alice" / "json-kit" / latest / "src" / "JsonKit" / "Parse.pudu").exists() and docs.exists(), again.stderr)
+        poisoned = json.loads((snapshot / "packages.json").read_text())
+        poisoned["projects"][0]["searchEntries"] = []
+        (snapshot / "packages.json").write_text(json.dumps(poisoned))
+        shutil.rmtree(snapshot / "docs", ignore_errors=True)
+        GitHub.seen.clear()
+        healed = subprocess.run(["node", str(ROOT / "website" / "scripts" / "generate-packages.mjs"), "--api", api, "--out", str(snapshot), "--pudu", pudu], env=environment, capture_output=True, text=True, timeout=300)
+        restored = json.loads((snapshot / "packages.json").read_text()).get("projects", [{}])[0]
+        check("a reused package without search facts rebuilds its catalogue from the carried files", healed.returncode == 0 and "1 reused" in healed.stdout and any(entry["name"] == "one" and entry["moduleName"] == "JsonKit.Parse" for entry in restored.get("searchEntries", [])) and docs.exists() and not any("/tarball/" in path for kind, path in GitHub.seen), healed.stdout + healed.stderr + json.dumps(restored.get("searchEntries", []))[:500])
         library(lib, "1.2.0")
         code, out = run(["release", "1.2.0"], lib)
         check("a release inside its package root names no module outside it", code == 0 and "outside the package root" not in out, out)
