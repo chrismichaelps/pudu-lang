@@ -12,6 +12,8 @@ release in monospace, a file filter (enhanced by
 `assets/packages/source/filter.js`), and the file tree with local per-type icons mapped by extension,
 the current file marked by a blue left edge; folders open and close with a small rotating caret. Pudu files reuse the VS Code extension's logo, Markdown and common
 configuration/source files have distinct icons, and unknown types use a generic document.
+The default file choice is shared with [[website Service LiveFiles]]: README, manifest, then the
+first sorted file, so a live Source route fetches the body the view opens.
 Beside it: a breadcrumb from the package through the file's
 directories, then a file card whose header names the file, its language (`LANGUAGES`), line count, and
 size, with Copy path and GitHub actions; its body is the numbered, linkable listing (`#L12`),

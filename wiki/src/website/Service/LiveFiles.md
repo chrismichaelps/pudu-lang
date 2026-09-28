@@ -12,6 +12,8 @@ commit (recursively), keeping blobs of at most 1 MiB that the package ships, sor
 `body` reads one file's bytes from the raw host at the same commit, each path segment encoded.
 `shipped` is the build's rule: nothing named with a leading dot or under a dot directory, and nothing
 under a top-level `deps/`.
+`defaultFile` chooses README, manifest, then the first sorted file for both the live body fetch and
+the Source view. The two must agree or the default Source route has a file list but no preview body.
 
 Both are addressed by a commit, so what they answer never changes: they are remembered with the
 `immutable` freshness (a week fresh, a month stale) for as long as the cache holds them. The raw host

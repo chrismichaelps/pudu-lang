@@ -7,6 +7,7 @@ import Std.Test as Test
 import Service.LiveIndex as LiveIndex
 import Service.LivePackages as LivePackages
 import Service.LiveSource as LiveSource
+import Service.PackageSearch as PackageSearch
 import Service.Packages as Packages
 import Test.LiveStand as Stand
 
@@ -102,6 +103,7 @@ export fn main() -> Int {
           case Some(held) => held.latest == Some("0.2.0") && held.description == "Fresh things" && held.keywords == ["fresh"] && held.license == "MIT" && held.root == "FreshPkg" && held.readme.contains("Published after the build")
           case None => false
         }),
+      Test.that("a new package's public API enters package search", PackageSearch.declarations(&view.packages, "freshness", "").length() == 1 && PackageSearch.declarations(&view.packages, "freshness", "@bruno/fresh-pkg").length() == 1),
       Test.that("its new owner gains a profile", Packages.profile(&view.packages, "@bruno") != None),
       Test.that("a known package takes GitHub's counts and only its newer release", match known {
           case Some(held) => held.stars == 2000 && held.latest == Some("2.1.0") && versions(&known) == ["2.1.0", "2.0.0", "1.1.0", "1.0.0"] && held.files.isEmpty()

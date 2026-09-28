@@ -6,6 +6,7 @@ import Std.Option as Option
 import Std.Url as Url
 import Domain.Entry as Domain
 import Service.Catalog as Catalog
+import Service.LiveFiles as LiveFiles
 import Service.Packages as Packages
 import View.Markdown as Markdown
 import View.Packages.Frame as Frame
@@ -36,10 +37,7 @@ const ICONS: Map[Str, Str] = mapOf([
 
 /// The file a source page opens on: the README, the manifest, or the first file.
 export fn defaultFile(project: &Packages.Project) -> Str {
-  for wanted in ["README.md", "pudu.toml"] {
-    if project.files.contains(wanted) { return wanted }
-  }
-  if project.files.isEmpty() { "" } else { project.files[0] }
+  LiveFiles.defaultFile(&project.files)
 }
 
 fn extensionOf(path: Str) -> Str {

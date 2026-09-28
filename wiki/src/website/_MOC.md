@@ -15,6 +15,8 @@ tags: [website, source, moc]
 
 Visual system: [[website stylesheet]]. Content: [[website documentation pages]]. Download controls: [[Download platform script]]. Mascot: [[Pudu mascot script]]. Package controls: [[Package install controls]] · [[Package list pagination]] · [[Package live search]] · [[Package source navigation]] · [[Package avatar fallback]] · [[Package file icons]].
 
+Live package source selection and public declaration search: [[website Service LiveFiles]] · [[website Service LivePackages]] · [[website Service PackageSearch]].
+
 Delivery surfaces: [[Vercel output builder]] · [[Linux Pudu renderer builder]] ·
 [[Musl Runtime Workflow]] · [[Musl Runtime Builder]] · [[website regression suite]] · [[website package search suite]] · [[website live packages suite]] · [[website live pages suite]] · [[website live stand]] · [[website live network check]] · [[website Markdown suite]] · [[Syntax parity test]] ·
 [[Website Operations]] · [[Package snapshot generator]] · [[Package snapshot GitHub client]] ·

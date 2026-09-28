@@ -12,6 +12,8 @@ a new package's overview and dated releases, the listing and the owner's profile
 answering a briefly cached 404 that is not indexed, the snapshot served when GitHub is unavailable, a
 snapshot release's source and API catalogue, a missing file, and the prerender leaving package pages
 to the function. CI runs it with the other website suites.
+The live default Source route opens a README even when it is not the tree's first file; the full
+package search includes a public declaration from a release added by the live overlay.
 
 Resolved Grill Log: pages are rendered through the same routes the function serves, so the suite
 checks what a reader receives, headers included.

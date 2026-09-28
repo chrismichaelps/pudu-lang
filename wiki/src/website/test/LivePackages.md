@@ -12,7 +12,7 @@ Checks [[website Service LivePackages]], [[website Service LiveSource]], and the
 a request counter, and a clock the test moves. No test touches the network.
 
 - **Success:** a package published after the build is listed with its tag, commit, dependencies,
-  manifest description, README, and a new owner profile; a known package takes new counts and a newer
+  manifest description, README, attached public API search facts, and a new owner profile; a known package takes new counts and a newer
   release; the function renders the new package's overview, releases, the listing, and the owner.
 - **Failure:** a manifest naming another package, an archived repository, and a refused name stay
   out; GitHub down from the start yields exactly the snapshot, and a new package's page is 404.

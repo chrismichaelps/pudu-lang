@@ -23,6 +23,7 @@ export fn main() -> Int {
   let page = DynamicWeb.render(&routed, "/@bruno/fresh-pkg")
   let releasesPage = DynamicWeb.render(&routed, "/@bruno/fresh-pkg/releases")
   let listing = DynamicWeb.render(&routed, "/packages")
+  let searched = DynamicWeb.render(&routed, "/packages/search?q=freshness")
   let owner = DynamicWeb.render(&routed, "/@bruno")
   let unknown = DynamicWeb.render(&routed, "/@bruno/not-published")
   let impostor = DynamicWeb.render(&routed, "/@carol/impostor")
@@ -43,7 +44,7 @@ export fn main() -> Int {
   let talked = Stand.edge(&snapshot, &Stand.live(&talking))
   // A release the build never saw has its files read at its commit.
   let reading = Stand.stand(&Stand.github())
-  Stand.answer(&reading, "https://api.github.com/repos/bruno/fresh-pkg/git/trees/c2?recursive=1", "\{\"tree\":[\{\"path\":\"src\",\"type\":\"tree\"\},\{\"path\":\"src/FreshPkg.pudu\",\"type\":\"blob\",\"size\":48\},\{\"path\":\"pudu.toml\",\"type\":\"blob\",\"size\":90\},\{\"path\":\".github/ci.yml\",\"type\":\"blob\",\"size\":10\},\{\"path\":\"deps/x/Y.pudu\",\"type\":\"blob\",\"size\":10\}]\}")
+  Stand.answer(&reading, "https://api.github.com/repos/bruno/fresh-pkg/git/trees/c2?recursive=1", "\{\"tree\":[\{\"path\":\"src\",\"type\":\"tree\"\},\{\"path\":\"src/FreshPkg.pudu\",\"type\":\"blob\",\"size\":48\},\{\"path\":\"README.md\",\"type\":\"blob\",\"size\":48\},\{\"path\":\"pudu.toml\",\"type\":\"blob\",\"size\":90\},\{\"path\":\".github/ci.yml\",\"type\":\"blob\",\"size\":10\},\{\"path\":\"deps/x/Y.pudu\",\"type\":\"blob\",\"size\":10\}]\}")
   Stand.answer(&reading, "https://raw.githubusercontent.com/bruno/fresh-pkg/c2/src/FreshPkg.pudu", "module FreshPkg\n\nexport fn freshness() -> Int \{ 1 \}\n")
   let read = Stand.edge(&snapshot, &Stand.live(&reading))
   let liveFile = DynamicWeb.render(&read, "/@bruno/fresh-pkg/source/src/FreshPkg.pudu")
@@ -53,7 +54,9 @@ export fn main() -> Int {
   let documented = Stand.stand(&Stand.github())
   Stand.answer(&documented, "https://github.com/bruno/fresh-pkg/releases/download/v0.2.0/pudu-api.json", "\{\"schemaVersion\":1,\"languageVersion\":\"0.1.2\",\"entries\":[\{\"module\":\"FreshPkg\",\"kind\":\"fn\",\"name\":\"freshness\",\"signature\":\"() -> Int\",\"doc\":[\"How fresh it is.\"]\}]\}")
   let liveDocs = DynamicWeb.render(&Stand.edge(&snapshot, &Stand.live(&documented)), "/@bruno/fresh-pkg/docs")
-  let undocumented = DynamicWeb.render(&Stand.edge(&snapshot, &Stand.live(&Stand.stand(&Stand.github()))), "/@bruno/fresh-pkg/docs")
+  let noCatalog = Stand.stand(&Stand.github())
+  Stand.answer(&noCatalog, "https://github.com/bruno/fresh-pkg/releases/download/v0.2.0/pudu-api.json", "")
+  let undocumented = DynamicWeb.render(&Stand.edge(&snapshot, &Stand.live(&noCatalog)), "/@bruno/fresh-pkg/docs")
   let liveTickets = DynamicWeb.render(&talked, "/@alice/json-kit/tickets")
   let liveTicket = DynamicWeb.render(&talked, "/@alice/json-kit/tickets/7")
   let liveContributions = DynamicWeb.render(&talked, "/@alice/json-kit/contributions")
@@ -62,6 +65,7 @@ export fn main() -> Int {
       Test.that("the function renders a new package's page, cached at the edge", page.status.code == 200 && page.body.contains("fresh-pkg") && page.body.contains("Fresh Package") && cacheOf(&page) == DynamicWeb.LIVE_CACHE),
       Test.that("the function renders a new package's releases with their dates", releasesPage.status.code == 200 && releasesPage.body.contains("0.2.0") && releasesPage.body.contains("0.1.0") && releasesPage.body.contains("2026-09-20")),
       Test.that("the listing includes the new package", listing.status.code == 200 && listing.body.contains("/@bruno/fresh-pkg") && listing.body.contains("/@alice/json-kit") && cacheOf(&listing) == DynamicWeb.LIVE_CACHE),
+      Test.that("the full package search includes a live declaration", searched.status.code == 200 && searched.body.contains("FreshPkg.") && searched.body.contains("freshness") && searched.body.contains("@bruno/fresh-pkg")),
       Test.that("the new owner's profile answers", owner.status.code == 200 && owner.body.contains("/@bruno/fresh-pkg")),
       Test.that("an unlisted package is missing, briefly cached, and not indexed", unknown.status.code == 404 && cacheOf(&unknown) == DynamicWeb.MISSING_CACHE && Http.header(&unknown.headers, "X-Robots-Tag") == Some("noindex")),
       Test.equals("an impostor has no page", &impostor.status.code, &404),
@@ -75,7 +79,7 @@ export fn main() -> Int {
       Test.that("a live ticket has its own page", liveTicket.status.code == 200 && liveTicket.body.contains("Opened today.") && liveTicket.body.contains("dana")),
       Test.that("a merged pull request is a merged contribution", liveContributions.status.code == 200 && liveContributions.body.contains("Merged work") && liveContributions.body.contains("erged")),
       Test.that("a new release's file is read at its commit", liveFile.status.code == 200 && liveFile.body.contains("freshness") && liveFile.body.contains("src/FreshPkg.pudu")),
-      Test.that("a new release's file list leaves out dot paths and installed dependencies", liveSource.status.code == 200 && liveSource.body.contains("pudu.toml") && !liveSource.body.contains(".github/ci.yml") && !liveSource.body.contains("deps/x")),
+      Test.that("a new release's default source opens its README", liveSource.status.code == 200 && liveSource.body.contains("Fresh Package") && liveSource.body.contains("pudu.toml") && !liveSource.body.contains(".github/ci.yml") && !liveSource.body.contains("deps/x")),
       Test.equals("a dot path is not one of its files", &liveHidden.status.code, &404),
       Test.that("a new release's API reference is the catalogue attached to it", liveDocs.status.code == 200 && liveDocs.body.contains("freshness") && liveDocs.body.contains("How fresh it is.")),
       Test.that("a release published without a catalogue says so rather than missing", undocumented.status.code == 200 && undocumented.body.contains("No API reference has been generated")),

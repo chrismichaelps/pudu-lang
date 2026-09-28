@@ -82,6 +82,11 @@ releases, and install control from the registry snapshot under [[architecture/PA
     `P`, and the dark gradient banner heads every page, including search results, owner profiles,
     and project pages. The project tabs (Overview, Docs, Releases, Tickets, Contributions) are
     redrawn as file, ledger, and post layouts under one tab heading.
+25. **Website Engineer (2026-09-28):** owns `website/src/Service/LivePackages.pudu`,
+    `LiveFiles.pudu`, `View/Packages/Source.pudu`, `View/Layout.pudu`, `public/site.css`, the live
+    website suites and fixture, and their mirrors for the source, search, and topic-list fixes.
+26. **Forensic Guardian (2026-09-28):** reconciles the source/wiki diff, changelog, and production
+    validation before the direct website commits to `dev` and `main`.
 
 ## Delivery exception
 
@@ -111,8 +116,8 @@ is created.
 
 ## Exact next action
 
-Publish a real package repository with the `pudu-package` topic (for example with `pudu release`), set
-`GITHUB_TOKEN` in the website build, deploy, and verify its pages before closing #297 and #299.
+After the website fix is committed and deployed, verify the reported package's Source route and a
+public declaration search against the production site.
 
 ## Referenced by
 

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-28 — Package source, public API search, and topic scrolling
+
+- [[website Service LivePackages]] and [[website Service LiveFiles]]: read the default source file
+  selected by the view and index live releases' attached public API declarations for package search.
+- [[website stylesheet]] and [[website View Layout]]: keep the package topics in a vertically
+  scrollable panel and revise the stylesheet URL to 63.
+- [[website live packages suite]] and [[website live pages suite]]: cover the live declaration in
+  search and a README that is not the first file in the tree.
+
 ## 2026-09-25 — A module named like a built-in type lends it no methods
 
 - [[Type Check Method]] and `Rule.methodType`: a member of a built-in type is a method only when a

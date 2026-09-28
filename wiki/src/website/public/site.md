@@ -33,8 +33,10 @@ in two ruled columns rather than cards, and the home page's module list sits und
 monospace.
 
 The catalogue is a ledger (mark, identity and description, release, stars) beside a topics and
-publishing column that drops below at 900px. Search results reuse the ledger for projects and give
-declarations a kind mark, module, project and release, and signature. A project page has the banner
+publishing column that drops below at 900px. The topics list scrolls vertically within a
+viewport-bounded panel when many topics are present; the publishing information remains visible
+below it. Search results reuse the ledger for projects and give declarations a kind mark, module,
+project and release, and signature. A project page has the banner
 with identity, facts, and the install control, then tabs on one rule with a project search box that
 moves above the tabs below 1000px. Every tab opens with the same heading closed by an ink rule. The
 overview shows the README as a file beside a hairline-divided facts column; releases give the latest

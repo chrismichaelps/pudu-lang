@@ -18,8 +18,13 @@ within minutes of its publication, with no redeploy.
   repositories are skipped. Its README at that tag becomes its overview; its owner gains a profile.
 - A repository the snapshot has takes GitHub's stars, forks, and open issues. When it was pushed
   after its latest snapshot release, its tags are read; a newer valid release becomes latest and
-  the latest-release `files` and `catalog` are dropped with the old release, while its compact
-  declarations stay searchable until the next build.
+  the latest-release `files` and `catalog` are dropped with the old release. Its compact
+  declarations are refreshed from the new catalogue when available.
+- A new project's public declarations come from the newest release's `pudu-api.json`, the same
+  catalogue used by its Docs tab. A newer release replaces a known project's search facts when
+  its catalogue is available; a missing catalogue preserves the last known facts.
+- The default Source route reads the README when present, then the manifest, then the first file,
+  exactly as the Source view chooses. An explicitly requested missing file remains a 404.
 - At most eight repositories have tags read per rebuild; tags are remembered 300 s, files at a tag an hour.
 - The merged index is memoized for 30 s. `View.live` says whether GitHub contributed.
 - Without a listing from GitHub (outage, rate limit, malformed answer) the snapshot is returned unchanged.

@@ -12,6 +12,14 @@ const API: Str = "https://api.github.com/repos/"
 const MOST_FILES: Int = 2000
 const MOST_BYTES: Int = 1048576
 
+/// The Source tab opens the README, then the manifest, then the first file.
+export fn defaultFile(files: &Array[Str]) -> Str {
+  for wanted in ["README.md", "pudu.toml"] {
+    if files.contains(wanted) { return wanted }
+  }
+  if files.isEmpty() { "" } else { files[0] }
+}
+
 /// Whether a release file is one a package ships: nothing under a dot
 /// directory or named with a leading dot, and nothing under a top-level `deps/`,
 /// which holds installed dependencies rather than the package's own code.

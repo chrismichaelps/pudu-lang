@@ -114,6 +114,7 @@ export fn github() -> Array[(Str, Str)] {
     (RAW + "bruno/fresh-pkg/c1/pudu.toml", manifest("@bruno/fresh-pkg", "0.1.0")),
     (RAW + "bruno/fresh-pkg/c2/pudu.toml", manifest("@bruno/fresh-pkg", "0.2.0")),
     (RAW + "bruno/fresh-pkg/c2/README.md", "# Fresh Package\n\nPublished after the build.\n"),
+    ("https://github.com/bruno/fresh-pkg/releases/download/v0.2.0/pudu-api.json", "\{\"schemaVersion\":1,\"languageVersion\":\"0.1.2\",\"entries\":[\{\"module\":\"FreshPkg\",\"kind\":\"fn\",\"name\":\"freshness\",\"signature\":\"() -> Int\",\"doc\":[\"How fresh it is.\"]\}]\}"),
     (API + "alice/json-kit/tags?per_page=100", "[\{\"name\":\"v2.1.0\",\"commit\":\{\"sha\":\"a9\"\}\},\{\"name\":\"v2.0.0\",\"commit\":\{\"sha\":\"a8\"\}\}]"),
     (API + "alice/json-kit/releases?per_page=100", "[\{\"tag_name\":\"v2.1.0\",\"published_at\":\"2026-09-23T08:00:00Z\",\"draft\":false,\"body\":\"Faster.\",\"author\":\{\"login\":\"alice\"\},\"assets\":[]\}]"),
     (RAW + "alice/json-kit/a9/pudu.toml", manifest("@alice/json-kit", "2.1.0")),

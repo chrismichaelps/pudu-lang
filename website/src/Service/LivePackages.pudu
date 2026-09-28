@@ -115,7 +115,7 @@ export fn merged(source: &Source.Source, snapshot: &Packages.Packages) -> View {
   for repository in known {
     let Some(held) = Packages.find(snapshot, repository.handle, repository.project) else { continue }
     let counted = Packages.Project{..held, stars: repository.stars, forks: repository.forks, openIssues: repository.openIssues}
-    projects = replaced(&projects, &advanced(&counted, &answerFor(&answers, repository.path)))
+    projects = replaced(&projects, &advanced(source, &counted, &answerFor(&answers, repository.path)))
   }
   if listing.complete {
     var listed: Set[Str] = setOf([])
@@ -131,10 +131,17 @@ export fn merged(source: &Source.Source, snapshot: &Packages.Packages) -> View {
 /// A snapshot project with releases newer than its latest put first. `files`
 /// and `catalog` describe the latest release, so they are dropped with it; the
 /// previous release's declarations stay searchable until the next build.
-fn advanced(project: &Packages.Project, newer: &Option[Release.Releases]) -> Packages.Project {
+fn advanced(source: &Source.Source, project: &Packages.Project, newer: &Option[Release.Releases]) -> Packages.Project {
   let Some(read) = *newer else { return *project }
   if read.releases.isEmpty() { return *project }
-  Packages.Project{..*project, latest: Some(read.releases[0].version), releases: read.releases.concat(project.releases), files: [], catalog: None}
+  let latest = read.releases[0]
+  Packages.Project{..*project, latest: Some(latest.version), releases: read.releases.concat(project.releases), files: [], catalog: None, searchEntries: Option.unwrapOr(declarations(source, Discussions.pathOf(project.repository), latest.tag), project.searchEntries)}
+}
+
+/// Search facts come from the same release catalogue as the Docs tab.
+fn declarations(source: &Source.Source, path: Str, tag: Str) -> Option[Array[Packages.PublicDeclaration]] {
+  let catalog = Files.catalogue(source, path, tag) ?
+  Some(catalog.entries.map(|entry| Packages.PublicDeclaration{moduleName: entry.moduleName, kind: entry.kind, name: entry.name, signature: entry.signature}))
 }
 
 /// A project the snapshot does not have, from its search result, its releases,
@@ -157,7 +164,7 @@ fn introduced(source: &Source.Source, repository: &Index.Repository, read: &Rele
     openIssues: repository.openIssues,
     tickets: [],
     contributions: [],
-    searchEntries: [],
+    searchEntries: Option.unwrapOr(declarations(source, repository.path, newest.tag), []),
     latest: Some(newest.version),
     releases: read.releases,
     files: [],
@@ -188,7 +195,8 @@ fn withLiveFiles(source: &Source.Source, project: &Packages.Project, file: Str) 
   let path = Discussions.pathOf(project.repository)
   let Some(files) = Files.listed(source, path, commit) else { return *project }
   if files.isEmpty() { return Packages.Project{..*project, files: files} }
-  let shown = if files.contains(file) { file } else { files[0] }
+  let shown = if file.isEmpty() { Files.defaultFile(&files) } else { file }
+  if !files.contains(shown) { return Packages.Project{..*project, files: files} }
   match Files.body(source, path, commit, shown) {
     case Some(held) => Packages.Project{..*project, files: files, bodies: mapOf([(shown, held)])}
     case None => Packages.Project{..*project, files: files}

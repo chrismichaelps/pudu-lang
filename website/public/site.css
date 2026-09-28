@@ -319,7 +319,7 @@ a:hover{color:var(--brand)}
 .package-index-main{min-width:0}
 .package-index-side{position:sticky;top:24px;display:grid;gap:34px}
 .package-index-side h2{margin:0 0 8px;padding:0;border:0;font-size:1rem}
-.package-topics ul{margin:0;padding:0;border-top:1px solid var(--line);list-style:none}
+.package-topics ul{margin:0;padding:0;border-top:1px solid var(--line);list-style:none;max-height:min(60vh,32rem);overflow-y:auto;overscroll-behavior:contain}
 .package-topics a{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--ink);font-weight:700;text-decoration:none}
 .package-topics a:hover{color:var(--brand-dark)}
 .package-topic-count,.package-group-count{color:var(--faint);font-weight:400;font-variant-numeric:tabular-nums}
