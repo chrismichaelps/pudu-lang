@@ -290,6 +290,7 @@ export fn main() -> Int {
   }
   let manySite = Site.Site{..site, packages: Packages.Packages{..packages, projects: manyProjects}}
   let manyCatalog = Web.render(&manySite, "/packages")
+  let manyHome = Web.render(&manySite, "/")
   var longProjects: Array[Packages.Project] = []
   var longNumber = 0
   while longNumber < 25 {
@@ -513,6 +514,8 @@ export fn main() -> Int {
       Test.that("package searches provide the live enhancement hook", packageCatalog.body.contains("data-package-search") && packageCatalog.body.contains("/assets/packages/search.js?v=8") && packageSearch.body.contains("data-package-search")),
       Test.that("package avatars prefer a local GitHub image with a neutral fallback", localAvatarCatalog.body.contains("src=\"/packages/avatars/alice.png\"") && !localAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && githubAvatarCatalog.body.contains("src=\"https://avatars.githubusercontent.com/u/123\"") && packageCatalog.body.contains("package-avatar-fallback") && !packageCatalog.body.contains("package-initial")),
       Test.that("larger catalogues feature six most-starred projects and retain all seven", manyCatalog.body.contains("Most starred") && manyCatalog.body.contains("All packages") && manyCatalog.body.split("class=\"package-row-link\"").length() == 14 && manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-6") && !manyCatalog.body.split("All packages")[0].contains("/@alice/pkg-0")),
+      Test.that("the home showcase shares the most-starred selection", manyHome.status.code == 200 && manyHome.body.contains("data-package=\"@alice/pkg-6\"") && !manyHome.body.contains("data-package=\"@alice/pkg-0\"") && manyHome.body.contains("data-package=\"@alice/pkg-1\"")),
+      Test.that("home cards expose live hydration hooks", home.body.contains("data-package=\"@alice/json-kit\"") && home.body.contains("home-package-latest") && home.body.contains("home-package-stars") && home.body.contains("/assets/packages/featured.js") && !bareHome.body.contains("/assets/packages/featured.js")),
       Test.that("reading pages share the page banner", docsIndex.body.contains("class=\"hero-banner page-banner\"") && docsPage.body.contains("class=\"hero-banner page-banner\"") && modulesIndex.body.contains("class=\"hero-banner page-banner\"") && modulePage.body.contains("class=\"hero-banner page-banner\"") && symbol.body.contains("class=\"hero-banner page-banner\"")),
       Test.that("public pages share the page banner", releases.body.contains("class=\"hero-banner page-banner\"") && about.body.contains("class=\"hero-banner page-banner\"") && donation.body.contains("class=\"hero-banner page-banner\"") && conduct.body.contains("class=\"hero-banner page-banner\"") && brand.body.contains("class=\"hero-banner page-banner\"")),
       Test.that("search and missing pages share the banner", search.body.contains("class=\"hero-banner page-banner\"") && missing.body.contains("class=\"hero-banner page-banner\"")),

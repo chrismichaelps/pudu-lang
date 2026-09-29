@@ -2,7 +2,6 @@ module View.Packages.Catalog
 
 import Std.Html.Build as H
 import Std.Html as Html
-import Std.List as List
 import Std.Option as Option
 import Std.Url as Url
 import Service.PackageSearch as PackageSearch
@@ -76,13 +75,13 @@ fn group(packages: &Packages.Packages, title: Str, count: Str, projects: &Array[
 }
 
 /// Rows in the most-starred group, shown only when the catalogue holds more
-/// projects than this, so a small catalogue lists each project once.
+/// projects than this, so a small catalogue lists each project once. The home
+/// showcase shares the same selector (`Packages.featured`), so both agree on
+/// the same snapshot.
 const FEATURED: Int = 6
 
 fn featured(packages: &Packages.Packages) -> Array[Packages.Project] {
-  List.sortBy(&packages.projects, fn(left: Packages.Project, right: Packages.Project) -> Bool {
-      if left.stars != right.stars { left.stars > right.stars } else { left.name < right.name }
-    }).slice(0, FEATURED)
+  Packages.featured(packages, FEATURED)
 }
 
 /// A declaration match: its kind mark, qualified name over its project and

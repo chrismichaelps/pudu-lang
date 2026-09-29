@@ -76,8 +76,20 @@ export type Project = {
 /// `directory` is where the snapshot's files and avatars are.
 export type Packages = { registry: Str, directory: Str, projects: Array[Project], handles: Array[Profile] }
 export const LIST_PAGE_SIZE: Int = 20
+/// How many projects the home showcase and the catalogue's most-starred group show.
+export const FEATURED_COUNT: Int = 6
 
 export fn listPages(length: Int) -> Int { if length == 0 { 1 } else { (length + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE } }
+
+/// The most-starred projects, ties by name, up to `count`. The home showcase
+/// and the catalogue's most-starred group share it, so both agree on the same
+/// snapshot. Live counts converge after the home hydration script refreshes
+/// each card from the suggest answers.
+export fn featured(packages: &Packages, count: Int) -> Array[Project] {
+  List.sortBy(&packages.projects, fn(left: Project, right: Project) -> Bool {
+      if left.stars != right.stars { left.stars > right.stars } else { left.name < right.name }
+    }).slice(0, count)
+}
 
 export fn empty() -> Packages { Packages{registry: "", directory: "", projects: [], handles: []} }
 
