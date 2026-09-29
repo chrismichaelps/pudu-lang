@@ -13,6 +13,11 @@ import View.Dynamic as Dynamic
 import View.Layout as Layout
 import View.Pudu as Pudu
 
+/// The script that refreshes each showcase card's release and star count from
+/// the live suggest answers. The snapshot stays the first paint and the
+/// fallback; hydration only replaces text.
+const FEATURED_SCRIPT: Str = "/assets/packages/featured.js?v=1"
+
 /// The home page: the banner with the release, the language's promise, and
 /// API search; then how Pudu reads, its packages when there are any, and its
 /// library.
@@ -113,15 +118,23 @@ fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
     ])
 }
 
-/// Up to six packages from the snapshot, or nothing when there is none.
+/// The most-starred projects from the snapshot, or nothing when there is none.
+/// Each card carries its project name and separate latest/star spans so the
+/// hydration script can refresh live counts from the suggest answers. Cards
+/// and the catalogue's most-starred group share `Packages.featured`, so both
+/// agree on the same snapshot.
 fn featured(packages: &Packages.Packages) -> H.Node {
   if !Packages.present(packages) { return H.nothing() }
   var cards: Array[H.Node] = []
-  for project in packages.projects.slice(0, 6) {
-    cards = cards.push(H.a().class("home-package").href("/" + project.name).holding([
+  for project in Packages.featured(packages, Packages.FEATURED_COUNT) {
+    cards = cards.push(H.a().class("home-package").at("data-package", project.name).href("/" + project.name).holding([
           H.span().class("home-package-name").holding([H.span().class("package-owner").says(project.handle), H.span().class("package-slash").says(" / "), H.strong().says(project.project)]),
           H.span().class("home-package-description").says(project.description),
-          H.span().class("home-package-meta").says(Option.unwrapOr(project.latest, "unreleased") + " · ★ " + show(project.stars))
+          H.span().class("home-package-meta").holding([
+              H.span().class("home-package-latest").says(Option.unwrapOr(project.latest, "unreleased")),
+              H.span().class("home-package-sep").at("aria-hidden", "true").says(" · ★ "),
+              H.span().class("home-package-stars").says(show(project.stars))
+            ])
         ]))
   }
   H.section().class("home-section").holding([
@@ -132,7 +145,8 @@ fn featured(packages: &Packages.Packages) -> H.Node {
       H.p().class("home-actions").holding([
           H.a().href("/packages").says(if packages.projects.length() == 1 { "Explore the package" } else { "Explore all " + show(packages.projects.length()) + " packages" }),
           H.a().href("/docs/dependencies").says("Learn how dependencies work")
-        ])
+        ]),
+      H.script().kind("module").src(FEATURED_SCRIPT)
     ])
 }
 

@@ -29,6 +29,14 @@ See [[architecture/PACKAGES]] · [[website Site]] · [[src/website/_MOC]].
 Resolved Grill Log: only public GitHub documents enter the snapshot; the service admits files by its generated listing and serves no unlisted path.
 Discussion records are read-only and bounded; a requested number must match a record in that project's snapshot.
 
+## Featured selection (home and catalogue share one)
+
+`featured(packages, count)` answers the most-starred projects, ties by `name <`, up to `count`.
+`View/Home.pudu` and `View/Packages/Catalog.pudu` both render from it, so the home showcase and the
+catalogue's "Most starred" group agree whenever they are given the same `Packages` value. The home
+page remains a static snapshot render; the listing remains the live overlay. Counts converge after
+the home hydration script refreshes each card from `GET /packages/suggest`.
+
 ## Detail on demand (#367)
 
 `detailed` fills a compactly loaded project with its latest release's files, API catalogue, and

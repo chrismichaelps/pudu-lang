@@ -47,3 +47,5 @@ Resolved Grill Log: query results are not indexed, while canonical catalogue and
 The most-starred group is a discovery aid on a larger catalogue; the complete list remains explicit
 and deterministically ordered by the snapshot. Declaration order is the search service's ranking,
 shared with the suggestion box.
+The most-starred group renders from `Packages.featured`, the same selector the home showcase uses,
+so both agree on the same snapshot. Live counts converge through the home hydration script.

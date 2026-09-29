@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — Home showcase agrees with the live package listing
+
+- [[website Service Packages]] `featured`: one most-starred selector shared by the home showcase
+  and the catalogue's "Most starred" group, so ordering agrees on the same snapshot.
+- [[website View Home]]: cards carry `data-package` hooks with separate latest/star spans and load
+  [[Package featured hydration]], which refreshes each card from live `GET /packages/suggest`
+  answers; failure keeps the snapshot text.
+- [[website regression suite]]: home and catalogue featured agreement from one synthetic snapshot.
+
 ## 2026-09-28 — Package source, public API search, and topic scrolling
 
 - [[website Service LivePackages]] and [[website Service LiveFiles]]: read the default source file

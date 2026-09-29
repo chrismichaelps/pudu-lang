@@ -87,6 +87,16 @@ releases, and install control from the registry snapshot under [[architecture/PA
     website suites and fixture, and their mirrors for the source, search, and topic-list fixes.
 26. **Forensic Guardian (2026-09-28):** reconciles the source/wiki diff, changelog, and production
     validation before the direct website commits to `dev` and `main`.
+27. **Website Engineer (2026-09-29):** owns the home-featured fix — `website/src/Service/Packages.pudu`
+    (`featured`), `website/src/View/Home.pudu` (shared selector, data hooks, hydration script),
+    `website/src/View/Packages/Catalog.pudu` (shared selector), `website/public/assets/packages/featured.js`,
+    `website/src/Test/Website.pudu` (agreement checks), and mirrors `website Service Packages`,
+    `website View Home`, `website View Packages Catalog`, `Package featured hydration`,
+    `website regression suite`, `src/website/_MOC`, `CHANGELOG`, and this handoff. Reports
+    `pudu-lang-resilience` showing `★ 0` on home while `/packages` shows `★ 1`: static snapshot vs
+    live overlay plus alphabetical vs most-starred selection.
+28. **Independent reviewer:** reviews the diff without editing for correctness, contract, and test
+    strength. **Forensic Guardian:** audits wiki parity before readiness.
 
 ## Delivery exception
 
@@ -116,8 +126,9 @@ is created.
 
 ## Exact next action
 
-After the website fix is committed and deployed, verify the reported package's Source route and a
-public declaration search against the production site.
+Verify locally: `pudu test website/src/Test/Website.pudu`, render `/` and `/packages` from the same
+snapshot, and refresh home cards in a browser with and without script; then verify the reported
+package's Source route and a public declaration search against the production site.
 
 ## Referenced by
 

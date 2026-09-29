@@ -58,3 +58,6 @@ The catalogue gate also requires every public declaration to carry at least one 
 including implementation members whose text is inherited from their trait contract.
 
 Since #367 its dynamic fixtures carry `LivePackages.offline()`, so they exercise the snapshot path; the live path is covered by [[website live packages suite]].
+Home and catalogue featured agreement is checked from one synthetic snapshot: both render the same
+most-starred order from `Packages.featured`, home cards carry `data-package` hooks with separate
+latest/star spans, and the home page includes the hydration script.

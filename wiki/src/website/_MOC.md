@@ -13,7 +13,7 @@ tags: [website, source, moc]
 [[website Service Packages]] · [[website Service PackageSearch]] · [[website Service LivePackages]] · [[website Service LiveSource]] · [[website Service LiveIndex]] · [[website Service LiveRelease]] · [[website Service LiveJson]] · [[website Service LiveDiscussions]] · [[website Service LiveFiles]] ·
 [[website Search Index]] · [[website Seo]] · [[website Config]] · [[website Constants]] · [[website Error]]
 
-Visual system: [[website stylesheet]]. Content: [[website documentation pages]]. Download controls: [[Download platform script]]. Mascot: [[Pudu mascot script]]. Package controls: [[Package install controls]] · [[Package list pagination]] · [[Package live search]] · [[Package source navigation]] · [[Package avatar fallback]] · [[Package file icons]].
+Visual system: [[website stylesheet]]. Content: [[website documentation pages]]. Download controls: [[Download platform script]]. Mascot: [[Pudu mascot script]]. Package controls: [[Package install controls]] · [[Package list pagination]] · [[Package live search]] · [[Package featured hydration]] · [[Package source navigation]] · [[Package avatar fallback]] · [[Package file icons]].
 
 Live package source selection and public declaration search: [[website Service LiveFiles]] · [[website Service LivePackages]] · [[website Service PackageSearch]].
 
