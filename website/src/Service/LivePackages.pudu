@@ -65,11 +65,18 @@ export fn detail(live: &Live, snapshot: &Packages.Packages, project: &Packages.P
   if tab == "source" && filled.files.isEmpty() {
     return withLiveFiles(&live.source, &filled, file)
   }
+  // A release the build never saw is described by the catalogue `pudu release`
+  // attached to it, or else by its own sources at its commit, so its Docs tab
+  // never waits for a build or depends on how it was released.
   if tab == "docs" && filled.catalog == None {
     let path = Discussions.pathOf(filled.repository)
-    let tag = Option.map(newestRelease(&filled), |release: Packages.Release| release.tag)
-    return match Files.catalogue(&live.source, path, Option.unwrapOr(tag, "")) {
-      case Some(found) => Packages.Project{..filled, catalog: Some(found)}
+    let Some(release) = newestRelease(&filled) else { return filled }
+    let found = match Files.catalogue(&live.source, path, release.tag) {
+      case Some(attached) => Some(attached)
+      case None => Files.derived(&live.source, path, release.commit, filled.root)
+    }
+    return match found {
+      case Some(catalog) => Packages.Project{..filled, catalog: Some(catalog)}
       case None => filled
     }
   }

@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — A package's API reference no longer depends on how it was released
+
+- [[website Service LiveFiles]] `derived`: a release without an attached `pudu-api.json` has its
+  Docs tab read from its own sources at its commit, the package root's modules only, sixteen files
+  at a time and remembered per commit; [[website Domain Declarations]] reads each file's public
+  declarations and documentation, and [[website Service Catalog]] `fromEntries` assembles them.
+- [[website Service LivePackages]]: the Docs tab tries the attached catalogue first, then the
+  sources, for a release the snapshot lacks or whose catalogue the build could not produce.
+- [[website declarations suite]] and [[website live pages suite]] pin both.
+
 ## Unreleased — Home showcase agrees with the live package listing
 
 - [[website Service Packages]] `featured`: one most-starred selector shared by the home showcase

@@ -1,0 +1,142 @@
+module Domain.Declarations
+
+import Std.Char as Char
+import Std.List as List
+import Std.Option as Option
+import Std.Text as Text
+import Domain.Entry as Domain
+
+/// What one source file declares in public: its module and each exported
+/// declaration with its documentation.
+export type Declared = { moduleName: Str, entries: Array[Domain.Entry] }
+
+/// The words that open an exported declaration, and the kind each one names.
+const OPENERS: Array[(Str, Str)] = [("export fn ", "fn"), ("export async fn ", "fn"), ("export type ", "type"), ("export trait ", "trait"), ("export const ", "const")]
+
+/// The separator between an anchor's name and its intent in `/** @A.B — intent */`.
+const ANCHOR_DASH: Str = " — "
+
+/// The public declarations of one Pudu source file, read from its text as
+/// written: the `module` line, then every top-level `export` with the `///`
+/// lines above it. A function's signature is its header as declared, a
+/// constant's is its type, and a type or trait has none. `None` when the text
+/// declares no module.
+export fn read(text: Str) -> Option[Declared] {
+  let lines = text.split("\n")
+  let moduleLine = List.find(&lines, |line: Str| line.startsWith("module "))
+  let moduleName = Text.stripPrefix(moduleLine ?, "module ").trim()
+  if moduleName.isEmpty() { return None }
+  var entries: Array[Domain.Entry] = []
+  var notes: Array[Str] = []
+  var index = 0
+  while index < lines.length() {
+    let line = lines[index]
+    let trimmed = line.trim()
+    if trimmed.startsWith("///") {
+      notes = notes.push(Text.stripPrefix(Text.stripPrefix(trimmed, "///"), " "))
+    } else if trimmed.startsWith("/**") && trimmed.endsWith("*/") {
+      notes = [anchorIntent(trimmed)]
+    } else if let Some((opener, kind)) = List.find(&OPENERS, |pair: (Str, Str)| line.startsWith(pair[0])) {
+      let (header, last) = headerAt(&lines, index)
+      let rest = header.drop(opener.length())
+      let name = nameOf(rest)
+      if !name.isEmpty() {
+        entries = entries.push(Domain.Entry{name: name, kind: kind, moduleName: moduleName, signature: signatureOf(kind, rest.drop(name.length())), documentation: paragraphs(&notes)})
+      }
+      notes = []
+      index = last
+    } else if !trimmed.isEmpty() {
+      notes = []
+    }
+    index = index + 1
+  }
+  Some(Declared{moduleName: moduleName, entries: entries})
+}
+
+/// A declaration's header from its first line: later lines join it, trimmed,
+/// while brackets or parentheses opened on it are still open. Answers the
+/// header and the index of its last line.
+fn headerAt(lines: &Array[Str], start: Int) -> (Str, Int) {
+  var header = lines[start]
+  var depth = openings(header)
+  var index = start
+  while depth > 0 && index + 1 < lines.length() {
+    index = index + 1
+    let next = lines[index].trim()
+    header = header + (if header.endsWith("(") || header.endsWith("[") || next.startsWith(")") || next.startsWith("]") { "" } else { " " }) + next
+    depth = depth + openings(next)
+  }
+  (header, index)
+}
+
+/// How many more parentheses and square brackets a line opens than it closes.
+fn openings(line: Str) -> Int {
+  var depth = 0
+  for character in line.chars() {
+    if character == '(' || character == '[' { depth = depth + 1 }
+    if character == ')' || character == ']' { depth = depth - 1 }
+  }
+  depth
+}
+
+/// The declared name at the start of a header's remainder.
+fn nameOf(rest: Str) -> Str {
+  var taken: Array[Str] = []
+  for character in rest.chars() {
+    if !(Char.isAlphanumeric(character) || character == '_') { return taken.join("") }
+    taken = taken.push(character.toText())
+  }
+  taken.join("")
+}
+
+/// The signature shown for a declaration, from its header after the name.
+fn signatureOf(kind: Str, afterName: Str) -> Str {
+  if kind == "fn" { return beforeBody(afterName).trim() }
+  if kind == "const" {
+    let typed = Text.stripPrefix(afterName.trim(), ":").trim()
+    return Option.unwrapOr(List.first(&typed.split(" = ")), typed).trim()
+  }
+  ""
+}
+
+/// A function header without its body: everything before the first `{` that
+/// is outside parentheses and brackets.
+fn beforeBody(header: Str) -> Str {
+  var depth = 0
+  var taken: Array[Str] = []
+  for character in header.chars() {
+    if character == '{' && depth == 0 { return taken.join("") }
+    if character == '(' || character == '[' { depth = depth + 1 }
+    if character == ')' || character == ']' { depth = depth - 1 }
+    taken = taken.push(character.toText())
+  }
+  taken.join("")
+}
+
+/// The intent of a one-line anchor comment, `/** @Name.Role — intent */`, or its
+/// whole text when it names no intent.
+fn anchorIntent(comment: Str) -> Str {
+  let inner = Text.stripSuffix(Text.stripPrefix(comment, "/**"), "*/").trim()
+  let parts = inner.split(ANCHOR_DASH)
+  if parts.length() < 2 { inner } else { List.drop(&parts, 1).join(ANCHOR_DASH).trim() }
+}
+
+/// Documentation lines as paragraphs: consecutive lines join with a space, a
+/// blank line ends a paragraph, and reading stops at the first heading or code
+/// fence, which open the examples a summary leaves out.
+fn paragraphs(notes: &Array[Str]) -> Array[Str] {
+  var found: Array[Str] = []
+  var current: Array[Str] = []
+  for note in *notes {
+    let trimmed = note.trim()
+    if trimmed.startsWith("#") || trimmed.startsWith("```") { break }
+    if trimmed.isEmpty() {
+      if !current.isEmpty() { found = found.push(current.join(" ")) }
+      current = []
+    } else {
+      current = current.push(trimmed)
+    }
+  }
+  if !current.isEmpty() { found = found.push(current.join(" ")) }
+  found
+}

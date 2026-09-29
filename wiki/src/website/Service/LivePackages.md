@@ -23,6 +23,9 @@ within minutes of its publication, with no redeploy.
 - A new project's public declarations come from the newest release's `pudu-api.json`, the same
   catalogue used by its Docs tab. A newer release replaces a known project's search facts when
   its catalogue is available; a missing catalogue preserves the last known facts.
+- The Docs tab of a release without a catalogue in the snapshot — one the build never saw, or
+  one whose catalogue the build could not produce — reads the release's attached `pudu-api.json`
+  and, when there is none, the reference `LiveFiles.derived` reads from its sources at its commit.
 - The default Source route reads the README when present, then the manifest, then the first file,
   exactly as the Source view chooses. An explicitly requested missing file remains a 404.
 - At most eight repositories have tags read per rebuild; tags are remembered 300 s, files at a tag an hour.

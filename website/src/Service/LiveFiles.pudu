@@ -1,7 +1,10 @@
 module Service.LiveFiles
 
+import Std.Concurrent as Concurrent
 import Std.List as List
 import Std.Url as Url
+import Domain.Declarations as Declarations
+import Domain.Entry as Domain
 import Service.Catalog as Catalog
 import Service.LiveJson as J
 import Service.LiveRelease as Release
@@ -11,6 +14,10 @@ const API: Str = "https://api.github.com/repos/"
 /// What one release's Source tab lists and previews, as the build bounds it.
 const MOST_FILES: Int = 2000
 const MOST_BYTES: Int = 1048576
+/// Source files read to describe a release that carries no catalogue, and
+/// how many are read at once from the raw host.
+const MOST_SOURCES: Int = 400
+const SOURCE_WORKERS: Int = 16
 
 /// The Source tab opens the README, then the manifest, then the first file.
 export fn defaultFile(files: &Array[Str]) -> Str {
@@ -71,4 +78,40 @@ export fn catalogue(source: &Source.Source, path: Str, tag: Str) -> Option[Catal
     case Ok(found) => Some(found)
     case Err(_) => None
   }
+}
+
+/// The API reference of a release that carries no `pudu-api.json`, read from
+/// its own sources at the release's commit: every `.pudu` file of the package's
+/// root module and the modules under it, outside `test/` and `tests/`. Each
+/// file is addressed by the commit, so it is read once and remembered as
+/// immutable; files are read several at a time. A file that cannot be read is
+/// left out rather than failing the page. `None` when no declaration is found.
+export fn derived(source: &Source.Source, path: Str, commit: Str, root: Str) -> Option[Catalog.Catalog] {
+  if root.isEmpty() { return None }
+  let files = listed(source, path, commit) ?
+  let wanted = List.take(&files.filter(|file: Str| ofRoot(file, root)), MOST_SOURCES)
+  let shared = *source
+  let readOne = fn(file: Str) -> Option[Declarations.Declared] {
+    let text = Source.text(&shared, Release.RAW + path + "/" + commit + "/" + file.split("/").map(|part: Str| Url.encodeComponent(part)).join("/"), &Source.immutable()) ?
+    Declarations.read(text)
+  }
+  let read = match Concurrent.mapBounded(&wanted, SOURCE_WORKERS, readOne) {
+    case Ok(found) => found
+    case Err(_) => wanted.map(readOne)
+  }
+  var entries: Array[Domain.Entry] = []
+  for declared in read {
+    if let Some(held) = declared {
+      if held.moduleName == root || held.moduleName.startsWith(root + ".") { entries = entries.concat(held.entries) }
+    }
+  }
+  Catalog.fromEntries("", entries)
+}
+
+/// Whether a release file is a source of the package's root module or one under
+/// it: `…/Root.pudu` or a `.pudu` file inside a `…/Root/` directory, never a suite.
+export fn ofRoot(file: Str, root: Str) -> Bool {
+  if !file.endsWith(".pudu") || file.startsWith("test/") || file.startsWith("tests/") { return false }
+  let rooted = root.replace(".", "/")
+  file == rooted + ".pudu" || file.endsWith("/" + rooted + ".pudu") || file.startsWith(rooted + "/") || file.contains("/" + rooted + "/")
 }

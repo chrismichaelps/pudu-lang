@@ -9,7 +9,7 @@ tags: [website, source, moc]
 [[website View Layout]] · [[website View Home]] · [[website View Dynamic]] · [[website View Documentation]] · [[website View Document]] · [[website View About]] · [[website View Donation]] ·
 [[website View Docs]] · [[website View Download]] · [[website View Releases]] · [[website View Markdown]] · [[website View MarkdownInline]] · [[website View MarkdownHtml]] · [[website View Syntax]] · [[website View Pudu]] ·
 [[website View Packages Catalog]] · [[website View Packages Frame]] · [[website View Packages Project]] · [[website View Packages Source]] · [[website View Packages Reference]] · [[website View Packages Discussion]] · [[website View Packages State]] · [[website View Packages Highlight]] · [[website View Packages Suggest]] ·
-[[website Service Catalog]] · [[website Service Search]] · [[website Service Docs]] · [[website Domain Entry]] · [[website Domain Search]] · [[website Domain Library]] ·
+[[website Service Catalog]] · [[website Service Search]] · [[website Service Docs]] · [[website Domain Entry]] · [[website Domain Search]] · [[website Domain Library]] · [[website Domain Declarations]] ·
 [[website Service Packages]] · [[website Service PackageSearch]] · [[website Service LivePackages]] · [[website Service LiveSource]] · [[website Service LiveIndex]] · [[website Service LiveRelease]] · [[website Service LiveJson]] · [[website Service LiveDiscussions]] · [[website Service LiveFiles]] ·
 [[website Search Index]] · [[website Seo]] · [[website Config]] · [[website Constants]] · [[website Error]]
 
@@ -18,7 +18,7 @@ Visual system: [[website stylesheet]]. Content: [[website documentation pages]].
 Live package source selection and public declaration search: [[website Service LiveFiles]] · [[website Service LivePackages]] · [[website Service PackageSearch]].
 
 Delivery surfaces: [[Vercel output builder]] · [[Linux Pudu renderer builder]] ·
-[[Musl Runtime Workflow]] · [[Musl Runtime Builder]] · [[website regression suite]] · [[website package search suite]] · [[website live packages suite]] · [[website live pages suite]] · [[website live stand]] · [[website live network check]] · [[website Markdown suite]] · [[Syntax parity test]] ·
+[[Musl Runtime Workflow]] · [[Musl Runtime Builder]] · [[website regression suite]] · [[website package search suite]] · [[website live packages suite]] · [[website live pages suite]] · [[website live stand]] · [[website live network check]] · [[website Markdown suite]] · [[website declarations suite]] · [[Syntax parity test]] ·
 [[Website Operations]] · [[Package snapshot generator]] · [[Package snapshot GitHub client]] ·
 [[Package topic discovery]] · [[Package snapshot cache]].
 

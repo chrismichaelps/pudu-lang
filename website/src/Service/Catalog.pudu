@@ -55,6 +55,14 @@ export fn parse(source: Str) -> Result[Catalog, SiteError.SiteError] {
   Ok(Catalog{languageVersion: version, entries: entries, modules: moduleNames(&entries)})
 }
 
+/// A catalogue of entries gathered some other way than the compiler's export,
+/// such as from a release's sources; `None` when there are none, so a page
+/// never shows an empty reference as if it were one.
+export fn fromEntries(languageVersion: Str, entries: Array[Domain.Entry]) -> Option[Catalog] {
+  if entries.isEmpty() { return None }
+  Some(Catalog{languageVersion: languageVersion, entries: entries, modules: moduleNames(&entries)})
+}
+
 /// Read the compact catalogue used by dynamic search.
 ///
 /// Static pages need every documentation paragraph and the complete module

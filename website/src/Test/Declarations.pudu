@@ -1,0 +1,87 @@
+module Test.Declarations
+
+import Std.Io as Io
+import Std.Option as Option
+import Std.Test as Test
+import Domain.Declarations as Declarations
+import Domain.Entry as Domain
+import Service.LiveFiles as LiveFiles
+
+/// A package source written the way packages write them: anchors, `///`
+/// paragraphs with examples, multi-line headers, and private helpers.
+fn sample() -> Str {
+  [
+    "/** @Log.Sink.Seam — where events finally go */",
+    "module PuduLangLog.Sink",
+    "",
+    "import Std.List as List",
+    "",
+    "/** @Log.Sink.Report — a sink failure and the events it lost */",
+    "export type Report = \{ kind: Str, events: Array[Str] \}",
+    "",
+    "/// The largest limit, standing for no limit.",
+    "export const UNLIMITED: Int = 2147483647",
+    "",
+    "/// A sink writing each event with a function.",
+    "///",
+    "/// It needs no flushing",
+    "/// or closing.",
+    "///",
+    "/// ## Examples",
+    "///",
+    "/// ```",
+    "/// Sink.of(write)",
+    "/// ```",
+    "export fn of(emit: fn(&Str) -> Result[(), Str]) -> Sink \{ build(emit) \}",
+    "",
+    "/// Groups items.",
+    "export fn grouped[T](",
+    "  items: Array[T],",
+    "  size: Int",
+    ") -> Array[Array[T]] \{",
+    "  []",
+    "\}",
+    "",
+    "/// Not exported, so not listed.",
+    "fn build(emit: fn(&Str) -> Result[(), Str]) -> Sink \{ emit \}",
+    "",
+    "/// Stale note above code.",
+    "let unrelated = 1",
+    "export async fn fetch(url: Str) -> Str \{ url \}",
+    "",
+    "/** @Log.Sink.Writing — what a sink does */",
+    "export trait Writing \{",
+    "  fn write(self: &Self) -> ()",
+    "\}"
+  ].join("\n")
+}
+
+/// The name, kind, signature, and documentation of every entry.
+fn shapes(entries: &Array[Domain.Entry]) -> Array[(Str, Str, Str, Array[Str])] {
+  entries.map(|entry: Domain.Entry| (entry.name, entry.kind, entry.signature, entry.documentation))
+}
+
+export fn main() -> Int {
+  let read = Declarations.read(sample())
+  let entries = Option.unwrapOr(Option.map(read, |held: Declarations.Declared| held.entries), [])
+  let none: Array[Str] = []
+  let suite = Test.suite("public declarations read from sources", &[
+      Test.equals("the module is named by its module line", &Option.map(read, |held: Declarations.Declared| held.moduleName), &Some("PuduLangLog.Sink")),
+      Test.equals("every exported declaration, in order, with its signature and paragraphs", &shapes(&entries), &[
+          ("Report", "type", "", ["a sink failure and the events it lost"]),
+          ("UNLIMITED", "const", "Int", ["The largest limit, standing for no limit."]),
+          ("of", "fn", "(emit: fn(&Str) -> Result[(), Str]) -> Sink", ["A sink writing each event with a function.", "It needs no flushing or closing."]),
+          ("grouped", "fn", "[T](items: Array[T], size: Int) -> Array[Array[T]]", ["Groups items."]),
+          ("fetch", "fn", "(url: Str) -> Str", none),
+          ("Writing", "trait", "", ["what a sink does"])
+        ]),
+      Test.that("every entry belongs to the module", entries.filter(|entry: Domain.Entry| entry.moduleName != "PuduLangLog.Sink").isEmpty()),
+      Test.equals("text without a module declares nothing", &Declarations.read("export fn lost() -> Int \{ 1 \}"), &None),
+      Test.equals("a module without exports declares no entries", &Option.map(Declarations.read("module Quiet\n\nfn hidden() -> Int \{ 1 \}"), |held: Declarations.Declared| held.entries.length()), &Some(0)),
+      Test.that("sources of the package root and beneath it are read", LiveFiles.ofRoot("src/PuduLangLog.pudu", "PuduLangLog") && LiveFiles.ofRoot("src/PuduLangLog/Sinks/File.pudu", "PuduLangLog") && LiveFiles.ofRoot("PuduLangLog/A.pudu", "PuduLangLog")),
+      Test.that("suites, examples, tools, other roots, and other files are not", !LiveFiles.ofRoot("test/PuduLangLog/SinkTest.pudu", "PuduLangLog") && !LiveFiles.ofRoot("tests/PuduLangLog.pudu", "PuduLangLog") && !LiveFiles.ofRoot("examples/QuickStart.pudu", "PuduLangLog") && !LiveFiles.ofRoot("tools/Mutate.pudu", "PuduLangLog") && !LiveFiles.ofRoot("src/PuduLangLogExtra.pudu", "PuduLangLog") && !LiveFiles.ofRoot("src/PuduLangLog/README.md", "PuduLangLog"))
+    ])
+  let report = Test.run(&suite)
+  for failure in Test.failuresOf(&report) { let _reported = Io.writeErrorLine(failure) }
+  Test.report(&report)
+}
