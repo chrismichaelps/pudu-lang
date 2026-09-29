@@ -1,8 +1,11 @@
 // Where along the banner's edge the pudu may stand, in pixels from the
 // stage's left side.
 
-import { EDGE_CLEARANCE, SPOT_SPREAD, SPOT_TRIES } from "../config/constants.js";
+import { EDGE_CLEARANCE, HERD_GAP, SPOT_SPREAD, SPOT_TRIES } from "../config/constants.js";
 import { between } from "../motion/timing.js";
+
+// Pixels between the spots a scan of the edge tries.
+const SCAN_STEP = 4;
 
 export function range(pudu) {
   const low = EDGE_CLEARANCE;
@@ -10,15 +13,54 @@ export function range(pudu) {
   return { low, high };
 }
 
-/// A random spot, well away from `avoid` when there is room for that.
+/// How far `x` keeps the pudu from the nearest other pudu of its herd beyond
+/// the gap they need, in pixels; negative when they would overlap, and
+/// unbounded for a pudu alone.
+export function roomAt(pudu, x) {
+  const width = pudu.actor.offsetWidth;
+  let room = Infinity;
+  for (const other of pudu.herd ?? []) {
+    if (other === pudu) continue;
+    const apart = Math.abs(x + width / 2 - (other.x + other.actor.offsetWidth / 2));
+    room = Math.min(room, apart - (width + other.actor.offsetWidth) / 2 - HERD_GAP);
+  }
+  return room;
+}
+
+/// A random spot clear of the rest of the herd and well away from `avoid`
+/// when there is room for that. When chance finds none, the edge is scanned
+/// for one; a crowded edge with no clear spot keeps the pudu where it is, so
+/// two pudus never overlap.
 export function spot(pudu, avoid = null) {
   const { low, high } = range(pudu);
   const spread = (high - low) * SPOT_SPREAD;
-  let candidate = between(low, high);
-  for (let tries = 0; avoid !== null && Math.abs(candidate - avoid) < spread && tries < SPOT_TRIES; tries += 1) {
-    candidate = between(low, high);
+  const far = (x) => avoid === null || Math.abs(x - avoid) >= spread;
+  for (let tries = 0; tries < SPOT_TRIES; tries += 1) {
+    const candidate = between(low, high);
+    if (roomAt(pudu, candidate) >= 0 && far(candidate)) return candidate;
   }
-  return candidate;
+  const clear = [];
+  for (let x = low; x <= high; x += SCAN_STEP) if (roomAt(pudu, x) >= 0) clear.push(x);
+  const distant = clear.filter(far);
+  if (distant.length > 0) return distant[Math.floor(Math.random() * distant.length)];
+  if (clear.length > 0) return clear[Math.floor(Math.random() * clear.length)];
+  return avoid ?? low;
+}
+
+/// Lays a herd out along the edge at even steps, the big pudu at a random
+/// place among them, so every pudu starts clear of the others.
+export function layOut(herd) {
+  const order = herd.slice(1);
+  order.splice(Math.floor(Math.random() * herd.length), 0, herd[0]);
+  const widths = order.reduce((sum, member) => sum + member.actor.offsetWidth, 0);
+  const { low } = range(herd[0]);
+  const span = herd[0].stage.clientWidth - 2 * low;
+  const step = order.length > 1 ? (span - widths) / (order.length - 1) : 0;
+  let x = order.length > 1 ? low : spotAt(herd[0], between(0, 1));
+  for (const member of order) {
+    place(member, x);
+    x += member.actor.offsetWidth + step;
+  }
 }
 
 /// The spot at `share` of the way along the edge.

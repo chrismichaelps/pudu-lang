@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — A herd of little pudus on the home banner
+
+- [[Pudu mascot script]]: up to ten little pudus roam the home banner beside the big one, each on
+  its own clock, as many as the edge's width allows; no two ever overlap, and the herd rests
+  spaced out under reduced motion.
+
 ## Unreleased — A package's API reference no longer depends on how it was released
 
 - [[website Service LiveFiles]] `derived`: a release without an attached `pudu-api.json` has its

@@ -77,6 +77,29 @@ export const SHY = {
   awayMax: 1500,
 };
 
+// The little pudus that roam the home banner beside the big one: as many as
+// fill `fill` of the edge the big one leaves, at most `most`; each keeps its
+// own clock, so they come and go in a ripple rather than all at once.
+export const FAWNS = {
+  most: 10,
+  fill: 0.9,
+  firstMin: 1400,
+  firstMax: 9000,
+  hiddenMin: 2200,
+  hiddenMax: 6400,
+  holdMin: 360,
+  holdMax: 900,
+  beatsMin: 1,
+  beatsMax: 3,
+  peek: 0.4,
+  hop: 0.25,
+  blinkPace: 0.8,
+  restStep: 0.01,
+};
+
+// Pixels kept clear between any two pudus on the edge, so they never overlap.
+export const HERD_GAP = 14;
+
 export const ASK = {
   firstEntrance: 700,
   gestureMin: 2800,
@@ -101,6 +124,8 @@ export const EASE = {
 export const SELECTOR = {
   stage: "[data-pudu]",
   frontClass: "pudu-stage pudu-stage-front",
+  actorClass: "pudu-actor",
+  littleClass: "pudu-actor pudu-actor-little",
   host: ".pudu-host",
 };
 

@@ -1,9 +1,11 @@
 // The home banner: the pudu turns up somewhere along the edge, looks about,
-// and ducks out of sight; it moves to its next spot only while hidden.
+// now and then at one of the little pudus beside it, and ducks out of sight;
+// it moves to its next spot only while hidden.
 
 import { CURIOUS_TILT, POSE, ROAM, TIMING } from "../config/constants.js";
 import { exclaim, flick, hold, look, rise, sink, sniff, tilt } from "../motion/moves.js";
 import { between, chance, pick, wait } from "../motion/timing.js";
+import { nearest, toward } from "../stage/herd.js";
 import { place, spot } from "../stage/place.js";
 import { blinking } from "./blinking.js";
 
@@ -29,6 +31,11 @@ const BEATS = [
   },
   (pudu) => flick(pudu, pick(["left", "right"])),
   (pudu) => sniff(pudu),
+  async (pudu) => {
+    const companion = nearest(pudu);
+    await look(pudu, companion === null ? 0 : toward(pudu, companion));
+    await holdLook();
+  },
 ];
 
 async function beats(pudu) {
@@ -71,7 +78,7 @@ async function doubleTake(pudu) {
 
 export async function roam(pudu) {
   hold(pudu, POSE.hidden);
-  place(pudu, spot(pudu));
+  if (pudu.herd.length < 2) place(pudu, spot(pudu));
   blinking(pudu);
   await wait(ROAM.firstEntrance);
   for (;;) {
