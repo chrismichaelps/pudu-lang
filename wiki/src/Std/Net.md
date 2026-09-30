@@ -38,5 +38,9 @@ chunk per read: a length taken off the wire sizes the answer, never a single rec
 - **Q:** Ask the host for the whole remaining count in `receiveExactly`? **A:** No. _Rationale:_ the
   runtime allocates the requested size per read, so a peer's length prefix would choose the
   allocation. _Rejected:_ trusting the prefix.
+- **Q:** Search the whole buffer and concatenate onto it after every chunk? **A:** No. _Rationale:_
+  waiting for a marker 32 MB in took 8.99 s and grew with the square of the bytes (#411). Each
+  chunk is searched with the carried bytes that could begin a marker (`tailStart`), and the
+  chunks are joined once. An empty read is a close rather than a reason to read again.
 ## Referenced by
 [[src/Std/_MOC]] · [[Eval Socket]] · [[architecture/STDLIB]]

@@ -121,7 +121,13 @@ export fn faulty(held: &Report, name: Str) -> Bool { failuresFor(held, name).len
 /// The fields that are wrong, each once, in the order they first appeared.
 export fn faultyFields(held: &Report) -> Array[Str] {
   var found: Array[Str] = []
-  for failure in held.failures { if !found.contains(failure.field) { found = found.push(failure.field) } }
+  var seen: Set[Str] = setOf([])
+  for failure in held.failures {
+    if !seen.contains(failure.field) {
+      seen = seen.insert(failure.field)
+      found = found.push(failure.field)
+    }
+  }
   found
 }
 

@@ -149,6 +149,9 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 - **Q:** Type `sortBy`? **A:** `fn(fn(T, T) -> Bool) -> Array[T]`. _Rationale:_ the comparison says
   whether its first argument goes before its second, as [[Std List]] always has.
+- **Q:** Suggest the bare name whenever the environment holds it? **A:** No. _Rationale:_ the
+  checker's environment holds other modules' declarations by bare name, so `ByteSeq.sha256Hex`
+  suggested a name the resolver then refused (#415). Only a prelude value is suggested.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]

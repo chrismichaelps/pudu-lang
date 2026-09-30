@@ -124,6 +124,13 @@ export fn main() -> Int {
   if !Mail.explain(&NotAnAddress("secret@internal")).contains("internal") { held = held + 1 }
   if Mail.explain(&NoRecipient).contains("nobody") { held = held + 1 }
 
+  // A mailbox or a domain with an empty piece between dots is refused.
+  if Result.isErr(&Mail.address(".a@b.c")) && Result.isErr(&Mail.address("a..b@c.d"))
+    && Result.isErr(&Mail.address("a.@b.c")) && Result.isErr(&Mail.address("a@b..c"))
+    && Result.isErr(&Mail.address("a@.b.c")) && Result.isOk(&Mail.address("first.last@mail.example.com")) {
+    held = held + 1
+  }
+
   held
 }
 

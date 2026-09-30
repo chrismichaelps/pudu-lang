@@ -136,19 +136,24 @@ export fn parse(name: Str, sql: Str) -> Bytes {
 /// empty, because the protocol distinguishes them and a column that is empty
 /// is not a column that has nothing.
 export fn bind(portal: Str, statement: Str, values: &Array[Option[Str]]) -> Bytes {
-  var body = cString(portal).concat(cString(statement))
-  body = body.concat(ByteSeq.putU16Be(widen16(0)))
-  body = body.concat(ByteSeq.putU16Be(widen16(values.length())))
+  // Pieces are gathered and joined once, so a statement with many values is
+  // not copied again for each one.
+  var pieces = [
+    cString(portal),
+    cString(statement),
+    ByteSeq.putU16Be(widen16(0)),
+    ByteSeq.putU16Be(widen16(values.length()))
+  ]
   for value in values {
     if let Some(text) = value {
       let payload = text.toBytes()
-      body = body.concat(ByteSeq.putU32Be(widen(payload.length()))).concat(payload)
+      pieces = pieces.push(ByteSeq.putU32Be(widen(payload.length()))).push(payload)
     } else {
-      body = body.concat(absentValue())
+      pieces = pieces.push(absentValue())
     }
   }
-  body = body.concat(ByteSeq.putU16Be(widen16(0)))
-  frame("B", &body)
+  pieces = pieces.push(ByteSeq.putU16Be(widen16(0)))
+  frame("B", &ByteSeq.join(&pieces))
 }
 
 /// The length the protocol writes for a value that is not there: minus one,

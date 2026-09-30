@@ -127,7 +127,7 @@ testProtocolEvaluation = do
         more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "25")
+        (endpoints === Just "26")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
@@ -188,7 +188,7 @@ testProtocolEvaluation = do
         could produce it. A body line that would end the message is escaped. -}
     , counterexample
         "a message cannot carry more than it says"
-        (posted === Just "46")
+        (posted === Just "47")
     {-| What a client is set up with is said through a bound naming the
         configuring trait alone, which is what checks those settings are usable
         as methods. The protection is checked at the port that decides it and
@@ -329,7 +329,7 @@ testProtocolEvaluation = do
         the machine it is running on. -}
     , counterexample
         "an envelope's names, entities, and CDATA survive, and a DTD is refused"
-        (xmlDocuments === Just "18")
+        (xmlDocuments === Just "19")
     {-| A round trip proves the two halves agree; the size proves they agree
         about a real archive rather than about storing everything, which would
         also round-trip. That an archive written here is read by an ordinary
@@ -476,7 +476,7 @@ testProtocolEvaluation = do
         wrongly. -}
     , counterexample
         "a request reaches the route written for its method, and no other"
-        (routeAll === Just "35")
+        (routeAll === Just "36")
     {-| Every export of the cursor module, each read checked for the value and
         for the cursor that follows it. A reader answering the right number
         without moving on would pass a check that looked only at the value,
@@ -494,7 +494,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "66")
+        (urlAll === Just "67")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

@@ -337,7 +337,7 @@ testRuntimeEvaluation = do
         the clock are asked only what holds of any reading. -}
     , counterexample
         "every time operation answers for a stated moment"
-        (moments === Just "40")
+        (moments === Just "41")
     {-| Every export of the parser module, on text it accepts and text it
         refuses. A parser is only worth its name if it also refuses, and
         `run` insists the whole text is consumed, so one that stopped early is
@@ -396,7 +396,7 @@ testRuntimeEvaluation = do
         (aliasDispatch === Just "224")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "109")
+        (enterpriseSsr === Just "110")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")

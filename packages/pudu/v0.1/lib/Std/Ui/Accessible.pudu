@@ -75,7 +75,7 @@ export fn snapshot(layout: &Layout.Layout, focus: Option[Str]) -> Str {
 /// Records back into values, refusing the first that cannot be read.
 export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
   var found: Array[Exposed] = []
-  var seen: Array[Int] = []
+  var seen: Set[Int] = setOf([])
   var index = 0
   for line in text.lines() {
     if line.isEmpty() { continue }
@@ -91,7 +91,7 @@ export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
     let flag = fields[3]
     if flag != "0" && flag != "1" { return Err(MalformedRecord(index)) }
     let parent = numbers[1]
-    if parent != -1 && seen.indexOf(parent) < 0 { return Err(OrphanedRecord(index)) }
+    if parent != -1 && !seen.contains(parent) { return Err(OrphanedRecord(index)) }
     found = found.push(Exposed {
         node: numbers[0],
         parent: parent,
@@ -100,7 +100,7 @@ export fn decode(text: Str) -> Result[Array[Exposed], AccessibleError] {
         frame: Canvas.rect(numbers[2], numbers[3], numbers[4], numbers[5]),
         focused: flag == "1"
       })
-    seen = seen.push(numbers[0])
+    seen = seen.insert(numbers[0])
     index = index + 1
   }
   Ok(found)

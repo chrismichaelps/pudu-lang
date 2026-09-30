@@ -136,7 +136,7 @@ testServiceEvaluation = do
         (markup === Just "74")
     , counterexample
         "checked HTML builder destinations reject program-bearing values without compatibility drift"
-        (checkedDestinations === Just "16")
+        (checkedDestinations === Just "17")
     , counterexample
         "safe HTML streaming keeps text inert and boundary identifiers out of code contexts"
         (safeStreaming === Just "18")

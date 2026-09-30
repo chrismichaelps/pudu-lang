@@ -104,6 +104,9 @@ name fails it as its children without tags, and `attribute` refuses such a name 
   space, quote, or `>` writes a handler or markup of its own after the prefix check. _Rejected:_
   escaping names, which HTML has no syntax for.
 
+- **Q:** Refuse only line breaks and tabs in a checked destination? **A:** No. _Rationale:_ a browser
+  drops every control character before reading a scheme, so a leading U+0001 hid `javascript:`
+  from the check (#421). Any C0 control character or DEL is refused.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
 [[2026-09-20-bounded-ssr-slots]] · [[2026-09-20-deferred-html-builders]] ·

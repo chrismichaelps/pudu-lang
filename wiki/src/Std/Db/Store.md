@@ -84,5 +84,7 @@ holds SQLite's one connection, these calls are not for use inside a transaction 
 - **Q:** Derive the column list from the shape of the value? **A:** No — that needs reflection this
   language does not have, and where it exists it turns renaming a field into a schema change nobody
   reviewed. _Rejected:_ derived mappings.
+- **Q:** Keep distinct parent keys by searching the kept array? **A:** No. _Rationale:_ a large batch
+  of parents searched every kept key per parent (#414). A set decides, the array keeps order.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db Schema]] · [[Std Db Query]] · [[Std Db Repository]] · [[Std Db Session]]

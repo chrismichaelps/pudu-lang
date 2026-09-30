@@ -158,9 +158,11 @@ fn piecesOf(path: Str) -> Array[Str] {
 
 /// Whether a pattern matches a path, and what it captured.
 ///
-/// A piece written `:name` matches one piece and captures it. A piece written
-/// `*name` matches every remaining piece and captures them joined, which is
-/// what serving files under a prefix needs. Anything else matches itself.
+/// A piece written `:name` matches one piece and captures it with its percent
+/// escapes read back, so `/users/Ana%20Paz` captures `Ana Paz`. A piece written
+/// `*name` matches every remaining piece and captures them joined exactly as
+/// written: read back, an escaped slash would become a separator, and a caller
+/// serving files would see `..` it never matched. Anything else matches itself.
 fn matchPattern(pattern: Str, path: Str) -> Option[Map[Str, Str]] {
   let wanted = piecesOf(pattern)
   let given = piecesOf(path)
@@ -178,7 +180,7 @@ fn matchPattern(pattern: Str, path: Str) -> Option[Map[Str, Str]] {
         matched = false
       } else {
         if piece.startsWith(":") {
-          captured = captured.push((piece.drop(1), given[index]))
+          captured = captured.push((piece.drop(1), Url.decodeSegment(given[index])))
         } else {
           if piece != given[index] { matched = false }
         }

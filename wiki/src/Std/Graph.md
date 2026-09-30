@@ -14,7 +14,7 @@ reachability, topological order, cycles, strongly connected groups, components, 
 counted in edges.
 ## Interface
 A graph is a node set and a [[Std MultiMap]] of edges. Walks take the next node from a
-[[Std Deque]], and every query answers arrays in a deterministic order.
+`Std.Deque`, and every query answers arrays in a deterministic order.
 ## Governance and algorithm
 `roots` gathers every node an edge points at in one pass over the edges, then keeps the nodes it
 did not gather. `topologicalOrder` counts in-degrees once. Walk loops carry a guard derived from the

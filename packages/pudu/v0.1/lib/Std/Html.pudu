@@ -327,17 +327,16 @@ fn schemeEnd(written: Str) -> Int {
 
 const SCHEME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyz0123456789+-."
 
-/// Whether text carries a character that would break out of where it is
-/// written, including the ones that are invisible.
+/// Whether text carries a control character: a line break or tab that would
+/// break out of where it is written, or any other invisible one. A browser
+/// drops control characters before reading a destination's scheme, so
+/// `\u{1}javascript:` runs as `javascript:`; none belongs in a value unescaped.
 fn hasControl(value: Str) -> Bool {
-  var found = false
-  var index = 0
-  while index < value.length() && !found {
-    let character = value.slice(index, index + 1)
-    if character == "\n" || character == "\r" || character == "\t" { found = true }
-    index = index + 1
+  for character in value.chars() {
+    let code = character.code()
+    if code < 32 || code == 127 { return true }
   }
-  found
+  false
 }
 
 /// What a refusal says.

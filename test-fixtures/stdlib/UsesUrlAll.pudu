@@ -102,6 +102,15 @@ export fn main() -> Int {
   if Url.decodeComponent("a%20b%26c") == "a b&c" { held = held + 1 }
   // Both spellings of a space are read back as one.
   if Url.decodeComponent("a+b") == "a b" { held = held + 1 }
+  // In a path and a fragment a plus is a plus; only the query reads it as a space.
+  match Url.parse("http://h/lang/c++?q=c+d#x+y") {
+    case Ok(plussed) => {
+      if Url.segments(&plussed) == ["lang", "c++"] && Url.queryValue(&plussed, "q") == Some("c d") && plussed.fragment == Some("x+y") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
   // An escape that is not two hex digits is left as it was written rather
   // than guessed at, so a caller showing the result shows what arrived.
   if Url.decodeComponent("100%") == "100%" { held = held + 1 }

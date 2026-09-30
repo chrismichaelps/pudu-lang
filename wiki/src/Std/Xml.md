@@ -44,5 +44,9 @@ instead of stopping the program.
 - **Q:** Let element nesting recurse until the evaluator's call limit? **A:** No. _Rationale:_ that
   limit stops the whole program, and deeply nested markup is ordinary hostile input. _Accepted:_ a
   512-level bound answered as `TooDeep`.
+- **Q:** Keep both copies of a repeated attribute? **A:** No. _Rationale:_ a repeated attribute is
+  not well formed, and two readers keeping different copies read one document two ways, which is
+  how signed documents are attacked (#416). Both readers refuse it; other leniencies stay as
+  documented.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

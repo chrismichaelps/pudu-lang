@@ -18,5 +18,8 @@ Fragments are still accumulated as Bytes; this is not a zero-copy parser.
 - **Q:** Renew timeout for every packet? **A:** No; use one absolute deadline to bound slow drip.
 - **Q:** Accept an oversized final delimiter chunk? **A:** No; cap reads before allocation.
 
+- **Q:** Keep a buffer searched and copied whole on each read? **A:** No. _Rationale:_ the server's
+  head reader paid the same growth as [[Std Net]] (#411); it now carries only the marker's tail
+  and joins its pieces once.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Server]]

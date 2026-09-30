@@ -10,6 +10,7 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Unsafe as Unsafe
 import Data.Char (chr, isSpace)
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
@@ -42,7 +43,8 @@ maxDepth = 512
     document type declaration is refused. Inside an element, comments and
     instructions are dropped, CDATA is kept as written, text that is only
     whitespace is dropped, and other text and attribute values have their
-    entities decoded. Anything after the root element is not read. Every
+    entities decoded. Anything after the root element is not read. A repeated attribute is left to
+    the reader in `Std.Xml`, which refuses it. Every
     structural character is ASCII, so the scan works on the document's UTF-8
     bytes and decodes each name, value, and run of text once. -}
 decodeDocument :: ByteString.ByteString -> Maybe Value
@@ -89,14 +91,14 @@ decodeDocument input = do
   element from depth
     | from >= size || byteAt from /= 60 = Nothing
     | nameEnd == nameStart = Nothing
-    | otherwise = attributesAt nameEnd Seq.empty
+    | otherwise = attributesAt nameEnd Seq.empty Set.empty
    where
     nameStart = from + 1
     nameEnd = nameEndAt nameStart
     name = textOf nameStart nameEnd
     nameBytes = bytesOf nameStart nameEnd
 
-    attributesAt position held
+    attributesAt position held names
       | here >= size = Nothing
       | byteAt here == 47 =
           if here + 1 < size && byteAt (here + 1) == 62
@@ -104,16 +106,18 @@ decodeDocument input = do
             else Nothing
       | byteAt here == 62 = contentAt (here + 1) held Seq.empty
       | attributeEnd == here = Nothing
+      | Set.member attributeName names = Nothing
       | equals >= size || byteAt equals /= 61 = Nothing
       | open >= size || (byteAt open /= 34 && byteAt open /= 39) = Nothing
       | otherwise = do
           offset <- ByteString.elemIndex (byteAt open) (ByteString.drop (open + 1) input)
           let valueEnd = open + 1 + offset
-              pair = TupleValue [StrValue (textOf here attributeEnd), StrValue (unescape (textOf (open + 1) valueEnd))]
-          attributesAt (valueEnd + 1) (held Seq.|> pair)
+              pair = TupleValue [StrValue attributeName, StrValue (unescape (textOf (open + 1) valueEnd))]
+          attributesAt (valueEnd + 1) (held Seq.|> pair) (Set.insert attributeName names)
      where
       here = skipSpace position
       attributeEnd = nameEndAt here
+      attributeName = textOf here attributeEnd
       equals = skipSpace attributeEnd
       open = skipSpace (equals + 1)
 

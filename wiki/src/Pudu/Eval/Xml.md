@@ -48,6 +48,9 @@ indistinguishable from one the library built.
 - **Requires:** [[Eval Env]], [[Eval Value]].
 - **Consumed by:** [[Eval Builtin]], [[Std Xml]].
 
+- **Q:** Accept a repeated attribute natively? **A:** No. _Rationale:_ the native reader leaves the
+  document to [[Std Xml]], which names the attribute (#416). Names seen are kept in a set so an
+  element with many attributes stays linear.
 ## Referenced by
 
 [[src/_MOC]] · [[Std Xml]]

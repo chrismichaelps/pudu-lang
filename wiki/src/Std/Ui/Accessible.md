@@ -55,6 +55,8 @@ window's content. The name is last, so it is the only field that may be empty.
 - **Q:** Map the platform's roles back to `Layout.Role` in `decode`? **A:** No. _Rationale:_ the
   report exists to show what the platform was told; mapping it back would hide a wrong mapping.
 
+- **Q:** Check each record's parent against an array of seen nodes? **A:** No. _Rationale:_ a large
+  tree searched every seen node per record (#414). A set of seen nodes answers.
 ## Referenced by
 
 [[Std Ui Desktop]] · [[Std Ui Layout]] · [[Pudu Desktop Access]] · [[Uses Ui Accessible]] · [[Stdlib MOC]]

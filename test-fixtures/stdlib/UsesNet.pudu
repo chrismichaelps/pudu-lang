@@ -88,6 +88,33 @@ export fn main() -> Int {
     }
   }
 
+  // A long body whose four-byte marker arrives split over separate writes is
+  // read whole, with what follows the marker kept.
+  let split = Net.listenLocal(0)
+  if let Ok(splitListener) = split {
+    let splitPort = Result.unwrapOr(Net.portOf(&splitListener), 0)
+    let body = "b".repeat(300000)
+    let sender = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&splitListener, 1, fn(connection: Net.Connection) -> Bool {
+            let _body = Net.sendText(&connection, body + "\r\n")
+            let _rest = Net.sendText(&connection, "\r")
+            let _last = Net.sendText(&connection, "\nnext")
+            false
+          })
+        let _closed = Net.closeListener(&splitListener)
+        ()
+      })
+    let read = Net.withConnection("127.0.0.1", splitPort, fn(connection: Net.Connection) -> Result[(Bytes, Bytes), Net.NetError] {
+        Net.receiveUntil(&connection, &ByteSeq.fromText("\r\n\r\n"), 400000)
+      })
+    if let Ok(parts) = read {
+      if parts[0].length() == 300000 && Net.tailStart(10, 4) == 7 && Net.tailStart(2, 4) == 0 {
+        held = held + 1
+      }
+    }
+    if let Ok(worker) = sender { let _joined = Concurrent.join(&worker) }
+  }
+
   held
 }
 

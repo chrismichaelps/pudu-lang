@@ -49,6 +49,8 @@ Sibling tasks that succeed together or not at all, and never outlive the call th
   observed. _Rationale:_ the scope sees failures by watching settled futures, so two failures inside
   one watch interval are ordered by input position, which keeps the answer deterministic.
 
+- **Q:** Track finished tasks in an array searched on every poll? **A:** No. _Rationale:_ each poll
+  searched every finished index for every task (#414). A set and a count answer both questions.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Concurrent]] · [[Std Concurrent Future]] · [[Uses Concurrent Scope]]

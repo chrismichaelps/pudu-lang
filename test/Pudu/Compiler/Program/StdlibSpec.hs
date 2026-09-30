@@ -85,6 +85,7 @@ testStandardLibrary = do
   missingMemberHelp <- helps "test-fixtures/stdlib/RejectsMissingMember.pudu"
   unqualifiedHelp <- helps "test-fixtures/stdlib/RejectsUnqualifiedMember.pudu"
   unknownHelp <- helps "test-fixtures/stdlib/RejectsUnknownMember.pudu"
+  otherModuleHelp <- helps "test-fixtures/stdlib/RejectsOtherModuleMember.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   numberMisuse <- codes "test-fixtures/stdlib/RejectsTextToNumberMisuse.pudu"
   textMisuse <- codes "test-fixtures/stdlib/RejectsToTextMisuse.pudu"
@@ -142,6 +143,12 @@ testStandardLibrary = do
         (any (Text.isInfixOf "available unqualified") unqualifiedHelp === True)
     , counterexample "and a name that is neither only says to check the exports"
         (any (Text.isInfixOf "check the spelling against what") unknownHelp === True)
+    , counterexample "another module's export is not offered as an unqualified name"
+        ( conjoin
+            [ any (Text.isInfixOf "available unqualified") otherModuleHelp === False
+            , any (Text.isInfixOf "check the spelling against what ByteSeq") otherModuleHelp === True
+            ]
+        )
     , counterexample "the standard module joins the program graph"
         (elem "Std.Math" resolved === True)
     ]

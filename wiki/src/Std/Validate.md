@@ -51,5 +51,7 @@ trimmed before it is checked, by something whose name says so.
   over the whole form, not through a reference from one field to another. _Rationale:_ a reference
   makes the order fields are checked in significant, and then a report depends on a declaration
   order nobody thought was load-bearing. _Rejected:_ cross-field references inside a field's rules.
+- **Q:** Keep distinct faulty fields by searching the kept array? **A:** No. _Rationale:_ it grew
+  with the square of the failures (#414). A set decides, the array keeps first-seen order.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std App]] · [[Std Http Server Reply]] · [[architecture/WEB]]

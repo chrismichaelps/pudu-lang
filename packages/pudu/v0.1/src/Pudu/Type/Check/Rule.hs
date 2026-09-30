@@ -30,7 +30,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.FloatLiteral
   ( ParsedFloat (..), floatWidthType, parseFloatLiteral )
 import Pudu.Source (Span)
-import Pudu.Semantic.Prelude (preludeTypeNames)
+import Pudu.Semantic.Prelude (preludeTypeNames, preludeValueNames)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
@@ -165,8 +165,12 @@ qualifiedMemberType declared spanValue target member = case target of
         if ownsMembers && selfIsValue == Nothing
           then do
             unqualified <- lookupName member
+            {-| The checker's environment also holds other modules' declarations
+                by their bare names, which a program cannot write unqualified;
+                only a prelude value is one the program can reach that way. -}
+            let reachable = unqualified /= Nothing && member `elem` preludeValueNames
             report "E3033" spanValue (owner <> " exports no " <> member)
-              (Just (missingMemberHelp owner member (unqualified /= Nothing)))
+              (Just (missingMemberHelp owner member reachable))
             pure (Just ErrorType)
           else
             {-| A qualifier that names a type, and a member the type does not

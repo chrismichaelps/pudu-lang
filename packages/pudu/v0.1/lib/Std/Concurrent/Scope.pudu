@@ -37,12 +37,14 @@ export fn all[T, E](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> R
     }
   }
 
-  var finished: Array[Int] = []
-  while finished.length() < pending.length() {
+  var finished: Set[Int] = setOf([])
+  var done = 0
+  while done < pending.length() {
     var index = 0
     for watched in pending {
-      if finished.indexOf(index) < 0 && Future.isDone(&watched) {
-        finished = finished.push(index)
+      if !finished.contains(index) && Future.isDone(&watched) {
+        finished = finished.insert(index)
+        done = done + 1
         if Option.isNone(&first) {
           if let Some(problem) = failureOf(Future.wait(&watched)) {
             first = Some(problem)
@@ -52,7 +54,7 @@ export fn all[T, E](parent: &Cancel.Token, actions: &Array[fn(Cancel.Token) -> R
       }
       index = index + 1
     }
-    if finished.length() < pending.length() { let _slept = Concurrent.sleep(WATCH_MILLIS) }
+    if done < pending.length() { let _slept = Concurrent.sleep(WATCH_MILLIS) }
   }
 
   if let Some(problem) = first { return Err(problem) }

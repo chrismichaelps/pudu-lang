@@ -5,6 +5,14 @@ import Std.Html as Html
 import Std.Html.Ssr as Ssr
 import Std.Result as Result
 
+/// One character by its code, for the invisible ones a literal cannot hold.
+fn control(code: Int) -> Str {
+  match charFromCode(code) {
+    case Some(found) => found.toText()
+    case None => ""
+  }
+}
+
 fn renderedChecked(value: Result[H.Node, Html.Unsafe]) -> Str {
   match value {
     case Ok(node) => { H.render(&node) }
@@ -59,6 +67,15 @@ export fn main() -> Int {
   }
   if H.render(&H.div().at("OnLoAd", "run()")) == "<div></div>" { held = held + 1 }
   if let Err(Html.BadScheme(_)) = Html.attribute("AcTiOn", "javascript:run()") {
+    held = held + 1
+  }
+
+  // A browser drops control characters before it reads a scheme, so any
+  // control character in a destination is refused, not only line breaks.
+  if Result.isErr(&H.tag("a").hrefChecked(control(1) + "javascript:alert(1)"))
+    && Result.isErr(&H.tag("a").hrefChecked("java" + control(0) + "script:alert(1)"))
+    && Result.isErr(&Html.destination(control(127) + "javascript:x"))
+    && Result.isOk(&H.tag("a").hrefChecked("/docs/intro")) {
     held = held + 1
   }
 

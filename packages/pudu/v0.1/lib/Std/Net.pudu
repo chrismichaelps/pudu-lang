@@ -250,7 +250,9 @@ export fn receiveAll(connection: &Connection) -> Result[Bytes, NetError] {
 /// This is what a protocol whose messages end with a marker needs, and it is
 /// the operation such a reader most often gets wrong: the marker can arrive
 /// split across two reads, so a reader that looked only at the newest chunk
-/// would miss it. The buffer is searched whole each time.
+/// would miss it. Each chunk is searched together with the bytes before it that
+/// could begin a marker, and the chunks are joined once when the marker is
+/// found, so no byte is searched or copied twice.
 ///
 /// The limit counts every byte read, marker included, and no read asks for
 /// more than the limit leaves, so a marker past the limit is reported rather
@@ -266,18 +268,37 @@ export fn receiveUntil(
   limit: Int
 ) -> Result[(Bytes, Bytes), NetError] {
   if marker.isEmpty() || limit < marker.length() { return Err(Other("invalid delimiter read limit")) }
-  var buffer = ByteSeq.empty()
+  var pieces: Array[Bytes] = []
+  var held = 0
+  var carry = ByteSeq.empty()
   loop {
-    let found = buffer.indexOf(*marker)
-    if found >= 0 { return Ok((buffer.take(found), buffer.drop(found + marker.length()))) }
-    let capacity = limit - buffer.length()
+    let capacity = limit - held
     if capacity <= 0 { return Err(Other("the marker did not arrive within " + show(limit) + " bytes")) }
     let wanted = if capacity < CHUNK { capacity } else { CHUNK }
-    match receive(connection, wanted) ? {
+    let piece = match receive(connection, wanted) ? {
       case None => { return Err(Closed) }
-      case Some(bytes) => { buffer = buffer.concat(bytes) }
+      case Some(bytes) => bytes
     }
+    if piece.isEmpty() { return Err(Closed) }
+    let window = carry.concat(piece)
+    let found = window.indexOf(*marker)
+    pieces = pieces.push(piece)
+    if found >= 0 {
+      let whole = ByteSeq.join(&pieces)
+      let at = held - carry.length() + found
+      return Ok((whole.take(at), whole.drop(at + marker.length())))
+    }
+    held = held + piece.length()
+    carry = window.drop(tailStart(window.length(), marker.length()))
   }
+}
+
+/// Where the bytes that could still begin a marker start in a searched window:
+/// the marker's length less one from the end, since a whole marker there would
+/// already have been found.
+export fn tailStart(size: Int, markerLength: Int) -> Int {
+  let keep = markerLength - 1
+  if size > keep { size - keep } else { 0 }
 }
 
 /// Read exactly the requested count of bytes, or report that the peer closed
@@ -291,16 +312,21 @@ export fn receiveUntil(
 /// the answer but never a single receive buffer. A negative count is reported.
 export fn receiveExactly(connection: &Connection, count: Int) -> Result[Bytes, NetError] {
   if count < 0 { return Err(Other("negative read length")) }
-  var buffer = ByteSeq.empty()
-  while buffer.length() < count {
-    let remaining = count - buffer.length()
+  var pieces: Array[Bytes] = []
+  var held = 0
+  while held < count {
+    let remaining = count - held
     let wanted = if remaining < CHUNK { remaining } else { CHUNK }
     match receive(connection, wanted) ? {
       case None => { return Err(Closed) }
-      case Some(bytes) => { buffer = buffer.concat(bytes) }
+      case Some(bytes) => {
+        if bytes.isEmpty() { return Err(Closed) }
+        pieces = pieces.push(bytes)
+        held = held + bytes.length()
+      }
     }
   }
-  Ok(buffer)
+  Ok(ByteSeq.join(&pieces))
 }
 
 /// Open a connection, hand it to an action, and close it however the action

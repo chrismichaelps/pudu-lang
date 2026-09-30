@@ -228,7 +228,13 @@ export fn allNamed(parts: &Array[Part], name: Str) -> Array[Part] {
 /// The fields a form carried, each once, in the order they arrived.
 export fn fields(parts: &Array[Part]) -> Array[Str] {
   var found: Array[Str] = []
-  for one in parts { if !found.contains(one.field) { found = found.push(one.field) } }
+  var seen: Set[Str] = setOf([])
+  for one in parts {
+    if !seen.contains(one.field) {
+      seen = seen.insert(one.field)
+      found = found.push(one.field)
+    }
+  }
   found
 }
 

@@ -23,6 +23,10 @@ fn saying(text: Str) -> Route.Handler {
   fn(request: Route.Request) -> Http.Response => Reply.text(200, text)
 }
 
+fn echoed(request: Route.Request) -> Http.Response {
+  Reply.text(200, Option.unwrapOr(Route.param(&request, "name"), "") + "|" + Option.unwrapOr(Route.param(&request, "rest"), ""))
+}
+
 fn answered(router: &Route.Router, request: Route.Request) -> Str {
   Route.dispatch(router, request).body
 }
@@ -136,6 +140,15 @@ export fn main() -> Int {
   if Route.carriesForm(
       &asking(Http.Post, "/t", [("content-type", "multipart/form-data; boundary=x")], "")
   ) {
+    held = held + 1
+  }
+
+  // A captured piece reads its escapes back, a plus included as written; the
+  // captured rest stays as written, so an escaped slash cannot become `..`.
+  let byName = Route.routing(&[Route.get("/people/:name", echoed), Route.get("/files/*rest", echoed)])
+  if answered(&byName, asking(Http.Get, "/people/Ana%20Paz", [], "")) == "Ana Paz|"
+    && answered(&byName, asking(Http.Get, "/people/c++", [], "")) == "c++|"
+    && answered(&byName, asking(Http.Get, "/files/..%2Fetc", [], "")) == "|..%2Fetc" {
     held = held + 1
   }
 

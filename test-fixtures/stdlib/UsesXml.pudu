@@ -185,5 +185,11 @@ fn main() -> Int {
     case _ => {}
   }
 
+  // An attribute written twice is refused by both readers, whichever reads it.
+  match Xml.decode("<a x='1' x='2'/>") {
+    case Err(reason) => { if Xml.explain(&reason) == "at 9: the attribute x is written twice" { held = held + 1 } }
+    case Ok(_) => {}
+  }
+
   held
 }

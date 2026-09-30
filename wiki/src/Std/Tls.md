@@ -44,6 +44,9 @@ Timed send/receive invalidates the connection because an interrupted record cann
 - **Q:** Let handshake timeout cleanup skip the protocol goodbye? **A:** Yes. _Rationale:_ no secured
   session exists yet, while the underlying socket must close immediately. _Rejected:_ leaking the
   socket while attempting a goodbye on a handshake that never completed.
+- **Q:** Check the limit only before a full-size read? **A:** No. _Rationale:_ a marker past the
+  limit in the same record was accepted, and the buffer was searched and copied whole each time
+  (#412). The limit bounds each read, and the search follows [[Std Net]]'s carried tail.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Tls]] · [[Std Net]]
 
