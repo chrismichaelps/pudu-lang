@@ -71,7 +71,7 @@ effectValueNames =
   , "spawnProgram", "childReadChunk", "childReadErrorChunk", "childWriteChunk"
   , "childCloseInput", "childWait", "childWaitWithin", "childStop"
   , "listDirectory", "createDirectory"
-  , "renamePath", "createTemporaryFile", "createDirectoryExclusive", "removeEmptyDirectory"
+  , "renamePath", "writeFileAtomically", "createTemporaryFile", "createDirectoryExclusive", "removeEmptyDirectory"
   , "permissionsOf", "setPermissionsOf", "pathIsSymbolicLink", "createSymbolicLink"
   , "canonicalPath", "fileSize", "directoryExists"
   , "openReader", "openWriter", "openAppender"

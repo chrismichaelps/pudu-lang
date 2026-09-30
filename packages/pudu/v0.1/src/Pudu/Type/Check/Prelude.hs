@@ -384,6 +384,7 @@ effectSignatures =
   , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
   , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("renamePath", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("writeFileAtomically", monotype (FunctionTypeValue False [stringType, bytesType] (resultOf unitTypeValue)))
   , ("createTemporaryFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf stringType)))
   , ("createDirectoryExclusive", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("removeEmptyDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))

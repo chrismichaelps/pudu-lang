@@ -149,6 +149,7 @@ effectBuiltins =
   , EnvironmentBuiltin
   , TemporaryDirectoryBuiltin
   , RenamePathBuiltin
+  , WriteFileAtomicallyBuiltin
   , CreateTemporaryFileBuiltin
   , CreateDirectoryExclusiveBuiltin
   , RemoveEmptyDirectoryBuiltin
@@ -536,6 +537,8 @@ callEffect spanValue builtin arguments = do
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
       (RenamePathBuiltin, [StrValue from, StrValue to]) ->
         effectUnit (renamePathAt (Text.unpack from) (Text.unpack to))
+      (WriteFileAtomicallyBuiltin, [StrValue path, BytesValue contents]) ->
+        effectUnit (writeBytesAtomically (Text.unpack path) contents)
       (CreateTemporaryFileBuiltin, [StrValue directory, StrValue prefix]) ->
         resultOf . fmap StrValue
           <$> lift refusal (createTemporaryFileIn (Text.unpack directory) (Text.unpack prefix))

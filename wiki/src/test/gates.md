@@ -33,6 +33,10 @@ safe fixing, compiler acceptance, and a clean second lint without modifying repo
 [[Diagnostic Code Gate]] audits the intentional reuse of compiler warning identities by lint policy
 and output instead of allowing a second, incompatible lint-only code vocabulary.
 
+[[Atomic Permission Gate]] exercises both public atomic-write APIs through that same binary,
+checking process-umask creation modes, existing-file modes, private scratch files, symlink
+replacement, failure output, and temporary-file cleanup on POSIX systems.
+
 ## Grill Log
 
 - **Q:** Stop after the first gate? **A:** No. _Rationale:_ one release run should expose every
@@ -41,8 +45,9 @@ and output instead of allowing a second, incompatible lint-only code vocabulary.
   a production surface and distribution lookup differs outside the checkout. _Accepted:_ the
   generated-project workflow is mandatory in this gate.
 
-Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary.
+Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary,
+including externally observable filesystem modes that portable permission booleans cannot prove.
 
 ## Referenced by
 
-[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Pudu CLI]]
+[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Atomic Permission Gate]] · [[Pudu CLI]]

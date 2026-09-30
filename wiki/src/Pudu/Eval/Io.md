@@ -128,6 +128,24 @@ DEPTH 0.40 (SHALLOW by intent). It is the boundary, not a policy.
   duration. Calendar time needs a `Std.Time` with zones and a real date type. _Deferred:_ with
   [[architecture/STDLIB]]'s `Std.Time`.
 
+## Atomic byte replacement (#385)
+
+`writeBytesAtomically :: FilePath -> ByteString -> IO (IoOutcome ())` writes through
+a retained private temporary handle beside the destination. After closing the handle,
+`copyPermissions` copies existing destination permissions in full (POSIX stat/chmod,
+Windows read-only attribute). An existing symlink supplies its referent's permissions;
+rename replaces the link without modifying its target. A missing path or dangling
+symlink uses an empty `openBinaryTempFileWithDefaultPermissions` template to obtain
+ordinary creation permissions without reading or changing process umask. Other
+permission-copy failures are returned rather than misclassified as absence. Brackets
+close handles and remove stages/templates on IO failure or cancellation. Rename
+publishes the complete stage; concurrent destination changes are not serialized.
+No fsync or power-loss durability guarantee is added.
+
+Resolved Grill Log: retain private payload staging and full existing modes. Obtain
+new-file permissions from an empty exclusive host template. Cleanup preserves the
+original failure and asynchronous exceptions remain control signals.
+
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+[[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Atomic Permission Gate]]

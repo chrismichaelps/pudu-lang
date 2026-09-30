@@ -62,23 +62,13 @@ export fn rename(from: Str, to: Str) -> Result[(), FsError] {
 /// The bytes go to a new file beside the destination, created under a name no
 /// other process can claim, and that file is then renamed over the destination.
 /// A crash before the rename leaves the old contents; after it, the new. The
-/// temporary file is removed when any step fails.
+/// temporary file is removed when any step fails or the operation is cancelled.
+/// New files use the same default permissions as `Io.write`; replacing a regular
+/// file preserves its permissions, including executable bits. A symbolic link is
+/// replaced without changing its target, retaining the target's permissions when
+/// it exists. This does not flush to disk.
 export fn writeAtomically(path: Str, contents: &Bytes) -> Result[(), FsError] {
-  let staged = temporaryFileIn(Path.directoryOf(path), "." + Path.nameOf(path) + ".") ?
-  match Io.writeAllBytes(staged, contents) {
-    case Ok(_) => {}
-    case Err(reason) => {
-      let _removed = removeFile(staged)
-      return Err(Failed(reason))
-    }
-  }
-  match rename(staged, path) {
-    case Ok(_) => Ok(())
-    case Err(reason) => {
-      let _removed = removeFile(staged)
-      Err(reason)
-    }
-  }
+  refused(writeFileAtomically(path, *contents), path)
 }
 
 /// Text written with the same guarantee as `writeAtomically`.
@@ -91,7 +81,8 @@ export fn writeTextAtomically(path: Str, text: Str) -> Result[(), FsError] {
 /// Created and named in one step by the operating system, so there is no gap
 /// between choosing a name and claiming it for another program to fill.
 ///
-/// The file is created empty; write to it with `Std.Io` or `writeAtomically`.
+/// The file is private to its owner and created empty; write to it with `Std.Io`
+/// or `writeAtomically`.
 ///
 /// ## Examples
 ///

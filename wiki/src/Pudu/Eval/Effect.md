@@ -85,13 +85,22 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
   _Rationale:_ device access is observable even when its samples are pure. _Rejected:_ dispatching
   it with the pure byte primitives.
 
-## Referenced by
-
-[[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]
-
-
 ## TLS and binary compression implementation contract
 
 Dispatches tlsUpgradeWithin through socket/TLS ownership transfer. gzipCompress and gzipDecompress invoke bounded host codec adapters; these host effects are unavailable during constant evaluation.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Atomic byte replacement (#385)
+
+`WriteFileAtomicallyBuiltin` belongs to `effectBuiltins` and dispatches
+`[StrValue path, BytesValue contents]` to [[Eval Io]]'s `writeBytesAtomically`,
+wrapping the outcome as `Result[(), Str]`. The ordinary effect-admission and
+confinement checks run before dispatch.
+
+Resolved Grill Log: atomic replacement is an explicit filesystem effect, so neither
+constant folding nor confined evaluation can bypass the filesystem boundary.
+
+## Referenced by
+
+[[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-30-atomic-file-permissions]] — issue #385 atomic creation and replacement permissions (complete).
+
 - [[2026-09-29-production-bugs]] — completed eleven-issue production bug repair, validation, direct dev publication and closure.
 
 - [[2026-09-24-desktop-and-framework]] — issues #321–#323 standard library, application framework, and desktop toolkit (active).

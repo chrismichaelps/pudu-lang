@@ -33,11 +33,13 @@ module Pudu.Eval.Io
   , writeStandardOutput
   , writeStandardOutputPart
   , writeTextFile
+  , writeBytesAtomically
   ) where
 
 import Control.Applicative ((<|>))
 import Control.Exception
-  ( IOException
+  ( bracket
+  , IOException
   , SomeAsyncException
   , SomeException
   , fromException
@@ -52,6 +54,7 @@ import qualified Data.Text.IO as TextIO
 import GHC.Clock (getMonotonicTime)
 import System.Directory
   ( canonicalizePath
+  , copyPermissions
   , createDirectory
   , createDirectoryIfMissing
   , createFileLink
@@ -80,8 +83,8 @@ import System.Environment (getArgs, getEnvironment, lookupEnv)
 import qualified System.FilePath as FilePath
 import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
-import System.IO (Handle, hClose, hFlush, hIsEOF, openBinaryTempFile, stderr, stdin, stdout)
-import System.IO.Error (doesNotExistErrorType, mkIOError)
+import System.IO (Handle, hClose, hFlush, hIsEOF, openBinaryTempFile, openBinaryTempFileWithDefaultPermissions, stderr, stdin, stdout)
+import System.IO.Error (doesNotExistErrorType, isDoesNotExistError, mkIOError)
 
 {-| An action's failure as a value, for every failure the action itself raised.
 
@@ -213,6 +216,38 @@ createTemporaryFileIn directory prefix = attempt $ do
   (path, handle) <- openBinaryTempFile directory (prefix <> ".tmp")
   hClose handle
   pure (Text.pack path)
+
+{-| Publish a complete private stage with the destination's creation or existing mode.
+
+    An empty default-permissions template lets the OS apply umask without a
+    process-wide mask change. Symlinks are replaced without changing targets.
+    Brackets register cleanup before cancellation can interrupt payload writes. -}
+writeBytesAtomically :: FilePath -> ByteString.ByteString -> IO (IoOutcome ())
+writeBytesAtomically destination contents = attempt $
+  bracket (openBinaryTempFile directory template) cleanTemporary $ \(stage, handle) -> do
+    ByteString.hPut handle contents
+    hClose handle
+    copied <- try (copyPermissions destination stage)
+    case copied of
+      Right () -> pure ()
+      Left problem
+        | isDoesNotExistError problem -> bracket
+            (openBinaryTempFileWithDefaultPermissions directory template)
+            cleanTemporary
+            (\(defaults, defaultHandle) -> do
+              hClose defaultHandle
+              copyPermissions defaults stage)
+        | otherwise -> ioError problem
+    renamePath stage destination
+ where
+  directory = FilePath.takeDirectory destination
+  template = "." <> FilePath.takeFileName destination <> ".tmp"
+  cleanTemporary (path, handle) = do
+    ignoreIo (hClose handle)
+    ignoreIo (removeFile path)
+  ignoreIo action = do
+    _ <- try action :: IO (Either IOException ())
+    pure ()
 
 {-| A directory created only if nothing has the name, without its parents.
 

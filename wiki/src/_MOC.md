@@ -64,6 +64,8 @@ tags: [moc, module]
 - [[Uses Audio Graph]] — exact waveforms, ramps, and mixes, with split renders equal to whole ones.
 - [[Uses Video]] — exact NTSC timing over an hour, cross-scale arithmetic, and track ordering refusals.
 - [[Uses Fs]] — atomic replacement, temporary names, permissions, containment, and non-following removal.
+- [[Atomic Permission Gate]] — real byte/text writes under child-local umasks, existing modes,
+  symlink replacement, refusal output, private scratch files, and temporary-file cleanup.
 - [[Uses Crypto All]] — digests against independent vectors, RFC 4231 keyed digests, and sealing refusals.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.

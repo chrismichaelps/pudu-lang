@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Atomic file creation and replacement permissions (#385)
+
+- [[Std Fs]] delegates atomic writes to a scoped [[Eval Io]] operation that retains private
+  staging handles, preserves existing platform permissions, and derives new-file modes from
+  ordinary OS creation under the process umask. Scratch files remain private; replacement
+  symlinks leave their targets intact. [[Atomic Permission Gate]] checks both public APIs,
+  exact modes under two umasks, refusal output, destination preservation, and cleanup.
+  Independent review, Pudu formatting, and every local repository gate pass.
+
 ## 2026-09-30 — YAML block scalar content and following list items (#384)
 
 - [[Std Yaml Block]] retains physical scalar lines and implements literal/folded paragraph and

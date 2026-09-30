@@ -61,10 +61,6 @@ builtinName :: Builtin -> Text
   [[Eval Value]] remains the compatibility boundary, while this module is an internal depth split.
   _Rejected:_ rewriting every evaluator import for a no-semantics refactor.
 
-## Referenced by
-
-[[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]
-
 ## Cryptographic builtin vocabulary
 
 The closed vocabulary adds `Sha3_256Builtin`, `Sha3_512Builtin`, `Blake2b256Builtin`,
@@ -175,3 +171,16 @@ Registers `ChecksumBuiltin` with the canonical name `checksumOf`.
 
 Resolved Grill Log: one tag for every algorithm, selected by a code, keeps the wired-in surface one
 name wide.
+
+## Atomic byte replacement (#385)
+
+`WriteFileAtomicallyBuiltin` has the canonical source name `writeFileAtomically`.
+[[Eval Effect]] dispatches it; [[Semantic Prelude]] installs its name and
+[[Type Check Prelude]] states its signature.
+
+Resolved Grill Log: use one explicit constructor and total name mapping for atomic
+replacement; definitions retain no runtime policy.
+
+## Referenced by
+
+[[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]

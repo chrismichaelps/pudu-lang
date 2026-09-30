@@ -137,6 +137,7 @@ data Builtin
   | EnvironmentBuiltin
   | TemporaryDirectoryBuiltin
   | RenamePathBuiltin
+  | WriteFileAtomicallyBuiltin
   | CreateTemporaryFileBuiltin
   | CreateDirectoryExclusiveBuiltin
   | RemoveEmptyDirectoryBuiltin
@@ -345,6 +346,7 @@ builtinName value = case value of
   EnvironmentBuiltin -> "environment"
   TemporaryDirectoryBuiltin -> "temporaryPath"
   RenamePathBuiltin -> "renamePath"
+  WriteFileAtomicallyBuiltin -> "writeFileAtomically"
   CreateTemporaryFileBuiltin -> "createTemporaryFile"
   CreateDirectoryExclusiveBuiltin -> "createDirectoryExclusive"
   RemoveEmptyDirectoryBuiltin -> "removeEmptyDirectory"
