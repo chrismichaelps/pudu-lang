@@ -251,14 +251,10 @@ formNamed declared rigid path arguments
       _ -> NominalType identity arguments
  where
   identity = Map.findWithDefault fallback pathText (declaredNames declared)
-  {-| An alias is found by the name written, or by the declaration that name
-      reaches. A record declared in one module can name an alias another
-      module declares, and a third module forms that field with its own names,
-      where the qualifier the record's module wrote means nothing: only the
-      declaration it identifies does. -}
-  aliasFor = case Map.lookup pathText (declaredAliases declared) of
-    Just found -> Just found
-    Nothing -> Map.lookup (nominalKey identity) (declaredAliases declared)
+  {-| Alias facts belong to declarations, not spellings. A graph can carry a
+      callback alias called Listener beside Std.Net's record of that name;
+      only the identity this scope resolved may supply an expansion. -}
+  aliasFor = Map.lookup (nominalKey identity) (declaredAliases declared)
   pathText = moduleNameText path
   name = lastSegment path
   unqualified = pathText == name

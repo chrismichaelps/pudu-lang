@@ -42,6 +42,8 @@ the depth guard; exact tree/depth/tab regressions and formatter checks pass. #37
 #376: structured Decimal equality passed focused/full tests and independent review.
 #373: dependency-scoped constant folds passed focused/full tests and independent review.
 #378: canonical nested coverage passed focused graph tests and independent review.
+#379: canonical alias identity passed actual-server graph tests and independent review; reverse
+traversal uses a formatted wrapper and both entries run.
 Remaining issues are in progress.
 
 ## Exact next action

@@ -32,7 +32,23 @@ interfaceProperties =
   , ("selected imports map canonical names and values", testSelectedImports)
   , ("trait defaults remain discoverable without bodies", testDefaults)
   , ("imported record fields expand later chained function aliases", testLateAliases)
+  , ("a package alias cannot replace the HTTP server's Listener", testListenerIdentity)
   ]
+
+testListenerIdentity :: IO Property
+testListenerIdentity = do
+  accepted <- codes "test-fixtures/listeneridentity/Main.pudu"
+  reversed <- codes "test-fixtures/listeneridentity/Reverse.pudu"
+  reversedResult <- runEntry "test-fixtures/listeneridentity/Reverse.pudu"
+  result <- runEntry "test-fixtures/listeneridentity/Main.pudu"
+  refused <- codes "test-fixtures/listeneridentity/RejectsWrongListener.pudu"
+  pure $ conjoin
+    [ accepted === []
+    , reversed === []
+    , reversedResult === Just "0"
+    , result === Just "0"
+    , refused === ["E3001"]
+    ]
 
 testLateAliases :: IO Property
 testLateAliases = do

@@ -48,6 +48,9 @@ The exported signatures are the module header's export list.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it. The compiler wires in `Float` as an alias for `Float64`, because [[grammar/pudu]] makes the alias transparent at the type level and a reader who writes `Float` expects the same type as `Float64`.
 - `DeclaredTypes` carries a path-to-canonical-identity map assembled by [[Type Interface]]. `formType` resolves the complete syntax path through that map before constructing `NominalType`; it never drops qualifiers to their last segment.
+- Alias lookup uses that resolved canonical identity exclusively. A bare alias retained from a
+  different module cannot override a record with the same spelling, including `Std.Net.Listener`
+  beside a package's callback alias `Listener`. Built-in aliases retain their ownerless identity.
 - A private foreign handle is formable by signatures in its own block but never enters an importing module's visible name map.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
@@ -84,6 +87,11 @@ including through chains and generic aliases. Nominal shells terminate data recu
 DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
 ## Grill Log
+
+- **Q:** May a bare alias entry win over the declaration resolved by the current module's names?
+  **A:** No; look up the alias by canonical declaration key. _Rationale:_ accumulated graph facts
+  include many modules, but `Listener` in a Net signature denotes Net's declaration. _Rejected:_
+  path-spelling-first alias lookup, which lets unrelated packages change standard-library types.
 
 - **Q:** Can a record permanently retain the nominal shell of a later alias? **A:** No; aliases
   are formed in dependency order before data shapes. _Rationale:_ shells establish declaration

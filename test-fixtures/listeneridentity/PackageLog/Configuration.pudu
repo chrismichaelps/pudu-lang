@@ -1,0 +1,9 @@
+module PackageLog.Configuration
+
+import PackageLog.Sink as Sink
+
+export type Configuration = { listener: Sink.Listener }
+
+export fn create() -> Configuration {
+  Configuration{listener: fn(_report: &Sink.Report) -> () {}}
+}

@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Package aliases cannot replace Net.Listener (#379)
+
+- [[Type Formation]] expands aliases only by canonical declaration identity, preserving the
+  HTTP server Listener when a package exports a same-named callback alias. [[Type Interface Spec]]
+  covers actual Std.Http.Server, two dependency traversal orders, runtime success, and wrong-type
+  refusal. Focused tests and independent review pass.
+
 ## 2026-09-30 — Nested match domains retain constructor ownership (#378)
 
 - [[Type Exhaust]] carries instantiated types in pattern columns and reads constructor payloads

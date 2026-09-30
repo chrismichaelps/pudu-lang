@@ -22,6 +22,10 @@ declaration-order-independent transparent alias formation across module boundari
 The late-alias regression compiles and runs an importing module whose record field names a later
 function alias through a later generic alias. A mismatched callback must retain `E3001`.
 
+The Listener collision regression loads the actual HTTP server and a package-shaped module with
+a function alias called Listener. Both dependency traversal orders check and run; a Net.Listener record
+still fails when passed where the callback alias is required.
+
 ## Grill Log
 
 - **Q:** Is successful formation alone enough? **A:** No; assert exact imported checking and
