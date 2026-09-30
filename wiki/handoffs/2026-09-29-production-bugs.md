@@ -34,12 +34,12 @@ suite and warning gates. Independent reviewers cannot author the implementation 
 ## State
 
 #381: independent Language Architect and Forensic Guardian review approved after correcting
-the depth guard; exact tree/depth/tab regressions and formatter checks pass. Remaining issues
-are in progress.
+the depth guard; exact tree/depth/tab regressions and formatter checks pass. #371: Decimal dispatch passed focused tests and independent review; its fixture is formatted.
+Remaining issues are in progress.
 
 ## Exact next action
 
-Complete #371 validation and commit its Decimal dispatch slice.
+Complete #377 validation and commit its tuple exhaustiveness slice.
 
 ## Referenced by
 

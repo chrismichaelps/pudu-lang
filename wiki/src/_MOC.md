@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Decimal Dispatch]] — Decimal trait receiver, generic, and qualified calls.
+
 - [[Uses Yaml Compact Sequence]] — exact nested compact-sequence trees and depth refusal.
 
 - [[Examples]] — human-run programs and the boundary between demonstrations and release evidence.

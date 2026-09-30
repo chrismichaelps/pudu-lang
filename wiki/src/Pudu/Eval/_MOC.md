@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Function Closure Tests]] — receiver, generic, qualified, and missing Decimal dispatch checks.
+
 - [[Eval Runtime]] — scoped resource ownership shared by evaluation modes.
 - [[Eval Context]] — serialized accepted-state retention across evaluator actions.
 
@@ -52,6 +54,8 @@ tags: [moc, module]
 - [[Eval Verify]] — runtime verification and integrity assertion preflight.
 
 Dependency direction: Builtin Definition → Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
+
+- [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
 
 ## Referenced by
 

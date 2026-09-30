@@ -270,6 +270,7 @@ nominalNameOf value = case value of
   IntValue kind _ -> Just (integerKindName kind)
   FloatValue Float32Width _ -> Just "Float32"
   FloatValue Float64Width _ -> Just "Float64"
+  DecimalValue _ -> Just "Decimal"
   StrValue _ -> Just "Str"
   BytesValue _ -> Just "Bytes"
   BucketsValue _ -> Just "Buckets"

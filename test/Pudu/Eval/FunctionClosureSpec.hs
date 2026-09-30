@@ -2,6 +2,7 @@
 module Pudu.Eval.FunctionClosureSpec
   ( functionClosureProperties
   , testBuiltinImpls
+  , testDecimalImpls
   , testClosures
   , testFunctions
   ) where
@@ -15,6 +16,7 @@ functionClosureProperties =
   [ ("functions defaults and recursion evaluate", testFunctions)
   , ("function literals capture the environment they were written in", testClosures)
   , ("implementations reach built-in types", testBuiltinImpls)
+  , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   ]
 
 testFunctions :: IO Property
@@ -135,4 +137,27 @@ testBuiltinImpls = do
     , counterexample "an implementation for Result is reachable" (onResult === "9")
     , counterexample "a program's own sum is reachable the same way"
         (onUserSum === "5")
+    ]
+
+
+testDecimalImpls :: IO Property
+testDecimalImpls = do
+  let declarations =
+        [ "trait Doubling { fn twice(self: &Self) -> Self }"
+        , "impl Doubling for Decimal { fn twice(self: &Self) -> Self { *self + *self } }"
+        , "fn doubled[T: Doubling](value: T) -> T { value.twice() }"
+        ]
+  direct <- evaluateWith declarations "2.50d.twice()"
+  generic <- evaluateWith declarations "doubled(-2.50d)"
+  qualified <- evaluateWith declarations "Doubling.twice(&2.50d)"
+  ownerQualified <- evaluateWith declarations "Decimal.twice(&2.50d)"
+  missing <- evaluateWith declarations "2.50d.missing()"
+  rendered <- evaluate "2.50d.toText()"
+  pure $ conjoin
+    [ counterexample "direct dispatch retains Decimal arithmetic and scale" (direct === "5.00")
+    , counterexample "bounded generic dispatch handles negative Decimal values" (generic === "-5.00")
+    , counterexample "trait qualification uses the same Decimal owner" (qualified === "5.00")
+    , counterexample "type qualification reaches the registered implementation" (ownerQualified === "5.00")
+    , counterexample "an absent member is still refused" (missing === "failed: E3005")
+    , counterexample "universal rendering remains the fallback" (rendered === "\"2.50\"")
     ]

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Decimal trait dispatch (#371)
+
+- [[Eval Operator Access]] identifies Decimal receivers for the existing implementation lookup.
+  [[Eval Function Closure Tests]] and [[Uses Decimal Dispatch]] prove direct, generic, qualified,
+  missing-method, and rendering behavior; independent review approved.
+
 ## 2026-09-29 — Compact YAML lists inside list mappings (#381)
 
 - [[Std Yaml]] preserves a same-indent list under a key inside a compact list mapping,

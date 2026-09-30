@@ -21,7 +21,8 @@ import Pudu.Eval.DataSpec
   , testTextMethods
   )
 import Pudu.Eval.FunctionClosureSpec
-  ( testBuiltinImpls
+  ( testDecimalImpls
+  , testBuiltinImpls
   , testClosures
   , testFunctions
   )
@@ -38,7 +39,8 @@ import Pudu.Eval.SystemSpec
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
-  [ ("arithmetic and comparison follow declared operators", testArithmetic)
+  [ ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
+  , ("arithmetic and comparison follow declared operators", testArithmetic)
   , ("bindings assignment and blocks evaluate in order", testBindings)
   , ("functions defaults and recursion evaluate", testFunctions)
   , ("conditionals and pattern matching select branches", testBranching)

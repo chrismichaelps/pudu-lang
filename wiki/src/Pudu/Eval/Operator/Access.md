@@ -51,6 +51,11 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 ## Grill Log
 
+- **Q:** How does a Decimal reach a user implementation (#371)? **A:** `nominalNameOf` returns
+  `Decimal` for `DecimalValue`, so direct, generic, and trait-qualified calls use the same lookup
+  as other scalar types. _Rationale:_ Decimal already admits implementations during checking;
+  runtime owner discovery must preserve that contract. _Rejected:_ adding built-in Decimal
+  methods or accepting unknown members without an implementation.
 - **Q:** Why extract access and method lookup into `Eval.Operator.Access`? **A:** `readIndex`, `readMember`, `unwrapTry`, and the built-in method lookup tables form a cohesive access and inspection boundary (~240 lines) distinct from arithmetic and comparison operators, bringing `Eval.Operator` well below the 500-line limit.
 - **Q:** Why include `escapeHtml` in `stringMethods`? **A:** Mapping `escapeHtml` in the static `stringMethods` table ensures it is discovered during member evaluation and included in `builtinMethodNamesFor` suggestions.
 

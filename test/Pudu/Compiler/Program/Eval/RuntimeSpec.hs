@@ -18,6 +18,7 @@ testRuntimeEvaluation = do
   hashing <- runEntry "test-fixtures/stdlib/UsesCrypto.pudu"
   parsing <- runEntry "test-fixtures/stdlib/UsesParse.pudu"
   labelled <- runEntry "test-fixtures/stdlib/UsesLabels.pudu"
+  decimalDispatch <- runEntry "test-fixtures/stdlib/UsesDecimalDispatch.pudu"
   exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
@@ -87,7 +88,8 @@ testRuntimeEvaluation = do
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
-    [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
+    [ counterexample "Decimal methods dispatch through every checked call form" (decimalDispatch === Just "5")
+    , {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
           `?`, through methods, trait-qualified calls, and a place lent on. -}
       counterexample "a place is written, lent, and handed back on every exit"
