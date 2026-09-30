@@ -1,0 +1,9 @@
+module Main
+
+import Lib.Sink as Sink
+
+fn main() -> Int {
+  let listen: Sink.Listener = fn(_report: &Sink.Report) -> () {}
+  (Sink.none().attach)(listen)
+  0
+}

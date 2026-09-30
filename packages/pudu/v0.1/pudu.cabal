@@ -266,6 +266,7 @@ library
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation
+    Pudu.Type.Formation.Order
     Pudu.Type.Marker
     Pudu.Type.Interface
     Pudu.Type.Interface.Graph

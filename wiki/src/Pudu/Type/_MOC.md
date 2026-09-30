@@ -5,6 +5,9 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Type Formation Order]] — dependency ordering of transparent aliases before data fields.
+- [[Type Interface Spec]] — imported generic and late-alias checks and callback refusals.
+
 - [[Type Check Pattern Spec]] — correlated product coverage and missing-pattern diagnostics.
 
 - [[Type Boundary]] — the phase entry point and the published type map.

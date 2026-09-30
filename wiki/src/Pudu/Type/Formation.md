@@ -65,6 +65,11 @@ The exported signatures are the module header's export list.
 
 Direct structural recursion over the type or syntax shape, with the checker's substitution consulted whenever a variable is reached.
 
+Collection introduces every nominal shell first, orders local aliases by their alias dependencies
+through [[Type Formation Order]], and forms aliases before record fields, sum payloads, and
+implementation heads. A later function alias therefore expands exactly as an earlier one does,
+including through chains and generic aliases. Nominal shells terminate data recursion.
+
 ## Negative Logic (Prohibited Paths)
 
 - No subtyping beyond `Never`, no implicit numeric conversion, no trait resolution, no defaulting of unsolved variables, and no evaluation.
@@ -79,6 +84,11 @@ Direct structural recursion over the type or syntax shape, with the checker's su
 DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
 ## Grill Log
+
+- **Q:** Can a record permanently retain the nominal shell of a later alias? **A:** No; aliases
+  are formed in dependency order before data shapes. _Rationale:_ shells establish declaration
+  identity, while transparent alias expansions establish structural type equality. _Rejected:_
+  repeated whole-module collection, which duplicates implementation facts and makes cost quadratic.
 
 - **Q:** Why refuse an applied parameter rather than ignore the arguments? **A:** Because ignoring
   them is agreeing to a type that was not understood. _Rationale:_ `F[Int]` and `F[Str]` both became

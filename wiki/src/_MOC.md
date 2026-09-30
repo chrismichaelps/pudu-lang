@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[src/test-fixtures/latealias/Main]] · [[src/test-fixtures/latealias/RejectsWrongCallback]] · [[src/test-fixtures/latealias/Lib/Sink]] — imported late callback aliases and wrong callback refusal.
+
 - [[Uses Decimal Dispatch]] — Decimal trait receiver, generic, and qualified calls.
 
 - [[Uses Yaml Compact Sequence]] — exact nested compact-sequence trees and depth refusal.

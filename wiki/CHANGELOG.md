@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Imported fields expand later function aliases (#372)
+
+- [[Type Formation]] uses [[Type Formation Order]] to resolve transparent aliases before data
+  fields, including chained generic function aliases. [[Type Interface Spec]] proves imported
+  callbacks check and run, and rejects incompatible callbacks with E3001. Independent review passes.
+
 ## 2026-09-30 — Correlated tuple exhaustiveness (#377)
 
 - [[Type Exhaust]] specializes tuple pattern rows without losing correlations between columns.

@@ -1,0 +1,8 @@
+module RejectsWrongCallback
+
+import Lib.Sink as Sink
+
+fn main() -> Int {
+  (Sink.none().attach)(fn(_value: Int) -> () {})
+  0
+}

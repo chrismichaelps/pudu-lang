@@ -42,6 +42,7 @@ import Pudu.Type.Env
   , freshVariable
   )
 import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, nominalKey, restrictedBy)
+import Pudu.Type.Formation.Order (formationOrder)
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -342,7 +343,7 @@ collectDeclaredFrom initial owner declarations = do
           , declaredAliases =
               Map.withoutKeys (builtinAliases <> declaredAliases initial) (locallyDeclared declarations)
           }
-  foldCollect owner shells declarations
+  foldCollect owner shells (formationOrder owner declarations)
 
 {-| The bare names this module declares a type or trait under.
 

@@ -167,3 +167,9 @@ Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new
 ## Runtime packs (#355)
 
 Registers `Pudu.Cli.RuntimePack`; it uses the already-linked `zlib` and the package HTTP client.
+
+## Alias dependency ordering (#372)
+
+Register [[Type Formation Order]] as a library module. Resolved Grill Log: transparent aliases
+are formed in dependency order before record/sum fields, with deterministic cycles left for
+existing formation diagnostics; no new package is required.
