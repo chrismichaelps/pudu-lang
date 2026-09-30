@@ -25,6 +25,7 @@ tags: [moc, module]
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
+- [[Std Mutation Harness]] — internal operator-mutation audit of Std against its fixtures.
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 - [[VS Code Grammar]] — the editor extension's TextMate grammar, interpolations included.
 - [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the

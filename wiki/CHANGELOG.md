@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — Bounded network reads, checked URL ports, and a Std mutation harness
+
+- [[Std Net]] `receiveUntil`: the limit bounds every read and counts the marker, so a marker past it
+  is an error; an empty marker or a limit shorter than the marker is rejected before reading.
+- [[Std Net]] `receiveExactly`: reads at most one chunk at a time, so a large requested count no
+  longer sizes one receive buffer; a negative count is an error.
+- [[Std Url]] `parse`: a port above 65535 is `BadPort`, a port with no host is `NoHost`, and an
+  empty or malformed scheme is `NoScheme`.
+- [[Std Mutation Harness]]: internal `tools/Mutate.pudu` scores Std against the fixtures that import
+  each module and lists modules no fixture imports.
+
 ## Unreleased — A herd of little pudus on the home banner
 
 - [[Pudu mascot script]]: up to ten little pudus roam the home banner beside the big one, each on
