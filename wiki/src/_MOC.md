@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.
+
 - [[src/test-fixtures/listeneridentity/Main]] · [[src/test-fixtures/listeneridentity/Reverse]] · [[src/test-fixtures/listeneridentity/RejectsWrongListener]] · [[src/test-fixtures/listeneridentity/PackageLog/Configuration]] · [[src/test-fixtures/listeneridentity/PackageLog/Sink]] · [[src/test-fixtures/listeneridentity/ZServer]] — actual HTTP server with conflicting package aliases, two traversal orders, and refusal.
 
 - [[src/test-fixtures/exhaustnamespace/UsesJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/UsesJsonCoverageReversed]] · [[src/test-fixtures/exhaustnamespace/RejectsJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/R/Value]] · [[src/test-fixtures/exhaustnamespace/R/Kinds]] · [[src/test-fixtures/exhaustnamespace/R/ZJson]] — module-owned nested constructor coverage and refusal.

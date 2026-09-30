@@ -1,0 +1,127 @@
+module Std.Yaml.Block
+
+import Std.Text as Reading
+import Std.Yaml.Quoted as Quoted
+
+/// A physical line retained for structure or scalar content.
+export type Line = { indent: Int, content: Str, number: Int, scalar: Bool, terminated: Bool }
+
+/// An indentation refusal at its physical line.
+export type Problem = TabIndent(Int) | BadIndent(Int)
+
+/// Whether text is one of the supported block scalar headers.
+export fn marker(value: Str) -> Bool {
+  value == "|" || value == ">" || value == "|-" || value == ">-" || value == "|+" || value == ">+"
+}
+
+/// Retain structure and raw scalar data while measuring physical lines once.
+export fn lines(source: Str) -> Result[Array[Line], Problem] {
+  let raw = source.replace("\r\n", "\n").split("\n")
+  var kept: Array[Line] = []
+  var index = 0
+  var inside = false
+  var owner = 0
+  var baseline = -1
+  var scalarStart = 0
+  while index < raw.length() {
+    let line = raw[index]
+    let terminated = index + 1 < raw.length()
+    if !terminated && line.isEmpty() { break }
+    let width = line.spanOf(" ")
+    let body = line.drop(width)
+    if body.startsWith("\t") && !(inside && width > owner && (baseline < 0 || width >= baseline)) { return Err(TabIndent(index + 1)) }
+    if inside && (body.isEmpty() || width > owner) {
+      if !body.isEmpty() {
+        if baseline < 0 {
+          var leading = scalarStart
+          while leading < kept.length() {
+            if kept[leading].indent > width { return Err(BadIndent(kept[leading].number)) }
+            leading = leading + 1
+          }
+          baseline = width
+        }
+        if width < baseline { return Err(BadIndent(index + 1)) }
+      }
+      kept = kept.push(Line{indent: width, content: body, number: index + 1, scalar: true, terminated: terminated})
+      index = index + 1
+      continue
+    }
+    inside = false
+    baseline = -1
+    let cleaned = Quoted.comment(Reading.trimEnd(body))
+    if cleaned.isEmpty() || cleaned.startsWith("#") || cleaned == "---" || cleaned == "..." {
+      index = index + 1
+      continue
+    }
+    let item = cleaned.startsWith("- ")
+    let rest = if item { Reading.trimStart(cleaned.drop(2)) } else { cleaned }
+    let colon = Quoted.colon(rest)
+    let value = if colon >= 0 { Reading.trimStart(rest.drop(colon + 1)) } else { rest }
+    if marker(value) && (item || colon >= 0) {
+      inside = true
+      scalarStart = kept.length() + 1
+      owner = if item && colon >= 0 { width + 2 } else { width }
+    }
+    kept = kept.push(Line{indent: width, content: cleaned, number: index + 1, scalar: false, terminated: terminated})
+    index = index + 1
+  }
+  Ok(kept)
+}
+
+/// Consume one scalar, folding ordinary lines and applying its chomping mode.
+///
+/// An invalid start returns empty text at its clamped position. An unsupported
+/// header returns empty text without consuming lines.
+export fn scalar(retained: &Array[Line], from: Int, header: Str) -> (Str, Int) {
+  if from < 0 { return ("", 0) }
+  if from >= retained.length() { return ("", retained.length()) }
+  if !marker(header) { return ("", from) }
+  var stop = from
+  var baseline = 0
+  var found = false
+  var lastText = from - 1
+  while stop < retained.length() && retained[stop].scalar {
+    if !retained[stop].content.isEmpty() { lastText = stop }
+    if !found && !retained[stop].content.isEmpty() {
+      baseline = retained[stop].indent
+      found = true
+    }
+    stop = stop + 1
+  }
+  var parts: Array[Str] = []
+  var index = from
+  while index < stop {
+    let line = retained[index]
+    let blank = !found || (line.content.isEmpty() && line.indent <= baseline)
+    let more = !blank && line.indent > baseline
+    let body = if blank { "" } else { " ".repeat(line.indent - baseline) + line.content }
+    parts = parts.push(body)
+    if line.terminated {
+      if header.startsWith("|") || index + 1 == stop {
+        parts = parts.push("\n")
+      } else {
+        let next = retained[index + 1]
+        let nextBlank = !found || (next.content.isEmpty() && next.indent <= baseline)
+        let nextMore = !nextBlank && next.indent > baseline
+        if blank {
+          parts = parts.push("\n")
+        } else if nextBlank {
+          if more || index >= lastText { parts = parts.push("\n") }
+        } else if more || nextMore {
+          parts = parts.push("\n")
+        } else {
+          parts = parts.push(" ")
+        }
+      }
+    }
+    index = index + 1
+  }
+  let joined = parts.join("")
+  if header.endsWith("+") { return (joined, stop) }
+  if !found { return ("", stop) }
+  var length = joined.length()
+  while length > 0 && joined.charAt(length - 1) == '\n' { length = length - 1 }
+  let stripped = joined.take(length)
+  if header.endsWith("-") || length == joined.length() { return (stripped, stop) }
+  (stripped + "\n", stop)
+}

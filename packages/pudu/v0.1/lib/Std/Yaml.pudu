@@ -1,6 +1,7 @@
 module Std.Yaml
 
 import Std.Text as Reading
+import Std.Yaml.Block as Block
 import Std.Yaml.Quoted as Quoted
 
 /// A value a YAML document holds.
@@ -58,8 +59,7 @@ const MAX_DEPTH: Int = 512
 /// because a file mixing them with spaces reads differently in every editor.
 fn readable() -> Bool { true }
 
-/// One line of a document, reduced to what its structure depends on.
-type Line = { indent: Int, content: Str, number: Int }
+type Line = Block.Line
 
 /// Read a document.
 export fn decode(source: Str) -> Result[Yaml, YamlError] {
@@ -71,67 +71,15 @@ export fn decode(source: Str) -> Result[Yaml, YamlError] {
   Ok(parsed[0])
 }
 
-/// The lines that carry structure, with their indentation measured.
-///
-/// Blank lines and comment lines are dropped here rather than in the parser,
-/// so nothing below has to ask whether a line it is looking at is real.
 fn significantLines(source: Str) -> Result[Array[Line], YamlError] {
-  let raw = source.lines()
-  var kept: Array[Line] = []
-  var number = 0
-  var insideBlock = false
-  var blockIndent = 0
-  while number < raw.length() {
-    let line = raw[number]
-    let measured = measureIndent(line)
-    if measured[1] < 0 {
-      return Err(TabIndent(number + 1))
+  match Block.lines(source) {
+    case Ok(lines) => Ok(lines)
+    case Err(problem) => match problem {
+      case Block.TabIndent(line) => Err(TabIndent(line))
+      case Block.BadIndent(line) => Err(BadIndent(line))
     }
-    let body = Reading.trimEnd(Reading.drop(line, measured[0]))
-    // A block scalar's own lines are text, not structure: a `#` inside one is
-    // part of the value, and a blank line inside one is a blank line in it.
-    if insideBlock && measured[0] > blockIndent && !body.isEmpty() {
-      kept = kept.push(Line{indent: measured[0], content: body, number: number + 1})
-      number = number + 1
-      continue
-    }
-    insideBlock = false
-    if body.isEmpty() || body.startsWith("#") {
-      number = number + 1
-      continue
-    }
-    if body == "---" || body == "..." {
-      number = number + 1
-      continue
-    }
-    let cleaned = withoutComment(body)
-    if cleaned.isEmpty() {
-      number = number + 1
-      continue
-    }
-    if cleaned.endsWith("|") || cleaned.endsWith(">") || cleaned.endsWith("|-") || cleaned.endsWith(">-") {
-      insideBlock = true
-      blockIndent = measured[0]
-    }
-    kept = kept.push(Line{indent: measured[0], content: cleaned, number: number + 1})
-    number = number + 1
   }
-  Ok(kept)
 }
-
-/// How far a line is indented, and whether it used tabs to do it.
-///
-/// A tab answers a negative width rather than a count, because a tab in
-/// indentation is not a narrower or wider indent — it is a file that means
-/// different things in different editors, which is why the format refuses it.
-fn measureIndent(line: Str) -> (Int, Int) {
-  let width = line.spanOf(" ")
-  if line.drop(width).startsWith("\t") { (width, 0 - 1) } else { (width, width) }
-}
-
-/// A line with a trailing comment removed, leaving quoted text alone.
-/// A line without `#` has no comment to remove, and most lines are that line.
-fn withoutComment(line: Str) -> Str { Quoted.comment(line) }
 
 /// Read the run of lines indented at one level, and answer where it ended.
 ///
@@ -178,6 +126,10 @@ fn parseSequence(
         items = items.push(Empty)
         index = index + 1
       }
+    } else if isBlockMarker(rest) {
+      let held = parseBlockScalar(lines, index + 1, rest)
+      items = items.push(held[0])
+      index = held[1]
     } else if isKeyLine(rest) {
       // An item that is itself a mapping, written on the dash's own line.
       let inlineIndent = indent + 2
@@ -203,7 +155,11 @@ fn parseInlineMapping(
   let split = splitKey(first, lines[from].number) ?
   var entries: Array[(Str, Yaml)] = []
   var index = from + 1
-  if split[1].isEmpty() {
+  if isBlockMarker(split[1]) {
+    let held = parseBlockScalar(lines, index, split[1])
+    entries = entries.push((split[0], held[0]))
+    index = held[1]
+  } else if split[1].isEmpty() {
     if index < lines.length() && lines[index].indent >= indent {
       let nested = parseBlock(lines, index, lines[index].indent, depth + 1) ?
       entries = entries.push((split[0], nested[0]))
@@ -237,7 +193,7 @@ fn parseInlineMapping(
         index = index + 1
       }
     } else if isBlockMarker(pair[1]) {
-      let folded = parseBlockScalar(lines, index + 1, indent, pair[1])
+      let folded = parseBlockScalar(lines, index + 1, pair[1])
       entries = entries.push((pair[0], folded[0]))
       index = folded[1]
     } else {
@@ -266,7 +222,7 @@ fn parseMapping(
     }
     let pair = splitKey(line.content, line.number) ?
     if isBlockMarker(pair[1]) {
-      let folded = parseBlockScalar(lines, index + 1, indent, pair[1])
+      let folded = parseBlockScalar(lines, index + 1, pair[1])
       entries = entries.push((pair[0], folded[0]))
       index = folded[1]
     } else if pair[1].isEmpty() {
@@ -296,28 +252,11 @@ fn parseMapping(
   Ok((Mapping(entries), index))
 }
 
-fn isBlockMarker(value: Str) -> Bool {
-  value == "|" || value == ">" || value == "|-" || value == ">-"
-}
+fn isBlockMarker(value: Str) -> Bool { Block.marker(value) }
 
-/// The lines of a block scalar, joined the way its marker says.
-///
-/// `|` keeps the line breaks and `>` folds them into spaces. A trailing `-`
-/// drops the final newline, which is what a caller writing a single-line
-/// command across several lines wants.
-fn parseBlockScalar(lines: &Array[Line], from: Int, indent: Int, marker: Str) -> (Yaml, Int) {
-  var collected: Array[Str] = []
-  var index = from
-  while index < lines.length() && lines[index].indent > indent {
-    collected = collected.push(lines[index].content)
-    index = index + 1
-  }
-  let separator = if marker.startsWith("|") { "\n" } else { " " }
-  var joined = Reading.join(&collected, separator)
-  if marker.startsWith("|") && !marker.endsWith("-") && collected.length() > 0 {
-    joined = joined + "\n"
-  }
-  (Text(joined), index)
+fn parseBlockScalar(lines: &Array[Line], from: Int, marker: Str) -> (Yaml, Int) {
+  let held = Block.scalar(lines, from, marker)
+  (Text(held[0]), held[1])
 }
 
 /// Whether a line is `key: value` rather than a bare scalar.

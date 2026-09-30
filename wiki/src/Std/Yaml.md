@@ -34,7 +34,14 @@ starts on a list item's dash; parsing resumes at the next sibling key or outer i
 Quoted keys and values decode YAML escapes through [[Std Yaml Quoted]]. Quote-aware comment,
 colon and comma scans skip escaped double quotes and doubled single quotes. Invalid escapes,
 Unicode non-scalars, trailing text and missing closers return line-numbered typed errors.
+Block scalar line retention and joining belong to [[Std Yaml Block]]. Scalars on list
+items and first compact mapping keys consume exactly their content and resume at siblings.
+Literal/folded forms retain paragraphs, relative indentation, comment-like text and trailing
+spaces; clip, strip and keep chomping apply to physical line breaks.
 ## Grill Log
+- **Q:** Drop blank lines before parsing structure? **A:** Only outside block scalars.
+  _Accepted:_ preserve raw scalar lines through the scalar reader. _Rationale:_ blanks,
+  hashes and indentation are scalar data, and list-item headers open the same scalar form.
 - **Q:** Keep the source spelling inside quoted text? **A:** No. _Accepted:_ YAML escape
   decoding and doubled single quotes; malformed strings are refused, including in nested flow
   collections and quoted keys. _Rationale:_ configuration text means its decoded characters.

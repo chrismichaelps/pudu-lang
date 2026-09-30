@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — YAML block scalar content and following list items (#384)
+
+- [[Std Yaml Block]] retains physical scalar lines and implements literal/folded paragraph and
+  clip/strip/keep behavior. [[Std Yaml]] handles scalar headers in compact mappings and list items
+  without losing siblings; its coordinator is now below 500 lines. [[Uses Yaml Block]] checks
+  full trees, malformed indentation and helper boundaries. Independent review and focused tests pass.
+
 ## 2026-09-30 — Package aliases cannot replace Net.Listener (#379)
 
 - [[Type Formation]] expands aliases only by canonical declaration identity, preserving the

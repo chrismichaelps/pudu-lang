@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Yaml Block]] — raw scalar lines, literal/folded paragraphs, and physical newline chomping.
+
 - [[src/Std/Yaml/Quoted]] — checked single-line YAML quoting and delimiter scans.
 
 - [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred

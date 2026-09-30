@@ -1,0 +1,57 @@
+module UsesYamlBlock
+
+import Std.Yaml.Block as Block
+import Std.Yaml as Yaml
+
+fn expect(source: Str, wanted: Yaml.Yaml) -> () {
+  if Yaml.decode(source) != Ok(wanted) { panic(source) }
+}
+
+fn text(source: Str, wanted: Str) -> () {
+  expect(source, Yaml.Mapping([("m", Yaml.Text(wanted))]))
+}
+
+fn main() -> Int {
+  expect("- m: |\n    x\n    y\n- z", Yaml.List([
+        Yaml.Mapping([("m", Yaml.Text("x\ny\n"))]), Yaml.Text("z")
+      ]))
+  expect("k:\n  m: |\n    x\n\n    y\n  n: 2", Yaml.Mapping([
+        ("k", Yaml.Mapping([("m", Yaml.Text("x\n\ny\n")), ("n", Yaml.Whole(2))]))
+      ]))
+  expect("- m: |-\n    x\n\n    y\n  n: 2\n- z", Yaml.List([
+        Yaml.Mapping([("m", Yaml.Text("x\n\ny")), ("n", Yaml.Whole(2))]), Yaml.Text("z")
+      ]))
+  expect("- |\n  one\n\n  # text\n- >-\n  two\n  three\n- z", Yaml.List([
+        Yaml.Text("one\n\n# text\n"), Yaml.Text("two three"), Yaml.Text("z")
+      ]))
+  text("m: |\n  x  \n    nested\n  # value\n  ---\n  ...\n", "x  \n  nested\n# value\n---\n...\n")
+  text("m: |\n\n  x\n\n\n", "\nx\n")
+  text("m: |-\n\n  x\n\n\n", "\nx")
+  text("m: |+\n\n  x\n\n\n", "\nx\n\n\n")
+  text("m: >\n  x\n  y\n", "x y\n")
+  text("m: >-\n  x\n\n  y\n", "x\ny")
+  text("m: >+\n  x\n\n\n  y\n\n\n", "x\n\ny\n\n\n")
+  text("m: >-\n  x\n    nested\n    more\n  y\n", "x\n  nested\n  more\ny")
+  text("m: |\n  x", "x")
+  text("m: >\n  x", "x")
+  text("m: |\r\n  x\r\n\r\n  y\r\n", "x\n\ny\n")
+  text("m: |\n  x\n    \n  y\n", "x\n  \ny\n")
+  text("m: |\n  \ttab\n", "\ttab\n")
+  text("m: |\n\n\n", "")
+  text("m: >\n  \n", "")
+  text("m: |", "")
+  text("m: |+\n\n\n", "\n\n")
+  expect("m: |\nn: 2", Yaml.Mapping([("m", Yaml.Text("")), ("n", Yaml.Whole(2))]))
+  if Yaml.decode("m: |\n\tbad") != Err(Yaml.TabIndent(2)) { panic("tab line") }
+  if Yaml.decode("m: |\n    first\n  wrong") != Err(Yaml.BadIndent(3)) { panic("scalar indentation") }
+  if Yaml.decode("m: |\n    \n  x") != Err(Yaml.BadIndent(2)) { panic("leading blank indentation") }
+  let empty: Array[Block.Line] = []
+  if Block.scalar(&empty, -1, "|") != ("", 0) { panic("negative scalar start") }
+  if Block.scalar(&empty, 4, "|") != ("", 0) { panic("past-end scalar start") }
+  let retained = match Block.lines("m: |\n  x\n") {
+    case Ok(value) => value
+    case Err(_) => { panic("helper lines") }
+  }
+  if Block.scalar(&retained, 1, "unknown") != ("", 1) { panic("unsupported scalar header") }
+  0
+}

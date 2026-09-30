@@ -28,6 +28,9 @@ all checks run; its entry result is exactly zero. [[Uses Yaml Compact Sequence]]
 [[Uses Yaml Quoted]] verifies escaped/doubled quotes, Unicode scalars, mapping/flow delimiters,
 and exact typed failures at physical line numbers.
 
+[[Uses Yaml Block]] compares complete scalar/list/mapping trees and checks literal/folded
+paragraphs, indentation, physical final newlines, chomping modes and malformed indentation.
+
 ## Grill Log
 
 - **Q:** Accept any positive fixture count? **A:** No. _Rationale:_ a skipped branch could still look

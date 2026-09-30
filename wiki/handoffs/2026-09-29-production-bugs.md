@@ -44,11 +44,13 @@ the depth guard; exact tree/depth/tab regressions and formatter checks pass. #37
 #378: canonical nested coverage passed focused graph tests and independent review.
 #379: canonical alias identity passed actual-server graph tests and independent review; reverse
 traversal uses a formatted wrapper and both entries run.
-Remaining issues are in progress.
+#384: independent review corrected helper bounds and leading blank indentation; all YAML
+fixtures, formatter and lint pass. All eleven slices are implemented; final integration validation
+and remote publication remain.
 
 ## Exact next action
 
-Implement #384 block scalar retention after the #382 commit.
+Integrate the fetched remote dev commits, run the full local gates, push dev and close the eleven issues.
 
 ## Referenced by
 
