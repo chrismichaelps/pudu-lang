@@ -61,6 +61,10 @@ established byte-for-byte formatting. Writing the 3.26 MB document takes 0.12 s 
 `Writing`-stack encoder, which built each string one character at a time, took 12.2 s; 91 documents
 encode to identical compact and pretty text either way, including every control character.
 
+A number follows RFC 8259 exactly: an optional `-`, then `0` or digits not starting with `0`, then
+optionally `.` with at least one digit, then optionally `e`/`E`, an optional sign, and at least one
+digit. Anything else is `Unexpected` at the first position that breaks the grammar.
+
 ## Evidence
 
 - A focused executable fixture covers plain text; quote, slash, reverse-solidus, named and unnamed control, BMP,
@@ -105,5 +109,9 @@ encode to identical compact and pretty text either way, including every control 
   then have two sources that must agree forever. _Accepted:_ the native decoder answers only what it
   reads exactly as the library does, and every other text takes the library's reader. _Rejected:_ a
   native error vocabulary.
+- **Q:** Take a number as the longest run of number characters and let the value decide? **A:** No.
+  _Rationale:_ `01`, `1.`, and `1e` then decode as numbers from text that is not JSON. _Rejected:_
+  lenient number runs.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Json]]

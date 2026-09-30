@@ -473,15 +473,24 @@ fn readKeyword(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
 
 /// A number, kept whole when it has no fraction or exponent and kept as written
 /// when it has, so nothing is rounded on the way through.
+///
+/// The grammar is JSON's own: an optional `-`, then `0` or a digit run not
+/// starting with `0`, then optionally `.` and at least one digit, then
+/// optionally `e` or `E`, an optional sign, and at least one digit.
 fn readNumber(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
   let rest = cursor.rest
   var width = if rest.startsWith("-") { 1 } else { 0 }
   var fractional = false
-  width = width + rest.drop(width).spanOf(DIGITS)
+  let whole = rest.drop(width).spanOf(DIGITS)
+  if whole == 0 || (whole > 1 && rest.drop(width).startsWith("0")) {
+    return Err(Unexpected(cursor.at, "a number"))
+  }
+  width = width + whole
   if rest.drop(width).startsWith(".") {
+    let digits = rest.drop(width + 1).spanOf(DIGITS)
+    if digits == 0 { return Err(Unexpected(cursor.at + width + 1, "a digit")) }
     fractional = true
-    width = width + 1
-    width = width + rest.drop(width).spanOf(DIGITS)
+    width = width + 1 + digits
   }
   let exponent = rest.drop(width)
   if exponent.startsWith("e") || exponent.startsWith("E") {
@@ -489,10 +498,11 @@ fn readNumber(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
     width = width + 1
     let sign = rest.drop(width)
     if sign.startsWith("+") || sign.startsWith("-") { width = width + 1 }
-    width = width + rest.drop(width).spanOf(DIGITS)
+    let digits = rest.drop(width).spanOf(DIGITS)
+    if digits == 0 { return Err(Unexpected(cursor.at + width, "a digit")) }
+    width = width + digits
   }
   let numeral = rest.take(width)
-  if numeral.isEmpty() || numeral == "-" { return Err(Unexpected(cursor.at, "a number")) }
   if fractional { return Ok((Fractional(numeral), advanced(cursor, width))) }
   let Some(number) = Reading.wholeOf(numeral) else {
     return Err(Unexpected(cursor.at, "a number"))

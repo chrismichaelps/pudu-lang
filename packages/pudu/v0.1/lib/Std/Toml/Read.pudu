@@ -46,7 +46,7 @@ export fn read(source: Str) -> Result[Toml, TomlError] {
           // A repeated section starts a new table at the end of a list; a plain
           // one names a table that may already exist and is not replaced, so
           // keys written under it after another section still land in it.
-          let opened = if found[1] { appendTable(drafts, &section) } else { openTable(drafts, &section) }
+          let opened = if found[1] { appendTable(drafts, &section) } else { declareTable(drafts, &section) }
           match opened {
             case Ok(next) => {
               drafts = next[0]
@@ -223,11 +223,15 @@ fn readBare(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
     index = index + 1
   }
   let word = source.slice(start, index).trim()
-  if word.isEmpty() {
-    Err(Unexpected(start, "a value that is not there"))
-  } else {
-    Ok((Scan.valueOf(word), index))
+  if word.isEmpty() { return Err(Unexpected(start, "a value that is not there")) }
+  let value = Scan.valueOf(word)
+  match value {
+    case Whole(_) | Fractional(_) => {
+      if !Scan.isNumber(word) { return Err(Malformed(start, "a number the format does not write")) }
+    }
+    case _ => {}
   }
+  Ok((value, index))
 }
 
 /// A section path joined with a key path.
@@ -260,16 +264,18 @@ type Slot
 
 /// A table under construction: its keys in the order they were written, and
 /// where each one points.
-type Draft = { order: Array[Str], slots: Map[Str, Slot] }
+/// `declared` records that a section header named the table, since a second
+/// header naming it would reopen a table the format says is already written.
+type Draft = { order: Array[Str], slots: Map[Str, Slot], declared: Bool }
 
-fn emptyDraft() -> Draft { Draft{order: [], slots: mapOf([])} }
+fn emptyDraft() -> Draft { Draft{order: [], slots: mapOf([]), declared: false} }
 
 /// The drafts with a key of one of them pointed somewhere, keeping the order
 /// the key was first written in.
 fn withSlot(drafts: Array[Draft], position: Int, name: Str, slot: Slot) -> Array[Draft] {
   let draft = drafts[position]
   let order = if Option.isSome(&draft.slots.get(name)) { draft.order } else { draft.order.push(name) }
-  drafts.remove(position).insert(position, Draft{order: order, slots: draft.slots.insert(name, slot)})
+  drafts.remove(position).insert(position, Draft{..draft, order: order, slots: draft.slots.insert(name, slot)})
 }
 
 /// The table a path names below another, opening the tables not written yet.
@@ -304,6 +310,14 @@ fn openTable(drafts: Array[Draft], pieces: &Array[Str]) -> Result[(Array[Draft],
     case Ok(opened) => Ok(opened)
     case Err(path) => Err(Document.Duplicate(path))
   }
+}
+
+/// The table a plain section header names, refused when a header named it before.
+fn declareTable(drafts: Array[Draft], pieces: &Array[Str]) -> Result[(Array[Draft], Int), TomlError] {
+  let (built, position) = openTable(drafts, pieces) ?
+  let draft = built[position]
+  if draft.declared { return Err(Document.Duplicate(dotted(pieces))) }
+  Ok((built.remove(position).insert(position, Draft{..draft, declared: true}), position))
 }
 
 /// A new table at the end of a repeated section, which is what a doubled

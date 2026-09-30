@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — JSON and TOML numbers follow their grammars
+
+- [[Std Json]] `decode`: numbers follow RFC 8259; leading zeros and a point or exponent without
+  digits are `Unexpected`.
+- [[Std Toml Scan]] `isNumber` and [[Std Toml Read]]: malformed integers and floats (leading zeros,
+  stray underscores, `1.`, `.5`, `1e`) and bare words that are not values are `Malformed`, and a
+  table header written twice is `Duplicate`.
+
 ## Unreleased — Semver identifiers and Accept negotiation follow their specifications
 
 - [[Std Semver]] `parse`: prerelease and build identifiers are ASCII letters, digits, and `-`
