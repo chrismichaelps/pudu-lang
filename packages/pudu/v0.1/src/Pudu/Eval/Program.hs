@@ -17,6 +17,7 @@ module Pudu.Eval.Program
   , evaluateProgramTallied
   , evaluateProgramTalliedFolded
   , foldModule
+  , foldModuleWith
   , linkedNames
   ) where
 
@@ -44,7 +45,6 @@ import Pudu.Eval.Env
 import Pudu.Eval.Frozen (Frozen, freeze, thaw)
 import Pudu.Eval.Install
   ( installBuiltinConstructors
-  , loadDeclarations
   , loadModuleDeclarations
   , loadModuleDeclarationsWith
   )
@@ -239,16 +239,28 @@ evaluateModule integerKinds moduleValue = fst <$> foldModule integerKinds module
 {-| Fold a module's constants: evaluate them with effects denied, and answer
     with what went wrong and with every constant whose value is plain data.
 
-    Folding runs the module alone, with nothing but the language in scope, so a
-    constant that compiles is one whose value is fixed by its own module; the
-    values answered are what linking would compute, and linking installs them
-    instead of computing them again. -}
+    The isolated entry supplies no dependencies; program compilation supplies
+    checked imports through `foldModuleWith`. -}
 foldModule :: Map.Map Span Text -> Module -> IO (EvalOutcome, Map.Map Text Frozen)
-foldModule integerKinds moduleValue = do
+foldModule integerKinds = foldModuleWith Map.empty integerKinds []
+
+{-| Fold with checked imports linked exactly as they are during execution.
+    Dependency linking and imported calls both retain the denial of effects. -}
+foldModuleWith
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Module
+  -> IO (EvalOutcome, Map.Map Text Frozen)
+foldModuleWith foldedDependencies integerKinds dependencies moduleValue = do
   found <- newIORef Map.empty
   outcome <- runWithEffects False $ do
     withIntegerKinds integerKinds
-    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    builtins <- linkDependenciesFolded foldedDependencies dependencies
+    pushFrame builtins
+    pushFrame Map.empty
+    installImportAliases (moduleImports moduleValue)
+    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     frame <- currentFrame
     Evaluator $ \env -> do
       writeIORef found (Map.mapMaybe freeze (Map.restrictKeys frame constants))

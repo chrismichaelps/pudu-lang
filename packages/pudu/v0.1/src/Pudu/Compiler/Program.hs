@@ -13,6 +13,7 @@ module Pudu.Compiler.Program
   , sourceRootFor
   ) where
 
+import Control.Monad (foldM)
 import Control.Exception (IOException, try)
 import Data.ByteString (ByteString)
 import Data.Graph (SCC, flattenSCC, stronglyConnComp)
@@ -29,6 +30,7 @@ import Pudu.Compiler
   , CompileResult (..)
   , FrontendResult (..)
   , compileFrontendWith
+  , compileFrontendWithDependencies
   , runFrontend
   )
 import Pudu.Compiler.Cache
@@ -43,6 +45,7 @@ import Pudu.Compiler.Cache
   , storeChecked
   , storeFrontend
   )
+import Pudu.Compiler.Constants (foldingInputs)
 import Pudu.Compiler.Library
   ( ResolutionContext
   , isStandardModule
@@ -94,7 +97,6 @@ data ProgramResult = ProgramResult
       reused never prepares the interfaces it had no module to check. -}
   , programContext :: ~CompileContext
   }
-
 {-| Every documented name in the program, in dependency order.
 
     Ordering by `programOrder` rather than by module name means a search over a
@@ -143,10 +145,8 @@ programFolded result =
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
-
 compileProgram :: FilePath -> IO ProgramResult
 compileProgram = compileProgramCached disabledCache
-
 {-| Compile a program, reusing what an earlier run stored for modules that have
     not changed.
 
@@ -303,13 +303,16 @@ finish cache rootName discovered = do
     (\(name, source) -> (,) (moduleNameText name) <$> interfaceKey cache source)
     (Map.toList (discoveredSources discovered))
   let graph = graphFingerprint keys
-      compileOne (name, frontend) = (,) name <$> case Map.lookup name (discoveredSources discovered) of
-        Nothing -> compileFrontendWith context frontend
-        Just source -> checkedFor cache graph context source frontend
-  results <- mapM compileOne pending
+      compileOne compiled (name, frontend) = do
+        let (folded, kinds, modules) = foldingInputs validModules order name compiled
+            compile = compileFrontendWithDependencies folded kinds modules context frontend
+        result <- case Map.lookup name (discoveredSources discovered) of
+          Nothing -> compile
+          Just source -> checkedFor cache graph source frontend compile
+        pure (Map.insert name result compiled)
+  compiled <- foldM compileOne Map.empty pending
   pruneProducts cache
-  let compiled = Map.fromList results
-      uncompiled = Map.difference (discoveredFrontends discovered) compiled
+  let uncompiled = Map.difference (discoveredFrontends discovered) compiled
       diagnostics = sortDiagnostics
         ( discoveredDiagnostics discovered
             <> concatMap frontendDiagnostics (Map.elems uncompiled)
@@ -341,8 +344,8 @@ frontendFor cache source = do
 {-| A module's check, from the cache when this text was checked before in a
     program of exactly these modules. Only a check that produced no diagnostic
     is stored, for the same reason as a parse. -}
-checkedFor :: ProductCache -> ByteString -> CompileContext -> Source -> FrontendResult -> IO CompileResult
-checkedFor cache graph context source frontend = do
+checkedFor :: ProductCache -> ByteString -> Source -> FrontendResult -> IO CompileResult -> IO CompileResult
+checkedFor cache graph source frontend compile = do
   stored <- lookupChecked cache graph source
   case stored of
     Just reused ->
@@ -359,7 +362,7 @@ checkedFor cache graph context source frontend = do
         , compileFolded = checkedFolded reused
         }
     Nothing -> do
-      compiled <- compileFrontendWith context frontend
+      compiled <- compile
       case compileModule compiled of
         Just checked | null (compileDiagnostics compiled) ->
           storeChecked cache graph source

@@ -4,6 +4,7 @@ module Pudu.Compiler
   , CompileResult (..)
   , FrontendResult (..)
   , compileFrontendWith
+  , compileFrontendWithDependencies
   , emptyCompileContext
   , recoveredSyntax
   , runCompile
@@ -22,7 +23,7 @@ import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Frozen (Frozen)
-import Pudu.Eval.Program (foldModule)
+import Pudu.Eval.Program (foldModuleWith)
 import Pudu.Frontend.Expand (expandModule)
 import Pudu.Semantic
   ( ExportIndex
@@ -105,7 +106,18 @@ runCompileWith :: CompileContext -> Source -> IO CompileResult
 runCompileWith context source = compileFrontendWith context (runFrontend source)
 
 compileFrontendWith :: CompileContext -> FrontendResult -> IO CompileResult
-compileFrontendWith context FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} =
+compileFrontendWith = compileFrontendWithDependencies Map.empty Map.empty []
+
+{-| Compile against checked dependency products so folding sees the same imports
+    as execution. Isolated callers continue to provide no dependency environment. -}
+compileFrontendWithDependencies
+  :: Map Text (Map Text Frozen)
+  -> Map Span Text
+  -> [(Text, Module)]
+  -> CompileContext
+  -> FrontendResult
+  -> IO CompileResult
+compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies context FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} =
   case frontendModule of
         Nothing ->
           pure CompileResult
@@ -137,7 +149,8 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 (constantDiagnostics, folded) <-
                   if hasErrors typed
                     then pure ([], Map.empty)
-                    else foldConstants (maybe Map.empty moduleIntegerKinds typing) parsed
+                    else foldConstants dependencyFolded
+                      (Map.union (maybe Map.empty moduleIntegerKinds typing) dependencyKinds) dependencies parsed
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
                   CompileResult
@@ -165,10 +178,10 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Map Span Text -> Module -> IO ([Diagnostic], Map Text Frozen)
-foldConstants integerKinds parsed
+foldConstants :: Map Text (Map Text Frozen) -> Map Span Text -> [(Text, Module)] -> Module -> IO ([Diagnostic], Map Text Frozen)
+foldConstants foldedDependencies integerKinds dependencies parsed
   | any hasInitializer (moduleDeclarations parsed) = do
-      (outcome, folded) <- foldModule integerKinds parsed
+      (outcome, folded) <- foldModuleWith foldedDependencies integerKinds dependencies parsed
       pure (outcomeDiagnostics outcome, folded)
   | otherwise = pure ([], Map.empty)
  where

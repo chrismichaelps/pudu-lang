@@ -46,7 +46,7 @@ data CompileResult = CompileResult
   }
   deriving stock (Eq, Show)
 
-runCompile :: Source -> CompileResult
+runCompile :: Source -> IO CompileResult
 
 data CompileContext = CompileContext
   { contextExports :: !ExportIndex
@@ -54,8 +54,11 @@ data CompileContext = CompileContext
   , contextStrictImports :: !Bool
   }
 emptyCompileContext :: CompileContext
-compileFrontendWith :: CompileContext -> FrontendResult -> CompileResult
-runCompileWith :: CompileContext -> Source -> CompileResult
+compileFrontendWith :: CompileContext -> FrontendResult -> IO CompileResult
+compileFrontendWithDependencies
+  :: Map Text (Map Text Frozen) -> Map Span Text -> [(Text, Module)]
+  -> CompileContext -> FrontendResult -> IO CompileResult
+runCompileWith :: CompileContext -> Source -> IO CompileResult
 ```
 
 ### Governance
@@ -145,3 +148,12 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
 ## Places
 
 Typing receives the resolution's `var` use spans, so the checker's assignment rules and the resolver's scopes cannot disagree. See [[ADR-0022-lending-a-place]].
+
+## Imported constant environments (#373)
+
+`compileFrontendWithDependencies` accepts checked dependencies in link order, their frozen
+constants and integer kinds. The isolated API supplies an empty dependency list. Folding uses
+these executable products only after the consumer passes resolution and typing.
+
+Resolved Grill Log: imports have the same scope during folding and execution. Reuse the evaluator's
+linker with effects denied rather than inventing constructor or alias lookup in the compiler.

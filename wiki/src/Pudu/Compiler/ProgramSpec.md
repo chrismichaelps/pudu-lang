@@ -53,3 +53,6 @@ DEPTH 0.2 (SHALLOW). A registry by design.
 ## Referenced by
 
 [[src/Pudu/Compiler/Program/_MOC]]
+
+Imported constant folding is registered from [[Program Cache Spec]], covering imported constructors,
+all import forms, transitive frozen products, cache equivalence and capability refusal (#373).

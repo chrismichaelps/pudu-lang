@@ -147,3 +147,13 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]] · [[Compiler Cache]]
+
+## Dependency-aware folding (#373)
+
+Compilation accumulates checked products in dependency order. A module with constants receives
+only its checked transitive imports through [[Compiler Constants]], in graph order, including their frozen constants and literal
+kinds. Cached products contribute the same inputs as freshly checked products. Cycles still admit
+signatures; a value depending on an unavailable cyclic initializer remains a diagnostic.
+
+Resolved Grill Log: link checked dependency products for a fold, never untyped frontend trees or
+unrelated modules compiled earlier. The evaluator retains capability denial while installing imports.

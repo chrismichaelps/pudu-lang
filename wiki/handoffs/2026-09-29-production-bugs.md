@@ -40,6 +40,7 @@ the depth guard; exact tree/depth/tab regressions and formatter checks pass. #37
 #383: exact unwrapOr regressions pass on the fresh binary; independent review approved.
 #382: quoted YAML fixture, formatter, API coverage and independent review pass.
 #376: structured Decimal equality passed focused/full tests and independent review.
+#373: dependency-scoped constant folds passed focused/full tests and independent review.
 Remaining issues are in progress.
 
 ## Exact next action

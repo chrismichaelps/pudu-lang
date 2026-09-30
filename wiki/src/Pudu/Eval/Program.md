@@ -26,6 +26,10 @@ evaluateEntryPoint     :: Map Span Text -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry   :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
 evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Map Text Int)
 evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
+foldModule :: Map Span Text -> Module -> IO (EvalOutcome, Map Text Frozen)
+foldModuleWith
+  :: Map Text (Map Text Frozen) -> Map Span Text -> [(Text, Module)]
+  -> Module -> IO (EvalOutcome, Map Text Frozen)
 evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module -> Located Block -> Evaluator Value
 ```
 
@@ -127,3 +131,17 @@ changes. Module constants may be folded again; prior local effects never replay.
 Resolved Grill Log: Mark module scope before restoring retained locals. Reversing
 that order classifies every previous REPL binding as module state and defeats
 selective capture for long-running sessions.
+
+## Folding imports (#373)
+
+`foldModuleWith` links checked dependencies using their frozen constants, installs the current
+module's import aliases and loads its declarations in a separate frame. Integer-kind maps include
+the dependencies. `foldModule` remains the isolated-source wrapper. The entire action runs with
+effects denied, including imported calls and dependency linking.
+
+Resolved Grill Log: the runtime linker already owns module scopes and all three import forms;
+folding reuses it. Constructor arrays, selected constants and calls retain canonical module identity.
+
+Resolved Grill Log: builtins reside in their own frame before aliases are installed. Loading the
+root's declarations must not reinstall them over selected imports with names such as `show` or
+`Some`; folding uses `loadModuleDeclarations`, matching runtime root loading.

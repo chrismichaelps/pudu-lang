@@ -4,6 +4,7 @@ module Pudu.Compiler.Program.CacheSpec
   , testCacheEquivalence
   , testCacheInvalidation
   , testFoldedConstants
+  , testImportedConstants
   ) where
 
 import Control.Monad (forM_)
@@ -178,3 +179,43 @@ testFoldedConstants = do
         , counterexample ("linking does less work: " <> show (sum reusedWork, sum evaluatedWork))
             (sum reusedWork < sum evaluatedWork)
         ]
+
+{-| Imported constructors and pure calls fold in their declaration scopes across
+    all import forms, including transitive constants and reused checked products. -}
+testImportedConstants :: IO Property
+testImportedConstants = withSystemTempDirectory "pudu-imported-constants" $ \root -> do
+  let project = root </> "project"
+      entry = project </> "Main.pudu"
+      cacheRoot = root </> "cache"
+  createDirectoryIfMissing True (project </> "Lib")
+  TextIO.writeFile (project </> "Lib" </> "Colors.pudu")
+    "module Lib.Colors\nexport type Color = Red | Green\nexport const BASE: Int = 20\nexport fn show() -> Int { 7 }\n"
+  TextIO.writeFile (project </> "Lib" </> "Palette.pudu")
+    "module Lib.Palette\nimport Lib.Colors as C\nexport const SIZE: Int = C.BASE + 1\nexport fn answer() -> Int { SIZE * 2 }\n"
+  TextIO.writeFile entry
+    "module Main\nimport Lib.Colors as C\nimport Lib.Colors\nimport Lib.Colors {BASE, show}\nimport Lib.Palette as P\nconst ALL: Array[C.Color] = [C.Red, C.Green]\nconst OTHERS: Array[Colors.Color] = [Colors.Green, Colors.Red]\nconst TOTAL: Int = P.answer() + BASE + show()\nfn main() -> Int { ALL.length() + OTHERS.length() + TOTAL }\n"
+  freshProgram <- compileProgramCached disabledCache entry
+  fresh <- observed freshProgram
+  coldProgram <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  cold <- observed coldProgram
+  warmProgram <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  warm <- observed warmProgram
+  TextIO.writeFile (project </> "Lib" </> "Effects.pudu")
+    "module Lib.Effects\nexport fn read() -> Result[Str, Str] { readFile(\"must-not-be-read\") }\n"
+  TextIO.writeFile entry
+    "module Main\nimport Lib.Effects as E\nconst BAD: Result[Str, Str] = E.read()\nfn main() -> Int { 0 }\n"
+  refused <- compileProgramCached disabledCache entry
+  let folded = Map.findWithDefault Map.empty "Main" (programFolded freshProgram)
+      codes = map (diagnosticCodeText . diagnosticCode) . programDiagnostics
+  pure $ conjoin
+    [ counterexample "aliases, default qualifiers, selected imports and transitive calls fold"
+        (fresh === ([], ["Lib.Colors", "Lib.Palette", "Main"], Just "73"))
+    , counterexample "imported constructor arrays and pure calls produce frozen values"
+        (filter (`Map.notMember` folded) ["ALL", "OTHERS", "TOTAL"] === [])
+    , counterexample "a cold cache agrees with a fresh compile" (cold === fresh)
+    , counterexample "a warm cache retains imported frozen values" (warm === fresh)
+    , counterexample "an imported call cannot perform IO during folding"
+        (codes refused === ["E7009"])
+    , counterexample "an effectful initializer never produces an executable module"
+        (case rootCompileResult refused >>= compileModule of Nothing -> True; Just _ -> False)
+    ]

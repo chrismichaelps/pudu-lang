@@ -87,6 +87,7 @@ library
     Pudu.Bundle
     Pudu.Cache.Persist
     Pudu.Compiler
+    Pudu.Compiler.Constants
     Pudu.Compiler.Cache
     Pudu.Compiler.Literals
     Pudu.Compiler.Library

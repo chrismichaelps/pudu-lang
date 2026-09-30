@@ -173,3 +173,8 @@ Registers `Pudu.Cli.RuntimePack`; it uses the already-linked `zlib` and the pack
 Register [[Type Formation Order]] as a library module. Resolved Grill Log: transparent aliases
 are formed in dependency order before record/sum fields, with deterministic cycles left for
 existing formation diagnostics; no new package is required.
+
+## Imported constant dependencies (#373)
+
+Register [[Compiler Constants]] for transitive checked dependency selection. Resolved Grill Log:
+selection is bounded and cycle-safe, and folds use existing dependency products without new IO.

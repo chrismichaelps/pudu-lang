@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Imported aliases in constant initializers (#373)
+
+- [[Compiler Constants]], [[Compiler Pipeline]], [[Compiler Program]], and [[Eval Program]]
+  fold constants in checked transitive module scopes with frozen dependencies and effects denied.
+  [[Program Cache Spec]] covers import forms, builtin-name shadowing, cold/warm caches and IO
+  refusal. Focused/full tests and independent review pass.
+
 ## 2026-09-30 — Decimal equality inside structured values (#376)
 
 - [[Eval Value]] compares Decimal leaves numerically throughout aggregates and collections while
