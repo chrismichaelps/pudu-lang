@@ -31,6 +31,9 @@ and syntax tables. This module adds no interpolation, trust conversion, destinat
 recursive traversal, or input-tree limit. The caller already owns the `Html` tree; only rendered
 output traversal and retention are bounded.
 
+Element and attribute names follow `Html.isName` exactly as `Html.render` does, so both renderers
+write the same bytes for every view.
+
 ## Grill Log
 
 - **Q:** Put this writer into the 408-line core module? **A:** No; the bounded responsibility would

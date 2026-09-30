@@ -58,6 +58,10 @@ piece reused across pages is a function returning a view. Template engines grow 
 fragments, and inclusion because their templates are files rather than values; here those are what
 functions already are, and they compose without a second mechanism to learn.
 
+Names cannot be escaped, so `isName` admits only an ASCII letter followed by letters, digits, `-`,
+`_`, `.`, or `:`. The renderer leaves out an attribute whose name fails it, writes an element whose
+name fails it as its children without tags, and `attribute` refuses such a name as `BadName`.
+
 ## Grill Log
 - **Q:** Is escaping text enough? **A:** No, and believing so is where the established engines leave
   a hole. _Rationale:_ a script destination and an event-handler attribute both survive escaping
@@ -96,6 +100,10 @@ functions already are, and they compose without a second mechanism to learn.
 - **Q:** Reject all raw attribute pairs at element construction? **A:** No; that would break the
   public element shape. Checked construction is strengthened additively, while rendering retains
   case-insensitive handler blocking as defense in depth.
+- **Q:** Filter attributes only by the handler prefix? **A:** No. _Rationale:_ a name holding a
+  space, quote, or `>` writes a handler or markup of its own after the prefix check. _Rejected:_
+  escaping names, which HTML has no syntax for.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]] ·
 [[2026-09-20-bounded-ssr-slots]] · [[2026-09-20-deferred-html-builders]] ·

@@ -127,7 +127,7 @@ testProtocolEvaluation = do
         more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "22")
+        (endpoints === Just "25")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
@@ -220,7 +220,7 @@ testProtocolEvaluation = do
         (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
-        (mimeType === Just "11")
+        (mimeType === Just "15")
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")
@@ -320,7 +320,7 @@ testProtocolEvaluation = do
         one of them cannot be written. -}
     , counterexample
         "versions order by number and globs stop at separators"
-        (versionsAndGlobs === Just "29")
+        (versionsAndGlobs === Just "34")
     {-| A SOAP envelope, because the parts that break a reader arrive together
         in one: a prefixed name, a self-closing element, an entity in text,
         and a CDATA section whose content must not be read as either. The
@@ -386,7 +386,7 @@ testProtocolEvaluation = do
         sections, dotted keys, and a document written and read back. -}
     , counterexample
         "a configuration reads back what it was written as"
-        (configured === Just "49")
+        (configured === Just "54")
     {-| Every export of the configuration scanner. Each reading call answers a
         value and where it stopped, and the position is checked beside the
         value every time: a reader answering the right text and the wrong
@@ -494,7 +494,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "58")
+        (urlAll === Just "66")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

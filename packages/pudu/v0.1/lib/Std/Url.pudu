@@ -12,13 +12,16 @@ export type Url = {
   fragment: Option[Str]
 }
 
+/// The largest TCP port number.
+const LARGEST_PORT: Int = 65535
+
 /// What stopped a URL from being read.
 export type UrlError = NoScheme | NoHost | BadPort(Str)
 
 /// A URL read from text, or what stopped the reader.
 export fn parse(source: Str) -> Result[Url, UrlError] {
   let schemeEnd = source.indexOf("://")
-  if schemeEnd < 0 { Err(NoScheme) } else {
+  if schemeEnd < 0 || !isScheme(source.slice(0, schemeEnd)) { Err(NoScheme) } else {
     let scheme = source.slice(0, schemeEnd).toLower()
     let rest = source.slice(schemeEnd + 3, source.length())
     let authorityEnd = firstOf(rest, "/?#")
@@ -239,14 +242,25 @@ fn splitPort(authority: Str) -> Result[(Str, Option[Int]), UrlError] {
     return portAfter(host, after.slice(1, after.length()))
   }
   let colon = hostAndPort.indexOf(":")
+  if colon == 0 { return Err(NoHost) }
   if colon < 0 { Ok((hostAndPort.toLower(), None)) } else {
     portAfter(hostAndPort.slice(0, colon).toLower(), hostAndPort.slice(colon + 1, hostAndPort.length()))
   }
 }
 
+/// A scheme is an ASCII letter followed by letters, digits, `+`, `-`, or `.`.
+fn isScheme(written: Str) -> Bool {
+  !written.isEmpty() && isAsciiLetter(written.charAt(0))
+    && Text.allChars(written, |c: Char| isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.')
+}
+
+fn isAsciiLetter(c: Char) -> Bool { (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+
+/// A port is one TCP port number, so anything past the largest is reported
+/// rather than handed to a connection.
 fn portAfter(host: Str, written: Str) -> Result[(Str, Option[Int]), UrlError] {
   match Text.countOf(written) {
-    case Some(number) => Ok((host, Some(number)))
+    case Some(number) => if number > LARGEST_PORT { Err(BadPort(written)) } else { Ok((host, Some(number))) }
     case None => Err(BadPort(written))
   }
 }

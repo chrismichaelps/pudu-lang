@@ -114,5 +114,11 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // A candidate's quality comes from the most specific range matching it, so
+  // `q=0` refuses a type even when a wider range accepts everything.
+  if Mime.negotiate("text/html;q=0, */*", ["text/html", "application/json"]) == Some("application/json") { held = held + 1 }
+  if Mime.negotiate("text/*;q=0, text/plain", ["text/html", "text/plain"]) == Some("text/plain") { held = held + 1 }
+  if Mime.negotiate("text/html;q=0", ["text/html"]) == None { held = held + 1 }
+  if Mime.negotiate("application/json;q=0.5, text/html", ["application/json", "text/html"]) == Some("text/html") { held = held + 1 }
   held
 }

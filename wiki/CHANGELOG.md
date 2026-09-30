@@ -74,6 +74,39 @@ tags: [changelog]
   including following keys and outer items. [[Uses Yaml Compact Sequence]] checks complete
   trees, indentation variants, and depth refusal through [[Protocol Evaluation Spec]].
 
+## Unreleased — JSON and TOML numbers follow their grammars
+
+- [[Std Json]] `decode`: numbers follow RFC 8259; leading zeros and a point or exponent without
+  digits are `Unexpected`.
+- [[Std Toml Scan]] `isNumber` and [[Std Toml Read]]: malformed integers and floats (leading zeros,
+  stray underscores, `1.`, `.5`, `1e`) and bare words that are not values are `Malformed`, and a
+  table header written twice is `Duplicate`.
+
+## Unreleased — Semver identifiers and Accept negotiation follow their specifications
+
+- [[Std Semver]] `parse`: prerelease and build identifiers are ASCII letters, digits, and `-`
+  (new `BadIdentifier`), and a numeric prerelease identifier with a leading zero is `LeadingZero`.
+- [[Std Mime]] `negotiate`: a candidate's quality comes from the most specific matching range, so
+  `q=0` refuses a type even when `*/*` also matches.
+
+## Unreleased — HTML names cannot carry markup
+
+- [[Std Html]] `isName`: an element or attribute name is an ASCII letter followed by letters,
+  digits, `-`, `_`, `.`, or `:`. Rendering leaves out other attributes and writes other elements'
+  children without tags; `attribute` refuses them as the new `BadName`.
+- [[Std Html Bounded]] applies the same rule, so bounded output stays equal to `Html.render`.
+
+## Unreleased — Bounded network reads, checked URL ports, and a Std mutation harness
+
+- [[Std Net]] `receiveUntil`: the limit bounds every read and counts the marker, so a marker past it
+  is an error; an empty marker or a limit shorter than the marker is rejected before reading.
+- [[Std Net]] `receiveExactly`: reads at most one chunk at a time, so a large requested count no
+  longer sizes one receive buffer; a negative count is an error.
+- [[Std Url]] `parse`: a port above 65535 is `BadPort`, a port with no host is `NoHost`, and an
+  empty or malformed scheme is `NoScheme`.
+- [[Std Mutation Harness]]: internal `tools/Mutate.pudu` scores Std against the fixtures that import
+  each module and lists modules no fixture imports.
+
 ## Unreleased — A herd of little pudus on the home banner
 
 - [[Pudu mascot script]]: up to ten little pudus roam the home banner beside the big one, each on

@@ -252,6 +252,11 @@ export fn receiveAll(connection: &Connection) -> Result[Bytes, NetError] {
 /// split across two reads, so a reader that looked only at the newest chunk
 /// would miss it. The buffer is searched whole each time.
 ///
+/// The limit counts every byte read, marker included, and no read asks for
+/// more than the limit leaves, so a marker past the limit is reported rather
+/// than accepted. An empty marker, or a limit shorter than the marker, is
+/// reported before anything is read.
+///
 /// The remainder is answered rather than dropped because it is the start of
 /// the next message: a reader that discarded it would lose the beginning of
 /// everything that followed.
@@ -260,39 +265,18 @@ export fn receiveUntil(
   marker: &Bytes,
   limit: Int
 ) -> Result[(Bytes, Bytes), NetError] {
+  if marker.isEmpty() || limit < marker.length() { return Err(Other("invalid delimiter read limit")) }
   var buffer = ByteSeq.empty()
-  var failure: Option[NetError] = None
-  var found = -1
-  var going = true
-  while going {
-    found = buffer.indexOf(*marker)
-    if found >= 0 {
-      going = false
-    } else {
-      if buffer.length() > limit {
-        failure = Some(Other("the marker did not arrive within " + show(limit) + " bytes"))
-        going = false
-      } else {
-        let chunk = receive(connection, CHUNK)
-        if let Err(reason) = chunk {
-          failure = Some(reason)
-          going = false
-        } else {
-          let piece = Result.unwrapOr(chunk, None)
-          if let Some(bytes) = piece {
-            buffer = buffer.concat(bytes)
-          } else {
-            failure = Some(Closed)
-            going = false
-          }
-        }
-      }
+  loop {
+    let found = buffer.indexOf(*marker)
+    if found >= 0 { return Ok((buffer.take(found), buffer.drop(found + marker.length()))) }
+    let capacity = limit - buffer.length()
+    if capacity <= 0 { return Err(Other("the marker did not arrive within " + show(limit) + " bytes")) }
+    let wanted = if capacity < CHUNK { capacity } else { CHUNK }
+    match receive(connection, wanted) ? {
+      case None => { return Err(Closed) }
+      case Some(bytes) => { buffer = buffer.concat(bytes) }
     }
-  }
-  if let Some(reason) = failure {
-    Err(reason)
-  } else {
-    Ok((buffer.take(found), buffer.drop(found + marker.length())))
   }
 }
 
@@ -302,27 +286,21 @@ export fn receiveUntil(
 /// A protocol that states a length ahead of its body needs this rather than
 /// `receive`, which is permitted to answer with fewer bytes than it was asked
 /// for whenever that is all that has arrived so far.
+///
+/// Each read asks for at most one chunk, so a length read off the wire sizes
+/// the answer but never a single receive buffer. A negative count is reported.
 export fn receiveExactly(connection: &Connection, count: Int) -> Result[Bytes, NetError] {
+  if count < 0 { return Err(Other("negative read length")) }
   var buffer = ByteSeq.empty()
-  var failure: Option[NetError] = None
-  var going = buffer.length() < count
-  while going {
-    let chunk = receive(connection, count - buffer.length())
-    if let Err(reason) = chunk {
-      failure = Some(reason)
-      going = false
-    } else {
-      let piece = Result.unwrapOr(chunk, None)
-      if let Some(bytes) = piece {
-        buffer = buffer.concat(bytes)
-        going = buffer.length() < count
-      } else {
-        failure = Some(Closed)
-        going = false
-      }
+  while buffer.length() < count {
+    let remaining = count - buffer.length()
+    let wanted = if remaining < CHUNK { remaining } else { CHUNK }
+    match receive(connection, wanted) ? {
+      case None => { return Err(Closed) }
+      case Some(bytes) => { buffer = buffer.concat(bytes) }
     }
   }
-  if let Some(reason) = failure { Err(reason) } else { Ok(buffer) }
+  Ok(buffer)
 }
 
 /// Open a connection, hand it to an action, and close it however the action

@@ -1,0 +1,268 @@
+module Mutate
+
+import Std.Char as Char
+import Std.Env as Env
+import Std.Io as Io
+import Std.List as List
+import Std.Math as Math
+import Std.Option as Option
+import Std.Process as Process
+import Std.Result as Result
+import Std.Text as Text
+
+/// One single-point change to one file.
+type Mutant = { file: Str, line: Int, column: Int, from: Str, to: Str }
+
+/// What the fixtures said about one mutant.
+type Verdict = Killed | Survived | Invalid
+
+/// What one fixture run answered: its exit status and everything it printed.
+type Observed = { fixture: Str, status: Int, output: Str }
+
+/// Operator replacements, tried at every code position in this order.
+const OPERATORS: Array[(Str, Str)] = [
+  ("==", "!="), ("!=", "=="), ("<=", "<"), (">=", ">"), ("<", "<="), (">", ">="),
+  ("&&", "||"), ("||", "&&"), ("true", "false"), ("false", "true"), ("+ 1", "- 1"), ("- 1", "+ 1"), ("!", "")
+]
+
+/// Longest one fixture run may take before the mutant counts as killed.
+const MUTANT_TIMEOUT_MS: Int = 60000
+
+/// Folder holding the standard library's modules.
+const SOURCE_ROOT: Str = "packages/pudu/v0.1/lib/Std/"
+
+/// Folder holding the programs that exercise the standard library.
+const FIXTURE_ROOT: Str = "test-fixtures/stdlib/"
+
+/// Module name prefix of every file under `SOURCE_ROOT`.
+const MODULE_PREFIX: Str = "Std."
+
+/// Runs the harness and answers 0, or 1 when the score is below the threshold.
+fn main() -> Int {
+  let every = Option.unwrapOr(Option.andThen(Env.option("--every"), |given: Str| Text.countOf(given)), 1)
+  let offset = Option.unwrapOr(Option.andThen(Env.option("--offset"), |given: Str| Text.countOf(given)), 0)
+  let threshold = Option.unwrapOr(Option.andThen(Env.option("--threshold"), |given: Str| Text.countOf(given)), 0)
+  let files = match Env.option("--file") {
+    case Some(one) => [one]
+    case None => sources(Option.unwrapOr(Env.option("--dir"), SOURCE_ROOT))
+  }
+  let fixtures = sources(FIXTURE_ROOT)
+  var all: Array[Mutant] = []
+  for file in files {
+    all = all.concat(mutantsOf(file, Result.unwrapOr(Io.read(file), "")))
+  }
+  var chosen: Array[Mutant] = []
+  var index = 0
+  for mutant in all {
+    let step = Math.max(1, every)
+    if index % step == offset % step { chosen = chosen.push(mutant) }
+    index = index + 1
+  }
+  if Env.hasFlag("--dry-run") {
+    for mutant in chosen { let _listed = Io.writeLine(describe(&mutant)) }
+    for file in files {
+      if fixturesOf(file, &fixtures).isEmpty() { let _gap = Io.writeLine("uncovered " + file) }
+    }
+    let _counted = Io.writeLine(show(chosen.length()) + " mutants")
+    return 0
+  }
+  let compiler = Env.variableOr("PUDU_BIN", "pudu")
+  if !Process.isAvailable(compiler) {
+    let _said = Io.writeErrorLine("Mutate: " + compiler + " was not found; set PUDU_BIN")
+    return 1
+  }
+  if Env.variableOr("PUDU_LIB", "").isEmpty() {
+    let _said = Io.writeErrorLine("Mutate: set PUDU_LIB to this tree's packages/pudu/v0.1/lib so fixtures read the mutated file")
+    return 1
+  }
+  var killed = 0
+  var survived = 0
+  var invalid = 0
+  var uncovered = 0
+  var number = 0
+  var baselineFile = ""
+  var baseline: Array[Observed] = []
+  for mutant in chosen {
+    number = number + 1
+    if mutant.file != baselineFile {
+      baselineFile = mutant.file
+      baseline = observeAll(compiler, &fixturesOf(mutant.file, &fixtures))
+    }
+    if baseline.isEmpty() {
+      uncovered = uncovered + 1
+    } else {
+      match judge(compiler, &mutant, &baseline) {
+        case Killed => { killed = killed + 1 }
+        case Survived => {
+          survived = survived + 1
+          let _reported = Io.writeLine("survived  " + describe(&mutant))
+        }
+        case Invalid => { invalid = invalid + 1 }
+      }
+    }
+    let _progress = Io.writeErrorLine("[" + show(number) + "/" + show(chosen.length()) + "] " + describe(&mutant))
+  }
+  let scored = killed + survived
+  let score = if scored == 0 { 100 } else { killed * 100 / scored }
+  let _summary = Io.writeLine("killed " + show(killed) + ", survived " + show(survived) + ", invalid " + show(invalid) + ", uncovered " + show(uncovered) + ", score " + show(score) + "%")
+  if score < threshold { 1 } else { 0 }
+}
+
+/// Applies one mutant, reruns the fixtures, restores the file, and answers the verdict.
+fn judge(compiler: Str, mutant: &Mutant, baseline: &Array[Observed]) -> Verdict {
+  let original = Result.unwrapOr(Io.read(mutant.file), "")
+  let _mutated = Io.write(mutant.file, applied(original, mutant))
+  let verdict = match Process.within(compiler, &["check", mutant.file], MUTANT_TIMEOUT_MS) {
+    case Ok(Some(checked)) => {
+      if checked.status != 0 || checked.output.contains("error[") { Invalid } else { compared(compiler, baseline) }
+    }
+    case _ => Invalid
+  }
+  let _restored = Io.write(mutant.file, original)
+  verdict
+}
+
+/// Killed when any fixture answers differently from its baseline or runs past the deadline.
+fn compared(compiler: Str, baseline: &Array[Observed]) -> Verdict {
+  for expected in baseline {
+    match Process.within(compiler, &["run", expected.fixture], MUTANT_TIMEOUT_MS) {
+      case Ok(Some(finished)) => {
+        if finished.status != expected.status || finished.output != expected.output { return Killed }
+      }
+      case Ok(None) => { return Killed }
+      case Err(_) => { return Invalid }
+    }
+  }
+  Survived
+}
+
+/// The unmutated answer of every fixture that finishes in time.
+fn observeAll(compiler: Str, fixtures: &Array[Str]) -> Array[Observed] {
+  var observed: Array[Observed] = []
+  for fixture in fixtures {
+    if let Ok(Some(finished)) = Process.within(compiler, &["run", fixture], MUTANT_TIMEOUT_MS) {
+      observed = observed.push(Observed{fixture: fixture, status: finished.status, output: finished.output})
+    }
+  }
+  observed
+}
+
+/// The fixtures that import a source file's module by name.
+fn fixturesOf(file: Str, fixtures: &Array[Str]) -> Array[Str] {
+  if !file.startsWith(SOURCE_ROOT) { return [] }
+  let name = MODULE_PREFIX + file.drop(SOURCE_ROOT.length()).replace(".pudu", "").replace("/", ".")
+  fixtures.filter(|fixture: Str| imports(Result.unwrapOr(Io.read(fixture), ""), name))
+}
+
+/// Whether a program's text imports exactly the named module.
+fn imports(text: Str, name: Str) -> Bool {
+  let statement = "import " + name
+  !text.split("\n").filter(|line: Str| line == statement || line.startsWith(statement + " ")).isEmpty()
+}
+
+/// Every mutant of one file's text.
+fn mutantsOf(file: Str, text: Str) -> Array[Mutant] {
+  var found: Array[Mutant] = []
+  var lineNumber = 0
+  for line in text.split("\n") {
+    lineNumber = lineNumber + 1
+    let trimmed = line.trim()
+    if !trimmed.startsWith("//") && !trimmed.startsWith("/*") && !trimmed.startsWith("import ") {
+      let code = codeMask(line)
+      for operator in OPERATORS {
+        var at = 0
+        while at < line.length() {
+          if matchesAt(line, &code, at, operator[0]) {
+            found = found.push(Mutant{file: file, line: lineNumber, column: at + 1, from: operator[0], to: operator[1]})
+          }
+          at = at + 1
+        }
+      }
+    }
+  }
+  found
+}
+
+/// Whether an operator occurs at a code position and is not part of a longer operator or word.
+fn matchesAt(line: Str, code: &Array[Bool], at: Int, operator: Str) -> Bool {
+  let end = at + operator.length()
+  if end > line.length() || line.slice(at, end) != operator { return false }
+  var position = at
+  while position < end {
+    if !code[position] { return false }
+    position = position + 1
+  }
+  let before = if at > 0 { line.slice(at - 1, at) } else { "" }
+  let after = if end < line.length() { line.slice(end, end + 1) } else { "" }
+  if operator == "true" || operator == "false" { return !isWord(before) && !isWord(after) }
+  if operator == "<" { return after != "=" && after != "-" && before != "<" && isSpaced(before, after) }
+  if operator == ">" { return after != "=" && before != "-" && before != "=" && before != ">" && isSpaced(before, after) }
+  if operator == "!" { return after != "=" && (isWord(after) || after == "(") }
+  if operator == "- 1" || operator == "+ 1" { return !isWord(after) }
+  true
+}
+
+/// Whether a comparison has a space on both sides, which a type's brackets never do.
+fn isSpaced(before: Str, after: Str) -> Bool { before == " " && after == " " }
+
+/// For each character of a line, whether it is code rather than a string literal or comment.
+fn codeMask(line: Str) -> Array[Bool] {
+  var mask: Array[Bool] = []
+  var inString = false
+  var escaped = false
+  var commented = false
+  var index = 0
+  let characters = line.chars()
+  for character in characters {
+    if commented {
+      mask = mask.push(false)
+    } else if inString {
+      mask = mask.push(false)
+      if escaped { escaped = false } else if character == '\\' { escaped = true } else if character == '"' { inString = false }
+    } else if character == '"' {
+      inString = true
+      mask = mask.push(false)
+    } else if character == '/' && index + 1 < characters.length() && characters[index + 1] == '/' {
+      commented = true
+      mask = mask.push(false)
+    } else if character == '\'' {
+      mask = mask.push(false)
+    } else {
+      mask = mask.push(true)
+    }
+    index = index + 1
+  }
+  mask
+}
+
+/// The text with one mutant applied.
+fn applied(text: Str, mutant: &Mutant) -> Str {
+  let lines = text.split("\n")
+  let target = lines[mutant.line - 1]
+  let start = mutant.column - 1
+  let changed = target.slice(0, start) + mutant.to + target.drop(start + mutant.from.length())
+  lines.slice(0, mutant.line - 1).concat([changed]).concat(lines.slice(mutant.line, lines.length())).join("\n")
+}
+
+/// A mutant as `file:line:column  from -> to`.
+fn describe(mutant: &Mutant) -> Str {
+  mutant.file + ":" + show(mutant.line) + ":" + show(mutant.column) + "  " + mutant.from + " -> " + (if mutant.to.isEmpty() { "(removed)" } else { mutant.to })
+}
+
+/// Whether text is one identifier character.
+fn isWord(text: Str) -> Bool {
+  !text.isEmpty() && Text.allChars(text, |c: Char| Char.isAlphanumeric(c) || c == '_')
+}
+
+/// Every source file under a directory, sorted.
+fn sources(directory: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  for path in List.sortBy(&Result.unwrapOr(Io.listPaths(directory), []), fn(left: Str, right: Str) -> Bool { left < right }) {
+    if path.endsWith(".pudu") {
+      found = found.push(path)
+    } else if !path.contains(".") {
+      found = found.concat(sources(path))
+    }
+  }
+  found
+}

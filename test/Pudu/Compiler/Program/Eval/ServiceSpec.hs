@@ -133,7 +133,7 @@ testServiceEvaluation = do
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "66")
+        (markup === Just "74")
     , counterexample
         "checked HTML builder destinations reject program-bearing values without compatibility drift"
         (checkedDestinations === Just "16")

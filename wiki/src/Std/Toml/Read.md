@@ -28,6 +28,10 @@ the finished `Toml` once, after the text is read. A key written through a value 
 value with a table. Inline tables use the same drafts, so a key given twice inside braces is refused
 too. Measured at -O2, 5,000 keys in one table read in 0.87 s (43.2 s when every key rebuilt the
 tables along its path and searched each sibling), and 5,000 keys across 500 sections in 0.93 s.
+A bare word that `Scan.valueOf` reads as a number must also pass `Scan.isNumber`, or it is
+`Malformed`. A table named by a `[header]` is marked declared, and a second header naming it is
+`Duplicate`; a table only opened implicitly (as `a` by `[a.b]`) may still be declared once later.
+
 ## Grill Log
 - **Q:** Gather keys first and place them afterwards? **A:** No. _Rationale:_ each key would have to
   carry the header it arrived under, which is the same bookkeeping done less directly. _Rejected:_
@@ -40,5 +44,8 @@ tables along its path and searched each sibling), and 5,000 keys across 500 sect
   with the square of its key count. Drafts still place each key as it is read, which is what the
   earlier answer protects. _Rejected:_ gathering keys and assembling in a second pass; a side index
   over the nested value, which must be kept in step with every rebuild.
+- **Q:** Merge a table header written twice? **A:** No. _Rationale:_ TOML defines a table once, and
+  merging hides a pasted or conflicting section. _Rejected:_ last-writer-wins and silent merging.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Toml]] · [[Std Toml Scan]]
