@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Type Check Pattern Spec]] — correlated product coverage and missing-pattern diagnostics.
+
 - [[Type Boundary]] — the phase entry point and the published type map.
 - [[Type Value]] — formed types, schemes, and how a type is rendered.
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.
@@ -31,6 +33,8 @@ tags: [moc, module]
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 
 Dependency direction: Value → Env → Unify/Formation → Rule/Pattern/Method/Coherence/Import → Check → Boundary.
+
+- [[Type Test Coordinator]] — executable registration of checker regression properties.
 
 ## Referenced by
 

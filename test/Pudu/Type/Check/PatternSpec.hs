@@ -2,6 +2,7 @@
 module Pudu.Type.Check.PatternSpec
   ( patternProperties
   , testExhaustiveness
+  , testTupleCoverage
   , testMatchThroughBorrow
   ) where
 
@@ -9,7 +10,11 @@ import Pudu.Type.Check.Common
   ( codes
   , codesOfExpression
   , typeOf
+  , compile
+  , diagnosticContract
   )
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Type.Check.DataSpec (colorProgram)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -17,6 +22,7 @@ patternProperties :: [(String, IO Property)]
 patternProperties =
   [ ("a match reads through a borrow", testMatchThroughBorrow)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
+  , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
   ]
 
 testExhaustiveness :: IO Property
@@ -270,3 +276,47 @@ testMatchThroughBorrow = do
     , counterexample "a character answers for its code" (charCode === "Int")
     , counterexample "a character has no other method" (unknownChar === ["E3005"])
     ]
+
+{-| Complete products must check, but independent coverage of their columns
+    must never stand in for coverage of every combination. -}
+testTupleCoverage :: IO Property
+testTupleCoverage = do
+  complete <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), Some(_))", "(Some(_), None)", "(None, Some(_))", "(None, None)"])
+  grouped <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), _)", "(None, Some(_))", "(None, None)"])
+  diagonal <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), Some(_))", "(None, None)"])
+  guarded <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), _)", "(None, Some(_))", "(None, None) if true"])
+  payload <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(1), _)", "(None, _)"])
+  booleans <- codes (program "(Bool, Bool)"
+    ["(true, true)", "(true, false)", "(false, true)", "(false, false)"])
+  diagonalBool <- codes (program "(Bool, Bool)" ["(true, true)", "(false, false)"])
+  nested <- codes (program "((Option[Int], Bool), Option[Int])"
+    ["((Some(_), _), _)", "((None, true), _)", "((None, false), _)"])
+  alternatives <- codes (program "(Bool, Bool)" ["(true | false, true)", "(_, false)"])
+  let source = Text.unlines (program "(Option[Int], Option[Int])"
+        ["(Some(_), _)", "(None, Some(_))"])
+  missing <- compile source
+  pure $ conjoin
+    [ counterexample "all four combinations" (complete === [])
+    , counterexample "grouped wildcard covers all combinations" (grouped === [])
+    , counterexample "diagonal leaves two combinations" (diagonal === ["E5001"])
+    , counterexample "guarded last combination remains missing" (guarded === ["E5001"])
+    , counterexample "open payload test leaves values" (payload === ["E5001"])
+    , counterexample "boolean product" (booleans === [])
+    , counterexample "boolean diagonal remains incomplete" (diagonalBool === ["E5001"])
+    , counterexample "nested tuple product" (nested === [])
+    , counterexample "alternatives specialize without losing their row" (alternatives === [])
+    , diagnosticContract source "match value" "E5001"
+        "match on (Option[Int], Option[Int]) does not cover every value"
+        (Just "add a wildcard case for the values the arms do not name") missing
+    ]
+ where
+  program :: Text -> [Text] -> [Text]
+  program subject patterns =
+    ["module M", "fn run(value: " <> subject <> ") -> Int {", "  match value {"]
+      <> ["    case " <> held <> " => 0" | held <- patterns]
+      <> ["  }", "}"]

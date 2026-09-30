@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Correlated tuple exhaustiveness (#377)
+
+- [[Type Exhaust]] specializes tuple pattern rows without losing correlations between columns.
+  [[Type Check Pattern Spec]] covers Option/Bool products, alternatives, guards, nested tuples,
+  and missing combinations with exact E5001 diagnostics. Focused tests and independent review pass.
+
 ## 2026-09-30 — Decimal trait dispatch (#371)
 
 - [[Eval Operator Access]] identifies Decimal receivers for the existing implementation lookup.

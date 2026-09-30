@@ -37,6 +37,10 @@ checkExhaustive spanValue subjectType arms = do
       case variants of
         Just names -> checkClosed isVariant spanValue owner names arms
         Nothing -> checkOpen isVariant spanValue resolved arms
+    TupleTypeValue _ -> do
+      covered <- coversRows isVariant
+        [[armPattern arm] | Located _ arm <- arms, armGuard arm == Nothing]
+      if covered then pure () else checkOpen isVariant spanValue resolved arms
     _ -> checkOpen isVariant spanValue resolved arms
 
 {-| Decide, for the names these arms actually mention, which are sum variants.
@@ -177,6 +181,56 @@ coversPatterns isVariant patterns
           _ -> False
       )
       patterns
+
+{-| Specialize whole pattern rows, retaining the other columns so coverage of
+    separate tuple members cannot invent missing combinations. A wildcard
+    participates in every specialization, while an open domain admits only
+    rows whose head binds the entire value. -}
+coversRows :: (Text -> Bool) -> [[Located Pattern]] -> Checker Bool
+coversRows isVariant rows
+  | null rows = pure False
+  | any null rows = pure True
+  | otherwise = case [held | held : _ <- expanded, not (irrefutable isVariant held)] of
+      [] -> coversRows isVariant defaults
+      Located _ (TuplePattern members) : _ ->
+        coversRows isVariant (specialize (length members) tupleMembers)
+      Located _ (LiteralPattern (Tree.BoolValue _)) : _ ->
+        and <$> mapM (\flag -> coversRows isVariant (specialize 0 (boolean flag))) [True, False]
+      Located _ (ConstructorPattern path _) : _ -> do
+        found <- lookupVariant (NonEmpty.last (moduleNameSegments path))
+        case found of
+          Nothing -> coversRows isVariant defaults
+          Just (owner, _, _) -> do
+            variants <- lookupOwnerVariants owner
+            case variants of
+              Nothing -> coversRows isVariant defaults
+              Just names -> and <$> mapM coverConstructor names
+      _ -> coversRows isVariant defaults
+ where
+  expanded = concatMap expand rows
+  expand [] = [[]]
+  expand (held : rest) = [branch : rest | branch <- branches held]
+  defaults = [rest | held : rest <- expanded, irrefutable isVariant held]
+  specialize arity select =
+    [ arguments <> rest
+    | held@(Located heldSpan _) : rest <- expanded
+    , arguments <- if irrefutable isVariant held
+        then [replicate arity (Located heldSpan WildcardPattern)]
+        else maybe [] pure (select held)
+    ]
+  tupleMembers (Located _ (TuplePattern members)) = Just members
+  tupleMembers _ = Nothing
+  boolean flag (Located _ (LiteralPattern (Tree.BoolValue actual)))
+    | flag == actual = Just []
+  boolean _ _ = Nothing
+  constructor name (Located _ (ConstructorPattern path arguments))
+    | NonEmpty.last (moduleNameSegments path) == name = Just arguments
+  constructor _ _ = Nothing
+  coverConstructor name = do
+    found <- lookupVariant name
+    case found of
+      Nothing -> pure False
+      Just (_, _, payload) -> coversRows isVariant (specialize (length payload) (constructor name))
 
 {-| An open domain cannot be enumerated, so only an irrefutable arm covers it. -}
 checkOpen :: (Text -> Bool) -> Span -> Type -> [Located MatchArm] -> Checker ()

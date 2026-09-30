@@ -35,11 +35,12 @@ suite and warning gates. Independent reviewers cannot author the implementation 
 
 #381: independent Language Architect and Forensic Guardian review approved after correcting
 the depth guard; exact tree/depth/tab regressions and formatter checks pass. #371: Decimal dispatch passed focused tests and independent review; its fixture is formatted.
+#377: correlated tuple tests pass after executable test registration; independent review approved.
 Remaining issues are in progress.
 
 ## Exact next action
 
-Complete #377 validation and commit its tuple exhaustiveness slice.
+Validate #378 canonical constructor coverage after the #377 commit.
 
 ## Referenced by
 

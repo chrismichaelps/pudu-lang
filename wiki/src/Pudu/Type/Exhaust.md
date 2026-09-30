@@ -30,7 +30,7 @@ checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
 ### Governance
 
 - A guarded arm never contributes to coverage. Its guard may be false, which is exactly the rule [[architecture/SEMANTICS]] states, and treating it as covering would accept a match that fails at run time.
-- Coverage is decided only where it is decidable: a closed sum and `Bool` are enumerated, and an open domain such as `Int` or `Str` is covered only by an irrefutable arm. Nothing here pretends to enumerate an infinite domain.
+- Coverage is decided only where it is decidable: a closed sum and `Bool` are enumerated, tuples are checked by correlated pattern-matrix specialization, and an open domain such as `Int` or `Str` is covered only by an irrefutable arm. Nothing here pretends to enumerate an infinite domain.
 - An arm covers a constructor only when its payload patterns bind rather than test: `case Ok(1)` tests, so it leaves `Ok` uncovered.
 - A missing case is `E5001` and names what is missing, because a list of remaining constructors is what the reader needs to act.
 - An arm after one that already matches everything is `W5001`, a warning rather than an error: unreachable code is a mistake worth reporting but not a reason to refuse the program.
@@ -45,12 +45,12 @@ checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]], [[Type Check Pattern Spec]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
 
-Resolve the scrutinee's type, walk the arms once carrying what earlier unguarded arms have taken and whether one of them matched everything, then either enumerate the constructors of a closed domain and name what the unguarded arms do not cover, or require an irrefutable arm for an open one.
+For a tuple, expand its members into correlated columns and recursively specialize whole rows by booleans and positional constructors, retaining every remaining column; a row with an open-domain head contributes only when that head binds. For other subjects, resolve the scrutinee's type, walk the arms once carrying what earlier unguarded arms have taken and whether one of them matched everything, then either enumerate the constructors of a closed domain and name what the unguarded arms do not cover, or require an irrefutable arm for an open one.
 
 Coverage of one constructor is collective rather than per-arm. A payload that binds covers the constructor outright, which is what a single arm has always done. A payload that tests covers it when the arms naming that constructor exhaust the payload between them — the same question asked one level down. That is what makes `Ok(true)` with `Ok(false)`, and `Ok(None)` with `Ok(Some(x))`, cover `Ok`, while `Ok(1)` alone still does not.
 
@@ -58,7 +58,8 @@ The domain one level down is read from the constructors the patterns actually wr
 
 ## Negative Logic (Prohibited Paths)
 
-- Only a payload of one value is followed down. Two would need every combination accounted for, and `C(true, true)` with `C(false, false)` covers neither the pair `(true, false)` nor `C`; that is more than this asks, so it answers no.
+- The nominal coverage helper follows only a payload of one value. Tuple matrix specialization
+  expands every payload column while preserving correlations. Two would need every combination accounted for, and `C(true, true)` with `C(false, false)` covers neither the pair `(true, false)` nor `C`; that is more than this asks, so it answers no.
 - No usefulness analysis beyond the irrefutable-arm and already-taken rules, no range or literal-domain reasoning, no reachability across guards, and no rewriting of the match. A pattern that binds part of what it matches spans more values than any key could stand for, so nothing is claimed about it in either direction.
 
 ## Edge Cases
@@ -72,6 +73,8 @@ The domain one level down is read from the constructors the patterns actually wr
 DEPTH 0.55 (MEDIUM). It hides refutability, guard handling, and domain classification behind one call.
 
 ## Grill Log
+
+- **Q:** May tuple coverage be decided by covering each member independently? **A:** No; specialize complete rows for each constructor or boolean and retain every remaining member. _Rationale:_ `(Some(_), Some(_))` and `(None, None)` cover both individual Option domains but miss two combinations. Tuple members and positional constructor payloads expand into columns; wildcard columns expand into wildcard payloads. Guarded rows are excluded. _Rejected:_ independent-column union; requiring a wildcard for every tuple (#377).
 
 - **Q:** Should a guarded arm count toward coverage? **A:** No. _Rationale:_ the guard decides at run time, so counting it would let a program pass the check and still find no arm. _Rejected:_ counting guarded arms; requiring guards to be total.
 - **Q:** Enumerate integer ranges? **A:** No; an open domain needs an irrefutable arm. _Rationale:_ range arithmetic over every integer type is a decision procedure this slice does not have, and a wrong answer here rejects valid programs. _Rejected:_ interval reasoning; treating a literal set as closed.

@@ -31,7 +31,8 @@ import Pudu.Type.Check.ControlFlowSpec
   , testTry
   )
 import Pudu.Type.Check.PatternSpec
-  ( testExhaustiveness
+  ( testTupleCoverage
+  , testExhaustiveness
   , testMatchThroughBorrow
   )
 import Pudu.Type.Check.PlaceSpec (testPlaces)
@@ -65,7 +66,8 @@ import Pudu.Type.Check.TraitSpec
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a generic alias stands for what it names", testGenericAliases)
+  [ ("tuple coverage retains correlated Option combinations", testTupleCoverage)
+  , ("a generic alias stands for what it names", testGenericAliases)
   , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
   , ("maps and sets are typed by what they hold", testKeyedTypes)
   , ("a tuple is indexed by a literal position", testTupleIndex)
