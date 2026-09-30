@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Decimal equality inside structured values (#376)
+
+- [[Eval Value]] compares Decimal leaves numerically throughout aggregates and collections while
+  preserving stored scales, closure equality, and foreign claims. [[Eval Data Tests]] covers
+  nested values, unequal cases, and lookup behavior. Focused and full tests and independent review pass.
+
 ## 2026-09-30 — YAML quoted scalar decoding (#382)
 
 - [[Std Yaml]] delegates to [[src/Std/Yaml/Quoted]] for YAML escapes, doubled apostrophes,

@@ -140,7 +140,47 @@ data Value
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
-  deriving stock (Eq, Show)
+  deriving stock (Show)
+
+{-| Aggregate equality follows numeric Decimal equality without changing the
+    retained scale or the identity of closures and foreign handle claims. -}
+instance Eq Value where
+  left == right = case (left, right) of
+    (IntValue kindA a, IntValue kindB b) -> kindA == kindB && a == b
+    (FloatValue widthA a, FloatValue widthB b) -> widthA == widthB && a == b
+    (DecimalValue a, DecimalValue b) -> decimalCompare a b == EQ
+    (StrValue a, StrValue b) -> a == b
+    (BytesValue a, BytesValue b) -> a == b
+    (BucketsValue a, BucketsValue b) -> a == b
+    (CharValue a, CharValue b) -> a == b
+    (BoolValue a, BoolValue b) -> a == b
+    (TupleValue a, TupleValue b) -> a == b
+    (ArrayValue a, ArrayValue b) -> a == b
+    (MapValue a, MapValue b) -> a == b
+    (SetValue a, SetValue b) -> a == b
+    (FunctionValue a, FunctionValue b) -> a == b
+    (BuiltinValue a, BuiltinValue b) -> a == b
+    (TextMethodValue a, TextMethodValue b) -> a == b
+    (ForeignValue a, ForeignValue b) -> a == b
+    (NullValue, NullValue) -> True
+    (UnitValue, UnitValue) -> True
+    (RecordValue tagA a, RecordValue tagB b) -> tagA == tagB && a == b
+    (VariantValue tagA a, VariantValue tagB b) -> tagA == tagB && a == b
+    (ArrayMethodValue tagA a, ArrayMethodValue tagB b) -> tagA == tagB && a == b
+    (StringMethodValue tagA a, StringMethodValue tagB b) -> tagA == tagB && a == b
+    (CharMethodValue tagA a, CharMethodValue tagB b) -> tagA == tagB && a == b
+    (MapMethodValue tagA a, MapMethodValue tagB b) -> tagA == tagB && a == b
+    (SetMethodValue tagA a, SetMethodValue tagB b) -> tagA == tagB && a == b
+    (RangeMethodValue tagA a, RangeMethodValue tagB b) -> tagA == tagB && a == b
+    (BytesMethodValue tagA a, BytesMethodValue tagB b) -> tagA == tagB && a == b
+    (BucketsMethodValue tagA a, BucketsMethodValue tagB b) -> tagA == tagB && a == b
+    (RangeValue lowA inclusiveA highA, RangeValue lowB inclusiveB highB) ->
+      lowA == lowB && inclusiveA == inclusiveB && highA == highB
+    (TaskValue closureA bindingsA spanA, TaskValue closureB bindingsB spanB) ->
+      closureA == closureB && bindingsA == bindingsB && spanA == spanB
+    (ForeignHandleValue nameA addressA claimA, ForeignHandleValue nameB addressB claimB) ->
+      nameA == nameB && addressA == addressB && claimA == claimB
+    _ -> False
 
 {-| Everything the runtime needs to make one foreign call.
 

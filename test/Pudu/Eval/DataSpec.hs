@@ -3,6 +3,7 @@ module Pudu.Eval.DataSpec
   ( dataProperties
   , testArrayConcat
   , testData
+  , testDecimalEquality
   , testInterpolation
   , testKeyed
   , testTextMethods
@@ -25,6 +26,7 @@ dataProperties =
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
   , ("interpolated strings render their holes", testInterpolation)
+  , ("Decimal equality is numeric inside every aggregate", testDecimalEquality)
   ]
 
 testData :: IO Property
@@ -247,3 +249,38 @@ testTextMethods = do
     , counterexample "a slice sharing its parent's buffer counts its own scalars" (sharedBuffer === "true")
     , counterexample "an index at the scalar length of a long text is E7004" (pastEnd === ["E7004"])
     ]
+
+
+testDecimalEquality :: IO Property
+testDecimalEquality = do
+  let declarations =
+        [ "type Amount = { value: Decimal }"
+        , "type AmountKind = | Price(Decimal) | Quantity(Decimal)"
+        , "fn absent() -> Option[Decimal] { None }"
+        ]
+      cases =
+        [ ("bare decimals compare numerically", "1.0d == 1.00d", "true")
+        , ("Options compare numerically", "Some(1.0d) == Some(1.00d)", "true")
+        , ("user sum payloads compare numerically", "Price(1.0d) == Price(1.00d)", "true")
+        , ("records compare numerically", "Amount{value: 1.0d} == Amount{value: 1.00d}", "true")
+        , ("tuples compare numerically", "(1.0d, true) == (1.00d, true)", "true")
+        , ("arrays compare numerically", "[1.0d] == [1.00d]", "true")
+        , ("map values compare numerically", "mapOf([(1, 1.0d)]) == mapOf([(1, 1.00d)])", "true")
+        , ("map keys compare numerically", "mapOf([(1.0d, 1)]) == mapOf([(1.00d, 1)])", "true")
+        , ("sets compare numerically", "setOf([1.0d]) == setOf([1.00d])", "true")
+        , ("nested aggregates compare numerically", "Some([Amount{value: 1.0d}]) == Some([Amount{value: 1.00d}])", "true")
+        , ("negative values compare numerically", "Some(-1.0d) == Some(-1.00d)", "true")
+        , ("zero compares numerically", "Some(0.0d) == Some(-0.00d)", "true")
+        , ("unequal numbers remain distinct", "Some(1.0d) == Some(1.01d)", "false")
+        , ("different variants remain distinct", "Price(1.0d) == Quantity(1.00d)", "false")
+        , ("presence differs from absence", "Some(1.0d) == absent()", "false")
+        , ("different fields remain distinct", "(1.0d, true) == (1.00d, false)", "false")
+        , ("array membership follows numeric equality", "[Some(1.0d)].contains(Some(1.00d))", "true")
+        , ("array index lookup follows numeric equality", "[Some(1.0d)].indexOf(Some(1.00d))", "0")
+        , ("missing array value stays absent", "[Some(1.0d)].indexOf(Some(2.00d))", "-1")
+        , ("equality preserves retained scale", "(1.0d, 1.00d)", "(1.0, 1.00)")
+        ]
+  results <- mapM (\(label, expression, expected) -> do
+    actual <- evaluateWith declarations expression
+    pure $ counterexample label (actual === expected)) cases
+  pure $ conjoin results

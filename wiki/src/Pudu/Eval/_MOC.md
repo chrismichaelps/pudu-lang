@@ -57,6 +57,8 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
 
+- [[Eval Data Tests]] — structural Decimal equality and retained numeric representation.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]]

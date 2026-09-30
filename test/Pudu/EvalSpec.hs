@@ -14,7 +14,8 @@ import Pudu.Eval.BindingFlowSpec
   , testUnwindFrameCleanup
   )
 import Pudu.Eval.DataSpec
-  ( testArrayConcat
+  ( testDecimalEquality
+  , testArrayConcat
   , testData
   , testInterpolation
   , testKeyed
@@ -39,7 +40,8 @@ import Pudu.Eval.SystemSpec
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
-  [ ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
+  [ ("Decimal equality follows numbers inside every structure", testDecimalEquality)
+  , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   , ("arithmetic and comparison follow declared operators", testArithmetic)
   , ("bindings assignment and blocks evaluate in order", testBindings)
   , ("functions defaults and recursion evaluate", testFunctions)

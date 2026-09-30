@@ -46,6 +46,10 @@ body.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 - `FloatValue` carries [[Float Literal]]'s `FloatWidth` beside its normalized `Double` storage. The tag is semantic: equality and operators cannot erase whether the admitted value is binary32 or binary64.
+- Runtime equality recursively compares aggregate payloads and compares Decimal leaves with
+  `decimalCompare`. Retained coefficient and scale remain unchanged, so equal decimals may render
+  differently. Other scalar tags, closure identities, and foreign ownership claims retain their
+  established equality.
 - A closure is equal to another when it is the same closure: same name, same receiver, same function. What it captured is deliberately not compared, because a captured environment reaches the scope the closure was made in, and that scope holds the closure — so a comparison that followed captures would not end. Equality on closures exists to answer identity, which is what removing one from a list of the tasks a scope started is asking.
 - `Captured` retains the lexical frames together with their module-depth boundary. The boundary is
   part of the capture because a function called through an imported module may create another
@@ -85,6 +89,15 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Grill Log
 
+- **Q:** Should equality of an aggregate compare Decimal storage (#376)? **A:** No; the
+  `Eq Value` instance recursively compares existing fields and uses `decimalCompare == EQ` for
+  Decimal leaves. _Rationale:_ [[ADR-0007]] makes equality numeric even when a decimal is stored
+  inside an Option, record, tuple, or collection. _Rejected:_ normalizing storage, which loses
+  scale, or changing the representation equality used by syntax and compiler cache products.
+- **Q:** May structural equality compare closures by captured environments? **A:** No; keep the
+  established `Eq Closure` identity and every foreign claim field. _Rationale:_ correcting one
+  scalar's numeric equality must not introduce recursive captures or erase ownership identity.
+  _Rejected:_ replacing runtime equality with the keyed collection's total ordering.
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Store an already computed async result? **A:** No; store the prepared closure and bindings. _Rationale:_ an async call is cold and body evaluation begins at `.await`. _Rejected:_ eager execution wrapped in a task-shaped value; a placeholder unit task.
 - **Q:** Erase `Float32` to a host `Double`? **A:** No; pair normalized storage with a width tag. _Rationale:_ later operations must round to binary32 and mixed-width values must not compare equal merely because their storage matches. _Rejected:_ static-only precision; a separate runtime constructor with duplicated rendering logic.

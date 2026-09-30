@@ -12,6 +12,9 @@ aliases: [Eval Test Coordinator]
 
 Register the focused evaluator properties in the executable test runner. The exported property list is consumed by `test/Main.hs`.
 
+Decimal equality regressions cover nested aggregates, collection lookup, unequal values, and
+representation-preserving rendering.
+
 ## Algorithm and invariants
 
 Import each selected focused test explicitly and expose a stable descriptive label. Every
@@ -29,4 +32,4 @@ No implementation semantics or broad exception suppression belong in the coordin
 
 ## Referenced by
 
-[[src/Pudu/_MOC]] · [[Eval Function Closure Tests]]
+[[src/Pudu/_MOC]] · [[Eval Function Closure Tests]] · [[Eval Data Tests]]
