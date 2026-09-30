@@ -1,0 +1,36 @@
+module UsesYamlCompactSequence
+
+import Std.Yaml as Yaml
+
+fn expect(source: Str, wanted: Yaml.Yaml) -> () {
+  if Yaml.decode(source) != Ok(wanted) { panic(source) }
+}
+
+fn main() -> Int {
+  let leaf = Yaml.Mapping([("name", Yaml.Text("Advanced")), ("href", Yaml.Text("a.md"))])
+  let item = Yaml.Mapping([("name", Yaml.Text("Deep")), ("items", Yaml.List([leaf]))])
+  expect("- name: Deep\n  items:\n  - name: Advanced\n    href: a.md", Yaml.List([item]))
+  expect("- name: Deep\n  items:\n    - name: Advanced\n      href: a.md", Yaml.List([item]))
+  expect("- items:\n  - name: Advanced\n    href: a.md", Yaml.List([Yaml.Mapping([("items", Yaml.List([leaf]))])]))
+  expect("- name: Deep\n  items:\n  - one\n  -\n  enabled: true\n- next", Yaml.List([
+        Yaml.Mapping([("name", Yaml.Text("Deep")), ("items", Yaml.List([Yaml.Text("one"), Yaml.Empty])), ("enabled", Yaml.Boolean(true))]),
+        Yaml.Text("next"),
+      ]))
+  expect("items:\n- name: Advanced\n  href: a.md", Yaml.Mapping([("items", Yaml.List([leaf]))]))
+  expect("- name: Deep\n  items:\n  enabled: true", Yaml.List([Yaml.Mapping([("name", Yaml.Text("Deep")), ("items", Yaml.Empty), ("enabled", Yaml.Boolean(true))])]))
+  if Yaml.decode("- items:\n\t- one") != Err(Yaml.TabIndent(2)) { panic("tab indentation") }
+  if let Err(problem) = Yaml.decode(nested(511)) { panic(Yaml.explain(&problem)) }
+  if Yaml.decode(nested(512)) != Err(Yaml.TooDeep(1025)) { panic("compact nesting bound") }
+  0
+}
+
+fn nested(levels: Int) -> Str {
+  var lines: Array[Str] = []
+  var level = 0
+  while level < levels {
+    let indent = " ".repeat(level * 2)
+    lines = lines.push(indent + "- name: n").push(indent + "  items:")
+    level = level + 1
+  }
+  lines.push(" ".repeat(level * 2) + "- leaf").join("\n")
+}

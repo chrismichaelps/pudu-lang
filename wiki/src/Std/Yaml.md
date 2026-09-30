@@ -29,7 +29,13 @@ identically. A whole number is read by `Std.Text.wholeOf`, so digits past what a
 text rather than a stopped program. Nesting is bounded: each indented block
 costs a reader recursion and the evaluator bounds call depth, so a block that would open more than
 512 levels deep answers `TooDeep` at its line instead of stopping the program.
+Compact sequences at a mapping key's indentation belong to that key even when the mapping
+starts on a list item's dash; parsing resumes at the next sibling key or outer item.
 ## Grill Log
+- **Q:** Does a compact sequence belong only to a document-level mapping? **A:** No.
+  _Rationale:_ mapping values follow the same indentation rule inside list items.
+  _Accepted:_ consume same-indent dash lines through the depth-checked block reader for an empty
+  mapping value and retain siblings.
 - **Q:** Skip anchors, tags, and merge keys that are not understood? **A:** No. _Rationale:_ a reader
   that skipped one answers with a document that is not the one written. _Accepted:_ refusal.
 - **Q:** Let block nesting recurse until the evaluator's call limit? **A:** No. _Rationale:_ that

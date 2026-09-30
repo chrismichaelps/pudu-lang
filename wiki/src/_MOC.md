@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Yaml Compact Sequence]] — exact nested compact-sequence trees and depth refusal.
+
 - [[Examples]] — human-run programs and the boundary between demonstrations and release evidence.
 - [[Media Studio Example]] — real-window integration of exact video timing, generated Canvas frames,
   bounded audio graph rendering, and WAV delivery.

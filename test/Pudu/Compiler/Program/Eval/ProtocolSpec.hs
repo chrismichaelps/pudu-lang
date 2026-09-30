@@ -62,6 +62,7 @@ testProtocolEvaluation = do
   stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
   cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
   providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
+  yamlCompact <- runEntry "test-fixtures/stdlib/UsesYamlCompactSequence.pudu"
   yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
   versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
@@ -73,7 +74,8 @@ testProtocolEvaluation = do
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
-    [ {-| The five lookup tables at both ends and past the end, where a
+    [ counterexample "compact YAML sequences preserve nested items and sibling keys" (yamlCompact === Just "0")
+    , {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
           must hold as flat matches. -}
       counterexample

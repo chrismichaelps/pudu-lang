@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-29 — Compact YAML lists inside list mappings (#381)
+
+- [[Std Yaml]] preserves a same-indent list under a key inside a compact list mapping,
+  including following keys and outer items. [[Uses Yaml Compact Sequence]] checks complete
+  trees, indentation variants, and depth refusal through [[Protocol Evaluation Spec]].
+
 ## Unreleased — A herd of little pudus on the home banner
 
 - [[Pudu mascot script]]: up to ten little pudus roam the home banner beside the big one, each on
