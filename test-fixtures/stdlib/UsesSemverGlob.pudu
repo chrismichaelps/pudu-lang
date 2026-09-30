@@ -2,6 +2,7 @@ module UsesSemverGlob
 
 import Std.Glob as Glob
 import Std.Option as Option
+import Std.Result as Result
 import Std.Semver as Semver
 
 fn version(text: Str) -> Semver.Version {
@@ -176,5 +177,12 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // Prerelease and build identifiers are ASCII letters, digits, and `-`, and a
+  // numeric prerelease identifier has no leading zero.
+  if Semver.parse("1.0.0-01") == Err(Semver.LeadingZero("01")) { held = held + 1 }
+  if Semver.parse("1.0.0-a b") == Err(Semver.BadIdentifier("a b")) { held = held + 1 }
+  if Semver.parse("1.0.0+b@d") == Err(Semver.BadIdentifier("b@d")) { held = held + 1 }
+  if Semver.parse("1.0.0+") == Err(Semver.EmptyIdentifier) { held = held + 1 }
+  if Result.isOk(&Semver.parse("1.0.0-0.x-y.10+build.007")) { held = held + 1 }
   held
 }

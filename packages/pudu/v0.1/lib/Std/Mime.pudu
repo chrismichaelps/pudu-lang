@@ -1,7 +1,5 @@
 module Std.Mime
 
-import Std.List as List
-
 /// Structured representation of a MIME Media Type.
 export type MediaType = {
   primaryType: Str,
@@ -233,30 +231,56 @@ fn parseQuality(item: Str) -> (Str, Int) {
 }
 
 /// Negotiates the best matching media type from available candidates using an RFC 7231 Accept header.
+///
+/// A candidate's quality is the one given by the most specific range that
+/// matches it, so `text/html;q=0, */*` refuses `text/html` while accepting
+/// everything else. The highest quality wins; a tie goes to the candidate whose
+/// deciding range the client wrote first, then to the earlier candidate.
 export fn negotiate(acceptHeader: Str, available: Array[Str]) -> Option[Str] {
   if acceptHeader.isEmpty() || available.length() == 0 { return None }
-  let rawOffers = acceptHeader.split(",")
   var offers: Array[(Str, Int)] = []
-  for ro in rawOffers {
-    let trimmed = ro.trim()
-    if !trimmed.isEmpty() {
-      offers = offers.push(parseQuality(trimmed))
+  for raw in acceptHeader.split(",") {
+    let trimmed = raw.trim()
+    if !trimmed.isEmpty() { offers = offers.push(parseQuality(trimmed)) }
+  }
+  var chosen: Option[Str] = None
+  var chosenQuality = 0
+  var chosenPosition = offers.length()
+  for candidate in available {
+    let (quality, position) = qualityOf(&offers, candidate)
+    if quality > chosenQuality || (quality > 0 && quality == chosenQuality && position < chosenPosition) {
+      chosen = Some(candidate)
+      chosenQuality = quality
+      chosenPosition = position
     }
   }
-  if offers.length() == 0 { return None }
+  chosen
+}
 
-  // Highest quality first. The sort is stable, so offers of equal quality
-  // keep the order the client wrote them in; a swapping sort reordered them.
-  let sortedOffers = List.sortOn(&offers, fn(offer: (Str, Int)) -> Int => 0 - offer[1])
-
-  for offer in sortedOffers {
-    if offer[1] > 0 {
-      for cand in available {
-        if matches(offer[0], cand) {
-          return Some(cand)
-        }
+/// The quality the most specific matching range gives a candidate, and where
+/// that range stands in the header; zero quality when no range matches.
+fn qualityOf(offers: &Array[(Str, Int)], candidate: Str) -> (Int, Int) {
+  var specificity = -1
+  var quality = 0
+  var position = offers.length()
+  var index = 0
+  for offer in offers {
+    if matches(offer[0], candidate) {
+      let here = specificityOf(offer[0])
+      if here > specificity {
+        specificity = here
+        quality = offer[1]
+        position = index
       }
     }
+    index = index + 1
   }
-  None
+  (quality, position)
+}
+
+/// How narrowly a range names types: `*/*` least, `type/*` more, a full type most.
+fn specificityOf(pattern: Str) -> Int {
+  let lowered = pattern.trim().toLower()
+  let base = if lowered.indexOf(";") >= 0 { lowered.take(lowered.indexOf(";")).trim() } else { lowered }
+  if base == "*/*" || base == "*" { 0 } else if base.endsWith("/*") { 1 } else { 2 }
 }

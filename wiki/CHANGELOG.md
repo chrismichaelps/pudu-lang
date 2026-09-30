@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — Semver identifiers and Accept negotiation follow their specifications
+
+- [[Std Semver]] `parse`: prerelease and build identifiers are ASCII letters, digits, and `-`
+  (new `BadIdentifier`), and a numeric prerelease identifier with a leading zero is `LeadingZero`.
+- [[Std Mime]] `negotiate`: a candidate's quality comes from the most specific matching range, so
+  `q=0` refuses a type even when `*/*` also matches.
+
 ## Unreleased — HTML names cannot carry markup
 
 - [[Std Html]] `isName`: an element or attribute name is an ASCII letter followed by letters,

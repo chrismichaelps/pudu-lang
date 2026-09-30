@@ -38,6 +38,10 @@ Type, subtype, and parameter names are compared lower case, and surrounding whit
 The extension registry is two module constants, `EXTENSION_TYPES` and `TYPE_EXTENSIONS`, read with one map lookup each rather than a chain of comparisons.
 Content negotiation parses quality factor weights (`q=0.0` to `q=1.0`) and orders offers by descending quality with the stable `List.sortOn`, so offers of equal quality keep the order the client wrote them in; the first offer, in that order, that matches an available type wins.
 
+`negotiate` gives each candidate the quality of the most specific range that matches it (full type,
+then `type/*`, then `*/*`), so `q=0` on a type refuses it even under a wider range. The highest
+quality wins; ties go to the range the client wrote first, then to the earlier candidate.
+
 ## Grill Log
 
 - **Q:** Why include an extension registry in the standard library?
@@ -48,6 +52,10 @@ Content negotiation parses quality factor weights (`q=0.0` to `q=1.0`) and order
   lists its preferences in order, and a swapping selection sort turned `text/html;q=0.5,
   application/json;q=0.5` into a JSON answer. _Rejected:_ an unstable sort; ranking ties by the
   server's own list.
+
+- **Q:** Try offers in quality order and take the first candidate any of them matches? **A:** No.
+  _Rationale:_ a wide range then re-admits a type the client refused with `q=0`. _Rejected:_
+  first-match negotiation.
 
 ## Referenced by
 

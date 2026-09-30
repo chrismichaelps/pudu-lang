@@ -214,7 +214,7 @@ testProtocolEvaluation = do
         (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
-        (mimeType === Just "11")
+        (mimeType === Just "15")
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")
@@ -314,7 +314,7 @@ testProtocolEvaluation = do
         one of them cannot be written. -}
     , counterexample
         "versions order by number and globs stop at separators"
-        (versionsAndGlobs === Just "29")
+        (versionsAndGlobs === Just "34")
     {-| A SOAP envelope, because the parts that break a reader arrive together
         in one: a prefixed name, a self-closing element, an entity in text,
         and a CDATA section whose content must not be read as either. The
