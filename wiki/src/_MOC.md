@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[src/test-fixtures/exhaustnamespace/UsesJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/UsesJsonCoverageReversed]] · [[src/test-fixtures/exhaustnamespace/RejectsJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/R/Value]] · [[src/test-fixtures/exhaustnamespace/R/Kinds]] · [[src/test-fixtures/exhaustnamespace/R/ZJson]] — module-owned nested constructor coverage and refusal.
+
 - [[src/test-fixtures/stdlib/UsesYamlQuoted]] — quoted escape values, flow delimiters, and typed malformed-text refusal.
 
 - [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodImported]] · [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodUnimported]] · [[src/test-fixtures/stdlib/UsesOptionUnwrapQualified]] — exact Option.unwrapOr method refusals and qualified success.

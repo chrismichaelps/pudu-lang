@@ -1,0 +1,13 @@
+module R.Kinds
+
+import R.Value as V
+
+export fn kind(held: &Option[V.Value]) -> Int {
+  match held {
+    case None => 0
+    case Some(V.Scalar(V.Null)) => 1
+    case Some(V.Scalar(V.Boolean(_))) => 2
+    case Some(V.Scalar(V.Text(_))) => 3
+    case Some(V.Many(_)) => 4
+  }
+}

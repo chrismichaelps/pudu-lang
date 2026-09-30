@@ -1,0 +1,4 @@
+module R.Value
+
+export type Atom = Null | Boolean(Bool) | Text(Str)
+export type Value = Scalar(Atom) | Many(Array[Value])

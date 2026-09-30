@@ -12,7 +12,8 @@ import Pudu.Frontend.Syntax.Name (moduleNameSegments)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree (MatchArm (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Env (Checker, lookupOwnerVariants, lookupVariant, report, warn)
+import Pudu.Type.Check.Pattern (substituteRigid)
+import Pudu.Type.Env (Checker, lookupOwnerVariants, lookupVariant, lookupVariantIn, report, warn)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 
@@ -21,7 +22,7 @@ import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 
     A guarded arm never contributes to coverage: its guard may be false, which
     is exactly the rule [[architecture/SEMANTICS]] states. Coverage is decided
-    only where it is decidable — closed sums and booleans — and an open domain
+    only where it is decidable — closed sums, booleans, and tuples — and an open domain
     such as `Int` is covered only by an irrefutable arm. -}
 checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
 checkExhaustive spanValue subjectType arms = do
@@ -31,14 +32,14 @@ checkExhaustive spanValue subjectType arms = do
   case resolved of
     ErrorType -> pure ()
     VariableType _ -> pure ()
-    NominalType "Bool" [] -> checkClosed isVariant spanValue "Bool" ["true", "false"] arms
-    NominalType owner _ -> do
+    NominalType "Bool" [] -> checkClosed isVariant spanValue "Bool" [] ["true", "false"] arms
+    NominalType owner arguments -> do
       variants <- lookupOwnerVariants owner
       case variants of
-        Just names -> checkClosed isVariant spanValue owner names arms
+        Just names -> checkClosed isVariant spanValue owner arguments names arms
         Nothing -> checkOpen isVariant spanValue resolved arms
     TupleTypeValue _ -> do
-      covered <- coversRows isVariant
+      covered <- coversRows isVariant [resolved]
         [[armPattern arm] | Located _ arm <- arms, armGuard arm == Nothing]
       if covered then pure () else checkOpen isVariant spanValue resolved arms
     _ -> checkOpen isVariant spanValue resolved arms
@@ -75,11 +76,11 @@ recordNames (Located _ pattern') = case pattern' of
 {-| A closed domain is covered when every constructor is covered by the
     unguarded arms, or when an irrefutable arm covers what remains. -}
 checkClosed
-  :: (Text -> Bool) -> Span -> NominalId -> [Text] -> [Located MatchArm] -> Checker ()
-checkClosed isVariant spanValue owner names arms
+  :: (Text -> Bool) -> Span -> NominalId -> [Type] -> [Text] -> [Located MatchArm] -> Checker ()
+checkClosed isVariant spanValue owner arguments names arms
   | any (irrefutableArm isVariant) arms = pure ()
   | otherwise = do
-      missing <- filterM (fmap not . constructorCovered isVariant patterns) names
+      missing <- filterM (fmap not . constructorCovered isVariant owner arguments patterns) names
       if null missing
         then pure ()
         else
@@ -99,34 +100,27 @@ branches held@(Located _ pattern') = case pattern' of
   AlternativePattern alternatives -> concatMap branches alternatives
   _ -> [held]
 
-{-| Whether these patterns, between them, cover one constructor.
-
-    A payload that binds covers the constructor outright, which is the rule a
-    single arm has always followed. A payload that tests covers it only when
-    the arms naming that constructor exhaust the payload between them — the
-    same question, one level down, which is what makes `Ok(None)` and
-    `Ok(Some(x))` cover `Ok` while `Ok(1)` does not.
-
-    Only a payload of one value is followed down. Two of them would need every
-    combination accounted for, and `C(true, true)` with `C(false, false)`
-    covers neither the pair `(true, false)` nor `C`; answering that needs more
-    than this asks, so it answers no. Saying no where the truth is unknown
-    costs a wildcard nobody needed. Saying yes would accept a match that fails
-    at run time. -}
-constructorCovered :: (Text -> Bool) -> [Located Pattern] -> Text -> Checker Bool
-constructorCovered isVariant patterns name
+{-| Cover a constructor's actual instantiated payload, retaining correlations
+    between payload elements and resolving every nested sum by its owner. -}
+constructorCovered
+  :: (Text -> Bool) -> NominalId -> [Type] -> [Located Pattern] -> Text -> Checker Bool
+constructorCovered isVariant owner typeArguments patterns name
   | any (namesLiteral name) patterns = pure True
   | any bindsWhole patterns = pure True
   | null payloads = pure False
-  | not (all single payloads) = pure False
-  | otherwise = coversPatterns isVariant [held | [held] <- payloads]
+  | otherwise = do
+      found <- lookupVariantIn owner name
+      case found of
+        Nothing -> pure False
+        Just (_, parameters, declaredPayload) ->
+          coversRows isVariant
+            (map (substituteRigid (zip parameters typeArguments)) declaredPayload) payloads
  where
   payloads =
     [ arguments
     | Located _ (ConstructorPattern path arguments) <- patterns
     , NonEmpty.last (moduleNameSegments path) == name
     ]
-  single held = length held == 1
   bindsWhole (Located _ pattern') = case pattern' of
     ConstructorPattern path arguments ->
       NonEmpty.last (moduleNameSegments path) == name
@@ -139,77 +133,37 @@ constructorCovered isVariant patterns name
     LiteralPattern (Tree.BoolValue flag) -> wanted == (if flag then "true" else "false")
     _ -> False
 
-{-| Whether these patterns, between them, cover every value they could be
-    matched against.
-
-    The domain is read from the patterns rather than from a type. A payload's
-    declared type is written in the sum's own parameters — `Ok` carries a `T`,
-    not the `Bool` this particular `Result` settled it to — so the type at hand
-    would have to be instantiated before it said anything. A constructor that
-    was actually written names its sum directly, and that is the same question
-    answered without the substitution.
-
-    Booleans are the domain with no constructors to read, so they are named. -}
-coversPatterns :: (Text -> Bool) -> [Located Pattern] -> Checker Bool
-coversPatterns isVariant patterns
-  | any (irrefutable isVariant) patterns = pure True
-  | bothBooleans = pure True
-  | otherwise = case written of
-      [] -> pure False
-      (first : _) -> do
-        found <- lookupVariant first
-        case found of
-          Nothing -> pure False
-          Just (owner, _, _) -> do
-            variants <- lookupOwnerVariants owner
-            case variants of
-              Nothing -> pure False
-              Just names -> and <$> mapM (constructorCovered isVariant patterns) names
- where
-  written =
-    [ NonEmpty.last (moduleNameSegments path)
-    | Located _ (ConstructorPattern path _) <- patterns
-    ]
-      <> [ NonEmpty.last (moduleNameSegments path)
-         | Located _ (RecordPattern (Just path) _ _) <- patterns
-         ]
-  bothBooleans = boolean True && boolean False
-  boolean wanted =
-    any
-      ( \(Located _ pattern') -> case pattern' of
-          LiteralPattern (Tree.BoolValue flag) -> flag == wanted
-          _ -> False
-      )
-      patterns
-
-{-| Specialize whole pattern rows, retaining the other columns so coverage of
-    separate tuple members cannot invent missing combinations. A wildcard
-    participates in every specialization, while an open domain admits only
-    rows whose head binds the entire value. -}
-coversRows :: (Text -> Bool) -> [[Located Pattern]] -> Checker Bool
-coversRows isVariant rows
+{-| Specialize complete rows against actual column types. Payload instantiation
+    follows the column's canonical owner rather than a globally loaded variant
+    spelling; keeping the remaining columns preserves tuple correlations. -}
+coversRows :: (Text -> Bool) -> [Type] -> [[Located Pattern]] -> Checker Bool
+coversRows isVariant types rows
   | null rows = pure False
-  | any null rows = pure True
-  | otherwise = case [held | held : _ <- expanded, not (irrefutable isVariant held)] of
-      [] -> coversRows isVariant defaults
-      Located _ (TuplePattern members) : _ ->
-        coversRows isVariant (specialize (length members) tupleMembers)
-      Located _ (LiteralPattern (Tree.BoolValue _)) : _ ->
-        and <$> mapM (\flag -> coversRows isVariant (specialize 0 (boolean flag))) [True, False]
-      Located _ (ConstructorPattern path _) : _ -> do
-        found <- lookupVariant (NonEmpty.last (moduleNameSegments path))
-        case found of
-          Nothing -> coversRows isVariant defaults
-          Just (owner, _, _) -> do
-            variants <- lookupOwnerVariants owner
-            case variants of
-              Nothing -> coversRows isVariant defaults
-              Just names -> and <$> mapM coverConstructor names
-      _ -> coversRows isVariant defaults
+  | null types = pure (any null rows)
+  | any (all (irrefutable isVariant)) rows = pure True
+  | otherwise = case types of
+      [] -> pure False
+      subject : restTypes -> do
+        resolved <- zonk subject
+        if all (irrefutable isVariant) heads
+          then coversRows isVariant restTypes defaults
+          else case resolved of
+            ReferenceTypeValue _ target -> coversRows isVariant (target : restTypes) rows
+            TupleTypeValue members ->
+              coversRows isVariant (members <> restTypes) (specialize (length members) tupleMembers)
+            NominalType "Bool" [] ->
+              and <$> mapM (\flag -> coversRows isVariant restTypes (specialize 0 (boolean flag))) [True, False]
+            NominalType owner arguments -> do
+              variants <- lookupOwnerVariants owner
+              case variants of
+                Nothing -> coversRows isVariant restTypes defaults
+                Just names -> and <$> mapM (coverConstructor owner arguments restTypes) names
+            _ -> coversRows isVariant restTypes defaults
  where
   expanded = concatMap expand rows
   expand [] = [[]]
   expand (held : rest) = [branch : rest | branch <- branches held]
+  heads = [held | held : _ <- expanded]
   defaults = [rest | held : rest <- expanded, irrefutable isVariant held]
   specialize arity select =
     [ arguments <> rest
@@ -223,14 +177,22 @@ coversRows isVariant rows
   boolean flag (Located _ (LiteralPattern (Tree.BoolValue actual)))
     | flag == actual = Just []
   boolean _ _ = Nothing
-  constructor name (Located _ (ConstructorPattern path arguments))
-    | NonEmpty.last (moduleNameSegments path) == name = Just arguments
-  constructor _ _ = Nothing
-  coverConstructor name = do
-    found <- lookupVariant name
+  constructor name arity (Located heldSpan pattern') = case pattern' of
+    ConstructorPattern path arguments
+      | NonEmpty.last (moduleNameSegments path) == name -> Just arguments
+    RecordPattern (Just path) fields _
+      | NonEmpty.last (moduleNameSegments path) == name
+      , all (irrefutableField isVariant) fields ->
+          Just (replicate arity (Located heldSpan WildcardPattern))
+    _ -> Nothing
+  coverConstructor owner arguments restTypes name = do
+    found <- lookupVariantIn owner name
     case found of
       Nothing -> pure False
-      Just (_, _, payload) -> coversRows isVariant (specialize (length payload) (constructor name))
+      Just (_, parameters, declaredPayload) -> do
+        let payload = map (substituteRigid (zip parameters arguments)) declaredPayload
+        coversRows isVariant (payload <> restTypes)
+          (specialize (length payload) (constructor name (length payload)))
 
 {-| An open domain cannot be enumerated, so only an irrefutable arm covers it. -}
 checkOpen :: (Text -> Bool) -> Span -> Type -> [Located MatchArm] -> Checker ()

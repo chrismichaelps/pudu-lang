@@ -12,6 +12,9 @@ aliases: [Type Test Coordinator]
 
 Register primitive, pattern, control-flow, generic, trait, and system checker properties. The exported property list is consumed by `test/Main.hs`.
 
+The constructor-namespace regression compiles complete module graphs with Std.Json and
+same-named local variants, preserving imported nominal identity and instantiated payloads.
+
 ## Algorithm and invariants
 
 Import each selected focused test explicitly and expose a stable descriptive label. Every

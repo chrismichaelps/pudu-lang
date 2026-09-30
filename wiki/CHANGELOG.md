@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Nested match domains retain constructor ownership (#378)
+
+- [[Type Exhaust]] carries instantiated types in pattern columns and reads constructor payloads
+  by canonical owner. [[Type Check Pattern Spec]] verifies Json import-order collisions, missing
+  variants, generic products, and nested tuples. Focused tests and independent review pass.
+
 ## 2026-09-30 — Imported aliases in constant initializers (#373)
 
 - [[Compiler Constants]], [[Compiler Pipeline]], [[Compiler Program]], and [[Eval Program]]

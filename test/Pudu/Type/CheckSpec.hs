@@ -31,7 +31,8 @@ import Pudu.Type.Check.ControlFlowSpec
   , testTry
   )
 import Pudu.Type.Check.PatternSpec
-  ( testTupleCoverage
+  ( testNestedConstructorNamespaces
+  , testTupleCoverage
   , testExhaustiveness
   , testMatchThroughBorrow
   )
@@ -66,7 +67,8 @@ import Pudu.Type.Check.TraitSpec
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("tuple coverage retains correlated Option combinations", testTupleCoverage)
+  [ ("nested constructor coverage follows canonical module identities", testNestedConstructorNamespaces)
+  , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
   , ("a generic alias stands for what it names", testGenericAliases)
   , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
   , ("maps and sets are typed by what they hold", testKeyedTypes)

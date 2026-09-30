@@ -20,7 +20,7 @@ Prove match coverage, unreachable-arm warnings, and matching through borrows.
 
 ## Algorithm
 
-Compile complete Pudu programs and compare exact ordered diagnostics; check missing tuple combinations with the E5001 span, message, and help contract.
+Compile complete Pudu modules and dependency graphs and compare exact ordered diagnostics; check missing tuple combinations with the E5001 span, message, and help contract.
 
 ## Negative Logic
 
@@ -31,6 +31,8 @@ No snapshots, accepted guarded coverage, or independent-column coverage assumpti
 Tuple Option products cover all four combinations, grouped wildcard rows, nested tuples, alternatives, open payloads, and guarded missing combinations. Diagonal-only rows and literal-only payloads remain incomplete.
 
 ## Grill Log
+
+- **Q:** How is namespace independence proved? **A:** Compile and run the complete borrowed nested Option classifier beside Std.Json through both direct and indirect dependency graphs, and reject a match missing one local Atom variant. _Rationale:_ both sums declare Null, Boolean, and Text, so a global constructor table is observably wrong (#378).
 
 - **Q:** How is tuple coverage distinguished from an unsound independent-column union? **A:** Test both a complete correlated matrix and diagonal-only rows. _Rationale:_ both examples cover every individual column but only the first covers every tuple. _Rejected:_ success-only coverage tests (#377).
 
