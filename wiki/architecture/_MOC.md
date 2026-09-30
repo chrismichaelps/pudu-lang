@@ -18,6 +18,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/FMCF Workflow|FMCF Workflow]] — repository-specific operating contract.
 - [[architecture/DELIVERY|Engineering Delivery]] — branches, issues, agents, reviews, gates, and releases.
 - [[architecture/MACROS|Macro Design]] — the macro form as hygienic typed syntax transformers, and what was rejected.
+- [[architecture/DERIVES|Derive Design]] — code written once for every type that asks, from compile-time reflection that leaves the program.
 - [[architecture/STDLIB|Standard Library Design]] — the `Std` namespace, the shipped modules, the import DX, and what production-ready is required to mean.
 - [[architecture/RELEASE-READINESS|First Release Readiness]] — evidence-based v1 blockers, completed rows, and work order.
 - [[architecture/NATIVE-UI|Native Application UI]] — Pudu-native software rendering, audio, video, and explicit platform boundaries.
