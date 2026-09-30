@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — HTML names cannot carry markup
+
+- [[Std Html]] `isName`: an element or attribute name is an ASCII letter followed by letters,
+  digits, `-`, `_`, `.`, or `:`. Rendering leaves out other attributes and writes other elements'
+  children without tags; `attribute` refuses them as the new `BadName`.
+- [[Std Html Bounded]] applies the same rule, so bounded output stays equal to `Html.render`.
+
 ## Unreleased — Bounded network reads, checked URL ports, and a Std mutation harness
 
 - [[Std Net]] `receiveUntil`: the limit bounds every read and counts the marker, so a marker past it
