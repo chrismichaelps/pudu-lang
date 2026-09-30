@@ -61,6 +61,8 @@ fixed run succeeds.
   not established. _Rejected:_ best-effort fixes on an invalid tree.
 - **Q:** Follow directory symlinks? **A:** No. _Rationale:_ they can escape ownership or form cycles.
 
+- **Q:** Name `W3004` for lint output? **A:** `discarded-value`. _Rationale:_ it states the finding
+  without implying the value was a collection, which `W3002` already names.
 ## Referenced by
 
 [[Pudu CLI]] · [[Pudu Lint]] · [[Pudu CLI Lint Spec]] · [[Repository Gates]]

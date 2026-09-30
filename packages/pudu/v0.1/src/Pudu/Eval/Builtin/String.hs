@@ -341,10 +341,12 @@ scalarOffset text@(Text array offset bytes) index
     | otherwise = position
 
 indexOfText :: Text -> Text -> Integer
-indexOfText text needle = case Text.breakOn needle text of
-  (before, rest)
-    | Text.null rest, not (Text.null needle) -> -1
-    | otherwise -> fromIntegral (Text.length before)
+indexOfText text needle
+  | Text.null needle = 0
+  | otherwise = case Text.breakOn needle text of
+      (before, rest)
+        | Text.null rest -> -1
+        | otherwise -> fromIntegral (Text.length before)
 
 escapeHtmlText :: Text -> Text
 escapeHtmlText text = case Text.break needsEscape text of

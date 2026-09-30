@@ -33,11 +33,14 @@ record is complete exactly when it holds an even number of them.
 Measured at -O2 on 20 MB of rows that each hold a quoted field: `parse` takes 0.59 s, where the
 character scanner takes 272 s and holds 711 MB; `foldRows` takes 1.53 s at a 99 MB peak; unquoted
 rows fold in 0.68 s. Rows before a failure have already reached the step function.
+`scanWith` matches a delimiter of several characters as a sequence, advancing past all of it.
 ## Grill Log
 - **Q:** Split each line and then each separator? **A:** Only after gathering lines into records by
   quote count. _Rationale:_ both may occur inside a quoted field, and an odd count is exactly an open
   field. _Rejected:_ permissively accepting an unclosed quote.
 - **Q:** Report a read failure through `CsvError`? **A:** No. _Rationale:_ adding a variant would
   break every exhaustive match on the text parser's errors. _Accepted:_ a separate `CsvReadError`.
+- **Q:** Compare each character against the whole delimiter? **A:** No. _Rationale:_ a delimiter of
+  more than one character never matched, so `parseWith(text, "||")` returned each line as one field.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

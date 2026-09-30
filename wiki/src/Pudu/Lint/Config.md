@@ -38,6 +38,8 @@ finding.
   table before Pudu code can run. _Accepted:_ the same bounded manifest subset policy used by
   [[Compiler Manifest]].
 
+- **Q:** Admit `W3004` in lint policy? **A:** Yes. _Rationale:_ every checker warning is a known code
+  a project may allow or deny.
 ## Referenced by
 
 [[Pudu CLI Lint]] · [[Pudu CLI Lint Spec]] · [[Pudu Lint]]

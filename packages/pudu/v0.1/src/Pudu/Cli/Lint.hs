@@ -281,6 +281,7 @@ compilerRule code = case code of
   "W3001" -> "unused-unsafe-capability"
   "W3002" -> "discarded-persistent-result"
   "W3003" -> "manual-failure-propagation"
+  "W3004" -> "discarded-value"
   "W5001" -> "unreachable-case"
   "W7027" -> "resource-cleanup-failure"
   _ -> "compiler-" <> Text.toLower code

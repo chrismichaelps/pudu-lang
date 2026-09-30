@@ -120,6 +120,11 @@ exception.
   consumer such as `let … else`, because it leaves `if`, `match`, and contextual
   checking with contradictory answers. Resolved for issue #146.
 
+- **Q:** Warn on every discarded scalar answer? **A:** No. _Rationale:_ discarding an answer is
+  pointless, not wrong. `W3004` covers what no writer means: a statement that is only arithmetic,
+  a comparison, a literal, or a name, and a statement with a value followed by a line whose
+  expression begins with `-`, which the line break split from it. _Rejected:_ a type-only rule,
+  which flagged deliberate discards of `contains` and user methods.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Expression]]

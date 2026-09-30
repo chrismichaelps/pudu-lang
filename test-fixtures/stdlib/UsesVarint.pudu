@@ -148,5 +148,12 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // The tenth byte holds bit 63 alone; a larger one is past 64 bits.
+  let nines = [255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8]
+  if Varint.decodeUleb128(&nines.push(2u8), 0) == None
+    && Varint.decodeUleb128(&nines.push(1u8), 0) == Some(Varint.VarintDecodeResult{value: 18446744073709551615u64, bytesRead: 10}) {
+    held = held + 1
+  }
+
   held
 }

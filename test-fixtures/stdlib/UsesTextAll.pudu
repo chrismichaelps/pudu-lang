@@ -26,6 +26,8 @@ export fn main() -> Int {
   // Finding, and not finding.
   if Option.unwrapOr(Text.find("hello", "ll"), 0 - 1) == 2 { held = held + 1 }
   if Option.isNone(&Text.find("hello", "z")) { held = held + 1 }
+  // An empty needle is found where the search starts, even in empty text.
+  if Text.find("hello", "") == Some(0) && "".indexOf("") == 0 { held = held + 1 }
   if Text.countOccurrences("banana", "an") == 2 { held = held + 1 }
 
   // Ends, added and removed.

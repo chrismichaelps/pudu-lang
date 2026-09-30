@@ -103,7 +103,7 @@ testRuntimeEvaluation = do
     , counterexample "statistics answer for enough data and refuse too little"
         (statistics === Just "27")
     , counterexample "an environment file reads, expands, renders back, and refuses by line"
-        (settings === Just "17")
+        (settings === Just "19")
     , counterexample "terminal styles write the sequences they name and strip back to text"
         (styled === Just "13")
     {-| Futures, cancellation, races, and deadlines, including work that
@@ -169,7 +169,7 @@ testRuntimeEvaluation = do
         found to refuse rather than answer nothing. -}
     , counterexample
         "every text operation answers what it says it answers"
-        (textual === Just "91")
+        (textual === Just "92")
     {-| Every export of the option and result modules, each asked of a value
         that is there and one that is not. These two exist for the absent
         case, so a check that only covered the present one would be the half
@@ -378,7 +378,7 @@ testRuntimeEvaluation = do
         centuries a naive leap-year rule gets wrong. -}
     , counterexample
         "a moment written as text reads back as the moment it named"
-        (calendars === Just "50")
+        (calendars === Just "55")
     {-| Readings are built rather than timed: a check against the clock would
         answer differently on a machine that was busy, and a failure for that
         reason says nothing about the code. -}
@@ -472,7 +472,7 @@ testRuntimeEvaluation = do
     , counterexample "a declared width is enforced wherever the value came from"
         (declaredWidths === Just "63")
     , counterexample "decimal arithmetic is exact and rounds only when told"
-        (exact === Just "12")
+        (exact === Just "13")
     , counterexample "a generic trait's parameters follow its implementation"
         (generic === Just "5")
     , counterexample "a user type and lazy adapters use the open sequence protocol"

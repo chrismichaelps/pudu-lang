@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Std parser and runtime repairs found by dependency-layer probing (#395–#403)
+
+- [[Eval Builtin String]] finds an empty needle at 0 instead of ending the program (#395).
+  [[Type Check Statement]] adds `W3004` for a value dropped by a line starting with `-` or by a
+  statement that is only arithmetic, a literal, or a name (#397); it has one hit across Std, the
+  broken [[Std Time Format]] `dayOfYear` (#396). [[Std Time Format]] reads RFC 3339 strictly (#398)
+  and reads every HTTP-date form through the new [[Std Time Format Header]] with a checked clock
+  (#399). [[Decimal Literal]] refuses exponents past 6144 instead of wrapping (#400).
+  [[Std Varint]] refuses a tenth byte past 64 bits (#401). [[Std Dotenv]] refuses text after a
+  closing quote and keeps quoted spacing (#402). [[Std Csv]] splits on multi-character
+  delimiters (#403). Fixture counts and checker specs cover each repair.
+
 ## 2026-09-30 — Atomic file creation and replacement permissions (#385)
 
 - [[Std Fs]] delegates atomic writes to a scoped [[Eval Io]] operation that retains private

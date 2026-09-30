@@ -41,6 +41,8 @@ export fn main() -> Int {
 
   // A tab-separated file is read by saying so rather than by hoping.
   if Result.unwrapOr(Csv.parseWith("a\tb\n", "\t"), []) == [["a", "b"]] { held = held + 1 }
+  // A delimiter of several characters separates only where all of them appear.
+  if Result.unwrapOr(Csv.parseWith("a||b|c||\"d||e\"\n", "||"), []) == [["a", "b|c", "d||e"]] { held = held + 1 }
 
   // A table takes its first row as the names of its columns.
   if let Ok(table) = Csv.parseTable("name,age\nada,36\nalan,41\n") {

@@ -104,6 +104,16 @@ fn comparisonsAndSigns() -> Bool {
   D.truncate(0d - 1.9d) == (0d - 1d)
 }
 
+/// An exponent past decimal128's range names no value, rather than wrapping
+/// around the width of an integer into a small one.
+fn exponentsStayInRange() -> Bool {
+  D.parse("1e3") == Some(1000d) &&
+  D.parse("1e6144") != None &&
+  D.parse("1e6145") == None &&
+  D.parse("1e18446744073709551617") == None &&
+  D.parse("1e-9223372036854775808") == None
+}
+
 export fn main() -> Int {
   var passed = 0
   if exactTenths() { passed = passed + 1 }
@@ -118,5 +128,6 @@ export fn main() -> Int {
   if manyAmountsStayExact() { passed = passed + 1 }
   if aggregatesAgree() { passed = passed + 1 }
   if comparisonsAndSigns() { passed = passed + 1 }
+  if exponentsStayInRange() { passed = passed + 1 }
   passed
 }

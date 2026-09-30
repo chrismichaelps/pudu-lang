@@ -111,7 +111,7 @@ testProtocolEvaluation = do
         newline that a quoted field swallows. -}
     , counterexample
         "a separated file survives quotes, newlines, and its own separator"
-        (separated === Just "31")
+        (separated === Just "32")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
         given, so nothing is assumed about what else the machine holds.
@@ -232,7 +232,7 @@ testProtocolEvaluation = do
         (ringBuffer === Just "10")
     , counterexample
         "Varint ULEB128 and signed ZigZag SLEB128 variable-length integer encoding and decoding"
-        (varintCodec === Just "10")
+        (varintCodec === Just "11")
     , counterexample
         "DisjointSet flat array Union-Find with iterative path halving and union-by-rank"
         (disjointSet === Just "10")

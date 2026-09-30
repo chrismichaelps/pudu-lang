@@ -160,7 +160,7 @@ warningCode code = case Text.unpack code of
 
 knownWarningCodes :: Set Text
 knownWarningCodes = Set.fromList
-  [ "W2001", "W2002", "W3001", "W3002", "W3003", "W5001", "W7027", "W7101" ]
+  [ "W2001", "W2002", "W3001", "W3002", "W3003", "W3004", "W5001", "W7027", "W7101" ]
 
 sourcePath :: Source -> Text
 sourcePath source = case sourceName source of SourceName path -> path

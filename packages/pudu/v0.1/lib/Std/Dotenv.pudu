@@ -1,12 +1,14 @@
 module Std.Dotenv
 
 import Std.Char as Char
+import Std.Text as Text
 
 /// Why an environment file was refused. Line numbers start at 1.
 export type DotenvError
   = MissingEquals(Int)
   | InvalidKey(Int, Str)
   | Unterminated(Int)
+  | TrailingText(Int)
   | Unreadable(Str, Str)
 
 /// One assignment, in file order.
@@ -16,7 +18,8 @@ export type Entry = { key: Str, value: Str }
 ///
 /// Blank lines and lines starting with `#` are skipped, and a leading
 /// `export ` is ignored. An unquoted value is trimmed and ends at ` #`.
-/// A single-quoted value is literal. A double-quoted value may span lines,
+/// A quoted value keeps every character between its quotes, and only space or
+/// a `#` comment may follow the closing quote. A single-quoted value is literal. A double-quoted value may span lines,
 /// reads the escapes `\n`, `\r`, `\t`, `\"`, `\\`, `\$`, and expands
 /// `${NAME}` from keys assigned earlier in the same text; unquoted values
 /// expand the same way. An unknown `${NAME}` expands to nothing.
@@ -27,32 +30,37 @@ export fn parse(text: Str) -> Result[Array[Entry], DotenvError] {
   var index = 0
   while index < lines.length() {
     let number = index + 1
-    var line = lines[index].trim()
+    var line = Text.trimStart(lines[index])
     index = index + 1
-    if line.length() == 0 || line.startsWith("#") { continue }
-    if line.startsWith("export ") { line = line.drop(7).trim() }
+    if line.trim().length() == 0 || line.startsWith("#") { continue }
+    if line.startsWith("export ") { line = Text.trimStart(line.drop(7)) }
     let equals = line.indexOf("=")
     if equals < 0 { return Err(MissingEquals(number)) }
     let key = line.take(equals).trim()
     if !validKey(key) { return Err(InvalidKey(number, key)) }
-    let raw = line.drop(equals + 1).trim()
+    let raw = Text.trimStart(line.drop(equals + 1))
     let value = if raw.startsWith("'") {
       let rest = raw.drop(1)
       let close = rest.indexOf("'")
       if close < 0 { return Err(Unterminated(number)) }
+      if !endsQuietly(rest.drop(close + 1)) { return Err(TrailingText(number)) }
       rest.take(close)
     } else {
       if raw.startsWith("\"") {
         var body = raw.drop(1)
-        while !closesDouble(body) {
+        var close = closingQuote(body)
+        while close < 0 {
           if index >= lines.length() { return Err(Unterminated(number)) }
           body = body + "\n" + lines[index]
           index = index + 1
+          close = closingQuote(body)
         }
-        unescaped(body, &known)
+        if !endsQuietly(body.drop(close + 1)) { return Err(TrailingText(number)) }
+        unescaped(body.take(close), &known)
       } else {
-        let comment = raw.indexOf(" #")
-        let bare = if comment < 0 { raw } else { raw.take(comment).trim() }
+        let trimmed = Text.trimEnd(raw)
+        let comment = trimmed.indexOf(" #")
+        let bare = if comment < 0 { trimmed } else { trimmed.take(comment).trim() }
         expanded(bare, &known)
       }
     }
@@ -104,6 +112,7 @@ export fn explain(problem: &DotenvError) -> Str {
     case MissingEquals(line) => "line {line}: expected KEY=value"
     case InvalidKey(line, key) => "line {line}: invalid key '{key}'"
     case Unterminated(line) => "line {line}: quoted value is not closed"
+    case TrailingText(line) => "line {line}: text follows the closing quote"
     case Unreadable(path, reason) => "cannot read {path}: {reason}"
   }
 }
@@ -120,17 +129,26 @@ fn validKey(key: Str) -> Bool {
   true
 }
 
-fn closesDouble(body: Str) -> Bool {
+/// Where the unescaped quote that closes a double-quoted value sits, or -1.
+fn closingQuote(body: Str) -> Int {
   var escaped = false
+  var at = 0
   for symbol in body {
     if escaped {
       escaped = false
     } else {
       if symbol == '\\' { escaped = true }
-      if symbol == '"' { return true }
+      if symbol == '"' { return at }
     }
+    at = at + 1
   }
-  false
+  -1
+}
+
+/// Whether what follows a closing quote is only space or a comment.
+fn endsQuietly(after: Str) -> Bool {
+  let rest = after.trim()
+  rest.isEmpty() || rest.startsWith("#")
 }
 
 fn unescaped(body: Str, known: &Map[Str, Str]) -> Str {

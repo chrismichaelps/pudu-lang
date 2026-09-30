@@ -33,6 +33,8 @@ Exports:
   an unknown name expands to nothing. The process environment is never read.
 - Keys are ASCII letters, digits, `_`, and `.`, not starting with a digit.
 
+A quoted value keeps every character between its quotes, including the space ending the first line
+of a spanning value, and only space or a `#` comment may follow the closing quote (`TrailingText`).
 ## Grill Log
 
 - **Q:** Write the entries into the process environment? **A:** No. _Rationale:_ the language has no
@@ -43,6 +45,9 @@ Exports:
 - **Q:** Ordered entries or a map? **A:** Entries; `toMap` is one call away and order is needed to
   render a file back and to report duplicates.
 
+- **Q:** Stop reading at the closing quote and ignore what follows? **A:** No. _Rationale:_
+  `A="a"b` read as `a`, silently dropping part of what the file says. _Rejected:_ appending the
+  trailing text, which no two dotenv readers agree on.
 ## Dependencies and consumers
 
 - Depends on `Std.Char` and the prelude `readFile` effect.

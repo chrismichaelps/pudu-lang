@@ -48,6 +48,7 @@ const shared = new Map([
   ["W3001", "an unsafe operation outside an unsafe block, retained by lint policy and output"],
   ["W3002", "an unreachable statement, retained by lint policy and output"],
   ["W3003", "an unused failure channel, retained by lint policy and output"],
+  ["W3004", "a computed value discarded by an expression statement, retained by lint policy and output"],
   ["W5001", "an unreachable match arm, retained by lint policy and output"],
   ["W7027", "a resource released by teardown, retained by lint policy and output"],
   ["W7101", "a redundant Boolean comparison, reported by lint and retained by its policy registry"],

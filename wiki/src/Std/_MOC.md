@@ -56,6 +56,7 @@ tags: [moc, module, stdlib]
 - [[Std Bench]] — repeated measurement and distribution summaries.
 - [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
 - [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
+- [[Std Time Format Header]] — strict HTTP-date forms and date name tables.
 - [[Std Concurrent]] — joinable host-thread work.
 - [[Std Concurrent Future]] — typed results from other threads, with races, all-settled, and deadlines.
 - [[Std Concurrent Cancel]] — cooperative cancellation tokens with inherited deadlines.
