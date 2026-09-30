@@ -259,7 +259,7 @@ testProtocolEvaluation = do
         (sipHash === Just "10")
     , counterexample
         "IntervalTree augmented 1D interval tree with O(log n + k) stabbing queries"
-        (intervalTree === Just "10")
+        (intervalTree === Just "11")
     {-| A whole archive written and read back, because the two halves are only
         correct together: a header field written at the wrong offset reads back
         at the same wrong offset, and a round trip through one implementation

@@ -31,7 +31,8 @@ import Pudu.Eval.Operator.Access
   , unwrapTry
   )
 import Pudu.Eval.Render (valueKind)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Rope (ropeAppend)
+import Pudu.Eval.Value (Value (..), ropeOfValue)
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
   ( IntegerKind (..)
@@ -82,6 +83,10 @@ combine spanValue operator left right = case (left, right) of
   (FloatValue leftWidth a, FloatValue rightWidth b)
     | leftWidth == rightWidth -> floatOperation spanValue leftWidth operator a b
   (DecimalValue a, DecimalValue b) -> decimalOperation spanValue operator a b
+  (StrValue _, StrValue _)
+    | operator == "+"
+    , Just a <- ropeOfValue left
+    , Just b <- ropeOfValue right -> pure (RopeText (ropeAppend a b))
   (StrValue a, StrValue b) -> textOperation spanValue operator a b
   (CharValue a, CharValue b) -> comparisonOnly spanValue operator a b
   (BoolValue a, BoolValue b) -> comparisonOnly spanValue operator a b

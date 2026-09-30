@@ -7,14 +7,18 @@ export type Interval = {
 }
 
 /// Internal interval tree node storing subtree maximum endpoint.
+/// A node of the tree, kept height-balanced: the two sides of every node differ
+/// in height by at most one, so intervals inserted in order still form a tree
+/// whose depth grows with the logarithm of its size rather than a chain.
 export type IntervalNode = {
   interval: Interval,
   maxHigh: Int,
+  height: Int,
   left: Array[IntervalNode],
   right: Array[IntervalNode]
 }
 
-/// Augmented Interval Tree indexing closed 1D intervals with O(log n + k) queries.
+/// Augmented Interval Tree indexing closed 1D intervals; a query visits only the subtrees that can hold a match.
 export type IntervalTree = {
   root: Array[IntervalNode],
   count: Int
@@ -51,62 +55,60 @@ fn overlaps(a: &Interval, b: &Interval) -> Bool {
   a.low <= b.high && b.low <= a.high
 }
 
-fn insertNode(node: IntervalNode, item: Interval) -> IntervalNode {
-  var l = node.left
-  var r = node.right
-  if item.low < node.interval.low {
-    if l.length() == 0 {
-      l = [IntervalNode {
-          interval: item,
-          maxHigh: item.high,
-          left: [],
-          right: []
-        }]
-    } else {
-      l = [insertNode(l[0], item)]
-    }
+fn heightOf(side: &Array[IntervalNode]) -> Int {
+  if side.length() == 0 { 0 } else { side[0].height }
+}
+
+/// A node over two sides, with its height and greatest end worked out from them.
+fn joined(item: Interval, left: Array[IntervalNode], right: Array[IntervalNode]) -> IntervalNode {
+  var m = item.high
+  if left.length() > 0 && left[0].maxHigh > m { m = left[0].maxHigh }
+  if right.length() > 0 && right[0].maxHigh > m { m = right[0].maxHigh }
+  let tall = if heightOf(&left) > heightOf(&right) { heightOf(&left) } else { heightOf(&right) }
+  IntervalNode{interval: item, maxHigh: m, height: tall + 1, left: left, right: right}
+}
+
+fn rotatedRight(node: IntervalNode) -> IntervalNode {
+  let pivot = node.left[0]
+  joined(pivot.interval, pivot.left, [joined(node.interval, pivot.right, node.right)])
+}
+
+fn rotatedLeft(node: IntervalNode) -> IntervalNode {
+  let pivot = node.right[0]
+  joined(pivot.interval, [joined(node.interval, node.left, pivot.left)], pivot.right)
+}
+
+/// The node with its sides brought back within one level of each other.
+fn rebalanced(node: IntervalNode) -> IntervalNode {
+  let lean = heightOf(&node.left) - heightOf(&node.right)
+  if lean > 1 {
+    let side = node.left[0]
+    let left = if heightOf(&side.left) < heightOf(&side.right) { [rotatedLeft(side)] } else { node.left }
+    rotatedRight(joined(node.interval, left, node.right))
+  } else if lean < -1 {
+    let side = node.right[0]
+    let right = if heightOf(&side.right) < heightOf(&side.left) { [rotatedRight(side)] } else { node.right }
+    rotatedLeft(joined(node.interval, node.left, right))
   } else {
-    if r.length() == 0 {
-      r = [IntervalNode {
-          interval: item,
-          maxHigh: item.high,
-          left: [],
-          right: []
-        }]
-    } else {
-      r = [insertNode(r[0], item)]
-    }
+    node
   }
-  var m = node.interval.high
-  if item.high > m {
-    m = item.high
-  }
-  if l.length() > 0 && l[0].maxHigh > m {
-    m = l[0].maxHigh
-  }
-  if r.length() > 0 && r[0].maxHigh > m {
-    m = r[0].maxHigh
-  }
-  IntervalNode {
-    interval: node.interval,
-    maxHigh: m,
-    left: l,
-    right: r
+}
+
+fn insertNode(node: IntervalNode, item: Interval) -> IntervalNode {
+  let leaf = [joined(item, [], [])]
+  if item.low < node.interval.low {
+    let left = if node.left.length() == 0 { leaf } else { [insertNode(node.left[0], item)] }
+    rebalanced(joined(node.interval, left, node.right))
+  } else {
+    let right = if node.right.length() == 0 { leaf } else { [insertNode(node.right[0], item)] }
+    rebalanced(joined(node.interval, node.left, right))
   }
 }
 
 /// Inserts an interval into the tree and updates subtree maximum endpoints.
 export fn insert(tree: &IntervalTree, item: Interval) -> IntervalTree {
   if tree.root.length() == 0 {
-    return IntervalTree {
-      root: [IntervalNode {
-          interval: item,
-          maxHigh: item.high,
-          left: [],
-          right: []
-        }],
-      count: 1
-    }
+    return IntervalTree{root: [joined(item, [], [])], count: 1}
   }
   let newRoot = insertNode(tree.root[0], item)
   IntervalTree {
@@ -171,24 +173,10 @@ fn buildBalanced(sorted: &Array[Interval], start: Int, end: Int) -> Array[Interv
   }
   let mid = start + (end - start) / 2
   let iv = sorted[mid]
-  let leftSub = buildBalanced(sorted, start, mid - 1)
-  let rightSub = buildBalanced(sorted, mid + 1, end)
-  var m = iv.high
-  if leftSub.length() > 0 && leftSub[0].maxHigh > m {
-    m = leftSub[0].maxHigh
-  }
-  if rightSub.length() > 0 && rightSub[0].maxHigh > m {
-    m = rightSub[0].maxHigh
-  }
-  [IntervalNode {
-      interval: iv,
-      maxHigh: m,
-      left: leftSub,
-      right: rightSub
-    }]
+  [joined(iv, buildBalanced(sorted, start, mid - 1), buildBalanced(sorted, mid + 1, end))]
 }
 
-/// Builds a balanced interval tree from an array of intervals in O(n log n) time.
+/// Builds a balanced interval tree from an array of intervals, sorting them first.
 export fn fromIntervals(intervals: &Array[Interval]) -> IntervalTree {
   let n = intervals.length()
   if n == 0 {
@@ -273,7 +261,7 @@ fn collectInOrder(nodes: &Array[IntervalNode]) -> Array[Interval] {
   out
 }
 
-/// Materializes all intervals sorted by low endpoint in O(n) time.
+/// Every interval, sorted by low endpoint.
 export fn toIntervals(tree: &IntervalTree) -> Array[Interval] {
   collectInOrder(&tree.root)
 }

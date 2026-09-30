@@ -120,5 +120,16 @@ export fn main() -> Int {
   if Map.size(&LinkedMap.toMap(&items)) == 3 { held = held + 1 }
   if Option.unwrapOr(Map.get(&LinkedMap.toMap(&items), "a"), 0) == 1 { held = held + 1 }
 
+  // Refreshing and removing keep every other key where it was.
+  var recent = LinkedMap.fromPairs(&[("a", 1), ("b", 2), ("c", 3), ("d", 4)])
+  recent = LinkedMap.touch(&recent, "b", 20)
+  recent = LinkedMap.remove(&recent, "c")
+  recent = LinkedMap.touch(&recent, "a", 10)
+  recent = LinkedMap.insert(&recent, "e", 5)
+  if LinkedMap.keys(&recent) == ["d", "b", "a", "e"] && LinkedMap.values(&recent) == [4, 20, 10, 5]
+    && LinkedMap.keys(&LinkedMap.reversed(&recent)) == ["e", "a", "b", "d"] {
+    held = held + 1
+  }
+
   held
 }

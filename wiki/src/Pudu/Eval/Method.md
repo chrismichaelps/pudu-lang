@@ -69,6 +69,8 @@ charMethodName    :: CharMethod -> Text
   learn a second import.
 - **Q:** Why include `StringEscapeHtml` in the closed `StringMethod` enum? **A:** HTML entity escaping is a performance-critical primitive for web templating and UI islands. Registering it in the closed method vocabulary provides uniform dispatch, static method resolution, and single-point spelling (`"escapeHtml"`).
 
+- **Q:** Name the native sort `sortBy`? **A:** Yes. _Rationale:_ the same name and argument order as
+  [[Std List]], so the library function is a direct call.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]

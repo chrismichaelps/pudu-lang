@@ -198,7 +198,11 @@ export fn hasCycle[N: Ord](graph: &Graph[N]) -> Bool {
 
 /// The nodes that nothing points at, which is where a topological walk begins.
 export fn roots[N: Ord](graph: &Graph[N]) -> Array[N] {
-  List.filter(&nodes(graph), fn(node: N) -> Bool => inDegree(graph, node) == 0)
+  var pointed = Set.empty()
+  for from in nodes(graph) {
+    for to in neighbours(graph, from) { pointed = Set.insert(&pointed, to) }
+  }
+  List.filter(&nodes(graph), fn(node: N) -> Bool => !Set.contains(&pointed, node))
 }
 
 /// The nodes that point at nothing.

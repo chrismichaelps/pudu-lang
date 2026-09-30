@@ -1,6 +1,6 @@
 module Std.LinkedMap
 
-import Std.List as List
+import Std.Option as Option
 
 /// A map that also remembers the order its keys were first put in.
 ///
@@ -20,7 +20,17 @@ import Std.List as List
 /// changes its value and leaves it where it is. That is what separates this
 /// from a recency order, and it is the one a person means: a setting does not
 /// move to the bottom of the file because it was edited.
-export type LinkedMap[K, V] = { order: Array[K], entries: Map[K, V] }
+///
+/// Each key carries a stamp from a counter that only grows, and the order is
+/// the keys paired with their stamps, ascending. Finding a key's place is then
+/// a search by stamp rather than a walk, so removing or moving one key never
+/// visits the others.
+export type LinkedMap[K, V] = {
+  order: Array[(Int, K)],
+  stamps: Map[K, Int],
+  entries: Map[K, V],
+  next: Int
+}
 
 /// A map with no entries.
 ///
@@ -31,7 +41,7 @@ export type LinkedMap[K, V] = { order: Array[K], entries: Map[K, V] }
 /// LinkedMap.isEmpty(&m)  // true
 /// ```
 export fn empty[K, V]() -> LinkedMap[K, V] {
-  LinkedMap{order: [], entries: mapOf([])}
+  LinkedMap{order: [], stamps: mapOf([]), entries: mapOf([]), next: 0}
 }
 
 /// How many entries the map holds.
@@ -114,9 +124,9 @@ export fn containsKey[K, V](map: &LinkedMap[K, V], key: K) -> Bool {
 /// ```
 export fn insert[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
   if map.entries.containsKey(key) {
-    LinkedMap{order: map.order, entries: map.entries.insert(key, held)}
+    LinkedMap{..*map, entries: map.entries.insert(key, held)}
   } else {
-    LinkedMap{order: map.order.push(key), entries: map.entries.insert(key, held)}
+    appended(map, key, held)
   }
 }
 
@@ -135,8 +145,7 @@ export fn insert[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V
 /// LinkedMap.keys(&LinkedMap.touch(&m, 3, "c"))  // [1, 2, 3]
 /// ```
 export fn touch[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
-  let without = List.filter(&map.order, fn(existing: K) -> Bool => existing != key)
-  LinkedMap{order: without.push(key), entries: map.entries.insert(key, held)}
+  appended(&remove(map, key), key, held)
 }
 
 /// The map with a key's entry removed, or unchanged when there is none.
@@ -151,7 +160,9 @@ export fn touch[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V]
 export fn remove[K, V](map: &LinkedMap[K, V], key: K) -> LinkedMap[K, V] {
   if !map.entries.containsKey(key) { *map } else {
     LinkedMap {
-      order: List.filter(&map.order, fn(existing: K) -> Bool => existing != key),
+      ..*map,
+      order: map.order.remove(positionOf(&map.order, Option.unwrapOr(map.stamps.get(key), -1))),
+      stamps: map.stamps.remove(key),
       entries: map.entries.remove(key)
     }
   }
@@ -165,7 +176,11 @@ export fn remove[K, V](map: &LinkedMap[K, V], key: K) -> LinkedMap[K, V] {
 /// let m = LinkedMap.fromPairs(&[(2, "b"), (1, "a")])
 /// LinkedMap.keys(&m)  // [2, 1]
 /// ```
-export fn keys[K, V](map: &LinkedMap[K, V]) -> Array[K] { map.order }
+export fn keys[K, V](map: &LinkedMap[K, V]) -> Array[K] {
+  var out: Array[K] = []
+  for pair in map.order { out = out.push(pair[1]) }
+  out
+}
 
 /// Every value, in the insertion order of its key.
 ///
@@ -177,7 +192,8 @@ export fn keys[K, V](map: &LinkedMap[K, V]) -> Array[K] { map.order }
 /// ```
 export fn values[K, V](map: &LinkedMap[K, V]) -> Array[V] {
   var out = []
-  for key in map.order {
+  for pair in map.order {
+    let key = pair[1]
     match map.entries.get(key) {
       case Some(found) => { out = out.push(found) }
       case None => {}
@@ -196,7 +212,8 @@ export fn values[K, V](map: &LinkedMap[K, V]) -> Array[V] {
 /// ```
 export fn pairs[K, V](map: &LinkedMap[K, V]) -> Array[(K, V)] {
   var out = []
-  for key in map.order {
+  for pair in map.order {
+    let key = pair[1]
     match map.entries.get(key) {
       case Some(found) => { out = out.push((key, found)) }
       case None => {}
@@ -216,7 +233,7 @@ export fn pairs[K, V](map: &LinkedMap[K, V]) -> Array[(K, V)] {
 /// ```
 export fn oldest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
   if map.order.length() == 0 { None } else {
-    let key = map.order[0]
+    let key = map.order[0][1]
     Some((key, map.entries.get(key) ?))
   }
 }
@@ -232,7 +249,7 @@ export fn oldest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
 export fn newest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
   let total = map.order.length()
   if total == 0 { None } else {
-    let key = map.order[total - 1]
+    let key = map.order[total - 1][1]
     Some((key, map.entries.get(key) ?))
   }
 }
@@ -387,7 +404,35 @@ export fn merge[K, V](
 /// LinkedMap.keys(&LinkedMap.reversed(&m))  // [2, 1]
 /// ```
 export fn reversed[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
-  LinkedMap{order: List.reversed(&map.order), entries: map.entries}
+  var out: LinkedMap[K, V] = empty()
+  var index = map.order.length() - 1
+  while index >= 0 {
+    let key = map.order[index][1]
+    if let Some(held) = map.entries.get(key) { out = appended(&out, key, held) }
+    index = index - 1
+  }
+  out
+}
+
+/// The map with a key it does not hold put last.
+fn appended[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
+  LinkedMap {
+    order: map.order.push((map.next, key)),
+    stamps: map.stamps.insert(key, map.next),
+    entries: map.entries.insert(key, held),
+    next: map.next + 1
+  }
+}
+
+/// Where the pair carrying a stamp sits in the order, found by halving.
+fn positionOf[K](order: &Array[(Int, K)], stamp: Int) -> Int {
+  var low = 0
+  var high = order.length()
+  while low < high {
+    let middle = (low + high) / 2
+    if order[middle][0] < stamp { low = middle + 1 } else { high = middle }
+  }
+  low
 }
 
 /// The map with its order forgotten, as an ordinary map.

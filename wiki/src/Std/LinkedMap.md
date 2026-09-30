@@ -73,6 +73,8 @@ other.
 
 DEPTH 0.40 (MEDIUM). Two structures kept in step by every operation that touches either.
 
+Each key carries a stamp from a counter that only grows; the order is the `(stamp, key)` pairs
+ascending, so a key's place is found by halving on its stamp and removed from the sequence there.
 ## Grill Log
 
 - **Q:** Why not make the built-in `Map` insertion-ordered instead? **A:** Because [[Eval Keyed]]
@@ -93,6 +95,11 @@ DEPTH 0.40 (MEDIUM). Two structures kept in step by every operation that touches
   positions rather than a plain sequence — but that costs on every write, which is the common case,
   to save on removal, which is not.
 
+- **Q:** Keep the order as an array of keys and filter it on every removal or refresh? **A:** No.
+  _Rationale:_ each `touch` walked every key with a closure call, so an [[Std LruCache]] workload of
+  8,000 operations took 209.6 s on the development build; with the key's stamp found by halving the
+  stamped order it takes 2.8 s and doubles with the work. _Rejected:_ a linked list through the map,
+  which a persistent value cannot update in place.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Keyed]]

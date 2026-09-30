@@ -147,6 +147,8 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   a generic missing-export diagnostic.
 - **Q:** Why type `escapeHtml` in the core type checker rather than in `Std.Html`? **A:** `escapeHtml` is wired as a zero-argument built-in method on primitive `Str` values returning `Str`. Typing it in `stringMethodType` ensures that `.escapeHtml()` is recognized statically across all modules and in standard library implementations without circular dependencies.
 
+- **Q:** Type `sortBy`? **A:** `fn(fn(T, T) -> Bool) -> Array[T]`. _Rationale:_ the comparison says
+  whether its first argument goes before its second, as [[Std List]] always has.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]

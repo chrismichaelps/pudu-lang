@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
   ( Builtin (..)
@@ -25,7 +27,8 @@ module Pudu.Eval.Value
   , stringMethodName
   , Captured (..)
   , Closure (..)
-  , Value (..)
+  , Value (.., StrValue)
+  , ropeOfValue
   , ForeignBinding (..)
   , ForeignClaim (..)
   , ForeignRelease (..)
@@ -43,6 +46,7 @@ import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text)
+import Pudu.Eval.Rope (Rope, ropeOf, ropeText)
 import Pudu.Eval.Method
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
 import Pudu.Eval.Builtin.Definition (Builtin (..), builtinName)
@@ -70,7 +74,11 @@ data Value
   = IntValue !IntegerKind !Integer
   | FloatValue !FloatWidth !Double
   | DecimalValue !Decimal
-  | StrValue !Text
+  {-| Text as one contiguous value: every text that was not built by `+`. -}
+  | FlatText !Text
+  {-| Text built by `+`, held as the chunks it was appended from so that
+      building one a piece at a time does not copy it at every step. -}
+  | RopeText !Rope
   {-| A byte sequence is its own value rather than an `Array[UInt8]`.
 
       An array holds each element as a separate runtime value and reaches the
@@ -141,6 +149,34 @@ data Value
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
   deriving stock (Show)
+
+{-| A text value, read as its whole text and built from one.
+
+    Matching joins an appended text once and keeps the join, so every reader
+    sees plain text; `+` on two texts appends ropes instead of copying. Text
+    that was never appended to stays flat and carries no rope. -}
+{-# INLINE StrValue #-}
+pattern StrValue :: Text -> Value
+pattern StrValue text <- (textOf -> Just text)
+  where
+    StrValue text = FlatText text
+
+{-| The whole text of a text value, joining an appended one once. -}
+textOf :: Value -> Maybe Text
+{-# INLINE textOf #-}
+textOf value = case value of
+  FlatText text -> Just text
+  RopeText rope -> Just (ropeText rope)
+  _ -> Nothing
+
+{-| A text value as a rope, ready to be appended to without copying. -}
+ropeOfValue :: Value -> Maybe Rope
+ropeOfValue value = case value of
+  FlatText text -> Just (ropeOf text)
+  RopeText rope -> Just rope
+  _ -> Nothing
+
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}

@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Linear text building, native sort, and container repairs (#404–#410)
+
+- [[Eval Rope]] holds text built by `+` as chunks joined once when read; [[Eval Value]] keeps
+  other text flat behind the same `StrValue` pattern and [[Eval Operator]] appends ropes (#404).
+  Appending 320,000 pieces at -O2 fell from 26.9 s to 0.5 s; a 17.8 MB JSON round trip is
+  unchanged. [[Eval Sort]] gives arrays a native stable natural merge `sortBy`, which
+  [[Std List]] `sortBy`, `sorted`, and `sortOn` use, `sortOn` drawing each key once (#408):
+  100,000 integers fell from 8.3 s to 1.6 s. [[Std LinkedMap]] finds keys by stamp instead of
+  filtering its order, so an [[Std LruCache]] workload of 4,000 operations fell from 8.6 s to
+  0.5 s (#405). [[Std IntervalTree]] rebalances on insert (#406), [[Std Graph]] `roots` counts
+  in-degrees once (#407), [[Std PrefixTrie]] nodes carry their key counts (#409), and [[Std List]]
+  set functions decide membership through a set, `union` keeping the first array as documented
+  (#410). Public
+  documentation no longer states costs in asymptotic notation. Fixtures cover ordering,
+  stability, balance, and counts.
+
 ## 2026-09-30 — Std parser and runtime repairs found by dependency-layer probing (#395–#403)
 
 - [[Eval Builtin String]] finds an empty needle at 0 instead of ending the program (#395).

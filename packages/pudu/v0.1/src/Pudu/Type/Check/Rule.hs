@@ -287,7 +287,7 @@ builtinMethodNames =
   , "drop", "take", "spanOf", "spanNotOf", "escapeHtml"
   , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
-  , "map", "filter", "reduce", "at", "toArray", "toText", "toBytes", "join"
+  , "map", "filter", "reduce", "sortBy", "at", "toArray", "toText", "toBytes", "join"
   , "toInt", "toFloat", "toDecimal"
   ]
 
@@ -970,6 +970,8 @@ arrayMethodType spanValue member element = case member of
     result <- freshVariable
     pure (FunctionTypeValue False [FunctionTypeValue False [element] result] (arrayOf result))
   "filter" -> pure (FunctionTypeValue False [FunctionTypeValue False [element] boolType] arrayType)
+  "sortBy" ->
+    pure (FunctionTypeValue False [FunctionTypeValue False [element, element] boolType] arrayType)
   "reduce" -> do
     acc <- freshVariable
     pure (FunctionTypeValue False [FunctionTypeValue False [acc, element] acc, acc] acc)

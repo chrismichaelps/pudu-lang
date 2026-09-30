@@ -57,6 +57,8 @@ tags: [moc, module, stdlib]
 - [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
 - [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
 - [[Std Time Format Header]] — strict HTTP-date forms and date name tables.
+- [[Std List]] — array operations beyond the built-in methods, with a native stable sort.
+- [[Std Graph]] — directed graphs, walks, orders, and groups.
 - [[Std Concurrent]] — joinable host-thread work.
 - [[Std Concurrent Future]] — typed results from other threads, with races, all-settled, and deadlines.
 - [[Std Concurrent Cancel]] — cooperative cancellation tokens with inherited deadlines.

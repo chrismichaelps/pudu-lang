@@ -96,6 +96,9 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Round only `Float32` literals? **A:** No; normalize each arithmetic result too. _Rationale:_ binary32 precision applies to operations, not just source conversion. _Rejected:_ hidden binary64 intermediates; rounding only when a value is printed.
 
+- **Q:** Append two texts by joining them? **A:** No. _Rationale:_ building text in a loop copied
+  everything written so far at each step. `+` on two texts appends ropes and reads neither side's
+  joined text on the left. _Rejected:_ recognising only `x = x + y`.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

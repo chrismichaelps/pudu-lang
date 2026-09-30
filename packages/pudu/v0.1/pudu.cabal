@@ -151,6 +151,8 @@ library
     Pudu.Eval.Order
     Pudu.Eval.Range
     Pudu.Eval.Render
+    Pudu.Eval.Rope
+    Pudu.Eval.Sort
     Pudu.Eval.Value
     Pudu.Frontend.Expand
     Pudu.Frontend.Expand.Substitute

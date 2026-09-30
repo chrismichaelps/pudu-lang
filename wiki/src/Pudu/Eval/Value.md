@@ -137,6 +137,10 @@ includes the claim, so a borrowed handle and an owned one at one address are not
   a value that has to be remembered everywhere it is compared; a constructor makes the two cases
   something the compiler asks about at each use.
 
+- **Q:** Keep text as one strict value only? **A:** No. _Rationale:_ `+` then copied the whole left
+  side on every append. `FlatText` holds text as before and `RopeText` holds an appended one
+  ([[Eval Rope]]); the bidirectional `StrValue` pattern reads either as its text, so matching,
+  equality, hashing, and freezing are unchanged. _Rejected:_ a rope for every text.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

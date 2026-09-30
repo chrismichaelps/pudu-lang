@@ -258,6 +258,7 @@ arrayMethods =
   , ("map", ArrayMap)
   , ("filter", ArrayFilter)
   , ("reduce", ArrayReduce)
+  , ("sortBy", ArraySortBy)
   ]
 
 {-| The nominal type a value belongs to, for the values that belong to one the

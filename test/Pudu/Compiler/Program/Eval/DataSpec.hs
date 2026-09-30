@@ -39,7 +39,7 @@ testDataEvaluation = do
           right shape with the wrong contents fails here. -}
       counterexample
         "every list operation answers what it says it answers"
-        (listAll === Just "92")
+        (listAll === Just "94")
     {-| Every export of the map and set modules against a stated answer. The
         empty one is asked the same questions as a full one: that is where a
         fold has nothing to fold and an extreme has no answer, and where an
@@ -72,7 +72,7 @@ testDataEvaluation = do
         recency. -}
     , counterexample
         "a map that keeps its insertion order keeps it through every operation"
-        (linkedMapAll === Just "41")
+        (linkedMapAll === Just "42")
     {-| Every export of the two-way map and the map over a settled domain. A
         pairing is asked in both directions everywhere, since a map whose two
         directions disagreed would answer correctly for whichever one a
@@ -104,7 +104,7 @@ testDataEvaluation = do
         answers that something begins there. -}
     , counterexample
         "a read moves an entry and an emptied path stops being a prefix"
-        (cachedAndPrefixed === Just "90")
+        (cachedAndPrefixed === Just "91")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those

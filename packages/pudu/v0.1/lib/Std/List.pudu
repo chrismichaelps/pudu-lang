@@ -916,8 +916,12 @@ export fn group[T](items: &Array[T]) -> Array[Array[T]] {
 /// - `distinctBy` — sameness the type does not define itself.
 export fn distinct[T](items: &Array[T]) -> Array[T] {
   var out = []
+  var seen = setOf([])
   for item in items {
-    if !out.contains(item) { out = out.push(item) }
+    if !seen.contains(item) {
+      seen = seen.insert(item)
+      out = out.push(item)
+    }
   }
   out
 }
@@ -950,9 +954,10 @@ export fn removeFirst[T](items: &Array[T], unwanted: T) -> Array[T] {
 /// List.difference(&[1, 2, 2, 3], &[2])  // [1, 3]
 /// ```
 export fn difference[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  let excluded = setOf(*right)
   var out = []
   for item in left {
-    if !right.contains(item) { out = out.push(item) }
+    if !excluded.contains(item) { out = out.push(item) }
   }
   out
 }
@@ -969,9 +974,13 @@ export fn difference[T](left: &Array[T], right: &Array[T]) -> Array[T] {
 /// List.union(&[1, 1, 2], &[2, 3])  // [1, 1, 2, 3]
 /// ```
 export fn union[T](left: &Array[T], right: &Array[T]) -> Array[T] {
-  var out = distinct(left)
+  var out = *left
+  var seen = setOf(*left)
   for item in right {
-    if !out.contains(item) { out = out.push(item) }
+    if !seen.contains(item) {
+      seen = seen.insert(item)
+      out = out.push(item)
+    }
   }
   out
 }
@@ -987,9 +996,10 @@ export fn union[T](left: &Array[T], right: &Array[T]) -> Array[T] {
 /// List.intersection(&[1, 2, 2, 3], &[2, 3])  // [2, 2, 3]
 /// ```
 export fn intersection[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  let kept = setOf(*right)
   var out = []
   for item in left {
-    if right.contains(item) { out = out.push(item) }
+    if kept.contains(item) { out = out.push(item) }
   }
   out
 }
@@ -1262,6 +1272,10 @@ export fn suffixes[T](items: &Array[T]) -> Array[Array[T]] {
 /// a failure, which is the same promise every comparison sort makes. The sort is
 /// stable: elements the comparison calls equal keep their original order.
 ///
+/// The runtime sorts natively and first finds the runs the input already
+/// holds, so input that arrives in order, or in reverse order, is sorted in
+/// one pass.
+///
 /// ## Examples
 ///
 /// ```
@@ -1273,13 +1287,7 @@ export fn suffixes[T](items: &Array[T]) -> Array[Array[T]] {
 /// - `sorted` — the type's own ordering.
 /// - `sortOn` — ordering by a key drawn from each element.
 export fn sortBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
-  let size = items.length()
-  if size <= 1 { items.slice(0, size) } else {
-    let middle = size / 2
-    let front = sortBy(&items.slice(0, middle), before)
-    let back = sortBy(&items.slice(middle, size), before)
-    mergeBy(&front, &back, before)
-  }
+  items.sortBy(before)
 }
 
 /// Two arrays ordered by the same comparison interleaved into one.
@@ -1764,7 +1772,10 @@ export fn distinctBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[T] {
 /// List.sortOn(&["ccc", "a", "bb"], fn(s: Str) -> Int => s.length())  // ["a", "bb", "ccc"]
 /// ```
 export fn sortOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Array[T] {
-  sortBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
+  // Each key is drawn once rather than on every comparison.
+  let keyed = items.map(fn(item: T) -> (K, T) => (key(item), item))
+  let ordered = keyed.sortBy(fn(left: (K, T), right: (K, T)) -> Bool => left[0].before(&right[0]))
+  ordered.map(fn(pair: (K, T)) -> T => pair[1])
 }
 
 /// The element whose key is smallest, or `None` for an empty array.
