@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — YAML quoted scalar decoding (#382)
+
+- [[Std Yaml]] delegates to [[src/Std/Yaml/Quoted]] for YAML escapes, doubled apostrophes,
+  quote-aware delimiters, and precise malformed-scalar errors. The regression fixture passes;
+  formatter, API coverage (zero undocumented exports), and independent review pass.
+
 ## 2026-09-30 — Exact Option method regression (#383)
 
 - [[Standard Library Program Spec]] verifies unwrapOr receiver calls report one E3005 with

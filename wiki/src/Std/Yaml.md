@@ -31,7 +31,13 @@ costs a reader recursion and the evaluator bounds call depth, so a block that wo
 512 levels deep answers `TooDeep` at its line instead of stopping the program.
 Compact sequences at a mapping key's indentation belong to that key even when the mapping
 starts on a list item's dash; parsing resumes at the next sibling key or outer item.
+Quoted keys and values decode YAML escapes through [[Std Yaml Quoted]]. Quote-aware comment,
+colon and comma scans skip escaped double quotes and doubled single quotes. Invalid escapes,
+Unicode non-scalars, trailing text and missing closers return line-numbered typed errors.
 ## Grill Log
+- **Q:** Keep the source spelling inside quoted text? **A:** No. _Accepted:_ YAML escape
+  decoding and doubled single quotes; malformed strings are refused, including in nested flow
+  collections and quoted keys. _Rationale:_ configuration text means its decoded characters.
 - **Q:** Does a compact sequence belong only to a document-level mapping? **A:** No.
   _Rationale:_ mapping values follow the same indentation rule inside list items.
   _Accepted:_ consume same-indent dash lines through the depth-checked block reader for an empty

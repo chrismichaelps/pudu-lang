@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[src/test-fixtures/stdlib/UsesYamlQuoted]] — quoted escape values, flow delimiters, and typed malformed-text refusal.
+
 - [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodImported]] · [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodUnimported]] · [[src/test-fixtures/stdlib/UsesOptionUnwrapQualified]] — exact Option.unwrapOr method refusals and qualified success.
 
 - [[src/test-fixtures/latealias/Main]] · [[src/test-fixtures/latealias/RejectsWrongCallback]] · [[src/test-fixtures/latealias/Lib/Sink]] — imported late callback aliases and wrong callback refusal.

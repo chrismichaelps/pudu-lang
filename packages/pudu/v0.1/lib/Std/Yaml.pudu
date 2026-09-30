@@ -1,6 +1,7 @@
 module Std.Yaml
 
 import Std.Text as Reading
+import Std.Yaml.Quoted as Quoted
 
 /// A value a YAML document holds.
 ///
@@ -130,28 +131,7 @@ fn measureIndent(line: Str) -> (Int, Int) {
 
 /// A line with a trailing comment removed, leaving quoted text alone.
 /// A line without `#` has no comment to remove, and most lines are that line.
-fn withoutComment(line: Str) -> Str {
-  if !line.contains("#") { return line }
-  let chars = line.chars()
-  var index = 0
-  var quote = ' '
-  var quoted = false
-  while index < chars.length() {
-    let here = chars[index]
-    if quoted {
-      if here == quote {
-        quoted = false
-      }
-    } else if here == '"' || here == '\'' {
-      quoted = true
-      quote = here
-    } else if here == '#' && (index == 0 || chars[index - 1] == ' ') {
-      return Reading.trimEnd(Reading.take(line, index))
-    }
-    index = index + 1
-  }
-  line
-}
+fn withoutComment(line: Str) -> Str { Quoted.comment(line) }
 
 /// Read the run of lines indented at one level, and answer where it ended.
 ///
@@ -205,7 +185,7 @@ fn parseSequence(
       items = items.push(held[0])
       index = held[1]
     } else {
-      items = items.push(scalarOf(rest))
+      items = items.push(scalarOf(rest, line.number) ?)
       index = index + 1
     }
   }
@@ -220,7 +200,7 @@ fn parseInlineMapping(
   first: Str,
   depth: Int
 ) -> Result[(Yaml, Int), YamlError] {
-  let split = splitKey(first)
+  let split = splitKey(first, lines[from].number) ?
   var entries: Array[(Str, Yaml)] = []
   var index = from + 1
   if split[1].isEmpty() {
@@ -232,7 +212,7 @@ fn parseInlineMapping(
       entries = entries.push((split[0], Empty))
     }
   } else {
-    entries = entries.push((split[0], scalarOf(split[1])))
+    entries = entries.push((split[0], scalarOf(split[1], lines[from].number) ?))
   }
   // The remaining keys of the same mapping are indented under the dash.
   while index < lines.length() && lines[index].indent == indent {
@@ -240,7 +220,7 @@ fn parseInlineMapping(
     if line.content.startsWith("- ") || !isKeyLine(line.content) {
       break
     }
-    let pair = splitKey(line.content)
+    let pair = splitKey(line.content, line.number) ?
     if pair[1].isEmpty() {
       if index + 1 < lines.length() && lines[index + 1].indent > indent {
         let nested = parseBlock(lines, index + 1, lines[index + 1].indent, depth + 1) ?
@@ -261,7 +241,7 @@ fn parseInlineMapping(
       entries = entries.push((pair[0], folded[0]))
       index = folded[1]
     } else {
-      entries = entries.push((pair[0], scalarOf(pair[1])))
+      entries = entries.push((pair[0], scalarOf(pair[1], line.number) ?))
       index = index + 1
     }
   }
@@ -284,7 +264,7 @@ fn parseMapping(
     if !isKeyLine(line.content) {
       return Err(Malformed(line.number, "a mapping needs a key"))
     }
-    let pair = splitKey(line.content)
+    let pair = splitKey(line.content, line.number) ?
     if isBlockMarker(pair[1]) {
       let folded = parseBlockScalar(lines, index + 1, indent, pair[1])
       entries = entries.push((pair[0], folded[0]))
@@ -306,7 +286,7 @@ fn parseMapping(
         index = index + 1
       }
     } else {
-      entries = entries.push((pair[0], scalarOf(pair[1])))
+      entries = entries.push((pair[0], scalarOf(pair[1], line.number) ?))
       index = index + 1
     }
   }
@@ -344,56 +324,23 @@ fn parseBlockScalar(lines: &Array[Line], from: Int, indent: Int, marker: Str) ->
 ///
 /// Only a quote can hide a colon, so a line without one is decided by native
 /// searches and the walk below is left to the lines that quote something.
-fn isKeyLine(value: Str) -> Bool {
-  if !value.contains(":") { return false }
-  if !value.contains("\"") && !value.contains("'") { return value.contains(": ") || value.endsWith(":") }
-  let chars = value.chars()
-  var index = 0
-  var quote = ' '
-  var quoted = false
-  while index < chars.length() {
-    let here = chars[index]
-    if quoted {
-      if here == quote { quoted = false }
-    } else if here == '"' || here == '\'' {
-      quoted = true
-      quote = here
-    } else if here == ':' {
-      if index + 1 >= chars.length() || chars[index + 1] == ' ' {
-        return true
-      }
-    }
-    index = index + 1
-  }
-  false
+fn isKeyLine(value: Str) -> Bool { Quoted.colon(value) >= 0 }
+
+fn splitKey(value: Str, line: Int) -> Result[(Str, Str), YamlError] {
+  let colon = Quoted.colon(value)
+  if colon < 0 { return Ok((quotedText(value, line) ?, "")) }
+  let name = quotedText(Reading.trimEnd(value.take(colon)), line) ?
+  Ok((name, Reading.trimStart(value.drop(colon + 1))))
 }
 
-fn splitKey(value: Str) -> (Str, Str) {
-  if !value.contains("\"") && !value.contains("'") {
-    let spaced = value.indexOf(": ")
-    let colon = if spaced >= 0 { spaced } else if value.endsWith(":") { value.length() - 1 } else { 0 - 1 }
-    if colon < 0 { return (unquote(value), "") }
-    return (unquote(Reading.trimEnd(Reading.take(value, colon))), Reading.trimStart(Reading.drop(value, colon + 1)))
-  }
-  let chars = value.chars()
-  var index = 0
-  var quote = ' '
-  var quoted = false
-  while index < chars.length() {
-    let here = chars[index]
-    if quoted {
-      if here == quote { quoted = false }
-    } else if here == '"' || here == '\'' {
-      quoted = true
-      quote = here
-    } else if here == ':' && (index + 1 >= chars.length() || chars[index + 1] == ' ') {
-      let name = unquote(Reading.trimEnd(Reading.take(value, index)))
-      let rest = Reading.trimStart(Reading.drop(value, index + 1))
-      return (name, rest)
+fn quotedText(value: Str, line: Int) -> Result[Str, YamlError] {
+  match Quoted.decode(value) {
+    case Ok(text) => Ok(text)
+    case Err(problem) => match problem {
+      case Quoted.Unterminated => Err(Unterminated(line))
+      case Quoted.Invalid(what) => Err(Malformed(line, what))
     }
-    index = index + 1
   }
-  (unquote(value), "")
 }
 
 /// What a scalar written on one line means.
@@ -401,99 +348,49 @@ fn splitKey(value: Str) -> (Str, Str) {
 /// The order matters: a quoted value is text whatever it looks like, which is
 /// why `"true"` and `"1"` survive as text. Everything else is read as the kind
 /// it is written as, which is what a configuration file means by `replicas: 3`.
-fn scalarOf(value: Str) -> Yaml {
+fn scalarOf(value: Str, line: Int) -> Result[Yaml, YamlError] {
   if value.startsWith("\"") || value.startsWith("'") {
-    return Text(unquote(value))
+    return Ok(Text(quotedText(value, line) ?))
   }
-  if value.startsWith("[") || value.startsWith("\{") {
-    return flowOf(value)
-  }
-  if value == "null" || value == "~" || value.isEmpty() {
-    return Empty
-  }
-  if value == "true" || value == "True" || value == "yes" {
-    return Boolean(true)
-  }
-  if value == "false" || value == "False" || value == "no" {
-    return Boolean(false)
-  }
-  match wholeOf(value) {
-    case Some(number) => Whole(number)
-    case None => {
-      if looksFractional(value) {
-        Fractional(value)
-      } else {
-        Text(value)
-      }
-    }
-  }
+  if value.startsWith("[") || value.startsWith("\{") { return flowOf(value, line) }
+  if value == "null" || value == "~" || value.isEmpty() { return Ok(Empty) }
+  if value == "true" || value == "True" || value == "yes" { return Ok(Boolean(true)) }
+  if value == "false" || value == "False" || value == "no" { return Ok(Boolean(false)) }
+  Ok(match wholeOf(value) {
+      case Some(number) => Whole(number)
+      case None => if looksFractional(value) { Fractional(value) } else { Text(value) }
+    })
 }
 
 /// A sequence or mapping written on one line.
-fn flowOf(value: Str) -> Yaml {
+fn flowOf(value: Str, line: Int) -> Result[Yaml, YamlError] {
+  if !(value.startsWith("[") && value.endsWith("]")) && !(value.startsWith("\{") && value.endsWith("\}")) { return Err(Unterminated(line)) }
   let inner = Reading.trimStart(Reading.trimEnd(Reading.drop(Reading.take(value, value.length() - 1), 1)))
   if inner.isEmpty() {
-    return if value.startsWith("[") { List([]) } else { Mapping([]) }
+    return Ok(if value.startsWith("[") { List([]) } else { Mapping([]) })
   }
   let pieces = splitFlow(inner)
   if value.startsWith("[") {
     var items: Array[Yaml] = []
     var index = 0
     while index < pieces.length() {
-      items = items.push(scalarOf(Reading.trimStart(Reading.trimEnd(pieces[index]))))
+      items = items.push(scalarOf(Reading.trimStart(Reading.trimEnd(pieces[index])), line) ?)
       index = index + 1
     }
-    return List(items)
+    return Ok(List(items))
   }
   var entries: Array[(Str, Yaml)] = []
   var index = 0
   while index < pieces.length() {
-    let pair = splitKey(Reading.trimStart(Reading.trimEnd(pieces[index])))
-    entries = entries.push((pair[0], scalarOf(pair[1])))
+    let pair = splitKey(Reading.trimStart(Reading.trimEnd(pieces[index])), line) ?
+    entries = entries.push((pair[0], scalarOf(pair[1], line) ?))
     index = index + 1
   }
-  Mapping(entries)
+  Ok(Mapping(entries))
 }
 
 /// A flow collection cut at its commas, ignoring commas inside a nested one.
-fn splitFlow(value: Str) -> Array[Str] {
-  let chars = value.chars()
-  var pieces: Array[Str] = []
-  var depth = 0
-  var start = 0
-  var index = 0
-  var quote = ' '
-  var quoted = false
-  while index < chars.length() {
-    let here = chars[index]
-    if quoted {
-      if here == quote { quoted = false }
-    } else if here == '"' || here == '\'' {
-      quoted = true
-      quote = here
-    } else if here == '[' || here == '{' {
-      depth = depth + 1
-    } else if here == ']' || here == '}' {
-      depth = depth - 1
-    } else if here == ',' && depth == 0 {
-      pieces = pieces.push(Reading.take(Reading.drop(value, start), index - start))
-      start = index + 1
-    }
-    index = index + 1
-  }
-  pieces.push(Reading.drop(value, start))
-}
-
-fn unquote(value: Str) -> Str {
-  if value.length() < 2 {
-    return value
-  }
-  if (value.startsWith("\"") && value.endsWith("\""))
-    || (value.startsWith("'") && value.endsWith("'")) {
-    return Reading.take(Reading.drop(value, 1), value.length() - 2)
-  }
-  value
-}
+fn splitFlow(value: Str) -> Array[Str] { Quoted.pieces(value) }
 
 /// A whole number written as one, with an optional sign.
 ///

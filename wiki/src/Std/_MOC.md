@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[src/Std/Yaml/Quoted]] — checked single-line YAML quoting and delimiter scans.
+
 - [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
   conditionals, and exact rendering delegated to `Std.Html`.
 - [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
