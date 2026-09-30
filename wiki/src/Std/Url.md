@@ -17,5 +17,7 @@ Malformed required structure reports `Result`; malformed percent escapes remain 
 User information before the authority's last `@` is not part of the host and is not kept, so credentials never travel in a field named for the host. A host written in brackets is an IPv6 address: it keeps its brackets, and the port is only what follows the closing bracket. Text with neither `%` nor `+` is returned by `decodeComponent` unchanged, and where the authority and the path end is found with one native search per delimiter.
 ## Grill Log
 - **Q:** Why preserve a malformed escape? **A:** The original text is more honest than an invented replacement scalar. _Rejected:_ lossy guessing.
+- **Q:** Accept any count as a port and let the connection fail? **A:** No. _Rationale:_ the error
+  then names the network rather than the URL that was wrong. _Rejected:_ wrapping to 16 bits.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

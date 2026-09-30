@@ -121,7 +121,7 @@ testProtocolEvaluation = do
         more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "22")
+        (endpoints === Just "25")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
@@ -488,7 +488,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "58")
+        (urlAll === Just "66")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same
