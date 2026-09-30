@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 tags: [handoff, regression, checker, runtime, stdlib]
 ---
 
@@ -31,26 +31,41 @@ match completeness, numerical Decimal equality at every nesting level, and typed
 Add success/failure/regression/output evidence, preserve formatter stability, and run the full
 suite and warning gates. Independent reviewers cannot author the implementation they approve.
 
-## State
+## Completed delivery
 
-#381: independent Language Architect and Forensic Guardian review approved after correcting
-the depth guard; exact tree/depth/tab regressions and formatter checks pass. #371: Decimal dispatch passed focused tests and independent review; its fixture is formatted.
-#377: correlated tuple tests pass after executable test registration; independent review approved.
-#372: imported late/chained aliases passed focused compile/run/refusal tests and independent review.
-#383: exact unwrapOr regressions pass on the fresh binary; independent review approved.
-#382: quoted YAML fixture, formatter, API coverage and independent review pass.
-#376: structured Decimal equality passed focused/full tests and independent review.
-#373: dependency-scoped constant folds passed focused/full tests and independent review.
-#378: canonical nested coverage passed focused graph tests and independent review.
-#379: canonical alias identity passed actual-server graph tests and independent review; reverse
-traversal uses a formatted wrapper and both entries run.
-#384: independent review corrected helper bounds and leading blank indentation; all YAML
-fixtures, formatter and lint pass. All eleven slices are implemented; final integration validation
-and remote publication remain.
+All eleven fixes were committed separately on `dev`, formatted with Pudu where applicable,
+and pushed after integrating the five concurrent upstream commits without discarding changes.
+The eleven GitHub issues are closed as completed. No PR was created and no GitHub Actions
+completion was awaited.
+
+| Issue | Commit | Evidence |
+| --- | --- | --- |
+| #371 | `4af50f5d` | Decimal direct, generic, qualified, missing-method and rendering checks |
+| #372 | `27dd0338` | Imported late/chained generic callback aliases, execution and E3001 refusal |
+| #373 | `74deadb9` | Imported constants, selected builtin-name shadowing, cache reuse and IO refusal |
+| #376 | `02983000` | Nested numerical equality, retained scale, unequal values and collection lookup |
+| #377 | `1403bdc9` | Correlated Option/Bool products, guards, alternatives and missing combinations |
+| #378 | `8e0e1ef6` | Canonical nested constructors, Json graph order and instantiated payloads |
+| #379 | `48f1c62a` | Actual HTTP server with package alias, two traversal orders and wrong-type refusal |
+| #381 | `8de2249f` | Exact compact-list trees, siblings, depth boundary and tab refusal |
+| #382 | `6ee97e53` | YAML escapes, doubled quotes, delimiter scans and malformed Unicode refusals |
+| #383 | `e2bd8397` | Exact unwrapOr E3005 with/without imports and qualified Some/None success |
+| #384 | `d521673c` | Physical scalar content, paragraphs, siblings, chomping and indentation refusals |
+
+## Final validation
+
+`PUDU_LIB` pointed to this checkout. `bash test/gates.sh` passed every gate after the integration:
+clean optimized compilation with `-Werror`, complete optimized suite, formatting of every committed
+Pudu source, diagnostic-code uniqueness, release planning, API coverage and documentation,
+streaming residency, package install/publish workflows, generated projects, lint, language-server
+sessions and robustness, watched reloads and documentation-site parity. The local toolchain was
+GHC 9.10.3; the hosted toolchain matrix was not awaited. Independent implementation and wiki
+reviews were completed, with the reported bounds, scope and test-registration findings resolved.
+New module and handoff wiki links resolve, and private governance inputs remain untracked.
 
 ## Exact next action
 
-Integrate the fetched remote dev commits, run the full local gates, push dev and close the eleven issues.
+None; this issue batch is complete.
 
 ## Referenced by
 

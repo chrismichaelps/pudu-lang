@@ -5,7 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
-- [[2026-09-29-production-bugs]] — active issue-by-issue production bug repair and validation.
+- [[2026-09-29-production-bugs]] — completed eleven-issue production bug repair, validation, direct dev publication and closure.
 
 - [[2026-09-24-desktop-and-framework]] — issues #321–#323 standard library, application framework, and desktop toolkit (active).
 - [[2026-09-23-init-package-release]] — issue #302 generated package project, release, and download chain (complete).
