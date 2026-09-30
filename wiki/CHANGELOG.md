@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Exact Option method regression (#383)
+
+- [[Standard Library Program Spec]] verifies unwrapOr receiver calls report one E3005 with
+  and without importing Std.Option, while qualified calls run for Some and None. The existing
+  [[Type Check Method]] namespace fix already enforces this contract; focused tests and review pass.
+
 ## 2026-09-30 — Imported fields expand later function aliases (#372)
 
 - [[Type Formation]] uses [[Type Formation Order]] to resolve transparent aliases before data

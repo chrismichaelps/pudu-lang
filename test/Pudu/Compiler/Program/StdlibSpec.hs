@@ -15,7 +15,7 @@ import Pudu.Compiler.Library
   , resolutionMetrics
   , resolutionSearchRoots
   )
-import Pudu.Compiler.Program.Common (codes, helps, messages, moduleNames)
+import Pudu.Compiler.Program.Common (codes, helps, messages, moduleNames, runEntry)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv, setEnv, unsetEnv)
@@ -89,6 +89,12 @@ testStandardLibrary = do
   numberMisuse <- codes "test-fixtures/stdlib/RejectsTextToNumberMisuse.pudu"
   textMisuse <- codes "test-fixtures/stdlib/RejectsToTextMisuse.pudu"
   aliasedMethod <- codes "test-fixtures/stdlib/RejectsAliasedModuleMethod.pudu"
+  importedUnwrap <- codes "test-fixtures/stdlib/RejectsOptionUnwrapMethodImported.pudu"
+  unimportedUnwrap <- codes "test-fixtures/stdlib/RejectsOptionUnwrapMethodUnimported.pudu"
+  importedUnwrapMessages <- messages "test-fixtures/stdlib/RejectsOptionUnwrapMethodImported.pudu"
+  unimportedUnwrapMessages <- messages "test-fixtures/stdlib/RejectsOptionUnwrapMethodUnimported.pudu"
+  qualifiedUnwrap <- codes "test-fixtures/stdlib/UsesOptionUnwrapQualified.pudu"
+  qualifiedUnwrapResult <- runEntry "test-fixtures/stdlib/UsesOptionUnwrapQualified.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
     , counterexample "a program may shadow a standard module" (shadows === [])
@@ -97,6 +103,17 @@ testStandardLibrary = do
     , counterexample "toText answers text and takes nothing, and a literal's members are checked"
         (textMisuse === ["E3001", "E3003", "E3005", "E3001"])
     , counterexample "a module imported under a built-in type's name lends it no methods" (aliasedMethod === ["E3005"])
+    , counterexample "importing Option does not admit unwrapOr as a receiver method"
+        (importedUnwrap === ["E3005"])
+    , counterexample "Option unwrapOr receiver syntax is also refused without an import"
+        (unimportedUnwrap === ["E3005"])
+    , counterexample "both Option method refusals identify unwrapOr"
+        (conjoin
+          [ any (Text.isInfixOf "unwrapOr") importedUnwrapMessages === True
+          , any (Text.isInfixOf "unwrapOr") unimportedUnwrapMessages === True
+          ])
+    , counterexample "qualified Option unwrapOr checks and handles present and absent values"
+        (conjoin [qualifiedUnwrap === [], qualifiedUnwrapResult === Just "(3, 7)"])
     , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)

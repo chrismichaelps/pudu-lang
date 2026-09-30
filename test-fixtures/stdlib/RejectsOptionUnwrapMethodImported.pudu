@@ -1,0 +1,8 @@
+module RejectsOptionUnwrapMethodImported
+
+import Std.Option as Option
+
+export fn main() -> Int {
+  let value: Option[Int] = Some(3)
+  value.unwrapOr(7)
+}

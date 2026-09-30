@@ -1,0 +1,9 @@
+module UsesOptionUnwrapQualified
+
+import Std.Option as Option
+
+export fn main() -> (Int, Int) {
+  let present: Option[Int] = Some(3)
+  let absent: Option[Int] = None
+  (Option.unwrapOr(present, 7), Option.unwrapOr(absent, 7))
+}

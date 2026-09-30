@@ -37,6 +37,7 @@ suite and warning gates. Independent reviewers cannot author the implementation 
 the depth guard; exact tree/depth/tab regressions and formatter checks pass. #371: Decimal dispatch passed focused tests and independent review; its fixture is formatted.
 #377: correlated tuple tests pass after executable test registration; independent review approved.
 #372: imported late/chained aliases passed focused compile/run/refusal tests and independent review.
+#383: exact unwrapOr regressions pass on the fresh binary; independent review approved.
 Remaining issues are in progress.
 
 ## Exact next action
