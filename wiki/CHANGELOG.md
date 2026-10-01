@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Integer operators chosen at compile time (#429)
+
+- [[Eval Compile]] chooses each binary operator when a body is compiled: integer `+ - * %` and the
+  comparisons compute directly and check their result with [[Eval Operator]]'s `checkedResult`.
+  Every other operand pair falls back to the general operator path. A plain `Int` result is checked
+  against platform bounds computed once ([[Integer Literal]]). At -O2 the compiled loop benchmark
+  goes from 0.89 s to 0.79 s. The full suite and the evaluator agreement spec pass.
+
 ## 2026-09-30 — Direct calls, and compiled for, if let, and index reads (#428)
 
 - [[Eval Compile]] calls a known module function directly when nothing is lent to it, and compiles

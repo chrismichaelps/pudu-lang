@@ -47,5 +47,11 @@ and every thread.
   compiled call evaluates the arguments and calls it directly (#428). A local of the callee's name,
   an `&mut` argument, or a callee with `&mut` parameters keeps the general path. The general path's
   per-argument code is found by where the argument starts rather than by comparing whole spans.
+- **Q:** Decode a binary operator's text on every step? **A:** No. _Rationale:_ the operation is
+  chosen when the body is compiled; `+ - * % < <= > >= == !=` on two integers compute directly,
+  meeting the kinds and checking the result exactly as [[Eval Operator]]'s `checkedResult` does
+  (#429). Any other operand pair, and remainder by zero, goes to the general `combine`, so values
+  and diagnostics are unchanged. _Rejected:_ duplicating the full operator table, which would drift
+  from the tree walker.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Compiled Evaluation]] · [[Eval Compile Cache]] · [[Eval Call]]

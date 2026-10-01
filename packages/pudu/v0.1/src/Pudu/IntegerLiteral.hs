@@ -158,9 +158,16 @@ integerKindSigned kind = case kind of
     arithmetic result: the exact mathematical answer or a typed overflow
     failure, never a silently truncated one. -}
 integerKindFits :: IntegerKind -> Integer -> Bool
-integerKindFits kind value = case integerKindBounds kind of
-  Nothing -> True
-  Just (low, high) -> value >= low && value <= high
+integerKindFits kind value = case kind of
+  -- The platform integer is the kind nearly every operation has, so its
+  -- bounds are compared directly rather than built for each check.
+  PlatformSigned -> value >= platformLow && value <= platformHigh
+  _ -> case integerKindBounds kind of
+    Nothing -> True
+    Just (low, high) -> value >= low && value <= high
+
+platformLow, platformHigh :: Integer
+(platformLow, platformHigh) = signedBounds targetPointerWidth
 
 {-| Inclusive scalar bounds shared by checked and saturating runtime operations. -}
 integerKindBounds :: IntegerKind -> Maybe (Integer, Integer)

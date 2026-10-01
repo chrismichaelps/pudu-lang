@@ -35,7 +35,8 @@ import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember)
+import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
+import Pudu.IntegerLiteral (integerKindMeet)
 import Pudu.Eval.Place (exclusiveParameters, plainPlace, storePlace)
 import Pudu.Eval.Value (Closure (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -341,10 +342,39 @@ compileBinary walker located@(Located spanValue _) left operator right = case op
   _ -> do
     first <- compileExpression walker left
     second <- compileExpression walker right
+    let operation = operationFor spanValue operator
     pure $ do
       leftValue <- first
       rightValue <- second
-      combine spanValue operator leftValue rightValue
+      operation leftValue rightValue
+
+{-| What an operator does, chosen once. Two integers are handled here with the
+    same checks `combine` makes; every other pairing, and every refusal, is
+    `combine`'s, so the two cannot disagree. -}
+operationFor :: Span -> Text -> Value -> Value -> Evaluator Value
+operationFor spanValue operator = case operator of
+  "+" -> arithmetic "add" (+)
+  "-" -> arithmetic "subtract" (-)
+  "*" -> arithmetic "multiply" (*)
+  "<" -> comparing (<)
+  "<=" -> comparing (<=)
+  ">" -> comparing (>)
+  ">=" -> comparing (>=)
+  "==" -> comparing (==)
+  "!=" -> comparing (/=)
+  "%" -> \left right -> case (left, right) of
+    (IntValue leftKind a, IntValue rightKind b)
+      | b /= 0 -> pure (IntValue (integerKindMeet leftKind rightKind) (rem a b))
+    _ -> combine spanValue operator left right
+  _ -> combine spanValue operator
+ where
+  arithmetic what apply left right = case (left, right) of
+    (IntValue leftKind a, IntValue rightKind b) ->
+      checkedResult spanValue (integerKindMeet leftKind rightKind) what (apply a b)
+    _ -> combine spanValue operator left right
+  comparing test left right = case (left, right) of
+    (IntValue _ a, IntValue _ b) -> pure (BoolValue (test a b))
+    _ -> combine spanValue operator left right
 
 {-| A block's statements in order, then its result, in a frame of its own when
     one of its statements binds a name. -}

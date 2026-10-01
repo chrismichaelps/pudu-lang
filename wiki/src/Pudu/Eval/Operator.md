@@ -161,3 +161,12 @@ Index retrieval (`readIndex`), member lookup (`readMember`), type reflection (`n
 ### Resolved Grill Log
 - **Q:** Why extract access logic into a separate module? **A:** Indexing, member dispatch, and method tables form an independent concern from unary and binary arithmetic kernels (~240 lines), scaling both files below 270 lines.
 
+
+## Exported result check
+
+`checkedResult` is exported so [[Eval Compile]] can compute integer operators chosen at compile time
+and still check the result against its kind the same way the general operator path does (#429).
+
+### Resolved Grill Log
+- **Q:** Give the compiled operators a check of their own? **A:** No; one check keeps the bounds and the
+  `E7005` diagnostic identical in both evaluators.

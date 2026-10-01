@@ -2,6 +2,7 @@
 module Pudu.Eval.Operator
   ( applyUnary
   , builtinMethodNamesFor
+  , checkedResult
   , combine
   , nominalNameOf
   , readIndex
