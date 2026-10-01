@@ -9,6 +9,7 @@ module Pudu.Frontend.Parser.Expression
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Frontend.Parser.Declaration.Generic (parseWhereClause)
 import Pudu.Frontend.Parser.Expression.Aggregate
   ( blockExpression
   , literal
@@ -19,6 +20,7 @@ import Pudu.Frontend.Parser.Expression.Aggregate
   )
 import Pudu.Frontend.Parser.Expression.Control
   ( ExpressionParsers (..)
+  , parseComptimeFor
   , parseFor
   , parseIf
   , parseLabelled
@@ -74,7 +76,7 @@ import Pudu.Frontend.Syntax.Tree
   , lambdaName
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
+  ( Keyword (KwAsync, KwComptime, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
     , KwMatch, KwMut, KwNull, KwScope, KwTrue, KwUnsafe, KwWhile, KwWith)
   , TemplatePart (..)
   , SymbolKind (..)
@@ -181,6 +183,14 @@ parsePrefix recovery blockParser = do
       | otherwise -> parseScope blockParser
     Keyword KwLoop -> parseLoop controlParsers blockParser Nothing
     Keyword KwFor -> parseFor controlParsers blockParser Nothing
+    {-| `comptime` followed by `for` opens a compile-time loop; any other use
+        keeps the diagnostic it already had, because `comptime` alone starts
+        no expression. -}
+    Keyword KwComptime -> do
+      followed <- lookaheadKind 1
+      if followed == Keyword KwFor
+        then parseComptimeFor controlParsers blockParser
+        else invalidPrefix token
     Identifier name -> parseNameOrRecord controlParsers blockParser token name
     Symbol SymAt -> parseLabelled controlParsers blockParser
     Symbol SymPipe -> parseShortLambda False recovery blockParser
@@ -284,6 +294,7 @@ parseLambda recovery blockParser = do
   parameters <- parseLambdaParameters ")" []
   _ <- expectSymbol ")" "after the parameter list"
   returnType <- parseLambdaReturn
+  constraints <- parseWhereClause
   body <- parseLambdaBody recovery blockParser
   let endSpan = maybe (tokenSpan start) locatedSpan body
   pure
@@ -298,7 +309,7 @@ parseLambda recovery blockParser = do
               , functionTypeParams = []
               , functionParameters = parameters
               , functionReturn = returnType
-              , functionConstraints = []
+              , functionConstraints = constraints
               , functionBody = body
               }
         )
@@ -366,6 +377,7 @@ parseShortLambda asynchronous recovery blockParser = do
       _ <- expectSymbol "|" "after the parameter list"
       pure declared
   returnType <- parseLambdaReturn
+  constraints <- parseWhereClause
   body <- parseExpressionAtWith recovery blockParser 0
   pure
     ( Located (mergedOrLeft (tokenSpan start) (locatedSpan body))
@@ -379,7 +391,7 @@ parseShortLambda asynchronous recovery blockParser = do
               , functionTypeParams = []
               , functionParameters = parameters
               , functionReturn = returnType
-              , functionConstraints = []
+              , functionConstraints = constraints
               , functionBody = Just (Located (locatedSpan body) (ExpressionBody body))
               }
         )

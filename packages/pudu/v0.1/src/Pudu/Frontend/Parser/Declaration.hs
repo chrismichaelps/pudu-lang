@@ -5,6 +5,7 @@ module Pudu.Frontend.Parser.Declaration
 
 import Pudu.Frontend.Parser.Declaration.Binding (parseTopConst)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
+import Pudu.Frontend.Parser.Declaration.Derive (parseAttributes, parseDeriveDeclaration)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.Declaration.Import (parseImport)
 import Pudu.Frontend.Parser.Declaration.Macro (parseMacro)
@@ -26,7 +27,7 @@ import Pudu.Frontend.Parser.State
   , synchronizeDeclaration
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Declaration (..), Import, Module (..), Visibility (..))
+import Pudu.Frontend.Syntax.Tree (Attribute, Declaration (..), Import, Module (..), Visibility (..))
 import Pudu.Frontend.Token
   ( Keyword (..)
   , Token (..)
@@ -101,14 +102,20 @@ misplacedImport token declarations
         (Just "move every import above the first declaration")
 
 {-| `export` is consumed here and handed to the declaration modules, so no
-    construct grammar can invent public API. -}
+    construct grammar can invent public API. Attributes come first: they
+    annotate the whole declaration that follows, and `export` keeps the place
+    it already had. -}
 parseTopDeclaration :: TokenKind -> Parser (Located Declaration)
-parseTopDeclaration kind = do
-  visibility <- if kind == Keyword KwExport
-    then advanceToken >> pure Exported
-    else pure Private
+parseTopDeclaration _ = do
+  leading <- parseAttributes
+  exportKeyword <- matchKeyword KwExport
+  let visibility = maybe Private (const Exported) exportKeyword
+  trailing <- case exportKeyword of
+    Just _ -> parseAttributes
+    Nothing -> pure []
+  let attributes = leading ++ trailing
   following <- peekKind
-  case following of
+  declaration <- case following of
     Keyword KwConst -> parseTopConst visibility parseBlock
     Keyword KwLet -> rejectedModuleBinding visibility
     Keyword KwVar -> rejectedModuleBinding visibility
@@ -117,16 +124,37 @@ parseTopDeclaration kind = do
     Keyword KwUnsafe -> parseFunction visibility
     Keyword KwComptime -> parseFunction visibility
     Keyword KwMacro -> parseMacro visibility
-    Keyword KwType -> parseTypeDeclaration visibility
+    Keyword KwType -> parseTypeDeclaration attributes visibility
     Keyword KwTrait -> parseTrait visibility
     Keyword KwImpl -> parseImpl
+    Identifier "derive" -> parseDeriveDeclaration visibility
     {-| `foreign` starts a declaration without being reserved anywhere else.
+
         Reserving it would break every program that had used the word for a
         variable, and a language that costs its own users a rename to gain a
         feature has chosen the feature over them. -}
     Identifier "foreign" -> parseForeign visibility
     Keyword reserved | isReservedDeclaration reserved -> reservedDeclaration
     _ -> unexpectedModuleToken
+  admitAttributes (not (null trailing)) attributes declaration
+
+{-| Attributes annotate type declarations only, written before `export`. Anything
+    else keeps its own diagnostic: the declaration still parses, minus what it
+    never admitted. -}
+admitAttributes :: Bool -> [Located Attribute] -> Located Declaration -> Parser (Located Declaration)
+admitAttributes misplaced attributes located@(Located _ declaration) =
+  case attributes of
+    [] -> pure located
+    first : _ -> case declaration of
+      TypeDeclaration _ | not misplaced -> pure located
+      TypeDeclaration _ -> do
+        emitParseError "E1064" (locatedSpan first) "attributes precede export"
+          (Just "write @name before export, on a type declaration")
+        pure located
+      _ -> do
+        emitParseError "E1064" (locatedSpan first) "attributes annotate type declarations only"
+          (Just "move @name onto a type, field, or variant")
+        pure located
 
 {-| [[Parser Binding]] owns the single rejection diagnostic for a module `let`
     or `var`; the orchestrator only synchronizes past the rejected binding so

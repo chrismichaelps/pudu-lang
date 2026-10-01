@@ -52,6 +52,7 @@ import Pudu.Frontend.Token
     , KwLet, KwMacro, KwStruct, KwTrait, KwType, KwVar)
   , Token (..)
   , TokenKind (..)
+  , SymbolKind (SymAt)
   , Trivia (triviaText)
   , keywordText
   , symbolFromText
@@ -383,6 +384,12 @@ isDeclarationStart kind =
       [ KwExport, KwLet, KwVar, KwConst, KwFn, KwAsync, KwType, KwEnum
       , KwStruct, KwTrait, KwImpl, KwComptime, KwMacro
       ]
+    {-| An attribute always opens an attributed declaration at module scope,
+        and `derive` opens a derive definition or request. Both stay ordinary
+        identifiers everywhere else: recovery only ever asks this question
+        where a declaration may start. -}
+    Symbol SymAt -> True
+    Identifier "derive" -> True
     _ -> False
 
 parseDiagnostic :: Text -> Span -> Text -> Maybe Text -> Maybe Diagnostic
