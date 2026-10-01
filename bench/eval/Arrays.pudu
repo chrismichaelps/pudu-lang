@@ -1,0 +1,18 @@
+module Arrays
+fn main() -> Int {
+  var a: Array[Int] = []
+  var i = 0
+  while i < 500000 {
+    a = a.push(i)
+    i = i + 1
+  }
+  var total = 0
+  for v in a { total = total + v }
+  i = 0
+  while i < 500000 {
+    total = total + a[i]
+    i = i + 1
+  }
+  print(display(total))
+  0
+}

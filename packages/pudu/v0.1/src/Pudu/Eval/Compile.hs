@@ -1,0 +1,276 @@
+{-| @Pudu.Eval.Compile.Module — function bodies turned into closures once -}
+module Pudu.Eval.Compile
+  ( Walker (..)
+  , Code
+  , compileBody
+  , blockIntroducesBindings
+  ) where
+
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import Pudu.Eval.Env
+  ( Evaluator
+  , Unwind (..)
+  , abortAt
+  , bind
+  , expectBool
+  , integerKindAt
+  , lookupLocal
+  , lookupModule
+  , lookupName
+  , tally
+  , unwind
+  , withFrame
+  , withNewFrame
+  )
+import Pudu.Eval.Call (CallNeeds (..), evaluateCall)
+import Pudu.Eval.Call.Path (lastPathSegment, pathValue)
+import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Loop (LoopNeeds (..), evaluateWhile)
+import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
+import Pudu.Eval.Operator (applyUnary, combine, readMember)
+import Pudu.Eval.Place (plainPlace, storePlace)
+import Pudu.Eval.Value (Value (..))
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Block (..)
+  , Declaration (..)
+  , Expression (..)
+  , FieldInit (..)
+  , FunctionBody (..)
+  , Literal (IntegerValue, ResolvedInteger)
+  , MatchArm (..)
+  , Pattern
+  , Statement (..)
+  )
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Source (Span)
+
+{-| A body ready to run: every decision the tree walker makes about its syntax
+    has been made, and running it only does the work. -}
+type Code = Evaluator Value
+
+{-| The tree walker, for every construct the compiler leaves to it.
+
+    Passed in rather than imported, because the walker is the module that
+    starts calls, and calls are where compiled bodies are used. -}
+data Walker = Walker
+  { walkExpression :: Located Expression -> Evaluator Value
+  , walkStatement :: Located Statement -> Evaluator ()
+  , walkLoopNeeds :: LoopNeeds
+  , walkCallNeeds :: CallNeeds
+  }
+
+{-| Compile a function body. -}
+compileBody :: Walker -> FunctionBody -> Evaluator Code
+compileBody walker body = case body of
+  BlockBody block -> compileBlock walker block
+  ExpressionBody expression -> compileExpression walker expression
+
+compileExpression :: Walker -> Located Expression -> Evaluator Code
+compileExpression walker located@(Located spanValue expression) = case expression of
+  -- A literal's kind is the checker's answer for its span, read once here
+  -- rather than each time the literal is reached.
+  LiteralExpression literal -> case literal of
+    IntegerValue _ -> do
+      selected <- integerKindAt spanValue
+      let value = integerLiteralValue selected literal
+      pure (pure value)
+    ResolvedInteger kind number -> let value = IntValue kind number in pure (pure value)
+    _ -> let value = literalValue literal in pure (pure value)
+  NameExpression (first :| rest) -> do
+    -- A function bound in module scope does not change once the program is
+    -- linked, so it is found once here. A local of the same first name, bound
+    -- later by the body, still wins, which is what lexical scope says.
+    let written = Text.intercalate "." (first : rest)
+    global <- lookupModule written
+    case global of
+      Just function@(FunctionValue _) -> pure $ do
+        local <- lookupLocal first
+        case local of
+          Nothing -> pure function
+          Just _ -> walkExpression walker located
+      _ -> case rest of
+        [] -> pure $ do
+          found <- lookupName first
+          case found of
+            Just value -> pure value
+            Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
+        _ -> pure (walkExpression walker located)
+  UnaryExpression operator operand -> do
+    inner <- compileExpression walker operand
+    pure (inner >>= applyUnary spanValue operator)
+  BinaryExpression left operator right -> compileBinary walker located left operator right
+  BlockExpression block -> compileBlock walker block
+  IfExpression condition thenBlock elseBranch -> do
+    test <- compileExpression walker condition
+    taken <- compileBlock walker thenBlock
+    otherwise' <- traverse (compileExpression walker) elseBranch
+    pure $ do
+      truth <- test >>= expectBool spanValue
+      if truth then taken else maybe (pure UnitValue) id otherwise'
+  -- The loop itself is the tree walker's, so its step limit and its handling of
+  -- `break` and `continue` are written once; only the condition and the body
+  -- it runs are compiled.
+  WhileExpression label condition body -> do
+    test <- compileExpression walker condition
+    turn <- compileBlock walker body
+    let needs = (walkLoopNeeds walker){loopEvaluate = const test, loopBlock = const turn}
+    pure (evaluateWhile needs spanValue (fmap locatedValue label) condition body)
+  MemberExpression target member -> do
+    inner <- compileExpression walker target
+    pure $ do
+      tally "member"
+      -- A chain of names may name a module's member rather than read a value.
+      linked <- pathValue expression
+      case linked of
+        Just value -> pure value
+        Nothing -> inner >>= \value -> readMember spanValue value (locatedValue member)
+  TupleExpression [] -> pure (pure UnitValue)
+  TupleExpression members -> do
+    codes <- mapM (compileExpression walker) members
+    pure (TupleValue <$> sequence codes)
+  ArrayExpression members -> do
+    codes <- mapM (compileExpression walker) members
+    pure (ArrayValue . Seq.fromList <$> sequence codes)
+  RecordExpression path fields -> do
+    codes <- mapM (compileFieldInit walker spanValue) fields
+    let owner = lastPathSegment path
+    pure (RecordValue owner <$> sequence codes)
+  MatchExpression scrutinee arms -> do
+    subject <- compileExpression walker scrutinee
+    compiled <- mapM (compileArm walker) arms
+    pure (subject >>= chooseArm spanValue compiled)
+  CallExpression callee arguments -> do
+    -- The call machinery reaches the callee, its receiver, and each argument
+    -- through the needs it is given; each is answered by its compiled code.
+    let reached = callee : calleeTarget callee <> concatMap argumentParts arguments
+    codes <- mapM (\part -> (,) part <$> compileExpression walker part) reached
+    let table = Map.fromListWith (<>) [(locatedSpan part, [(part, code)]) | (part, code) <- codes]
+        answer part = case Map.lookup (locatedSpan part) table of
+          Just [(_, code)] -> code
+          Just several | Just code <- lookup part several -> code
+          _ -> walkExpression walker part
+        needs = (walkCallNeeds walker){callEvaluate = answer}
+    pure (evaluateCall needs spanValue callee arguments)
+  _ -> pure (walkExpression walker located)
+
+{-| The receiver a member callee is called on. -}
+calleeTarget :: Located Expression -> [Located Expression]
+calleeTarget (Located _ expression) = case expression of
+  MemberExpression target _ -> [target]
+  TypeApplication inner _ -> calleeTarget inner
+  _ -> []
+
+{-| An argument, and what it lends when it is written `&` or `&mut`. -}
+argumentParts :: Located Expression -> [Located Expression]
+argumentParts argument@(Located _ expression) = case expression of
+  UnaryExpression operator operand | operator == "&" || operator == "&mut" -> [argument, operand]
+  _ -> [argument]
+
+{-| A field written with its value, or written as a name standing for itself. -}
+compileFieldInit :: Walker -> Span -> Located FieldInit -> Evaluator (Evaluator (Text, Value))
+compileFieldInit walker recordSpan (Located _ field) = do
+  let name = locatedValue (fieldInitName field)
+  case fieldInitValue field of
+    Just expression -> do
+      code <- compileExpression walker expression
+      pure ((,) name <$> code)
+    Nothing -> pure $ do
+      found <- lookupName name
+      case found of
+        Just existing -> pure (name, existing)
+        Nothing -> abortAt (Just recordSpan) "E7001" ("undefined name " <> name) Nothing
+
+{-| An arm's pattern with its guard and body compiled. -}
+data Arm = Arm !(Located Pattern) !(Maybe Code) !Code
+
+compileArm :: Walker -> Located MatchArm -> Evaluator Arm
+compileArm walker (Located _ arm) = do
+  guard' <- traverse (compileExpression walker) (armGuard arm)
+  body <- compileExpression walker (armBody arm)
+  pure (Arm (armPattern arm) guard' body)
+
+{-| The first arm whose pattern matches and whose guard holds, run in a frame
+    holding what its pattern bound. A guard answering anything but `true`
+    rejects the arm. -}
+chooseArm :: Span -> [Arm] -> Value -> Evaluator Value
+chooseArm spanValue arms subject = case arms of
+  [] ->
+    abortAt (Just spanValue) "E7011" ("no match arm accepted " <> renderValue subject)
+      (Just "add a case that covers this value")
+  Arm pattern' guard' body : rest -> case matchPattern pattern' subject of
+    Nothing -> chooseArm spanValue rest subject
+    Just bindings -> do
+      accepted <- case guard' of
+        Nothing -> pure True
+        Just test -> do
+          value <- withFrame bindings test
+          pure (value == BoolValue True)
+      if accepted then withFrame bindings body else chooseArm spanValue rest subject
+
+compileBinary
+  :: Walker -> Located Expression -> Located Expression -> Text -> Located Expression -> Evaluator Code
+compileBinary walker located@(Located spanValue _) left operator right = case operator of
+  "=" -> case plainPlace left of
+    Just place -> do
+      value <- compileExpression walker right
+      pure $ do
+        held <- value
+        storePlace place held
+        pure UnitValue
+    Nothing -> pure (walkExpression walker located)
+  "&&" -> do
+    first <- compileExpression walker left
+    second <- compileExpression walker right
+    pure $ do
+      truth <- first >>= expectBool spanValue
+      if not truth then pure (BoolValue False) else BoolValue <$> (second >>= expectBool spanValue)
+  "||" -> do
+    first <- compileExpression walker left
+    second <- compileExpression walker right
+    pure $ do
+      truth <- first >>= expectBool spanValue
+      if truth then pure (BoolValue True) else BoolValue <$> (second >>= expectBool spanValue)
+  "in" -> pure (walkExpression walker located)
+  _ -> do
+    first <- compileExpression walker left
+    second <- compileExpression walker right
+    pure $ do
+      leftValue <- first
+      rightValue <- second
+      combine spanValue operator leftValue rightValue
+
+{-| A block's statements in order, then its result, in a frame of its own when
+    one of its statements binds a name. -}
+compileBlock :: Walker -> Located Block -> Evaluator Code
+compileBlock walker (Located _ block) = do
+  steps <- mapM (compileStatement walker) (blockStatements block)
+  result <- maybe (pure (pure UnitValue)) (compileExpression walker) (blockResult block)
+  let run = sequence_ steps >> result
+  pure (if blockIntroducesBindings block then withNewFrame run else run)
+
+compileStatement :: Walker -> Located Statement -> Evaluator (Evaluator ())
+compileStatement walker located@(Located _ statement) = case statement of
+  DeclarationStatement (Located _ (BindingDeclaration _ _ name _ value)) -> do
+    code <- compileExpression walker value
+    pure (code >>= bind (locatedValue name))
+  ExpressionStatement expression -> do
+    code <- compileExpression walker expression
+    pure (code >> pure ())
+  ReturnStatement (Just expression) -> do
+    code <- compileExpression walker expression
+    pure (code >>= unwind . ReturnUnwind)
+  _ -> pure (walkStatement walker located)
+
+{-| Whether a block binds a name, and so needs a frame of its own. -}
+blockIntroducesBindings :: Block -> Bool
+blockIntroducesBindings block = any statementIntroduces (blockStatements block)
+ where
+  statementIntroduces (Located _ statement) = case statement of
+    DeclarationStatement (Located _ BindingDeclaration{}) -> True
+    LetElseStatement{} -> True
+    LetPatternStatement{} -> True
+    _ -> False

@@ -44,7 +44,10 @@ module Pudu.Eval.Env
   , withoutEffects
   , expectBool
   , lookupName
+  , compiledBodies
+  , runtimeIO
   , lookupLocal
+  , lookupModule
   , popFrame
   , pushFrame
   , replaceFrame
@@ -104,6 +107,10 @@ data Env = Env
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
+  {-| Function bodies compiled to closures, by the span of the body, when this
+      run compiles them. `Nothing` runs every body through the tree walker,
+      which is what compile-time evaluation and every other run does. -}
+  , envCompiledBodies :: !(Maybe (IORef (Map Span (Evaluator Value))))
   , envHandleStore :: !HandleStore
   , envChildStore :: !ChildStore
   , envSocketStore :: !SocketStore
@@ -308,6 +315,7 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     , envDepth = 0
     , envScopes = []
     , envEffects = True
+    , envCompiledBodies = Nothing
     , envHandleStore = handles
     , envChildStore = children
     , envSocketStore = sockets
@@ -359,6 +367,17 @@ update name value = updateExisting name value >> pure ()
     a frame that only the module declaring it can see. Keeping impls out of the
     frame stack is what lets a library's adapter dispatch to a program's own
     type, which was linked long after the library was. -}
+{-| Run an action that is the runtime's own bookkeeping rather than an effect
+    the program asked for, so it is never refused for lack of effects. -}
+runtimeIO :: IO a -> Evaluator a
+runtimeIO action = Evaluator $ \env -> do
+  value <- action
+  pure (Done value env)
+
+{-| Where this run keeps compiled bodies, when it compiles them. -}
+compiledBodies :: Evaluator (Maybe (IORef (Map Span (Evaluator Value))))
+compiledBodies = Evaluator $ \env -> pure (Done (envCompiledBodies env) env)
+
 lookupName :: Text -> Evaluator (Maybe Value)
 lookupName name =
   Evaluator $ \env -> do
@@ -395,6 +414,21 @@ lookupLocal name = Evaluator $ \env -> pure (Done (search (localCount env) (envF
         current : rest -> case Map.lookup name current of
           Just found -> Just found
           Nothing -> search (remaining - 1) rest
+
+{-| A name bound in module scope, ignoring every frame a call or block pushed.
+    Before module scope is marked nothing is answered, since then no frame can
+    be told apart as the module's. -}
+lookupModule :: Text -> Evaluator (Maybe Value)
+lookupModule name = Evaluator $ \env -> pure (Done (answer env) env)
+ where
+  answer env
+    | envModuleDepth env <= 0 = Nothing
+    | otherwise = search (drop (length (envFrames env) - envModuleDepth env) (envFrames env))
+  search frames = case frames of
+    [] -> Nothing
+    current : rest -> case Map.lookup name current of
+      Just found -> Just found
+      Nothing -> search rest
 
 {-| The implementation a type provides under this name, and nothing else.
 

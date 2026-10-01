@@ -104,6 +104,11 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   walked each frame's map twice per assignment (#423); `alterF` replaces the value in the walk that
   finds it. `lookupLocal` answers from the frames calls and blocks pushed, so a dotted read can tell
   a local from a module member without searching module scope.
+- **Q:** Where does a run keep compiled bodies? **A:** In `envCompiledBodies`, set only by a
+  program's run; `Nothing` everywhere else, so compile-time evaluation stays on the tree walker.
+  `lookupModule` answers from module scope alone, which is what lets [[Eval Compile]] resolve a
+  module's function once; `runtimeIO` runs the runtime's own bookkeeping, never refused for lack of
+  effects.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

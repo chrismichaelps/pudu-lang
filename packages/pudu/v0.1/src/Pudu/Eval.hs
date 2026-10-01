@@ -35,6 +35,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Runtime (withRuntimeEnv)
+import Pudu.Eval.Compile (Walker (..), blockIntroducesBindings, compileBody)
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
   , evaluateFor
@@ -73,7 +74,8 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   , Statement (..)
   )
-import Data.IORef (IORef)
+import Data.IORef (IORef, newIORef)
+import System.Environment (lookupEnv)
 import Pudu.Source (Span)
 
 {-| @Eval.Outcome — a value or the diagnostic that stopped evaluation -}
@@ -84,8 +86,13 @@ data EvalOutcome = EvalOutcome
   deriving stock (Eq, Show)
 
 runCounted :: Maybe (IORef (Map.Map Text Int)) -> Evaluator Value -> IO EvalOutcome
-runCounted counters (Evaluator action) =
-  withRuntime $ \env -> outcomeOf <$> action env{envEffects = True, envTally = counters}
+runCounted counters (Evaluator action) = do
+  -- A program's run compiles its function bodies unless the tree walker is
+  -- asked for by name; it is the reference the compiled bodies are held to.
+  mode <- lookupEnv "PUDU_EVAL"
+  bodies <- if mode == Just "tree" then pure Nothing else Just <$> newIORef Map.empty
+  withRuntime $ \env ->
+    outcomeOf <$> action env{envEffects = True, envTally = counters, envCompiledBodies = bodies}
 
 {-| Run an evaluation, choosing whether the program may reach the world.
 
@@ -121,15 +128,6 @@ evaluateBlock :: Located Block -> Evaluator Value
 evaluateBlock located@(Located _ block)
   | blockIntroducesBindings block = withNewFrame (evaluateBlockInFrame located)
   | otherwise = evaluateBlockInFrame located
-
-blockIntroducesBindings :: Block -> Bool
-blockIntroducesBindings block = any statementIntroduces (blockStatements block)
- where
-  statementIntroduces (Located _ statement) = case statement of
-    DeclarationStatement (Located _ BindingDeclaration{}) -> True
-    LetElseStatement{} -> True
-    LetPatternStatement{} -> True
-    _ -> False
 
 {-| Interactive top-level bindings use the frame their context retains. Nested
     lexical blocks still enter through evaluateBlock and keep normal scoping. -}
@@ -205,7 +203,17 @@ scopeTo :: [Map Text Value] -> Value -> Value
 scopeTo = Call.scopeTo
 
 callNeeds :: CallNeeds
-callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock}
+callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock, callCompile = compileBody walker}
+
+{-| The tree walker, handed to the compiler for what it does not compile. -}
+walker :: Walker
+walker =
+  Walker
+    { walkExpression = evaluate
+    , walkStatement = evaluateStatement
+    , walkLoopNeeds = loopNeeds
+    , walkCallNeeds = callNeeds
+    }
 
 {-| A range's end, which must be a whole number.
 

@@ -58,8 +58,10 @@ import Pudu.Eval.Call.Path
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Foreign (callForeign)
+import Pudu.Eval.Compile.Cache (compiledBody)
 import Pudu.Eval.Env
   ( tally
+  , compiledBodies
   , currentConcurrentStore
   , withCaptured
   , adoptChild
@@ -120,6 +122,8 @@ import Pudu.Source (Span)
 data CallNeeds = CallNeeds
   { callEvaluate :: Located Expression -> Evaluator Value
   , callBlock :: Located Block -> Evaluator Value
+  {-| A function body compiled to closures, for a run that compiles them. -}
+  , callCompile :: FunctionBody -> Evaluator (Evaluator Value)
   }
 
 {-| A member in callee position prefers a method over a field of the same name,
@@ -364,9 +368,15 @@ runClosureKeeping needs closure bindings kept callSpan = do
 closureOutcome :: CallNeeds -> Closure -> Evaluator (Either Unwind Value)
 closureOutcome needs closure = catchUnwind $ case functionBody (closureFunction closure) of
   Nothing -> pure UnitValue
-  Just (Located _ body) -> case body of
-    BlockBody block -> callBlock needs block
-    ExpressionBody expression -> callEvaluate needs expression
+  Just (Located bodySpan body) -> do
+    cache <- compiledBodies
+    case cache of
+      Just compiled -> do
+        code <- compiledBody compiled bodySpan (callCompile needs body)
+        code
+      Nothing -> case body of
+        BlockBody block -> callBlock needs block
+        ExpressionBody expression -> callEvaluate needs expression
 
 settled :: Maybe Span -> Either Unwind Value -> Evaluator Value
 settled callSpan outcome = case outcome of

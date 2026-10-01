@@ -5,6 +5,7 @@ module Pudu.Compiler.Program.EvalSpec
   , testProgramEvaluation
   ) where
 
+import Pudu.Compiler.Program.Eval.CompiledSpec (testCompiledAgreement)
 import Pudu.Compiler.Program.Eval.DataSpec (testDataEvaluation)
 import Pudu.Compiler.Program.Eval.ProtocolSpec (testProtocolEvaluation)
 import Pudu.Compiler.Program.Eval.RuntimeSpec (testRuntimeEvaluation)
@@ -29,7 +30,8 @@ testProgramEvaluation = do
   protocolProp <- testProtocolEvaluation
   serviceProp <- testServiceEvaluation
   runtimeProp <- testRuntimeEvaluation
-  pure (conjoin [dataProp, protocolProp, serviceProp, runtimeProp])
+  compiledProp <- testCompiledAgreement
+  pure (conjoin [dataProp, protocolProp, serviceProp, runtimeProp, compiledProp])
 
 {-| A module is published under its path with its own declarations only.
 

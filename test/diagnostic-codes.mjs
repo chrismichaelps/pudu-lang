@@ -43,6 +43,7 @@ const shared = new Map([
   ["E7008", "await used where it cannot be, from the evaluator and from its builtins"],
   ["E7009", "an effect refused while a constant is folded, from the effects and from starting a thread"],
   ["E7012", "a built-in given arguments it does not accept, from the builtins and the effects"],
+  ["E7011", "a match no arm accepted, from the tree walker and from compiled bodies, which must report it alike"],
   ["W2001", "an unused import, reported by resolution and retained by lint policy and output"],
   ["W2002", "a shadowed name, reported by resolution and retained by lint policy and output"],
   ["W3001", "an unsafe operation outside an unsafe block, retained by lint policy and output"],

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Compiled function bodies (#426)
+
+- [[Eval Compile]] compiles each function body to closures on its first call, kept by
+  [[Eval Compile Cache]] for the run: literal kinds, operators, module function names, and the
+  shape of every covered construct are decided once. `pudu run` uses compiled bodies unless
+  `PUDU_EVAL=tree` asks for the tree walker, which stays the reference and the compile-time
+  evaluator. Every deterministic stdlib fixture runs under both and must agree. At -O2
+  (`bench/eval.sh`): loop 2.68 s to 1.44 s, records 2.15 s to 1.25 s, calls 0.56 s to 0.36 s, maps
+  1.01 s to 0.70 s, arrays 1.33 s to 1.00 s, multimap 7.85 s to 5.71 s. Slot frames (Plan B of
+  [[Compiled Evaluation]]) are next.
+
 ## 2026-09-30 — Containers on the runtime's map and set (#424, #425)
 
 - [[Std IntMap]] and [[Std IntSet]] are held in the runtime's ordered map and set: 80,000 mixed

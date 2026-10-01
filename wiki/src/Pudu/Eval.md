@@ -179,6 +179,9 @@ primary diagnostic. Exceptional host termination may have no outcome to carry di
 - **Q:** Collect cleanup diagnostics before teardown? **A:** No; a destructor can fail during
   teardown itself. Close resources before draining the journal, retaining the bracket for exceptional exits.
 
+- **Q:** Which evaluator runs a program? **A:** Compiled bodies, unless `PUDU_EVAL=tree` asks for
+  the tree walker by name. _Rationale:_ the tree walker stays as the reference every fixture is run
+  against in both modes ([[Eval Compile]]), and remains the evaluator for compile-time folding.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Pudu REPL]] · [[Syntax Tree]] · [[Diagnostic Model]] · [[Semantics]]

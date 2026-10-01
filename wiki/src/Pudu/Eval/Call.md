@@ -97,6 +97,9 @@ constructor.
   keeps nested literal capture correct across root, dependency, and interactive callers.
   _Rejected:_ relying on whatever boundary the caller currently has.
 
+- **Q:** Run a body through the tree walker on every call? **A:** Not when the run compiles bodies.
+  _Rationale:_ `closureOutcome` takes the body's compiled code from [[Eval Compile Cache]], compiling
+  it through `callCompile` on the first call; a run without a cache keeps the tree walker.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]
