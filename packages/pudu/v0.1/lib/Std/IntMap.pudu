@@ -109,7 +109,7 @@ export fn values[V](map: &IntMap[V]) -> Array[V] { map.held.values() }
 
 /// Returns an array of all key-value entries in key order.
 export fn entries[V](map: &IntMap[V]) -> Array[IntMapEntry[V]] {
-  map.held.entries().map(fn(pair: (Int, V)) -> IntMapEntry[V] => IntMapEntry{key: pair[0], value: pair[1]})
+  map.held.entries().map(fn(pair: (Int, V)) -> IntMapEntry[V] => IntMapEntry { key: pair[0], value: pair[1] })
 }
 
 /// Returns the smallest key present in the map, or None if empty.
