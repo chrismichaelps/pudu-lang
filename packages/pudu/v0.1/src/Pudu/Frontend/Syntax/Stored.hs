@@ -94,6 +94,11 @@ instance Persist Impl
 instance Persist Macro
 instance Persist MacroParam
 instance Persist MacroKind
+instance Persist Attribute
+instance Persist DeriveShape
+instance Persist Derive
+instance Persist DeriveRequest
+instance Persist ComptimeFor
 instance Persist Parameter
 instance Persist TypeSyntax
 instance Persist FunctionBody
