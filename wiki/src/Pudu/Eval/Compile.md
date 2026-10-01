@@ -21,8 +21,8 @@ evaluators.
 Compiled: literals (an integer literal's kind read once), names (a module-scope function resolved
 once, with a later local of the same first name still winning), unary and binary operators,
 assignment to a place that needs no evaluation, `&&` and `||`, blocks, `let`, `return`, `if`,
-`while` (through the tree walker's own loop, given compiled condition and body), field reads,
-tuples, arrays, record literals, `match` with guards, and calls (the call machinery's needs answer
+`while` and `for` (through the tree walker's own loops, given compiled pieces), `if let`, index
+reads, field reads, tuples, arrays, record literals, `match` with guards, and calls (the call machinery's needs answer
 each callee, receiver, and argument from its compiled code, keyed by span and, where two share a
 span, by the syntax itself). Anything else runs through the tree walker for that one expression,
 so the language is always runnable while coverage grows. Compiled code depends only on the syntax
@@ -41,5 +41,11 @@ and every thread.
   that [[Eval Compile Layout]] placed is read and written by position, and a path or field read
   starting at one skips the module search, since a local is never a module. Its blocks open no
   frame. Everything else still reads the slot frame by name.
+- **Q:** Send a call to a known module function through the general call machinery? **A:** Not
+  when nothing is lent. _Rationale:_ for such a call the machinery's qualified-callee search,
+  lending bookkeeping, and per-argument lookup all reach the same function with the same values; the
+  compiled call evaluates the arguments and calls it directly (#428). A local of the callee's name,
+  an `&mut` argument, or a callee with `&mut` parameters keeps the general path. The general path's
+  per-argument code is found by where the argument starts rather than by comparing whole spans.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Compiled Evaluation]] · [[Eval Compile Cache]] · [[Eval Call]]

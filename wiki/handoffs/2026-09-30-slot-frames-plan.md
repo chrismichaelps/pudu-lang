@@ -50,8 +50,10 @@ setting up slots for each call cost more than it saved for them.
 
 ## Exact next action
 
-Profile the multimap benchmark in compiled mode and compile the constructs its time still falls
-back on (method calls on fields, `for`, `if let`, index reads), each checked by the agreement spec.
+Direct calls and compiled `for`, `if let`, and index reads landed (#428). Next: profile
+`bench/eval/MultiMap.pudu` again; its time is now spread across call setup, keyed-map comparison of
+tuple keys, and method dispatch on builtin values, so the next step is a design choice between a
+leaner monad for compiled code and native code generation, recorded in [[Compiled Evaluation]].
 
 ## Referenced by
 

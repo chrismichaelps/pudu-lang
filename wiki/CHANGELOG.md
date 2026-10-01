@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Direct calls, and compiled for, if let, and index reads (#428)
+
+- [[Eval Compile]] calls a known module function directly when nothing is lent to it, and compiles
+  `for`, `if let`, and index reads. At -O2: `fib(27)` 0.37 s to 0.31 s compiled, record updates
+  1.12 s to 0.94 s, and a push, `for`/`if let`, and index-read workload (`bench/eval/Iterate.pudu`)
+  0.72 s in the tree walker against 0.34 s compiled. The full suite and the evaluator agreement spec
+  pass.
+
 ## 2026-09-30 — Slot frames for compiled bodies (#427)
 
 - A frame is now an [[Eval Frame]]: a name map, or a compiled body's slot frame. A body that

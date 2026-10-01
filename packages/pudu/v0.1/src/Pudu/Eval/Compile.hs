@@ -7,6 +7,7 @@ module Pudu.Eval.Compile
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -28,15 +29,15 @@ import Pudu.Eval.Env
   , withFrame
   , withNewFrame
   )
-import Pudu.Eval.Call (CallNeeds (..), evaluateCall)
+import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
 import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
-import Pudu.Eval.Loop (LoopNeeds (..), evaluateWhile)
+import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, readMember)
-import Pudu.Eval.Place (plainPlace, storePlace)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember)
+import Pudu.Eval.Place (exclusiveParameters, plainPlace, storePlace)
+import Pudu.Eval.Value (Closure (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -51,7 +52,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Source (Span)
+import Pudu.Source (Span, spanStart, unOffset)
 
 {-| A body ready to run: every decision the tree walker makes about its syntax
     has been made, and running it only does the work. -}
@@ -153,6 +154,35 @@ compileExpression walker located@(Located spanValue expression) = case expressio
       case linked of
         Just value -> pure value
         Nothing -> inner >>= \value -> readMember spanValue value (locatedValue member)
+  IndexExpression target index -> do
+    container <- compileExpression walker target
+    key <- compileExpression walker index
+    pure $ do
+      tally "index"
+      held <- container
+      chosen <- key
+      readIndex (locatedSpan index) held chosen
+  -- Like `while`, the iteration itself is the tree walker's, so every way of
+  -- walking a value and the step limit are written once; the body is compiled.
+  ForExpression label binder iterated body -> do
+    sequenceCode <- compileExpression walker iterated
+    turn <- compileBlock walker body
+    let needs = (walkLoopNeeds walker){loopBlock = const turn}
+    pure $ do
+      sequence' <- sequenceCode
+      evaluateFor needs spanValue (fmap locatedValue label) binder sequence' body
+  IfLetExpression pattern' subject thenBlock elseBranch -> do
+    subjectCode <- compileExpression walker subject
+    taken <- compileBlock walker thenBlock
+    otherwise' <- traverse (compileExpression walker) elseBranch
+    pure $ do
+      value <- subjectCode
+      case matchPattern pattern' value of
+        -- Without an `else` the expression answers unit whichever way it went.
+        Just bindings -> withFrame bindings $ case otherwise' of
+          Nothing -> taken >> pure UnitValue
+          Just _ -> taken
+        Nothing -> maybe (pure UnitValue) id otherwise'
   TupleExpression [] -> pure (pure UnitValue)
   TupleExpression members -> do
     codes <- mapM (compileExpression walker) members
@@ -168,19 +198,54 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms
     pure (subject >>= chooseArm spanValue compiled)
-  CallExpression callee arguments -> do
+  -- A module's function called by name, with nothing lent to it, is called
+  -- directly: this is the path the call machinery takes for such a call, with
+  -- what it decides on every call decided here once.
+  CallExpression callee@(Located _ (NameExpression (first :| rest))) arguments
+    | Nothing <- slotOf walker first
+    , not (any lendsExclusively arguments) -> do
+        resolved <- lookupModule (Text.intercalate "." (first : rest))
+        case resolved of
+          Just (FunctionValue closure)
+            | null (exclusiveParameters (closureFunction closure)) -> do
+                codes <- mapM (compileExpression walker) arguments
+                general <- compileCall walker spanValue callee arguments
+                pure $ do
+                  local <- lookupLocal first
+                  case local of
+                    Just _ -> general
+                    Nothing -> do
+                      values <- sequence codes
+                      callClosure (walkCallNeeds walker) closure values (Just spanValue)
+          _ -> compileCall walker spanValue callee arguments
+  CallExpression callee arguments -> compileCall walker spanValue callee arguments
+  _ -> pure (walkExpression walker located)
+
+{-| Whether an argument lends a place exclusively. -}
+lendsExclusively :: Located Expression -> Bool
+lendsExclusively (Located _ expression) = case expression of
+  UnaryExpression "&mut" _ -> True
+  _ -> False
+
+{-| A call through the call machinery, which reaches the callee, its receiver,
+    and each argument through the needs it is given; each is answered by its
+    compiled code, found by where it starts and, where two start together, by
+    the syntax itself. -}
+compileCall :: Walker -> Span -> Located Expression -> [Located Expression] -> Evaluator Code
+compileCall walker spanValue callee arguments = do
     -- The call machinery reaches the callee, its receiver, and each argument
     -- through the needs it is given; each is answered by its compiled code.
     let reached = callee : calleeTarget callee <> concatMap argumentParts arguments
     codes <- mapM (\part -> (,) part <$> compileExpression walker part) reached
-    let table = Map.fromListWith (<>) [(locatedSpan part, [(part, code)]) | (part, code) <- codes]
-        answer part = case Map.lookup (locatedSpan part) table of
-          Just [(_, code)] -> code
+    let table = IntMap.fromListWith (<>) [(startOf part, [(part, code)]) | (part, code) <- codes]
+        answer part = case IntMap.lookup (startOf part) table of
+          Just [(candidate, code)] | locatedSpan candidate == locatedSpan part -> code
           Just several | Just code <- lookup part several -> code
           _ -> walkExpression walker part
         needs = (walkCallNeeds walker){callEvaluate = answer}
     pure (evaluateCall needs spanValue callee arguments)
-  _ -> pure (walkExpression walker located)
+ where
+  startOf part = unOffset (spanStart (locatedSpan part))
 
 {-| The receiver a member callee is called on. -}
 calleeTarget :: Located Expression -> [Located Expression]
