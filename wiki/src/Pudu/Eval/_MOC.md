@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval MultiMap]] — fused persistent append and indexed membership beneath Std.MultiMap.
+
 - [[Eval Function Closure Tests]] — receiver, generic, qualified, and missing Decimal dispatch checks.
 
 - [[Eval Runtime]] — scoped resource ownership shared by evaluation modes.
@@ -68,3 +70,10 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]]
+
+- [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
+
+- [[Eval MultiMap Kernel]] — pure native loop regions containing proven MultiMap primitives.
+
+- [[Eval Call Argument]] — argument values and receiver lending places.
+- [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

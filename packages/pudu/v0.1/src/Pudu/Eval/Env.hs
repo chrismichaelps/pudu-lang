@@ -225,6 +225,7 @@ data Eval a
 newtype Evaluator a = Evaluator (Env -> IO (Eval a))
 
 instance Functor Evaluator where
+  {-# INLINE fmap #-}
   fmap transform (Evaluator action) =
     Evaluator $ \env -> do
       outcome <- action env
@@ -234,6 +235,8 @@ instance Functor Evaluator where
         Aborted stop -> Aborted stop
 
 instance Applicative Evaluator where
+  {-# INLINE pure #-}
+  {-# INLINE (<*>) #-}
   pure value = Evaluator $ \env -> pure (Done value env)
   Evaluator leftAction <*> Evaluator rightAction =
     Evaluator $ \env -> do
@@ -249,6 +252,7 @@ instance Applicative Evaluator where
             Done value afterRight -> Done (transform value) afterRight
 
 instance Monad Evaluator where
+  {-# INLINE (>>=) #-}
   Evaluator action >>= continue =
     Evaluator $ \env -> do
       outcome <- action env

@@ -123,6 +123,8 @@ installBuiltinConstructors = do
   bind "deriveKey" (BuiltinValue DeriveKeyBuiltin)
   bind "audioToneBytes" (BuiltinValue AudioToneBytesBuiltin)
   bind "audioRampBytes" (BuiltinValue AudioRampBytesBuiltin)
+  bind "multiMapAdd" (BuiltinValue MultiMapAddBuiltin)
+  bind "multiMapContains" (BuiltinValue MultiMapContainsBuiltin)
   bind "wordMapUnion" (BuiltinValue WordMapUnionBuiltin)
   bind "wordMapIntersection" (BuiltinValue WordMapIntersectionBuiltin)
   bind "wordMapDifference" (BuiltinValue WordMapDifferenceBuiltin)
@@ -197,7 +199,7 @@ installDeclaration
 installDeclaration traits layouts (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing))
+      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
@@ -320,7 +322,7 @@ installMethods traits value = case targetNameOf (implTarget value) of
  where
   installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
-        implementation = FunctionValue (Closure name method Nothing Nothing)
+        implementation = FunctionValue (Closure name method Nothing Nothing Nothing)
     bindMethod (owner <> "." <> name) implementation
     case traitNameOf (implTrait value) of
       Nothing -> pure ()

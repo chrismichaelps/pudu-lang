@@ -35,6 +35,7 @@ import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
+import Pudu.Eval.MultiMap (multiMapWrapper)
 import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
 import Pudu.IntegerLiteral (integerKindMeet)
 import Pudu.Eval.Place (exclusiveParameters, plainPlace, storePlace)
@@ -202,25 +203,36 @@ compileExpression walker located@(Located spanValue expression) = case expressio
   -- A module's function called by name, with nothing lent to it, is called
   -- directly: this is the path the call machinery takes for such a call, with
   -- what it decides on every call decided here once.
-  CallExpression callee@(Located _ (NameExpression (first :| rest))) arguments
-    | Nothing <- slotOf walker first
+  CallExpression callee arguments
+    | Just (first : rest) <- flattenPath (locatedValue callee)
+    , Nothing <- slotOf walker first
     , not (any lendsExclusively arguments) -> do
         resolved <- lookupModule (Text.intercalate "." (first : rest))
         case resolved of
           Just (FunctionValue closure)
-            | null (exclusiveParameters (closureFunction closure)) -> do
+            | null (exclusiveParameters (closureFunction closure))
+            , directCallee callee closure -> do
                 codes <- mapM (compileExpression walker) arguments
                 general <- compileCall walker spanValue callee arguments
+                let invoke = maybe (\callSpan values -> callClosure (walkCallNeeds walker) closure values callSpan) id (multiMapWrapper closure)
                 pure $ do
                   local <- lookupLocal first
                   case local of
                     Just _ -> general
                     Nothing -> do
                       values <- sequence codes
-                      callClosure (walkCallNeeds walker) closure values (Just spanValue)
+                      invoke (Just spanValue) values
           _ -> compileCall walker spanValue callee arguments
   CallExpression callee arguments -> compileCall walker spanValue callee arguments
   _ -> pure (walkExpression walker located)
+
+{-| Member syntax keeps method dispatch unless its captured closure proves
+    a transparent call to one of the MultiMap primitives. -}
+directCallee :: Located Expression -> Closure -> Bool
+directCallee (Located _ NameExpression{}) _ = True
+directCallee _ closure = case multiMapWrapper closure of
+  Just _ -> True
+  Nothing -> False
 
 {-| Whether an argument lends a place exclusively. -}
 lendsExclusively :: Located Expression -> Bool

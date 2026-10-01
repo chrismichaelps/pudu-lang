@@ -118,7 +118,7 @@ export fn containsKey[K, V](map: &MultiMap[K, V], key: K) -> Bool {
 /// MultiMap.contains(&m, 1, "z")  // false
 /// ```
 export fn contains[K, V](map: &MultiMap[K, V], key: K, value: V) -> Bool {
-  map.occurrences.containsKey((key, value))
+  multiMapContains(map, key, value)
 }
 
 /// How many values a key has.
@@ -141,18 +141,7 @@ export fn count[K, V](map: &MultiMap[K, V], key: K) -> Int { get(map, key).lengt
 /// MultiMap.get(&m, 1)  // ["a", "b"]
 /// ```
 export fn add[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
-  // The commonest operation, so it is written straight through: one read and
-  // one write of each map, with no loop over a single value.
-  let group = match map.groups.get(key) {
-    case Some(found) => found
-    case None => []
-  }
-  let pair = (key, value)
-  let seen = match map.occurrences.get(pair) {
-    case Some(held) => held
-    case None => 0
-  }
-  MultiMap{groups: map.groups.insert(key, group.push(value)), occurrences: map.occurrences.insert(pair, seen + 1)}
+  multiMapAdd(map, key, value)
 }
 
 /// The map with several values added under a key, in the order given.

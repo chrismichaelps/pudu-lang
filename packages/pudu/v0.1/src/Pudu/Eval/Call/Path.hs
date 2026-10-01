@@ -72,6 +72,11 @@ qualifiedParts expression = case expression of
     longer match is the one the reader meant, and preferring it cannot shadow a
     local. -}
 readPath :: Span -> NonEmpty Text -> Evaluator Value
+readPath spanValue (name :| []) = do
+  found <- lookupName name
+  case found of
+    Just value -> pure value
+    Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
 readPath spanValue path@(first :| rest) = do
   local <- if null rest then pure Nothing else lookupLocal first
   linked <- case local of

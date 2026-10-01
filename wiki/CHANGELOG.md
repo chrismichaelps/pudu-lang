@@ -5,6 +5,25 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-01 — Persistent MultiMap kernels below one second
+
+- [[Std MultiMap]] uses proven pure primitives for persistent append and indexed
+  membership. [[Eval MultiMap]] keeps numeric occurrence pairs in persistent
+  integer trees with a lazy ordinary Map view, preserving generic keys, ordering,
+  duplicate counts, incoming equal-key representations, and checked overflow.
+- [[Eval MultiMap Kernel]] prepares scalar reads and sequencing once for eligible
+  pure loops in both evaluators. Other loops retain ordinary evaluation. Captured
+  primitive identity, call-depth refusal, short-circuit order, persistent snapshots,
+  and source spans remain intact. [[Eval Call Argument]] and [[Eval Call Needs]]
+  contain the pending call-helper extraction included in this delivery.
+- The unchanged benchmark script reports **0.92 s tree / 0.90 s compiled**, against
+  the user's 8.15 / 4.99 baseline. All seven benchmark outputs agree. Twenty-seven
+  behavior assertions and four refusal fixtures agree with the original library in
+  both modes, including exact loop-limit and overflow diagnostics. The full
+  optimized suite with warnings as errors, focused formatting, and whitespace
+  checks pass. [[2026-10-01-multimap-performance]] records dependency layers and
+  complete validation evidence.
+
 ## 2026-09-30 — Integer operators chosen at compile time (#429)
 
 - [[Eval Compile]] chooses each binary operator when a body is compiled: integer `+ - * %` and the

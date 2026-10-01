@@ -1,0 +1,8 @@
+module RejectsMultiMapUnordered
+
+import Std.MultiMap as MultiMap
+
+fn main() -> Int {
+  let next = MultiMap.add(&MultiMap.empty(), 1, fn(n: Int) -> Int => n)
+  MultiMap.total(&next)
+}

@@ -55,3 +55,21 @@ and every thread.
   from the tree walker.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Compiled Evaluation]] · [[Eval Compile Cache]] · [[Eval Call]]
+
+## Transparent MultiMap primitive calls
+
+Known closures satisfying [[Eval MultiMap]]'s transparent-wrapper proof invoke
+the two MultiMap primitives directly, retaining argument evaluation order, caller
+shadowing, the inner primitive span, closure tally, and call depth. No library or
+function spelling selects this path, and all other closures retain the existing call.
+
+Resolved Grill Log: only captured builtin identity and an exact one-call body can
+eliminate the wrapper frame; preserve defaults, async, lending, and shadowing
+through the normal path whenever the proof does not hold.
+
+Module-qualified calls parsed as `MemberExpression` must also reach the transparent
+MultiMap wrapper selection. Previously the direct-call branch accepted only
+`NameExpression`, so `MultiMap.add` and `MultiMap.contains` silently kept full
+call setup despite being known module functions. Flatten member chains only for
+lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
+Other member calls retain their established dispatch.

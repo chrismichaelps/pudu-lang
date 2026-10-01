@@ -116,3 +116,13 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## MultiMap execution allocation
+
+Inline the small Evaluator Functor/Applicative/Monad combinators so nested pure
+primitive calls can fuse their Done/environment continuations at -O2. The three
+result paths remain identical. The MultiMap loop-only control measured 1.29s tree
+and 0.29s compiled before this cut.
+
+Resolved Grill Log: expose existing combinators to optimization; introduce no
+mode override, new state, control-flow policy, or effect behavior.

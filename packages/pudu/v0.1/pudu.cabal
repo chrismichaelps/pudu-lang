@@ -110,6 +110,8 @@ library
     Pudu.Eval.Csv
     Pudu.Eval.Json
     Pudu.Eval.Xml
+    Pudu.Eval.Call.Argument
+    Pudu.Eval.Call.Needs
     Pudu.Eval.Call.Path
     Pudu.Eval.Clock
     Pudu.Eval.Concurrent
@@ -128,6 +130,7 @@ library
     Pudu.Eval.Frozen
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Argument
+    Pudu.Eval.Foreign.Binding
     Pudu.Eval.Foreign.Resource
     Pudu.Eval.Foreign.Result
     Pudu.Eval.Method
@@ -287,6 +290,8 @@ library
     Pudu.Semantic.Symbol
     Pudu.Source
     Pudu.Runtime.Word
+    Pudu.Eval.MultiMap
+    Pudu.Eval.MultiMap.Kernel
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
     Pudu.Runtime.Buffer

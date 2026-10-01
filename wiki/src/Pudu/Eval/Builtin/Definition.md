@@ -184,3 +184,18 @@ replacement; definitions retain no runtime policy.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]
+
+## Fused MultiMap operations
+
+The pure primitives `multiMapAdd[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` and
+`multiMapContains[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` preserve the library's
+record shape and ordered maps. [[Eval MultiMap]] owns their runtime implementation.
+`add` appends to the group and increments its occurrence count with one tree traversal
+per map; `contains` performs one occurrence lookup. They are registered by name,
+typed with the canonical library nominal identity, installed, and dispatched as pure
+builtins, so aliases, first-class wrappers, shadowing, and constant folding retain
+ordinary call semantics.
+
+Resolved Grill Log: use explicit primitives rather than recognizing a library function
+by name. Preserve persistence, key representatives, duplicate counts, checked Int
+overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.

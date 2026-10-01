@@ -90,3 +90,11 @@ answers with.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Type Check Iteration]]
+
+## MultiMap dependency-region intrinsic
+
+Before ordinary while dispatch, attempt [[Eval MultiMap Kernel]]. Entirely
+unsupported regions retain the existing loop unchanged. Both evaluators use the
+same pure primitive loop kernel for eligible MultiMap regions.
+Resolved Grill Log: preserve transfers and effect boundaries through whole-region
+fallback; retain ordinary execution as the oracle for non-native library wrappers.

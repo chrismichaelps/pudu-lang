@@ -155,3 +155,33 @@ rank 29.
 
 Resolved Grill Log: one constructor carrying the receiver rather than a method tag per kind, because
 the behaviour is the same for every kind of value.
+
+## MultiMap integer-pair storage
+
+`MapValue` is a bundled bidirectional pattern covering the ordinary ordered map
+and `IntPairMapValue`. The latter holds a persistent nested IntMap of original
+key/value/count triples plus an intentionally lazy, memoized ordered Map view.
+Only Eval.MultiMap creates/updates this representation. All existing Map methods,
+rendering, equality, freezing and ordering consume the same MapValue view.
+Integer payloads must fit host Int; otherwise use the generic representation.
+Signed ascending IntMap traversal produces lexicographic tuple ordering; incoming
+representatives and integer kind tags remain in each stored triple.
+Foreign binding/slot/claim/release records move unchanged to [[Eval Foreign Binding]]
+and remain re-exported here to keep Value below the default file-size limit.
+
+Resolved Grill Log: optimize numeric index traversal rather than mutate values or
+change the public record fields. The cached Map view is lazy because eagerly
+rebuilding it per add would make construction quadratic. Noninteger additions and
+ordinary Map operations materialize that view and use existing behavior. Equal
+numeric keys retain the incoming tuple's representatives, including kind tags.
+
+## Proven wrapper cache
+
+Closure carries an intentionally lazy Maybe (Span, Builtin) proof cache for
+transparent MultiMap wrappers. scopeTo fills it using the newly captured immutable
+frames once; constructor sites initialize it to Nothing. Equality ignores this
+execution metadata. A receiver disables its use.
+
+Resolved Grill Log: cache only the body proof and captured builtin identity.
+A callee with the same spelling is insufficient, and borrowed/exclusive/default/
+async behavior still decides eligibility before caching.

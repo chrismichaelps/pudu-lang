@@ -1,0 +1,12 @@
+module RejectsMultiMapStepLimit
+import Std.MultiMap as MultiMap
+const BAG: MultiMap.MultiMap[Int, Int] = {
+  var bag: MultiMap.MultiMap[Int, Int] = MultiMap.empty()
+  var i = 0
+  while i < 100002 {
+    bag = MultiMap.add(&bag, i % 2, i)
+    i = i + 1
+  }
+  bag
+}
+fn main() -> Int { 0 }

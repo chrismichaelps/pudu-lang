@@ -28,7 +28,8 @@ module Pudu.Eval.Value
   , Captured (..)
   , Frame (..)
   , Closure (..)
-  , Value (.., StrValue)
+  , Value (.., StrValue, MapValue)
+  , intPairMap
   , ropeOfValue
   , ForeignBinding (..)
   , ForeignClaim (..)
@@ -58,7 +59,7 @@ import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Data.Int (Int64)
 import Pudu.FloatLiteral (FloatWidth)
-import Pudu.Foreign.Crossing (Crossing)
+import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
 
@@ -115,7 +116,9 @@ data Value
   | UnitValue
   | TupleValue ![Value]
   | ArrayValue !(Seq Value)
-  | MapValue !(Map OrdValue Value)
+  | OrderedMapValue !(Map OrdValue Value)
+  {-| Numeric occurrence storage with its ordered view computed only on demand. -}
+  | IntPairMapValue !(IntMap (IntMap (Value, Value, Value))) ~(Map OrdValue Value)
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
@@ -152,6 +155,26 @@ data Value
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
   deriving stock (Show)
+
+{-| Both map representations expose the same persistent ordered contents. -}
+pattern MapValue :: Map OrdValue Value -> Value
+pattern MapValue entries <- (mapOfValue -> Just entries)
+  where
+    MapValue entries = OrderedMapValue entries
+
+mapOfValue :: Value -> Maybe (Map OrdValue Value)
+mapOfValue value = case value of
+  OrderedMapValue entries -> Just entries
+  IntPairMapValue _ entries -> Just entries
+  _ -> Nothing
+
+{-| The view is lazy and shared; native integer updates never force it. -}
+intPairMap :: IntMap (IntMap (Value, Value, Value)) -> Value
+intPairMap index = IntPairMapValue index $ Map.fromDistinctAscList
+  [ (OrdValue (TupleValue [key, value]), count)
+  | values <- IntMap.elems index
+  , (key, value, count) <- IntMap.elems values
+  ]
 
 {-| A text value, read as its whole text and built from one.
 
@@ -220,75 +243,6 @@ instance Eq Value where
     (ForeignHandleValue nameA addressA claimA, ForeignHandleValue nameB addressB claimB) ->
       nameA == nameB && addressA == addressB && claimA == claimB
     _ -> False
-
-{-| Everything the runtime needs to make one foreign call.
-
-    Resolved from the declaration rather than looked up per call: the library
-    name, the symbol, and how each value crosses. Nothing here is decided while
-    the program is running, so a call is a call rather than a search. -}
-data ForeignBinding = ForeignBinding
-  { foreignBindingLibrary :: !Text
-  {-| Whether the result is one the library keeps rather than gives away. -}
-  , foreignBindingBorrowedResult :: !Bool
-  {-| Whether the result is another reference the library counts, which owes a
-      release of its own even where an existing reference is the same address. -}
-  , foreignBindingCountedResult :: !Bool
-  {-| The ABI version the declaration named, which the platform's own naming
-      puts inside the file name rather than beside it. -}
-  , foreignBindingVersion :: !(Maybe Text)
-  , foreignBindingSymbol :: !Text
-  {-| How every native argument crosses, slots included: the bridge needs a kind
-      for each position whether the value is sent or written back. -}
-  , foreignBindingArguments :: ![Crossing]
-  {-| Which of those positions the library writes rather than reads, in the same
-      order. An ordinary argument carries nothing here. -}
-  , foreignBindingSlots :: ![Maybe ForeignSlot]
-  , foreignBindingResult :: !Crossing
-  , foreignBindingReleasedBy :: !(Maybe ForeignRelease)
-  {-| The handle type this function releases, when it is a release.
-
-      Known from the declaration rather than guessed at the call: a release is
-      whatever some function in the same block named after `by`. -}
-  , foreignBindingReleases :: !(Maybe Text)
-  }
-  deriving stock (Eq, Show)
-
-{-| One argument the library writes rather than reads.
-
-    Carries what the slot answers with rather than what the caller sends: the
-    handle type when it is a handle, so the address it receives can be claimed
-    under the same name a direct result would be, and the destructor that claim
-    retains. -}
-data ForeignSlot = ForeignSlot
-  { foreignSlotCrossing :: !Crossing
-  , foreignSlotReleasedBy :: !(Maybe ForeignRelease)
-  }
-  deriving stock (Eq, Show)
-
-{-| The exact native destructor an owned result retains for runtime teardown. -}
-{-| Whether the program owes a release for a handle it holds.
-
-    A library hands back two different things through one C type. Some of them
-    it gives away, and the program must release exactly once. Others it keeps —
-    a default font, the text of its last error, the surface a context draws to —
-    and releasing one of those frees something the library is still using.
-
-    Which it is cannot be read off the address, so it is carried beside it. A
-    borrowed handle has no claim in the store, is never leased, is never
-    released at teardown, and is refused if it reaches a release. -}
-data ForeignClaim
-  = {-| The generation of this handle's claim, which the store admitted. -}
-    OwnedClaim !Integer
-  | {-| The library keeps it. Nothing on this side releases it, ever. -}
-    BorrowedClaim
-  deriving stock (Eq, Show)
-
-data ForeignRelease = ForeignRelease
-  { foreignReleaseLibrary :: !Text
-  , foreignReleaseVersion :: !(Maybe Text)
-  , foreignReleaseSymbol :: !Text
-  }
-  deriving stock (Eq, Show)
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
     index, a scalar value. That is the type the language gives an unsuffixed
@@ -365,6 +319,8 @@ data Closure = Closure
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe Captured)
+  {-| Proven after immutable capture; forced once by the first invocation. -}
+  , closureMultiMap :: ~(Maybe (Span, Builtin))
   }
   deriving stock (Show)
 

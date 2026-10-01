@@ -74,3 +74,12 @@ typeArgumentName :: Located TypeSyntax -> Text
 ## Referenced by
 
 [[Eval Call]] · [[src/Pudu/Eval/_MOC]]
+
+## Single-segment names
+
+A bare name goes directly to lookupName and the existing undefined-name refusal.
+It cannot have a dotted module prefix or trailing member, so it bypasses empty
+prefix generation. Dotted paths keep their exact existing algorithm.
+
+Resolved Grill Log: skip provably empty path work, without changing lexical or
+implementation lookup, diagnostic spans, or name-lookup tallies.

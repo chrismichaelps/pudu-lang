@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
+
 - [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.
 
 - [[src/test-fixtures/listeneridentity/Main]] · [[src/test-fixtures/listeneridentity/Reverse]] · [[src/test-fixtures/listeneridentity/RejectsWrongListener]] · [[src/test-fixtures/listeneridentity/PackageLog/Configuration]] · [[src/test-fixtures/listeneridentity/PackageLog/Sink]] · [[src/test-fixtures/listeneridentity/ZServer]] — actual HTTP server with conflicting package aliases, two traversal orders, and refusal.
@@ -91,3 +93,16 @@ tags: [moc, module]
 ## Referenced by
 
 [[00-INDEX]] · [[grammar/haskell]]
+
+- [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
+
+- [[Eval MultiMap Kernel]] — pure native loop regions containing proven MultiMap primitives.
+
+- [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
+
+- [[RejectsMultiMapLoopOverflow]] — native MultiMap loop diagnostic compatibility.
+
+- [[RejectsMultiMapStepLimit]] — native MultiMap loop diagnostic compatibility.
+
+- [[Eval Call Argument]] — argument values and receiver lending places.
+- [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

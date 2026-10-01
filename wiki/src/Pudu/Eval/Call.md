@@ -25,6 +25,7 @@ Call something, reach a name through a path, and join the tasks a scope owns.
 data CallNeeds = CallNeeds
   { callEvaluate :: Located Expression -> Evaluator Value
   , callBlock    :: Located Block -> Evaluator Value
+  , callCompile  :: [Text] -> FunctionBody -> Evaluator (Evaluator Value)
   }
 
 evaluateCall   :: CallNeeds -> Span -> Located Expression -> [Located Expression] -> Evaluator Value
@@ -212,3 +213,24 @@ A call records the place each `&mut` argument, bare name, and receiver was taken
 
 `dispatchCall` and `applyFunction` call a `TextMethodValue` through `callDisplay` with its receiver
 first, so `value.toText()` and `display(value)` share one rendering.
+
+## Proven MultiMap forwarding
+
+After arguments and callee resolution, callClosureLending may invoke the
+transparent primitive recognized by [[Eval MultiMap]]. This skips parameter and
+body frames in tree mode as well as compiled mode. Three supplied arguments,
+no receiver/default/async/exclusive parameter, and captured builtin identity are
+required. Wrong arity and lending use ordinary dispatch.
+
+Resolved Grill Log: resolving the callee before applying the proof keeps caller
+shadowing intact. Keep the existing argument/place refactor and all fallback
+paths; no general closure inlining or evaluator mode substitution is introduced.
+
+`scopeTo` computes a lazy MultiMap forwarding proof once when it attaches the
+module capture. Dispatch reads that cached proof, preserving the original closure
+identity and retained body. Calls with invalid arity keep ordinary binding errors.
+
+The pre-existing argument/place extraction into [[Eval Call Argument]] and callback
+record extraction into [[Eval Call Needs]] are included by the user's request to
+commit all uncommitted work. Call re-exports CallNeeds and delegates argument and
+receiver discovery, preserving its invocation behavior and keeping it below 500 lines.

@@ -197,3 +197,6 @@ The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanu
 ## Places
 
 Assignment resolves its place through [[Eval Place]] — root and index keys first — then evaluates the right-hand side and stores; a field, an element, and `*r` are places as well as a variable. See [[ADR-0022-lending-a-place]].
+
+Function literals initialize the internal MultiMap proof cache to Nothing.
+Resolved Grill Log: literal capture and body evaluation remain unchanged.
