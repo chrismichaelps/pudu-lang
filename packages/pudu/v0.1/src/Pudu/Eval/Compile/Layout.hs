@@ -25,20 +25,24 @@ slotLayout parameters body
   -- up slots for a call costs more than it saves there.
   | null declared = Nothing
   | nub everything /= everything = Nothing
-  | otherwise = Just (Map.fromList (zip (parameters <> declared) [0 ..]))
+  | otherwise = Just (Map.fromList (zip (parameters <> placed) [0 ..]))
  where
   found = case body of
     BlockBody block -> fromBlock block
     ExpressionBody expression -> fromExpression expression
   declared = [name | Declared name <- found]
+  placed = declared <> [name | Matched name <- found]
   everything = parameters <> map nameOf found
   nameOf binder = case binder of
     Declared name -> name
     Matched name -> name
+    Framed name -> name
 
-{-| A name a body binds: by `let`, which takes a slot, or by a pattern, which
-    binds through a frame. -}
-data Binder = Declared Text | Matched Text
+{-| A name a body binds: by `let`, or by a pattern the compiled code matches
+    (a `match` arm or an `if let`), each of which takes a slot; or by a pattern
+    the tree walker binds through a frame of its own (`for`, `while let`,
+    `let ... else`, a destructuring `let`), which is read by name. -}
+data Binder = Declared Text | Matched Text | Framed Text
 
 fromBlock :: Located Block -> [Binder]
 fromBlock (Located _ block) =
@@ -54,8 +58,8 @@ fromStatement (Located _ statement) = case statement of
   BreakStatement _ value -> foldMap fromExpression value
   ContinueStatement _ -> []
   LetElseStatement pattern' subject fallback ->
-    matched pattern' <> fromExpression subject <> fromBlock fallback
-  LetPatternStatement _ pattern' _ subject -> matched pattern' <> fromExpression subject
+    framed pattern' <> fromExpression subject <> fromBlock fallback
+  LetPatternStatement _ pattern' _ subject -> framed pattern' <> fromExpression subject
   InvalidStatement -> []
 
 fromExpression :: Located Expression -> [Binder]
@@ -85,9 +89,9 @@ fromExpression (Located _ expression) = case expression of
   MatchExpression subject arms -> fromExpression subject <> concatMap fromArm arms
   WhileExpression _ condition body -> fromExpression condition <> fromBlock body
   WhileLetExpression _ pattern' subject body ->
-    matched pattern' <> fromExpression subject <> fromBlock body
+    framed pattern' <> fromExpression subject <> fromBlock body
   LoopExpression _ body -> fromBlock body
-  ForExpression _ binder iterated body -> matched binder <> fromExpression iterated <> fromBlock body
+  ForExpression _ binder iterated body -> framed binder <> fromExpression iterated <> fromBlock body
   LiteralExpression _ -> []
   NameExpression _ -> []
   LambdaExpression _ -> []
@@ -99,3 +103,6 @@ fromExpression (Located _ expression) = case expression of
 
 matched :: Located Pattern -> [Binder]
 matched = map Matched . patternNames
+
+framed :: Located Pattern -> [Binder]
+framed = map Framed . patternNames

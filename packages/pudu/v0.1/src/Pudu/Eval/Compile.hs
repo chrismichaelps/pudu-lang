@@ -179,7 +179,7 @@ compileExpression walker located@(Located spanValue expression) = case expressio
       value <- subjectCode
       case matchPattern pattern' value of
         -- Without an `else` the expression answers unit whichever way it went.
-        Just bindings -> withFrame bindings $ case otherwise' of
+        Just bindings -> withBindings (walkSlots walker) bindings $ case otherwise' of
           Nothing -> taken >> pure UnitValue
           Just _ -> taken
         Nothing -> maybe (pure UnitValue) id otherwise'
@@ -197,7 +197,7 @@ compileExpression walker located@(Located spanValue expression) = case expressio
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms
-    pure (subject >>= chooseArm spanValue compiled)
+    pure (subject >>= chooseArm spanValue (walkSlots walker) compiled)
   -- A module's function called by name, with nothing lent to it, is called
   -- directly: this is the path the call machinery takes for such a call, with
   -- what it decides on every call decided here once.
@@ -286,20 +286,30 @@ compileArm walker (Located _ arm) = do
 {-| The first arm whose pattern matches and whose guard holds, run in a frame
     holding what its pattern bound. A guard answering anything but `true`
     rejects the arm. -}
-chooseArm :: Span -> [Arm] -> Value -> Evaluator Value
-chooseArm spanValue arms subject = case arms of
+chooseArm :: Span -> Maybe (Map Text Int) -> [Arm] -> Value -> Evaluator Value
+chooseArm spanValue slots arms subject = case arms of
   [] ->
     abortAt (Just spanValue) "E7011" ("no match arm accepted " <> renderValue subject)
       (Just "add a case that covers this value")
   Arm pattern' guard' body : rest -> case matchPattern pattern' subject of
-    Nothing -> chooseArm spanValue rest subject
+    Nothing -> chooseArm spanValue slots rest subject
     Just bindings -> do
+      let scoped = withBindings slots bindings
       accepted <- case guard' of
         Nothing -> pure True
         Just test -> do
-          value <- withFrame bindings test
+          value <- scoped test
           pure (value == BoolValue True)
-      if accepted then withFrame bindings body else chooseArm spanValue rest subject
+      if accepted then scoped body else chooseArm spanValue slots rest subject
+
+{-| Run code with a pattern's bindings: written to their slots in a body on
+    slots, where every name has one, or in a frame of their own otherwise. -}
+withBindings :: Maybe (Map Text Int) -> [(Text, Value)] -> Evaluator a -> Evaluator a
+withBindings slots bindings action = case slots of
+  Just layout | all ((`Map.member` layout) . fst) bindings -> do
+    mapM_ (\(name, value) -> mapM_ (`writeSlot` value) (Map.lookup name layout)) bindings
+    action
+  _ -> withFrame bindings action
 
 compileBinary
   :: Walker -> Located Expression -> Located Expression -> Text -> Located Expression -> Evaluator Code
