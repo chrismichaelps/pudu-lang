@@ -15,6 +15,7 @@ import Pudu.Frontend.Syntax.Tree
   , BindingKind (..)
   , Block (..)
   , Capability (..)
+  , ComptimeFor (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
@@ -63,6 +64,8 @@ outlineDeclaration (Located _ declaration) = case declaration of
   TypeDeclaration value -> "type " <> locatedValue (typeName value)
   TraitDeclaration _ -> "trait"
   ImplDeclaration _ -> "impl"
+  DeriveDeclaration _ -> "derive"
+  DeriveImplDeclaration _ -> "derive impl"
   MacroDeclaration value -> "macro " <> locatedValue (macroName value)
   ForeignDeclaration value ->
     "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
@@ -125,6 +128,9 @@ outlineExpression (Located _ expression) = case expression of
   LoopExpression label _ -> labelPrefix label <> "loop"
   ForExpression label binder iterated _ ->
     labelPrefix label <> "for " <> outlinePattern binder <> " in " <> outlineExpression iterated
+  ComptimeForExpression loop ->
+    "comptime for " <> locatedValue (comptimeForElement loop)
+      <> " in " <> outlineExpression (comptimeForSource loop)
   InvalidExpression -> "invalid"
 
 outlineLabel :: Located Text -> Text

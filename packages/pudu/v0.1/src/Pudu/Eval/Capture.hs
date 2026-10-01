@@ -70,6 +70,11 @@ fromDeclaration (Located _ declaration) = case declaration of
   MacroDeclaration value -> fromExpression (macroBody value)
   TraitDeclaration value -> foldMap (reachableNames . locatedValue) (traitMembers value)
   ImplDeclaration value -> foldMap (reachableNames . locatedValue) (implFunctions value)
+  {-| Derive members are reachable like trait members: a literal body that
+      closes over a name must see it whether the function implements a trait
+      by hand or by derivation. A request carries no functions. -}
+  DeriveDeclaration value -> foldMap (reachableNames . locatedValue) (deriveFunctions value)
+  DeriveImplDeclaration _ -> Set.empty
   TypeDeclaration _ -> Set.empty
   ForeignDeclaration _ -> Set.empty
   InvalidDeclaration -> Set.empty
@@ -115,6 +120,8 @@ fromExpression (Located _ expression) = case expression of
   WhileLetExpression _ _ subject body -> fromExpression subject <> fromBlock body
   LoopExpression _ body -> fromBlock body
   ForExpression _ _ iterated body -> fromExpression iterated <> fromBlock body
+  ComptimeForExpression loop ->
+    fromExpression (comptimeForSource loop) <> fromBlock (comptimeForBody loop)
   InvalidExpression -> Set.empty
 
 {-| A field written without a value takes the binding of its own name. -}

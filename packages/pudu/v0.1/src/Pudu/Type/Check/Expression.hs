@@ -14,6 +14,8 @@ import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
+  , Constraint (..)
   , Expression (..)
   , Parameter
   )
@@ -21,9 +23,11 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , bindName
   , finalizeIntegerLiteralsBetween
   , finalizeIntegerLiteralsSince
   , freshVariable
+  , inDeriveChecking
   , inTypeScope
   , inTypeScopeWith
   , integerLiteralCheckpoint
@@ -32,6 +36,7 @@ import Pudu.Type.Env
   , recordExpression
   , report
   , validateIntegerLiteralsSince
+  , withRigidBounds
   )
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Iteration (iterationElement)
@@ -86,12 +91,14 @@ import Pudu.Type.Check.Expression.Control
   , literalIndex
   )
 import Pudu.Type.Exhaust (checkExhaustive)
-import Pudu.Type.Formation (formType)
+import Pudu.Type.Formation (formOptionalType, formType)
+import Pudu.Type.Check.Method (boundName)
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Type (..)
   , boolType
   , integerType
+  , monotype
   )
 
 {-| @Check.Expression.CheckSurroundings — what an expression needs of the
@@ -211,6 +218,14 @@ inferExpression around declared rigid spanValue expression = case expression of
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Set" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
+  ComptimeForExpression loop -> do
+    checking <- inDeriveChecking
+    if checking
+      then checkComptimeLoop around declared rigid (Located spanValue loop)
+      else do
+        report "E3090" spanValue "a compile-time loop outside a derive needs derive instantiation"
+          (Just "move the loop into a derive definition")
+        pure ErrorType
   LambdaExpression value ->
     lambdaType
       (aroundParameter around declared rigid)
@@ -381,6 +396,36 @@ inferExpression around declared rigid spanValue expression = case expression of
         _ <- checkExpression around declared rigid target
         pure ErrorType
   InvalidExpression -> pure ErrorType
+
+{-| Check one compile-time loop generically: the `where` subjects bind as
+    rigid loop-local variables, the element binds at its ascribed type, the
+    bounds install, and the body checks under both through the surrounding
+    chain, so a nested loop checks the same way. The source list is not
+    checked here: it names compile-time values instantiation validates, and
+    `Meta` names do not resolve until that slice lands. The loop answers the
+    unit type like every other loop, because unrolling repeats the body
+    rather than producing one value. -}
+checkComptimeLoop
+  :: CheckSurroundings
+  -> DeclaredTypes
+  -> [(Text, Int)]
+  -> Located ComptimeFor
+  -> Checker Type
+checkComptimeLoop around declared rigid (Located _ loop) = do
+  let variables =
+        [(locatedValue (constraintSubject constraint), 0) | Located _ constraint <- comptimeForConstraints loop]
+      rigidHere = rigid <> variables
+      bounds =
+        [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+        | Located _ constraint <- comptimeForConstraints loop
+        ]
+  loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))
+  withRigidBounds bounds $ inTypeScope $ do
+    recordExpression (locatedSpan (comptimeForElement loop)) loopElementType
+    bindName (locatedValue (comptimeForElement loop)) (monotype loopElementType)
+    _ <- aroundBlock around declared rigidHere (comptimeForBody loop)
+    pure ()
+  pure UnitTypeValue
 
 {-| The two directions a field's value may be checked in, handed to record
     construction so it can reach back into checking without importing it. -}

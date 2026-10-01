@@ -13,8 +13,11 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..)
   , Block (..)
+  , ComptimeFor (..)
   , Constraint (..)
   , Declaration (..)
+  , Derive (..)
+  , DeriveRequest (..)
   , Expression (..)
   , FieldDeclaration (..)
   , FieldInit (..)
@@ -203,6 +206,12 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
   MacroDeclaration _ -> pure ()
+  {-| A derive declares no namespace entry: its members are checked once at
+      the definition by derive checking, never called by name, and a request
+      carries no members at all. Both stay visible here so a later slice can
+      resolve their member bodies once the rigid treatment exists. -}
+  DeriveDeclaration _ -> pure ()
+  DeriveImplDeclaration _ -> pure ()
   {-| Every function a foreign block declares is a module-scope name, since the
       declaration is the only definition of it that exists. The block's own
       visibility carries to all of them: they were written together because they
@@ -237,6 +246,7 @@ walkDeclaration (Located spanValue declaration) = case declaration of
   FunctionDeclaration value -> walkFunction spanValue value
   TypeDeclaration value -> inScopeOver (spanExtent spanValue) $ do
     mapM_ bindTypeParam (typeTypeParams value)
+    mapM_ walkType (typeDerives value)
     walkDefinition (typeDefinition value)
   TraitDeclaration value -> inScopeOver (spanExtent spanValue) $ do
     mapM_ bindTypeParam (traitTypeParams value)
@@ -251,6 +261,17 @@ walkDeclaration (Located spanValue declaration) = case declaration of
     mapM_ walkConstraint (implConstraints value)
     mapM_ (\(Located at member) -> walkFunction at member) (implFunctions value)
   MacroDeclaration _ -> pure ()
+  {-| A derive's trait resolves like any other reference. Its members wait
+      for derive checking, which binds the derived type rigidly; walking
+      them now would resolve that parameter against whatever the scope
+      happens to hold. A request's trait and target are ordinary references. -}
+  DeriveDeclaration value -> inScopeOver (spanExtent spanValue) $ do
+    declareNamed TypeSpace TypeParamOrigin Private False (deriveParameter value)
+    walkType (deriveTrait value)
+    mapM_ (\(Located at member) -> walkFunction at member) (deriveFunctions value)
+  DeriveImplDeclaration value -> do
+    walkType (deriveRequestTrait value)
+    walkType (deriveRequestTarget value)
   ForeignDeclaration value ->
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
@@ -412,6 +433,21 @@ walkExpression (Located spanValue expression) = case expression of
     insideLoop label $ inScopeOver (spanningExtent (locatedSpan binder) (locatedSpan body)) $ do
       bindPattern binder
       walkBlock body
+  {-| The source resolves first, then the body with only the element bound.
+      The `where` subjects bind as rigid loop-local type variables before the
+      element type and bounds walk: they are declared by the clause the way a
+      generic function's parameters are declared by its header, so every
+      position that names them resolves. The element value binds for the body
+      alone. -}
+  ComptimeForExpression loop -> do
+    walkExpression (comptimeForSource loop)
+    inScopeOver (spanningExtent (locatedSpan (comptimeForElement loop)) (locatedSpan (comptimeForBody loop))) $ do
+      mapM_ (declareNamed TypeSpace TypeParamOrigin Private False . constraintSubject . locatedValue)
+        (comptimeForConstraints loop)
+      walkType (comptimeForType loop)
+      mapM_ walkConstraint (comptimeForConstraints loop)
+      declareNamed ValueSpace PatternOrigin Private False (comptimeForElement loop)
+      walkBlock (comptimeForBody loop)
   InvalidExpression -> pure ()
 
 {-| A field written without a value refers to the binding with the field's own

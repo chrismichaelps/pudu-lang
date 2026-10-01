@@ -27,7 +27,9 @@ import Pudu.Diagnostic
 import Pudu.Frontend.Syntax.Located (Located (..), locatedSpan, locatedValue)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
   , Declaration (..)
+  , Derive (..)
   , Expression (..)
   , FieldInit (..)
   , Function (..)
@@ -127,6 +129,11 @@ declarationWork declaration = case declaration of
   TypeDeclaration {} -> []
   TraitDeclaration trait -> map (FunctionWork . locatedValue) (traitMembers trait)
   ImplDeclaration implementation -> map (FunctionWork . locatedValue) (implFunctions implementation)
+  {-| Derive members lint like ordinary members: the loop unrolls them, so a
+      finding inside one is a finding in every instantiation. A request
+      carries no functions. -}
+  DeriveDeclaration value -> map (FunctionWork . locatedValue) (deriveFunctions value)
+  DeriveImplDeclaration _ -> []
   MacroDeclaration macroValue -> [ExpressionWork (macroBody macroValue)]
   ForeignDeclaration {} -> []
   InvalidDeclaration -> []
@@ -188,6 +195,8 @@ expressionWork expression = case expression of
   WhileLetExpression _ _ value body -> [ExpressionWork value, BlockWork body]
   LoopExpression _ body -> [BlockWork body]
   ForExpression _ _ values body -> [ExpressionWork values, BlockWork body]
+  ComptimeForExpression loop ->
+    [ExpressionWork (comptimeForSource loop), BlockWork (comptimeForBody loop)]
   InvalidExpression -> []
 
 fieldWork :: [Located FieldInit] -> [Work]

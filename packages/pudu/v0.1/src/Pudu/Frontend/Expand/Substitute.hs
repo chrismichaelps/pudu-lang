@@ -16,6 +16,7 @@ import Pudu.Frontend.Syntax.Located (Located (..), locatedValue)
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..)
   , Block (..)
+  , ComptimeFor (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
@@ -107,6 +108,23 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
   LoopExpression label body -> at (LoopExpression label (recurseBlock body))
   ForExpression label binder iterated body ->
     at (ForExpression label binder (recurse iterated) (recurseBlock body))
+  {-| A compile-time loop binds its element for the body alone: the source
+      list is substituted before the binding exists, while the body sees the
+      element under a hygienic name. The element type and bounds are
+      declarations about types rather than value bindings, so neither is
+      renamed nor substituted. -}
+  ComptimeForExpression loop ->
+    let element = locatedValue (comptimeForElement loop)
+        local = Map.singleton element (hygienicName element identifier)
+        bodyRenames = Map.union local renames
+     in at ( ComptimeForExpression
+               loop
+                 { comptimeForElement =
+                     Located callSpan (Map.findWithDefault element element bodyRenames)
+                 , comptimeForSource = recurse (comptimeForSource loop)
+                 , comptimeForBody = recurseBlockWith bodyRenames (comptimeForBody loop)
+                 }
+           )
   MacroCall name arguments -> at (MacroCall name (map recurse arguments))
   other -> at other
  where

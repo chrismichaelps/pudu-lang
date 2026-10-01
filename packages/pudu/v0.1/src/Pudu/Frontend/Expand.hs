@@ -19,7 +19,9 @@ import Pudu.Frontend.Expand.Substitute (substituteExpression)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
   , Declaration (..)
+  , Derive (..)
   , Expression (..)
   , FieldInit (..)
   , Function (..)
@@ -123,6 +125,9 @@ expandDeclaration macros depth (Located declarationSpan declaration) = case decl
   ImplDeclaration value -> do
     functions <- mapM (expandLocatedFunction macros depth) (implFunctions value)
     pure (Located declarationSpan (ImplDeclaration value{implFunctions = functions}))
+  DeriveDeclaration value -> do
+    functions <- mapM (expandLocatedFunction macros depth) (deriveFunctions value)
+    pure (Located declarationSpan (DeriveDeclaration value{deriveFunctions = functions}))
   _ -> pure (Located declarationSpan declaration)
 
 expandLocatedFunction :: Map Text Macro -> Int -> Located Function -> Expand (Located Function)
@@ -265,6 +270,13 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth iterated
           <*> expandBlock macros depth body
       )
+  {-| A compile-time loop keeps its surface: the source list and the body are
+      macro-expanded where they stand, while the element binding, its type,
+      and the bounds stay exactly as written for the derivation phase. -}
+  ComptimeForExpression loop -> do
+    source <- expandExpression macros depth (comptimeForSource loop)
+    body <- expandBlock macros depth (comptimeForBody loop)
+    rebuild (pure (ComptimeForExpression loop{comptimeForSource = source, comptimeForBody = body}))
   _ -> pure located
  where
   rebuild build' = Located expressionSpan <$> build'

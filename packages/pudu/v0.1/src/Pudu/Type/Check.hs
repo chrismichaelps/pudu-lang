@@ -15,6 +15,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Declaration (..)
+  , Derive (..)
   , Expression (..)
   , Function (..)
   , FunctionBody (..)
@@ -38,6 +39,7 @@ import Pudu.Type.Env
   , recordUnsafeFunction
   , recordComptimeFunction
   , withComptime
+  , withDeriveChecking
   , lookupName
   , recordExpression
   , report
@@ -258,8 +260,26 @@ checkDeclaration declared layouts (Located _ declaration) = case declaration of
       mapM_
         (checkMember (implAliases declared value) (implRigid value) (implBounds declared value) Nothing)
         (implFunctions value)
+  DeriveDeclaration value -> checkDerive declared value
+  DeriveImplDeclaration _ -> pure ()
   ForeignDeclaration value -> checkForeign layouts value
   _ -> pure ()
+
+{-| Check each derive member once, generically: the derived type parameter is
+    rigid with no bounds of its own, and members are checked like impl methods
+    without a Self type, since `self` arrives as an explicit parameter. The
+    flag scopes compile-time loops to rigid checking for the members alone; a
+    request carries no members. Interface annotations are required for the same
+    reason implementations require them: the generated impl must show the
+    signature the definition proved. -}
+checkDerive :: DeclaredTypes -> Derive -> Checker ()
+checkDerive declared value = do
+  let rigid = [(locatedValue (deriveParameter value), 0)]
+  mapM_ (requireInterfaceAnnotations "derive member" . locatedValue) (deriveFunctions value)
+  withDeriveChecking True $
+    mapM_
+      (checkMember declared rigid [] Nothing)
+      (deriveFunctions value)
 
 checkFunctionWith
   :: FunctionRole

@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Derive (..)
   , Foreign (..)
   , ForeignFunction (..)
   , Function (..)
@@ -145,6 +146,13 @@ buildIndex tokens types moduleValue =
       make lowerBound (locatedValue (traitName value)) DocTrait declarationSpan (locatedValue (traitName value))
         : memberEntries (traitMember (locatedValue (traitName value))) declarationSpan (traitMembers value)
     ImplDeclaration value -> memberEntries (implMember value) declarationSpan (implFunctions value)
+    {-| Derive members document like impl members under the derived type
+        parameter: they are implementations with a definition site, and the
+        parameter is the only name the derive introduces for its target. A
+        request carries no members. -}
+    DeriveDeclaration value ->
+      memberEntries (deriveMember value) declarationSpan (deriveFunctions value)
+    DeriveImplDeclaration _ -> []
     MacroDeclaration value ->
       [make lowerBound (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
     {-| A foreign declaration is the only description of those functions that
@@ -202,6 +210,14 @@ buildIndex tokens types moduleValue =
       (DocMethod (implLabel holder))
       memberSpan
       (implLabel holder <> "." <> locatedValue (functionName value))
+
+  deriveMember holder lowerBound (Located memberSpan value) =
+    make
+      lowerBound
+      (locatedValue (functionName value))
+      (DocMethod ("derive " <> locatedValue (deriveParameter holder)))
+      memberSpan
+      (locatedValue (deriveParameter holder) <> "." <> locatedValue (functionName value))
 
   make = makeWith []
 

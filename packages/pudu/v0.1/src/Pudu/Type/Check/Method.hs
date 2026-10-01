@@ -1,6 +1,7 @@
 {-| @Type.Check.Method.Module — types trait and implementation methods -}
 module Pudu.Type.Check.Method
-  ( declareBounds
+  ( boundName
+  , declareBounds
   , declareMethods
   , declareInterfaceMethods
   , declareBuiltinConstructors

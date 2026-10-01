@@ -92,6 +92,12 @@ fromExpression (Located _ expression) = case expression of
     framed pattern' <> fromExpression subject <> fromBlock body
   LoopExpression _ body -> fromBlock body
   ForExpression _ binder iterated body -> framed binder <> fromExpression iterated <> fromBlock body
+  {-| The element binds one slot like a pattern with one name; the source and
+      body are read for the bindings they declare. -}
+  ComptimeForExpression loop ->
+    [Framed (locatedValue (comptimeForElement loop))]
+      <> fromExpression (comptimeForSource loop)
+      <> fromBlock (comptimeForBody loop)
   LiteralExpression _ -> []
   NameExpression _ -> []
   LambdaExpression _ -> []

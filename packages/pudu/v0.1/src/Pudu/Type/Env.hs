@@ -15,6 +15,8 @@ module Pudu.Type.Env
   , isComptimeFunction
   , inComptime
   , withComptime
+  , inDeriveChecking
+  , withDeriveChecking
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
   , inheritRestrictions
@@ -201,6 +203,11 @@ data CheckerState = CheckerState
       name absent from the map is a parameter, a local, or a value obtained some
       other way, about which nothing is claimed. -}
   , stateInComptime :: !Bool
+  {-| Whether derive definitions are being checked. A compile-time loop inside
+      one checks rigidly under its `where` bounds; anywhere else it is refused
+      because instantiation has not run. Scoped like `withComptime`, restoring
+      the previous setting on exit. -}
+  , stateInDeriveChecking :: !Bool
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateIntegerKinds :: ![(Span, Text)]
@@ -322,6 +329,7 @@ initialState =
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = Map.empty
     , stateInComptime = False
+    , stateInDeriveChecking = False
     , stateObligations = []
     , stateIntegerLiterals = []
     , stateIntegerKinds = []
@@ -1026,6 +1034,23 @@ withComptime inside action = do
 
 inComptime :: Checker Bool
 inComptime = Checker $ \state -> (stateInComptime state, state)
+
+{-| Run an action while checking a derive definition, restoring the previous
+    setting on exit so a nested ordinary declaration is unaffected. A
+    compile-time loop met inside checks rigidly under its `where` bounds;
+    anywhere else it is refused because instantiation has not run. -}
+withDeriveChecking :: Bool -> Checker a -> Checker ()
+withDeriveChecking inside action = do
+  previous <- inDeriveChecking
+  setDeriveChecking inside
+  _ <- action
+  setDeriveChecking previous
+
+inDeriveChecking :: Checker Bool
+inDeriveChecking = Checker $ \state -> (stateInDeriveChecking state, state)
+
+setDeriveChecking :: Bool -> Checker ()
+setDeriveChecking inside = Checker $ \state -> ((), state{stateInDeriveChecking = inside})
 
 setComptime :: Bool -> Checker ()
 setComptime inside = Checker $ \state -> ((), state{stateInComptime = inside})

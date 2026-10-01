@@ -132,6 +132,11 @@ instance Walk Impl
 instance Walk Macro
 instance Walk MacroParam
 instance Walk MacroKind
+instance Walk Attribute
+instance Walk DeriveShape
+instance Walk Derive
+instance Walk DeriveRequest
+instance Walk ComptimeFor
 instance Walk Parameter
 instance Walk TypeSyntax
 instance Walk FunctionBody

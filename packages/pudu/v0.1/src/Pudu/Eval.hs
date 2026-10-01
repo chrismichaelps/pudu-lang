@@ -369,6 +369,11 @@ evaluateHere (Located spanValue expression) = case expression of
   ForExpression label binder iterated body -> do
     sequence' <- evaluate iterated
     evaluateFor loopNeeds spanValue (fmap locatedValue label) binder sequence' body
+  {-| A compile-time loop is unrolled before checking, so one that reaches
+      evaluation means derive instantiation did not run: the same refusal
+      class as an unexpanded macro call. -}
+  ComptimeForExpression _ ->
+    abortAt (Just spanValue) "E7001" "compile-time loop reached evaluation unexpanded" Nothing
   InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
 
 evaluateFieldInit :: Span -> Located FieldInit -> Evaluator (Text, Value)
