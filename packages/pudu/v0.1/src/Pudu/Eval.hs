@@ -213,6 +213,7 @@ walker =
     , walkStatement = evaluateStatement
     , walkLoopNeeds = loopNeeds
     , walkCallNeeds = callNeeds
+    , walkSlots = Nothing
     }
 
 {-| A range's end, which must be a whole number.

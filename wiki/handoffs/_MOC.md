@@ -117,6 +117,7 @@ tags: [moc, handoff]
 - [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
 - [[2026-08-31-json-string-decoding]] — standard-library handoff for linear, strict JSON string escape decoding and encoding.
 - [[2026-09-15-places-and-documentation-book]] — language and website handoff for assignment through `&mut`, `mut` fields, and array elements, and the twenty-chapter documentation.
+- [[2026-09-30-slot-frames-plan]] — slot frames for compiled bodies, done.
 - [[2026-09-30-compiled-evaluation-plan]] — compiled function bodies, Plan A done; slot frames next.
 - [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.

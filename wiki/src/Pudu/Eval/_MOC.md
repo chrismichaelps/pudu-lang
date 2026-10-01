@@ -45,6 +45,8 @@ tags: [moc, module]
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
 - [[Eval Method]] — the closed vocabulary of built-in methods a value answers to, and the name each is spelled by.
 - [[Eval Compile]] — function bodies compiled to closures once per run.
+- [[Eval Frame]] — one level of bindings, a name map or a compiled body's slots, read by name.
+- [[Eval Compile Layout]] — whether a compiled body runs on slots, and where its locals sit.
 - [[Eval Compile Cache]] — compiled bodies kept for a run, shared by its threads.
 - [[Eval Rope]] — text built by `+` held as chunks, joined once when read.
 - [[Eval Sort]] — stable natural merge sort by a program's comparison.

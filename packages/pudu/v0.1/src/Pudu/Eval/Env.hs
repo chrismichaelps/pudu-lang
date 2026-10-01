@@ -46,6 +46,9 @@ module Pudu.Eval.Env
   , lookupName
   , compiledBodies
   , runtimeIO
+  , enterSlots
+  , readSlot
+  , writeSlot
   , lookupLocal
   , lookupModule
   , popFrame
@@ -76,15 +79,17 @@ import Pudu.Diagnostic
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
-import Pudu.Eval.Value (Captured (..), Value (..))
+import Pudu.Eval.Frame (frameAssign, frameBind, frameLookup, frameSnapshot)
+import Pudu.Eval.Value (Captured (..), Frame (..), Value (..))
 import Pudu.Foreign.Ownership (ForeignStore)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
+import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
 import Data.Set (Set)
 import Pudu.Source (Span)
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
 data Env = Env
-  { envFrames :: ![Map Text Value]
+  { envFrames :: ![Frame]
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
   , envIntegerKinds :: !(Map Span Text)
@@ -111,6 +116,9 @@ data Env = Env
       run compiles them. `Nothing` runs every body through the tree walker,
       which is what compile-time evaluation and every other run does. -}
   , envCompiledBodies :: !(Maybe (IORef (Map Span (Evaluator Value))))
+  {-| The slots of the compiled body now running, which its code reads and
+      writes by position. Each call sets its own and restores its caller's. -}
+  , envSlots :: !(Maybe (IOArray Int Value))
   , envHandleStore :: !HandleStore
   , envChildStore :: !ChildStore
   , envSocketStore :: !SocketStore
@@ -306,7 +314,7 @@ emptyEnv
   -> Env
 emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore =
   Env
-    { envFrames = [Map.empty]
+    { envFrames = [MapFrame Map.empty]
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
     , envIntegerKinds = Map.empty
@@ -316,6 +324,7 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     , envScopes = []
     , envEffects = True
     , envCompiledBodies = Nothing
+    , envSlots = Nothing
     , envHandleStore = handles
     , envChildStore = children
     , envSocketStore = sockets
@@ -328,29 +337,31 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
 
 bind :: Text -> Value -> Evaluator ()
 bind name value =
-  Evaluator $ \env -> pure $ case envFrames env of
-    [] -> Done () env{envFrames = [Map.singleton name value]}
-    current : rest -> Done () env{envFrames = Map.insert name value current : rest}
+  Evaluator $ \env -> case envFrames env of
+    [] -> pure (Done () env{envFrames = [MapFrame (Map.singleton name value)]})
+    current : rest -> do
+      bound <- frameBind name value current
+      pure (Done () env{envFrames = bound : rest})
 
 {-| Assignment writes the binding where it was declared rather than creating a
     new one in the innermost frame. Returns True if the name was found and updated,
     False if no frame contained the binding. -}
 updateExisting :: Text -> Value -> Evaluator Bool
-updateExisting name value = Evaluator $ \env ->
-  case go (envFrames env) of
-    Nothing -> pure (Done False env)
-    Just updatedFrames -> pure (Done True env{envFrames = updatedFrames})
+updateExisting name value = Evaluator $ \env -> do
+  updated <- go (envFrames env)
+  pure $ case updated of
+    Nothing -> Done False env
+    Just updatedFrames -> Done True env{envFrames = updatedFrames}
  where
-  -- One walk of each frame: the alteration fails where the name is absent,
-  -- and replaces the value in the same descent where it is present.
+  -- One walk of each frame: a frame that does not bind the name answers
+  -- nothing, and one that does is written in the same descent.
   go frames = case frames of
-    [] -> Nothing
-    current : rest -> case Map.alterF replaceHeld name current of
-      Just replaced -> Just (replaced : rest)
-      Nothing -> (current :) <$> go rest
-  replaceHeld held = case held of
-    Just _ -> Just (Just value)
-    Nothing -> Nothing
+    [] -> pure Nothing
+    current : rest -> do
+      assigned <- frameAssign name value current
+      case assigned of
+        Just replaced -> pure (Just (replaced : rest))
+        Nothing -> fmap (current :) <$> go rest
 
 {-| Assignment writes the binding where it was declared rather than creating a
     new one in the innermost frame. -}
@@ -374,6 +385,47 @@ runtimeIO action = Evaluator $ \env -> do
   value <- action
   pure (Done value env)
 
+{-| Run a compiled body on slots: the frame its parameters were bound in
+    becomes its slot frame, laid out as given, and its code reads and writes
+    those slots by position until it finishes, however it finishes. -}
+enterSlots :: Map Text Int -> Evaluator a -> Evaluator a
+enterSlots layout (Evaluator action) = Evaluator $ \env -> do
+  slots <- newIOArray (0, max 0 (Map.size layout - 1)) UnitValue
+  extra <- newIORef Map.empty
+  frames <- case envFrames env of
+    MapFrame parameters : rest -> do
+      -- A parameter is placed by the layout; anything else bound with them
+      -- stays reachable by name. One pass does both.
+      leftover <- Map.foldrWithKey (place slots) (pure Map.empty) parameters
+      writeIORef extra leftover
+      pure (SlotFrame layout slots extra : rest)
+    other -> pure (SlotFrame layout slots extra : other)
+  outcome <- action env{envFrames = frames, envSlots = Just slots}
+  pure $ case outcome of
+    Done value next -> Done value next{envSlots = envSlots env}
+    Unwound transfer next -> Unwound transfer next{envSlots = envSlots env}
+    Aborted stop -> Aborted stop
+ where
+  place slots name value rest = case Map.lookup name layout of
+    Just at -> unsafeWriteIOArray slots at value >> rest
+    Nothing -> Map.insert name value <$> rest
+
+{-| The value at a position of the running body's slots. -}
+readSlot :: Int -> Evaluator Value
+readSlot position = Evaluator $ \env -> case envSlots env of
+  Just slots -> do
+    value <- unsafeReadIOArray slots position
+    pure (Done value env)
+  Nothing -> pure (Done UnitValue env)
+
+{-| Write a position of the running body's slots. -}
+writeSlot :: Int -> Value -> Evaluator ()
+writeSlot position value = Evaluator $ \env -> case envSlots env of
+  Just slots -> do
+    unsafeWriteIOArray slots position value
+    pure (Done () env)
+  Nothing -> pure (Done () env)
+
 {-| Where this run keeps compiled bodies, when it compiles them. -}
 compiledBodies :: Evaluator (Maybe (IORef (Map Span (Evaluator Value))))
 compiledBodies = Evaluator $ \env -> pure (Done (envCompiledBodies env) env)
@@ -386,13 +438,16 @@ lookupName name =
     case envTally env of
       Nothing -> pure ()
       Just counters -> modifyIORef' counters (Map.insertWith (+) "name lookup" 1)
-    pure (Done (maybe (Map.lookup name (envMethods env)) Just (search (envFrames env))) env)
+    found <- search (envFrames env)
+    pure (Done (maybe (Map.lookup name (envMethods env)) Just found) env)
  where
   search frames = case frames of
-    [] -> Nothing
-    current : rest -> case Map.lookup name current of
-      Just found -> Just found
-      Nothing -> search rest
+    [] -> pure Nothing
+    current : rest -> do
+      here <- frameLookup name current
+      case here of
+        Just _ -> pure here
+        Nothing -> search rest
 
 {-| A name bound by a call or a block, ignoring module scope.
 
@@ -402,33 +457,41 @@ lookupName name =
     segment is a local the dotted search cannot be what the reader meant and is
     skipped. Before module scope is marked nothing counts as local. -}
 lookupLocal :: Text -> Evaluator (Maybe Value)
-lookupLocal name = Evaluator $ \env -> pure (Done (search (localCount env) (envFrames env)) env)
+lookupLocal name = Evaluator $ \env -> do
+  found <- search (localCount env) (envFrames env)
+  pure (Done found env)
  where
   localCount env
     | envModuleDepth env <= 0 = 0
     | otherwise = length (envFrames env) - envModuleDepth env
   search remaining frames
-    | remaining <= 0 = Nothing
+    | remaining <= 0 = pure Nothing
     | otherwise = case frames of
-        [] -> Nothing
-        current : rest -> case Map.lookup name current of
-          Just found -> Just found
-          Nothing -> search (remaining - 1) rest
+        [] -> pure Nothing
+        current : rest -> do
+          here <- frameLookup name current
+          case here of
+            Just _ -> pure here
+            Nothing -> search (remaining - 1) rest
 
 {-| A name bound in module scope, ignoring every frame a call or block pushed.
     Before module scope is marked nothing is answered, since then no frame can
     be told apart as the module's. -}
 lookupModule :: Text -> Evaluator (Maybe Value)
-lookupModule name = Evaluator $ \env -> pure (Done (answer env) env)
+lookupModule name = Evaluator $ \env -> do
+  found <- answer env
+  pure (Done found env)
  where
   answer env
-    | envModuleDepth env <= 0 = Nothing
+    | envModuleDepth env <= 0 = pure Nothing
     | otherwise = search (drop (length (envFrames env) - envModuleDepth env) (envFrames env))
   search frames = case frames of
-    [] -> Nothing
-    current : rest -> case Map.lookup name current of
-      Just found -> Just found
-      Nothing -> search rest
+    [] -> pure Nothing
+    current : rest -> do
+      here <- frameLookup name current
+      case here of
+        Just _ -> pure here
+        Nothing -> search rest
 
 {-| The implementation a type provides under this name, and nothing else.
 
@@ -525,7 +588,7 @@ variantOwner variant =
 withFrame :: [(Text, Value)] -> Evaluator a -> Evaluator a
 withFrame bindings (Evaluator action) =
   Evaluator $ \env -> do
-    outcome <- action env{envFrames = Map.fromList bindings : envFrames env}
+    outcome <- action env{envFrames = MapFrame (Map.fromList bindings) : envFrames env}
     pure $ case outcome of
       Done value next -> Done value (dropInnermostFrame next)
       Unwound transfer next -> Unwound transfer (dropInnermostFrame next)
@@ -538,7 +601,9 @@ withFrame bindings (Evaluator action) =
     names, and the two would have to agree forever; capturing the environment
     means they cannot disagree. -}
 captureEnvironment :: Evaluator [Map Text Value]
-captureEnvironment = Evaluator $ \env -> pure (Done (envFrames env) env)
+captureEnvironment = Evaluator $ \env -> do
+  frames <- mapM frameSnapshot (envFrames env)
+  pure (Done frames env)
 
 {-| Record that every frame now on the stack is module scope.
 
@@ -575,18 +640,22 @@ capturedFrames reachable = Evaluator $ \env -> do
       written while the module's own declarations are still loading sees. It is
       kept whole: nothing has drawn the line yet, so there is nothing to narrow
       against. -}
-  pure $
-    if envModuleDepth env <= 0 || localCount <= 0
-      then Done (Captured frames (envModuleDepth env)) env
-      else
-        let (locals, moduleScope) = splitAt localCount frames
-            {-| Innermost first, so `Map.unions` keeps the binding that shadows. -}
-            picked = Map.restrictKeys (Map.unions locals) reachable
+  if envModuleDepth env <= 0 || localCount <= 0
+    then do
+      -- A slot frame is written in place, so a capture holds a copy of it.
+      kept <- mapM (fmap MapFrame . frameSnapshot) frames
+      pure (Done (Captured kept (envModuleDepth env)) env)
+    else do
+      let (locals, moduleScope) = splitAt localCount frames
+      held <- mapM frameSnapshot locals
+      pure $
+        let {-| Innermost first, so `Map.unions` keeps the binding that shadows. -}
+            picked = Map.restrictKeys (Map.unions held) reachable
         {-| Forced here rather than left as a thunk. An unforced restriction
             holds the frames it was taken from, which is every value that was in
             scope — exactly what this is for dropping, and the leak would have
             been invisible because the answer is correct either way. -}
-            captured = Captured (picked : moduleScope) (length moduleScope)
+            captured = Captured (MapFrame picked : moduleScope) (length moduleScope)
          in Map.size picked `seq` Done captured env
 
 {-| Run an action in a captured environment, restoring the caller's afterwards.
@@ -627,7 +696,7 @@ withNewFrame :: Evaluator a -> Evaluator a
 withNewFrame = withFrame []
 
 pushFrame :: Map Text Value -> Evaluator ()
-pushFrame frame = Evaluator $ \env -> pure (Done () env{envFrames = frame : envFrames env})
+pushFrame frame = Evaluator $ \env -> pure (Done () env{envFrames = MapFrame frame : envFrames env})
 
 {-| What the innermost frame currently holds.
 
@@ -636,9 +705,11 @@ pushFrame frame = Evaluator $ \env -> pure (Done () env{envFrames = frame : envF
     means reading back exactly what that load produced. -}
 currentFrame :: Evaluator (Map Text Value)
 currentFrame =
-  Evaluator $ \env -> pure $ case envFrames env of
-    current : _ -> Done current env
-    [] -> Done Map.empty env
+  Evaluator $ \env -> case envFrames env of
+    current : _ -> do
+      held <- frameSnapshot current
+      pure (Done held env)
+    [] -> pure (Done Map.empty env)
 
 {-| Replace what the innermost frame holds.
 
@@ -648,8 +719,8 @@ currentFrame =
 replaceFrame :: Map Text Value -> Evaluator ()
 replaceFrame frame =
   Evaluator $ \env -> pure $ case envFrames env of
-    _ : rest -> Done () env{envFrames = frame : rest}
-    [] -> Done () env{envFrames = [frame]}
+    _ : rest -> Done () env{envFrames = MapFrame frame : rest}
+    [] -> Done () env{envFrames = [MapFrame frame]}
 
 popFrame :: Evaluator ()
 popFrame =

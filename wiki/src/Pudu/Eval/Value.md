@@ -141,6 +141,8 @@ includes the claim, so a borrowed handle and an owned one at one address are not
   side on every append. `FlatText` holds text as before and `RopeText` holds an appended one
   ([[Eval Rope]]); the bidirectional `StrValue` pattern reads either as its text, so matching,
   equality, hashing, and freezing are unchanged. _Rejected:_ a rope for every text.
+- **Q:** Where does `Frame` live? **A:** Beside `Captured`, which holds frames, so a closure's
+  captured environment is the frames themselves rather than maps rewrapped on every call.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

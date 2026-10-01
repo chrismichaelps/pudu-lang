@@ -7,6 +7,7 @@ module Pudu.Eval.Compile
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Env
@@ -19,13 +20,17 @@ import Pudu.Eval.Env
   , lookupLocal
   , lookupModule
   , lookupName
+  , enterSlots
+  , readSlot
+  , writeSlot
   , tally
   , unwind
   , withFrame
   , withNewFrame
   )
 import Pudu.Eval.Call (CallNeeds (..), evaluateCall)
-import Pudu.Eval.Call.Path (lastPathSegment, pathValue)
+import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateWhile)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
@@ -61,13 +66,23 @@ data Walker = Walker
   , walkStatement :: Located Statement -> Evaluator ()
   , walkLoopNeeds :: LoopNeeds
   , walkCallNeeds :: CallNeeds
+  {-| The positions of the body being compiled, when it runs on slots. -}
+  , walkSlots :: Maybe (Map Text Int)
   }
 
-{-| Compile a function body. -}
-compileBody :: Walker -> FunctionBody -> Evaluator Code
-compileBody walker body = case body of
-  BlockBody block -> compileBlock walker block
-  ExpressionBody expression -> compileExpression walker expression
+{-| Compile a function body, on slots when every name it binds is distinct. -}
+compileBody :: Walker -> [Text] -> FunctionBody -> Evaluator Code
+compileBody walker parameters body = case slotLayout parameters body of
+  Just layout -> enterSlots layout <$> compileWith walker{walkSlots = Just layout}
+  Nothing -> compileWith walker{walkSlots = Nothing}
+ where
+  compileWith scoped = case body of
+    BlockBody block -> compileBlock scoped block
+    ExpressionBody expression -> compileExpression scoped expression
+
+{-| The slot a name has in the body being compiled. -}
+slotOf :: Walker -> Text -> Maybe Int
+slotOf walker name = walkSlots walker >>= Map.lookup name
 
 compileExpression :: Walker -> Located Expression -> Evaluator Code
 compileExpression walker located@(Located spanValue expression) = case expression of
@@ -80,6 +95,11 @@ compileExpression walker located@(Located spanValue expression) = case expressio
       pure (pure value)
     ResolvedInteger kind number -> let value = IntValue kind number in pure (pure value)
     _ -> let value = literalValue literal in pure (pure value)
+  -- A local of a body on slots is read by position; a path that starts at one
+  -- is that local's fields, read in turn.
+  NameExpression (first :| rest)
+    | Just position <- slotOf walker first ->
+        pure (foldl (\base field -> base >>= \value -> readMember spanValue value field) (readSlot position) rest)
   NameExpression (first :| rest) -> do
     -- A function bound in module scope does not change once the program is
     -- linked, so it is found once here. A local of the same first name, bound
@@ -119,6 +139,11 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     turn <- compileBlock walker body
     let needs = (walkLoopNeeds walker){loopEvaluate = const test, loopBlock = const turn}
     pure (evaluateWhile needs spanValue (fmap locatedValue label) condition body)
+  MemberExpression target member
+    | Just (first : _) <- flattenPath expression
+    , Just _ <- slotOf walker first -> do
+        inner <- compileExpression walker target
+        pure (inner >>= \value -> readMember spanValue value (locatedValue member))
   MemberExpression target member -> do
     inner <- compileExpression walker target
     pure $ do
@@ -215,6 +240,9 @@ compileBinary
   :: Walker -> Located Expression -> Located Expression -> Text -> Located Expression -> Evaluator Code
 compileBinary walker located@(Located spanValue _) left operator right = case operator of
   "=" -> case plainPlace left of
+    _ | Located _ (NameExpression (name :| [])) <- left, Just position <- slotOf walker name -> do
+        value <- compileExpression walker right
+        pure (value >>= writeSlot position >> pure UnitValue)
     Just place -> do
       value <- compileExpression walker right
       pure $ do
@@ -250,13 +278,17 @@ compileBlock walker (Located _ block) = do
   steps <- mapM (compileStatement walker) (blockStatements block)
   result <- maybe (pure (pure UnitValue)) (compileExpression walker) (blockResult block)
   let run = sequence_ steps >> result
-  pure (if blockIntroducesBindings block then withNewFrame run else run)
+  -- A body on slots keeps every local in its slot frame, so its blocks open none.
+  let scoped = blockIntroducesBindings block && walkSlots walker == Nothing
+  pure (if scoped then withNewFrame run else run)
 
 compileStatement :: Walker -> Located Statement -> Evaluator (Evaluator ())
 compileStatement walker located@(Located _ statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name _ value)) -> do
     code <- compileExpression walker value
-    pure (code >>= bind (locatedValue name))
+    pure $ case slotOf walker (locatedValue name) of
+      Just position -> code >>= writeSlot position
+      Nothing -> code >>= bind (locatedValue name)
   ExpressionStatement expression -> do
     code <- compileExpression walker expression
     pure (code >> pure ())

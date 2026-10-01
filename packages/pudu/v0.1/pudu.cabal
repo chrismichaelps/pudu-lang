@@ -153,6 +153,8 @@ library
     Pudu.Eval.Render
     Pudu.Eval.Compile
     Pudu.Eval.Compile.Cache
+    Pudu.Eval.Compile.Layout
+    Pudu.Eval.Frame
     Pudu.Eval.Rope
     Pudu.Eval.Sort
     Pudu.Eval.Value

@@ -55,6 +55,9 @@ a value, because values are immutable and the root is the only thing that change
   index step the old value is never used, so the search was wasted on every `x = value` (#423).
   The lookup happens only to name the failure when the update finds no binding.
 
+- **Q:** Read a lent parameter's final value from a map? **A:** From a snapshot of the frame.
+  _Rationale:_ a compiled body may have turned the parameter frame into a slot frame, whose values
+  are read through its layout.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Env]]

@@ -50,6 +50,7 @@ import Pudu.Eval.Install
   )
 import Pudu.Eval.Value
   ( Closure (..)
+  , Frame (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -203,7 +204,7 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
   unless reuseDeclarations $ do
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
-      { envFrames = [Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
     builtins <- linkDependencies dependencies
     pushFrame builtins
     pushFrame Map.empty
@@ -426,7 +427,7 @@ linkDependenciesFolded folded dependencies = do
     scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
     pure (Map.union (Map.mapKeysMonotonic ((path <> ".") <>) scoped) published)
 
-  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = frames})
+  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = map MapFrame frames})
 
 {-| Give a declared function the environment of the module that declared it.
 
@@ -462,16 +463,17 @@ installImportAliases = mapM_ (installOne . locatedValue)
       Just value -> bind item value
       Nothing -> pure ()
 
+  -- Linking runs before any compiled body, so every frame here is a map frame.
   republish path prefix = Evaluator $ \env -> pure $
     let qualified = path <> "."
         select frame =
           Map.mapKeysMonotonic (\name -> prefix <> Text.drop (Text.length qualified) name)
             (Map.takeWhileAntitone (Text.isPrefixOf qualified) (snd (Map.split qualified frame)))
-        published = Map.unions (map select (envFrames env))
+        published = Map.unions [select held | MapFrame held <- envFrames env]
      in case envFrames env of
-          current : rest ->
-            Done () env{envFrames = Map.union published current : rest}
-          [] -> Done () env{envFrames = [published]}
+          MapFrame current : rest ->
+            Done () env{envFrames = MapFrame (Map.union published current) : rest}
+          _ -> Done () env{envFrames = MapFrame published : envFrames env}
 
 
 

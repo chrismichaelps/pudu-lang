@@ -109,6 +109,10 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   `lookupModule` answers from module scope alone, which is what lets [[Eval Compile]] resolve a
   module's function once; `runtimeIO` runs the runtime's own bookkeeping, never refused for lack of
   effects.
+- **Q:** Keep frames as name maps only? **A:** No. _Rationale:_ a frame is now a [[Eval Frame]],
+  either a map or a compiled body's slot frame. `enterSlots` turns a call's parameter frame into its
+  body's slot frame and points `envSlots` at the array for the call, restoring the caller's on every
+  exit; `readSlot` and `writeSlot` are that body's code reading and writing by position.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

@@ -101,6 +101,7 @@ import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Captured (..)
+  , Frame (..)
   , Closure (..)
   , intOf
   , Value (..)
@@ -123,7 +124,7 @@ data CallNeeds = CallNeeds
   { callEvaluate :: Located Expression -> Evaluator Value
   , callBlock :: Located Block -> Evaluator Value
   {-| A function body compiled to closures, for a run that compiles them. -}
-  , callCompile :: FunctionBody -> Evaluator (Evaluator Value)
+  , callCompile :: [Text] -> FunctionBody -> Evaluator (Evaluator Value)
   }
 
 {-| A member in callee position prefers a method over a field of the same name,
@@ -336,11 +337,13 @@ evaluateScope needs spanValue body = do
     what keeps a scope from reporting success while a task it owned did not. -}
 
 scopeTo :: [Map Text Value] -> Value -> Value
-scopeTo environment value = case value of
+scopeTo environment = \value -> case value of
   FunctionValue closure@Closure{closureCaptured = Nothing} ->
-    FunctionValue closure
-      { closureCaptured = Just (Captured environment (length environment)) }
+    FunctionValue closure{closureCaptured = Just captured}
   other -> other
+ where
+  -- Built once for every declaration scoped to the same environment.
+  captured = Captured (map MapFrame environment) (length environment)
 
 
 {-| Start a prepared closure body. Async calls retain these bindings in a cold
@@ -372,7 +375,8 @@ closureOutcome needs closure = catchUnwind $ case functionBody (closureFunction 
     cache <- compiledBodies
     case cache of
       Just compiled -> do
-        code <- compiledBody compiled bodySpan (callCompile needs body)
+        let parameters = map (locatedValue . parameterName . locatedValue) (functionParameters (closureFunction closure))
+        code <- compiledBody compiled bodySpan (callCompile needs parameters body)
         code
       Nothing -> case body of
         BlockBody block -> callBlock needs block

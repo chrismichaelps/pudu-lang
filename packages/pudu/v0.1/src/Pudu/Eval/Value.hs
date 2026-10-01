@@ -26,6 +26,7 @@ module Pudu.Eval.Value
   , charMethodName
   , stringMethodName
   , Captured (..)
+  , Frame (..)
   , Closure (..)
   , Value (.., StrValue)
   , ropeOfValue
@@ -46,6 +47,8 @@ import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text)
+import Data.IORef (IORef)
+import GHC.IOArray (IOArray)
 import Pudu.Eval.Rope (Rope, ropeOf, ropeText)
 import Pudu.Eval.Method
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
@@ -323,6 +326,22 @@ falseValue = BoolValue False
     is: a method the compiler knows the semantics of can be typed exactly, and
     an unknown one is reported rather than dispatched. -}
 
+{-| @Eval.Value.Frame — one level of bindings.
+
+    A map frame holds names as they are bound. A slot frame belongs to a
+    compiled body: its locals sit in an array at positions fixed when the body
+    was compiled, named by the layout, and a name bound at run time that the
+    body never declared goes to the extra map. Everything that works by name
+    reads a slot frame through its layout, so the two are interchangeable to it. -}
+data Frame
+  = MapFrame !(Map Text Value)
+  | SlotFrame !(Map Text Int) !(IOArray Int Value) !(IORef (Map Text Value))
+
+instance Show Frame where
+  show frame = case frame of
+    MapFrame held -> "MapFrame " <> show held
+    SlotFrame layout _ _ -> "SlotFrame " <> show (Map.keys layout)
+
 {-| @Eval.Value.Closure — a callable function.
 
     `closureSelf` is present when the function was reached as a method: the
@@ -336,7 +355,7 @@ falseValue = BoolValue False
     boundary travels with either capture so a nested literal can still tell
     durable module bindings from transient call locals. -}
 data Captured = Captured
-  { capturedEnvironment :: ![Map Text Value]
+  { capturedEnvironment :: ![Frame]
   , capturedModuleDepth :: !Int
   }
   deriving stock (Show)

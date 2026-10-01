@@ -37,5 +37,9 @@ and every thread.
   they do not change after linking, while a module value could, and a parameter or local is
   different on every call. _Rejected:_ caching any binding found at compile time, which would freeze
   a function argument seen on the first call.
+- **Q:** Read a compiled body's locals by name? **A:** Not when it runs on slots. _Rationale:_ a name
+  that [[Eval Compile Layout]] placed is read and written by position, and a path or field read
+  starting at one skips the module search, since a local is never a module. Its blocks open no
+  frame. Everything else still reads the slot frame by name.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Compiled Evaluation]] · [[Eval Compile Cache]] · [[Eval Call]]

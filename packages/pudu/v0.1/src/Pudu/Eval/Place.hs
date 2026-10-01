@@ -28,10 +28,11 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
+import Pudu.Eval.Frame (frameSnapshot)
 import Pudu.Eval.Env (Env (..), Eval (..), Evaluator (..), abortAt, lookupName, updateExisting)
 import Pudu.Eval.Operator (readIndex, readMember)
 import Pudu.Eval.Render (valueKind)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Value (Frame (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Expression (..)
@@ -146,13 +147,15 @@ storePlace (Place spanValue root steps) value = do
 withFrameKeeping :: [(Text, Value)] -> [Text] -> Evaluator a -> Evaluator (a, [Value])
 withFrameKeeping bindings kept (Evaluator action) =
   Evaluator $ \env -> do
-    outcome <- action env{envFrames = Map.fromList bindings : envFrames env}
-    pure $ case outcome of
+    outcome <- action env{envFrames = MapFrame (Map.fromList bindings) : envFrames env}
+    case outcome of
       Done value next -> case envFrames next of
-        frame : rest -> Done (value, map (finalIn frame) kept) next{envFrames = rest}
-        [] -> Done (value, map (finalIn Map.empty) kept) next
-      Unwound transfer next -> Unwound transfer next{envFrames = drop 1 (envFrames next)}
-      Aborted stop -> Aborted stop
+        frame : rest -> do
+          held <- frameSnapshot frame
+          pure (Done (value, map (finalIn held) kept) next{envFrames = rest})
+        [] -> pure (Done (value, map (finalIn Map.empty) kept) next)
+      Unwound transfer next -> pure (Unwound transfer next{envFrames = drop 1 (envFrames next)})
+      Aborted stop -> pure (Aborted stop)
  where
   finalIn frame name = Map.findWithDefault (maybe UnitValue id (lookup name bindings)) name frame
 

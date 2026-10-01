@@ -112,6 +112,8 @@ find.
   the last segment regardless, so the unaliased form type-checked and then aborted with an undefined
   name. Both sides settle a qualifier through one function.
 
+- **Q:** Do linking frames need slots? **A:** No. _Rationale:_ linking runs before any compiled body,
+  so every frame it reads and replaces is a name map, wrapped and unwrapped at its boundary.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Compiler Pipeline]]

@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Slot frames for compiled bodies (#427)
+
+- A frame is now an [[Eval Frame]]: a name map, or a compiled body's slot frame. A body that
+  declares locals and binds every name once ([[Eval Compile Layout]]) keeps its parameters and
+  locals in an array at fixed positions; [[Eval Compile]] reads and writes them by position, and
+  everything that works by name reads the slot frame through its layout. At -O2
+  (`bench/eval.sh`), tree walker against compiled: loop 2.70 s / 0.90 s, records 2.21 s / 1.12 s,
+  maps 1.03 s / 0.56 s, arrays 1.37 s / 0.79 s, calls 0.56 s / 0.37 s, multimap 7.99 s / 4.95 s.
+  The full suite and the evaluator agreement spec pass.
+
 ## 2026-09-30 — Compiled function bodies (#426)
 
 - [[Eval Compile]] compiles each function body to closures on its first call, kept by
