@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Containers on the runtime's map and set (#424, #425)
+
+- [[Std IntMap]] and [[Std IntSet]] are held in the runtime's ordered map and set: 80,000 mixed
+  operations on `IntMap` fell from 22.2 s to 0.74 s, with the same API and order. [[Std MultiMap]]
+  answers `contains` from an occurrence count: 640,000 entries fell from 56.3 s to 7.8 s and now grow
+  linearly. A doubling sweep over every Std container at -O2 finds no other super-linear growth.
+
 ## 2026-09-30 — Evaluator core: operators, assignment, and dotted reads (#423)
 
 - [[Eval Operator]] chooses an integer operator from its characters; [[Eval Place]] assigns a plain

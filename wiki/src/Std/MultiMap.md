@@ -86,6 +86,11 @@ DEPTH 0.40 (MEDIUM). One invariant, funnelled through one function so it is stat
   exist, then "absent" and "present but empty" are one case, and an `Option` would ask the caller to
   handle a branch that never occurs. _Rejected:_ `Option[Array[V]]`.
 
+- **Q:** Answer `contains` by searching the key's values? **A:** No. _Rationale:_ asking it for every
+  value under a large key grew with the square of the key's size; 640,000 entries took 56.3 s (#425).
+  An `occurrences` map counts each key and value pair, kept by `add`, `addAll`, `setAll`, `removeKey`,
+  and `mapValues`, and `add` is written straight through as the commonest operation: the same work
+  now takes 7.8 s, most of it the interpreter rather than the map.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

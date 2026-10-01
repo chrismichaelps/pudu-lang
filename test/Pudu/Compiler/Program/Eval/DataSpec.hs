@@ -55,7 +55,7 @@ testDataEvaluation = do
         when every key held exactly one value. -}
     , counterexample
         "a key holding several values is counted apart from the values"
-        (multiMapAll === Just "34")
+        (multiMapAll === Just "35")
     {-| Every export of the sorted map. The neighbour lookups are checked at a
         key that is present and one that is not, which is the only case where
         `floor` differs from `lower` and `ceiling` from `higher`. -}
