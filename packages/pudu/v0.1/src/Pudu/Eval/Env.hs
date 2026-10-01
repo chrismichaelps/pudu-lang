@@ -44,6 +44,7 @@ module Pudu.Eval.Env
   , withoutEffects
   , expectBool
   , lookupName
+  , lookupLocal
   , popFrame
   , pushFrame
   , replaceFrame
@@ -332,11 +333,16 @@ updateExisting name value = Evaluator $ \env ->
     Nothing -> pure (Done False env)
     Just updatedFrames -> pure (Done True env{envFrames = updatedFrames})
  where
+  -- One walk of each frame: the alteration fails where the name is absent,
+  -- and replaces the value in the same descent where it is present.
   go frames = case frames of
     [] -> Nothing
-    current : rest
-      | Map.member name current -> Just (Map.insert name value current : rest)
-      | otherwise -> (current :) <$> go rest
+    current : rest -> case Map.alterF replaceHeld name current of
+      Just replaced -> Just (replaced : rest)
+      Nothing -> (current :) <$> go rest
+  replaceHeld held = case held of
+    Just _ -> Just (Just value)
+    Nothing -> Nothing
 
 {-| Assignment writes the binding where it was declared rather than creating a
     new one in the innermost frame. -}
@@ -368,6 +374,27 @@ lookupName name =
     current : rest -> case Map.lookup name current of
       Just found -> Just found
       Nothing -> search rest
+
+{-| A name bound by a call or a block, ignoring module scope.
+
+    A dotted read like `point.x` first asks whether `point.x` names a linked
+    module's member, a search through every module's frame that fails for a
+    local value. A value's own name never contains a dot, so when the first
+    segment is a local the dotted search cannot be what the reader meant and is
+    skipped. Before module scope is marked nothing counts as local. -}
+lookupLocal :: Text -> Evaluator (Maybe Value)
+lookupLocal name = Evaluator $ \env -> pure (Done (search (localCount env) (envFrames env)) env)
+ where
+  localCount env
+    | envModuleDepth env <= 0 = 0
+    | otherwise = length (envFrames env) - envModuleDepth env
+  search remaining frames
+    | remaining <= 0 = Nothing
+    | otherwise = case frames of
+        [] -> Nothing
+        current : rest -> case Map.lookup name current of
+          Just found -> Just found
+          Nothing -> search (remaining - 1) rest
 
 {-| The implementation a type provides under this name, and nothing else.
 

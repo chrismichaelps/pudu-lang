@@ -100,6 +100,10 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Why introduce `updateExisting` alongside `update`?
   **A:** Updating a mutable binding previously required searching the frame hierarchy with `lookupName` to check existence and then searching again to write the new value; `updateExisting` performs the traversal and mutation in a single pass, returning a boolean indicating whether the binding was present.
 
+- **Q:** Update a binding by testing membership and then inserting? **A:** No. _Rationale:_ that
+  walked each frame's map twice per assignment (#423); `alterF` replaces the value in the walk that
+  finds it. `lookupLocal` answers from the frames calls and blocks pushed, so a dotted read can tell
+  a local from a module member without searching module scope.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

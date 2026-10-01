@@ -67,6 +67,10 @@ typeArgumentName :: Located TypeSyntax -> Text
 - **Q:** Why keep `readMember` in `Pudu.Eval.Operator` rather than here?
   **A:** `readMember` is a general property access operator used across operators, whereas `Path` specifically handles identifier chains and callee prefixes.
 
+- **Q:** Search for `point.x` as a module member before reading `point`? **A:** Not when `point` is a
+  local. _Rationale:_ a value's own name never contains a dot, so a local first segment cannot begin
+  a module path, and the failing search through every module's frame cost a sixth of a record-heavy
+  loop (#423). A first segment that is not local keeps the longest-binding search.
 ## Referenced by
 
 [[Eval Call]] · [[src/Pudu/Eval/_MOC]]

@@ -20,10 +20,10 @@ import qualified Data.Text.Unsafe as TextUnsafe
     Appending never reads it, so `out = out + piece` in a loop copies at most a
     tail chunk per step rather than everything written so far.
 
-    The chunks are the finished pieces, each at least `tailLimit` bytes or a
-    piece that arrived that large; `ropeTail` is the last one, still growing by
-    copy while it stays small, so a loop of short pieces holds a few large
-    chunks rather than one node per piece. -}
+    The second field holds the finished chunks, each at least `tailLimit` bytes
+    or a piece that arrived that large; the third is the last chunk, still
+    growing by copy while it stays small, so a loop of short pieces holds a few
+    large chunks rather than one node per piece. -}
 data Rope = Rope ~Text (Seq Text) Text
 
 {-| The whole text, joined on first read and kept. -}

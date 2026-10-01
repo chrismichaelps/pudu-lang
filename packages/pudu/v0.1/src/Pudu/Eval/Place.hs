@@ -98,6 +98,16 @@ readPlace (Place spanValue root steps) = do
 {-| Store a value into a place: the binding at its root is given a copy of what
     it held with the one field or element along the path replaced. -}
 storePlace :: Place -> Value -> Evaluator ()
+storePlace (Place spanValue root []) value = do
+  -- A plain assignment needs nothing of the old value, so it is not looked up.
+  stored <- updateExisting root value
+  if stored
+    then pure ()
+    else do
+      found <- lookupName root
+      case found of
+        Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> root) Nothing
+        Just _ -> abortAt (Just spanValue) "E7001" (root <> " is not a binding that can be assigned") Nothing
 storePlace (Place spanValue root steps) value = do
   found <- lookupName root
   case found of

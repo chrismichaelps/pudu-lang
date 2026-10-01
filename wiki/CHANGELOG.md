@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-30 — Evaluator core: operators, assignment, and dotted reads (#423)
+
+- [[Eval Operator]] chooses an integer operator from its characters; [[Eval Place]] assigns a plain
+  name without reading it first; [[Eval Env]] updates a binding in one walk and adds `lookupLocal`,
+  which [[Eval Call Path]] uses to skip the module search for a dotted read on a local. At -O2,
+  minimum of five runs: an arithmetic loop 3.27 s to 2.76 s, record updates 2.57 s to 2.14 s, map
+  work 1.22 s to 1.03 s, array work 1.51 s to 1.33 s, and `fib(27)` 0.61 s to 0.51 s. The full
+  suite passes.
+
 ## 2026-09-30 — Layer sweep: reads, membership, and checked inputs (#411–#422)
 
 - [[Std Net]], [[Std Net Bounded Read]], and [[Std Tls]] search each chunk with only the bytes that could

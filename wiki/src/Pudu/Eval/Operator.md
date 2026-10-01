@@ -99,6 +99,10 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Append two texts by joining them? **A:** No. _Rationale:_ building text in a loop copied
   everything written so far at each step. `+` on two texts appends ropes and reads neither side's
   joined text on the left. _Rejected:_ recognising only `x = x + y`.
+- **Q:** Choose an integer operator by comparing its text against every spelling? **A:** No.
+  _Rationale:_ a loop paid up to twenty text comparisons per operation (#423). `integerFast` reads
+  the operator's one or two characters for the arithmetic and comparison operators and leaves every
+  other operator and every refusal to `integerOperation`, so the two cannot disagree.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

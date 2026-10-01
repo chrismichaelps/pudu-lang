@@ -17,7 +17,7 @@ import Data.List (inits)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Eval.Env (Evaluator, abortAt, lookupName)
+import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
 import Pudu.Eval.Operator (readMember)
@@ -73,7 +73,10 @@ qualifiedParts expression = case expression of
     local. -}
 readPath :: Span -> NonEmpty Text -> Evaluator Value
 readPath spanValue path@(first :| rest) = do
-  linked <- longestBinding path
+  local <- if null rest then pure Nothing else lookupLocal first
+  linked <- case local of
+    Just value -> pure (Just (value, rest))
+    Nothing -> longestBinding path
   case linked of
     Just (value, remaining) -> foldMember value remaining
     Nothing -> do
@@ -95,7 +98,12 @@ readPath spanValue path@(first :| rest) = do
 pathValue :: Expression -> Evaluator (Maybe Value)
 pathValue expression = case flattenPath expression of
   Nothing -> pure Nothing
-  Just path -> lookupName (Text.intercalate "." path)
+  Just [] -> pure Nothing
+  Just path@(first : _) -> do
+    local <- lookupLocal first
+    case local of
+      Just _ -> pure Nothing
+      Nothing -> lookupName (Text.intercalate "." path)
 
 {-| The last segment of a module's dotted name. -}
 lastPathSegment :: ModuleName -> Text

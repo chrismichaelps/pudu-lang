@@ -48,3 +48,13 @@ exclusiveParameters :: Function -> [Int]
 
 Resolved Grill Log: a place is re-read from its root at store time rather than held as a pointer into
 a value, because values are immutable and the root is the only thing that changes.
+
+## Grill Log
+
+- **Q:** Look a name up before a plain assignment to it? **A:** No. _Rationale:_ with no field or
+  index step the old value is never used, so the search was wasted on every `x = value` (#423).
+  The lookup happens only to name the failure when the update finds no binding.
+
+## Referenced by
+
+[[src/Pudu/Eval/_MOC]] · [[Eval Env]]
