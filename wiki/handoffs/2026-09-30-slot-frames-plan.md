@@ -30,7 +30,7 @@ uses the index directly wherever its compile-time scope proves the name is that 
 ## Task 1: Frames as a type
 
 - [x] `Frame` in `Pudu.Eval.Value` beside `Captured`; `Captured` holds frames.
-- [x] `Pudu.Eval.Frame`: `frameLookup`, `frameAssign`, `frameBind`, `frameSnapshot`, `mapFrame`.
+- [x] `Pudu.Eval.Frame`: `frameLookup`, `frameAssign`, `frameBind`, `frameSnapshot`.
 - [x] Every `envFrames` site in Env, Place, Program, and Call goes through them. No slot frame is
   created yet; the full suite passes unchanged.
 

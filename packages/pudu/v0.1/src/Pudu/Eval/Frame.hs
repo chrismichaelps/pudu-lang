@@ -4,7 +4,6 @@ module Pudu.Eval.Frame
   , frameAssign
   , frameBind
   , frameSnapshot
-  , frameOf
   ) where
 
 import Data.IORef (atomicModifyIORef', readIORef)
@@ -13,10 +12,6 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import GHC.IOArray (unsafeReadIOArray, unsafeWriteIOArray)
 import Pudu.Eval.Value (Frame (..), Value)
-
-{-| A frame holding exactly these bindings. -}
-frameOf :: Map Text Value -> Frame
-frameOf = MapFrame
 
 {-| The value a frame binds to a name. -}
 frameLookup :: Text -> Frame -> IO (Maybe Value)

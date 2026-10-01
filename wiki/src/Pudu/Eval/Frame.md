@@ -13,8 +13,8 @@ aliases: [Eval Frame]
 Read and write one level of bindings by name, whether it is a name map or a compiled body's slot
 frame, so everything that works by name treats the two alike.
 ## Interface
-`frameLookup`, `frameAssign` (only a name the frame already binds), `frameBind`, `frameSnapshot`
-(the bindings as they stand, copied), and `frameOf`.
+`frameLookup`, `frameAssign` (only a name the frame already binds), `frameBind`, and `frameSnapshot`
+(the bindings as they stand, copied).
 ## Governance and algorithm
 A slot frame answers a name through its layout and writes the slot in place; a name it was not laid
 out with lives in its extra map. A snapshot copies a slot frame's values, which is what a captured
