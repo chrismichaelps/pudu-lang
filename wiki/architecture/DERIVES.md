@@ -103,6 +103,56 @@ Instantiation shares the compile-time evaluator's step and depth budget. A deriv
 capability of a field type (`Encode` on `Line`) relies on that type's own `derives` or `impl`,
 never on an implicit derive.
 
+## Integration contracts
+
+A trait may have one derive for each shape, Record and Sum. The derive catalog is
+separate from the ordinary trait namespace and is keyed by canonical trait identity
+and shape; a type asks once and selects its shape. Imported aliases select the same
+identity. Attribute names remain inert metadata rather than runtime declarations.
+
+Graph elaboration publishes generated ordinary impl heads before module interfaces
+are prepared. Derive definitions are checked once in their defining module, with
+an abstract shape parameter and fresh field parameters carrying loop/callback bounds.
+The residualizer folds metadata, unrolls heterogeneous loops, and preserves runtime
+expressions. User derives and Std derives use the same mechanism.
+
+Every generated span retains valid authored offsets plus a definition, request and
+node identity. Fact maps key by the complete span, not offsets alone. Diagnostics
+retain both authored locations. Products with external generated provenance safely
+miss persistent caches until graph source rebinding is implemented; derive bodies
+participate in interface fingerprints so edits invalidate consumers. No cache-hit
+performance guarantee is made for those products.
+
+The existing evaluator limits are 4096 call depth and 100000 compile-time loop
+iterations. A phase-neutral limits module supplies both evaluator and residualizer;
+expansion accounts bounded traversal work and nested unrolling rather than permitting
+an unbounded build. Existing runtime loops remain unrestricted.
+
+The library adds ordinary trait contracts where none previously existed:
+`Show.show(&Self) -> Str`, `Json.Encode.encode(&Self) -> Json`,
+`Json.Decode.decode(&Json) -> Result[Self, DecodeError]`, and
+`Db.Row.fromRow(&Driver.Rows, Int) -> Result[Self, RowError]`. These contracts
+preserve existing module functions. `Db.Row` builds fields through ordinary
+`Std.Db.Row.Column.fromColumn`, which uses the existing strict row readers.
+
+Derived equality and hashing delegate to field traits. Ordering is lexicographic
+in declaration order and tests each direction, without requiring Eq. Hashing combines
+ordered field hashes and the variant index. Show renders declared names and fields
+in declaration order. JSON records are objects; sums are single-key objects whose
+key is the variant name and whose value is an array for positional payloads or an
+object for named payloads. Unit variants carry an empty array. `@json` renames wire
+fields/variants. Decode ignores unknown fields, refuses duplicate consumed keys,
+and applies `@default` to missing fields. A skipped field uses its explicit default
+or decodes JSON null; an Option therefore becomes None while required scalars refuse
+absence. Consumed wire names must be unique. DecodeError preserves a field/index
+path separately from textual JsonError positions. `@column` selects the strict
+row reader's column name.
+
+Generic static trait calls inside a build callback must preserve concrete type
+selection after type erasure. The implementation must carry or specialize that
+selection; consulting the result's runtime value cannot select a decoder before
+that value exists. Generated code remains ordinary trait calls with no metadata.
+
 ## Diagnostics
 
 - A mistake inside a derive body is reported at the derive's definition, once.
@@ -151,6 +201,39 @@ attributes.
 - **Q:** Derive automatically for every type that fits? **A:** No; a type opts in. _Rationale:_
   an automatic impl changes what a type means without anything written at the type, and two
   packages' automatic impls would conflict. _Rejected:_ blanket impls over shape bounds.
+- **Q:** Does unrolling risk slow builds? **A:** Every loop uses the shared
+  compile-time iteration and call-depth limits, and expansion visits each node once; caching generated
+  impls across modules is later work once real derives measure the cost. _Rationale:_ an
+  unbounded compile-time loop is a build that never ends, so the bound comes before the
+  optimization. _Rejected:_ unlimited unrolling with caching promised up front.
+- **Q:** How does the compiler recognize a compile-time-only name? **A:** By its declaring
+  module: names declared in `Std.Meta` refuse outside derive definitions. _Rationale:_
+  reflection over type shapes is intrinsic compiler work, like the prelude import, while no
+  individual derive is known — the design's core rule survives because only the module is
+  fixed, never its members. Canonical module identity (not spelling) keeps aliases honest.
+  _Rejected:_ per-name compiler knowledge, which makes every new Meta function a compiler
+  change; marker attributes, which user code could forge.
+- **Q:** Reserve `derive` and `derives` as keywords? **A:** No; both stay contextual identifiers.
+  _Rationale:_ each is only special where the grammar puts it — a declaration start and a
+  definition end — so reserving them renames working programs for no diagnostic gain, and the
+  `foreign` precedent shows contextual words carry their weight. _Rejected:_ new keywords.
+- **Q:** Check the parsed surface in later phases before instantiation exists? **A:** Resolution
+  walks what names exist and binds rigid positions (derive parameter, loop `where` subjects) the
+  way generic headers bind theirs; checking reports `E3090` on a surviving compile-time loop;
+  evaluation refuses one as unexpanded. _Rationale:_ each phase stays explicit about the missing
+  phase instead of crashing the compiler or silently accepting template code. _Rejected:_
+  catch-all silence; leaving rigid variables unbound until instantiation.
+- **Q:** Where do attributes sit on a type declaration? **A:** First, before visibility and
+  `export` modifiers: `@json("id") export type ...`. _Rationale:_ the attribute annotates the
+  whole declaration that follows, matching field and variant position where the attribute
+  immediately precedes its item; modifiers keep their existing relative order after it.
+  _Rejected:_ attributes between modifiers, which would split the modifier prefix the parser
+  and the formatter treat as one unit.
+- **Q:** Which literal productions may attribute arguments use? **A:** Unsigned integer, decimal,
+  string, char, `true`, `false`, and `null` literals only. _Rationale:_ arguments are inert
+  data read at compile time; a leading `-` parses as negation rather than part of the literal,
+  and compound values would need evaluation to stay inert. _Rejected:_ signed numerics and
+  compound literals as argument productions.
 
 ## Referenced by
 

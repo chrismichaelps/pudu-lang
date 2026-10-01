@@ -44,6 +44,11 @@ expandModule :: Module -> (Module, [Diagnostic])
   its uses in the success block; record shorthand keeps the field selector and becomes an explicit
   nested binding when its local name must change. The subject and else branch exclude those local
   renames because the successful bindings are not in scope there.
+- A derive declaration's member bodies expand like an impl's, and a compile-time loop expands its
+  source list and body while keeping the element binding, its type, and the bounds exactly as
+  written. The loop's element is renamed inside the body alone: the source is substituted before
+  the binding exists, matching the `if let` rule, while the element type and bounds declare types
+  rather than binding values and are never renamed.
 - A `SetExpression` is traversed member by member in source order in both expansion and hygienic
   substitution. Its constructor and member order are retained.
 

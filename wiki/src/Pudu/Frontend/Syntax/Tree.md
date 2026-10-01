@@ -17,7 +17,7 @@ aliases: [Syntax Tree]
 
 ## Purpose
 
-Own the mutually recursive, recovery-capable, untyped syntax data for the whole surface language: `Module`, `Import`, visibility and binding kinds, every declaration form, generic parameters and constraints, type syntax, function bodies, blocks, statements, literals, patterns, match arms, and expressions.
+Own the mutually recursive, recovery-capable, untyped syntax data for the whole surface language: `Module`, `Import`, visibility and binding kinds, every declaration form, generic parameters and constraints, type syntax, function bodies, blocks, statements, literals, patterns, match arms, expressions, attributes, derive declarations and requests, and compile-time loops.
 
 ## Interface
 
@@ -40,6 +40,8 @@ data Declaration
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
   | MacroDeclaration !Macro
+  | DeriveDeclaration !Derive
+  | DeriveImplDeclaration !DeriveRequest
   | ForeignDeclaration !Foreign
   | InvalidDeclaration
 data Foreign = Foreign
@@ -63,15 +65,18 @@ data TypeParam = TypeParam
 data Constraint = Constraint
   { constraintSubject :: !(Located Text), constraintBounds :: ![Located TypeSyntax] }
 data TypeDeclarationValue = TypeDeclarationValue
-  { typeVisibility :: !Visibility, typeName :: !(Located Text)
-  , typeTypeParams :: ![Located TypeParam], typeDefinition :: !(Located TypeDefinition) }
+  { typeVisibility :: !Visibility, typeAttributes :: ![Located Attribute]
+  , typeName :: !(Located Text), typeTypeParams :: ![Located TypeParam]
+  , typeDefinition :: !(Located TypeDefinition), typeDerives :: ![Located TypeSyntax] }
 data TypeDefinition
   = RecordDefinition ![Located FieldDeclaration] | SumDefinition ![Located Variant]
   | AliasDefinition !(Located TypeSyntax) | InvalidDefinition
 data FieldDeclaration = FieldDeclaration
-  { fieldMutable :: !Bool, fieldName :: !(Located Text), fieldType :: !(Located TypeSyntax) }
+  { fieldMutable :: !Bool, fieldAttributes :: ![Located Attribute]
+  , fieldName :: !(Located Text), fieldType :: !(Located TypeSyntax) }
 data Variant = Variant
-  { variantName :: !(Located Text), variantPayload :: !VariantPayload }
+  { variantAttributes :: ![Located Attribute]
+  , variantName :: !(Located Text), variantPayload :: !VariantPayload }
 data VariantPayload
   = UnitPayload | TuplePayload ![Located TypeSyntax] | RecordPayload ![Located FieldDeclaration]
 data Trait = Trait
@@ -135,8 +140,25 @@ data Expression
   | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
   | LoopExpression !(Maybe (Located Text)) !(Located Block)
   | ForExpression !(Located Pattern) !(Located Expression) !(Located Block)
+  | ComptimeForExpression !ComptimeFor
   | InvalidExpression
 ```
+
+data Attribute = Attribute
+  { attributeName :: !(Located Text), attributeArguments :: ![Located Literal] }
+data DeriveShape = RecordShape | SumShape
+data Derive = Derive
+  { deriveVisibility :: !Visibility, deriveTrait :: !(Located TypeSyntax)
+  , deriveParameter :: !(Located Text), deriveShape :: !(Located DeriveShape)
+  , deriveFunctions :: ![Located Function] }
+data DeriveRequest = DeriveRequest
+  { deriveRequestTrait :: !(Located TypeSyntax)
+  , deriveRequestTarget :: !(Located TypeSyntax) }
+data ComptimeFor = ComptimeFor
+  { comptimeForElement :: !(Located Text), comptimeForType :: !(Located TypeSyntax)
+  , comptimeForSource :: !(Located Expression)
+  , comptimeForConstraints :: ![Located Constraint]
+  , comptimeForBody :: !(Located Block) }
 
 All constructors derive `Eq` and `Show` and are exported for parser construction and structural tests.
 
@@ -171,6 +193,10 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 - Data only: no parsing, desugaring, type logic, traversal framework, or evaluator behavior.
 - Invalid nodes are explicit poison and never lower.
 - Mutually recursive types remain co-located to avoid `hs-boot` cycles.
+  `Attribute` is small but joins this file rather than standing alone: its
+  argument literals live here, and splitting it out would trade one import
+  cycle for a re-export. The file is past the 500-line default until the
+  syntax partition lands; that split is tracked work, not drift.
 - A declaration form with more than three components is a named record rather than a positional constructor, so adding a field to `Function`, `Trait`, or a type declaration cannot silently reorder existing arguments at a call site.
 - An absent `functionBody` means a trait member declared without a default; it is the one legitimate bodiless function and is never produced at module scope.
 - Patterns are syntax only: alternation is flat, a range keeps two literal endpoints, and a record rest is an explicit flag rather than an implied field list.
@@ -213,6 +239,10 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
   make empty-literal inference depend on a synthetic call. _Rejected:_ parser desugaring.
 
 - **Q:** Split each recursive data type with `hs-boot`? **A:** No; keep the data knot in one behavior-free file. _Rationale:_ cycles add build complexity without modular behavior. _Rejected:_ artificial boot modules; all parser logic in the same file.
+
+- **Q:** Why is a comptime element a typed binding rather than a `Pattern`? **A:** Unrolling needs one type per element, and a binding with its type ascribed states exactly that. _Rationale:_ a general pattern would need its own type language to say the same thing, and every design example binds one name with one type. _Rejected:_ a general pattern with destructuring, which the instantiator could not assign per-element types from.
+
+- **Q:** Why do `derives` entries stay `TypeSyntax` rather than becoming paths? **A:** Resolution already walks type syntax, so entries resolve like every other written reference with no new representation. _Rationale:_ a parallel path type would need its own resolution, persistence, and tooling cases for the same names. _Rejected:_ a bespoke trait-path node.
 - **Q:** Lower `if let` directly into `MatchExpression` while parsing? **A:** No; preserve a surface node. _Rationale:_ parser lowering makes source tools show syntax the reader did not write and lets synthetic-arm diagnostics leak. _Rejected:_ parser-only desugaring; a second pattern representation.
 - **Q:** Store only the native symbol and derive the local name from it? **A:** No. _Rationale:_
   Raylib's `MemAlloc` is not a legal Pudu value name, and weakening one language's naming rules to

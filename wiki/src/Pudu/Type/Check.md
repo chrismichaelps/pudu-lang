@@ -96,6 +96,12 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
 - Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected. `E3014` rejects a module that owns neither the trait nor the target's expanded nominal declaration, while `E3015` rejects duplicate heads; body checking can continue to preserve useful independent diagnostics.
+- A derive definition checks each member once, generically: its type parameter is rigid with no
+  bounds of its own, members check like impl methods without a `Self` type, and interface
+  annotations are required for the same reason implementations require them. A compile-time loop
+  inside checks with its `where` subjects rigid and its element bound at the ascribed type; the
+  source list is not checked, because it names compile-time values instantiation validates. A
+  request carries no members and needs no checking.
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
 - Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, `while` and `for` are unit while `loop` takes the type its `break` statements carry, and `return` is checked against the enclosing function's declared result.

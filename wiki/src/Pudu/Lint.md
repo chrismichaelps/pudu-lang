@@ -46,6 +46,8 @@ files itself. The CLI owns atomic persistence and recompiles after a change.
 - A parenthesized inner comparison is withheld because its expression span includes source wrapper
   text; an enclosing comparison may still carry one independently verified edit. Any overlapping
   edits supplied by future rules are reduced to a compatible batch.
+- Derive members lint like ordinary members: the loop unrolls them, so a finding inside one is a
+  finding in every instantiation. A compile-time loop lints its source and its body like a `for` loop.
 
 ## Grill Log
 

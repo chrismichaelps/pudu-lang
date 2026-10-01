@@ -48,6 +48,9 @@ reachableNames :: Function -> Set Text
   was already a pointer copy. What it was not was cheap afterwards: two hundred literals made in a
   loop beside a twenty-thousand element array held 416MB, and hold 76MB now — the same as the loop
   that makes no literals at all.
+- Derive members close over names like trait members, so their reachable names are collected the
+  same way; a request carries no functions. A compile-time loop contributes its source and its body,
+  like a `for` loop.
 
 ### Linkage
 

@@ -115,6 +115,7 @@ evaluateModule :: Module -> EvalOutcome
 - **A value names the variant it is; an implementation is written for the type that declares it.** Every method lookup on a receiver therefore tries the variant's own name and then what that variant belongs to — a direct call, a trait-qualified call, and the sequence protocol all go through the same two names. Without the second, `impl Shaped for Round` was unreachable from a `Circle` and no trait method worked on any sum at all. The variant's own name is tried first, because a record type is its own owner and must not be looked past.
 
 - **The compiler must terminate; a program need not.** A loop is bounded only while effects are refused, which is exactly when a `const` is being folded and a loop that never ends would be a build that never ends. A program the reader ran is bounded by the machine. A fixed step count applied to both is not a safety property — an input of any size needs more steps than any constant this module could pick, so the bound made every file unreadable rather than making anything safe.
+- **A compile-time loop that reaches evaluation is refused like an unexpanded macro.** Derivation unrolls every loop before checking, so a surviving one means instantiation did not run; `E7001` names that instead of executing template code.
 
 ### Linkage
 

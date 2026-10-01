@@ -56,6 +56,9 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
   and compares its loans with the callee's parameter types before unifying them.
 - A non-empty `SetExpression` unifies all member types and produces `Set[T]`. The empty form creates
   one local inference variable; expected-type contexts may determine it before a statement boundary.
+- A compile-time loop that reaches checking is `E3090` outside a derive definition, where
+  instantiation has nothing to unroll. Inside one it checks generically: the `where` subjects bind
+  rigid, the element binds at its ascribed type, and the body checks under both.
 
 ### Linkage
 

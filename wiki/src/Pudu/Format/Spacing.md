@@ -73,6 +73,10 @@ spaced         :: [Piece] -> Text
   opening delimiter — holds its fields tight like the record construction it matches. Opened by a
   keyword it keeps the space that separates it from the keyword, which is the pair of answers an
   import's selection list already gives.
+- A brace opened by an **attribute-prefixed field** holds tight like any other field list:
+  `{ @skip x: Int }`. What follows the attribute name tells it apart from a label — an argument
+  list, `mut`, or a field name means attribute; a loop keyword means label, which keeps block
+  spacing.
 
 - **Two adjacencies tokens alone cannot decide:**
   1. Record construction (`User{id: 1}`, tight) vs block (`if ready { 1 }`, padded) vs import selection list (`import Std.Num {Add}`, detached, unpadded).

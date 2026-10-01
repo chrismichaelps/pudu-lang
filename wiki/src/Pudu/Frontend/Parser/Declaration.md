@@ -32,6 +32,7 @@ parseCompilationUnit :: Parser (Maybe Module)
 - The orchestrator owns composition only. Import, binding, function, block, expression, type, and name grammar stay in their own modules, which never import this one.
 - Exactly one `module` header is required and must come first; its absence yields `Nothing` with one `E1001`, so no file without a header is ever presented as a module.
 - `export` is consumed here and passed to the declaration modules, which is why neither [[Parser Binding]] nor [[Parser Function]] can invent public API.
+- Attributes precede `export` and annotate type declarations only; anything else keeps `E1064` and still parses. `derive` opens a derive definition or request as a contextual word, never a reserved keyword.
 - Imports precede declarations. A later `import` is still parsed and preserved, but reports `E1034` so ordering is enforced without discarding recovered syntax.
 - Module scope admits `const` and `async`/`fn` declarations. `let` and `var` reach [[Parser Binding]]'s module entry point, which rejects them once, keeping module-load execution and global mutable state unrepresentable; the orchestrator then synchronizes past the rejected binding so its initializer produces no further module-scope diagnostics.
 - Reserved declaration keywords — `type`, `enum`, `struct`, `trait`, `impl`, `macro`, `comptime` — report `E1039` and synchronize instead of being silently accepted or dropped.

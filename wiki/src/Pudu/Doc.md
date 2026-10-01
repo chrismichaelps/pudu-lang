@@ -58,6 +58,8 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 - Three sources meet here and each answers only what it is authoritative for: the module says what
   was declared and where, the checker says what type it has, the token stream says what was
   documented.
+- Derive members document under the derived type parameter like impl members under their target;
+  a request carries no members and gets no entries.
 - Documentation is produced for a module that failed to check. A broken module is when a reader
   most wants to see what it declares, and the entries that did check are still true.
 - A member is found under the checker's own key — a trait's member under its owning nominal type,

@@ -5,6 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-01-derive-integration]] — complete derive integration, uncommitted until all gates pass.
+
+- [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).
+
 - [[2026-10-01-multimap-performance]] — focused MultiMap kernels and benchmark evidence.
 
 - [[2026-09-30-atomic-file-permissions]] — issue #385 atomic creation and replacement permissions (complete).

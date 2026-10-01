@@ -5,6 +5,32 @@ tags: [changelog]
 
 # Changelog
 
+## Unreleased — Generic derive checking (issue #433)
+
+- Every derive member checks once at its definition with the derived type
+  parameter rigid: mistakes report once, at the definition. Compile-time loops
+  inside check with their `where` subjects rigid and the element bound at its
+  ascribed type; outside a derive a surviving loop is `E3090`. Requests carry
+  no members and need no checking.
+
+## Unreleased — Derive resolution rigid binding (issue #432)
+
+- A derive binds its type parameter rigidly and walks its member bodies without
+  declaring them callable. A compile-time loop binds its `where` subjects as
+  rigid loop-local type variables before the element type, bounds, and body
+  walk, so every position naming them resolves without leaking outward.
+
+## Unreleased — Derive frontend syntax (issue #430)
+
+- The surface language admits attributes, trailing `derives` clauses, `derive`
+  definitions and `derive impl` requests, and `comptime for` loops with `where`
+  bounds, all preserved through persistence, macro expansion, and formatting.
+  Resolution walks name-like positions and skips rigid ones; a surviving
+  compile-time loop reports `E3090`; evaluation refuses one as unexpanded.
+  New diagnostics `E1064`–`E1068` report misplaced attributes, malformed or
+  repeated derives entries, non-literal attribute arguments, and bad derive
+  shapes, each once.
+
 ## 2026-10-01 — Persistent MultiMap kernels below one second
 
 - [[Std MultiMap]] uses proven pure primitives for persistent append and indexed

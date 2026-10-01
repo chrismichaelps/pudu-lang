@@ -63,6 +63,13 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 - A recovered `InvalidDeclaration`, `InvalidExpression`, or `InvalidPattern` introduces no symbol and no reference, so a parse error never produces a second resolution error for the same defect.
 - An `if let` subject resolves before its pattern binds. The successful bindings occupy one fresh
   frame around the then block only; the else expression resolves outside that frame.
+- A `derives` entry resolves as a type reference, and so do a derive's trait and a request's trait
+  and target. A derive binds its type parameter rigidly and walks its member bodies, without
+  declaring them callable: collection declares nothing for either derive form. A compile-time
+  loop walks its source, binds its `where` subjects as rigid loop-local type variables, then
+  walks the element type, the bounds, and the body with only the element value bound. The
+  subjects are declared by the clause the way a generic header declares its parameters, so
+  every position naming them resolves without leaking outward.
 
 ### Linkage
 

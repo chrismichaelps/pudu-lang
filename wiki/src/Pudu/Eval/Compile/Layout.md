@@ -34,5 +34,10 @@ in that frame, and they are read by name.
   compiled code matches those patterns itself, so it writes the bound values to their slots instead
   of pushing a frame and reading them back by name. A `for` binder does not get one: the tree
   walker's loop binds it in a frame each turn, and a slot would hold a stale value.
+- **Q:** Does a compile-time element take a slot? **A:** No; it is a framed name read by name, like
+  a `for` binder. _Rationale:_ the loop binds its element fresh each turn, so a slot would hold a
+  stale value; unrolling happens before compilation, so by the time layout runs the loop is ordinary
+  code with an ordinary binder. _Rejected:_ a slot for the element, which the tree walker would
+  never write.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Eval Compile]] · [[Eval Env]]

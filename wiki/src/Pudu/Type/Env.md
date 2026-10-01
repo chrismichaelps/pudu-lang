@@ -37,6 +37,9 @@ The exported signatures are the module header's export list.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
 - Trait obligations are registered when a scheme is instantiated at a call site and discharged after the enclosing function's body is checked, while the parameter's own bounds are still in scope and inference has solved the argument types.
 - `withRigidBounds` installs the enclosing declaration's parameter bounds so a generic body can call another generic that demands the same trait; a rigid parameter satisfies a bound its own declaration declared. Bounds from the parameter list and the `where` clause are merged with `(<>)` so a parameter carrying bounds in both places keeps all of them rather than the last entry overwriting the first.
+- `withDeriveChecking` scopes compile-time loops to generic checking for one definition, restoring
+  the previous setting on exit like `withComptime`. Outside the scope a surviving loop is refused,
+  because instantiation has not run for it.
 - `implementsTrait` answers whether a nominal type has an implementation for a trait, read from `declaredImpls` which [[Type Formation]] collects from `impl` declarations.
 - Declared shapes, implementation relationships, and method keys use canonical nominal/trait identity rather than basenames. Imported interface state is merged once before local signatures; local bindings remain in an inner frame.
 - Imported concrete method keys are marked separately from ordinary name bindings. Local implementation installation can therefore diagnose an imported-plus-local provider collision without treating two local declarations as an import-order ambiguity or replacing coherence's duplicate-head diagnostic.

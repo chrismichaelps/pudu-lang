@@ -22,6 +22,8 @@ tree's module holds its shapes alone.
 
 - Every node is stored the way its shape dictates, except a module's declarations and a function's
   body, which are stored as deferred blocks and read when first reached.
+- `Attribute`, `DeriveShape`, `Derive`, `DeriveRequest`, and `ComptimeFor` store through the same
+  generic instances: every field already stores, so no custom encoding exists to drift from the tree.
 - The instances are orphans on purpose: the class knows nothing of syntax. Every module that stores
   or reads a tree imports this one; a missing import is a compile error, never a silent change.
 
