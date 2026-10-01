@@ -1,0 +1,13 @@
+module SumShapes
+
+trait Tag { fn tag(self: &Self) -> Str }
+
+type Shape = @round Circle{radius: Int} | Square{side: Int} derives Tag
+
+type Meters = Int derives Tag
+
+derive Tag for T: Sum {
+  fn tag(self: &T) -> Str { "sum" }
+}
+
+export fn main() -> Int { 0 }

@@ -1,0 +1,9 @@
+module OrdinaryLoop
+
+fn run(items: Array[Int]) -> Int {
+  var total = 0
+  comptime for item: Int in items {
+    total = total + item
+  }
+  total
+}

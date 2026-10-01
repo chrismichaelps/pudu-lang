@@ -26,6 +26,12 @@ resolveProperties =
   , ("imports bind external names in both namespaces", testImports)
   , ("exports list only public module declarations", testExports)
   , ("a parse error suppresses resolution entirely", testParseErrorGate)
+  , ("derive traits and requests resolve like other references", testDeriveReferences)
+  , ("unknown derive names resolve nowhere", testDeriveUnknown)
+  , ("loop where-subjects bind rigidly for the loop", testLoopBinders)
+  , ("unbound loop variables still diagnose", testLoopFreeVariable)
+  , ("loop binders do not leak outward", testLoopNoLeak)
+  , ("derive members are not callable", testDeriveNotCallable)
   ]
 
 testOrderIndependence :: IO Property
@@ -352,6 +358,116 @@ testParseErrorGate = do
 
 isParseCode :: Diagnostic -> Bool
 isParseCode value = Text.isPrefixOf "E1" (diagnosticCodeText (diagnosticCode value))
+
+testDeriveReferences :: IO Property
+testDeriveReferences = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive Encode for T: Record {"
+    , "  fn encode(self: &T) -> Str { \"\" }"
+    , "}"
+    , "derive impl Encode for Line"
+    , "type Line = { sku: Str }"
+    , "type Order = { id: Int } derives Encode"
+    ]
+  pure $ counterexample "no resolution errors" (property (all (not . isResolveCode) (snd result)))
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011"
+
+testDeriveUnknown :: IO Property
+testDeriveUnknown = do
+  clause <- resolve
+    [ "module M"
+    , "type Order = { id: Int } derives Nope"
+    ]
+  definition <- resolve
+    [ "module M"
+    , "derive Nope for T: Record {"
+    , "}"
+    ]
+  request <- resolve
+    [ "module M"
+    , "derive impl Nope for Line"
+    , "type Line = { sku: Str }"
+    ]
+  requestTarget <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive impl Encode for Missing"
+    ]
+  pure $ conjoin
+    [ counterexample "clause trait unknown" (codes clause === ["E2011"])
+    , counterexample "definition trait unknown" (codes definition === ["E2011"])
+    , counterexample "request trait unknown, target known" (codes request === ["E2011"])
+    , counterexample "request target unknown" (codes requestTarget === ["E2011"])
+    ]
+
+testLoopBinders :: IO Property
+testLoopBinders = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Option[Int]]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[F] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "no resolution errors" (property (all (not . isResolveCode) (snd result)))
+    , counterexample "checker names its missing phase" (property ("E3090" `elem` codes result))
+    ]
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011"
+
+testLoopFreeVariable :: IO Property
+testLoopFreeVariable = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[G] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  pure $ counterexample "unbound G reported" (property ("E2011" `elem` codes result))
+
+testLoopNoLeak :: IO Property
+testLoopNoLeak = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[F] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  F"
+    , "}"
+    ]
+  pure $ counterexample "F is not a value outside" (property ("E2010" `elem` codes result))
+
+testDeriveNotCallable :: IO Property
+testDeriveNotCallable = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive Encode for T: Record {"
+    , "  fn encode(self: &T) -> Str { \"\" }"
+    , "}"
+    , "fn run() -> Str { encode(\"x\") }"
+    ]
+  pure $ counterexample "member not in scope" (property ("E2010" `elem` codes result))
 
 resolve :: [Text] -> IO (Resolution, [Diagnostic])
 resolve inputLines = do

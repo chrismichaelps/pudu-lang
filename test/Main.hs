@@ -34,6 +34,7 @@ import Pudu.Frontend.ParserBindingSpec (parserBindingProperties)
 import Pudu.Frontend.ParserBlockSpec (parserBlockProperties)
 import Pudu.Frontend.ParserFunctionSpec (parserFunctionProperties)
 import Pudu.Frontend.ParserModuleSpec (parserModuleProperties)
+import Pudu.Frontend.ParserDeriveSpec (parserDeriveProperties)
 import Pudu.Frontend.ParserPatternSpec (parserPatternProperties)
 import Pudu.Frontend.ParserTypeDeclarationSpec (parserTypeDeclarationProperties)
 import Pudu.Frontend.ParserExpressionSpec (parserExpressionProperties)
@@ -113,6 +114,7 @@ main = do
   parserBlockOutcomes <- traverse (uncurry check) parserBlockProperties
   parserFunctionOutcomes <- traverse (uncurry check) parserFunctionProperties
   parserModuleOutcomes <- traverse (uncurry check) parserModuleProperties
+  parserDeriveOutcomes <- traverse (uncurry check) parserDeriveProperties
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) resolveProperties
@@ -128,7 +130,7 @@ main = do
   slotOutcomes <- traverse (uncurry check) slotProperties
   ownershipOutcomes <- traverse (uncurry check) ownershipProperties
   resultOutcomes <- traverse (uncurry check) resultProperties
-  unless (and (sourceOutcomes <> decimalOutcomes <> versionOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> literalsOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> decimalOutcomes <> versionOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> schedulerOutcomes <> renderOutcomes <> programOutcomes <> persistOutcomes <> literalsOutcomes <> initOutcomes <> packageOutcomes <> lintCommandOutcomes <> lintOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserDeriveOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
 {-| Runs one property, or skips it when `PUDU_TEST_MATCH` is set and the label
     does not contain it: a focused run of the few properties a change touches,
     without building a second suite. -}

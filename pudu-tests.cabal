@@ -85,6 +85,7 @@ test-suite pudu-test
     Pudu.Frontend.ParserBlockSpec
     Pudu.Frontend.ParserFunctionSpec
     Pudu.Frontend.ParserModuleSpec
+    Pudu.Frontend.ParserDeriveSpec
     Pudu.Frontend.ParserPatternSpec
     Pudu.Frontend.ParserTypeDeclarationSpec
     Pudu.Frontend.ParserExpressionSpec
@@ -115,6 +116,7 @@ test-suite pudu-test
     Pudu.Type.Check.Common
     Pudu.Type.Check.PrimitiveSpec
     Pudu.Type.Check.DataSpec
+    Pudu.Type.Check.DeriveSpec
     Pudu.Type.Check.ControlFlowSpec
     Pudu.Type.Check.PatternSpec
     Pudu.Type.Check.PlaceSpec
