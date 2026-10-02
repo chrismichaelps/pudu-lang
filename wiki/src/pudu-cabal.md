@@ -201,3 +201,8 @@ public Pudu package interface changes.
 
 Register Eval.Call.Argument and Eval.Call.Needs for the pre-existing call helper
 extraction included in the complete pending-work delivery.
+
+## Derive resolution hardening
+
+Register Resolve.Reflection and Resolve.Bindings. Resolved Grill Log: pure
+import classification and the existing pattern walk require no new dependencies.

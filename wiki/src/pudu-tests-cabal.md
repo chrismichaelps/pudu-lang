@@ -46,3 +46,8 @@ Separating this package makes the compiler's source distribution self-contained:
 ## Referenced by
 
 [[Pudu Cabal Manifest]] · [[Pudu Cabal Project]] · [[Release Readiness and Native UI Canvas]]
+
+Reflection Resolution Spec is registered beside ordinary resolution properties,
+covering selected and first-class metadata imports, namespace shadowing and
+repeated rigid loop bounds. Resolved Grill Log: explicit registration makes
+these boundary tests execute in the full suite.

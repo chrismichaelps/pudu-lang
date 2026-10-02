@@ -112,6 +112,7 @@ test-suite pudu-test
     Pudu.Repl.Session.ContextSpec
     Pudu.Repl.Session.EvaluationSpec
     Pudu.Semantic.ResolveSpec
+    Pudu.Semantic.ReflectionSpec
     Pudu.Type.CheckSpec
     Pudu.Type.Check.Common
     Pudu.Type.Check.PrimitiveSpec

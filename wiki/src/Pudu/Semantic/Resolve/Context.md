@@ -120,3 +120,16 @@ DEPTH 0.72 (DEEP). It hides the monad threading, the four accumulators, the dupl
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[Scope Model]] · [[Symbol Model]] · [[Semantics]]
+
+## Reflection and rigid-scope hardening
+
+Reflection import classification is computed once by [[Resolve Reflection]],
+including selected names as well as aliases. E2018 is attached once when the
+resolved symbol is a Std.Meta import outside a derive. Each reference uses its
+actual namespace, so an unrelated value shadow cannot disable a type refusal.
+[[Resolve Bindings]] owns the unchanged pattern walk. Repeated loop constraint
+subjects bind once; an enclosing type parameter is reused rather than shadowed.
+
+Resolved Grill Log: enforce the restriction on resolved references, not only
+member syntax; selected and first-class imports cannot bypass it. Preserve
+unknown-name diagnostics and ordinary lexical shadowing.

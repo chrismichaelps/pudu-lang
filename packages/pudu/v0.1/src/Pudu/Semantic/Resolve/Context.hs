@@ -16,10 +16,16 @@ module Pudu.Semantic.Resolve.Context
   , resolveExpressionName
   , resolveTypeName
   , resolveValueName
+  , setReflectionImports
+  , declareLoopTypeParameter
+  , inDeriveDefinition
+  , withDeriveDefinition
   , runResolver
   ) where
 
 import Data.Maybe (listToMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -32,7 +38,8 @@ import Pudu.Diagnostic
   , withRelated
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Visibility (Private))
+import Pudu.Frontend.Syntax.Tree (Import (..), Visibility (Private))
+import Pudu.Semantic.Resolve.Reflection (reflectionImports)
 import Pudu.Semantic.Scope
   ( ScopeStack
   , declareSymbol
@@ -69,6 +76,13 @@ data ResolveState = ResolveState
   {-| Where the bindings being declared now become visible, when that is later
       than their names: a `let` is visible after its statement. -}
   , stateVisibleAfter :: !(Maybe Int)
+  {-| Canonical reflection imports, including selections, classified once.
+      Uses are checked against the resolved namespace and symbol origin. -}
+  , stateReflectionImports :: !(Set (Namespace, Text))
+  {-| Whether a derive definition's members are being walked. Compile-time
+      reflection is refused everywhere else, because only derivation unrolls
+      the code that names it. -}
+  , stateInDerive :: !Bool
   }
 
 {-| @Semantic.Resolve.Products — everything one resolution run produced -}
@@ -125,6 +139,8 @@ initialState =
     , stateFramesRev = [(0, Frame Nothing Nothing)]
     , stateBindingsRev = []
     , stateVisibleAfter = Nothing
+    , stateReflectionImports = Set.empty
+    , stateInDerive = False
     }
 
 {-| Run an action inside one more enclosing loop.
@@ -192,6 +208,53 @@ readLoops = Resolver $ \state -> (stateLoops state, state)
 modifyLoops :: ([Maybe Text] -> [Maybe Text]) -> Resolver ()
 modifyLoops transform =
   Resolver $ \state -> ((), state{stateLoops = transform (stateLoops state)})
+
+setReflectionImports :: [Located Import] -> Resolver ()
+setReflectionImports imports =
+  Resolver $ \state -> ((), state{stateReflectionImports = reflectionImports imports})
+
+{-| A repeated constraint augments a type parameter rather than declaring it
+    again. Enclosing parameters retain their identity inside nested loops. -}
+declareLoopTypeParameter :: Located Text -> Resolver ()
+declareLoopTypeParameter name = do
+  existing <- lookupCurrent TypeSpace (locatedValue name)
+  case existing of
+    Just _ -> pure ()
+    Nothing -> declareNamed TypeSpace TypeParamOrigin Private False name
+
+inDeriveDefinition :: Resolver Bool
+inDeriveDefinition = Resolver $ \state -> (stateInDerive state, state)
+
+modifyDerive :: (Bool -> Bool) -> Resolver ()
+modifyDerive transform =
+  Resolver $ \state -> ((), state{stateInDerive = transform (stateInDerive state)})
+
+{-| Run an action inside a derive definition, restoring the previous setting
+    on exit so a nested ordinary declaration is unaffected. -}
+withDeriveDefinition :: Bool -> Resolver a -> Resolver a
+withDeriveDefinition inside action = do
+  previous <- inDeriveDefinition
+  modifyDerive (const inside)
+  result <- action
+  modifyDerive (const previous)
+  pure result
+
+{-| Check the symbol actually selected, once, for every expression/type path.
+    Syntactic member checks miss selected imports and first-class values. -}
+recordResolvedReference :: Span -> Symbol -> Resolver ()
+recordResolvedReference at symbol = do
+  recordReference (Reference at (symbolId symbol))
+  restricted <- Resolver $ \state ->
+    ( not (stateInDerive state)
+        && symbolOrigin symbol == ImportOrigin
+        && Set.member (symbolNamespace symbol, symbolName symbol) (stateReflectionImports state)
+    , state
+    )
+  if restricted
+    then emit "E2018" Error at
+      ("compile-time reflection `" <> symbolName symbol <> "` is only named from derive definitions")
+      (Just "move the reflection into a derive body")
+    else pure ()
 
 {-| Run an action inside a fresh lexical frame. The frame is discarded on exit,
     so nothing a nested scope declared can leak outward. -}
@@ -310,7 +373,7 @@ resolveExpressionName spanValue name = do
     else do
       value <- lookupCurrent ValueSpace name
       case value of
-        Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+        Just symbol -> recordResolvedReference spanValue symbol
         Nothing -> do
           typeSymbol <- lookupCurrent TypeSpace name
           case typeSymbol of
@@ -328,11 +391,11 @@ resolveUnambiguous :: Span -> Text -> Resolver ()
 resolveUnambiguous spanValue name = do
   value <- lookupCurrent ValueSpace name
   case value of
-    Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+    Just symbol -> recordResolvedReference spanValue symbol
     Nothing -> do
       typeSymbol <- lookupCurrent TypeSpace name
       case typeSymbol of
-        Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+        Just symbol -> recordResolvedReference spanValue symbol
         Nothing ->
           emit "E2010" Error spanValue ("unresolved value name " <> name)
             (Just "declare the name, import it, or check the spelling")
@@ -341,7 +404,7 @@ resolveTypeName :: Span -> Text -> Resolver ()
 resolveTypeName spanValue name = do
   found <- lookupCurrent TypeSpace name
   case found of
-    Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+    Just symbol -> recordResolvedReference spanValue symbol
     Nothing ->
       emit "E2011" Error spanValue ("unresolved type name " <> name)
         (Just "declare the type, import it, or check the spelling")

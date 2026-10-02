@@ -286,6 +286,8 @@ library
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Resolve.Reflection
+    Pudu.Semantic.Resolve.Bindings
     Pudu.Semantic.Scope
     Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol

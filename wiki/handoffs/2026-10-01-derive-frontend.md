@@ -53,10 +53,11 @@ No caching work indicated at these magnitudes; revisit once real derives with
 ## Exact next action
 
 Slices 1–3 are implemented with edge-case batteries: full suite green at
-497 passes. Slice 4 (`Std.Meta` groundwork) is opened as issue #434 with the
-module-path seam decided in the vault; entry points identified
-(`nameType`/`qualifiedMemberType` + declared-name provenance). Next: ship the
-`Std.Meta` surface with the refusal rule and specs, then instantiation.
+497 passes, plus 7 fixture programs (498 with the fixture property). Slice 4
+(`Std.Meta` groundwork) is opened as issue #434 with the module-path seam
+decided in the vault and a recon comment pinning entry points
+(`walkMemberTarget`, per-module alias sets, scope guard, resolver flag);
+implementation starts by walking derive member bodies under the flag.
 
 ## Pre-existing notes left untouched
 

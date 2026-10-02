@@ -3,9 +3,9 @@ module Pudu.Semantic.ResolveSpec (resolveProperties) where
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler (CompileResult (..), FrontendResult (..), runCompile, runFrontend)
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticRelated)
-import Pudu.Semantic (Resolution (..), Symbol (..))
+import Pudu.Semantic (Resolution (..), Symbol (..), resolveModule)
 import Pudu.Semantic.ScopeIndex (emptyScopeIndex)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -32,6 +32,11 @@ resolveProperties =
   , ("unbound loop variables still diagnose", testLoopFreeVariable)
   , ("loop binders do not leak outward", testLoopNoLeak)
   , ("derive members are not callable", testDeriveNotCallable)
+  , ("reflection outside derives is E2018", testMetaRefused)
+  , ("reflection inside derives resolves", testMetaAllowed)
+  , ("reflection refusal follows imports, not spelling", testMetaAlias)
+  , ("reflection in type positions is refused", testMetaTypePosition)
+  , ("unknown qualifiers keep their own diagnostic", testMetaUnknown)
   ]
 
 testOrderIndependence :: IO Property
@@ -468,6 +473,88 @@ testDeriveNotCallable = do
     , "fn run() -> Str { encode(\"x\") }"
     ]
   pure $ counterexample "member not in scope" (property ("E2010" `elem` codes result))
+
+testMetaRefused :: IO Property
+testMetaRefused = do
+  result <- resolve
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "fn run() -> Str {"
+    , "  Meta.nameOf[Int]()"
+    , "}"
+    ]
+  pure $ counterexample "E2018 once" (codes result === ["E2018"])
+
+testMetaAllowed :: IO Property
+testMetaAllowed = do
+  result <- resolveOnly
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "trait Tag { fn tag(self: &Self) -> Str }"
+    , "derive Tag for T: Record {"
+    , "  fn tag(self: &T) -> Str {"
+    , "    Meta.nameOf[T]()"
+    , "  }"
+    , "}"
+    ]
+  pure $ counterexample ("codes: " <> show (codes result)) (property (all (not . isResolveCode) (snd result)))
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011" || code == "E2018"
+
+testMetaAlias :: IO Property
+testMetaAlias = do
+  aliased <- resolve
+    [ "module M"
+    , "import Std.Meta as M"
+    , "fn run() -> Str {"
+    , "  M.nameOf[Int]()"
+    , "}"
+    ]
+  other <- resolve
+    [ "module M"
+    , "import Std.Text as Meta"
+    , "fn run(value: Str) -> Int {"
+    , "  Meta.length(value)"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "aliased reflection refused" (codes aliased === ["E2018"])
+    , counterexample "other modules untouched" (property (all (/= "E2018") (codes other)))
+    ]
+
+testMetaTypePosition :: IO Property
+testMetaTypePosition = do
+  result <- resolve
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "fn run(value: Meta.Field[Int, Int]) -> Int {"
+    , "  0"
+    , "}"
+    ]
+  pure $ counterexample "E2018 in types" (codes result === ["E2018"])
+
+testMetaUnknown :: IO Property
+testMetaUnknown = do
+  result <- resolve
+    [ "module M"
+    , "fn run() -> Str {"
+    , "  Meta.nameOf[Int]()"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "unknown qualifier reported" (property ("E2010" `elem` codes result))
+    , counterexample "no refusal without import" (property (all (/= "E2018") (codes result)))
+    ]
+
+resolveOnly :: [Text] -> IO (Resolution, [Diagnostic])
+resolveOnly lines' = do
+  source <- newSource (SourceName "resolve.pudu") (Text.unlines lines')
+  let frontend = runFrontend source
+  pure $ case frontendModule frontend of
+    Nothing -> (emptyResolution, frontendDiagnostics frontend)
+    Just parsed -> resolveModule parsed
 
 resolve :: [Text] -> IO (Resolution, [Diagnostic])
 resolve inputLines = do

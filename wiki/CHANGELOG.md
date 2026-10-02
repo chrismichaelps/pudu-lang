@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-02 — Resolved reflection boundaries (issues #432, #434)
+
+- Refuse compile-time metadata at the resolved value/type reference boundary,
+  including selected imports, held functions and module values. Lexical shadowing
+  follows the namespace selected. Classify imports once per module and reuse
+  enclosing or repeated rigid loop parameters instead of redeclaring them.
+- Extract pattern binding without changing its behavior. Focused refusal and
+  scope properties pass; the full optimized suite passes 507 properties with
+  `-Werror`. Metadata typing and residualization remain subsequent layers.
+
 ## Unreleased — Generic derive checking (issue #433)
 
 - Every derive member checks once at its definition with the derived type

@@ -20,3 +20,10 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]]
+
+- [[Resolve Reflection]] — namespace-aware compile-time import classification.
+- [[Resolve Bindings]] — pattern introduction and constructor references.
+
+- [[Reflection Resolution Spec]] — import and namespace refusal regression checks.
+
+- [[Name Resolution Spec]] — compiler and lexical-only phase evidence.
