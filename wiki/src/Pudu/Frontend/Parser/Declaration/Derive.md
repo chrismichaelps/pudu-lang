@@ -55,8 +55,13 @@ matchDeriveWord :: Text -> Parser Bool
 ## Algorithm
 
 Attributes loop on `@`; arguments loop on literals with comma handling and a
-single `E1067` per offending token. The derives clause matches its word, then
-loops trait paths with duplicate detection and progress guards. A derive
+single `E1067` per offending argument. Balanced recovery consumes a malformed
+argument through its own nested delimiters, stopping at a top-level comma or
+closing parenthesis. It never consumes the following declaration, outer closer
+or new attribute. An absent closer reports one expectation diagnostic; malformed
+argument recovery does not add a second missing-closer diagnostic. Attribute
+spans include a consumed closing parenthesis. The derives clause matches its word,
+then loops trait paths with a span-independent structural set and progress guards. A derive
 definition reads trait, `for`, parameter, shape, and member functions;
 a request reads `impl`, trait, `for`, and target. Every loop visits each token
 once with required progress and stops on budget exhaustion, so hostile input
@@ -77,6 +82,15 @@ costs linear time and reports one `E1099` rather than a diagnostic per token.
 
 ## Grill Log
 
+- **Q:** Compare located syntax directly for duplicate derives? **A:** Use a
+  structural key that retains paths, arguments, reference mutability, function
+  asyncness and capabilities while excluding spans. _Rationale:_ offsets identify
+  occurrences, not types; a set avoids quadratic rescanning. _Rejected:_ text
+  slices or equality of nested `Located` nodes.
+- **Q:** Recover an invalid argument token by token? **A:** Recover one balanced
+  argument region and emit once. _Rationale:_ compound expressions are one
+  unsupported argument, and recovery must preserve following declarations.
+  _Rejected:_ consuming a declaration while searching for a missing parenthesis.
 - **Q:** Reserve `derive`/`derives` as keywords? **A:** No; contextual words.
   _Rationale:_ both already name values in programs, and each is only special
   where the grammar puts it — a declaration start and a definition end — so

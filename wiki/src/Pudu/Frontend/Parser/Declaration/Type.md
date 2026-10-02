@@ -24,7 +24,7 @@ Parse `type` declarations into their three shapes — record, sum, and alias —
 ### Signatures
 
 ```haskell
-parseTypeDeclaration :: Visibility -> Parser (Located Declaration)
+parseTypeDeclaration :: [Located Attribute] -> Visibility -> Parser (Located Declaration)
 ```
 
 ### Governance
@@ -37,6 +37,8 @@ parseTypeDeclaration :: Visibility -> Parser (Located Declaration)
 - The sum lookahead is bounded to 512 tokens and stops at the next declaration start, so a malformed definition can never make it walk the file.
 - Record fields are immutable unless marked `mut`, preserving the ownership rule in [[architecture/SEMANTICS]] as syntax.
 - Fields and variants admit leading attributes; their spans start at the first attribute.
+- Type declaration spans also start at the first leading attribute and include
+  the full definition and derives clause.
 - Variants carry a unit, positional, or record payload; payload types are ordinary references through [[Parser Type]].
 - Field and variant iteration require token progress and stop on a latched budget.
 

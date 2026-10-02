@@ -58,9 +58,11 @@ compared to handwritten encoding with the same data and evaluation modes.
 
 ## Exact next action
 
-Harden parser recovery and structural derive identity, then generic checking and
-instantiation. Resolved reflection boundaries and rigid scope reuse pass the
-full optimized suite (507 properties, `-Werror`, 2026-10-02).
+Harden generic checking: validate every derive against its canonical trait
+contract, check loop sources, and preserve scoped bounds and obligations.
+Resolved reflection boundaries, rigid scope reuse, bounded attribute recovery
+and structural duplicate detection pass the full optimized suite (511
+properties, `-Werror`, 2026-10-02). Instantiation remains the next dependency layer.
 
 ## Referenced by
 

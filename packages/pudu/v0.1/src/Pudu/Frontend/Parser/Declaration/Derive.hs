@@ -14,6 +14,8 @@ module Pudu.Frontend.Parser.Declaration.Derive
   ) where
 
 import Data.Char (isUpper)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Parser.Declaration.Trait (parseMembers)
@@ -25,24 +27,29 @@ import Pudu.Frontend.Parser.State
   , expectIdentifier
   , expectKeyword
   , expectSymbol
+  , isDeclarationStart
+  , isSymbol
   , lookaheadKind
   , matchSymbol
   , peekKind
+  , peekStartsLine
   , peekToken
   )
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..), locatedSpan, locatedValue)
 import Pudu.Frontend.Syntax.Tree
   ( Attribute (..)
+  , Capability
   , Declaration (..)
   , Derive (..)
   , DeriveRequest (..)
   , DeriveShape (..)
   , Literal (..)
-  , TypeSyntax
+  , TypeSyntax (..)
   , Visibility
   )
-import Pudu.Frontend.Token (Keyword (KwFalse, KwFor, KwImpl, KwNull, KwTrue), SymbolKind (SymAt, SymRightParen), Token (..), TokenKind (..))
+import Pudu.Frontend.Syntax.Name (ModuleName)
+import Pudu.Frontend.Token (Keyword (KwFalse, KwFor, KwImpl, KwNull, KwTrue), SymbolKind (..), Token (..), TokenKind (..))
 import Pudu.Source (Span, mergeSpans)
 
 {-| Match a contextual word: the exact identifier and nothing else. Keywords
@@ -87,46 +94,60 @@ parseAttribute :: Parser (Located Attribute)
 parseAttribute = do
   sigil <- advanceToken
   name <- expectIdentifier "after @ to name the attribute"
-  arguments <- parseAttributeArguments
-  let endSpan = case reverse arguments of
-        [] -> locatedSpan name
-        final : _ -> locatedSpan final
+  (arguments, ending) <- parseAttributeArguments
+  let endSpan = maybe (locatedSpan name) id ending
   pure (Located (mergedOrLeft (tokenSpan sigil) endSpan) (Attribute name arguments))
 
-parseAttributeArguments :: Parser [Located Literal]
+parseAttributeArguments :: Parser ([Located Literal], Maybe Span)
 parseAttributeArguments = do
   open <- matchSymbol "("
   case open of
-    Nothing -> pure []
-    Just _ -> parseAttributeArgumentList []
+    Nothing -> pure ([], Nothing)
+    Just token -> do
+      (arguments, ending) <- parseAttributeArgumentList [] (tokenSpan token) False
+      pure (arguments, Just ending)
 
-parseAttributeArgumentList :: [Located Literal] -> Parser [Located Literal]
-parseAttributeArgumentList reversed = do
+parseAttributeArgumentList :: [Located Literal] -> Span -> Bool -> Parser ([Located Literal], Span)
+parseAttributeArgumentList reversed ending recovering = do
   kind <- peekKind
   exhausted <- budgetExhausted
   before <- peekToken
-  if kind == EndOfFile || exhausted
-    then pure (reverse reversed)
+  if exhausted
+    then pure (reverse reversed, ending)
+    else if argumentBoundary kind
+      then do
+        if recovering then pure () else do
+          _ <- expectSymbol ")" "to close the attribute arguments"
+          pure ()
+        pure (reverse reversed, ending)
     else case kind of
-      Symbol symbol | symbol == SymRightParen -> advanceToken >> pure (reverse reversed)
+      Symbol SymRightParen -> do
+        closing <- advanceToken
+        pure (reverse reversed, tokenSpan closing)
       _ -> case argumentOf kind of
         Just build -> do
           _ <- advanceToken
-          let collected = Located (tokenSpan before) build : reversed
-          comma <- matchSymbol ","
-          case comma of
-            Nothing -> do
-              _ <- expectSymbol ")" "to close the attribute arguments"
-              pure (reverse collected)
-            Just _ -> parseAttributeArgumentList collected
-        Nothing -> do
-          emitParseError "E1067" (tokenSpan before) "expected a literal attribute argument"
-            (Just "arguments are integers, decimals, strings, chars, true, false, or null")
-          after <- peekToken
-          if before == after
-            then advanceToken >> parseAttributeArgumentList reversed
-            else parseAttributeArgumentList reversed
+          following <- peekKind
+          if isSymbol "," following || isSymbol ")" following || argumentBoundary following
+            then continue (Located (tokenSpan before) build : reversed) (tokenSpan before) False
+            else invalidArgument before reversed
+        Nothing -> invalidArgument before reversed
  where
+  continue collected ending' recovering' = do
+    comma <- matchSymbol ","
+    case comma of
+      Just token -> parseAttributeArgumentList collected (tokenSpan token) recovering'
+      Nothing -> parseAttributeArgumentList collected ending' recovering'
+  invalidArgument before collected = do
+    emitParseError "E1067" (tokenSpan before) "expected a literal attribute argument"
+      (Just "arguments are integers, decimals, strings, chars, true, false, or null")
+    ending' <- skipAttributeArgument [] (tokenSpan before)
+    comma <- matchSymbol ","
+    case comma of
+      Just token -> parseAttributeArgumentList collected (tokenSpan token) True
+      Nothing -> do
+        closing <- matchSymbol ")"
+        pure (reverse collected, maybe ending' tokenSpan closing)
   argumentOf argumentKind = case argumentKind of
     IntegerLiteral value -> Just (IntegerValue value)
     FloatLiteral value -> Just (FloatValue value)
@@ -138,6 +159,35 @@ parseAttributeArgumentList reversed = do
     Keyword KwNull -> Just NullValue
     _ -> Nothing
 
+argumentBoundary :: TokenKind -> Bool
+argumentBoundary kind = kind == EndOfFile || isDeclarationStart kind
+  || isSymbol "}" kind || isSymbol "]" kind
+
+{-| Consume one malformed argument, retaining nested commas and stopping before
+    the following declaration or enclosing delimiter. Each token is visited once. -}
+skipAttributeArgument :: [SymbolKind] -> Span -> Parser Span
+skipAttributeArgument closers ending = do
+  kind <- peekKind
+  token <- peekToken
+  newLine <- peekStartsLine
+  exhausted <- budgetExhausted
+  if exhausted || kind == EndOfFile || isDeclarationStart kind
+      || (null closers && ((newLine && tokenSpan token /= ending) || argumentBoundary kind
+          || isSymbol "," kind || isSymbol ")" kind))
+    then pure ending
+    else do
+      consumed <- advanceToken
+      let next = case kind of
+            Symbol SymLeftParen -> SymRightParen : closers
+            Symbol SymLeftBracket -> SymRightBracket : closers
+            Symbol SymLeftBrace -> SymRightBrace : closers
+            Symbol closer | closer `elem` [SymRightParen, SymRightBracket, SymRightBrace] ->
+              case closers of
+                expected : rest | closer == expected -> rest
+                _ -> closers
+            _ -> closers
+      skipAttributeArgument next (tokenSpan consumed)
+
 {-| Parse `derives Trait, ...` after a type definition. Returns the entries
     with the clause span, or nothing when no clause follows. A missing entry
     is `E1065`; naming a trait twice is `E1066`. -}
@@ -148,14 +198,14 @@ parseDerivesClause = do
   if not matched
     then pure Nothing
     else do
-      entries <- parseDerivesList []
+      entries <- parseDerivesList Set.empty []
       let endSpan = case reverse entries of
             [] -> tokenSpan keyword
             final : _ -> locatedSpan final
       pure (Just (mergedOrLeft (tokenSpan keyword) endSpan, entries))
 
-parseDerivesList :: [Located TypeSyntax] -> Parser [Located TypeSyntax]
-parseDerivesList reversed = do
+parseDerivesList :: Set DeriveKey -> [Located TypeSyntax] -> Parser [Located TypeSyntax]
+parseDerivesList seen reversed = do
   kind <- peekKind
   exhausted <- budgetExhausted
   before <- peekToken
@@ -175,7 +225,11 @@ parseDerivesList reversed = do
         else do
           entry <- parseTypeSyntax
           let collected = entry : reversed
-          checkDuplicate collected entry
+          let key = deriveKey (locatedValue entry)
+          if Set.member key seen
+            then emitParseError "E1066" (locatedSpan entry) "a type may name a derive once"
+              (Just "remove the repeated entry")
+            else pure ()
           after <- peekToken
           if before == after
             then pure (reverse collected)
@@ -183,21 +237,37 @@ parseDerivesList reversed = do
               comma <- matchSymbol ","
               case comma of
                 Nothing -> pure (reverse collected)
-                Just _ -> parseDerivesList collected
+                Just _ -> parseDerivesList (Set.insert key seen) collected
 
 missingEntry :: Token -> Parser ()
 missingEntry before =
   emitParseError "E1065" (tokenSpan before) "expected a trait name in the derives clause"
     (Just "name one trait per entry, separated by commas")
 
-checkDuplicate :: [Located TypeSyntax] -> Located TypeSyntax -> Parser ()
-checkDuplicate collected entry = case collected of
-  _ : previous ->
-    if locatedValue entry `elem` map locatedValue previous
-      then emitParseError "E1066" (locatedSpan entry) "a type may name a derive once"
-        (Just "remove the repeated entry")
-      else pure ()
-  [] -> pure ()
+data DeriveKey
+  = NamedKey !ModuleName ![DeriveKey]
+  | DynamicKey !ModuleName
+  | ReferenceKey !Bool !DeriveKey
+  | TupleKey ![DeriveKey]
+  | FunctionKey !Bool ![DeriveKey] !DeriveKey
+  | UnsafeKey ![Capability] !DeriveKey
+  | UnitKey
+  | InvalidKey
+  deriving stock (Eq, Ord)
+
+deriveKey :: TypeSyntax -> DeriveKey
+deriveKey syntax = case syntax of
+  NamedType path arguments -> NamedKey path (map recurse arguments)
+  DynamicType path -> DynamicKey path
+  ReferenceType mutable target -> ReferenceKey mutable (recurse target)
+  TupleType members -> TupleKey (map recurse members)
+  FunctionType asynchronous inputs result ->
+    FunctionKey asynchronous (map recurse inputs) (recurse result)
+  UnsafeType capabilities target -> UnsafeKey (map locatedValue capabilities) (recurse target)
+  UnitType -> UnitKey
+  InvalidType -> InvalidKey
+ where
+  recurse = deriveKey . locatedValue
 
 {-| Parse `derive Trait for Param: Shape { ... }` or `derive impl Trait for
     Target`. `impl` is only special directly after `derive`; everywhere else

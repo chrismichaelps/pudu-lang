@@ -53,8 +53,11 @@ parseTypeDeclaration attributes visibility = do
       derives = case clause of
         Nothing -> []
         Just (_, entries) -> entries
+      startSpan = case attributes of
+        [] -> tokenSpan keyword
+        first : _ -> locatedSpan first
   pure
-    ( Located (mergedOrLeft (tokenSpan keyword) endSpan)
+    ( Located (mergedOrLeft startSpan endSpan)
         ( TypeDeclaration
             TypeDeclarationValue
               { typeVisibility = visibility

@@ -6,6 +6,8 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
+import Pudu.Frontend.Parser.Declaration.Derive (parseAttributes)
+import Pudu.Frontend.Parser.State (runParser)
 import Pudu.Frontend.Syntax
   ( Attribute (..)
   , Block (..)
@@ -31,7 +33,7 @@ import Pudu.Frontend.Syntax
   , locatedValue
   , moduleNameText
   )
-import Pudu.Source (SourceName (SourceName), newSource)
+import Pudu.Source (SourceName (SourceName), newSource, spanStart, spanEnd, unOffset)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 type Parsed = (Maybe Module, [Diagnostic])
@@ -59,6 +61,10 @@ parserDeriveProperties =
   , ("empty attribute args parse", testEmptyArgs)
   , ("lone comptime keeps its diagnostic", testLoneComptime)
   , ("exported derives keep visibility", testExportedDerive)
+  , ("derive attributes recover one malformed argument", testArgumentRecovery)
+  , ("derive attributes preserve following declarations", testMissingCloser)
+  , ("derive duplicates ignore nested source locations", testGenericDuplicates)
+  , ("derive attribute spans include delimiters", testAttributeSpans)
   ]
 
 parseModuleText :: Text -> IO Parsed
@@ -432,3 +438,60 @@ functionNames :: Parsed -> [Text]
 functionNames parsed = case declarationsOf parsed of
   [FunctionDeclaration value] -> [locatedValue (functionName value)]
   _ -> []
+
+testArgumentRecovery :: IO Property
+testArgumentRecovery = do
+  results <- traverse (parseModuleText . Text.unlines . ("module M" :) . (: []))
+    [ "@tag(foo(1, [2, 3]), \"kept\") type T = { x: Int }"
+    , "@tag(1 + 2, \"kept\") type T = { x: Int }"
+    , "@tag(-2, \"kept\") type T = { x: Int }"
+    ]
+  pure $ conjoin
+    [ case declarationsOf parsed of
+        [TypeDeclaration value] -> conjoin
+          [ codes parsed === ["E1067"]
+          , map attributeShape (typeAttributes value) === ["@tag(\"kept\")"]
+          ]
+        _ -> counterexample (show (codes parsed)) False
+    | parsed <- results
+    ]
+
+testMissingCloser :: IO Property
+testMissingCloser = do
+  missing <- parseModuleText "module M\n@tag(\ntype T = { x: Int }\nfn kept() -> Int { 1 }\n"
+  malformed <- parseModuleText "module M\n@tag(foo(1, 2\ntype T = { x: Int }\nfn kept() -> Int { 1 }\n"
+  source <- newSource (SourceName "attribute.pudu") "@tag(1"
+  let LexResult{lexTokens} = lexSource source
+      (_, eofDiagnostics) = runParser source parseAttributes lexTokens
+  pure $ conjoin
+    [ codes missing === ["E1001"]
+    , declarationKinds missing === ["type", "fn"]
+    , codes malformed === ["E1067"]
+    , declarationKinds malformed === ["type", "fn"]
+    , map (diagnosticCodeText . diagnosticCode) eofDiagnostics === ["E1000"]
+    ]
+
+testGenericDuplicates :: IO Property
+testGenericDuplicates = do
+  repeated <- parseModuleText "module M\ntype T = {} derives Holds[Array[Int]], Holds[Array[Int]]\n"
+  different <- parseModuleText "module M\ntype T = {} derives Holds[Array[Int]], Holds[Array[Str]]\n"
+  pure $ conjoin
+    [ codes repeated === ["E1066"]
+    , codes different === []
+    ]
+
+testAttributeSpans :: IO Property
+testAttributeSpans = do
+  parsed <- parseModuleText "module M\n@tag(\"x\") type T = {}\n"
+  pure $ case fst parsed of
+    Just moduleValue -> case moduleDeclarations moduleValue of
+      [Located declarationSpan (TypeDeclaration value)] -> case typeAttributes value of
+        [Located attributeSpan _] -> conjoin
+          [ codes parsed === []
+          , unOffset (spanStart declarationSpan) === 9
+          , unOffset (spanStart attributeSpan) === 9
+          , unOffset (spanEnd attributeSpan) === 18
+          ]
+        _ -> counterexample "one attribute" False
+      _ -> counterexample "one type" False
+    _ -> counterexample "module retained" False

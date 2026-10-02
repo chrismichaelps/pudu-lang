@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-02 — Derive parser recovery and identity (issue #430)
+
+- Recover an invalid attribute as one balanced argument region and preserve
+  following declarations. Include attribute delimiters and leading type
+  attributes in spans. Detect repeated generic derive entries using structural
+  keys without source locations, with set lookup instead of repeated list scans.
+- Four new properties cover recovery, EOF, structural duplicates and spans.
+  Focused checks and the full optimized suite pass 511 properties with `-Werror`.
+
 ## 2026-10-02 — Resolved reflection boundaries (issues #432, #434)
 
 - Refuse compile-time metadata at the resolved value/type reference boundary,
