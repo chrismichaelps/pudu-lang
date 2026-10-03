@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Pudu Module Map
 
+- [[Derive Record Residualizer]] · [[Derive Residual State]] · [[Derive Reflection Facts]] · [[Compile Time Limits]] — bounded shape residualization.
+
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu CLI Init]] — additive, staged, typed creation of canonical projects.
 - [[Pudu CLI Lint]] — project discovery, suppression, output, atomic safe fixes, and lint status.

@@ -200,6 +200,7 @@ library
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Stored
+    Pudu.Frontend.Syntax.Provenance
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
     Pudu.DecimalLiteral
@@ -296,6 +297,10 @@ library
     Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol
     Pudu.Source
+    Pudu.Comptime.Limits
+    Pudu.Derive.State
+    Pudu.Derive.Reflection
+    Pudu.Derive.Record
     Pudu.Runtime.Word
     Pudu.Eval.MultiMap
     Pudu.Eval.MultiMap.Kernel

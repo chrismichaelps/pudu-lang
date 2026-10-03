@@ -214,3 +214,14 @@ import classification and the existing pattern walk require no new dependencies.
 Register [[Type Check Reflection]] and [[Type Check Receiver]]. Resolved Grill
 Log: typed descriptors and receiver specialization reuse existing checker and
 canonical type primitives without introducing dependencies.
+
+## Derive record expansion modules
+
+Register [[Derive Record Residualizer]], [[Derive Residual State]],
+[[Derive Reflection Facts]] and [[Compile Time Limits]] without new dependencies.
+Resolved Grill Log: the pure phase kernel is independently testable while graph
+publication and field proof remain explicit subsequent consumers.
+
+Register [[Syntax Cache Provenance]] for the checked-product storage boundary.
+Resolved Grill Log: validate authored identity before deferred encoding, without
+changing the warm-reader format or adding dependencies.

@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-03 — Record residualization and deferred cache fence (issue #431)
+
+- Residualize arbitrary validated record derives into ordinary checked impls,
+  preserving heterogeneous field reads, mutable writes, strict fallback effects,
+  declaration order, lexical bindings and distinct generated identities. Return
+  located field obligations separately; refuse metadata escapes and exhausted
+  depth, iteration or syntax budgets without a partial product.
+- Centralize the existing compile-time depth and iteration constants. Runtime
+  behavior and thresholds remain unchanged. Refuse unsupported generated or
+  foreign syntax and integer facts before deferred cache storage; ordinary
+  products still restore their complete bodies.
+- Loaded-program kernel tests execute real generated reads and writes in both
+  evaluators. The full optimized suite passes 528 property families with -Werror
+  on GHC 9.10.3. Kernel expansion of 500/1,000/2,000/4,000 fields measures
+  0.0003/0.0004/0.0006/0.0019 seconds CPU; this excludes checking and execution.
+  Graph request publication, field-bound proof, Sum/build/Std integration and
+  end-to-end performance remain required before complete delivery.
+
 ## 2026-10-03 — Generated span and checker identity (issue #431)
 
 - Retain bounded authored definition/request anchors and a per-request ordinal

@@ -18,6 +18,7 @@ module Pudu.Eval.Loop
 import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Comptime.Limits (iterationLimit)
 import Pudu.Eval.Env
   ( effectsAdmitted
   , variantOwner
@@ -284,8 +285,6 @@ exceededStepLimit iterations
   | iterations <= iterationLimit = pure False
   | otherwise = not <$> effectsAdmitted
 
-iterationLimit :: Int
-iterationLimit = 100000
 
 {-| Assignment writes to an existing binding; `&&` and `||` short-circuit; every
     other operator evaluates both operands left to right. -}

@@ -50,6 +50,7 @@ test-suite pudu-test
     Pudu.VersionSpec
     Pudu.DiagnosticSpec
     Pudu.GeneratedIdentitySpec
+    Pudu.Derive.RecordSpec
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec

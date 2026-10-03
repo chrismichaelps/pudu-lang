@@ -8,6 +8,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
+import Pudu.Comptime.Limits (iterationLimit)
 import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, expectBool, integerKindAt
   , lookupLocal, lookupModule, lookupName, updateExisting )
@@ -71,7 +72,7 @@ execute spanValue names initial written test body = Evaluator $ \env -> do
       commit env
  where
   loop slots env iterations
-    | iterations > 100000 && not (envEffects env) =
+    | iterations > iterationLimit && not (envEffects env) =
         action env (abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
           (Just "a constant is folded while the compiler runs; restructure the loop"))
     | otherwise = bindResult (test slots env) $ \value ->

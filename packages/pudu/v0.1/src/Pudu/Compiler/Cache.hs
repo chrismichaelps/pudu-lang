@@ -35,6 +35,7 @@ import Pudu.Cache.Persist (decodeWith, encodeFor)
 import qualified Data.Set as Set
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Frontend.Syntax.Stored ()
+import Pudu.Frontend.Syntax.Provenance (cacheableModule, cacheableSpan)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Semantic.Interface (moduleExportKeys, moduleExports)
 import Pudu.Type.Interface
@@ -277,13 +278,16 @@ lookupChecked cache graph source =
           )
 
 storeChecked :: ProductCache -> ByteString -> Source -> CheckedProduct -> IO ()
-storeChecked cache graph source stored =
-  writeEntry cache (entryName "checked" [graph, sourceFingerprint source])
-    ( encodeFor source
+storeChecked cache graph source stored = case (cacheMemory cache, cacheDirectory cache) of
+  (Nothing, Nothing) -> pure ()
+  _ -> when (cacheableModule source (checkedModule stored)
+      && all (cacheableSpan source) (Map.keys (checkedIntegerKinds stored))) $
+    writeEntry cache (entryName "checked" [graph, sourceFingerprint source])
+      ( encodeFor source
         ( (checkedModule stored, Map.toList (checkedIntegerKinds stored))
         , Map.toList (checkedFolded stored)
         )
-    )
+      )
 
 entryName :: Text -> [ByteString] -> String
 entryName kind parts =

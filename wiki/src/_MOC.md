@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Derive Record Kernel Spec]] — generated method execution and refusal.
+
 - [[Generated Identity Spec]] — generated origins and complete fact identity.
 
 - [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.

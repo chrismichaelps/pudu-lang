@@ -106,3 +106,17 @@ See [[2026-09-21-product-cache]].
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Program]] · [[Cache Persist]] · [[Bundle End-to-End Gate]]
+
+## Deferred generated provenance fence
+
+`storeChecked` first calls [[Syntax Cache Provenance]]. A generated or foreign
+span in any declaration or body makes the whole product unstored. A Span marker
+alone is insufficient because deferred blocks can pass the top-level read and
+fail only when a body is reached. Ordinary cache hits retain lazy decoding.
+Integer-kind fact keys obey the same snapshot and origin fence. A disabled cache
+performs no provenance traversal, since it stores no product.
+
+- **Q:** Trust top-level decodeWith to validate deferred provenance? **A:** No;
+  refuse unsupported syntax before writing. _Rationale:_ cache reuse must not
+  turn generated locations into a latent host fault. _Rejected:_ losing origins,
+  byte-pattern scanning or eager decoding on every warm read.

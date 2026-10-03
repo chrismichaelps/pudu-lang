@@ -3,6 +3,9 @@ module Pudu.GeneratedIdentitySpec (generatedIdentityProperties) where
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.Cache.Persist (decodeWith, encodeFor)
+import Pudu.Compiler.Cache
+  ( CheckedProduct (..), collectedEntries, lookupChecked, openCollectingCache
+  , storeChecked )
 import Pudu.Diagnostic
   ( Related (..), Severity (Error), diagnostic, diagnosticRelated, mkDiagnosticCode )
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
@@ -26,6 +29,7 @@ generatedIdentityProperties =
   , ("generated identity isolates checker facts and place permissions", testChecker)
   , ("generated identity survives type publication and editor projection", testTypes)
   , ("generated identity retains diagnostic notes and refuses lossy persistence", testProducts)
+  , ("generated identity refuses deferred cache bodies before storage", testDeferredCache)
   ]
 
 testSpans :: IO Property
@@ -133,3 +137,39 @@ testProducts = do
     , fmap diagnosticRelated notes === Just
         [Related authored "derive definition", Related request "derive requested here"]
     ]
+
+testDeferredCache :: IO Property
+testDeferredCache = do
+  source <- newSource (SourceName "Cached.pudu") "module Cached\nfn main() -> Int = 1\n"
+  foreignSource <- newSource (SourceName "Cached.pudu") "module Cached\nfn main() -> Int = 1\n"
+  request <- emptySpan <$> newSource (SourceName "Request.pudu") "type"
+  let LexResult tokens lexErrors = lexSource source
+      ParseResult parsed parseErrors = parseModule source tokens
+  case parsed of
+    Just unit -> case moduleDeclarations unit of
+      [Located at (FunctionDeclaration function)] -> case functionBody function of
+        Just (Located bodyAt (ExpressionBody (Located literalAt literal))) -> do
+          let changed location = unit{moduleDeclarations =
+                [Located at (FunctionDeclaration function{functionBody =
+                  Just (Located bodyAt (ExpressionBody (Located location literal)))})]}
+              products =
+                [ (unit, Map.empty, True)
+                , (changed (generatedSpan 0 literalAt request), Map.empty, False)
+                , (changed (emptySpan foreignSource), Map.empty, False)
+                , (unit, Map.singleton (generatedSpan 0 literalAt request) "Int", False)
+                ]
+          outcomes <- mapM (stored source) products
+          pure $ conjoin ((lexErrors <> parseErrors === []) : outcomes)
+        _ -> pure (counterexample "cache expression fixture changed" False)
+      _ -> pure (counterexample "cache declaration fixture changed" False)
+    Nothing -> pure (counterexample "cache fixture did not parse" False)
+ where
+  stored source (unit, kinds, expected) = do
+    cache <- openCollectingCache Map.empty
+    storeChecked cache "graph" source (CheckedProduct unit kinds Map.empty)
+    entries <- collectedEntries cache
+    loaded <- lookupChecked cache "graph" source
+    pure $ conjoin
+      [ Map.size entries === if expected then 1 else 0
+      , fmap checkedModule loaded === if expected then Just unit else Nothing
+      ]

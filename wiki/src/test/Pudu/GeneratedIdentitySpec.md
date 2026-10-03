@@ -24,6 +24,11 @@ authored offsets with different ordinals and verify complete facts stay separate
 Merge equal and incompatible origins. Ordinary spans still round-trip to a new
 snapshot; generated and foreign same-name spans refuse persistence. Regeneration
 keeps a bounded authored origin rather than a recursive chain.
+Checked-product tests put a generated or foreign span only inside an otherwise
+authored function body, with no integer-kind facts to force an eager read. The
+collecting cache must remain empty. An ordinary product stores and restores its
+complete deferred declaration and body, proving ordinary reuse still works.
+Generated integer-kind keys refuse storage even with ordinary syntax.
 
 ## Negative logic
 

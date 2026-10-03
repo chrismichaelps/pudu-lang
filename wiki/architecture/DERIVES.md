@@ -132,6 +132,7 @@ performance guarantee is made for those products.
 
 The existing evaluator limits are 4096 call depth and 100000 compile-time loop
 iterations. A phase-neutral limits module supplies both evaluator and residualizer;
+a separate 1000000-node expansion limit bounds syntax growth;
 expansion accounts bounded traversal work and nested unrolling rather than permitting
 an unbounded build. Existing runtime loops remain unrestricted.
 

@@ -64,6 +64,7 @@ module Pudu.Eval.Env
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Eval.Concurrent (ConcurrentStore)
 import Pudu.Eval.AudioStream (AudioStreamStore)
 import Pudu.Eval.Desktop (DesktopStore)
@@ -750,7 +751,7 @@ setDepth :: Int -> Evaluator ()
 setDepth depth = Evaluator $ \env -> pure (Done () env{envDepth = depth})
 
 callLimit :: Int
-callLimit = 4096
+callLimit = callDepthLimit
 
 abortAt :: Maybe Span -> Text -> Text -> Maybe Text -> Evaluator a
 abortAt spanValue code message help =

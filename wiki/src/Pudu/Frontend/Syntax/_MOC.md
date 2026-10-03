@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Syntax Internals Map
 
+- [[Syntax Cache Provenance]] — refuse unsupported spans before deferred storage.
+
 - [[Syntax Located]] — uniform source locations and safe span composition.
 - [[Syntax Name]] — dotted module/name paths.
 - [[Syntax Tree]] — mutually recursive untyped declarations, blocks, statements, types, and expressions.

@@ -98,3 +98,10 @@ unsupported regions retain the existing loop unchanged. Both evaluators use the
 same pure primitive loop kernel for eligible MultiMap regions.
 Resolved Grill Log: preserve transfers and effect boundaries through whole-region
 fallback; retain ordinary execution as the oracle for non-native library wrappers.
+
+## Shared compile-time boundaries
+
+[[Compile Time Limits]] supplies the existing depth/iteration constants to both
+evaluation and derive residualization. Runtime loop policy and thresholds remain
+unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
+compiler expansion and ordinary constant evaluation from drifting apart.

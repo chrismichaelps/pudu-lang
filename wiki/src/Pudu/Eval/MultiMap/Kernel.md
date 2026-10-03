@@ -74,3 +74,10 @@ are read directly, with shared expectBool reserved for refusal; integer operator
 are selected once with shared checked-result and generic fallback semantics.
 Resolved Grill Log: remove transient IO-action/argument-list spines, preserving
 left-to-right execution, short-circuiting and every source span.
+
+## Shared compile-time boundaries
+
+[[Compile Time Limits]] supplies the existing depth/iteration constants to both
+evaluation and derive residualization. Runtime loop policy and thresholds remain
+unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
+compiler expansion and ordinary constant evaluation from drifting apart.
