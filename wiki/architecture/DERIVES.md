@@ -237,4 +237,10 @@ attributes.
 
 ## Referenced by
 
+Generic definition checking also validates the ordinary canonical trait contract.
+E3091 refuses an invalid head, wrong member signature, missing/extra/duplicate
+member or strengthened method bound. This is trait-independent; defaults follow
+the ordinary interface's availability metadata. Loop sources check once and
+scoped obligations discharge before local rigid bounds disappear.
+
 [[architecture/_MOC]] · [[Macro Design]] · [[architecture/SEMANTICS]]

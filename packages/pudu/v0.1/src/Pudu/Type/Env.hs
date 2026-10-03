@@ -66,6 +66,8 @@ module Pudu.Type.Env
   , takeObligations
   , warn
   , withRigidBounds
+  , withAdditionalRigidBounds
+  , withLocalObligations
   , implementsTrait
   , ambiguousProviders
   , markAmbiguousMethod
@@ -831,6 +833,13 @@ takeObligations :: Checker [(Span, Type, NominalId)]
 takeObligations =
   Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
 
+{-| Keep enclosing obligations pending while a nested rigid scope checks and
+    discharges its own. Remaining obligations retain their original order. -}
+withLocalObligations :: Checker a -> Checker a
+withLocalObligations (Checker action) = Checker $ \state ->
+  let (result, next) = action state{stateObligations = []}
+   in (result, next{stateObligations = stateObligations next <> stateObligations state})
+
 {-| The bounds the enclosing declaration's own parameters carry, which is how a
     generic body may call another generic that demands the same trait. Bounds
     from the parameter list and the `where` clause are merged with `(<>`) so a
@@ -840,6 +849,13 @@ withRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.fromListWith (<>) bounds)
+  _ <- action
+  setRigidBounds previous
+
+withAdditionalRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
+withAdditionalRigidBounds bounds action = do
+  previous <- currentRigidBounds
+  setRigidBounds (Map.unionWith (<>) previous (Map.fromListWith (<>) bounds))
   _ <- action
   setRigidBounds previous
 

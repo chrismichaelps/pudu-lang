@@ -23,6 +23,10 @@ nowhere and runs never, so the suite reports success without it.
 
 ## Invariants and negative logic
 
+[[Type Check Derive]] and [[Type Substitution]] are explicit production modules.
+The former validates signatures; the latter is a pure utility shared by ordinary
+checking. Resolved Grill Log: register each module without adding dependencies.
+
 Do not introduce runtime behavior, implicit network setup, private governance inputs, or alternate
 compiler semantics through build metadata. Every new library module must be registered explicitly.
 `Std/Audio/*.pudu` and `Std/Ui/*.pudu` are both source-distribution data, including their nested

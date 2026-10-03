@@ -37,6 +37,11 @@ The exported signatures are the module header's export list.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
 - Trait obligations are registered when a scheme is instantiated at a call site and discharged after the enclosing function's body is checked, while the parameter's own bounds are still in scope and inference has solved the argument types.
 - `withRigidBounds` installs the enclosing declaration's parameter bounds so a generic body can call another generic that demands the same trait; a rigid parameter satisfies a bound its own declaration declared. Bounds from the parameter list and the `where` clause are merged with `(<>)` so a parameter carrying bounds in both places keeps all of them rather than the last entry overwriting the first.
+- `withAdditionalRigidBounds` extends the existing lexical bounds for compile-time
+  loops and restores them on exit. `withLocalObligations` isolates obligations
+  introduced in that scope; discharge them while loop-local bounds still exist,
+  then restore unresolved enclosing obligations. A loop must not discharge or
+  satisfy obligations raised before its own bounds were introduced.
 - `withDeriveChecking` scopes compile-time loops to generic checking for one definition, restoring
   the previous setting on exit like `withComptime`. Outside the scope a surviving loop is refused,
   because instantiation has not run for it.
@@ -101,6 +106,13 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Replace the enclosing bounds at a nested compile-time loop? **A:** Merge
+  them lexically and restore them after checking. _Rationale:_ nested bodies retain
+  the outer field's capabilities. _Rejected:_ replacement or leaking local bounds.
+- **Q:** Discharge the enclosing obligation queue at a loop exit? **A:** Isolate
+  the loop's queue and discharge only that queue under its bounds. _Rationale:_
+  enclosing inference may still be incomplete, and local assumptions must not
+  prove earlier calls. _Rejected:_ draining all obligations indiscriminately.
 - **Q:** Why `isMethodKey`? **A:** Declared and imported methods are recorded apart from ordinary names, and only that record can tell a method from a module function filed at the same qualified key.
 
 - **Q:** Is one table of variants keyed by name enough? **A:** No; variants are held keyed by their owning type as well. _Rationale:_ a name-keyed table has one entry per name across every module in the graph, so two modules declaring a variant of the same name overwrite one another and the survivor depends on load order. Keyed by owner there is no collision to resolve, and a caller that already knows the type — which a pattern does, once its name has been resolved through the scope — asks a question with one answer. _Rejected:_ a name-keyed table with a tie-break; erroring on a duplicate name, which would refuse two modules that never meet.

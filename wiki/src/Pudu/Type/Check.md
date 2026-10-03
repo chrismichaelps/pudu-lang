@@ -127,6 +127,10 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ## Algorithm
 
+Validate each derive's canonical trait/member contract with [[Type Check Derive]]
+after signatures are installed. Generic bodies still check once, independently
+of requests; contract validation does not instantiate or evaluate them.
+
 Collect declared shapes and signatures, check trait implementation ownership and duplicate-head coherence over the complete declaration list, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
 
 ## Negative Logic (Prohibited Paths)

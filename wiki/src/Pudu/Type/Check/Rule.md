@@ -95,6 +95,9 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ## Algorithm
 
+Scheme instantiation and rigid member substitution use [[Type Substitution]],
+preserving nested function default arity and unsafe requirements.
+
 Dispatch on the operator, the receiver's type, or the pattern's shape, unifying against what the construct requires. A `NominalType "Array" [element]` receiver routes to `arrayMethodType`, which returns the function type for each built-in array method (`length`, `get`, `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`, `reverse`, `map`, `filter`, `reduce`), threading the element type through higher-order methods so `map` and `filter` type-check correctly.
 
 ## Negative Logic (Prohibited Paths)

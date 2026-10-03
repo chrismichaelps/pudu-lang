@@ -10,6 +10,7 @@ module Pudu.Type.Check.Expression
   ) where
 
 import Control.Monad (foldM, unless, when)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -36,7 +37,8 @@ import Pudu.Type.Env
   , recordExpression
   , report
   , validateIntegerLiteralsSince
-  , withRigidBounds
+  , withAdditionalRigidBounds
+  , withLocalObligations
   )
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Iteration (iterationElement)
@@ -92,7 +94,7 @@ import Pudu.Type.Check.Expression.Control
   )
 import Pudu.Type.Exhaust (checkExhaustive)
 import Pudu.Type.Formation (formOptionalType, formType)
-import Pudu.Type.Check.Method (boundName)
+import Pudu.Type.Check.Method (boundName, dischargeObligations)
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Type (..)
@@ -400,9 +402,9 @@ inferExpression around declared rigid spanValue expression = case expression of
 {-| Check one compile-time loop generically: the `where` subjects bind as
     rigid loop-local variables, the element binds at its ascribed type, the
     bounds install, and the body checks under both through the surrounding
-    chain, so a nested loop checks the same way. The source list is not
-    checked here: it names compile-time values instantiation validates, and
-    `Meta` names do not resolve until that slice lands. The loop answers the
+    chain, so a nested loop checks the same way. Its source is checked before
+    the element is bound, and local obligations discharge before the bounds
+    disappear without touching the enclosing queue. The loop answers the
     unit type like every other loop, because unrolling repeats the body
     rather than producing one value. -}
 checkComptimeLoop
@@ -412,18 +414,24 @@ checkComptimeLoop
   -> Located ComptimeFor
   -> Checker Type
 checkComptimeLoop around declared rigid (Located _ loop) = do
-  let variables =
-        [(locatedValue (constraintSubject constraint), 0) | Located _ constraint <- comptimeForConstraints loop]
+  let variables = Map.toList (Map.fromList
+        [(name, 0) | Located _ constraint <- comptimeForConstraints loop
+        , let name = locatedValue (constraintSubject constraint), name `notElem` map fst rigid])
       rigidHere = rigid <> variables
       bounds =
         [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
         | Located _ constraint <- comptimeForConstraints loop
         ]
   loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))
-  withRigidBounds bounds $ inTypeScope $ do
-    recordExpression (locatedSpan (comptimeForElement loop)) loopElementType
-    bindName (locatedValue (comptimeForElement loop)) (monotype loopElementType)
+  sourceType <- checkExpression around declared rigid (comptimeForSource loop)
+  unified <- unify (locatedSpan (comptimeForSource loop))
+    (NominalType "Array" [loopElementType]) sourceType
+  let element = if unified == ErrorType then ErrorType else loopElementType
+  withAdditionalRigidBounds bounds $ withLocalObligations $ inTypeScope $ do
+    recordExpression (locatedSpan (comptimeForElement loop)) element
+    bindName (locatedValue (comptimeForElement loop)) (monotype element)
     _ <- aroundBlock around declared rigidHere (comptimeForBody loop)
+    dischargeObligations
     pure ()
   pure UnitTypeValue
 
@@ -432,4 +440,3 @@ checkComptimeLoop around declared rigid (Located _ loop) = do
 checkValue :: CheckSurroundings -> CheckValue
 checkValue around =
   CheckValue{valueOf = checkExpression around, valueAgainst = aroundAgainst around}
-

@@ -58,11 +58,18 @@ compared to handwritten encoding with the same data and evaluation modes.
 
 ## Exact next action
 
-Harden generic checking: validate every derive against its canonical trait
-contract, check loop sources, and preserve scoped bounds and obligations.
-Resolved reflection boundaries, rigid scope reuse, bounded attribute recovery
-and structural duplicate detection pass the full optimized suite (511
-properties, `-Werror`, 2026-10-02). Instantiation remains the next dependency layer.
+Complete the mirrored Std.Meta facade and loaded-program typing properties for
+its owner-specific Field/Variant accessors before residualization. Canonical derive
+member contracts, loop source typing, nested rigid bounds and isolated obligations
+pass the full optimized suite (516 properties, `-Werror`, 2026-10-02). The preceding
+resolution and parser slices are committed as 81fd9860 and 9c1d7ea5.
+
+Remaining integration includes trait-head kind/bound proofs, callback `where`
+binders and typed reflection, macro traversal/hygiene, generated identity and
+provenance, graph residualization before interfaces, recursive field-bound proofs,
+cache invalidation, generic static trait calls, all shipped library derives,
+expansion output and JSON performance evidence. The complete feature is not ready
+for dev; no PR or review request is authorized yet.
 
 ## Referenced by
 
@@ -75,3 +82,16 @@ engineer. No sub-agents run. Authoritative ticket scopes are #432 resolution,
 #433 generic checking, #431 complete integration and #430 frontend; #434 tracks
 Meta groundwork. Preserve unrelated desktop metadata files and existing user
 changes. Commit each validated improvement without opening a PR.
+
+Architect → Semantic Engineer: own canonical contract validation, shared rigid
+substitution and scoped loop checking in Type.Check.Derive, Type.Substitute,
+Type.Env, Type.Check/Expression/Rule and their focused specs. No other agent owns
+these files. Existing Source/Diagnostic provenance contracts and the untracked
+Meta prototype remain pending their implementation layers.
+
+Definition scale evidence: temporary generated modules containing 500, 1,000,
+2,000 and 4,000 independent user traits and derives checked with zero diagnostics
+in 0.025, 0.086, 0.151 and 0.284 seconds of CPU time using the optimized compiler
+library. The harness imports Type.Check.Derive to pin this implementation. These
+numbers cover definition checking; generated impl/JSON runtime measurements remain
+required. The scratch harness and logs live outside the repository.

@@ -60,6 +60,7 @@ import Pudu.Type.Check.Safety
   ( requireComptimePurity
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Derive (checkDeriveContracts)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Expression (CheckSurroundings (..))
 import qualified Pudu.Type.Check.Expression as Expression
@@ -157,6 +158,7 @@ checkUnit imported moduleValue = do
   let layouts = recordLayouts (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
+  checkDeriveContracts declared imported moduleValue
   {-| A function literal's unwritten parameter types are settled once the
       declaration holding it is, so they are judged declaration by declaration. -}
   mapM_

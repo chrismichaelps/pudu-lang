@@ -36,6 +36,7 @@ import Pudu.IntegerLiteral
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
+import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -314,39 +315,7 @@ enclosingFunctionType binding = do
 
 {-| Replace a declaration's rigid parameters with a use's arguments. -}
 substituteRigidType :: [(Text, Type)] -> Type -> Type
-substituteRigidType replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  {-| A parameter of higher kind is replaced in head position and its arguments
-      are replaced beneath it. When the replacement is a constructor that can
-      take them, the application collapses into that constructor rather than
-      staying an application of something already known. -}
-  AppliedType head' arguments ->
-    applyType
-      (substituteRigidType replacements head')
-      (map (substituteRigidType replacements) arguments)
-  NominalType name arguments ->
-    NominalType name (map (substituteRigidType replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substituteRigidType replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substituteRigidType replacements) inputs)
-      (substituteRigidType replacements result)
-  ReferenceTypeValue mutable target ->
-    ReferenceTypeValue mutable (substituteRigidType replacements target)
-  other -> other
-
-{-| A constructor applied to arguments.
-
-    A named constructor takes them into itself, because that is the type it
-    already is: `F[A]` with `F` solved to `Option` is `Option[A]`, not an
-    application of `Option` to `A`. Anything still unsolved stays an
-    application, which is what a later substitution will collapse. -}
-applyType :: Type -> [Type] -> Type
-applyType head' arguments = case head' of
-  _ | null arguments -> head'
-  NominalType identity existing -> NominalType identity (existing <> arguments)
-  AppliedType inner existing -> applyType inner (existing <> arguments)
-  _ -> AppliedType head' arguments
+substituteRigidType = substituteRigid
 
 {-| `?` yields a carrier's payload and returns that carrier's failure from the
     enclosing function. Which carrier is meant is read from the function's own
@@ -433,18 +402,7 @@ obligationsFor spanValue replacements (name, bounds) =
     Just assigned -> mapM_ (addObligation spanValue assigned) bounds
 
 substitute :: [(Text, Type)] -> Type -> Type
-substitute replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  AppliedType head' arguments ->
-    applyType (substitute replacements head') (map (substitute replacements) arguments)
-  NominalType name arguments -> NominalType name (map (substitute replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substitute replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substitute replacements) inputs)
-      (substitute replacements result)
-  ReferenceTypeValue mutable target -> ReferenceTypeValue mutable (substitute replacements target)
-  other -> other
+substitute = substituteRigid
 
 unaryType :: Span -> Text -> Type -> Checker Type
 unaryType spanValue operator operand = case operator of

@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-02 — Canonical derive contracts and scoped loops (issue #433)
+
+- Validate every derive against its ordinary canonical trait contract once at
+  the definition. E3091 refuses invalid heads, arity, missing/extra/duplicate
+  members, signature differences and stronger method bounds. Imported defaults
+  and generic, alpha-renamed methods follow the same path.
+- Check loop sources against their element annotation. Preserve enclosing rigid
+  bounds and isolate local obligations so later assumptions cannot prove earlier
+  calls. Share total rigid substitution with ordinary checking, preserving unsafe
+  wrappers, higher-kind applications and function default arity.
+- Five new property families and a contract matrix cover user traits, imports,
+  generics, mutability, asyncness, kinds and nested bounds. The optimized full suite
+  passes 516 properties with `-Werror`. Metadata elaboration and generated impls
+  remain subsequent layers; these fixtures prove definition checking.
+
 ## 2026-10-02 — Derive parser recovery and identity (issue #430)
 
 - Recover an invalid attribute as one balanced argument region and preserve

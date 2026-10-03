@@ -261,6 +261,7 @@ library
     Pudu.Type.Check.Call
     Pudu.Type.Check.Collection
     Pudu.Type.Check.Coherence
+    Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
@@ -283,6 +284,7 @@ library
     Pudu.Type.Interface.Graph
     Pudu.Type.Unify
     Pudu.Type.Value
+    Pudu.Type.Substitute
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context

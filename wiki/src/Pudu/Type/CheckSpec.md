@@ -17,6 +17,9 @@ same-named local variants, preserving imported nominal identity and instantiated
 
 ## Algorithm and invariants
 
+Register [[Type Check Derive Spec]] contract, source, scoped-bound and substitution
+properties beside the existing definition-checking fixtures.
+
 Import each selected focused test explicitly and expose a stable descriptive label. Every
 registered property executes through the same structured diagnostic or evaluator test harness;
 adding a helper to an unused secondary property list is insufficient registration.
