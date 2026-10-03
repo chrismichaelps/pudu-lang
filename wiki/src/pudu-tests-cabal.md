@@ -51,3 +51,7 @@ Reflection Resolution Spec is registered beside ordinary resolution properties,
 covering selected and first-class metadata imports, namespace shadowing and
 repeated rigid loop bounds. Resolved Grill Log: explicit registration makes
 these boundary tests execute in the full suite.
+
+[[Program Reflection Spec]] is registered explicitly and aggregated by [[Program
+Spec]]. Resolved Grill Log: temporary complete programs check the actual shipped
+Meta facade and imported method schemes, including refusal diagnostics.

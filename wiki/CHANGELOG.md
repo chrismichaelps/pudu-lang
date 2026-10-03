@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-03 — Typed metadata sequences and method receivers (issue #431)
+
+- Declare the Std.Meta facade with owner-specific get/set/matches, name properties,
+  typed attribute fallback and variant payload access. Fields[T]/Variants[T] preserve
+  heterogeneous iteration; canonical imports introduce an abstract field parameter
+  without requiring a capability bound. Refuse concrete or enclosing field types.
+- Bind instantiated method self to its actual receiver before exposing the rest of
+  the function. Direct calls and captured methods share this rule; applied owner
+  arguments cannot drift with later arguments or expected results. Existing
+  constructor-wide Array implementations retain their receiver application.
+- Loaded-program matrices cover metadata ownership, aliases, selected imports,
+  captures, numeric constraints, rigid bounds, sequence misuse and ordinary generic
+  methods. The optimized full suite passes 519 properties with -Werror on GHC 9.10.3.
+  Four thousand metadata-loop definitions check in 0.666s CPU with zero diagnostics;
+  this is definition checking, not generated-code runtime evidence. CLI diagnostics
+  point at the offending authored call. Callback polymorphism, Result construction
+  and actual residualization remain required before complete feature delivery.
+
 ## 2026-10-02 — Canonical derive contracts and scoped loops (issue #433)
 
 - Validate every derive against its ordinary canonical trait contract once at

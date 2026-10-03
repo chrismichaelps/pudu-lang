@@ -70,6 +70,9 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
   walks the element type, the bounds, and the body with only the element value bound. The
   subjects are declared by the clause the way a generic header declares its parameters, so
   every position naming them resolves without leaking outward.
+  A canonical Meta.Field[T, F] annotation also introduces an unbound F without a
+  where capability. The import must resolve in TypeSpace; a same-spelled local
+  Field cannot introduce a type parameter.
 
 ### Linkage
 

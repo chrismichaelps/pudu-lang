@@ -116,6 +116,13 @@ an abstract shape parameter and fresh field parameters carrying loop/callback bo
 The residualizer folds metadata, unrolls heterogeneous loops, and preserves runtime
 expressions. User derives and Std derives use the same mechanism.
 
+Generic reflection typing preserves heterogeneous sequences as opaque
+`Std.Meta.Fields[T]` and `Variants[T]`, rather than an Array sharing one inferred
+field type. A `Field[T, F]` loop annotation introduces a fresh abstract F even
+without a capability bound. An enclosing parameter or concrete type cannot stand
+for every independently chosen field type. Descriptor accessors retain the owner
+T, and ordinary method binding specializes self before dropping its parameter.
+
 Every generated span retains valid authored offsets plus a definition, request and
 node identity. Fact maps key by the complete span, not offsets alone. Diagnostics
 retain both authored locations. Products with external generated provenance safely

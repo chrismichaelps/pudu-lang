@@ -269,6 +269,8 @@ library
     Pudu.Type.Check.Place
     Pudu.Type.Check.Expression
     Pudu.Type.Check.Expression.Control
+    Pudu.Type.Check.Reflection
+    Pudu.Type.Check.Receiver
     Pudu.Type.Check.Prelude
     Pudu.Type.Check.Record
     Pudu.Type.Check.Propagation

@@ -48,6 +48,9 @@ throughBorrow      :: Type -> Checker Type
   stopping after one would report a mismatch against a type the reader never intended.
 - Ambiguity between two traits providing one member is reported at the call rather than at the
   declaration: declaring both is legal, and only an unqualified call has to choose.
+- An instantiated method unifies self with its actual receiver through
+  [[Type Check Receiver]] before removing that bound parameter. Generic owner and
+  field types cannot be inferred independently from later arguments or results.
 
 ### The capability
 

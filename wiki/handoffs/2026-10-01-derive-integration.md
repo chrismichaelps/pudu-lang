@@ -58,11 +58,13 @@ compared to handwritten encoding with the same data and evaluation modes.
 
 ## Exact next action
 
-Complete the mirrored Std.Meta facade and loaded-program typing properties for
-its owner-specific Field/Variant accessors before residualization. Canonical derive
-member contracts, loop source typing, nested rigid bounds and isolated obligations
-pass the full optimized suite (516 properties, `-Werror`, 2026-10-02). The preceding
-resolution and parser slices are committed as 81fd9860 and 9c1d7ea5.
+Implement callback `where` rigid binding and local obligation scopes, then connect
+rank-polymorphic and Result-valued metadata construction to residualization.
+Std.Meta declarations, owner-specific accessors, heterogeneous sequences and
+canonical implicit field-parameter binding now have loaded-program evidence.
+Shared receiver specialization fixes the underlying generic-method owner/result
+hole for direct and captured calls. The full optimized suite passes 519 properties
+with `-Werror` on GHC 9.10.3 (2026-10-03); CLI checks and formatting pass.
 
 Remaining integration includes trait-head kind/bound proofs, callback `where`
 binders and typed reflection, macro traversal/hygiene, generated identity and
@@ -76,6 +78,25 @@ for dev; no PR or review request is authorized yet.
 [[handoffs/_MOC]] · [[Derive Design]] · [[Engineering Delivery]]
 
 ## Solo hardening continuation
+
+2026-10-03: Architect → Semantic/Stdlib Engineer owns Std.Meta, Type.Check.Reflection,
+loop integration, canonical implicit field-parameter resolution, loaded reflection
+specs and registration. Reflection sequences use opaque Fields[T]/Variants[T],
+because a homogeneous Array erases heterogeneous field identity. No sub-agents
+participate. Complete metadata elimination and polymorphic/Result construction
+remain required; declaration groundwork does not claim complete delivery.
+
+The reflection continuation preserves Source/Diagnostic provenance plans without
+changing or staging their pending mirrors. Meta panic bodies remain declarations
+only: runtime elimination and polymorphic/Result builders are not delivered.
+The renewed active goal authorizes committing each passing checkpoint on
+`feature/430-derive-frontend`, without a PR or review request. Checkpoint the
+validated reflection slice; preserve the pending Source/Diagnostic mirrors for
+the generated-identity layer. The complete integration remains off dev.
+Focused loaded-module matrices and existing built-in implementation compatibility
+pass. A complete compiler definition benchmark with 500/1,000/2,000/4,000 user
+derives containing Meta loops reports 0.115/0.177/0.350/0.666 seconds CPU and no
+diagnostics; generated implementation/runtime performance remains unmeasured.
 
 2026-10-02: all implementation and validation are owned by one integration
 engineer. No sub-agents run. Authoritative ticket scopes are #432 resolution,

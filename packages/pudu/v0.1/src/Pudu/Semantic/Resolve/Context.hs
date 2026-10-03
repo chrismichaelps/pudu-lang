@@ -18,6 +18,7 @@ module Pudu.Semantic.Resolve.Context
   , resolveValueName
   , setReflectionImports
   , declareLoopTypeParameter
+  , declareReflectedTypeParameter
   , inDeriveDefinition
   , withDeriveDefinition
   , runResolver
@@ -38,8 +39,8 @@ import Pudu.Diagnostic
   , withRelated
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Import (..), Visibility (Private))
-import Pudu.Semantic.Resolve.Reflection (reflectionImports)
+import Pudu.Frontend.Syntax.Tree (Import (..), TypeSyntax, Visibility (Private))
+import Pudu.Semantic.Resolve.Reflection (reflectionImports, fieldTypeParameter)
 import Pudu.Semantic.Scope
   ( ScopeStack
   , declareSymbol
@@ -221,6 +222,17 @@ declareLoopTypeParameter name = do
   case existing of
     Just _ -> pure ()
     Nothing -> declareNamed TypeSpace TypeParamOrigin Private False name
+
+declareReflectedTypeParameter :: Located TypeSyntax -> Resolver ()
+declareReflectedTypeParameter annotation = case fieldTypeParameter annotation of
+  Nothing -> pure ()
+  Just (qualifier, parameter) -> do
+    found <- lookupCurrent TypeSpace qualifier
+    reflection <- Resolver $ \state ->
+      (Set.member (TypeSpace, qualifier) (stateReflectionImports state), state)
+    case found of
+      Just symbol | reflection && symbolOrigin symbol == ImportOrigin -> declareLoopTypeParameter parameter
+      _ -> pure ()
 
 inDeriveDefinition :: Resolver Bool
 inDeriveDefinition = Resolver $ \state -> (stateInDerive state, state)

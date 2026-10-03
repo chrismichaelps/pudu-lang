@@ -210,3 +210,7 @@ extraction included in the complete pending-work delivery.
 
 Register Resolve.Reflection and Resolve.Bindings. Resolved Grill Log: pure
 import classification and the existing pattern walk require no new dependencies.
+
+Register [[Type Check Reflection]] and [[Type Check Receiver]]. Resolved Grill
+Log: typed descriptors and receiver specialization reuse existing checker and
+canonical type primitives without introducing dependencies.

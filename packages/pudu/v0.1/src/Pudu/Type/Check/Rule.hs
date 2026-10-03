@@ -37,6 +37,7 @@ import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
+import Pudu.Type.Check.Receiver (bindReceiver)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -640,17 +641,17 @@ memberType spanValue targetType member = do
             if length parameters == length arguments
               then substituteRigidType (zip parameters arguments) found
               else found
-        Nothing -> methodType spanValue name member
+        Nothing -> methodType spanValue (NominalType name arguments) name member
     RigidType name -> do
       bounds <- rigidBoundsOf name
-      rigidMethod spanValue name bounds member
+      rigidMethod spanValue resolved name bounds member
     {-| A parameter of higher kind carries its bounds on the parameter, so a
         receiver of type `F[A]` finds its members where a receiver of type `F`
         would. The arguments say what the container holds, never which trait
         provides a member. -}
     AppliedType (RigidType name) _ -> do
       bounds <- rigidBoundsOf name
-      rigidMethod spanValue name bounds member
+      rigidMethod spanValue resolved name bounds member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
     _ | member == textMember -> pure textMethodType
     _ -> do
@@ -976,8 +977,8 @@ textMethodType = FunctionTypeValue False [] stringType
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
     silently picking the first trait. -}
-rigidMethod :: Span -> Text -> [NominalId] -> Text -> Checker Type
-rigidMethod spanValue name bounds member = do
+rigidMethod :: Span -> Type -> Text -> [NominalId] -> Text -> Checker Type
+rigidMethod spanValue receiver name bounds member = do
   providers <- filterM provides bounds
   case providers of
     [] | member == textMember -> pure textMethodType
@@ -991,10 +992,7 @@ rigidMethod spanValue name bounds member = do
         Nothing -> pure ErrorType
         Just scheme -> do
           instantiated <- instantiate spanValue scheme
-          case instantiated of
-            FunctionTypeValue asynchronous (_ : inputs) result ->
-              pure (FunctionTypeValue asynchronous inputs result)
-            other -> pure other
+          bindReceiver spanValue receiver instantiated
     _ -> do
       report "E3013" spanValue
         (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
@@ -1008,8 +1006,8 @@ rigidMethod spanValue name bounds member = do
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself
     has the method's type with that parameter already supplied. -}
-methodType :: Span -> NominalId -> Text -> Checker Type
-methodType spanValue owner member = do
+methodType :: Span -> Type -> NominalId -> Text -> Checker Type
+methodType spanValue receiver owner member = do
   let key = nominalKey owner <> "." <> member
   providers <- ambiguousProviders key
   named <- lookupName key
@@ -1028,10 +1026,7 @@ methodType spanValue owner member = do
       pure ErrorType
     (_, Just scheme) -> do
       instantiated <- instantiate spanValue scheme
-      case instantiated of
-        FunctionTypeValue asynchronous (_ : rest) result ->
-          pure (FunctionTypeValue asynchronous rest result)
-        other -> pure other
+      bindReceiver spanValue receiver instantiated
 
 {-| The type of one member of a tuple.
 

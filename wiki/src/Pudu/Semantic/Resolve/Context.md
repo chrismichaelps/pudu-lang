@@ -130,6 +130,11 @@ actual namespace, so an unrelated value shadow cannot disable a type refusal.
 [[Resolve Bindings]] owns the unchanged pattern walk. Repeated loop constraint
 subjects bind once; an enclosing type parameter is reused rather than shadowed.
 
+`declareReflectedTypeParameter` checks a Field annotation candidate against the
+resolved TypeSpace import and the precomputed reflection set. Only a canonical
+Meta import can introduce the annotation's F; aliases, selections and lexical
+shadowing obey the same rule as runtime-reflection refusal.
+
 Resolved Grill Log: enforce the restriction on resolved references, not only
 member syntax; selected and first-class imports cannot bypass it. Preserve
 unknown-name diagnostics and ordinary lexical shadowing.

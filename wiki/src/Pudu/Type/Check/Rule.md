@@ -27,6 +27,9 @@ aliases: [Type Check Rule]
 
 Own the closed operator, call, member, and index rules for [[Type Check]].
 
+Captured nominal and rigid-bound methods use [[Type Check Receiver]] exactly as
+immediate calls do: self unifies before it is removed, and default arity survives.
+
 ### Governance
 
 - A range's two ends **meet each other before either meets `Int`**, so a range written between two

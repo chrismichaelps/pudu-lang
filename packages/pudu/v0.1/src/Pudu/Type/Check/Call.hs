@@ -10,6 +10,7 @@ module Pudu.Type.Check.Call
 import Control.Monad (when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
+import Pudu.Type.Check.Receiver (bindReceiver)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -86,7 +87,7 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
             pure (instantiated, Nothing)
           Nothing -> do
             targetType <- runCheck checker declared rigid target
-            resolved <- zonk targetType
+            resolved <- throughBorrow =<< zonk targetType
             method <- methodScheme calleeSpan resolved (locatedValue member)
             case method of
               {-| Not a method, so a field, typed from the receiver just checked.
@@ -100,11 +101,10 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
                 pure (found, Nothing)
               Just scheme -> do
                 instantiated <- instantiate calleeSpan scheme
-                (applied, changesReceiver) <- case instantiated of
-                  FunctionTypeValue asynchronous (selfInput : rest) result -> do
-                    exclusive <- exclusiveInput selfInput
-                    pure (FunctionTypeValue asynchronous rest result, exclusive)
-                  other -> pure (other, False)
+                changesReceiver <- case instantiated of
+                  FunctionTypeValue _ (selfInput : _) _ -> exclusiveInput selfInput
+                  _ -> pure False
+                applied <- bindReceiver calleeSpan resolved instantiated
                 when changesReceiver (checkExclusiveReceiver target)
                 recordExpression calleeSpan applied
                 pure (applied, if changesReceiver then Just target else Nothing)

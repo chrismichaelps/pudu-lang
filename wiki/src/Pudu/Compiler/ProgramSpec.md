@@ -23,6 +23,9 @@ Aggregate the layered program-compiler properties into one list for the package 
 
 `programProperties :: [(String, IO Property)]`.
 
+[[Program Reflection Spec]] contributes loaded Std.Meta definition and refusal
+properties, explicitly registered alongside the existing program properties.
+
 ### Linkage
 
 - **Requires:** [[Program Graph Spec]], [[Standard Library Program Spec]],

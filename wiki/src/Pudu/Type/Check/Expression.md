@@ -59,8 +59,11 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
 - A compile-time loop that reaches checking is `E3090` outside a derive definition, where
   instantiation has nothing to unroll. Inside one it checks generically: the `where` subjects bind
   rigid, the element binds at its ascribed type, and the body checks under both.
-  Its source checks before the element is bound and must have Array[Element]
-  type. The source check is mandatory even in an unused derive. New rigid subjects
+  Its source checks before the element is bound. Ordinary sources must have
+  Array[Element] type; canonical Std.Meta.Fields[T] and Variants[T] validate
+  their descriptor and owner through [[Type Check Reflection]]. An unbound F in
+  canonical Field[T, F] binds rigidly even when no capability is required.
+  The source check is mandatory even in an unused derive. New rigid subjects
   are deduplicated, enclosing identities and bounds persist, and local obligations
   discharge before those bounds are restored. The binder retains error poison on
   a source mismatch so body uses do not repeat the same defect.

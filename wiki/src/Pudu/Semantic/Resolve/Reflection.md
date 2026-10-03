@@ -19,6 +19,7 @@ Classify compile-time reflection imports by namespace and authored import identi
 
 ```haskell
 reflectionImports :: [Located Import] -> Set (Namespace, Text)
+fieldTypeParameter :: Located TypeSyntax -> Maybe (Text, Located Text)
 ```
 
 ## Governance
@@ -31,6 +32,11 @@ unchanged.
 ## Algorithm
 
 Enumerate aliases or bare module qualifiers in both namespaces; selected items use their selected names. Only Std.Meta imports enter the set. Resolved symbol origin and namespace decide whether a use denotes reflection, so shadowing in the other namespace cannot bypass refusal.
+
+Extract the simple F position of a Field[T, F] annotation together with its
+qualifier. This is a syntax candidate only: [[Resolve Context]] must confirm the
+qualifier resolves to the reflection import before binding F. An unrelated Field
+does not introduce a parameter.
 
 ## Negative Logic
 

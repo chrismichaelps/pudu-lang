@@ -41,6 +41,7 @@ import Pudu.Type.Env
   , withLocalObligations
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Reflection (reflectedParameters, checkSequenceElement)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
@@ -415,8 +416,9 @@ checkComptimeLoop
   -> Checker Type
 checkComptimeLoop around declared rigid (Located _ loop) = do
   let variables = Map.toList (Map.fromList
+        (reflectedParameters declared rigid (comptimeForType loop) <>
         [(name, 0) | Located _ constraint <- comptimeForConstraints loop
-        , let name = locatedValue (constraintSubject constraint), name `notElem` map fst rigid])
+        , let name = locatedValue (constraintSubject constraint), name `notElem` map fst rigid]))
       rigidHere = rigid <> variables
       bounds =
         [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
@@ -424,9 +426,7 @@ checkComptimeLoop around declared rigid (Located _ loop) = do
         ]
   loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))
   sourceType <- checkExpression around declared rigid (comptimeForSource loop)
-  unified <- unify (locatedSpan (comptimeForSource loop))
-    (NominalType "Array" [loopElementType]) sourceType
-  let element = if unified == ErrorType then ErrorType else loopElementType
+  element <- checkSequenceElement (locatedSpan (comptimeForSource loop)) declared rigid loopElementType sourceType
   withAdditionalRigidBounds bounds $ withLocalObligations $ inTypeScope $ do
     recordExpression (locatedSpan (comptimeForElement loop)) element
     bindName (locatedValue (comptimeForElement loop)) (monotype element)

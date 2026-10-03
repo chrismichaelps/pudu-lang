@@ -71,6 +71,7 @@ import Pudu.Semantic.Resolve.Context
   , resolveValueName
   , setReflectionImports
   , declareLoopTypeParameter
+  , declareReflectedTypeParameter
   , withDeriveDefinition
   , runResolver
   )
@@ -433,15 +434,12 @@ walkExpression (Located spanValue expression) = case expression of
     insideLoop label $ inScopeOver (spanningExtent (locatedSpan binder) (locatedSpan body)) $ do
       bindPattern binder
       walkBlock body
-  {-| The source resolves first, then the body with only the element bound.
-      The `where` subjects bind as rigid loop-local type variables before the
-      element type and bounds walk: they are declared by the clause the way a
-      generic function's parameters are declared by its header, so every
-      position that names them resolves. The element value binds for the body
-      alone. -}
+  {-| The source resolves outside the element's scope. Metadata field types and
+      `where` subjects bind rigidly before their annotation and body resolve. -}
   ComptimeForExpression loop -> do
     walkExpression (comptimeForSource loop)
     inScopeOver (spanningExtent (locatedSpan (comptimeForElement loop)) (locatedSpan (comptimeForBody loop))) $ do
+      declareReflectedTypeParameter (comptimeForType loop)
       mapM_ (declareLoopTypeParameter . constraintSubject . locatedValue)
         (comptimeForConstraints loop)
       walkType (comptimeForType loop)
