@@ -102,7 +102,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
-import Pudu.Source (Span, spanEnd, spanStart, unOffset)
+import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Value
   ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
@@ -183,7 +183,7 @@ data CheckerState = CheckerState
       and leaves the original alone, so the depth is kept in order to tell a
       name the closure declared from one it only captured. -}
   , stateClosureDepths :: ![Int]
-  , stateReportedSpans :: ![((Int, Int), Text)]
+  , stateReportedSpans :: !(Set (Span, Text))
   , stateUnsafeFunctions :: !(Map Text [Capability])
   {-| Whether each declared function may run at compile time.
 
@@ -228,7 +228,7 @@ data CheckerState = CheckerState
   , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
   }
 
-type SpanKey = (Int, Int)
+type SpanKey = Span
 
 data IntegerConstraint = IntegerConstraint
   { integerConstraintSpan :: !Span
@@ -327,7 +327,7 @@ initialState =
     , stateUnsafeFrames = []
     , stateLoopFrames = []
     , stateClosureDepths = []
-    , stateReportedSpans = []
+    , stateReportedSpans = Set.empty
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = Map.empty
     , stateInComptime = False
@@ -789,7 +789,7 @@ lookupRecordedExpression spanValue =
   Checker $ \state -> (lookup (keyOf spanValue) (stateTypes state), state)
 
 keyOf :: Span -> SpanKey
-keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+keyOf = id
 
 setWritableNames :: Set SpanKey -> Checker ()
 setWritableNames names = Checker $ \state -> ((), state{stateWritableNames = names})
@@ -1110,9 +1110,9 @@ inheritRestrictions from to =
 reportedAt :: Span -> Text -> Checker Bool
 reportedAt spanValue code =
   Checker $ \state ->
-    let key = ((unOffset (spanStart spanValue), unOffset (spanEnd spanValue)), code)
-        seen = key `elem` stateReportedSpans state
-     in (seen, state{stateReportedSpans = key : stateReportedSpans state})
+    let key = (spanValue, code)
+        seen = Set.member key (stateReportedSpans state)
+     in (seen, state{stateReportedSpans = Set.insert key (stateReportedSpans state)})
 
 {-| Record that two traits provide the same member for one type. Declaring both
     is legal; only an unqualified call has to choose, so the ambiguity is stored

@@ -68,6 +68,18 @@ hasErrors :: [Diagnostic] -> Bool
 - **Requires:** [[Source]], [[Diagnostic]], [[grammar/haskell]].
 - **Consumed by:** every later compiler phase.
 
+## Generated diagnostic provenance
+
+Construction of a diagnostic on a generated span adds its derive definition and
+request as related authored spans. This shared boundary preserves context across
+checker, resolver, evaluator and backend producers. Ordinary diagnostics are
+unchanged. Explicit field-bound diagnostics keep the field primary and add the
+request themselves.
+
+- **Q:** Decorate every producer separately? **A:** No, attach origin notes at the
+  central constructor. _Rationale:_ no phase can silently lose generated context.
+  _Rejected:_ inconsistent per-producer origin formatting.
+
 ## Algorithm
 
 1. Validate a code's exact ASCII family/group shape, then construct a base diagnostic only when severity and code family agree, normalizing an empty message to a stable code-based fallback.

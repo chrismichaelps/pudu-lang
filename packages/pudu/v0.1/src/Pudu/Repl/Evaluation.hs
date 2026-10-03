@@ -69,7 +69,7 @@ evaluateEntry context previous contextCompatible executesLocals reuseDeclaration
 
 compatible :: Maybe TypeInfo -> Maybe TypeInfo -> Bool
 compatible Nothing _ = True
-compatible (Just (TypeInfo previous)) (Just (TypeInfo current)) =
+compatible (Just (TypeInfo previous _)) (Just (TypeInfo current _)) =
   Map.isSubmapOfBy (==) previous current
 compatible _ Nothing = False
 
@@ -79,7 +79,7 @@ retainedTypes :: CompileResult -> Maybe TypeInfo
 retainedTypes result = do
   parsed <- compileModule result
   Located location block <- sessionBlock parsed
-  TypeInfo entries <- compileTypes result
+  TypeInfo entries _ <- compileTypes result
   let regions = map locatedSpan (blockStatements block)
         <> map locatedSpan (maybeToList (blockResult block))
       contained (from, to) = any
@@ -87,7 +87,7 @@ retainedTypes result = do
       origin = unOffset (spanStart location)
       relative (from, to) = (from - origin, to - origin)
   pure (TypeInfo (Map.mapKeysMonotonic relative
-    (Map.filterWithKey (\key _ -> contained key) entries)))
+    (Map.filterWithKey (\key _ -> contained key) entries)) Map.empty)
 
 declarationUpdateAllowed :: Int -> Int -> CompileResult -> Bool
 declarationUpdateAllowed start width result = case compileModule result of

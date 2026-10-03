@@ -8,16 +8,19 @@ module Pudu.Source
   , mergeSpans
   , advanceOffset
   , emptySpan
+  , generatedSpan
   , newSource
   , mkSpan
   , offsetFromInt
   , offsetPosition
   , sourceLength
   , sameSource
+  , sameSpanSource
   , sourceDigest
   , sourceName
   , sourceText
   , spanEnd
+  , spanOrigin
   , spanSource
   , spanStart
   , unOffset
@@ -81,13 +84,20 @@ data Span = Span
   { spanIdentity :: !SourceIdentity
   , spanStart :: !Offset
   , spanEnd :: !Offset
+  , spanOriginValue :: !(Maybe SpanOrigin)
   }
+
+{-| Generated identity holds authored anchors, never a recursive span chain. -}
+data SpanOrigin = SpanOrigin
+  !SourceIdentity !Offset !Offset !SourceIdentity !Offset !Offset !Int
+  deriving stock (Eq, Ord)
 
 instance Eq Span where
   left == right =
     spanIdentity left == spanIdentity right
       && spanStart left == spanStart right
       && spanEnd left == spanEnd right
+      && spanOriginValue left == spanOriginValue right
 
 {-| Spans order by where they start and then by where they end, within one
     source. Across two sources the order is by identity and means nothing beyond
@@ -98,6 +108,7 @@ instance Ord Span where
     compare (spanIdentity left) (spanIdentity right)
       <> compare (spanStart left) (spanStart right)
       <> compare (spanEnd left) (spanEnd right)
+      <> compare (spanOriginValue left) (spanOriginValue right)
 
 instance Show Source where
   show source =
@@ -142,6 +153,22 @@ newSource name textValue = do
 sameSource :: Source -> Source -> Bool
 sameSource left right = sourceIdentity left == sourceIdentity right
 
+sameSpanSource :: Span -> Span -> Bool
+sameSpanSource left right = spanIdentity left == spanIdentity right
+
+generatedSpan :: Int -> Span -> Span -> Span
+generatedSpan ordinal definition request = definition
+  { spanOriginValue = Just (SpanOrigin
+      (spanIdentity definition) (spanStart definition) (spanEnd definition)
+      (spanIdentity request) (spanStart request) (spanEnd request) ordinal)
+  }
+
+spanOrigin :: Span -> Maybe (Span, Span, Int)
+spanOrigin value = case spanOriginValue value of
+  Nothing -> Nothing
+  Just (SpanOrigin owner first past requester from to ordinal) ->
+    Just (Span owner first past Nothing, Span requester from to Nothing, ordinal)
+
 sourceDigest :: Source -> ByteString
 sourceDigest = sourceDigestValue
 
@@ -153,7 +180,7 @@ sourceText = sourceTextValue
 
 emptySpan :: Source -> Span
 emptySpan Source{sourceIdentity} =
-  Span{spanIdentity = sourceIdentity, spanStart = zeroOffset, spanEnd = zeroOffset}
+  Span{spanIdentity = sourceIdentity, spanStart = zeroOffset, spanEnd = zeroOffset, spanOriginValue = Nothing}
 
 zeroOffset :: Offset
 zeroOffset = Offset 0
@@ -174,7 +201,7 @@ mkSpan Source{sourceIdentity, sourceScalarLength} start@(Offset startValue) end@
   | startValue < 0 = Nothing
   | endValue < startValue = Nothing
   | endValue > sourceScalarLength = Nothing
-  | otherwise = Just Span{spanIdentity = sourceIdentity, spanStart = start, spanEnd = end}
+  | otherwise = Just Span{spanIdentity = sourceIdentity, spanStart = start, spanEnd = end, spanOriginValue = Nothing}
 
 zeroWidthSpan :: Source -> Offset -> Maybe Span
 zeroWidthSpan source offset = mkSpan source offset offset
@@ -188,6 +215,8 @@ mergeSpans left right
           { spanIdentity = spanIdentity left
           , spanStart = min (spanStart left) (spanStart right)
           , spanEnd = max (spanEnd left) (spanEnd right)
+          , spanOriginValue = if spanOriginValue left == spanOriginValue right
+              then spanOriginValue left else Nothing
           }
 
 offsetPosition :: Source -> Offset -> Maybe Position
@@ -234,4 +263,3 @@ lineStartsOf textValue = Map.fromDistinctAscList ((0, 1) : walk 0 1 False textVa
 
 sourceLength :: Source -> Offset
 sourceLength = Offset . sourceScalarLength
-

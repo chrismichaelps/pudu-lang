@@ -93,3 +93,11 @@ or binding declarations) within the specified region can be updated dynamically.
 ## Referenced by
 
 [[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Pudu REPL]] · [[Eval Context]]
+
+## Offset projection
+
+Retained session compatibility deliberately compares only authored offset types,
+rebased to the session block. Its transient TypeInfo has an empty complete-span
+map: retained values are compared across separately ingested snapshots, while
+compiler exact queries keep full identities. Resolved Grill Log: source Unique
+identity is not a cross-submission type-compatibility rule.

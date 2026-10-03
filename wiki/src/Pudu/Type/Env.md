@@ -132,3 +132,14 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Places
 
 `DeclaredTypes` records `declaredMutableFields`. The state holds the resolver's `var` use spans, the spans of `&mut` expressions a call admitted as its arguments, and the untyped function literal parameters awaiting judgement, with small accessors for [[Check Place]]. See [[ADR-0022-lending-a-place]].
+
+## Complete checker fact identity
+
+Expression types, writable references, lent arguments and signature diagnostic
+suppression use complete Span keys. Same offsets in another snapshot or generated
+node do not alias. Diagnostic suppression is a Set (Span, Text) for logarithmic
+membership, preserving one diagnostic per authored error.
+
+- **Q:** Keep offset-only keys internally? **A:** No. _Rationale:_ generated nodes
+  share authored offsets while holding distinct types and places. _Rejected:_
+  artificial offsets or cross-instantiation state leakage.

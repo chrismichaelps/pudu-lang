@@ -23,7 +23,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Lsp.Shapes (SumShape (..), VariantShape (..), renderTypeSyntax)
 import Pudu.Source (spanEnd, spanStart, unOffset)
-import Pudu.Type (Type (..), TypeInfo, renderType, typeAt)
+import Pudu.Type (Type (..), TypeInfo, renderType, typeAtOffsets)
 import Pudu.Type.Value (NominalId (..), nominalKey)
 
 data PatternCandidate = PatternCandidate
@@ -54,7 +54,8 @@ patternCandidates types sums parsed subject arms arm offset = case positionIn of
   Payload path -> candidatesFor False (subjectType >>= along path) <> [PatternCandidate "_" "any value"]
   NestedElsewhere -> [PatternCandidate "_" "any value"]
  where
-  subjectType = throughReferenceType <$> (types >>= (`typeAt` locatedSpan subject))
+  subjectType = throughReferenceType <$> (types >>= typeAtOffsets
+    (unOffset (spanStart (locatedSpan subject))) (unOffset (spanEnd (locatedSpan subject))))
   candidatesFor top target = case target of
     Just (NominalType identity arguments) -> variantsOf top identity arguments
     _ -> []

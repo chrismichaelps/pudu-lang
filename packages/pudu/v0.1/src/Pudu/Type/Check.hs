@@ -113,12 +113,12 @@ import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
-checkModule :: Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModule :: Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModule = checkModuleWith emptyImportTypes
 
 {-| The set is the spans of every use of a `var` binding, which resolution
     already knows; see [[Check Place]]. -}
-checkModuleWith :: ImportTypes -> Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
   let (types, schemes, kinds, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
@@ -131,9 +131,9 @@ checkModuleWith imported writable moduleValue =
     from the compiler's. -}
 checkModuleDetailed
   :: ImportTypes
-  -> Set (Int, Int)
+  -> Set Span
   -> Module
-  -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit imported moduleValue)
    in ( producedTypes products

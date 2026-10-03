@@ -24,7 +24,7 @@ Expose the typing phase: check a resolved module and publish the type each expre
 ### Signatures
 
 ```haskell
-newtype TypeInfo
+data TypeInfo
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 typeAt :: TypeInfo -> Span -> Maybe Type
@@ -63,7 +63,7 @@ renderType :: Type -> Text
 
 ## Algorithm
 
-Run the checker, collect the recorded expression types into a map keyed by span offsets, and return it beside the diagnostics.
+Run the checker, retain all complete-span facts and index only authored facts from the current snapshot for editor offset queries.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -88,3 +88,14 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 ## Places
 
 `checkTypesDetailed` takes the `var` use spans from the caller's resolution; `checkTypes` and `checkTypesWith` resolve the module themselves to obtain them. See [[ADR-0022-lending-a-place]].
+
+## Complete expression identity
+
+`TypeInfo` carries a complete `Map Span Type` for exact compiler queries and a
+separate `Map (Int, Int) Type` for authored editor queries in the module's own
+snapshot. Generated nodes and foreign snapshots never enter the offset index.
+Exact `typeAt` queries use the full span; offset query complexity stays unchanged.
+
+- **Q:** Collapse generated types into the hover map? **A:** No. _Rationale:_ a
+  template position has different types in different instantiations. _Rejected:_
+  last expansion wins or a linear rescan on every tooling query.

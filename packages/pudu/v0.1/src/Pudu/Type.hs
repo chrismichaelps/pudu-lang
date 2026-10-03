@@ -20,8 +20,9 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Semantic (resolveModule, writableReferences)
-import Pudu.Frontend.Syntax.Tree (Module)
-import Pudu.Source (Span, spanEnd, spanStart, unOffset)
+import Pudu.Frontend.Syntax.Tree (Module (..))
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
 import Pudu.Type.Interface.Graph (ImportTypes)
@@ -31,18 +32,18 @@ import Data.Text (Text)
 {-| @Type.Info — the type each checked expression was given, keyed by the span
     it occupies. Tooling reads it to answer "what is this?" without re-running
     the checker. -}
-newtype TypeInfo = TypeInfo (Map (Int, Int) Type)
+data TypeInfo = TypeInfo (Map (Int, Int) Type) (Map Span Type)
   deriving stock (Eq, Show)
 
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypes moduleValue =
   let (entries, diagnostics) = checkModule (writableIn moduleValue) moduleValue
-   in (TypeInfo (Map.fromList entries), diagnostics)
+   in (typeInfoFor moduleValue entries, diagnostics)
 
 {-| The uses of `var` bindings, for a caller that has not resolved the module
     itself. The checker takes them from resolution rather than scoping names a
     second time. -}
-writableIn :: Module -> Set (Int, Int)
+writableIn :: Module -> Set Span
 writableIn = writableReferences . fst . resolveModule
 
 {-| @Type.ModuleTypes — one check's full result.
@@ -65,11 +66,11 @@ data ModuleTypes = ModuleTypes
   }
   deriving stock (Eq, Show)
 
-checkTypesDetailed :: ImportTypes -> Set (Int, Int) -> Module -> (ModuleTypes, [Diagnostic])
+checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
   let (entries, schemes, kinds, methods, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
-          { moduleTypeInfo = TypeInfo (Map.fromList entries)
+          { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
           , moduleMethods = methods
@@ -80,13 +81,13 @@ checkTypesDetailed imported writable moduleValue =
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 checkTypesWith imported moduleValue =
   let (entries, diagnostics) = Check.checkModuleWith imported (writableIn moduleValue) moduleValue
-   in (TypeInfo (Map.fromList entries), diagnostics)
+   in (typeInfoFor moduleValue entries, diagnostics)
 
 {-| The type of the widest expression the checker typed inside a region of the
     source. Tooling uses it to answer "what is this?" for a span it knows only
     approximately, such as one line of an interactive entry. -}
 widestWithin :: Int -> Int -> TypeInfo -> Maybe Type
-widestWithin start end (TypeInfo entries) = snd <$> Map.foldlWithKey' wider Nothing candidates
+widestWithin start end (TypeInfo entries _) = snd <$> Map.foldlWithKey' wider Nothing candidates
  where
   -- Keys are ordered by where an expression starts, so only those starting
   -- inside the region are visited.
@@ -100,7 +101,7 @@ widestWithin start end (TypeInfo entries) = snd <$> Map.foldlWithKey' wider Noth
 
 {-| The type recorded for the expression occupying exactly these offsets. -}
 typeAtOffsets :: Int -> Int -> TypeInfo -> Maybe Type
-typeAtOffsets start end (TypeInfo entries) = Map.lookup (start, end) entries
+typeAtOffsets start end (TypeInfo entries _) = Map.lookup (start, end) entries
 
 {-| The type of the smallest expression covering this offset.
 
@@ -112,7 +113,7 @@ narrowestAt offset info = snd <$> narrowestSpanAt offset info
 
 {-| The smallest expression covering this offset, with the span it occupies. -}
 narrowestSpanAt :: Int -> TypeInfo -> Maybe ((Int, Int), Type)
-narrowestSpanAt offset (TypeInfo entries) = Map.foldlWithKey' narrower Nothing entries
+narrowestSpanAt offset (TypeInfo entries _) = Map.foldlWithKey' narrower Nothing entries
  where
   -- One pass keeping the shortest covering span; the first of equal widths,
   -- in key order, wins.
@@ -124,5 +125,16 @@ narrowestSpanAt offset (TypeInfo entries) = Map.foldlWithKey' narrower Nothing e
 
 {-| The type recorded for the expression occupying exactly this span. -}
 typeAt :: TypeInfo -> Span -> Maybe Type
-typeAt (TypeInfo entries) spanValue =
-  Map.lookup (unOffset (spanStart spanValue), unOffset (spanEnd spanValue)) entries
+typeAt (TypeInfo _ entries) spanValue = Map.lookup spanValue entries
+
+{-| Offset queries describe authored text in this module's snapshot only. -}
+typeInfoFor :: Module -> [(Span, Type)] -> TypeInfo
+typeInfoFor moduleValue entries = TypeInfo authored (Map.fromList entries)
+ where
+  anchor = locatedSpan (moduleName moduleValue)
+  authored = Map.fromList
+    [ ((unOffset (spanStart location), unOffset (spanEnd location)), found)
+    | (location, found) <- entries
+    , sameSpanSource anchor location
+    , spanOrigin location == Nothing
+    ]

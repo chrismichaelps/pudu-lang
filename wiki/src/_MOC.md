@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Generated Identity Spec]] — generated origins and complete fact identity.
+
 - [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
 
 - [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.

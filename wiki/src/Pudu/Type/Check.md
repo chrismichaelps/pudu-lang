@@ -24,8 +24,8 @@ Check every declaration, statement, and expression in a module against the types
 ### Signatures
 
 ```haskell
-checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
-checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModule :: Set Span -> Module -> ([(Span, Type)], [Diagnostic])
+checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 ```
 
 ### Governance
@@ -100,7 +100,7 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
   bounds of its own, members check like impl methods without a `Self` type, and interface
   annotations are required for the same reason implementations require them. A compile-time loop
   inside checks with its `where` subjects rigid and its element bound at the ascribed type; the
-  source list is not checked, because it names compile-time values instantiation validates. A
+  source is checked once against its metadata sequence or ordinary Array element type. A
   request carries no members and needs no checking.
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
 - Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
@@ -177,3 +177,10 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 ## Places
 
 The module is checked with the set of spans that use a `var` binding, from resolution. A function's parameter and result types, a module binding's type, and a type declaration's fields go to [[Check Place]], and after each top-level declaration a function literal's untyped parameters are judged there. See [[ADR-0022-lending-a-place]].
+
+## Generated identity boundary
+
+Checker entry points consume `Set Span` writable references and publish
+`[(Span, Type)]` expression facts. Full snapshot and generated identities survive
+all product boundaries; [[Type Boundary]] creates the authored editor index.
+Resolved Grill Log: offset-only signatures would undo generated identity.

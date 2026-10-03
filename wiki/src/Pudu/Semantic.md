@@ -73,3 +73,9 @@ DEPTH 0.30 (SHALLOW by intent). This is a curated stable facade whose deletion w
 ## Places
 
 `writableReferences` answers the spans of every use of a `var` binding, which the checker uses to decide whether an assignment's root may change. See [[ADR-0022-lending-a-place]].
+
+## Writable identity
+
+`writableReferences :: Resolution -> Set Span` preserves the full reference span,
+including snapshot and generated identity. Resolved Grill Log: assignments in
+separate instantiations cannot inherit another node's mutable-place permission.

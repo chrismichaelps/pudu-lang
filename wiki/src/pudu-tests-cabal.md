@@ -55,3 +55,6 @@ these boundary tests execute in the full suite.
 [[Program Reflection Spec]] is registered explicitly and aggregated by [[Program
 Spec]]. Resolved Grill Log: temporary complete programs check the actual shipped
 Meta facade and imported method schemes, including refusal diagnostics.
+
+[[Generated Identity Spec]] is registered explicitly. Resolved Grill Log: source,
+checker and persistence identity regressions execute in the full suite.

@@ -79,3 +79,13 @@ failDecode :: Decode a
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Compiler Cache]] · [[Syntax Tree]]
+
+## Provenance refusal
+
+Span persistence compares actual snapshot identity, not the display name.
+Generated spans use the existing invalid-span marker and decode as a miss until
+external source provenance can be rebound. Ordinary span bytes remain unchanged.
+
+- **Q:** Serialize only the authored offsets of a generated span? **A:** No.
+  _Rationale:_ that loses instantiation identity and diagnostic origins. _Rejected:_
+  a misleading cache hit or matching foreign snapshots by file name.

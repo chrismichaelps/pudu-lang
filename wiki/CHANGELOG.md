@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-03 — Generated span and checker identity (issue #431)
+
+- Retain bounded authored definition/request anchors and a per-request ordinal
+  on generated spans. Complete identities distinguish types, writable references,
+  lent arguments and diagnostic suppression across instantiations. Central
+  diagnostic construction adds both authored locations.
+- Preserve fast authored editor offset queries alongside full-span compiler facts.
+  REPL compatibility deliberately uses its rebased offset projection. Completion
+  from a repaired snapshot explicitly queries the unchanged authored prefix.
+- Refuse persistence of generated provenance and foreign same-name snapshots
+  rather than losing their identities. Four focused property families cover source,
+  checker, editor, diagnostic and serialization boundaries. Focused completion
+  regressions and the full optimized suite pass 523 families with -Werror on
+  GHC 9.10.3. Actual metadata residualization remains the next dependency layer.
+
+
 ## 2026-10-03 — Typed metadata sequences and method receivers (issue #431)
 
 - Declare the Std.Meta facade with owner-specific get/set/matches, name properties,
