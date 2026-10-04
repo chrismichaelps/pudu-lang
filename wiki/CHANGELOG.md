@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Demand-driven type lookup and integer substitutions (#435)
+
+- [[Type Boundary]] builds its expression lookup map only when a tooling caller
+  reads it. [[Type Env]] stores inference substitutions by their existing
+  integer variable identity. Diagnostics, literal widths and published types
+  retain their existing meaning.
+- The unchanged 8,000-branch check allocates about 414 MB versus 525 MB after the
+  frontier fix. All 464 property families and live language-server checks pass.
+  Peak RSS stays near 194 MB with the default eight capabilities; this change
+  reduces allocation and does not establish native-compiler memory parity.
+
 ## 2026-10-04 — Bounded integer-literal frontier work (#435)
 
 - [[Type Env]] selects recent literal constraints through [[Type Literal Frontier]]

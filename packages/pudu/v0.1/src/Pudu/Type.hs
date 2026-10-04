@@ -52,7 +52,9 @@ writableIn = writableReferences . fst . resolveModule
     Documentation and search read it so that what a tool reports and what the
     compiler believes cannot disagree. -}
 data ModuleTypes = ModuleTypes
-  { moduleTypeInfo :: !TypeInfo
+  {-| Tooling's lookup index is derived on demand; diagnostics and executable
+      products must not build a map that their callers never read. -}
+  { moduleTypeInfo :: ~TypeInfo
   , moduleSchemes :: ![(Text, Scheme)]
   {-| What inference settled on for each integer literal, by span.
 

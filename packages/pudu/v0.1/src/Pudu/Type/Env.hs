@@ -82,6 +82,8 @@ module Pudu.Type.Env
   ) where
 
 import Data.Bits (finiteBitSize)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.List (partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -164,7 +166,7 @@ emptyDeclared =
     shared resolved representation is the slice that removes this duplication. -}
 data CheckerState = CheckerState
   { stateNext :: !Int
-  , stateSubstitution :: !(Map TypeVar Type)
+  , stateSubstitution :: !(IntMap Type)
   , stateFrames :: ![Map Text Scheme]
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
@@ -297,7 +299,7 @@ runChecker (Checker action) = case action initialState of
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: Map TypeVar Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes :: IntMap Type -> [Map Text Scheme] -> [(Text, Scheme)]
 finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
@@ -309,7 +311,7 @@ initialState :: CheckerState
 initialState =
   CheckerState
     { stateNext = 0
-    , stateSubstitution = Map.empty
+    , stateSubstitution = IntMap.empty
     , stateFrames = [Map.empty]
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
@@ -406,7 +408,7 @@ constrainIntegerLiteral spanValue value selectedType =
         substitutions = case selectedType of
           Nothing -> stateSubstitution state
           Just name ->
-            Map.insert variable (NominalType (NominalId Nothing name) []) (stateSubstitution state)
+            IntMap.insert (stateNext state) (NominalType (NominalId Nothing name) []) (stateSubstitution state)
         constraint = IntegerConstraint spanValue value variable
      in ( VariableType variable
         , state
@@ -576,9 +578,9 @@ negateMatching variable@(TypeVar requested) constraints = case constraints of
         let (found, updated) = negateMatching variable rest
          in (found, constraint : updated)
 
-resolveFinal :: Map TypeVar Type -> Type -> Type
+resolveFinal :: IntMap Type -> Type -> Type
 resolveFinal substitutions typeValue = case typeValue of
-  VariableType variable -> case Map.lookup variable substitutions of
+  VariableType (TypeVar identity) -> case IntMap.lookup identity substitutions of
     Nothing -> typeValue
     Just found -> resolveFinal substitutions found
   NominalType name arguments -> NominalType name (map (resolveFinal substitutions) arguments)
@@ -594,13 +596,13 @@ resolveFinal substitutions typeValue = case typeValue of
 
 {-| Read what an inference variable has been solved to, if anything. -}
 resolveVariable :: TypeVar -> Checker (Maybe Type)
-resolveVariable variable =
-  Checker $ \state -> (Map.lookup variable (stateSubstitution state), state)
+resolveVariable (TypeVar identity) =
+  Checker $ \state -> (IntMap.lookup identity (stateSubstitution state), state)
 
 setVariable :: TypeVar -> Type -> Checker ()
-setVariable variable typeValue =
+setVariable (TypeVar identity) typeValue =
   Checker $ \state ->
-    ((), state{stateSubstitution = Map.insert variable typeValue (stateSubstitution state)})
+    ((), state{stateSubstitution = IntMap.insert identity typeValue (stateSubstitution state)})
 
 bindName :: Text -> Scheme -> Checker ()
 bindName name scheme =

@@ -135,3 +135,17 @@ exploiting the queue's existing creation invariant. Do not sort, globally drain,
 default early or introduce process-global state. The branch-heavy benchmark
 exposes the former quadratic scan; [[Type Literal Frontier Spec]] proves suffix
 laziness and unchanged integer widths.
+
+## Integer-keyed substitution storage (#435)
+
+The private substitution table uses strict IntMap keys, the exact integer
+identity carried by TypeVar. Freshness, graph-installed counters, alias chains,
+path compression and final substitution semantics remain unchanged. Textual
+name frames and nominal identities continue to use their existing maps.
+
+Resolved Grill Log: the measured checking layer allocates about 172 MB on the
+8,000-branch input. Compare a representation specialized to its existing integer
+keys before retaining the change. Do not reinterpret source offsets as variable
+identities, mutate shared interface state, assign dense array slots to imported
+variables, or change the public Checker API. Keep only a measured improvement
+with full diagnostic and editor regression evidence.

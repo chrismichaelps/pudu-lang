@@ -32,8 +32,8 @@ The benchmark is a standalone measurement tool, not a wall-clock unit test.
 
 ## Exact next action
 
-Make the measured expression-type publication map demand-driven, then compare
-allocation and peak RSS on the same optimized branch-heavy check.
+Make cold executable compilation retain the same execution-only products as a
+warm cache hit; preserve full analysis for editor, documentation and REPL APIs.
 
 ## Referenced by
 
@@ -74,3 +74,29 @@ publication. Expression map construction accounts for 87.5 MB of the final
 phase. Sorted bulk construction saves only 21 MB and was slower in the probe;
 do not adopt it merely because fewer bytes were measured. Diagnostic-only
 callers should avoid building this unused map while tooling retains its answers.
+
+Frontier checkpoint committed as 16d80cb8. Architect → Semantic Engineer now
+owns Type.hs and its mirror only for derived expression-map demand. Resolved
+Grill Log: defer the published lookup index, preserve the complete checker walk,
+literal products and diagnostic admission, and exercise existing editor/doc
+consumers before accepting the allocation measurement.
+
+Demand-driven TypeInfo saves 87.5 MB allocation (525 MB → 437 MB) and measures
+250 ms after the first run, but peak RSS remains around 194 MB under the default
+eight-capability RTS. Do not confuse this mode with the earlier two-capability
+RSS sample. Extend Semantic ownership to Type.Env's private substitution
+representation: benchmark strict integer-keyed storage against the same binary
+configuration before retaining it. No public type or checker semantics change.
+
+Integer-keyed substitutions reduce the same check to 413,778,832 allocated bytes
+and a minimum 238 ms in three samples; peak RSS remains about 194 MB. All 464
+families, optimized -Werror build and live language-server session pass. The
+complete compiler corpus verifies cold/first-cache/warm diagnostics and products:
+4,000 branches take 129 ms; 4,000 negative literals 72 ms; 200 graph modules
+157 ms; all 213 Std modules remain 1,106 ms. The last workload retains about
+228 MB live heap; allocation reduction alone has not repaired graph retention.
+
+Cold compile results retain tokens, resolution, deferred type/doc indexes and
+the pre-lowering tree even through an execution-only CLI call. Warm cache hits
+already provide only executable products. Trace that publication boundary next;
+the existing full-analysis API must continue serving tooling and REPL context.
