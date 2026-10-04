@@ -214,3 +214,17 @@ pass with -Werror on GHC 9.10.3. CLI higher-kind/iterator checks, formatting and
 code inventory pass. The inspected legacy ownership test retains its independent
 E3014 and now also reports the malformed trait head E3048. Complete derive-head
 kind admission and graph field-proof publication remain required next.
+
+Compiler performance proceeds separately as issue #435 in an isolated fresh-dev
+checkout `/tmp/pudu-compiler-latency`, branch `feature/435-compiler-latency`.
+The generic-bound checkpoint is committed as afa654bb. No Derive edits are moved
+or reverted; graph publication remains its next integration action.
+
+Compiler checkpoint 5e0e2600 and CI checkpoint 92b0a144 are committed and pushed
+on `feature/435-compiler-latency` and `feature/436-ci-latency`. The compiler branch
+passes all 465 optimized property families, editor/doc/output parity and the
+whole compiler corpus. The 8,000-branch check now allocates about 402 MB with
+158 MB peak RSS; all 213 Std modules have a 974 ms cold median. Native compiler
+memory parity remains open. These changes are not yet integrated into Derive:
+its expansion sharing needs a change witness covering every Derive and
+compile-time transformation before the macro-only guard can be carried over.
