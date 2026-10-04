@@ -17,7 +17,7 @@ Verify compiled product cache equivalence, invalidation, corruption recovery and
 ## Interface
 
 Exports `testCacheCorruption`, `testCacheEquivalence`, `testCacheInvalidation`,
-`testFoldedConstants`, and `testImportedConstants`, each `IO Property`.
+`testFoldedConstants`, `testImportedConstants`, and `testProductPublication`, each `IO Property`.
 
 ## Algorithm
 
@@ -35,6 +35,11 @@ Function constants carry environments and cannot be frozen. Effects remain unava
 
 ## Grill Log
 
+- **Q:** Compare only cached runs with each other? **A:** Compare full analysis
+  with cold and warm execution publication, and inspect both product contracts.
+  _Rationale:_ lifetime changes must retain diagnostics, link order, integer
+  widths, frozen constants and actual execution, while preserving editor facts.
+  _Rejected:_ allocation-only validation or skipped failure products.
 - **Q:** Can a constructor alias test stop at checking? **A:** No; assert frozen products and actual
   execution through cold and warm caches, because a checker-only fix can still fail at linking.
 - **Q:** What regression boundary matters? **A:** Imported function calls must still refuse effects

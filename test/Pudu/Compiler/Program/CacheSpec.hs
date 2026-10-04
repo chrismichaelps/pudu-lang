@@ -5,16 +5,19 @@ module Pudu.Compiler.Program.CacheSpec
   , testCacheInvalidation
   , testFoldedConstants
   , testImportedConstants
+  , testProductPublication
   ) where
 
 import Control.Monad (forM_)
 import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
+import Data.Maybe (isJust, isNothing)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Cache (disabledCache, openProductCacheAt)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
+  , compileProgram
   , compileProgramCached
   , programDependencies
   , programFolded
@@ -72,7 +75,7 @@ testCacheEquivalence = withSystemTempDirectory "pudu-cache" $ \root -> do
     , "test-fixtures/comptimehigher/Main.pudu"
     ]
   compareRuns root path = do
-    fresh <- observed =<< compileProgramCached disabledCache path
+    fresh <- observed =<< compileProgram path
     cache <- openProductCacheAt root
     cold <- observed =<< compileProgramCached cache path
     rereading <- openProductCacheAt root
@@ -81,6 +84,42 @@ testCacheEquivalence = withSystemTempDirectory "pudu-cache" $ \root -> do
       [ counterexample (path <> ": the storing run matches compiling from source") (cold === fresh)
       , counterexample (path <> ": the reading run matches compiling from source") (warm === fresh)
       ]
+
+testProductPublication :: IO Property
+testProductPublication = withSystemTempDirectory "pudu-products" $ \root -> do
+  let entry = root </> "Main.pudu"
+      cacheRoot = root </> "cache"
+  TextIO.writeFile entry
+    "module Main\n/// A narrow constant retains its checked width.\nconst SMALL: Int8 = 7\nexport fn main() -> Int8 { SMALL }\n"
+  analysis <- compileProgram entry
+  uncached <- compileProgramCached disabledCache entry
+  cold <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  warm <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  answers <- traverse observed [analysis, uncached, cold, warm]
+  TextIO.writeFile entry "module Main\nfn main() -> Int8 { true }\n"
+  rejected <- traverse (\compile -> compile entry >>= observed)
+    [compileProgram, compileProgramCached disabledCache]
+  pure $ conjoin
+    [ counterexample "full analysis retains every editor product"
+        (all analysisPublished (Map.elems (programModules analysis)))
+    , counterexample "execution drops analysis products even when the cache is cold"
+        (all executionPublished (concatMap (Map.elems . programModules) [uncached, cold, warm]))
+    , counterexample "publication retains checked execution and link order"
+        (answers === replicate 4 ([], ["Main"], Just "7"))
+    , counterexample "literal width survives every publication mode"
+        (map (Map.elems . programIntegerKinds) [analysis, uncached, cold, warm]
+          === replicate 4 ["Int8"])
+    , counterexample "rejected source retains diagnostics without an executable product"
+        (rejected === replicate 2 ([ ("E3001", "expected Int8, found Bool") ], ["Main"], Nothing))
+    ]
+ where
+  analysisPublished compiled =
+    not (null (compileTokens compiled)) && isJust (compileResolution compiled)
+      && isJust (compileTypes compiled) && isJust (compileDocs compiled)
+  executionPublished compiled =
+    null (compileTokens compiled) && isNothing (compileResolution compiled)
+      && isNothing (compileTypes compiled) && isNothing (compileDocs compiled)
+      && null (compileMethods compiled) && compileSyntax compiled == compileModule compiled
 
 {-| A stored product is only ever the product of exactly this input.
 

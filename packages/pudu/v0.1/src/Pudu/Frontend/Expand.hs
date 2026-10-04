@@ -48,9 +48,11 @@ expandModule moduleValue =
       state = ExpandState{stateNext = 0, stateDiagnosticsRev = []}
       (declarations, finalState) =
         runExpand (mapM (expandDeclaration macros 0) (moduleDeclarations moduleValue)) state
-   in ( moduleValue{moduleDeclarations = declarations}
-      , sortDiagnostics (reverse (stateDiagnosticsRev finalState))
-      )
+      findings = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
+      expanded
+        | stateNext finalState == 0 && null findings = moduleValue
+        | otherwise = moduleValue{moduleDeclarations = declarations}
+   in (expanded, findings)
 
 collectMacros :: [Located Declaration] -> Map Text Macro
 collectMacros declarations =
@@ -366,4 +368,3 @@ kindHelp kind = case kind of
   ExpressionKind -> "pass any expression"
   IdentifierKind -> "pass a bare name"
   BlockKind -> "pass a block in braces"
-

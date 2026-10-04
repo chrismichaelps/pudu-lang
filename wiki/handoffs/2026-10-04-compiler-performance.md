@@ -32,8 +32,8 @@ The benchmark is a standalone measurement tool, not a wall-clock unit test.
 
 ## Exact next action
 
-Make cold executable compilation retain the same execution-only products as a
-warm cache hit; preserve full analysis for editor, documentation and REPL APIs.
+Release execution-only frontend tokens immediately after parsing, then measure
+the unchanged 8,000-branch and all-Std checks with the same RTS configuration.
 
 ## Referenced by
 
@@ -100,3 +100,36 @@ Cold compile results retain tokens, resolution, deferred type/doc indexes and
 the pre-lowering tree even through an execution-only CLI call. Warm cache hits
 already provide only executable products. Trace that publication boundary next;
 the existing full-analysis API must continue serving tooling and REPL context.
+
+Allocation checkpoint committed as 93a310d2. Architect → Tooling Engineer owns
+Compiler.Program, new Compiler.Product, cache/publication specs and registration.
+Resolved Grill Log: explicit analysis/execution publication, no skipped phases,
+materialized rejected-frontend diagnostics before sequential checking, identical
+cache keys and full context/source retention. Keep Program below 500 lines by
+moving its existing per-module cache admission to the product boundary.
+
+Initial compact publication reduces all-Std maximum live heap to roughly 128 MB
+and process RSS to 346–358 MB in three cache-disabled samples. Investigate whether
+integer-kind selector thunks retain the full typing result. Extend ownership to
+Compiler.hs for a single shared kind binding, and force that required map only
+at executable publication before accepting the final memory measurement.
+
+The shared-kind forcing experiment did not materially improve allocation, RSS
+or latency and is removed. Extend ownership to Frontend.Expand and its mirror
+for unchanged-tree sharing. Resolved Grill Log: the existing complete walk must
+still diagnose unknown/rejected macros; zero hygienic identities plus zero
+findings proves that returning the original tree changes no syntax.
+
+Compact publication and unchanged-tree sharing pass all 465 property families,
+the optimized warning-as-error build, formatting, diagnostic inventory, live LSP,
+documentation-site parity and all seven tree/compiled benchmark output checks.
+In three cache-disabled samples, the 8,000-branch check allocates 409,891,648
+bytes, retains about 41 MB live heap and peaks at 185–186 MB RSS. Wall samples
+are 1,763/233/236 ms; preserve the first-run cost in the evidence. All-Std uses
+1,665,950,888 bytes allocation, about 127 MB live heap and 345 MB RSS; samples
+are 1,038/973/980 ms. The complete compiler corpus's all-Std cold median is
+975 ms and warm median 87 ms. Native-compiler memory parity remains unmet.
+
+The unchanged-tree guard is proven for this dev branch's macro-only expansion.
+Before integrating into Derive, extend the change witness to every Derive
+transformation: zero macro identities cannot prove that no methods were generated.

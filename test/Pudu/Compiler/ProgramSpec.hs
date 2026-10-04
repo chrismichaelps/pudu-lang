@@ -15,6 +15,7 @@ import Pudu.Compiler.Program.CacheSpec
   , testCacheInvalidation
   , testFoldedConstants
   , testImportedConstants
+  , testProductPublication
   )
 import Pudu.Compiler.Program.GraphSpec
   ( testDiscoveryFailures
@@ -57,6 +58,7 @@ programProperties =
   , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   , ("stored products compile and run exactly as source does", testCacheEquivalence)
+  , ("compiler publication bounds executable products and retains analysis", testProductPublication)
   , ("stored products are never reused for changed input", testCacheInvalidation)
   , ("damaged stored products fall back and are replaced", testCacheCorruption)
   , ("folded constants are bound at link instead of evaluated again", testFoldedConstants)

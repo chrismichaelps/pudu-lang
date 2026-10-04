@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Bounded executable product lifetime (#435)
+
+- [[Compiler Product Publication]] applies the warm cache's execution contract
+  to cold checks, retaining syntax, integer kinds, constants and diagnostics.
+  Editor, documentation and REPL entry points retain their full analysis facts.
+  [[Compiler Program]] releases rejected frontend bookkeeping before checking.
+- [[Macro Expansion]] still walks every declaration and diagnoses rejected macros; it
+  shares the original tree when no expansion changed syntax. All-Std maximum
+  live heap falls from roughly 228 MB to 127 MB. The 8,000-branch workload peaks
+  near 185 MB RSS and checks in 233–236 ms after its first run. This does not
+  establish C/C++ memory parity.
+- All 465 property families, optimized warnings-as-errors, CLI formatting,
+  diagnostic inventory, live LSP, documentation parity and evaluator output
+  agreement pass. The whole compiler corpus reports a 975 ms all-Std cold
+  median and 87 ms warm median; [[handoffs/2026-10-04-compiler-performance]]
+  records the raw first-run cost and remaining memory work.
+
 ## 2026-10-04 — Demand-driven type lookup and integer substitutions (#435)
 
 - [[Type Boundary]] builds its expression lookup map only when a tooling caller

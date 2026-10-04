@@ -6,6 +6,8 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compiler Product Publication]] — cache admission and analysis/execution product lifetime.
+
 - [[Compiler Constants]] — transitive checked products selected for imported constant folds.
 - [[Program Cache Spec]] — cold/warm product and constant dependency regression checks.
 

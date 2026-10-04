@@ -38,6 +38,10 @@ expandModule :: Module -> (Module, [Diagnostic])
 - Expansion is bounded. A macro that expands into itself exhausts the depth budget and reports at the call that started it, rather than looping.
 - Expanded syntax carries the call's span. A diagnostic inside an expansion therefore points at what the reader wrote, not at a position in a body they may not have read.
 - A call that cannot expand becomes an explicit invalid node, so later phases do not explain the same defect a second time.
+- When the complete walk allocates no hygienic expansion identity and reports
+  no finding, return the original module tree. A successful macro call always
+  consumes an identity, and a rejected call always contributes a diagnostic,
+  so this shares only an unchanged tree. The walk still detects unknown calls.
 - Expansion walks an `IfLetExpression` subject, then block, and else branch while retaining its
   pattern and surface constructor. Pattern binding semantics remain owned by resolution and typing.
 - An `if let` pattern's bindings are macro-introduced names. Hygiene renames both each binding and
@@ -74,6 +78,11 @@ DEPTH 0.78 (DEEP). One entry point hides collection, kind checking, hygiene rena
 
 ## Grill Log
 
+- **Q:** Keep a reconstructed tree when expansion changed nothing? **A:** Share
+  the original after the complete walk proves zero expansions and zero findings.
+  _Rationale:_ expansion allocates about 27 MB on the branch-heavy input and can
+  retain a second tree. _Rejected:_ skipping the walk when no macro is declared,
+  which would suppress E1047 for an unknown call; structural equality rescans.
 - **Q:** Where does expansion belong in the pipeline? **A:** Between parsing and resolution. _Rationale:_ [[architecture/SEMANTICS]] says so, and it means no later phase carries a case for a construct that should already be gone. _Rejected:_ expanding during resolution, which would make the resolver's two passes see different trees.
 - **Q:** How is hygiene enforced? **A:** By renaming each introduced binding at expansion and carrying that rename only through its lexical scope. _Rationale:_ a precomputed body-wide map cannot distinguish a successful pattern branch from its else branch or following expressions; a scope-local environment preserves the language's binding rules mechanically. _Rejected:_ a body-wide rename map; syntax contexts threaded through untyped token trees; trusting authors to pick unlikely names.
 - **Q:** What span does expanded syntax carry? **A:** The call's. _Rationale:_ a reader debugging a diagnostic can see the call; they may never have opened the macro. _Rejected:_ the definition's span, which points into code the reader did not write; synthetic spans, which point nowhere.
