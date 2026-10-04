@@ -7,6 +7,7 @@ import qualified Data.Text as Text
 import Pudu.DecimalLiteralSpec (decimalProperties)
 import Pudu.VersionSpec (versionProperties)
 import Pudu.Derive.RecordSpec (recordResidualProperties)
+import Pudu.Type.ImplementationSpec (implementationProperties)
 import Pudu.GeneratedIdentitySpec (generatedIdentityProperties)
 import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.FormatSpec (formatProperties)
@@ -88,7 +89,7 @@ main = do
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       , check "a looked-up position is the one counting gives" propertyPositionMatchesCounting
       ]
-  generatedOutcomes <- traverse (uncurry check) (generatedIdentityProperties <> recordResidualProperties)
+  generatedOutcomes <- traverse (uncurry check) (generatedIdentityProperties <> recordResidualProperties <> implementationProperties)
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   versionOutcomes <- traverse (uncurry check) versionProperties
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties

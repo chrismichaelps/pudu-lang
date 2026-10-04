@@ -217,6 +217,12 @@ canonical type primitives without introducing dependencies.
 
 ## Derive record expansion modules
 
+Register [[Type Implementation Rules]] and [[Type Trait Proof]] without new
+dependencies. Resolved Grill Log: formed heads and bounded proof serve ordinary
+checking and derive field publication through one semantic path.
+Register [[Type Formation Shells]] for the unchanged pure nominal shell pass.
+Register [[Trait Evidence Matching]] for isolated conditional-parameter inference.
+
 Register [[Derive Record Residualizer]], [[Derive Residual State]],
 [[Derive Reflection Facts]] and [[Compile Time Limits]] without new dependencies.
 Resolved Grill Log: the pure phase kernel is independently testable while graph

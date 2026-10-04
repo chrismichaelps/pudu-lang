@@ -184,3 +184,9 @@ Checker entry points consume `Set Span` writable references and publish
 `[(Span, Type)]` expression facts. Full snapshot and generated identities survive
 all product boundaries; [[Type Boundary]] creates the authored editor index.
 Resolved Grill Log: offset-only signatures would undo generated identity.
+
+## Complete trait evidence
+
+Function and member checking propagate full formed bounds. A trait default installs Self with its enclosing trait arguments; an implementation method forms its own bounds under implementation parameters.
+
+Resolved Grill Log: full bound evidence remains in scope until deferred obligations discharge, including trait default and derive bodies.

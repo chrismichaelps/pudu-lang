@@ -35,6 +35,7 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , traitMethodScheme
   , targetName
   )
 import Pudu.Type.Unify (zonk)
@@ -167,7 +168,15 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
         receiverType <- runCheck checker declared rigid receiver
         resolved <- throughBorrow =<< zonk receiverType
         case targetName resolved of
-          Nothing -> pure Nothing
+          Nothing -> do
+            found <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
+            case found of
+              Nothing -> pure Nothing
+              Just scheme -> do
+                instantiated <- instantiate calleeSpan scheme
+                recordExpression calleeSpan instantiated
+                restTypes <- mapM (runCheck checker declared rigid) rest
+                pure (Just (instantiated, receiverType : restTypes))
           Just owner -> do
             found <- lookupName (nominalKey owner <> "." <> locatedValue member)
             case found of

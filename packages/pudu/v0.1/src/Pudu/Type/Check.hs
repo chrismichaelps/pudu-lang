@@ -79,6 +79,7 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( declareBounds
+  , declareBoundsWith
   , declareMethods
   , declareTraitMembers
   , dischargeObligations
@@ -287,7 +288,7 @@ checkFunctionWith
   :: FunctionRole
   -> DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Function
   -> Checker ()
@@ -298,7 +299,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
       formed as a nominal type named `T` while `self.value` gave the real one,
       so the two disagreed while printing identically. -}
   let rigid = enclosing <> functionRigid value <> foldMap selfRigid selfBound
-      bounds = enclosingBounds <> declareBounds declared value <> foldMap selfBoundAsBound selfBound
+      bounds = enclosingBounds <> declareBoundsWith declared enclosing value <> foldMap (selfBoundAsBound enclosing) selfBound
   requireFunctionAnnotations value
   requireComptimePurity value
   declaredScheme <- case role of
@@ -382,7 +383,7 @@ checkBlock = Statement.checkBlock statementNeeds
 checkMember
   :: DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Located Function
   -> Checker ()

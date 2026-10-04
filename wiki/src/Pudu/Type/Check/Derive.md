@@ -66,3 +66,9 @@ and runs once under rigid types after contract validation.
 Requires [[Type Env]], [[Type Formation]], [[Type Interface]], [[Type Interface Graph]],
 [[Type Substitution]] and [[Syntax Tree]]. Consumed by [[Type Check]].
 Referenced by [[src/Pudu/Type/_MOC]] · [[Derive Design]].
+
+## Complete trait evidence
+
+Contract-bound comparison substitutes both the subject and the full trait application, including the implicit target implementation application. Method bound formation includes the abstract target parameter.
+
+Resolved Grill Log: method-local alpha-renaming does not erase a trait parameter or allow a stronger application than the trait contract.

@@ -5,6 +5,26 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Complete conditional trait evidence (issue #431)
+
+- Preserve canonical target and trait applications, repeated parameter
+  correlations and implementation premises throughout checking. Scoped generic
+  bounds, direct and captured methods, trait-qualified calls and documentation
+  share the full application rather than an owner-only relationship.
+- Prove conditional evidence with bounded, isolated search. Backtrack when later
+  premises fail, delay unresolved subjects and commit caller inference only when
+  complete applications agree. Refuse circular evidence, ambiguous inference and
+  exhausted budgets. Dynamic widening retains its E3032 diagnostic boundary.
+- Bind generic headers before resolving their bounds, retaining self/forward
+  references and constructor-bound shorthand. Missing names and duplicate
+  parameters remain diagnostics. The full optimized suite passes 537 property
+  families with -Werror on GHC 9.10.3; CLI evaluation agrees in both modes,
+  formatting and diagnostic-code checks pass. A 1,000-layer conditional proof
+  measures 0.0104s CPU; this is proof-layer evidence, not derived JSON performance.
+- Generated-head publication, callback construction, Sum and standard-library
+  integration, cache invalidation, expansion output and runtime performance
+  remain required. Complete Derive delivery is not yet ready for dev.
+
 ## 2026-10-03 — Record residualization and deferred cache fence (issue #431)
 
 - Residualize arbitrary validated record derives into ordinary checked impls,

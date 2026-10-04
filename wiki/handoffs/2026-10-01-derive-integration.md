@@ -163,3 +163,31 @@ cache products still restore complete function bodies. Kernel expansion of
 excluding checking and execution. No real CLI request expansion or complete
 delivery is claimed. Exact next action is the graph catalog and field-proof
 publication gate described above.
+
+Architect → Semantic Engineer owns Type.Implementation, Type.Proof, declaration
+collection, checker state access, obligation/dynamic consumers and their focused
+specs. Preserve concrete heads and conditional bounds before graph publication:
+the existing owner-only relation incorrectly admits incompatible applications.
+This work is solo; full derive integration remains the active objective.
+
+Architect → Semantic/Tooling Engineer: extend solo ownership to Type.Value, Check.Signature/Rule/Statement/Expression/Derive/Check and Doc.Signature for complete application evidence across shared Scheme, scoped bounds, call obligations, rigid method selection and signature rendering. Preserve existing inference and diagnostic boundaries. No other agents participate.
+
+Semantic ownership also covers Type.Check.Call for canonical qualified selection
+on rigid receivers, sharing full scoped bound specialization with member access.
+
+Tooling ownership includes Doc.Json's existing bound-string protocol projection;
+internal full bound shapes preserve alpha equivalence and public rendering.
+
+Semantic ownership extends to Resolve's generic-header binding order so explicit
+constructor applications and forward bound parameters resolve in their own scope.
+Value-parameter/default activation remains unchanged; the generic header tests
+verify missing and duplicate type names remain diagnostics.
+
+2026-10-04: conditional trait-evidence checkpoint passes all 537 property
+families, optimized build with -Werror, CLI tree/compiled output parity,
+formatter checks and diagnostic-code validation on GHC 9.10.3. Unique inference
+returns proposals without mutating the caller during proof; full method-bound
+applications and documentation retain their arguments. A 1,000-layer proof takes
+0.0104s CPU. Generic type-argument count/kind validation at the declaration still
+needs completion before graph field-proof publication. The renewed goal permits
+committing passing checkpoints; no PR, review request or dev promotion yet.

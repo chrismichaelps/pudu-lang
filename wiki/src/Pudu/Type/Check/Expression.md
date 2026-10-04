@@ -113,3 +113,9 @@ through the record.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Complete trait evidence
+
+Compile-time loop where bounds are formed under enclosing and fresh loop-local parameters and retain their full trait applications.
+
+Resolved Grill Log: fields bounded by a generic trait must not receive arbitrary trait arguments during generic derive checking.

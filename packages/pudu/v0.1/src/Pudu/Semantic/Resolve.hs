@@ -244,16 +244,16 @@ walkDeclaration (Located spanValue declaration) = case declaration of
     walkExpression value
   FunctionDeclaration value -> walkFunction spanValue value
   TypeDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (typeTypeParams value)
+    bindTypeParams (typeTypeParams value)
     mapM_ walkType (typeDerives value)
     walkDefinition (typeDefinition value)
   TraitDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (traitTypeParams value)
+    bindTypeParams (traitTypeParams value)
     bindSelf
     mapM_ walkConstraint (traitConstraints value)
     mapM_ (\(Located at member) -> walkFunction at member) (traitMembers value)
   ImplDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (implTypeParams value)
+    bindTypeParams (implTypeParams value)
     bindSelf
     walkType (implTrait value)
     walkType (implTarget value)
@@ -289,7 +289,7 @@ walkForeignFunction function = do
     which is exactly the left-to-right rule for default arguments. -}
 walkFunction :: Span -> Function -> Resolver ()
 walkFunction spanValue value = outsideLoops $ inScopeOver (spanExtent spanValue) $ do
-  mapM_ bindTypeParam (functionTypeParams value)
+  bindTypeParams (functionTypeParams value)
   mapM_ bindParameter (functionParameters value)
   mapM_ walkType (functionReturn value)
   mapM_ walkConstraint (functionConstraints value)
@@ -301,10 +301,10 @@ bindParameter (Located _ parameter) = do
   mapM_ walkExpression (parameterDefault parameter)
   declareNamed ValueSpace ParameterOrigin Private False (parameterName parameter)
 
-bindTypeParam :: Located TypeParam -> Resolver ()
-bindTypeParam (Located _ value) = do
-  mapM_ walkType (typeParamBounds value)
-  declareNamed TypeSpace TypeParamOrigin Private False (typeParamName value)
+bindTypeParams :: [Located TypeParam] -> Resolver ()
+bindTypeParams parameters = do
+  mapM_ (declareNamed TypeSpace TypeParamOrigin Private False . typeParamName . locatedValue) parameters
+  mapM_ (mapM_ walkType . typeParamBounds . locatedValue) parameters
 
 bindSelf :: Resolver ()
 bindSelf = declareBuiltin TypeSpace "Self"

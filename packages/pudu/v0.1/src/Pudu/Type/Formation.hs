@@ -6,6 +6,8 @@ module Pudu.Type.Formation
   , declaredParameterType
   , formType
   , formTraitReference
+  , formBoundType
+  , formBoundFor
   , formOptionalType
   ) where
 
@@ -21,7 +23,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
-  , Foreign (..)
+  , Constraint (..)
   , Impl (..)
   , Parameter (..)
   , FieldDeclaration (..)
@@ -29,7 +31,6 @@ import Pudu.Frontend.Syntax.Tree
   , TypeDefinition (..)
   , TypeParam (..)
   , TypeSyntax (..)
-  , Trait (..)
   , Variant (..)
   , VariantPayload (..)
   )
@@ -41,8 +42,10 @@ import Pudu.Type.Env
   , emptyDeclared
   , freshVariable
   )
-import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, nominalKey, restrictedBy)
+import Pudu.Type.Value (NominalId (..), Type (..), nominalKey, restrictedBy)
 import Pudu.Type.Formation.Order (formationOrder)
+import Pudu.Type.Formation.Shell (addShell, locallyDeclared, paramEntries)
+import Pudu.Type.Implementation (ImplementationRule (..))
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -54,6 +57,32 @@ formType = formTypeWith True
     an `impl`, or a bound. Nothing is rejected here. -}
 formTraitReference :: DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Checker Type
 formTraitReference = formTypeWith False
+
+{-| Preserve resolved bound applications using ordinary canonical formation.
+    Signature installation is pure; diagnostics belong to checked formation. -}
+formBoundType :: DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Type
+formBoundType declared rigid (Located _ syntax) = case syntax of
+  NamedType path [] | Just kind <- lookup (moduleNameText path) rigid, kind > 0 -> RigidType (moduleNameText path)
+  NamedType path arguments -> formNamed declared rigid path (map form arguments)
+  ReferenceType mutable held -> ReferenceTypeValue mutable (form held)
+  TupleType members -> TupleTypeValue (map form members)
+  FunctionType async inputs result -> FunctionTypeValue async (map form inputs) (form result)
+  UnsafeType capabilities held -> restrictedBy (Just (map locatedValue capabilities)) (form held)
+  DynamicType path -> DynamicTypeValue
+    (Map.findWithDefault (NominalId Nothing (moduleNameText path)) (moduleNameText path) (declaredNames declared))
+  UnitType -> UnitTypeValue
+  InvalidType -> ErrorType
+ where
+  form = formBoundType declared rigid
+
+{-| Constructor bounds may omit their single same-kind constructor argument. -}
+formBoundFor :: DeclaredTypes -> [(Text, Int)] -> Text -> Located TypeSyntax -> Type
+formBoundFor declared rigid subject written = case formBoundType declared rigid written of
+  NominalType owner []
+    | Just kind <- lookup subject rigid, kind > 0
+    , Map.lookup owner (declaredKinds declared) == Just [kind] ->
+        NominalType owner [RigidType subject]
+  formed -> formed
 
 formTypeWith :: Bool -> DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Checker Type
 formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case syntax of
@@ -341,72 +370,6 @@ collectDeclaredFrom initial owner declarations = do
           }
   foldCollect owner shells (formationOrder owner declarations)
 
-{-| The bare names this module declares a type or trait under.
-
-    An alias is recorded under its own module's qualified name and under its
-    bare one, and what is collected here carries forward from module to module.
-    Without this, `Std.App` writing `type Stage = Lifecycle.Stage` leaves
-    `Stage` in the alias table, and `Std.App.Stage` — which declares the real
-    `Stage` — then reads its own name through the other module's alias and
-    reports its own constructor as a different type than its own signature.
-
-    A name a module declares means what that module declared, so an alias
-    reaching it from elsewhere under the same bare name is dropped before the
-    module is collected. The qualified spelling is untouched, so `App.Stage`
-    still stands for what `App` said it stands for. -}
-locallyDeclared :: [Located Declaration] -> Set.Set Text
-locallyDeclared = Set.fromList . concatMap named
- where
-  named (Located _ declaration) = case declaration of
-    TypeDeclaration value -> [locatedValue (typeName value)]
-    TraitDeclaration value -> [locatedValue (traitName value)]
-    ForeignDeclaration value -> map locatedValue (foreignTypes value)
-    _ -> []
-
-addShell :: ModuleName -> Located Declaration -> DeclaredTypes -> DeclaredTypes
-addShell owner (Located _ declaration) declared = case declaration of
-  TypeDeclaration value ->
-    let name = locatedValue (typeName value)
-        identity = canonicalNominal owner name
-     in declared
-      { declaredNames =
-          Map.insert (moduleNameText owner <> "." <> name) identity
-            (Map.insert name identity (declaredNames declared))
-      , declaredParams = Map.insert identity (paramNames value) (declaredParams declared)
-      }
-  TraitDeclaration value ->
-    let name = locatedValue (traitName value)
-        identity = canonicalNominal owner name
-     in declared
-      { declaredNames =
-          Map.insert (moduleNameText owner <> "." <> name) identity
-            (Map.insert name identity (declaredNames declared))
-      , declaredTraitNames = Set.insert identity (declaredTraitNames declared)
-      }
-  ForeignDeclaration value ->
-    foldr addHandle declared (foreignTypes value)
-   where
-    addHandle named accumulated =
-      let name = locatedValue named
-          identity = canonicalNominal owner name
-       in accumulated
-        { declaredNames =
-            Map.insert (moduleNameText owner <> "." <> name) identity
-              (Map.insert name identity (declaredNames accumulated))
-        }
-  _ -> declared
-
-paramNames :: TypeDeclarationValue -> [Text]
-paramNames value = map fst (paramEntries value)
-
-{-| A declaration's parameters beside how many arguments each takes, which is
-    what type formation needs to tell an application from a mistake. -}
-paramEntries :: TypeDeclarationValue -> [(Text, Int)]
-paramEntries value =
-  [ (locatedValue (typeParamName param), typeParamArity param)
-  | Located _ param <- typeTypeParams value
-  ]
-
 foldCollect :: ModuleName -> DeclaredTypes -> [Located Declaration] -> Checker DeclaredTypes
 foldCollect owner declared declarations = case declarations of
   [] -> pure declared
@@ -414,18 +377,26 @@ foldCollect owner declared declarations = case declarations of
     extended <- collectOne owner declared first
     foldCollect owner extended rest
 
-{-| Which traits a type implements, read from the module's implementations.
-    Bound satisfaction consults it; coherence across modules is a later
-    slice. -}
+{-| Preserve complete implementation heads and conditional evidence; canonical
+    owners index candidates, while proof decides each concrete application. -}
 recordImpl :: DeclaredTypes -> Impl -> Checker DeclaredTypes
 recordImpl declared value = do
-  target <- formType declared [] (implTarget value)
-  trait <- formTraitReference declared [] (implTrait value)
+  let rigid = [(locatedValue (typeParamName param), typeParamArity param)
+        | Located _ param <- implTypeParams value]
+      requirements =
+        [(RigidType (locatedValue (typeParamName param)), bound)
+        | Located _ param <- implTypeParams value, bound <- typeParamBounds param]
+        <> [(RigidType (locatedValue (constraintSubject constraint)), bound)
+        | Located _ constraint <- implConstraints value, bound <- constraintBounds constraint]
+  target <- formType declared rigid (implTarget value)
+  trait <- formTraitReference declared rigid (implTrait value)
+  conditions <- mapM (\(subject, written) -> (subject,) <$> formTraitReference declared rigid written) requirements
+  let rule = ImplementationRule rigid target trait conditions
   pure $ case (identityOf target, identityOf trait) of
     (Just owner, Just traitIdentity) ->
       declared
         { declaredImpls =
-            Map.insertWith (<>) owner [traitIdentity] (declaredImpls declared)
+            Map.insertWith (<>) (owner, traitIdentity) [rule] (declaredImpls declared)
         }
     _ -> declared
  where

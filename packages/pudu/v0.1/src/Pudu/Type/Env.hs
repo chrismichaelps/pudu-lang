@@ -64,16 +64,19 @@ module Pudu.Type.Env
   , rigidBoundsOf
   , rigidSatisfies
   , takeObligations
+  , TraitObligation (..)
+  , ObligationKind (..)
   , warn
   , withRigidBounds
   , withAdditionalRigidBounds
   , withLocalObligations
-  , implementsTrait
+  , lookupImplementations
   , ambiguousProviders
   , markAmbiguousMethod
   , methodProvider
   , recordMethodProvider
   , addObligation
+  , addDynamicObligation
   , resolveVariable
   , runChecker
   , evalChecker
@@ -104,6 +107,7 @@ import Pudu.Diagnostic
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
+import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
   ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
 
@@ -113,6 +117,7 @@ import Pudu.Type.Value
     introduced, which is how a construction or a pattern finds its shape. -}
 data DeclaredTypes = DeclaredTypes
   { declaredNames :: !(Map Text NominalId)
+  , declaredKinds :: !(Map NominalId [Int])
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
   {-| The record fields declared `mut`, which are the only fields an
@@ -131,7 +136,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
   , declaredVariantFields :: !(Map Text [Text])
   , declaredOwners :: !(Map NominalId [Text])
-  , declaredImpls :: !(Map NominalId [NominalId])
+  , declaredImpls :: !(Map (NominalId, NominalId) [ImplementationRule])
   , declaredAliases :: !(Map Text ([Text], Type))
   , declaredTraitNames :: !(Set NominalId)
   {-| The module qualifiers whose interface was found.
@@ -143,10 +148,17 @@ data DeclaredTypes = DeclaredTypes
   }
   deriving stock (Eq, Show)
 
+data ObligationKind = CallBound | DynamicWidening
+  deriving stock (Eq, Show)
+
+data TraitObligation = TraitObligation !ObligationKind !Span !Type !Type
+  deriving stock (Eq, Show)
+
 emptyDeclared :: DeclaredTypes
 emptyDeclared =
   DeclaredTypes
     { declaredNames = Map.empty
+    , declaredKinds = Map.empty
     , declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredMutableFields = Set.empty
@@ -210,10 +222,10 @@ data CheckerState = CheckerState
       because instantiation has not run. Scoped like `withComptime`, restoring
       the previous setting on exit. -}
   , stateInDeriveChecking :: !Bool
-  , stateObligations :: ![(Span, Type, NominalId)]
+  , stateObligations :: ![TraitObligation]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateIntegerKinds :: ![(Span, Text)]
-  , stateRigidBounds :: !(Map Text [NominalId])
+  , stateRigidBounds :: !(Map Text [Type])
   {-| Uses of names that reach a `var` binding, from the resolver. -}
   , stateWritableNames :: !(Set SpanKey)
   {-| The `&mut` expressions written directly as a call's arguments, the one
@@ -824,12 +836,18 @@ takeUnwrittenParameters =
 
 {-| Record that a type must implement a trait. Obligations are proved after the
     body is checked, when inference has solved what the argument types are. -}
-addObligation :: Span -> Type -> NominalId -> Checker ()
-addObligation spanValue typeValue traitText =
-  Checker $ \state ->
-    ((), state{stateObligations = (spanValue, typeValue, traitText) : stateObligations state})
+addObligation :: Span -> Type -> Type -> Checker ()
+addObligation = queueObligation CallBound
 
-takeObligations :: Checker [(Span, Type, NominalId)]
+addDynamicObligation :: Span -> Type -> NominalId -> Checker ()
+addDynamicObligation at target owner = queueObligation DynamicWidening at target (NominalType owner [])
+
+queueObligation :: ObligationKind -> Span -> Type -> Type -> Checker ()
+queueObligation kind spanValue typeValue traitText =
+  Checker $ \state ->
+    ((), state{stateObligations = TraitObligation kind spanValue typeValue traitText : stateObligations state})
+
+takeObligations :: Checker [TraitObligation]
 takeObligations =
   Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
 
@@ -845,36 +863,39 @@ withLocalObligations (Checker action) = Checker $ \state ->
     from the parameter list and the `where` clause are merged with `(<>`) so a
     parameter that carries bounds in both places keeps all of them rather than
     the last entry overwriting the first. -}
-withRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
+withRigidBounds :: [(Text, [Type])] -> Checker a -> Checker ()
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.fromListWith (<>) bounds)
   _ <- action
   setRigidBounds previous
 
-withAdditionalRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
+withAdditionalRigidBounds :: [(Text, [Type])] -> Checker a -> Checker ()
 withAdditionalRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.unionWith (<>) previous (Map.fromListWith (<>) bounds))
   _ <- action
   setRigidBounds previous
 
-currentRigidBounds :: Checker (Map Text [NominalId])
+currentRigidBounds :: Checker (Map Text [Type])
 currentRigidBounds = Checker $ \state -> (stateRigidBounds state, state)
 
-setRigidBounds :: Map Text [NominalId] -> Checker ()
+setRigidBounds :: Map Text [Type] -> Checker ()
 setRigidBounds bounds = Checker $ \state -> ((), state{stateRigidBounds = bounds})
 
 {-| The traits a rigid parameter was declared to satisfy. A method call on it
     is answered by those traits, which is what a bound is for. -}
-rigidBoundsOf :: Text -> Checker [NominalId]
+rigidBoundsOf :: Text -> Checker [Type]
 rigidBoundsOf name =
   Checker $ \state -> (maybe [] id (Map.lookup name (stateRigidBounds state)), state)
 
 rigidSatisfies :: Text -> NominalId -> Checker Bool
 rigidSatisfies name traitText =
   Checker $ \state ->
-    (maybe False (elem traitText) (Map.lookup name (stateRigidBounds state)), state)
+    (maybe False (any owns) (Map.lookup name (stateRigidBounds state)), state)
+ where
+  owns (NominalType owner _) = owner == traitText
+  owns _ = False
 
 {-| Which trait supplied a method binding. Two traits providing the same member
     for one type is an ambiguity the reader must resolve, and this is what lets
@@ -1133,10 +1154,10 @@ ambiguousProviders :: Text -> Checker [NominalId]
 ambiguousProviders key =
   Checker $ \state -> (Map.findWithDefault [] key (stateAmbiguousMethods state), state)
 
-implementsTrait :: NominalId -> NominalId -> Checker Bool
-implementsTrait owner traitText =
+lookupImplementations :: NominalId -> NominalId -> Checker [ImplementationRule]
+lookupImplementations owner trait =
   Checker $ \state ->
-    ( maybe False (elem traitText) (Map.lookup owner (declaredImpls (stateDeclared state)))
+    ( Map.findWithDefault [] (owner, trait) (declaredImpls (stateDeclared state))
     , state
     )
 

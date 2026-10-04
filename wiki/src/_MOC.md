@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
+
 - [[Derive Record Kernel Spec]] — generated method execution and refusal.
 
 - [[Generated Identity Spec]] — generated origins and complete fact identity.

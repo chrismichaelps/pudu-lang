@@ -181,3 +181,9 @@ as `fn() -> Str` rather than an unchecked fresh variable.
 
 Resolved Grill Log: typed as the universal method only where nothing declared answers, so an
 implementation's own signature governs its calls; the evaluator makes the same choice at run time.
+
+## Complete trait evidence
+
+Call instantiation substitutes both sides of every full trait obligation. Rigid member access delegates scheme selection to Type.Check.Method, sharing trait-argument specialization with immediate calls.
+
+Resolved Grill Log: no second identity-only rigid resolver; a captured method keeps the same concrete result as an immediate call.

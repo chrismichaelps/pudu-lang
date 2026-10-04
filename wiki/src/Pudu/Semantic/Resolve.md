@@ -143,3 +143,11 @@ subjects bind once; an enclosing type parameter is reused rather than shadowed.
 Resolved Grill Log: enforce the restriction on resolved references, not only
 member syntax; selected and first-class imports cannot bypass it. Preserve
 unknown-name diagnostics and ordinary lexical shadowing.
+
+## Generic bound scope
+
+Bind all generic parameter declarations before resolving any parameter bound.
+Self-referential and forward parameter applications therefore resolve within the
+header's complete scope. Value parameters and defaults retain left-to-right
+activation. Resolved Grill Log: Mapper[F] in F's own bound names that constructor,
+not an unresolved module type or a same-spelled outer declaration.

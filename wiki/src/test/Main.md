@@ -2,7 +2,7 @@
 type: module
 path: "@root/test/Main.hs"
 fidelity: Active
-domain: "[[Testing]]"
+domain: "[[Compilation Artifact]]"
 subsystem: "[[architecture/DELIVERY]]"
 grammar: "[[grammar/haskell]]"
 tags: [module, test, runner]
@@ -51,3 +51,6 @@ checker and persistence identity regressions execute in the full suite.
 [[Derive Record Kernel Spec]] is registered explicitly and exercises generated ordinary
 implementations in both evaluator modes. Resolved Grill Log: actual expansion output
 is checked, with graph publication retained as a distinct integration gate.
+
+Register [[Type Implementation Proof Spec]] with ordinary type properties.
+Resolved Grill Log: full conditional capability evidence runs in the complete suite.

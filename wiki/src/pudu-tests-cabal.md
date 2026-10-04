@@ -62,3 +62,6 @@ checker and persistence identity regressions execute in the full suite.
 [[Derive Record Kernel Spec]] is registered explicitly and exercises generated ordinary
 implementations in both evaluator modes. Resolved Grill Log: actual expansion output
 is checked, with graph publication retained as a distinct integration gate.
+
+Register [[Type Implementation Proof Spec]]. Resolved Grill Log: ordinary caller,
+dynamic, imported and bounded solver regressions execute through the shared proof.

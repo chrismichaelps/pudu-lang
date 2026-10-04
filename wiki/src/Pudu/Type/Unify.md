@@ -52,6 +52,16 @@ The exported signatures are the module header's export list.
 
 ## Algorithm
 
+Dynamic widening records a complete concrete obligation for [[Type Trait Proof]]
+at the ordinary post-inference boundary. An integer field can settle before its
+conditional capability is tested. Failure retains E3032; specialized or conditional
+implementations cannot admit an incompatible application by owner alone.
+
+- **Q:** Prove conditional widening immediately? **A:** No; retain the obligation
+  until body inference settles. _Rationale:_ Box{held: 1} initially contains a fresh
+  literal variable, whose Ready implementation becomes knowable only after
+  settlement. _Rejected:_ rejecting a valid literal or defaulting it prematurely.
+
 Direct structural recursion over the type or syntax shape, with the checker's substitution consulted whenever a variable is reached.
 
 ## Negative Logic (Prohibited Paths)

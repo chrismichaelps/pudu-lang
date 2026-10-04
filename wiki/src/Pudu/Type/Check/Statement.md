@@ -26,13 +26,13 @@ Decide what a block and the statements in it mean, and what checking a value
 data StatementNeeds = StatementNeeds
   { statementExpression  :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
   , statementDeclaration :: DeclaredTypes -> Located Declaration -> Checker ()
-  , statementFunction    :: FunctionRole -> DeclaredTypes -> [Text] -> [(Text, [NominalId])] -> Maybe NominalId -> Function -> Checker ()
+  , statementFunction    :: FunctionRole -> DeclaredTypes -> [Text] -> [(Text, [Type])] -> Maybe NominalId -> Function -> Checker ()
   }
 
 checkBlock        :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Block -> Checker Type
 checkAgainst      :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
 checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Block -> Checker Type
-checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [NominalId])] -> Maybe NominalId -> Located Function -> Checker ()
+checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Type])] -> Maybe NominalId -> Located Function -> Checker ()
 ```
 
 ### Governance
@@ -132,3 +132,9 @@ exception.
 ## Places
 
 A local binding's annotation and inferred type are checked by [[Check Place]], which refuses one that would hold an exclusive reference. See [[ADR-0022-lending-a-place]].
+
+## Complete trait evidence
+
+StatementNeeds and checkMember carry full trait applications for enclosing rigid bounds.
+
+Resolved Grill Log: the recursive statement/function seam must not erase evidence preserved by declaration checking.

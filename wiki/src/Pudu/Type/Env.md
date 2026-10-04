@@ -45,7 +45,12 @@ The exported signatures are the module header's export list.
 - `withDeriveChecking` scopes compile-time loops to generic checking for one definition, restoring
   the previous setting on exit like `withComptime`. Outside the scope a surviving loop is refused,
   because instantiation has not run for it.
-- `implementsTrait` answers whether a nominal type has an implementation for a trait, read from `declaredImpls` which [[Type Formation]] collects from `impl` declarations.
+- `lookupImplementations` reads full [[Type Implementation Rules]] by canonical
+  target/trait identity. [[Type Trait Proof]] decides satisfaction, including
+  concrete arguments and recursive conditional requirements.
+- Trait obligations retain whether a generic call or dynamic widening requires
+  them. Both discharge after inference under the enclosing bounds; dynamic
+  failures preserve E3032 while call-bound failures preserve E3012.
 - Declared shapes, implementation relationships, and method keys use canonical nominal/trait identity rather than basenames. Imported interface state is merged once before local signatures; local bindings remain in an inner frame.
 - Imported concrete method keys are marked separately from ordinary name bindings. Local implementation installation can therefore diagnose an imported-plus-local provider collision without treating two local declarations as an import-order ambiguity or replacing coherence's duplicate-head diagnostic.
 - A loop frame records the loop's label, the type it produces, and whether it may carry a value out at all. `loop` produces what its `break` statements carry, so every `break` leaving one unifies against the same result variable; `while` and `for` can finish on their own condition without reaching a `break`, so a value carried out of one would exist on some runs and not others, and `E3029` says so rather than inventing a default. A `loop` no `break` leaves is `Never`.
@@ -143,3 +148,14 @@ membership, preserving one diagnostic per authored error.
 - **Q:** Keep offset-only keys internally? **A:** No. _Rationale:_ generated nodes
   share authored offsets while holding distinct types and places. _Rejected:_
   artificial offsets or cross-instantiation state leakage.
+
+## Complete trait evidence
+
+Scoped rigid bounds and queued call obligations retain complete trait applications. Dynamic widening retains its separate obligation reason. Proof search may infer implementation-local evidence only, without binding caller variables.
+
+Resolved Grill Log: do not erase generic arguments in checker state; canonical owner keys index candidates, never prove satisfaction.
+
+DeclaredTypes also inventories parameter kinds by canonical declaration identity.
+This pure inventory distinguishes constructor-trait shorthand from an omitted
+ordinary trait argument. Resolved Grill Log: only a bound on a constructor with
+one trait parameter of the same kind may supply that constructor implicitly.

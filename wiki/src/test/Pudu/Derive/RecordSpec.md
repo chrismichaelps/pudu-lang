@@ -2,7 +2,7 @@
 type: module
 path: "@root/test/Pudu/Derive/RecordSpec.hs"
 fidelity: Active
-domain: "[[Testing]]"
+domain: "[[Compilation Artifact]]"
 subsystem: "[[Semantics]]"
 grammar: "[[grammar/haskell]]"
 tags: [module, derive, test]

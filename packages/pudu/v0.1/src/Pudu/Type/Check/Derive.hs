@@ -11,7 +11,7 @@ import Pudu.Frontend.Syntax.Tree
   ( Declaration (..), Derive (..), Function (..), Module (..), Parameter (..)
   , Trait (..), TypeParam (..), requiredParameterCount )
 import Pudu.Source (Span)
-import Pudu.Type.Check.Method (declareBounds, functionRigid, traitTable)
+import Pudu.Type.Check.Method (declareBoundsWith, functionRigid, traitTable)
 import Pudu.Type.Env (Checker, DeclaredTypes (..), lookupName, report)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formTraitReference)
 import Pudu.Type.Interface
@@ -103,8 +103,8 @@ checkMembers declared defaults owner arguments trait value = do
     result <- formOptionalType declared rigid (functionReturn actual)
     let actualType = substituteRigid actualBindings (FunctionTypeValue (functionAsync actual) inputs result)
         expectedType = substituteRigid expectedBindings (schemeType contract)
-        allowed = (target, owner) : boundPairs expectedBindings (schemeBounds contract)
-        requested = boundPairs actualBindings (declareBounds declared actual)
+        allowed = (target, NominalType owner arguments) : boundPairs expectedBindings (schemeBounds contract)
+        requested = boundPairs actualBindings (declareBoundsWith declared [(targetName, 0)] actual)
         signatureMatches = actualType == expectedType
           && map snd actualParams == map snd expectedParams
           && requiredParameterCount actual == requiredParameterCount expected
@@ -115,9 +115,10 @@ checkMembers declared defaults owner arguments trait value = do
       unless signatureMatches $ refuse at "the derive member does not match the trait signature"
       when (signatureMatches && not boundsMatch) $ refuse at "the derive member requires bounds absent from the trait contract"
 
-boundPairs :: [(Text, Type)] -> [(Text, [NominalId])] -> [(Type, NominalId)]
+boundPairs :: [(Text, Type)] -> [(Text, [Type])] -> [(Type, Type)]
 boundPairs replacements bounds =
-  [(substituteRigid replacements (RigidType name), trait) | (name, traits) <- bounds, trait <- traits]
+  [(substituteRigid replacements (RigidType name), substituteRigid replacements trait)
+  | (name, traits) <- bounds, trait <- traits]
 
 complete :: Function -> Bool
 complete value = functionReturn value /= Nothing

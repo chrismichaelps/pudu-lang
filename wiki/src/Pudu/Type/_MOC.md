@@ -5,6 +5,11 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Type Implementation Rules]] — complete concrete heads and conditional bounds.
+- [[Type Trait Proof]] — bounded capability proof for calls and derive publication.
+- [[Trait Evidence Matching]] — local inference without caller mutation.
+- [[Type Formation Shells]] — pure declaration identities before formed types.
+
 - [[Type Check Reflection]] — owner-specific heterogeneous metadata iteration.
 - [[Type Check Receiver]] — specialization shared by called and captured methods.
 
@@ -41,7 +46,11 @@ tags: [moc, module]
 - [[Type Check Foreign]] — the type a foreign declaration gives its functions, and what its own declaration can be wrong about.
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 
-Dependency direction: Value → Env → Unify/Formation → Rule/Pattern/Method/Coherence/Import → Check → Boundary.
+Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method → Rule/Call/Pattern/Coherence/Import → Check → Boundary.
+
+Full trait applications survive Value/Scheme → scoped Env bounds → call obligations →
+Proof → method specialization. Canonical owners index candidates at the proof layer;
+only complete head matching and discharged premises establish evidence.
 
 - [[Type Test Coordinator]] — executable registration of checker regression properties.
 

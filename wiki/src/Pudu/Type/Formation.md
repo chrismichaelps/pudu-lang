@@ -66,6 +66,17 @@ The exported signatures are the module header's export list.
 
 ## Algorithm
 
+Implementation collection forms heads under their own rigid parameters and
+retains full target/trait applications and parameter/where requirements in
+[[Type Implementation Rules]], indexed by canonical target/trait identity.
+The pure first shell pass lives in [[Type Formation Shells]], keeping identity
+registration separate from formed aliases, shapes and implementation evidence.
+
+- **Q:** Does an owner relationship prove every application? **A:** Only an
+  unconditional constructor-wide rule does. _Rationale:_ specialized arguments
+  and parameter bounds belong to the implementation. _Rejected:_ erasing heads
+  and conditions during declaration collection.
+
 Direct structural recursion over the type or syntax shape, with the checker's substitution consulted whenever a variable is reached.
 
 Collection introduces every nominal shell first, orders local aliases by their alias dependencies
@@ -120,3 +131,20 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 ## Places
 
 Collecting a record also records which of its fields are declared `mut`, for local and imported types alike. See [[ADR-0022-lending-a-place]].
+
+## Complete trait evidence
+
+formBoundType preserves bound syntax as a canonical application under all enclosing rigid parameters, using the same formNamed alias expansion as ordinary formation. It projects already resolved signature syntax; formation diagnostics remain the checked formation boundary.
+
+Resolved Grill Log: bound projection must retain nested references, tuples, functions, capabilities and constructor applications, not just the trait head.
+
+formBoundFor additionally preserves the existing constructor-bound shorthand:
+F[_]: Mappable means Mappable[F] when the canonical trait has exactly one
+parameter of matching constructor kind. Other omitted applications do not receive
+invented arguments. Resolved Grill Log: ordinary trait arguments remain exact,
+while constructor capability syntax keeps its established generic meaning.
+
+A bare higher-kind rigid appearing in a bound application denotes its constructor,
+not an empty application of that constructor. Explicit Mapper[F] and the matching
+constructor-bound shorthand form the same evidence. Resolved Grill Log: preserve
+constructor identity until the member applies it to its own item parameters.

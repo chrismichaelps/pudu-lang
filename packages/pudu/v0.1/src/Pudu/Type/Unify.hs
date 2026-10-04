@@ -7,8 +7,7 @@ module Pudu.Type.Unify
 
 import Data.Text (Text)
 import Pudu.Source (Span)
-import Control.Monad (unless)
-import Pudu.Type.Env (Checker, implementsTrait, report, reportedAt, resolveVariable, setVariable)
+import Pudu.Type.Env (Checker, addDynamicObligation, report, resolveVariable, setVariable)
 import Pudu.Type.Value
   ( Type (..)
   , TypeVar
@@ -106,22 +105,9 @@ unify spanValue expected actual = do
         oriented — its message names the expected type first — so a widening
         can only happen where a `dynamic` was asked for. The reverse would be a
         narrowing, which needs a match, not an assignment. -}
-    (DynamicTypeValue traitIdentity, NominalType concrete _) -> do
-      implements <- implementsTrait concrete traitIdentity
-      if implements
-        then pure left
-        else do
-          seen <- reportedAt spanValue "E3032"
-          unless seen $
-            report "E3032" spanValue
-              (nominalName concrete <> " does not implement " <> nominalName traitIdentity)
-              ( Just
-                  ( "implement it for this type, or use a type that does; a dynamic "
-                      <> nominalName traitIdentity
-                      <> " holds only values that implement it"
-                  )
-              )
-          pure ErrorType
+    (DynamicTypeValue traitIdentity, NominalType _ _) -> do
+      addDynamicObligation spanValue right traitIdentity
+      pure left
     _ -> mismatch spanValue left right
 
 {-| Check an actual type against an expected one. The message names the

@@ -22,7 +22,7 @@ module Pudu.Type.Check.Rule
   , unaryType
   ) where
 
-import Control.Monad (filterM, unless)
+import Control.Monad (unless)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -38,6 +38,7 @@ import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Check.Receiver (bindReceiver)
+import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -57,7 +58,6 @@ import Pudu.Type.Env
   , negateIntegerLiteral
   , report
   , settleIntegerLiteral
-  , rigidBoundsOf
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
@@ -396,11 +396,11 @@ instantiateWith spanValue scheme arguments
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       pure (substitute replacements (schemeType scheme))
 
-obligationsFor :: Span -> [(Text, Type)] -> (Text, [NominalId]) -> Checker ()
+obligationsFor :: Span -> [(Text, Type)] -> (Text, [Type]) -> Checker ()
 obligationsFor spanValue replacements (name, bounds) =
   case lookup name replacements of
     Nothing -> pure ()
-    Just assigned -> mapM_ (addObligation spanValue assigned) bounds
+    Just assigned -> mapM_ (addObligation spanValue assigned . substituteRigid replacements) bounds
 
 substitute :: [(Text, Type)] -> Type -> Type
 substitute = substituteRigid
@@ -643,15 +643,13 @@ memberType spanValue targetType member = do
               else found
         Nothing -> methodType spanValue (NominalType name arguments) name member
     RigidType name -> do
-      bounds <- rigidBoundsOf name
-      rigidMethod spanValue resolved name bounds member
+      rigidMethod spanValue resolved name member
     {-| A parameter of higher kind carries its bounds on the parameter, so a
         receiver of type `F[A]` finds its members where a receiver of type `F`
         would. The arguments say what the container holds, never which trait
         provides a member. -}
     AppliedType (RigidType name) _ -> do
-      bounds <- rigidBoundsOf name
-      rigidMethod spanValue resolved name bounds member
+      rigidMethod spanValue resolved name member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
     _ | member == textMember -> pure textMethodType
     _ -> do
@@ -977,31 +975,16 @@ textMethodType = FunctionTypeValue False [] stringType
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
     silently picking the first trait. -}
-rigidMethod :: Span -> Type -> Text -> [NominalId] -> Text -> Checker Type
-rigidMethod spanValue receiver name bounds member = do
-  providers <- filterM provides bounds
-  case providers of
-    [] | member == textMember -> pure textMethodType
-    [] -> do
+rigidMethod :: Span -> Type -> Text -> Text -> Checker Type
+rigidMethod spanValue receiver name member = do
+  found <- methodScheme spanValue receiver member
+  case found of
+    Nothing | member == textMember -> pure textMethodType
+    Nothing -> do
       report "E3005" spanValue (name <> " has no method " <> member)
         (Just "add a trait bound that declares the method")
       pure ErrorType
-    [traitText] -> do
-      found <- lookupName (nominalKey traitText <> "." <> member)
-      case found of
-        Nothing -> pure ErrorType
-        Just scheme -> do
-          instantiated <- instantiate spanValue scheme
-          bindReceiver spanValue receiver instantiated
-    _ -> do
-      report "E3013" spanValue
-        (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
-        (Just "disambiguate with a qualified call or remove a trait bound")
-      pure ErrorType
- where
-  provides traitText = do
-    found <- lookupName (nominalKey traitText <> "." <> member)
-    pure (case found of Nothing -> False; Just _ -> True)
+    Just scheme -> instantiate spanValue scheme >>= bindReceiver spanValue receiver
 
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself

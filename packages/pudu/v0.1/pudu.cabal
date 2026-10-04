@@ -282,7 +282,11 @@ library
     Pudu.Type.Exhaust
     Pudu.Type.Formation
     Pudu.Type.Formation.Order
+    Pudu.Type.Formation.Shell
     Pudu.Type.Marker
+    Pudu.Type.Implementation
+    Pudu.Type.Proof
+    Pudu.Type.Proof.Match
     Pudu.Type.Interface
     Pudu.Type.Interface.Graph
     Pudu.Type.Unify

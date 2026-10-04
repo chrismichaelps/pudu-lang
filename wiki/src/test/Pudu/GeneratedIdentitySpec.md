@@ -2,7 +2,7 @@
 type: module
 path: "@root/test/Pudu/GeneratedIdentitySpec.hs"
 fidelity: Active
-domain: "[[Testing]]"
+domain: "[[Compilation Artifact]]"
 subsystem: "[[Semantics]]"
 grammar: "[[grammar/haskell]]"
 tags: [module, test, derive]

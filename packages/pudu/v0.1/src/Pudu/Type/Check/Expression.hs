@@ -94,8 +94,8 @@ import Pudu.Type.Check.Expression.Control
   , literalIndex
   )
 import Pudu.Type.Exhaust (checkExhaustive)
-import Pudu.Type.Formation (formOptionalType, formType)
-import Pudu.Type.Check.Method (boundName, dischargeObligations)
+import Pudu.Type.Formation (formBoundFor, formOptionalType, formType)
+import Pudu.Type.Check.Method (dischargeObligations)
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Type (..)
@@ -421,7 +421,7 @@ checkComptimeLoop around declared rigid (Located _ loop) = do
         , let name = locatedValue (constraintSubject constraint), name `notElem` map fst rigid]))
       rigidHere = rigid <> variables
       bounds =
-        [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+        [ (locatedValue (constraintSubject constraint), map (formBoundFor declared rigidHere (locatedValue (constraintSubject constraint))) (constraintBounds constraint))
         | Located _ constraint <- comptimeForConstraints loop
         ]
   loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))

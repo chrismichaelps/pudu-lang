@@ -118,8 +118,8 @@ requireInterfaceAnnotations kind value = do
 
 {-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
     which lets a default body call other trait methods on `self`. -}
-selfBoundAsBound :: NominalId -> [(Text, [NominalId])]
-selfBoundAsBound traitName = [("Self", [traitName])]
+selfBoundAsBound :: [(Text, Int)] -> NominalId -> [(Text, [Type])]
+selfBoundAsBound parameters traitName = [("Self", [NominalType traitName (map (RigidType . fst) parameters)])]
 
 {-| `Self` is rigid inside a trait member so that `formType` produces
     `RigidType "Self"` rather than `NominalType "Self"`, routing method

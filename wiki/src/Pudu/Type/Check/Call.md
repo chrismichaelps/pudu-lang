@@ -85,3 +85,11 @@ checking.
 ## Places
 
 `checkCalleeLending` answers the callee type and, when the method takes `self: &mut Self`, the receiver, which [[Check Place]] requires to be writable; `checkCallee` is its first half. See [[ADR-0022-lending-a-place]].
+
+## Generic qualified evidence
+
+A trait-qualified call on a rigid receiver selects that canonical trait from its
+full scoped bounds through Type.Check.Method. Trait parameters and Self specialize
+before remaining method-local parameters instantiate. Check the receiver once and
+reuse its type when checking the full call. Resolved Grill Log: qualifying a
+Holds[Int] receiver as Holds.get must not allow the result to become Bool.

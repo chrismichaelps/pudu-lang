@@ -205,7 +205,7 @@ data Scheme = Scheme
       and instantiation replaces it with a variable that is applied rather than
       one that stands alone. -}
   { schemeParams :: ![(Text, Int)]
-  , schemeBounds :: ![(Text, [NominalId])]
+  , schemeBounds :: ![(Text, [Type])]
   , schemeType :: !Type
   }
   deriving stock (Eq, Show)
@@ -215,7 +215,7 @@ monotype :: Type -> Scheme
 monotype typeValue = Scheme{schemeParams = [], schemeBounds = [], schemeType = typeValue}
 
 {-| A scheme over declared parameters carrying their bounds. -}
-polytype :: [(Text, Int)] -> [(Text, [NominalId])] -> Type -> Scheme
+polytype :: [(Text, Int)] -> [(Text, [Type])] -> Type -> Scheme
 polytype params bounds typeValue =
   Scheme{schemeParams = params, schemeBounds = bounds, schemeType = typeValue}
 
