@@ -15,6 +15,14 @@ aliases: [Type Formation]
 
 # Type Formation
 
+Application arguments are formed in their declared parameter-kind positions.
+A bare higher-kind rigid is retained as a constructor when a canonical receiving
+parameter requires that arity, including trait heads and ordinary generic types.
+Arguments otherwise remain value types. [[Type Check Bound]] validates complete
+trait applications before their evidence is assumed. Resolved Grill Log:
+forming an explicit Mapper[F] must preserve F's constructor identity without
+relaxing the ordinary E3038 check on a value-position bare constructor parameter.
+
 ## Purpose
 
 Own type syntax to formed type, and what declarations contribute for [[Type Check]].
@@ -71,6 +79,7 @@ retains full target/trait applications and parameter/where requirements in
 [[Type Implementation Rules]], indexed by canonical target/trait identity.
 The pure first shell pass lives in [[Type Formation Shells]], keeping identity
 registration separate from formed aliases, shapes and implementation evidence.
+The fixed language type and carrier inventory lives in [[Type Formation Builtins]].
 
 - **Q:** Does an owner relationship prove every application? **A:** Only an
   unconditional constructor-wide rule does. _Rationale:_ specialized arguments
@@ -148,3 +157,10 @@ A bare higher-kind rigid appearing in a bound application denotes its constructo
 not an empty application of that constructor. Explicit Mapper[F] and the matching
 constructor-bound shorthand form the same evidence. Resolved Grill Log: preserve
 constructor identity until the member applies it to its own item parameters.
+
+Implementation conditions project each requirement under its subject through
+formBoundFor, preserving the same constructor shorthand as scoped member bounds.
+Transparent aliases share total [[Type Substitution]], including applied heads,
+unsafe wrappers and function default counts. Resolved Grill Log: declaration
+rules, member assumptions and alias applications cannot use different meanings
+for the same full generic bound.

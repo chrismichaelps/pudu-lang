@@ -30,6 +30,7 @@ implementationProperties =
   , ("trait proof infers only unique call arguments and preserves target owners", testInference)
   , ("trait proof keeps generic applications in documentation shapes", testBoundDocumentation)
   , ("trait proof preserves constructor capability bounds", testConstructors)
+  , ("trait bounds validate unused generic declarations before their bodies", testBoundHeaders)
   ]
 
 testHeads :: IO Property
@@ -324,4 +325,56 @@ testConstructors = conjoin <$> forM cases (\(input, expected) -> do
     , (["fn through[A: Has[A]](held: A) -> Int = 1"], [])
     , (["fn through[Q: Holds[Missing]](held: Q) -> Int = 1"], ["E2011"])
     , (["fn through[A, A](held: A) -> Int = 1"], ["E2001"])
+    ]
+
+testBoundHeaders :: IO Property
+testBoundHeaders = conjoin <$> forM cases (\(label, input, expected, primary) -> do
+  source <- newSource (SourceName "Probe.pudu") (Text.unlines (prefix <> input))
+  result <- runCompile source
+  let diagnostics = compileDiagnostics result
+      selected at = Text.take (unOffset (spanEnd at) - unOffset (spanStart at))
+        (Text.drop (unOffset (spanStart at)) (sourceText source))
+  pure $ counterexample (label <> ": " <> show diagnostics) $ conjoin
+    [ map (diagnosticCodeText . diagnosticCode) diagnostics === expected
+    , property (maybe True (\written -> all ((== written) . selected . diagnosticSpan) diagnostics) primary)
+    ])
+ where
+  prefix = ["module Probe", "trait Holds[A] {}", "trait Mapper[F[_]] {}"
+    , "trait Ready {}", "type Higher[F[_]] = {held: F[Int]}"
+    , "impl Mapper[Array] for Array {}"]
+  bad label input at = (label, [input], ["E3048"], Just at)
+  good label input = (label, input, [], Nothing)
+  cases =
+    [ good "scalar trait application" ["fn unused[A: Holds[Int]](held: A) -> Int = 1"]
+    , good "explicit constructor" ["fn unused[F[_]: Mapper[F]](held: F[Int]) -> Int = 1"]
+    , good "concrete constructor" ["fn unused[F[_]: Mapper[Array]](held: F[Int]) -> Int = 1"]
+    , good "marker bound" ["fn unused[A: Copy](held: A) -> Int = 1"]
+    , bad "nontrait bound" "fn unused[A: Bool](held: A) -> Int = 1" "Bool"
+    , bad "missing trait argument" "fn unused[A: Holds](held: A) -> Int = 1" "Holds"
+    , bad "extra trait argument" "fn unused[A: Holds[Int, Bool]](held: A) -> Int = 1" "Holds[Int, Bool]"
+    , bad "scalar in constructor position" "fn unused[F[_]: Mapper[Int]](held: F[Int]) -> Int = 1" "Mapper[Int]"
+    , bad "value in constructor position" "fn unused[F[_]: Mapper[Array[Int]]](held: F[Int]) -> Int = 1" "Mapper[Array[Int]]"
+    , bad "partial constructor" "fn unused[F[_]: Mapper[Result[Str]]](held: F[Int]) -> Int = 1" "Mapper[Result[Str]]"
+    , bad "wrong rigid kind" "fn unused[F[_, _]: Mapper[F]](held: F[Int, Bool]) -> Int = 1" "Mapper[F]"
+    , bad "constructor in value position" "fn unused[F[_], A: Holds[F]](held: F[Int]) -> Int = 1" "Holds[F]"
+    , bad "nested application arity" "fn unused[A: Holds[Array[Int, Bool]]](held: A) -> Int = 1" "Holds[Array[Int, Bool]]"
+    , bad "trait in argument position" "fn unused[A: Holds[Ready]](held: A) -> Int = 1" "Holds[Ready]"
+    , bad "type header" "type Bad[A: Mapper[Int]] = {held: A}" "Mapper[Int]"
+    , bad "trait header" "trait Bad[A: Mapper[Int]] {}" "Mapper[Int]"
+    , bad "impl head" "impl Mapper[Int] for Higher[Array] {}" "Mapper[Int]"
+    , bad "impl condition" "impl[A: Holds] Ready for Array[A] {}" "Holds"
+    , bad "member header" "trait Member { fn unused[A: Holds](self: &Self, held: A) -> Int = 1 }" "Holds"
+    , bad "nominal subject" "fn unused() -> Int where Int: Ready = 1" "Ready"
+    , bad "loop bound" "trait Loop { fn unused(self: &Self) -> Int }\nderive Loop for T: Record { fn unused(self: &T) -> Int { comptime for field: F in [] where F: Mapper[Int] {}\n 1 } }" "Mapper[Int]"
+    , good "conditional constructor inference"
+        ["impl[F[_]: Mapper] Ready for Higher[F] {}"
+        , "fn need[A: Ready](held: A) -> Int = 1"
+        , "fn main() -> Int = need(Higher{held: [1]})"]
+    , good "generic constructor implementation"
+        ["impl[F[_]] Mapper[F] for Higher[F] {}"]
+    , good "constructor alias substitution"
+        ["type Wrapped[F[_], A] = F[A]"
+        , "fn unused[A: Holds[Wrapped[Array, Int]]](held: A) -> Int = 1"]
+    , ("inferred partial constructor is refused",
+        ["fn main() -> Int { let held = Higher{held: mapOf([(\"key\", 1)])}\n 1 }"], ["E3001"], Nothing)
     ]

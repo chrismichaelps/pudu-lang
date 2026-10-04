@@ -42,6 +42,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Reflection (reflectedParameters, checkSequenceElement)
+import Pudu.Type.Check.Bound (checkBounds)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
@@ -427,7 +428,10 @@ checkComptimeLoop around declared rigid (Located _ loop) = do
   loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))
   sourceType <- checkExpression around declared rigid (comptimeForSource loop)
   element <- checkSequenceElement (locatedSpan (comptimeForSource loop)) declared rigid loopElementType sourceType
-  withAdditionalRigidBounds bounds $ withLocalObligations $ inTypeScope $ do
+  admitted <- checkBounds declared rigidHere
+    [(locatedValue (constraintSubject constraint), constraintBounds constraint)
+    | Located _ constraint <- comptimeForConstraints loop]
+  when admitted $ withAdditionalRigidBounds bounds $ withLocalObligations $ inTypeScope $ do
     recordExpression (locatedSpan (comptimeForElement loop)) element
     bindName (locatedValue (comptimeForElement loop)) (monotype element)
     _ <- aroundBlock around declared rigidHere (comptimeForBody loop)

@@ -191,3 +191,26 @@ applications and documentation retain their arguments. A 1,000-layer proof takes
 0.0104s CPU. Generic type-argument count/kind validation at the declaration still
 needs completion before graph field-proof publication. The renewed goal permits
 committing passing checkpoints; no PR, review request or dev promotion yet.
+
+Architect → Semantic Engineer owns Type.Check.Bound, Check/Expression hooks,
+Formation's constructor-argument positions and ImplementationSpec admission
+matrices. Validate full bound arity and kinds at the definition before graph
+publication. Preserve existing canonical formation and declaration diagnostics;
+no sub-agents participate. A passing proof checkpoint is committed as 351c9861.
+
+Semantic ownership includes Pattern's shared substitution, the Record consumer,
+Unify's complete constructor applications and TraitSpec's inspected diagnostic
+delta. Keep valid higher-kind aggregate inference and refuse partial heads.
+
+The user additionally requests whole-compiler benchmarking and GitHub Actions
+latency improvements. Preserve Derive as the active integration work while the
+Tooling/Performance role measures Haskell build, Pudu checking and execution
+separately. CI currently changes Cabal configurations and invokes an unoptimized
+compiler for some gates; address measured workflow overhead without weakening
+checks. No sub-agents, PR or dev promotion is authorized.
+
+Bound admission checkpoint: full optimized build and all 538 property families
+pass with -Werror on GHC 9.10.3. CLI higher-kind/iterator checks, formatting and
+code inventory pass. The inspected legacy ownership test retains its independent
+E3014 and now also reports the malformed trait head E3048. Complete derive-head
+kind admission and graph field-proof publication remain required next.

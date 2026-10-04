@@ -5,6 +5,10 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Type Check Bound]] — definition-time trait application and kind admission.
+- [[Type Formation Builtins]] — fixed language constructor and carrier inventory.
+- [[Type Trait Dispatch Spec]] — dispatch, generic bounds and coherence evidence.
+
 - [[Type Implementation Rules]] — complete concrete heads and conditional bounds.
 - [[Type Trait Proof]] — bounded capability proof for calls and derive publication.
 - [[Trait Evidence Matching]] — local inference without caller mutation.

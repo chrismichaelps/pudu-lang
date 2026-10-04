@@ -15,6 +15,11 @@ aliases: [Type Unify]
 
 # Type Unify
 
+An applied constructor variable matches a named application only at the same
+complete argument count. The selected head is the bare named constructor;
+no leftover prefix arguments form a partial constructor. Resolved Grill Log:
+ADR-0014 forbids partial applications in inference as well as written bounds.
+
 - **Two restricted functions agree when they require the same abilities and the functions underneath
   them agree.** Exactly the same set, in both directions. One requiring more cannot stand where less
   is expected — that is the laundering this exists to stop — and one requiring less cannot stand

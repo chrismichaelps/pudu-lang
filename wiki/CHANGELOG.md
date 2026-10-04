@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Admit generic evidence by complete kind (issue #431)
+
+- Validate written generic bounds and ordinary implementation heads before
+  bodies assume them. Refuse non-traits, wrong argument counts, partial
+  constructors and mismatched constructor arities with one E3048 at the full
+  bound. Preserve isolated editor buffers whose imported kinds are unavailable.
+- Form higher-kind arguments in their declared positions and share total rigid
+  substitution with aggregate inference. Conditional constructor shorthand
+  retains its complete premise; inference cannot select a partial named head.
+- Focused admission matrices and all 538 optimized property families pass with
+  -Werror on GHC 9.10.3. CLI checks, formatting and diagnostic-code validation
+  pass. Graph publication and complete Derive delivery remain pending.
+
 ## 2026-10-04 — Complete conditional trait evidence (issue #431)
 
 - Preserve canonical target and trait applications, repeated parameter

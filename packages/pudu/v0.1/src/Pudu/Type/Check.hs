@@ -60,6 +60,7 @@ import Pudu.Type.Check.Safety
   ( requireComptimePurity
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Bound (checkDeclarationBounds)
 import Pudu.Type.Check.Derive (checkDeriveContracts)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Expression (CheckSurroundings (..))
@@ -163,7 +164,9 @@ checkUnit imported moduleValue = do
   {-| A function literal's unwritten parameter types are settled once the
       declaration holding it is, so they are judged declaration by declaration. -}
   mapM_
-    (\declaration -> checkDeclaration declared layouts declaration >> requireWrittenExclusive)
+    (\declaration -> do
+      admitted <- checkDeclarationBounds declared declaration
+      when admitted (checkDeclaration declared layouts declaration >> requireWrittenExclusive))
     (moduleDeclarations moduleValue)
   finalizeIntegerLiterals
   dischargeObligations

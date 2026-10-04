@@ -15,6 +15,11 @@ aliases: [Type Check Expression]
 
 # Type Check Expression
 
+Compile-time loop bounds validate through [[Type Check Bound]] under their fresh
+rigid field parameters. Invalid bounds withhold the loop body while retaining
+source/element checks. Resolved Grill Log: a malformed capability cannot become
+an abstract assumption merely because no concrete request exists yet.
+
 ## Purpose
 
 Decide what an expression's type is.

@@ -15,6 +15,12 @@ aliases: [Type Check Pattern]
 
 # Type Check Pattern
 
+Pattern and record instantiation share total [[Type Substitution]], preserving
+applied constructor heads, unsafe wrappers and function default counts. Fresh
+aggregate arguments can therefore solve from a field's constructor application.
+Resolved Grill Log: a partial local substitution cannot strand F[A] as a rigid
+field after the aggregate itself received fresh arguments.
+
 ## Purpose
 
 Own checking patterns against the type they match for [[Type Check]].

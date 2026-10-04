@@ -354,7 +354,7 @@ testCoherence = do
     , counterexample "a parameter shadows a same-named local nominal for ownership"
         (nominalShadow === ["W2001", "E3014"])
     , counterexample "a parameter shadows a same-named local trait for ownership"
-        (traitShadow === ["W2001", "E3014"])
+        (traitShadow === ["W2001", "E3048", "E3014"])
     ]
 
 orphanDiagnostic :: Text -> CompileResult -> Property

@@ -256,6 +256,7 @@ library
     Pudu.Semantic.Interface
     Pudu.Type
     Pudu.Type.Check
+    Pudu.Type.Check.Bound
     Pudu.Type.Check.Foreign
     Pudu.Type.Check.Import
     Pudu.Type.Check.Install
@@ -281,6 +282,7 @@ library
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation
+    Pudu.Type.Formation.Builtin
     Pudu.Type.Formation.Order
     Pudu.Type.Formation.Shell
     Pudu.Type.Marker

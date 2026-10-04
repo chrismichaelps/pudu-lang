@@ -217,6 +217,11 @@ canonical type primitives without introducing dependencies.
 
 ## Derive record expansion modules
 
+Register [[Type Check Bound]] for declaration-time application validation.
+Register [[Type Formation Builtins]] for the fixed type/carrier inventory.
+Resolved Grill Log: ordinary generic definitions and derive members consume the
+same canonical parameter-kind inventory without a new package dependency.
+
 Register [[Type Implementation Rules]] and [[Type Trait Proof]] without new
 dependencies. Resolved Grill Log: formed heads and bounded proof serve ordinary
 checking and derive field publication through one semantic path.

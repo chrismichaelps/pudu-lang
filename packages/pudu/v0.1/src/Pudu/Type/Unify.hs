@@ -46,19 +46,16 @@ unify spanValue expected actual = do
       | length leftArgs == length rightArgs -> do
           solvedHead <- unify spanValue leftHead rightHead
           AppliedType solvedHead <$> unifyAll spanValue leftArgs rightArgs
-    {-| A constructor variable meets a named constructor carrying at least as
-        many arguments. The variable takes the constructor with the arguments it
-        does not consume, and the rest are matched pairwise. -}
+    {-| Select a complete named constructor of the same arity. Leftover prefix
+        arguments would manufacture the partial application ADR-0014 forbids. -}
     (AppliedType leftHead leftArgs, NominalType rightName rightArgs)
-      | length rightArgs >= length leftArgs -> do
-          let (kept, matched) = splitAt (length rightArgs - length leftArgs) rightArgs
-          _ <- unify spanValue leftHead (NominalType rightName kept)
-          NominalType rightName . (kept <>) <$> unifyAll spanValue leftArgs matched
+      | length rightArgs == length leftArgs -> do
+          _ <- unify spanValue leftHead (NominalType rightName [])
+          NominalType rightName <$> unifyAll spanValue leftArgs rightArgs
     (NominalType leftName leftArgs, AppliedType rightHead rightArgs)
-      | length leftArgs >= length rightArgs -> do
-          let (kept, matched) = splitAt (length leftArgs - length rightArgs) leftArgs
-          _ <- unify spanValue (NominalType leftName kept) rightHead
-          NominalType leftName . (kept <>) <$> unifyAll spanValue matched rightArgs
+      | length leftArgs == length rightArgs -> do
+          _ <- unify spanValue (NominalType leftName []) rightHead
+          NominalType leftName <$> unifyAll spanValue leftArgs rightArgs
     (TupleTypeValue leftMembers, TupleTypeValue rightMembers)
       | length leftMembers == length rightMembers ->
           TupleTypeValue <$> unifyAll spanValue leftMembers rightMembers

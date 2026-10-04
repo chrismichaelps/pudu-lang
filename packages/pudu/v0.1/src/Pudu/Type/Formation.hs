@@ -45,7 +45,10 @@ import Pudu.Type.Env
 import Pudu.Type.Value (NominalId (..), Type (..), nominalKey, restrictedBy)
 import Pudu.Type.Formation.Order (formationOrder)
 import Pudu.Type.Formation.Shell (addShell, locallyDeclared, paramEntries)
+import Pudu.Type.Formation.Builtin
+  ( builtinAliases, builtinOwnedVariants, builtinOwners, builtinTypeNames, builtinVariants )
 import Pudu.Type.Implementation (ImplementationRule (..))
+import Pudu.Type.Substitute (substituteRigid)
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -102,7 +105,15 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
         "declare the trait, import it, or check the spelling"
       pure ErrorType
   NamedType path arguments -> do
-    formed <- mapM (formTypeWith valuePosition declared rigid) arguments
+    let identity = Map.findWithDefault (NominalId Nothing (moduleNameText path))
+          (moduleNameText path) (declaredNames declared)
+        argumentKinds = Map.findWithDefault [] identity (declaredKinds declared)
+        formArgument (kind, written@(Located _ argument)) = case argument of
+          NamedType parameter []
+            | kind > 0, Just arity <- lookup (moduleNameText parameter) rigid, arity > 0 ->
+                pure (RigidType (moduleNameText parameter))
+          _ -> formTypeWith True declared rigid written
+    formed <- mapM formArgument (zip (argumentKinds <> repeat 0) arguments)
     refused <-
       if valuePosition then rejectTraitAsType declared typeSpan path else pure False
     unknown <- rejectUnknownQualifiedType declared typeSpan path
@@ -230,22 +241,6 @@ rejectUnknownQualifiedType declared typeSpan path
   known key =
     Map.member key (declaredNames declared) || Map.member key (declaredAliases declared)
 
-{-| The types the language itself provides, which belong to no module and are
-    written without a qualifier.
-
-    A reader who writes `M.Map` has reached for one of these through the module
-    whose functions work on it. That is the commonest way to arrive at a
-    qualified name nothing declares, and the one worth answering directly rather
-    than sending them to read what the module exports. -}
-builtinTypeNames :: [Text]
-builtinTypeNames =
-  [ "Array", "Str", "Bytes", "Buckets", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
-  , "Range"
-  , "Int", "UInt", "BigInt", "Decimal", "Float", "Float32", "Float64"
-  , "Int8", "Int16", "Int32", "Int64", "Int128"
-  , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
-  ]
-
 {-| Report a formation diagnostic at most once for a given span.
 
     A signature is formed both when it is declared and when its body is checked
@@ -294,16 +289,7 @@ formNamed declared rigid path arguments
     Only the parameter names the alias declared are replaced, so a rigid name
     from the surrounding declaration keeps its own meaning. -}
 expandAlias :: [(Text, Type)] -> Type -> Type
-expandAlias replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  NominalType identity arguments -> NominalType identity (map expand arguments)
-  TupleTypeValue members -> TupleTypeValue (map expand members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous (map expand inputs) (expand result)
-  ReferenceTypeValue mutable target -> ReferenceTypeValue mutable (expand target)
-  other -> other
- where
-  expand = expandAlias replacements
+expandAlias = substituteRigid
 
 {-| An absent annotation becomes a fresh inference variable, which is how a
     private binding or parameter participates in local inference. -}
@@ -319,37 +305,6 @@ formOptionalType declared rigid annotation = case annotation of
 
 lastSegment :: ModuleName -> Text
 lastSegment (ModuleName segments) = NonEmpty.last segments
-
-{-| The sums the compiler wires in. `Option` and `Result` are the language's
-    absence and failure carriers, so their constructors exist without any
-    declaration, exactly as their types do. -}
-{-| The wired-in variants keyed by the type that owns them, so a pattern
-    reaching one through a name in scope asks the same question a pattern
-    reaching a declared variant asks. -}
-builtinOwnedVariants :: Map (NominalId, Text) (NominalId, [Text], [Type])
-builtinOwnedVariants =
-  Map.fromList
-    [ ((owner, name), shape)
-    | (name, shape@(owner, _, _)) <- Map.toList builtinVariants
-    ]
-
-builtinVariants :: Map Text (NominalId, [Text], [Type])
-builtinVariants =
-  Map.fromList
-    [ ("Some", ("Option", ["T"], [RigidType "T"]))
-    , ("None", ("Option", ["T"], []))
-    , ("Ok", ("Result", ["T", "E"], [RigidType "T"]))
-    , ("Err", ("Result", ["T", "E"], [RigidType "E"]))
-    ]
-
-builtinOwners :: Map NominalId [Text]
-builtinOwners = Map.fromList [("Option", ["Some", "None"]), ("Result", ["Ok", "Err"])]
-
-{-| Type aliases the compiler wires in. `Float` aliases `Float64` because
-    [[grammar/pudu]] makes the alias transparent at the type level, and a
-    reader who writes `Float` expects the same type as `Float64`. -}
-builtinAliases :: Map Text ([Text], Type)
-builtinAliases = Map.fromList [("Float", ([], NominalType "Float64" []))]
 
 {-| Collect what every type declaration contributes before any body is checked,
     so a declaration may refer to one that appears later in the file. -}
@@ -384,14 +339,15 @@ recordImpl declared value = do
   let rigid = [(locatedValue (typeParamName param), typeParamArity param)
         | Located _ param <- implTypeParams value]
       requirements =
-        [(RigidType (locatedValue (typeParamName param)), bound)
+        [(locatedValue (typeParamName param), bound)
         | Located _ param <- implTypeParams value, bound <- typeParamBounds param]
-        <> [(RigidType (locatedValue (constraintSubject constraint)), bound)
+        <> [(locatedValue (constraintSubject constraint), bound)
         | Located _ constraint <- implConstraints value, bound <- constraintBounds constraint]
   target <- formType declared rigid (implTarget value)
   trait <- formTraitReference declared rigid (implTrait value)
-  conditions <- mapM (\(subject, written) -> (subject,) <$> formTraitReference declared rigid written) requirements
-  let rule = ImplementationRule rigid target trait conditions
+  let conditions = [(RigidType subject, formBoundFor declared rigid subject written)
+        | (subject, written) <- requirements]
+      rule = ImplementationRule rigid target trait conditions
   pure $ case (identityOf target, identityOf trait) of
     (Just owner, Just traitIdentity) ->
       declared

@@ -11,6 +11,13 @@ aliases: [Type Implementation Proof Spec]
 
 # Type Implementation Proof Spec
 
+Definition-admission matrices validate unused generic bounds, full trait arity,
+constructor kinds, partial applications, generic implementation heads, enclosing
+member parameters and compile-time loop bounds. Positive cases retain named
+constructors and existing shorthand; malformed bounds report E3048 at the bound,
+once, with their body withheld. Resolved Grill Log: caller proof tests alone
+cannot establish correctness of the generic definition's assumptions.
+
 ## Purpose and interface
 
 `implementationProperties` exercises complete compiler admission for conditional,

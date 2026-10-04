@@ -30,6 +30,7 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
 
 {-| The variant a pattern names, found the way an expression finds one.
@@ -193,19 +194,6 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     the payload `Int` rather than the declaration's rigid parameter. -}
 freshFor :: [Text] -> Checker [(Text, Type)]
 freshFor = mapM (\name -> (,) name <$> freshVariable)
-
-substituteRigid :: [(Text, Type)] -> Type -> Type
-substituteRigid replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  NominalType name arguments -> NominalType name (map (substituteRigid replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substituteRigid replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substituteRigid replacements) inputs)
-      (substituteRigid replacements result)
-  ReferenceTypeValue mutable target ->
-    ReferenceTypeValue mutable (substituteRigid replacements target)
-  other -> other
 
 {-| A record's declared field types, with the type's own parameters replaced by
     the arguments the subject carries.

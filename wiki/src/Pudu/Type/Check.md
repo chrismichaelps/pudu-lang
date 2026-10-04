@@ -15,6 +15,11 @@ aliases: [Type Check]
 
 # Type Check
 
+Written bounds are validated by [[Type Check Bound]] before checking each
+declaration body. An invalid header withholds that body's assumptions; imported
+bodies remain excluded. Resolved Grill Log: unused generic definitions must
+not establish evidence whose trait argument count or kind is invalid.
+
 ## Purpose
 
 Check every declaration, statement, and expression in a module against the types its declarations promise, inferring what the language allows to be left unwritten.
