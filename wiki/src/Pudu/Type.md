@@ -44,6 +44,10 @@ renderType :: Type -> Text
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
 - `ModuleTypes` carries `moduleMethods`: the methods this module's declarations provide, by owner,
   with their schemes (see [[Type Env]]).
+- Its `moduleTypeInfo` field is intentionally lazy. Checking diagnostics and
+  integer kinds must not construct the expression lookup map that only tooling
+  reads. The completed checker facts and substitution remain the sole source;
+  a demanded table is built once and retains the existing keys and values.
 - `narrowestSpanAt` answers for a point: the shortest recorded span covering it, the first in key
   order among equal widths. It is one pass over the table keeping the best so far; a hover or a
   completion detail asks it several times per request, and sorting the table for each would repeat
@@ -79,6 +83,12 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 
 ## Grill Log
 
+- **Q:** Build the expression map while admitting every `ModuleTypes` result?
+  **A:** Defer only this derived lookup product until a consumer asks for it.
+  _Rationale:_ phase attribution measures 87.5 MB for this unused map on an
+  8,000-branch check. Strict diagnostics and executable integer kinds still run
+  normally. _Rejected:_ skipping type checking, dropping editor facts, changing
+  inferred types, or sorting the facts without a measured latency win.
 - **Q:** Should the checker return an annotated tree? **A:** Not yet; it publishes a span-keyed map. _Rationale:_ a typed IR is the right home for annotations, and inventing one before lowering exists would freeze a shape no consumer has asked for. _Rejected:_ rewriting the syntax tree with types; a parallel typed AST.
 
 ## Referenced by

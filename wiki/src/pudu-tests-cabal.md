@@ -65,3 +65,8 @@ is checked, with graph publication retained as a distinct integration gate.
 
 Register [[Type Implementation Proof Spec]]. Resolved Grill Log: ordinary caller,
 dynamic, imported and bounded solver regressions execute through the shared proof.
+
+Register [[Type Literal Frontier Spec]] for generated ordered-selection laws,
+unvisited-suffix proof and actual width/diagnostic compatibility. No new testing
+dependency. Resolved Grill Log: deterministic work evidence accompanies the
+benchmark; no host-specific timing gate.

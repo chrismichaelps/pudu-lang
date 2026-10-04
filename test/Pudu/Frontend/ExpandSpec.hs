@@ -1,6 +1,7 @@
 module Pudu.Frontend.ExpandSpec (expandProperties) where
 
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
@@ -9,6 +10,7 @@ import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateEntryPoint)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Frontend.Expand (expandModule)
+import Pudu.Frontend.Expand.Substitute (substituteExpression)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Pudu.Frontend.Syntax
@@ -21,6 +23,7 @@ import Pudu.Frontend.Syntax
   , FunctionBody (..)
   , Located (..)
   , Module (..)
+  , Parameter (..)
   , Statement (..)
   )
 import Pudu.Frontend.Token (Token)
@@ -37,7 +40,88 @@ expandProperties =
   , ("derive surface keeps its shape while macro calls expand", testDeriveSurface)
   , ("a surviving compile-time loop reports E3090", testComptimeDiagnostic)
   , ("a loop element renames with its body", testComptimeHygiene)
+  , ("lambda block and expression bodies expand before resolution", testLambdaExpansion)
+  , ("macro lambda parameters preserve lexical argument scope", testLambdaHygiene)
+  , ("shared lambda function payload preserves default scope", testLambdaDefaults)
   ]
+
+testLambdaExpansion :: IO Property
+testLambdaExpansion = do
+  body <- evaluateWith ["macro twice(value: expr) = value + value"]
+    "(fn(n: Int) -> Int { twice!(n) })(3)"
+  expressionBody <- evaluateWith ["macro twice(value: expr) = value + value"]
+    "(fn(n: Int) => twice!(n))(2)"
+  unknownBody <- codes
+    ["module M", "fn run() -> Int { (fn() -> Int { missing!(1) })() }"]
+  unknownExpression <- codes
+    ["module M", "fn run() -> Int { (fn() => missing!(1))() }"]
+  pure $ conjoin
+    [ counterexample "lambda body expands" (body === "6")
+    , counterexample "lambda expression body expands" (expressionBody === "4")
+    , counterexample "unknown call in a lambda body reports once"
+        (unknownBody === ["E1047"])
+    , counterexample "unknown call in a lambda expression reports once"
+        (unknownExpression === ["E1047"])
+    ]
+
+testLambdaHygiene :: IO Property
+testLambdaHygiene = do
+  captured <- evaluateStatements
+    [ "macro closure(value: expr) = fn(hidden: Int) -> Int { value + hidden }"
+    , "let hidden = 10", "closure!(hidden)(2)"
+    ]
+  shadowed <- evaluateWith
+    ["macro closure(value: expr) = fn(value: Int) -> Int { value }"]
+    "closure!(10)(2)"
+  nested <- evaluateWith
+    [ "macro closure(value: expr) = fn(value: Int) -> Int {"
+    , "  let inner = fn(value: Int) -> Int { value }"
+    , "  inner(3) + value", "}"
+    ] "closure!(10)(2)"
+  pure $ conjoin
+    [ counterexample "inserted caller argument avoids the lambda parameter"
+        (captured === "12")
+    , counterexample "parameter masks a same-named macro argument" (shadowed === "2")
+    , counterexample "nested parameter scope returns to its enclosing parameter" (nested === "5")
+    ]
+
+testLambdaDefaults :: IO Property
+testLambdaDefaults = do
+  source <- newSource (SourceName "defaults.pudu") (Text.unlines
+    [ "module M", "macro twice(value: expr) = value + value"
+    , "fn defaults(value: Int = twice!(value), next: Int = value) -> Int { next }"
+    ])
+  pure $ case parseModule source (lexTokensOf source) of
+    ParseResult (Just moduleValue) _ -> case moduleDeclarations moduleValue of
+      [macro, Located spanValue (FunctionDeclaration function)] ->
+        let lambda = Located spanValue (LambdaExpression function)
+            caller = Located spanValue (NameExpression ("caller" :| []))
+            substituted = substituteExpression (Map.singleton "value" caller) 0 Map.empty spanValue lambda
+            wrapper = Located spanValue (FunctionDeclaration function
+              { functionParameters = []
+              , functionBody = Just (Located spanValue (ExpressionBody substituted))
+              })
+            (expanded, diagnostics) = expandModule moduleValue
+              { moduleDeclarations = [macro, wrapper] }
+         in case locatedValue substituted of
+          LambdaExpression changed -> case functionParameters changed of
+            [Located _ first, Located _ second] -> conjoin
+              [ counterexample "own default keeps the caller argument" $
+                  case parameterDefault first of
+                    Just (Located _ (MacroCall name arguments)) ->
+                      conjoin [locatedValue name === "twice", arguments === [caller]]
+                    _ -> counterexample "macro call retained before expansion" False
+              , counterexample "later default follows the earlier parameter" $
+                  fmap locatedValue (parameterDefault second)
+                    === Just (NameExpression (locatedValue (parameterName first) :| []))
+              , counterexample "shared function defaults are expanded"
+                  (macroCallCount (countNodes expanded) === 0)
+              , counterexample "shared function traversal has no findings" (null diagnostics)
+              ]
+            _ -> counterexample "two lambda parameters retained" False
+          _ -> counterexample "lambda constructor retained" False
+      _ -> counterexample "macro and function parsed" False
+    _ -> counterexample "shared function defaults parse" False
 
 testExpansion :: IO Property
 testExpansion = do
@@ -210,7 +294,10 @@ testDeriveSurface = do
     [ "module M"
     , "macro twice(value: expr) = value + value"
     , "derive Encode for T: Record {"
-    , "  fn encode(self: &T) -> Str { twice!(\"x\") }"
+    , "  fn encode(self: &T, text: Str = twice!(\"x\")) -> Str {"
+    , "    let callback = fn(value: Str) -> Str { twice!(value) }"
+    , "    callback(text)"
+    , "  }"
     , "}"
     , "fn run(items: Array[Int]) -> Int {"
     , "  var total = 0"
@@ -332,10 +419,14 @@ countNodes moduleValue = foldMap countDeclaration (moduleDeclarations moduleValu
     DeriveDeclaration value ->
       one 1 0 0 <> foldMap (countFunction . locatedValue) (deriveFunctions value)
     FunctionDeclaration function -> countFunction function
+    BindingDeclaration _ _ _ _ expression -> countExpression expression
     _ -> zero
-  countFunction function = case functionBody function of
-    Just (Located _ (BlockBody block)) -> countBlock block
-    _ -> zero
+  countFunction function =
+    foldMap (foldMap countExpression . parameterDefault . locatedValue)
+      (functionParameters function) <> foldMap countBody (functionBody function)
+  countBody (Located _ body) = case body of
+    BlockBody block -> countBlock block
+    ExpressionBody expression -> countExpression expression
   countBlock (Located _ block) =
     foldMap countStatement (blockStatements block)
       <> foldMap countExpression (blockResult block)
@@ -350,6 +441,7 @@ countNodes moduleValue = foldMap countDeclaration (moduleDeclarations moduleValu
       one 0 1 0 <> countExpression (comptimeForSource loop) <> countBlock (comptimeForBody loop)
     CallExpression callee arguments ->
       countExpression callee <> foldMap countExpression arguments
+    LambdaExpression function -> countFunction function
     BlockExpression block -> countBlock block
     _ -> zero
 

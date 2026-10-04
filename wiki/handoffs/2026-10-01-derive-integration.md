@@ -228,3 +228,42 @@ whole compiler corpus. The 8,000-branch check now allocates about 402 MB with
 memory parity remains open. These changes are not yet integrated into Derive:
 its expansion sharing needs a change witness covering every Derive and
 compile-time transformation before the macro-only guard can be carried over.
+
+Architect → Integration/Performance Engineer owns the #435 merge into this
+branch: Type.Env/Boundary/Frontier, Compiler.Program/Product, macro expansion,
+their tests, registration, benchmark and matching mirrors. Work remains solo.
+Resolved Grill Log: preserve complete generated Span keys and conditional trait
+evidence while adopting integer substitutions and bounded literal frontiers.
+Macro traversal must continue through derive members and compile-time loops;
+sharing uses an explicit transformation witness rather than relying on a hygiene
+counter. Record a matching Derive baseline and run its full suite before commit
+and push. The previous goal turn made verified progress through pushed #435
+and #436 checkpoints; full Derive delivery remains active and incomplete.
+
+The bounded macro correction also owns Frontend.Expand.Substitute and
+Frontend.ExpandSpec with their mirrors. Lambda defaults use earlier-parameter
+scope, introduced parameters mask same-named macro substitutions, and inserted
+caller expressions retain their authored syntax. Broader pattern/local-binding
+substitution and typed graph publication remain separate pending work.
+
+The integration passes all 545 property families, optimized -Werror build,
+formatter, diagnostic inventory (163 codes/33 groups/262 sources), live LSP and
+documentation-site parity. Focused lambda checks also pass in tree mode. The
+new regression exposed compiled nested-closure cache aliasing: substituted
+lambda bodies now retain generated definition/request identity while caller
+arguments keep their authored syntax. Authored lambdas still accept no defaults;
+direct AST tests cover the shared Function payload without changing grammar.
+
+With the same 214-module Derive library, the compiler corpus measures cold
+medians of 121 ms for 4,000 branches (previously 1,103 ms), 146 ms for 200 graph
+modules (168 ms), and 932 ms for all Std modules (1,155 ms); warm all-Std is 97 ms.
+Three separate wait4 samples on 8,000 branches take 348/241/232 ms, allocate
+404 MB and peak at 165–166 MB RSS. Before integration they take
+4,563/4,522/4,248 ms and allocate 16.99 GB. All-Std RSS is 316 MB after versus
+340–368 MB before. Its separate memory-pass wall samples are 1,094/988/1,035 ms;
+this does not satisfy an always-subsecond or native-memory claim.
+
+The evaluator script reports MultiMap 0.96 s tree / 0.95 s compiled; Arrays,
+Loop and Records tree values remain 1.18/2.19/1.86 s. The user's latest steering
+requires tracing their common tree runtime cost next, after pushing this passing
+checkpoint. Full Derive graph publication remains active and incomplete.

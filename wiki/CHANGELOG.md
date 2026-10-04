@@ -5,6 +5,83 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Integrate compiler performance with Derive (#431, #435)
+
+- Preserve complete generated source identities and conditional trait evidence
+  while integrating bounded literal frontiers, integer substitutions and compact
+  execution products. With the same 214-module library, cold compiler medians
+  fall from 1,103 to 121 ms for 4,000 branches and from 1,155 to 932 ms for all Std.
+  Separate all-Std measurements still exceed one second; native memory parity
+  remains open. [[handoffs/2026-10-01-derive-integration]] records raw evidence.
+- [[Macro Expansion]] walks lambda bodies inside derive callbacks and records an
+  explicit change witness before sharing unchanged syntax. [[Macro Substitution]]
+  masks macro arguments at lambda parameter binders and retains generated body
+  identity, fixing nested closures that selected each other's compiled code.
+  Authored lambda syntax remains unchanged.
+- All 545 optimized property families, warning-as-error build, formatter,
+  diagnostics, editor and documentation parity pass. Focused lambda tests pass
+  in both evaluators. MultiMap measures 0.96 s tree / 0.95 s compiled; the tree
+  Arrays, Loop and Records costs and complete Derive delivery remain pending.
+
+## 2026-10-04 — Early frontend release and deferred checker facts (#435)
+
+- [[Compiler Product Publication]] releases executable token streams immediately
+  after parsing, before discovery retains a module. Analysis against a populated
+  cache still runs the lossless frontend. Recovery findings remain identical.
+- [[Type Env]] defers only its final expression-type publication list; live
+  collection/place checks still use all recorded facts. The 8,000-branch check
+  now allocates about 402 MB and peaks near 158 MB RSS. Early frontend release
+  lowers RSS from about 185 MB; the deferred list saves another 8.1 MB allocation.
+  The post-frontier baseline was 525 MB allocation and 194 MB RSS under the same
+  default RTS policy.
+- All 465 property families, optimized -Werror, formatter, diagnostics, editor,
+  documentation and evaluator agreement checks pass. The whole compiler corpus
+  measures 122 ms for 4,000 branches, 135 ms for 200 modules and a 974 ms cold
+  all-Std median (98 ms warm). All-Std still peaks near 316 MB RSS, so native
+  compiler memory parity remains open. [[handoffs/2026-10-04-compiler-performance]]
+  preserves the first-run and allocation evidence.
+
+## 2026-10-04 — Bounded executable product lifetime (#435)
+
+- [[Compiler Product Publication]] applies the warm cache's execution contract
+  to cold checks, retaining syntax, integer kinds, constants and diagnostics.
+  Editor, documentation and REPL entry points retain their full analysis facts.
+  [[Compiler Program]] releases rejected frontend bookkeeping before checking.
+- [[Macro Expansion]] still walks every declaration and diagnoses rejected macros; it
+  shares the original tree when no expansion changed syntax. All-Std maximum
+  live heap falls from roughly 228 MB to 127 MB. The 8,000-branch workload peaks
+  near 185 MB RSS and checks in 233–236 ms after its first run. This does not
+  establish C/C++ memory parity.
+- All 465 property families, optimized warnings-as-errors, CLI formatting,
+  diagnostic inventory, live LSP, documentation parity and evaluator output
+  agreement pass. The whole compiler corpus reports a 975 ms all-Std cold
+  median and 87 ms warm median; [[handoffs/2026-10-04-compiler-performance]]
+  records the raw first-run cost and remaining memory work.
+
+## 2026-10-04 — Demand-driven type lookup and integer substitutions (#435)
+
+- [[Type Boundary]] builds its expression lookup map only when a tooling caller
+  reads it. [[Type Env]] stores inference substitutions by their existing
+  integer variable identity. Diagnostics, literal widths and published types
+  retain their existing meaning.
+- The unchanged 8,000-branch check allocates about 414 MB versus 525 MB after the
+  frontier fix. All 464 property families and live language-server checks pass.
+  Peak RSS stays near 194 MB with the default eight capabilities; this change
+  reduces allocation and does not establish native-compiler memory parity.
+
+## 2026-10-04 — Bounded integer-literal frontier work (#435)
+
+- [[Type Env]] selects recent literal constraints through [[Type Literal Frontier]]
+  without scanning unrelated older facts. Sign updates stop at the unique literal
+  identity. Deferred widths and E3018 remain unchanged.
+- [[Compiler Benchmark]] measures cold, first-cache and warm compiler work with
+  verified diagnostics, raw milliseconds and RTS memory statistics. An optimized
+  8,000-branch check falls from 4,105 to 287 ms and from 16.90 GB to 525 MB total
+  allocation on GHC 9.10.3. This is allocation over the run, not peak RSS.
+- All 464 property families, the warning-as-error build and diagnostic inventory
+  pass. [[handoffs/2026-10-04-compiler-performance]] records the remaining whole-Std
+  and peak-memory work; native compiler parity is not established.
+
 ## 2026-10-04 — Admit generic evidence by complete kind (issue #431)
 
 - Validate written generic bounds and ordinary implementation heads before

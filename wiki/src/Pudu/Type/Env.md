@@ -159,3 +159,47 @@ DeclaredTypes also inventories parameter kinds by canonical declaration identity
 This pure inventory distinguishes constructor-trait shorthand from an omitted
 ordinary trait argument. Resolved Grill Log: only a bound on a constructor with
 one trait parameter of the same kind may supply that constructor implicitly.
+
+## Creation-frontier selection (#435)
+
+Pending integer constraints remain in strictly decreasing creation-identity
+order. Since queries split the recent prefix through [[Type Literal Frontier]],
+and interval queries retain newer facts plus a shared older suffix. Validation
+partitions only that recent prefix into solved and unresolved facts; it never
+walks unrelated older constraints. Selected facts still execute in source order,
+and unsolved branch result literals still wait for the enclosing annotation.
+
+Negation targets one unique literal identity and stops when that identity is
+found or the decreasing queue has passed it. It does not rebuild the older tail.
+
+Resolved Grill Log: preserve deferred inference and diagnostic order while
+exploiting the queue's existing creation invariant. Do not sort, globally drain,
+default early or introduce process-global state. The branch-heavy benchmark
+exposes the former quadratic scan; [[Type Literal Frontier Spec]] proves suffix
+laziness and unchanged integer widths.
+
+## Integer-keyed substitution storage (#435)
+
+The private substitution table uses strict IntMap keys, the exact integer
+identity carried by TypeVar. Freshness, graph-installed counters, alias chains,
+path compression and final substitution semantics remain unchanged. Textual
+name frames and nominal identities continue to use their existing maps.
+
+Resolved Grill Log: the measured checking layer allocates about 172 MB on the
+8,000-branch input. Compare a representation specialized to its existing integer
+keys before retaining the change. Do not reinterpret source offsets as variable
+identities, mutate shared interface state, assign dense array slots to imported
+variables, or change the public Checker API. Keep only a measured improvement
+with full diagnostic and editor regression evidence.
+
+## Demand-driven expression publication (#435)
+
+`CheckerProducts.producedTypes` is intentionally lazy. Diagnostic admission and
+execution still run the complete checker with its live recorded-expression
+state, including deferred collection and place checks. Tooling alone demands
+the final reversed, substituted expression list through [[Type Boundary]].
+
+Resolved Grill Log: the diagnostic-only phase still allocates the complete
+publication spine despite the downstream lookup map being deferred. Defer that
+derived list at its producer, preserving its order, substitutions and consumers.
+Do not remove live recorded facts, defer checking itself, or drop editor answers.

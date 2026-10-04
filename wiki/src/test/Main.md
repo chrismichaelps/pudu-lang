@@ -54,3 +54,7 @@ is checked, with graph publication retained as a distinct integration gate.
 
 Register [[Type Implementation Proof Spec]] with ordinary type properties.
 Resolved Grill Log: full conditional capability evidence runs in the complete suite.
+
+The runner explicitly executes [[Type Literal Frontier Spec]] and includes its
+outcomes in the aggregate exit status. Resolved Grill Log: an unregistered
+performance regression property does not count as validation.

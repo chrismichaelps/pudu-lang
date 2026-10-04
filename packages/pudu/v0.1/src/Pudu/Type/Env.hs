@@ -89,6 +89,8 @@ module Pudu.Type.Env
   ) where
 
 import Data.Bits (finiteBitSize)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.List (partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -107,6 +109,7 @@ import Pudu.Diagnostic
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
+import Pudu.Type.Frontier (splitSince, splitBetween)
 import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
   ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
@@ -179,7 +182,7 @@ emptyDeclared =
     shared resolved representation is the slice that removes this duplication. -}
 data CheckerState = CheckerState
   { stateNext :: !Int
-  , stateSubstitution :: !(Map TypeVar Type)
+  , stateSubstitution :: !(IntMap Type)
   , stateFrames :: ![Map Text Scheme]
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
@@ -250,7 +253,9 @@ data IntegerConstraint = IntegerConstraint
 
 {-| @Type.Env.Products — the types a run recorded and what it diagnosed -}
 data CheckerProducts = CheckerProducts
-  { producedTypes :: ![(SpanKey, Type)]
+  {-| Final expression facts are demanded by tooling; live checking still uses
+      stateTypes, so diagnostic-only publication need not rebuild this list. -}
+  { producedTypes :: ~[(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
   {-| What `recordDeclaredMethod` collected, in declaration order. -}
@@ -317,7 +322,7 @@ runChecker (Checker action) = case action initialState of
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: Map TypeVar Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes :: IntMap Type -> [Map Text Scheme] -> [(Text, Scheme)]
 finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
@@ -329,7 +334,7 @@ initialState :: CheckerState
 initialState =
   CheckerState
     { stateNext = 0
-    , stateSubstitution = Map.empty
+    , stateSubstitution = IntMap.empty
     , stateFrames = [Map.empty]
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
@@ -427,7 +432,7 @@ constrainIntegerLiteral spanValue value selectedType =
         substitutions = case selectedType of
           Nothing -> stateSubstitution state
           Just name ->
-            Map.insert variable (NominalType (NominalId Nothing name) []) (stateSubstitution state)
+            IntMap.insert (stateNext state) (NominalType (NominalId Nothing name) []) (stateSubstitution state)
         constraint = IntegerConstraint spanValue value variable
      in ( VariableType variable
         , state
@@ -485,12 +490,12 @@ integerLiteralCheckpoint =
 
 finalizeIntegerLiteralsSince :: Int -> Checker ()
 finalizeIntegerLiteralsSince checkpoint = do
-  constraints <- takeIntegerConstraintsMatching (createdSince checkpoint)
+  constraints <- takeIntegerConstraintsWith (splitSince literalCreation checkpoint)
   mapM_ finalizeIntegerConstraint constraints
 
 finalizeIntegerLiteralsBetween :: Int -> Int -> Checker ()
 finalizeIntegerLiteralsBetween start end = do
-  constraints <- takeIntegerConstraintsMatching (createdBetween start end)
+  constraints <- takeIntegerConstraintsWith (splitBetween literalCreation start end)
   mapM_ finalizeIntegerConstraint constraints
 
 validateIntegerLiteralsSince :: Int -> Checker ()
@@ -539,36 +544,30 @@ takeIntegerConstraints =
     , state{stateIntegerLiterals = []}
     )
 
-takeIntegerConstraintsMatching
-  :: (IntegerConstraint -> Bool) -> Checker [IntegerConstraint]
-takeIntegerConstraintsMatching matches =
+takeIntegerConstraintsWith
+  :: ([IntegerConstraint] -> ([IntegerConstraint], [IntegerConstraint]))
+  -> Checker [IntegerConstraint]
+takeIntegerConstraintsWith select =
   Checker $ \state ->
     let constraints = stateIntegerLiterals state
-        (selected, retained) = partition matches constraints
+        (selected, retained) = select constraints
      in (reverse selected, state{stateIntegerLiterals = retained})
 
 takeResolvedIntegerConstraintsSince :: Int -> Checker [IntegerConstraint]
 takeResolvedIntegerConstraintsSince checkpoint =
   Checker $ \state ->
-    let constraints = stateIntegerLiterals state
-        isResolved constraint =
-          createdSince checkpoint constraint
-            && case resolveFinal (stateSubstitution state)
-              (VariableType (integerConstraintVariable constraint)) of
-                VariableType _ -> False
-                _ -> True
-        (selected, retained) = partition isResolved constraints
-     in (reverse selected, state{stateIntegerLiterals = retained})
+    let (recent, older) = splitSince literalCreation checkpoint (stateIntegerLiterals state)
+        isResolved constraint = case resolveFinal (stateSubstitution state)
+          (VariableType (integerConstraintVariable constraint)) of
+            VariableType _ -> False
+            _ -> True
+        (selected, unresolved) = partition isResolved recent
+     in (reverse selected, state{stateIntegerLiterals = unresolved <> older})
 
-createdSince :: Int -> IntegerConstraint -> Bool
-createdSince checkpoint constraint =
+literalCreation :: IntegerConstraint -> Int
+literalCreation constraint =
   let TypeVar identity = integerConstraintVariable constraint
-   in identity >= checkpoint
-
-createdBetween :: Int -> Int -> IntegerConstraint -> Bool
-createdBetween start end constraint =
-  let TypeVar identity = integerConstraintVariable constraint
-   in identity >= start && identity < end
+   in identity
 
 {-| What a variable stands for, remembering it for every link on the way.
 
@@ -593,20 +592,19 @@ resolveRemembering variable = do
 
 
 negateMatching :: TypeVar -> [IntegerConstraint] -> (Bool, [IntegerConstraint])
-negateMatching variable constraints = case constraints of
+negateMatching variable@(TypeVar requested) constraints = case constraints of
   [] -> (False, [])
-  constraint : rest ->
-    let (foundRest, updatedRest) = negateMatching variable rest
-     in if integerConstraintVariable constraint == variable
-          then
-            ( True
-            , constraint{integerConstraintValue = negate (integerConstraintValue constraint)} : updatedRest
-            )
-          else (foundRest, constraint : updatedRest)
+  constraint : rest
+    | literalCreation constraint < requested -> (False, constraints)
+    | integerConstraintVariable constraint == variable ->
+        (True, constraint{integerConstraintValue = negate (integerConstraintValue constraint)} : rest)
+    | otherwise ->
+        let (found, updated) = negateMatching variable rest
+         in (found, constraint : updated)
 
-resolveFinal :: Map TypeVar Type -> Type -> Type
+resolveFinal :: IntMap Type -> Type -> Type
 resolveFinal substitutions typeValue = case typeValue of
-  VariableType variable -> case Map.lookup variable substitutions of
+  VariableType (TypeVar identity) -> case IntMap.lookup identity substitutions of
     Nothing -> typeValue
     Just found -> resolveFinal substitutions found
   NominalType name arguments -> NominalType name (map (resolveFinal substitutions) arguments)
@@ -622,13 +620,13 @@ resolveFinal substitutions typeValue = case typeValue of
 
 {-| Read what an inference variable has been solved to, if anything. -}
 resolveVariable :: TypeVar -> Checker (Maybe Type)
-resolveVariable variable =
-  Checker $ \state -> (Map.lookup variable (stateSubstitution state), state)
+resolveVariable (TypeVar identity) =
+  Checker $ \state -> (IntMap.lookup identity (stateSubstitution state), state)
 
 setVariable :: TypeVar -> Type -> Checker ()
-setVariable variable typeValue =
+setVariable (TypeVar identity) typeValue =
   Checker $ \state ->
-    ((), state{stateSubstitution = Map.insert variable typeValue (stateSubstitution state)})
+    ((), state{stateSubstitution = IntMap.insert identity typeValue (stateSubstitution state)})
 
 bindName :: Text -> Scheme -> Checker ()
 bindName name scheme =

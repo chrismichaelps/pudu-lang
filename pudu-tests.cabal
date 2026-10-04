@@ -130,6 +130,7 @@ test-suite pudu-test
     Pudu.Type.Check.SystemSpec
     Pudu.Type.Check.ImportSpec
     Pudu.Type.InterfaceSpec
+    Pudu.Type.FrontierSpec
   build-depends:
     base >=4.20 && <4.23,
     bytestring >=0.11 && <0.13,

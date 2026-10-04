@@ -11,6 +11,8 @@ tags: [moc, module]
 
 - [[Generated Identity Spec]] — generated origins and complete fact identity.
 
+- [[Compiler Benchmark]] · [[Benchmark Guide]] — reproducible cold/warm compiler latency.
+
 - [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
 
 - [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.

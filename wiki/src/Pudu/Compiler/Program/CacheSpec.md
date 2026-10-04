@@ -17,7 +17,7 @@ Verify compiled product cache equivalence, invalidation, corruption recovery and
 ## Interface
 
 Exports `testCacheCorruption`, `testCacheEquivalence`, `testCacheInvalidation`,
-`testFoldedConstants`, and `testImportedConstants`, each `IO Property`.
+`testFoldedConstants`, `testImportedConstants`, and `testProductPublication`, each `IO Property`.
 
 ## Algorithm
 
@@ -28,6 +28,12 @@ Imported constant coverage creates temporary modules with explicit aliases, defa
 selected imports (including a function shadowing builtin `show`) and transitive constants, checks frozen values and warm-cache equivalence,
 and refuses imported effectful calls before runtime.
 
+Product-publication coverage also checks the frontend boundary directly on
+valid text, an invalid scalar and an unclosed body. Cache-disabled, cold and
+warm execution retain exactly the full frontend's admitted syntax and findings
+with an empty token stream. Analysis against that same cache still returns the
+complete lossless frontend, proving it bypasses token-free restored products.
+
 ## Invariants and failure cases
 
 Cached products retain source identity and integer kinds. Failed compiles are never stored.
@@ -35,6 +41,16 @@ Function constants carry environments and cannot be frozen. Effects remain unava
 
 ## Grill Log
 
+- **Q:** Check early token release only through final results? **A:** Assert the
+  frontend boundary directly, including recovery diagnostics and an analysis
+  call against a populated cache. _Rationale:_ final projection alone cannot
+  prove release happened before discovery. _Rejected:_ timing assertions or a
+  successful fixture that leaves failure and cached-analysis contracts untested.
+- **Q:** Compare only cached runs with each other? **A:** Compare full analysis
+  with cold and warm execution publication, and inspect both product contracts.
+  _Rationale:_ lifetime changes must retain diagnostics, link order, integer
+  widths, frozen constants and actual execution, while preserving editor facts.
+  _Rejected:_ allocation-only validation or skipped failure products.
 - **Q:** Can a constructor alias test stop at checking? **A:** No; assert frozen products and actual
   execution through cold and warm caches, because a checker-only fix can still fail at linking.
 - **Q:** What regression boundary matters? **A:** Imported function calls must still refuse effects
@@ -42,7 +58,8 @@ Function constants carry environments and cannot be frozen. Effects remain unava
 
 ## Linkage
 
-Requires [[Compiler Program]], [[Compiler Cache]], [[Eval Program]] and [[Eval Frozen]].
+Requires [[Compiler Program]], [[Compiler Cache]], [[Compiler Product Publication]],
+[[Eval Program]] and [[Eval Frozen]].
 Consumed by [[Program Spec]].
 
 ## Referenced by

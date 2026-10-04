@@ -36,6 +36,10 @@ properties, explicitly registered alongside the existing program properties.
 
 List each imported property with its description; no property is built here.
 
+Register [[Program Cache Spec]]'s product-publication boundary: full analysis,
+cold/warm executable results and rejected-source diagnostics. Resolved Grill Log:
+the product policy must have observable execution and tooling contract evidence.
+
 ## Negative Logic (Prohibited Paths)
 
 - No test logic; a property is defined in the spec that owns its subject.

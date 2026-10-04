@@ -17,6 +17,8 @@ tags: [moc, module]
 - [[Type Check Reflection]] — owner-specific heterogeneous metadata iteration.
 - [[Type Check Receiver]] — specialization shared by called and captured methods.
 
+- [[Type Literal Frontier]] · [[Type Literal Frontier Spec]] — bounded deferred-literal selection.
+
 - [[Type Formation Order]] — dependency ordering of transparent aliases before data fields.
 - [[Type Interface Spec]] — imported generic and late-alias checks and callback refusals.
 

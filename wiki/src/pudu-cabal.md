@@ -8,6 +8,10 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Compiler Product Publication]] as the bounded cache-admission and
+product-lifetime boundary. Resolved Grill Log: preserve compiler phases and
+cache identity; full analysis remains available independently of executable reuse.
+
 ## Purpose and interface
 
 Declare package metadata, compiler library modules, executable components, test components, compiler
@@ -236,3 +240,7 @@ publication and field proof remain explicit subsequent consumers.
 Register [[Syntax Cache Provenance]] for the checked-product storage boundary.
 Resolved Grill Log: validate authored identity before deferred encoding, without
 changing the warm-reader format or adding dependencies.
+
+Register [[Type Literal Frontier]], a pure bounded pending-constraint selector;
+no dependencies or public Pudu syntax change. Resolved Grill Log: the checker
+retains ownership and uses its existing monotone fresh-variable invariant.
