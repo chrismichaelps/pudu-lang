@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-04-ci-latency]] — optimized compiler CI reuse (issue #436).
+
 - [[2026-10-01-multimap-performance]] — focused MultiMap kernels and benchmark evidence.
 
 - [[2026-09-30-atomic-file-permissions]] — issue #385 atomic creation and replacement permissions (complete).

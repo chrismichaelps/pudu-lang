@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: haskell-actions/setup@v2
+        id: haskell
         with:
           ghc-version: 9.14.1
           cabal-version: 3.16.1.0
@@ -35,6 +36,13 @@ jobs:
         run: |
           sudo apt-get update || echo "some package indexes could not be read; continuing to the install"
           sudo apt-get install -y libffi-dev
+      - name: Restore compiled Haskell dependencies
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ steps.haskell.outputs.cabal-store }}
+          key: ${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-O2-Werror-${{ hashFiles('cabal.project', 'cabal.project.freeze', 'pudu-tests.cabal', 'packages/pudu/v0.1/pudu.cabal', 'packages/pudu/v0.1/cabal.project', 'packages/pudu/v0.1/cabal.project.freeze') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-O2-Werror-
       - run: cabal update
       # A fresh checkout has nothing built, so this cannot answer "up to date"
       # without compiling — which is how a local `-Werror` run passed for a week
@@ -42,7 +50,6 @@ jobs:
       # bindings through.
       - name: Verify the tree compiles with no warnings
         run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
-      - run: cabal build all --enable-optimization=2
       # Every gate below runs the executable, and `cabal list-bin` answers for
       # the configuration it is asked about rather than the one that was built.
       # Asked without the optimization flag it names the unoptimized path: on a
@@ -60,15 +67,16 @@ jobs:
       # observed run so an ordinary slow day is not a failure.
       - name: Run the full suite
         timeout-minutes: 12
-        run: cabal test all --enable-optimization=2 --test-show-details=direct
+        run: cabal test all --enable-optimization=2 --ghc-options="-Werror" --test-show-details=direct
       - name: Verify every committed Pudu file is formatted
-        run: cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name '*.pudu')
+        run: '"$PUDU" fmt --check packages/pudu test-fixtures examples'
       # Formatting only parses. Nothing else compiled the standard library
       # itself: a module broke only where a test happened to import it, and the
       # ones no test reaches were never checked at all. The fixtures are
       # excluded because many of them are programs that must fail to check.
       - name: Verify the standard library and examples compile
-        run: cabal run -v0 pudu -- check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
+        run: |
+          "$PUDU" check $(find packages/pudu/v0.1/lib examples -name '*.pudu')
       # The documentation promises that every example is a complete program
       # that runs as written, and the playground opens on its examples. A
       # documentation edit that broke one used to reach readers unnoticed.
@@ -163,6 +171,6 @@ jobs:
         run: python3 test/residency.py "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
-          cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
-          ! cabal run -v0 pudu -- doc --html > /dev/null
-          ! cabal run -v0 pudu -- doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null
+          "$PUDU" doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
+          ! "$PUDU" doc --html > /dev/null
+          ! "$PUDU" doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null

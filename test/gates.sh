@@ -36,7 +36,7 @@ fi
 run 'no warnings, optimized' \
   cabal build all --enable-optimization=2 --ghc-options='-Werror'
 run 'full suite, optimized' \
-  cabal test all --enable-optimization=2 --test-show-details=direct
+  cabal test all --enable-optimization=2 --ghc-options='-Werror' --test-show-details=direct
 
 # `cabal list-bin` answers for the configuration it is asked about, not the one
 # that was built. Asked plainly it names the unoptimized path: right after the
@@ -74,7 +74,7 @@ run 'the language server survives what an editor sends it' \
 run 'a watched program starts again for its sources and its --also paths' \
   bash -c 'node test/watch.mjs "$PUDU"'
 run 'the documentation site keeps its contract' \
-  bash -c 'cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
+  bash -c '"$PUDU" doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
 
 if [ "$failed" -ne 0 ]; then
   printf '\nat least one gate failed\n'

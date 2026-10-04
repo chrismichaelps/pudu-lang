@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Reuse the optimized compiler across CI gates (#436)
+
+- [[Compiler CI Workflow]] caches compiled Cabal dependencies under the actual
+  toolchain, host and manifest identity. Checkout source still builds with
+  optimization and warnings as errors; no validation gate is skipped on a hit.
+- Formatting, Std/examples and documentation invoke the selected executable.
+  The redundant relaxed build is removed, and [[Repository Gates]] keeps the
+  same warning/test configuration locally.
+- YAML, shell syntax, preserved-gate assertions and the exact affected CLI
+  commands pass locally. Hosted cache savings remain unmeasured; the successful
+  baseline spent 713 seconds in the fresh dependency/compiler build.
+
 ## 2026-10-01 — Persistent MultiMap kernels below one second
 
 - [[Std MultiMap]] uses proven pure primitives for persistent append and indexed

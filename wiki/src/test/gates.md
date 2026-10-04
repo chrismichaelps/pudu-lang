@@ -51,3 +51,13 @@ including externally observable filesystem modes that portable permission boolea
 ## Referenced by
 
 [[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Atomic Permission Gate]] · [[Pudu CLI]]
+
+## One optimized configuration (#436)
+
+The full suite retains the warning build's -Werror configuration. Documentation
+site parity invokes the resolved PUDU executable like every other behavioral
+gate. Build cleanup and aggregate failure reporting remain unchanged.
+
+Resolved Grill Log: mirror [[Compiler CI Workflow]]'s selected executable and
+flags; do not start another Cabal configuration to run documentation. The full
+local gate still forces a fresh source build.
