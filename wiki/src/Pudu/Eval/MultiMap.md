@@ -102,15 +102,26 @@ Decimal output is required; semantic equality alone cannot detect this regressio
 
 For a host-Int-sized IntValue key and value, an empty occurrence Map promotes to
 a persistent nested IntMap. Later integer updates descend the numeric key and
-value indexes directly and retain original key/value representatives plus count.
+value indexes directly and retain original key/value kind tags plus count.
 Nonempty generic maps stay generic. Contains reads the numeric index directly;
 noninteger or out-of-host-range arguments use its cached ordinary Map view.
 Groups remain ordinary persistent Map/Sequence storage. All updates are immutable.
+The numeric index keys supply the integer payloads for the lazy ordered view;
+entries retain only both kind tags and the original count. This removes duplicate
+boxed numeric storage without interning, normalizing kinds or mutating snapshots.
+Construct strict IntPairEntry fields before publishing the persistent index;
+unevaluated tuple selectors must not retain the temporary conversion payloads.
+Platform signed pairs use the compact constructor whose identity supplies both
+kind tags; mixed kinds use the explicit-tag entry. Count validation is shared.
 
 Resolved Grill Log: a specialized index requires no benchmark recognition, no
 public field/type change, no altered evaluator mode and no mutation. Retain a
 lazy ordered view for remove/setAll/show and all public Map access. Test signed
 ordering, duplicate increments, snapshots and transition back to generic maps.
+Resolved Grill Log: preserve the incoming kinds on every equal-pair overwrite;
+reconstruct only host-sized integers from exact index keys. Compare the ordered
+view against ordinary insertion, including mixed kinds, both host boundaries,
+out-of-host-width and noninteger transitions, malformed counts and overflow.
 
 [[Eval Loop Kernel]] fuses pure loop regions containing these proven
 primitives; original library implementations retain ordinary evaluation and form

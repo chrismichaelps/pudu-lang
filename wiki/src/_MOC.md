@@ -110,7 +110,8 @@ tags: [moc, module]
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval Loop Kernel]] — complete pure regions, proven primitives and closed module functions.
+- [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
+- [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
 

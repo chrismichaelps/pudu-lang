@@ -15,7 +15,7 @@ import Pudu.Eval.Env
 import Pudu.Eval.Frame (frameLookup)
 import Pudu.Eval.Match (integerLiteralValue, literalValue)
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains, multiMapWrapper)
-import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readMember)
+import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
 import Pudu.Eval.Place (exclusiveParameters)
 import Pudu.IntegerLiteral (integerKindMeet)
 import Pudu.Eval.Value (Builtin (..), Closure (..), Value (..))
@@ -155,6 +155,15 @@ planExpression region layout (Located spanValue expression) = case expression of
       let code = withArguments plans (invoke spanValue)
           Plan combined names written callees scratch = joined code plans
       pure (Plan combined names written (Set.insert prefix callees) (max needed scratch))
+  IndexExpression target index -> do
+    receiver <- planExpression region layout target
+    subscript <- planExpression region layout index
+    pure $ do
+      a@(Plan receiverCode _ _ _ _) <- receiver
+      b@(Plan indexCode _ _ _ _) <- subscript
+      let code slots env = bindResult (receiverCode slots env) $ \value ->
+            bindResult (indexCode slots env) (action env . readIndex spanValue value)
+      pure (joined code [a, b])
   MemberExpression target member | region == ClosedRegion -> do
     planned <- planExpression region layout target
     pure $ do
@@ -350,6 +359,7 @@ readsOf (Located _ expression) = case expression of
   UnaryExpression _ operand -> readsOf operand
   BinaryExpression left _ right -> readsOf left <> readsOf right
   CallExpression _ arguments -> Set.unions (map readsOf arguments)
+  IndexExpression target index -> readsOf target <> readsOf index
   BlockExpression block -> readsOfBlock block
   IfExpression condition thenBlock elseBranch -> readsOf condition <> readsOfBlock thenBlock <> maybe Set.empty readsOf elseBranch
   _ -> Set.empty

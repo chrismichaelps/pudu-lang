@@ -11,14 +11,16 @@ module Pudu.Eval.BindingFlowSpec
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
 import Data.Maybe (isJust)
 import Data.Text (Text)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Diagnostic (diagnosticCodeText, diagnosticCode, diagnosticHelp, diagnosticMessage, diagnosticSpan)
 import Pudu.Eval (EvalOutcome (..), callClosure, runWithEffects)
 import Pudu.Eval.Common (codesOfConstant, evaluate, evaluateStatements, evaluateWith, outcomeOf, runProgram)
-import Pudu.Eval.Env (Env (..), Evaluator (..), callLimit, withFrame, withTally)
+import Pudu.Eval.Env (Env (..), Evaluator (..), callLimit, lookupName, withFrame, withTally)
 import Pudu.Eval.Loop.Kernel (pureLoop)
+import Pudu.Eval.Operator (readIndex)
 import Pudu.Eval.Value (Captured (..), Closure (..), Frame (..), Value (..), intOf)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -251,6 +253,18 @@ testLoops = do
     , "value"
     ]
   bounded <- codesOfConstant "{ var count = 0\n while true { count = count + 1 }\n true }"
+  indexed <- evaluateStatements
+    [ "var values = [10, 20, 30]", "let snapshot = values", "let other = [40, 50, 60]"
+    , "var index = 0", "var reads = 0", "var total = 0"
+    , "while index < 2 && (true || values[999] > 0) {"
+    , " total = total + { reads = reads * 10 + 1\n values }[{ reads = reads * 10 + 2\n values = other\n index = index + 1\n index }]"
+    , "}", "(index, reads, total, snapshot)"
+    ]
+  indexedCall <- runProgram ["fn pick(values: Array[Int], index: Int) -> Int = values[index]"]
+    [ "let values = [3, 5, 7]", "var index = 0", "var total = 0"
+    , "while index < 3 { total = total + pick(values, index)\n index = index + 1 }"
+    ] "total"
+  indexBoundary <- testIndexBoundary
   pure $ conjoin
     [ counted === "10"
     , counterexample "break leaves the loop" (broken === "4")
@@ -259,6 +273,10 @@ testLoops = do
     , counterexample "short-circuiting skips invalid arithmetic" (shortCircuit === "3")
     , counterexample "pure loops retain checked overflow" (overflow === "failed: E7005")
     , counterexample "pure constant loops retain the step refusal" (bounded === ["E7002"])
+    , counterexample "index reads retain receiver order, skipped errors and immutable snapshots"
+        (indexed === "(2, 1212, 80, [10, 20, 30])")
+    , counterexample "closed bodies retain parameter indexing" (indexedCall === "15")
+    , indexBoundary
     ]
 
 testPureCalls :: IO Property
@@ -379,6 +397,39 @@ diagnosticIdentity outcome =
     , spanEnd (diagnosticSpan diagnostic))
   | diagnostic <- outcomeDiagnostics outcome
   ]
+
+testIndexBoundary :: IO Property
+testIndexBoundary = do
+  source <- newSource (SourceName "pure-index-boundary.pudu")
+    "module Boundary\nfn probe(values: Array[Int]) { var turns = 0\n var index = 0\n while turns < 1 { index = values[index]\n turns = turns + 1 } }"
+  compiled <- runCompile source
+  case compileModule compiled of
+    Just parsed
+      | [entry] <- [value | Located _ (FunctionDeclaration value) <- moduleDeclarations parsed]
+      , Just (Located _ (BlockBody (Located _ Block{blockResult = Just
+          (Located loopSpan (WhileExpression _ condition body))}))) <- functionBody entry
+      , Located _ Block{blockStatements = [Located _ (ExpressionStatement
+          (Located _ (BinaryExpression _ "=" (Located indexSpan IndexExpression{}))))]} <- body -> do
+          let values = ArrayValue (Seq.singleton (intOf 7))
+              probe index = withFrame [("values", values), ("turns", intOf 0), ("index", index)] $ do
+                planned <- pureLoop loopSpan condition body
+                case planned of
+                  Nothing -> pure (BoolValue False)
+                  Just code -> code >> do
+                    result <- lookupName "index"
+                    turns <- lookupName "turns"
+                    pure (BoolValue (result == Just (intOf 7) && turns == Just (intOf 1)))
+          accepted <- runWithEffects True (probe (intOf 0))
+          refused <- runWithEffects True (probe (intOf 1))
+          ordinary <- runWithEffects True (readIndex indexSpan values (intOf 1))
+          pure $ conjoin
+            [ counterexample "indexed loops actually use the complete kernel"
+                (outcomeValue accepted === Just (BoolValue True))
+            , counterexample "out-of-bounds kernel indexing refuses" (outcomeValue refused === Nothing)
+            , counterexample "index refusal retains the exact ordinary diagnostic"
+                (outcomeDiagnostics refused === outcomeDiagnostics ordinary)
+            ]
+    _ -> pure (counterexample "index boundary fixture did not compile to the expected AST" False)
 
 testPureCallBoundary :: IO Property
 testPureCallBoundary = do

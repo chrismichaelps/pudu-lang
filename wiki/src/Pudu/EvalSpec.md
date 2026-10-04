@@ -21,6 +21,8 @@ Import each selected focused test explicitly and expose a stable descriptive lab
 registered property executes through the same structured diagnostic or evaluator test harness;
 adding a helper to an unused secondary property list is insufficient registration.
 Register `testPureCalls` for closed-body calls and their fallback boundary.
+Register `testNumericOccurrences` for persistent numeric-index storage and exact
+scalar-index refusal at the shared primitive boundary.
 Explicitly register `testSlotScopes` from [[Eval Function Closure Tests]] so
 binding-order, scope and capture admission regressions execute in the full suite.
 

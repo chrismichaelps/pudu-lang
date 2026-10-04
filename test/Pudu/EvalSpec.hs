@@ -20,6 +20,7 @@ import Pudu.Eval.DataSpec
   , testData
   , testInterpolation
   , testKeyed
+  , testNumericOccurrences
   , testTextMethods
   )
 import Pudu.Eval.FunctionClosureSpec
@@ -62,6 +63,7 @@ evalProperties =
   , ("slot admission preserves ordered lexical scope and capture", testSlotScopes)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
+  , ("numeric occurrence storage preserves representatives and bounds", testNumericOccurrences)
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("interpolated strings render their holes", testInterpolation)
   , ("calendar time and subprocesses answer with results", testClock)

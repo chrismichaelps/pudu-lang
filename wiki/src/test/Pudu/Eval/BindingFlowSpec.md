@@ -30,6 +30,8 @@ ranges, alternatives and return. Unwind tests cross nested lexical blocks and
 check the caller's binding after break/return. Loop tests cover counted while,
 break and tuple iteration, plus pure-region condition writes, short-circuit,
 checked overflow and compile-time step refusal.
+Indexed pure loops additionally cover receiver/index evaluation order, snapshots,
+short-circuit skips, scalar bounds refusal and an explicit admission probe.
 
 Uses the shared `Pudu.Eval.Common` runners, [[Evaluator]], [[Eval Loop Kernel]],
 [[grammar/pudu]] and [[architecture/SEMANTICS]]. Properties are registered in
@@ -42,6 +44,10 @@ codes. No changed benchmark inputs, source-name optimization switches, snapshot
 updates or acceptance of failed compilation as successful execution.
 
 ## Grill Log
+
+- **Q:** Add indexing without testing the execution path? **A:** Compile and
+  extract a while AST, assert pureLoop returns a plan, then run it. Source tests
+  also compare ordered receiver/index writes, immutable snapshots and refusal.
 
 - **Q:** Test only the scalar loop's final total? **A:** Also check writes in the
   terminating condition, skipped invalid arithmetic, overflow and constant

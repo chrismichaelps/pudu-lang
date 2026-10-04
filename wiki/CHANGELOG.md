@@ -5,6 +5,33 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Admit indexed loops and compact numeric occurrences (#435)
+
+- [[Eval Loop Kernel]] admits complete pure receiver/index regions in loops and
+  closed bodies. Their order and the existing shared index diagnostic remain
+  unchanged. [[Eval Operator Access]] checks the exact Integer upper bound before
+  narrowing; huge positive array, tuple and text indices now reliably refuse
+  with E7004 instead of wrapping to a host position.
+- [[Eval Value]] and [[Eval MultiMap]] store numeric coordinates once in the
+  persistent IntMap keys, with strict count entries and a compact common integer
+  kind. The lazy ordered view reconstructs the last inserted representatives,
+  retaining signed order, immutable snapshots and ordinary Map interoperability.
+- [[Eval Data Tests]], [[Eval Binding Flow Tests]] and [[Eval Test Coordinator]]
+  exercise real promotion, mixed-kind overwrites, extreme coordinates, generic
+  fallback, retained snapshots, exact refusal equality and actual indexed-region
+  admission. Every fresh repository gate passes; an additional complete tree
+  run passes all 548 property families. Local GHC is 9.10.3.
+- The unchanged five-run script reports tree/compiled milliseconds: Arrays
+  750/580, Calls 430/270, Iterate 420/310, Loop 670/700, Maps 770/550,
+  MultiMap 870/850, Records 420/430. All seven output pairs match.
+  These are script minima and do not promise a host-independent time bound.
+- Three alternating cold samples compare identical inputs with the preceding
+  binary: Arrays tree median 911 → 756 ms and allocation 4.60 → 3.49 GB;
+  Iterate tree 482 → 415 ms and 2.36 → 1.92 GB; MultiMap tree
+  977 → 878 ms and compiled 926 → 900 ms. MultiMap peak RSS falls
+  from 273 to 256 MB, while cumulative allocation rises 3.17 → 3.26 GB
+  (about 2.7%). Native execution/memory parity and full Derive delivery remain open.
+
 ## 2026-10-04 — Remove closed-call setup and collector fanout (#435)
 
 - [[Eval Loop Kernel]] admits complete parameter-only synchronous module

@@ -419,3 +419,45 @@ file receives only its worker-policy comment correction. Publish this bounded
 runtime checkpoint immediately. Exact next implementation action: return to
 canonical Derive graph publication and field proof; neither the full feature
 nor native execution/memory parity is complete.
+
+Performance steering continues on the feature branch. Architect → Runtime/
+Performance Engineer owns Eval.Value, Eval.MultiMap, Eval.Loop.Kernel,
+Eval.Operator.Access, DataSpec, BindingFlowSpec, EvalSpec and matching mirrors.
+The dependency graph is benchmark → complete loop proof → collection primitive
+→ numeric storage. Current cold medians are 645 ms Loop, 921 ms MultiMap tree,
+899 ms Arrays tree. MultiMap peaks near 265–273 MB RSS with 3.17 GB cumulative
+allocation; Arrays tree allocates 4.60 GB. Preserve these distinct measurements.
+Resolve compact numeric occurrence storage and pure indexing admission before
+implementation. The shared index helper additionally narrows before checking its
+bound; correct exact Integer bounds before admitting that primitive into loops.
+No new evaluator mode, benchmark input, collection mutation or worker policy.
+Exact next action: implement the resolved mirrors, test representation/order/
+diagnostic boundaries, then compare identical workloads and run full gates.
+
+The indexed-region and compact-entry checkpoint passes every fresh repository
+gate and all 548 families in an additional complete tree run. Shared bounds
+refuse exact huge indices without host narrowing; direct tests compare typed
+kind representatives, all retained snapshots and generic-map refusal diagnostics.
+The unchanged five-run script reports tree/compiled ms: Arrays 750/580,
+Calls 430/270, Iterate 420/310, Loop 670/700, Maps 770/550, MultiMap
+870/850, Records 420/430; all seven stdout/stderr pairs match.
+Three alternating cold samples of the final compact representation give Arrays
+911 → 756 ms tree, Iterate 482 → 415 ms tree, MultiMap 977 → 878 ms tree
+and 926 → 900 ms compiled. MultiMap peak RSS falls 273 → 256 MB;
+cumulative allocation increases about 2.7% to 3.26 GB, while sampled live heap
+falls to 86 MB. Preserve that tradeoff. The speculative inline pragma has no
+allocation evidence and is removed. Local GHC 9.10.3 passes; locked 9.14.1
+and native resource parity are unverified. Publish this bounded fix and push
+its commit immediately, with no PR or dev promotion.
+
+The user additionally authorizes a reusable dependency-layer treemap report.
+Architect → Performance Tooling Engineer will own bench/layers.mjs,
+bench/layers/model.mjs, bench/layers/view.mjs, bench/layers.test.mjs,
+bench/README.md and matching complete mirrors. Resolve source-import SCCs,
+condensation layers and exclusive measured allocation/CPU attribution before
+implementation. Structural coupling is context, not proof of a performance bug;
+unknown costs remain unknown and inherited costs must not be counted twice.
+Exact next action after checkpoint publication: implement and validate that
+local report against a fresh instrumented workload, then commit and push it.
+Canonical typed Derive graph publication and all seven standard derives remain
+active and incomplete after this bounded tooling task.

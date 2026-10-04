@@ -168,12 +168,17 @@ the behaviour is the same for every kind of value.
 
 `MapValue` is a bundled bidirectional pattern covering the ordinary ordered map
 and `IntPairMapValue`. The latter holds a persistent nested IntMap of original
-key/value/count triples plus an intentionally lazy, memoized ordered Map view.
+key/value kind tags and occurrence counts plus an intentionally lazy, memoized ordered Map view.
 Only Eval.MultiMap creates/updates this representation. All existing Map methods,
 rendering, equality, freezing and ordering consume the same MapValue view.
 Integer payloads must fit host Int; otherwise use the generic representation.
-Signed ascending IntMap traversal produces lexicographic tuple ordering; incoming
-representatives and integer kind tags remain in each stored triple.
+Signed ascending IntMap traversal produces lexicographic tuple ordering. Reconstruct
+integer values from the two numeric index keys only when the ordered view is read;
+each entry retains incoming integer kind tags and the original count value.
+`IntPairEntry` stores those three fields strictly: lazy tuple selectors could keep
+the entire conversion tuple and its numeric payloads alive, defeating compaction.
+`PlatformIntPairEntry` omits both tags when both are the platform signed kind;
+the constructor itself proves those tags. Mixed kinds retain explicit tags.
 Foreign binding/slot/claim/release records move unchanged to [[Eval Foreign Binding]]
 and remain re-exported here to keep Value below the default file-size limit.
 
@@ -182,6 +187,16 @@ change the public record fields. The cached Map view is lazy because eagerly
 rebuilding it per add would make construction quadratic. Noninteger additions and
 ordinary Map operations materialize that view and use existing behavior. Equal
 numeric keys retain the incoming tuple's representatives, including kind tags.
+Resolved Grill Log: numeric payloads already live in the IntMap keys. Keeping
+another boxed key and value per occurrence retains redundant objects. Exact host
+fit checks make reconstruction lossless at both signed boundaries; kind tags must
+still replace on equal keys, and arbitrary-width inputs retain ordinary maps.
+Resolved Grill Log: force the compact entry's tags/count at insertion, so its
+selectors cannot retain the conversion tuple. The count remains an ordinary
+Value, preserving arbitrary precision, malformed-entry and overflow semantics.
+Resolved Grill Log: the common platform pair needs only its count pointer. Keep
+an explicit tagged alternative for every other kind combination, and select the
+constructor from incoming kinds on each update, including equal-pair overwrites.
 
 ## Proven wrapper cache
 

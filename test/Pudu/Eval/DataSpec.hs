@@ -6,10 +6,21 @@ module Pudu.Eval.DataSpec
   , testDecimalEquality
   , testInterpolation
   , testKeyed
+  , testNumericOccurrences
   , testTextMethods
   ) where
 
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp, diagnosticMessage, diagnosticSpan)
+import Pudu.Eval (EvalOutcome (..), runWithEffects)
+import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
+import Pudu.Eval.Operator (readIndex)
+import Pudu.Eval.Value (IntPairEntry (..), OrdValue (..), Value (..), intOf, intPairMap)
+import Pudu.IntegerLiteral (IntegerKind (..))
+import Pudu.Source (SourceName (..), emptySpan, newSource)
 
 import Pudu.Eval.Common
   ( codesOf
@@ -25,6 +36,7 @@ dataProperties =
   , ("built-in text methods answer with new values", testTextMethods)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
+  , ("numeric occurrence storage preserves representatives and bounds", testNumericOccurrences)
   , ("interpolated strings render their holes", testInterpolation)
   , ("Decimal equality is numeric inside every aggregate", testDecimalEquality)
   ]
@@ -154,6 +166,78 @@ testKeyed = do
         (membershipOrder === "(12, true)")
     , counterexample "a set is walked by for, as the grammar says" (setLoop === "10")
     , counterexample "a map is walked as key and value pairs" (mapLoop === "3")
+    ]
+
+testNumericOccurrences :: IO Property
+testNumericOccurrences = do
+  source <- newSource (SourceName "numeric-index.pudu") "index"
+  let spanValue = emptySpan source
+      empty = RecordValue "MultiMap" [("groups", MapValue Map.empty), ("occurrences", MapValue Map.empty)]
+      inputs = [(intOf (toInteger (minBound :: Int)), intOf (toInteger (maxBound :: Int)))
+        , (intOf (-3), intOf (-5)), (intOf 2, intOf (-9)), (intOf 0, intOf 0)
+        , (IntValue (SignedKind 8) (-3), IntValue BigIntKind (-5)), (intOf (-3), intOf (-5))]
+      contents entries = [(key, count) | (OrdValue key, count) <- Map.toAscList entries]
+      matches held expected = case held of
+        RecordValue _ fields | Just (MapValue actual) <- lookup "occurrences" fields ->
+          contents actual == contents expected
+        _ -> False
+      numeric held = case held of
+        RecordValue _ fields | Just (IntPairMapValue index _) <- lookup "occurrences" fields ->
+          case IntMap.lookup (-3) index >>= IntMap.lookup (-5) of
+            Just PlatformIntPairEntry{} -> True
+            _ -> False
+        _ -> False
+      walk held expected snapshots remaining = case remaining of
+        [] -> pure (BoolValue (all (uncurry matches) snapshots))
+        (key, value) : rest -> do
+          next <- callMultiMapAdd spanValue [held, key, value]
+          found <- callMultiMapContains spanValue [next, key, value]
+          let updated = Map.insertWith (\_ old -> case old of
+                IntValue kind count -> IntValue kind (count + 1)
+                other -> other) (OrdValue (TupleValue [key, value])) (intOf 1) expected
+          if found == BoolValue True && matches next updated
+            then walk next updated ((next, updated) : snapshots) rest
+            else pure (BoolValue False)
+      counted count = RecordValue "MultiMap"
+        [("groups", MapValue Map.empty), ("occurrences", intPairMap
+          (IntMap.singleton 0 (IntMap.singleton 0 (PlatformIntPairEntry count))))]
+      ordinary count = RecordValue "MultiMap"
+        [("groups", MapValue Map.empty), ("occurrences", MapValue
+          (Map.singleton (OrdValue (TupleValue [intOf 0, intOf 0])) count))]
+  promoted <- runWithEffects True $ do
+    first <- callMultiMapAdd spanValue [empty, intOf (-3), intOf (-5)]
+    pure (BoolValue (numeric first))
+  matrix <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)] inputs)
+  transitions <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)]
+    (inputs <> [(intOf 4, StrValue "member"), (IntValue BigIntKind (2 ^ (100 :: Int)), intOf 4)]))
+  failures <- mapM (\count -> do
+    specialized <- runWithEffects True (callMultiMapAdd spanValue [counted count, intOf 0, intOf 0])
+    generic <- runWithEffects True (callMultiMapAdd spanValue [ordinary count, intOf 0, intOf 0])
+    pure $ conjoin
+      [ outcomeValue specialized === Nothing
+      , outcomeDiagnostics specialized === outcomeDiagnostics generic
+      , map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics specialized)
+          === [if count == StrValue "bad" then "E7001" else "E7005"]
+      ]) [intOf (toInteger (maxBound :: Int)), IntValue (UnsignedKind 8) 255, StrValue "bad"]
+  wideFirst <- runWithEffects True (walk empty Map.empty []
+    [(IntValue BigIntKind (2 ^ (100 :: Int)), intOf 0)])
+  bounds <- mapM (\(container, index) -> do
+    outcome <- runWithEffects True (readIndex spanValue container (IntValue BigIntKind index))
+    pure $ conjoin
+      [ outcomeValue outcome === Nothing
+      , [(diagnosticCodeText (diagnosticCode diagnostic), diagnosticMessage diagnostic,
+          diagnosticHelp diagnostic, diagnosticSpan diagnostic) | diagnostic <- outcomeDiagnostics outcome]
+          === [("E7004", "index out of range", Nothing, spanValue)]
+      ]) [(container, index) | container <- [ArrayValue (Seq.singleton (intOf 7)), TupleValue [intOf 7], StrValue "x"]
+          , index <- [-1, 1, toInteger (maxBound :: Int) + 1, 2 ^ (100 :: Int)]]
+  pure $ conjoin
+    [ counterexample "platform numeric pairs use compact storage" (outcomeValue promoted === Just (BoolValue True))
+    , counterexample "ordered keys preserve incoming kinds, counts and snapshots"
+        (outcomeValue matrix === Just (BoolValue True))
+    , counterexample "generic and wide transitions preserve the numeric prefix"
+        (outcomeValue transitions === Just (BoolValue True))
+    , counterexample "a wide first pair remains exact" (outcomeValue wideFirst === Just (BoolValue True))
+    , conjoin failures, conjoin bounds
     ]
 
 testInterpolation :: IO Property

@@ -21,6 +21,10 @@ text operations. Decimal structural equality regressions cover issue #376.
 `dataProperties` registers the exported `testData`, `testArrayConcat`, `testKeyed`,
 `testInterpolation`, `testTextMethods`, and `testDecimalEquality` actions for the evaluator suite.
 Each returns a QuickCheck `Property` through `Pudu.Eval.Common`'s checked-source runners.
+`testNumericOccurrences` also exercises the private MultiMap index with evaluated
+runtime values, preserving integer kind representatives across promotion and
+ordinary-map transitions. This representation boundary is not expressible as
+mixed integer kinds in a well-typed Pudu Map. Ordinary fixtures remain required.
 
 ## Governance
 
@@ -34,6 +38,8 @@ Each returns a QuickCheck `Property` through `Pudu.Eval.Common`'s checked-source
 ## Linkage
 
 - **Requires:** `Pudu.Eval.Common`, QuickCheck.
+- Numeric storage checks also require [[Eval MultiMap]], [[Eval Env]],
+  [[Eval Value]], [[Integer Literal]], [[Diagnostic Model]] and [[Source]].
 - **Consumed by:** `Pudu.EvalSpec`, the shared test runner.
 
 ## Negative Logic (Prohibited Paths)
@@ -42,6 +48,14 @@ Each returns a QuickCheck `Property` through `Pudu.Eval.Common`'s checked-source
 - No unchecked evaluator standing in for the compiler and runtime path.
 
 ## Grill Log
+
+- **Q:** Test numeric storage with one rendered map only? **A:** Compare its lazy
+  ordered view with ordinary insertion after every update; cover signed ordering,
+  both host boundaries, incoming kind replacement, duplicates, snapshots,
+  generic transitions, count overflow and malformed entries. Preserve exact
+  diagnostics and exercise promotion directly.
+  Assert the common platform pair's compact constructor, and overwrite a pair
+  through platform → mixed kinds → platform while retaining each snapshot.
 
 - **Q:** Is equality of two Options enough to fix Decimal equality? **A:** No; cover nested
   aggregates, collections and lookup operations, plus unequal values and tags. _Rationale:_

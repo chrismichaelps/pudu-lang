@@ -22,6 +22,8 @@ modes, not a mode override or use of the general compiled-body cache.
 
 Plan literals, bare names, identity borrow, unary/binary scalar operations,
 assignment to bare bindings, blocks with expression statements only, and if.
+Index expressions evaluate their receiver before their index and delegate to the
+shared readIndex boundary. They cannot call user code or observe deferred writes.
 Operators delegate to existing applyUnary/combine/expectBool helpers; logical
 operators preserve short-circuiting. MultiMap calls require the existing proof
 and exactly three arguments. A bare module function may instead pass the closed
@@ -76,6 +78,12 @@ Consumed only by [[Eval Loop]].
 [[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Loop]] · [[Eval MultiMap]]
 
 ## Static dispatch allocation
+
+Resolved Grill Log: indexing is a pure shared primitive, so its mere presence must
+not reject an otherwise proven whole region. Include receiver/index reads in the
+layout. Retain receiver-before-index writes, short-circuiting, the exact error
+span and complete fallback for any unsupported child. Validate actual admission,
+not only final values that the ordinary walker could also produce.
 
 Prepare statement sequencing and three-argument forwarding once per eligible
 region. Identity borrow/dereference nodes reuse their operand code. Bool results
