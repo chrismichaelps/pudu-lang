@@ -75,6 +75,11 @@ compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO Progra
   to cold and cache-disabled cached calls too. `compileProgram` and in-memory
   source/overlay entry points retain full analysis. Cache keys, checking phases,
   diagnostics, source snapshots and graph context remain unchanged.
+- Discovery carries the selected product use to [[Compiler Product Publication]].
+  An executable frontend drops its tokens as soon as parsing and diagnostic
+  admission finish, before the graph retains it. Full analysis retains tokens
+  and bypasses frontend cache reuse. All subsequent semantic phases consume
+  syntax rather than lossless tokens; documentation remains an analysis product.
 - Before checking modules, `finish` materializes diagnostics from frontends that
   did not admit a module. This releases the discovery frontend table as pending
   entries are consumed instead of retaining every token stream for a final map

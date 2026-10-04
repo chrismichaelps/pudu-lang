@@ -5,6 +5,24 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Early frontend release and deferred checker facts (#435)
+
+- [[Compiler Product Publication]] releases executable token streams immediately
+  after parsing, before discovery retains a module. Analysis against a populated
+  cache still runs the lossless frontend. Recovery findings remain identical.
+- [[Type Env]] defers only its final expression-type publication list; live
+  collection/place checks still use all recorded facts. The 8,000-branch check
+  now allocates about 402 MB and peaks near 158 MB RSS. Early frontend release
+  lowers RSS from about 185 MB; the deferred list saves another 8.1 MB allocation.
+  The post-frontier baseline was 525 MB allocation and 194 MB RSS under the same
+  default RTS policy.
+- All 465 property families, optimized -Werror, formatter, diagnostics, editor,
+  documentation and evaluator agreement checks pass. The whole compiler corpus
+  measures 122 ms for 4,000 branches, 135 ms for 200 modules and a 974 ms cold
+  all-Std median (98 ms warm). All-Std still peaks near 316 MB RSS, so native
+  compiler memory parity remains open. [[handoffs/2026-10-04-compiler-performance]]
+  preserves the first-run and allocation evidence.
+
 ## 2026-10-04 — Bounded executable product lifetime (#435)
 
 - [[Compiler Product Publication]] applies the warm cache's execution contract

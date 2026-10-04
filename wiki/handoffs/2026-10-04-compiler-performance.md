@@ -32,8 +32,8 @@ The benchmark is a standalone measurement tool, not a wall-clock unit test.
 
 ## Exact next action
 
-Release execution-only frontend tokens immediately after parsing, then measure
-the unchanged 8,000-branch and all-Std checks with the same RTS configuration.
+Attribute the remaining checker allocation to state copying and live recorded
+facts on the unchanged 8,000-branch workload before changing its representation.
 
 ## Referenced by
 
@@ -133,3 +133,37 @@ are 1,038/973/980 ms. The complete compiler corpus's all-Std cold median is
 The unchanged-tree guard is proven for this dev branch's macro-only expansion.
 Before integrating into Derive, extend the change witness to every Derive
 transformation: zero macro identities cannot prove that no methods were generated.
+
+Product-lifetime checkpoint committed as 2477c5d3 and pushed to its feature
+branch, together with CI checkpoint 92b0a144 on feature/436-ci-latency. Continue
+Architect → Tooling/Performance Engineer ownership of Compiler.Product and
+Compiler.Program for execution-only frontend release. Resolved Grill Log:
+complete the canonical frontend and preserve all findings and source snapshots;
+drop token/trivia lists before discovery retains a module, while analysis keeps
+its tokens and bypasses token-free cache reuse. Benchmark identical workloads
+before accepting the change; publication/graph/editor tests remain required.
+
+Early frontend release measures about 158 MB RSS on 8,000 branches (232/240 ms
+after the first run), and 314–317 MB on all Std modules (946–951 ms). Allocation
+is unchanged, as expected: this repairs lifetime rather than the lexer walk.
+Extend Architect → Semantic/Performance Engineer ownership to Type.Env's
+producedTypes strictness and mirror. Resolved Grill Log: preserve the full live
+checker record for collection/place checks and defer only the final tooling
+list, whose downstream map is already demand-driven. Measure before retention.
+
+Early frontend release plus demand-driven CheckerProducts pass all 465 property
+families, optimized -Werror, formatter, diagnostic inventory, live LSP, doc-site
+parity and the seven evaluator output checks. The original evaluator script
+reports MultiMap 0.92 s tree / 0.95 s compiled. The compiler corpus verifies all
+cold/first-cache/warm results; 4,000 branches have a 122 ms cold median, 200
+graph modules 135 ms, and all 213 Std modules 974 ms (98 ms warm).
+
+The unchanged 8,000-branch process allocates about 401.8 MB, retains roughly
+33 MB live heap and peaks near 158 MB RSS. Deferring the final expression list
+saves 8.1 MB allocation without materially changing peak RSS. The separate
+all-Std measurement allocates 1.65 GB, retains roughly 103 MB and peaks at
+316 MB RSS. Its wall samples are 979/944/946 ms. Branch samples are
+2,847/266/284 ms; timing varied between passes and the first invocation remains
+slow. Keep allocation, live heap, RSS and first-run latency distinct. The
+C/C++ memory target remains open; no new capability or heap-growth policy was
+introduced. Editor/type/diagnostic behavior remains covered in full analysis.

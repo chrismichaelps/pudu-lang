@@ -149,3 +149,15 @@ keys before retaining the change. Do not reinterpret source offsets as variable
 identities, mutate shared interface state, assign dense array slots to imported
 variables, or change the public Checker API. Keep only a measured improvement
 with full diagnostic and editor regression evidence.
+
+## Demand-driven expression publication (#435)
+
+`CheckerProducts.producedTypes` is intentionally lazy. Diagnostic admission and
+execution still run the complete checker with its live recorded-expression
+state, including deferred collection and place checks. Tooling alone demands
+the final reversed, substituted expression list through [[Type Boundary]].
+
+Resolved Grill Log: the diagnostic-only phase still allocates the complete
+publication spine despite the downstream lookup map being deferred. Defer that
+derived list at its producer, preserving its order, substitutions and consumers.
+Do not remove live recorded facts, defer checking itself, or drop editor answers.

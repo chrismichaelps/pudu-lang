@@ -28,8 +28,9 @@ publishProduct ExecutionProducts compiled = compiled
   , compileMethods = []
   }
 
-frontendFor :: ProductCache -> Source -> IO FrontendResult
-frontendFor cache source = do
+frontendFor :: ProductUse -> ProductCache -> Source -> IO FrontendResult
+frontendFor AnalysisProducts _ source = pure (runFrontend source)
+frontendFor ExecutionProducts cache source = do
   stored <- lookupFrontend cache source
   case stored of
     Just parsed -> pure (FrontendResult [] (Just parsed) [])
@@ -38,7 +39,7 @@ frontendFor cache source = do
       case frontendModule frontend of
         Just parsed | null (frontendDiagnostics frontend) -> storeFrontend cache source parsed
         _ -> pure ()
-      pure frontend
+      pure frontend{frontendTokens = []}
 
 checkedFor :: ProductUse -> ProductCache -> ByteString -> Source -> FrontendResult -> IO CompileResult -> IO CompileResult
 checkedFor AnalysisProducts _ _ _ _ compile = compile

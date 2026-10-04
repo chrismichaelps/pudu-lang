@@ -13,8 +13,9 @@ import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
 import Data.Maybe (isJust, isNothing)
-import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler (CompileResult (..), FrontendResult (..))
 import Pudu.Compiler.Cache (disabledCache, openProductCacheAt)
+import Pudu.Compiler.Product (ProductUse (..), frontendFor)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
@@ -35,6 +36,7 @@ import Pudu.Eval.Program
   )
 import Pudu.Eval.Render (renderValue)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Source (SourceName (..), newSource)
 import System.Directory (createDirectoryIfMissing, getModificationTime, listDirectory, setModificationTime)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -99,8 +101,14 @@ testProductPublication = withSystemTempDirectory "pudu-products" $ \root -> do
   TextIO.writeFile entry "module Main\nfn main() -> Int8 { true }\n"
   rejected <- traverse (\compile -> compile entry >>= observed)
     [compileProgram, compileProgramCached disabledCache]
+  frontendProducts <- traverse (compareFrontends cacheRoot)
+    [ "module Main\n/// Keep the comment for analysis.\nfn main() -> Int { 7 }\n"
+    , "module Main\nfn main() -> Int { § }\n"
+    , "module Main\nfn main() -> Int { 7\n"
+    ]
   pure $ conjoin
-    [ counterexample "full analysis retains every editor product"
+    [ conjoin frontendProducts
+    , counterexample "full analysis retains every editor product"
         (all analysisPublished (Map.elems (programModules analysis)))
     , counterexample "execution drops analysis products even when the cache is cold"
         (all executionPublished (concatMap (Map.elems . programModules) [uncached, cold, warm]))
@@ -113,6 +121,22 @@ testProductPublication = withSystemTempDirectory "pudu-products" $ \root -> do
         (rejected === replicate 2 ([ ("E3001", "expected Int8, found Bool") ], ["Main"], Nothing))
     ]
  where
+  compareFrontends cacheRoot text = do
+    source <- newSource (SourceName "Frontend.pudu") text
+    cache <- openProductCacheAt cacheRoot
+    analysis <- frontendFor AnalysisProducts disabledCache source
+    uncached <- frontendFor ExecutionProducts disabledCache source
+    cold <- frontendFor ExecutionProducts cache source
+    warm <- frontendFor ExecutionProducts cache source
+    retained <- frontendFor AnalysisProducts cache source
+    pure $ conjoin
+      [ counterexample "execution releases tokens before discovery, preserving recovery"
+          ([uncached, cold, warm] === replicate 3 analysis{frontendTokens = []})
+      , counterexample "analysis against a populated cache retains lossless tokens"
+          (retained === analysis)
+      , counterexample "analysis includes at least its canonical EOF token"
+          (not (null (frontendTokens retained)))
+      ]
   analysisPublished compiled =
     not (null (compileTokens compiled)) && isJust (compileResolution compiled)
       && isJust (compileTypes compiled) && isJust (compileDocs compiled)

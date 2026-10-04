@@ -16,6 +16,7 @@ Own per-module frontend/checked cache admission and the lifetime of published
 products. Export `ProductUse = AnalysisProducts | ExecutionProducts`,
 `frontendFor`, `checkedFor` and `publishProduct`. The filesystem graph chooses
 the product use before compilation; this module never discovers dependencies.
+`frontendFor :: ProductUse -> ProductCache -> Source -> IO FrontendResult`.
 
 ## Algorithm and invariants
 
@@ -34,6 +35,14 @@ tooling lists. This is the existing warm-product contract applied also to cold
 and cache-disabled executable callers. Source snapshots and graph context remain
 owned by [[Compiler Program]]. Never cache a rejected or warning-bearing check.
 
+Frontend publication applies the same policy immediately after parsing.
+Execution drops the lossless token stream before graph discovery retains the
+frontend; only the admitted syntax and complete frontend findings remain.
+Analysis runs the canonical frontend directly and keeps tokens, because restored
+frontend cache entries cannot supply those facts. Lexing, parsing, recovery and
+cache admission still finish before token release. Later execution phases read
+the parsed tree; only documentation consumes the lossless tokens.
+
 ## Negative logic and edge cases
 
 No phase is skipped, cache identity changed, diagnostic suppressed or inference
@@ -45,6 +54,11 @@ tokens and cannot be used as proof that no expansion exists.
 
 ## Grill Log
 
+- **Q:** Keep executable token streams throughout graph discovery? **A:** Release
+  each stream after the canonical frontend has admitted its syntax and findings.
+  _Rationale:_ post-check release still lets every unprocessed module retain
+  lossless trivia and tokens. _Rejected:_ streaming grammar changes, dropped
+  diagnostics, token-free analysis, or a cache hit deciding the product contract.
 - **Q:** Keep analysis products until process exit on a cold executable check?
   **A:** Publish the same execution products as a warm hit after each module.
   _Rationale:_ unused doc/type closures retain tokens and checker state across

@@ -232,7 +232,9 @@ data IntegerConstraint = IntegerConstraint
 
 {-| @Type.Env.Products — the types a run recorded and what it diagnosed -}
 data CheckerProducts = CheckerProducts
-  { producedTypes :: ![(SpanKey, Type)]
+  {-| Final expression facts are demanded by tooling; live checking still uses
+      stateTypes, so diagnostic-only publication need not rebuild this list. -}
+  { producedTypes :: ~[(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
   {-| What `recordDeclaredMethod` collected, in declaration order. -}

@@ -161,7 +161,7 @@ compileProgramWith products cache rootPath = do
       pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
         (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
     Right rootSource -> do
-      rootFrontend <- frontendFor cache rootSource
+      rootFrontend <- frontendFor products cache rootSource
       case frontendModule rootFrontend of
         Nothing ->
           pure
@@ -218,7 +218,7 @@ discoverFrom :: ProductUse -> ProductCache -> Map FilePath Text.Text -> FilePath
 discoverFrom products cache overlay sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
   resolution <- newResolutionContext sourceRoot
-  discovered <- discover cache overlay resolution
+  discovered <- discover products cache overlay resolution
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
     Set.empty
@@ -233,7 +233,8 @@ data Discovery = Discovery
   }
 
 discover
-  :: ProductCache
+  :: ProductUse
+  -> ProductCache
   -> Map FilePath Text.Text
   -> ResolutionContext
   -> Map ModuleName FrontendResult
@@ -242,13 +243,13 @@ discover
   -> [Diagnostic]
   -> [(Located Import, ModuleName)]
   -> IO Discovery
-discover cache overlay resolution frontends sources failed diagnostics pending = case pending of
+discover products cache overlay resolution frontends sources failed diagnostics pending = case pending of
   [] -> pure (Discovery frontends sources diagnostics)
   (locatedImport, requested) : rest
     | Map.member requested frontends ->
-        discover cache overlay resolution frontends sources failed diagnostics rest
+        discover products cache overlay resolution frontends sources failed diagnostics rest
     | Set.member requested failed ->
-        discover cache overlay resolution frontends sources failed
+        discover products cache overlay resolution frontends sources failed
           (diagnostics <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport)
           rest
     | otherwise -> do
@@ -256,16 +257,16 @@ discover cache overlay resolution frontends sources failed diagnostics pending =
         loaded <- readFirstFrom overlay [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
-            discover cache overlay resolution frontends sources (Set.insert requested failed)
+            discover products cache overlay resolution frontends sources (Set.insert requested failed)
               ( diagnostics
                   <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport
               )
               rest
           Right source -> do
-            frontend <- frontendFor cache source
+            frontend <- frontendFor products cache source
             case frontendModule frontend of
               Nothing ->
-                discover cache overlay resolution
+                discover products cache overlay resolution
                   (Map.insert requested frontend frontends)
                   (Map.insert requested source sources)
                   failed
@@ -273,12 +274,12 @@ discover cache overlay resolution frontends sources failed diagnostics pending =
               Just parsed ->
                 let actual = locatedValue (moduleName parsed)
                  in if actual /= requested
-                      then discover cache overlay resolution
+                      then discover products cache overlay resolution
                         (Map.insert requested frontend{frontendModule = Nothing} frontends)
                         (Map.insert requested source sources)
                         failed
                         (diagnostics <> pathMismatch requested (moduleName parsed)) rest
-                      else discover cache overlay resolution
+                      else discover products cache overlay resolution
                         (Map.insert requested frontend frontends)
                         (Map.insert requested source sources)
                         failed
