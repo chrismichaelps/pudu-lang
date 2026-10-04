@@ -39,3 +39,7 @@ observable to CI.
 ## Referenced by
 
 [[Pudu Test Cabal Manifest]] · [[architecture/DELIVERY]]
+
+The runner explicitly executes [[Type Literal Frontier Spec]] and includes its
+outcomes in the aggregate exit status. Resolved Grill Log: an unregistered
+performance regression property does not count as validation.

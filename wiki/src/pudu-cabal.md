@@ -201,3 +201,7 @@ public Pudu package interface changes.
 
 Register Eval.Call.Argument and Eval.Call.Needs for the pre-existing call helper
 extraction included in the complete pending-work delivery.
+
+Register [[Type Literal Frontier]], a pure bounded pending-constraint selector;
+no dependencies or public Pudu syntax change. Resolved Grill Log: the checker
+retains ownership and uses its existing monotone fresh-variable invariant.

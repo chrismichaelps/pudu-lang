@@ -274,6 +274,7 @@ library
     Pudu.Type.Check.Signature
     Pudu.Type.Check.Statement
     Pudu.Type.Env
+    Pudu.Type.Frontier
     Pudu.Type.Exhaust
     Pudu.Type.Formation
     Pudu.Type.Formation.Order

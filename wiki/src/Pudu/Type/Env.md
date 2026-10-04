@@ -117,3 +117,21 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Places
 
 `DeclaredTypes` records `declaredMutableFields`. The state holds the resolver's `var` use spans, the spans of `&mut` expressions a call admitted as its arguments, and the untyped function literal parameters awaiting judgement, with small accessors for [[Check Place]]. See [[ADR-0022-lending-a-place]].
+
+## Creation-frontier selection (#435)
+
+Pending integer constraints remain in strictly decreasing creation-identity
+order. Since queries split the recent prefix through [[Type Literal Frontier]],
+and interval queries retain newer facts plus a shared older suffix. Validation
+partitions only that recent prefix into solved and unresolved facts; it never
+walks unrelated older constraints. Selected facts still execute in source order,
+and unsolved branch result literals still wait for the enclosing annotation.
+
+Negation targets one unique literal identity and stops when that identity is
+found or the decreasing queue has passed it. It does not rebuild the older tail.
+
+Resolved Grill Log: preserve deferred inference and diagnostic order while
+exploiting the queue's existing creation invariant. Do not sort, globally drain,
+default early or introduce process-global state. The branch-heavy benchmark
+exposes the former quadratic scan; [[Type Literal Frontier Spec]] proves suffix
+laziness and unchanged integer widths.

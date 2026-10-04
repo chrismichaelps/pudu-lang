@@ -4,10 +4,26 @@ Three tools, in the order they are worth reaching for. Asked out of order the
 last one is a haystack: a dump of the whole compiler is megabytes, and only a
 measurement says which page of it to read.
 
+## Whole-compiler latency
+
+```bash
+P=$(cabal list-bin exe:pudu --enable-optimization=2)
+node bench/compiler.mjs "$P" --json > compiler-benchmark.json
+```
+
+Measures actual startup, declarations, statement bodies, generic evidence,
+constant folding, module graphs and the standard library. Each case has explicit
+cache-disabled, first cached and warm samples. JSON retains wall milliseconds,
+RTS CPU, allocation, residency and binary/host identity. Unexpected diagnostics
+fail the harness; the intentional invalid-source case verifies E3001. Results
+cover Pudu checking. Bootstrap Haskell build and program execution are measured
+separately. Compare the same inputs, flags and cache policy before and after a
+compiler fix.
+
 ## 1. Where does the cost grow
 
 ```bash
-node bench/scaling.mjs "$(cabal list-bin exe:pudu)"
+node bench/scaling.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Builds inputs at doubling sizes and reports the ratio between them. Near 2 is
@@ -24,7 +40,7 @@ timed, because a program that does not run is not a fast one.
 ## 1a. How a program's module count costs
 
 ```bash
-node bench/graph.mjs "$(cabal list-bin exe:pudu)"
+node bench/graph.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Checks generated sparse programs of 25 to 200 modules and reports time and
@@ -35,7 +51,7 @@ graph, which is what preparing interfaces once per program removed.
 ## 1b. What one request costs
 
 ```bash
-node bench/request.mjs "$(cabal list-bin exe:pudu)"
+node bench/request.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Starts the service in `bench/service`, issues requests over a real socket, and

@@ -46,3 +46,8 @@ Separating this package makes the compiler's source distribution self-contained:
 ## Referenced by
 
 [[Pudu Cabal Manifest]] · [[Pudu Cabal Project]] · [[Release Readiness and Native UI Canvas]]
+
+Register [[Type Literal Frontier Spec]] for generated ordered-selection laws,
+unvisited-suffix proof and actual width/diagnostic compatibility. No new testing
+dependency. Resolved Grill Log: deterministic work evidence accompanies the
+benchmark; no host-specific timing gate.

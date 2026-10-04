@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Bounded integer-literal frontier work (#435)
+
+- [[Type Env]] selects recent literal constraints through [[Type Literal Frontier]]
+  without scanning unrelated older facts. Sign updates stop at the unique literal
+  identity. Deferred widths and E3018 remain unchanged.
+- [[Compiler Benchmark]] measures cold, first-cache and warm compiler work with
+  verified diagnostics, raw milliseconds and RTS memory statistics. An optimized
+  8,000-branch check falls from 4,105 to 287 ms and from 16.90 GB to 525 MB total
+  allocation on GHC 9.10.3. This is allocation over the run, not peak RSS.
+- All 464 property families, the warning-as-error build and diagnostic inventory
+  pass. [[handoffs/2026-10-04-compiler-performance]] records the remaining whole-Std
+  and peak-memory work; native compiler parity is not established.
+
 ## 2026-10-01 — Persistent MultiMap kernels below one second
 
 - [[Std MultiMap]] uses proven pure primitives for persistent append and indexed
