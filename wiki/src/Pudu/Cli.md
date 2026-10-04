@@ -44,6 +44,13 @@ pudu help            print usage
 
 ### Governance
 
+- Runtime capabilities and GC workers have independent budgets. The executable
+  retains its existing all-core capability selection for servers while
+  [[Pudu Cabal Manifest]] bounds default parallel collection to two workers.
+  Explicit collection RTS flags remain available. The runtime-worker comment
+  must not claim that using every core makes compilation universally faster;
+  measured allocation-heavy serial work demonstrates collector overhead.
+
 - `check`, `run`, `explain`, and `test` compile through the [[Compiler Cache]]: unchanged modules'
   products from earlier runs are reused. `PUDU_CACHE=off` compiles everything from source.
 
@@ -143,6 +150,10 @@ Read arguments, detect the render style once, dispatch to the session, checker, 
 DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it would move language behaviour out of the library.
 
 ## Grill Log
+
+- **Q:** Reduce server runtime capabilities to accelerate serial loops? **A:**
+  Keep worker parallelism and limit the separate collection budget. Validate
+  concurrent request behavior and ordinary CLI gates after linking the default.
 
 - **Q:** Should `pudu search` belong to the package commands alone? **A:** No. _Rationale:_ the
   declaration search `search <query> <file>...` shipped first and is documented; existing paths

@@ -152,9 +152,10 @@ readAndWriteUtf8 = do
 
     Set here rather than linked in, both because a reader can see it and
     because it can be conditional: a capability count other than one was asked
-    for on the command line, and an explicit choice is not overridden. A
-    compile is no slower in wall time for it — what the extra cores do there is
-    collect garbage. -}
+    for on the command line, and an explicit choice is not overridden.
+    Runtime workers and collection workers have separate budgets. Executable
+    metadata bounds collection workers to avoid synchronizing every core for
+    allocation-heavy serial work. -}
 useEveryCore :: IO ()
 useEveryCore = do
   chosen <- getNumCapabilities

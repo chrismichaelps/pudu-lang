@@ -20,6 +20,7 @@ representation-preserving rendering.
 Import each selected focused test explicitly and expose a stable descriptive label. Every
 registered property executes through the same structured diagnostic or evaluator test harness;
 adding a helper to an unused secondary property list is insufficient registration.
+Register `testPureCalls` for closed-body calls and their fallback boundary.
 Explicitly register `testSlotScopes` from [[Eval Function Closure Tests]] so
 binding-order, scope and capture admission regressions execute in the full suite.
 

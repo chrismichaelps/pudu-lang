@@ -74,7 +74,7 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval Loop Kernel]] — complete pure scalar regions and proven MultiMap primitive calls.
+- [[Eval Loop Kernel]] — complete pure regions, proven MultiMap calls and closed module functions.
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

@@ -372,3 +372,50 @@ remove repeated call setup, then measure the unchanged Records workload.
 Do not admit effects, callbacks, defaults, async, lending, recursion or mutable
 callee bindings without the corresponding proof. Full Derive typed graph
 publication and all seven standard derives remain active and incomplete.
+
+Checkpoint 4eeb66f6 is committed and pushed to the feature branch. The additional
+Calls check measures 459 → 435 ms with cache disabled and enabled; it supplies
+no evidence for the suspected regression or a cache defect. Architect → Runtime
+Engineer owns Eval.Loop.Kernel, BindingFlowSpec, EvalSpec and their mirrors for
+the closed parameter-only body proof resolved in the kernel page. Keep pure
+record construction/access inside closed bodies, finish all arguments before
+scratch installation, clear scratch after each result, and retain exact limits,
+error spans, call counting and whole-region fallback. Compare the unchanged
+Records workload against the preceding executable before accepting the change.
+
+The closed-body matrix passes in both modes, including actual kernel admission,
+depth/tally boundary and ordinary structured refusal equality. Its initial probe
+used a tuple-unit expression outside the admitted region and correctly fell
+back; the fixture now uses admitted scalar statements. Argument consumers remove
+the measured generic-result regression. Records cold median falls to 518/512 ms
+with 1.92 GB cumulative allocation versus 9.81/5.29 GB; RSS remains about 76 MB.
+The timing-script run on the busier machine still puts Arrays/MultiMap at
+1.03/1.01 s. The next graph layer is runtime GC scheduling: Main enables eight
+capabilities before serial work, and small collections synchronize every worker.
+Architect → Tooling/Performance Engineer additionally owns pudu.cabal, Main's
+worker-budget comment and matching mirrors for an independently bounded default
+two-worker collector. Preserve all-core program workers and validate a real
+concurrent service as well as the exact default-binary benchmark script.
+
+The larger request measurement stops even on the preceding executable: the
+fixture reads Env.at(1), but the CLI supplies the budget as argument zero, so
+it silently serves the 2000 default. Own bench/service/Service.pudu and its new
+complete mirror for the one-index correction; compare both binaries against
+the same corrected workload. Do not accept the failed run as throughput data.
+
+The delivered default executable's original five-run script now reports every
+cell below one second: Arrays 880/590, Calls 420/280, Iterate 480/320,
+Loop 660/660, Maps 750/550, MultiMap 910/910, Records 420/420 ms
+(tree/compiled). All seven stdout/stderr pairs match. The compiler harness's
+three-sample medians range from 28 ms startup through 962 ms all-214-Std cold;
+that entire graph is 96 ms warm. Larger HTTP runs now finish at their actual
+budget. Paired median throughput before/after is 4182/4248 plain, 4012/4038
+JSON and 3380/3179 page requests/s, with overlapping samples; do not claim an
+across-the-board server speedup. Every fresh repository gate passes; all 547
+families pass in the additional full tree run, including exact E7005/E7002
+checks and direct kernel admission. GHC 9.10.3 is the local toolchain; the
+locked 9.14.1 matrix remains unverified locally. The existing oversized CLI
+file receives only its worker-policy comment correction. Publish this bounded
+runtime checkpoint immediately. Exact next implementation action: return to
+canonical Derive graph publication and field proof; neither the full feature
+nor native execution/memory parity is complete.

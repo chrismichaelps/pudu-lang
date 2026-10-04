@@ -5,6 +5,41 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Remove closed-call setup and collector fanout (#435)
+
+- [[Eval Loop Kernel]] admits complete parameter-only synchronous module
+  bodies, with immutable record construction/member access inside those bodies.
+  A separate proof retains all ordinary capture, recursion, callback, default,
+  lending, effect and transfer paths. Arguments finish before shared scratch
+  installation; returned values own their payloads and scratch clears per call.
+- [[Eval Binding Flow Tests]] and [[Eval Test Coordinator]] exercise actual
+  admission, zero/larger arities, nested argument order, shorthand records,
+  bound receiver escape, local shadowing/replacement, fallback and exact
+  overflow/depth diagnostics, including an ordinary-dispatch oracle.
+- [[Pudu Cabal Manifest]] bounds default GC collection to two workers;
+  [[Pudu CLI]] retains its existing all-core runtime capability policy.
+  [[HTTP Benchmark Service]] reads its budget from carried argument zero,
+  correcting a larger harness run that silently stopped after 2000 connections.
+- The unchanged five-run evaluator script reports tree/compiled ms: Arrays
+  880/590, Calls 420/280, Iterate 480/320, Loop 660/660, Maps 750/550,
+  MultiMap 910/910, Records 420/420. These are script minima, not cold medians.
+  Paired cold Records medians before the collector cut fall from 1758/970 to
+  518/512 ms; allocation falls from 9.81/5.29 to 1.92 GB. RSS remains about
+  76 MB in that pass. Native execution and memory parity are still unmet.
+- Compiler medians with the delivered default and no extra RTS tuning are
+  28 ms startup, 68–188 ms for the 4000-unit syntax/evidence workloads,
+  42–141 ms for 25–200-module graphs, 172 ms for library composition and
+  962 ms cold / 96 ms warm for all 214 standard modules.
+- Three paired service runs with 1200 requests per route and 16 concurrent
+  clients complete. Median before/after throughput (requests/s) is
+  plain 4182/4248, JSON 4012/4038 and page 3380/3179, with overlapping
+  sample ranges. The smaller run is noisy and the initial larger run fails
+  at the fixture's incorrect budget; neither supports a sustained comparison.
+  Fresh full repository gates pass, and an additional full tree run passes all
+  547 property families. Local validation uses GHC 9.10.3; the locked GHC 9.14.1
+  CI matrix remains unverified locally. Complete typed Derive graph publication
+  and the standard derives remain unfinished.
+
 ## 2026-10-04 — Reduce tree runtime state and pure-loop dispatch (#430, #435, #436)
 
 - [[Eval Compile Layout]] validates binding order and lexical scope before

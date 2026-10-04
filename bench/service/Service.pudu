@@ -88,7 +88,7 @@ fn say(line: Str) -> () {
 /// requests a run measures, and the port is printed once the listener is up so
 /// the harness never guesses at readiness.
 fn main() -> Int {
-  let requested = Option.unwrapOr(numberOf(Env.at(1)), 2000)
+  let requested = Option.unwrapOr(numberOf(Env.at(0)), 2000)
   let routed = Route.withFallback(
       &Route.routing(
         &[Route.get("/plain", plain), Route.get("/json", document), Route.get("/page/:name", page)]

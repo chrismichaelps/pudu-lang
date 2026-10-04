@@ -95,7 +95,8 @@ answers with.
 
 Before ordinary while dispatch, attempt [[Eval Loop Kernel]]. Entirely
 unsupported regions retain the existing loop unchanged. Both evaluators use the
-same pure loop kernel for eligible scalar and MultiMap regions.
+same pure loop kernel for eligible scalar and MultiMap regions, including
+closed parameter-only module functions whose complete bodies pass its proof.
 Resolved Grill Log: preserve transfers and effect boundaries through whole-region
 fallback; retain ordinary execution as the oracle for non-native library wrappers.
 

@@ -100,13 +100,17 @@ tags: [moc, module]
 | DEEP | 3 | [[Lexer Cursor]], [[Parser State]], [[Parser Expression]] |
 | MEDIUM | 17 | [[Source]], [[Diagnostic Model]], [[Token]], [[Lexer Facade]], [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], [[Symbol Scanner]], [[Quoted Scanner]], [[Syntax]], [[Syntax Located]], [[Syntax Name]], [[Syntax Tree]], [[Parser Name]], [[Parser Type]], [[Parser Import]], [[Parser Binding]] |
 
+## Runtime benchmark fixtures
+
+- [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
+
 ## Referenced by
 
 [[00-INDEX]] · [[grammar/haskell]]
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval Loop Kernel]] — complete pure scalar regions and proven MultiMap primitive calls.
+- [[Eval Loop Kernel]] — complete pure regions, proven primitives and closed module functions.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
 

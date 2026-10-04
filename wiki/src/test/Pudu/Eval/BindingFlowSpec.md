@@ -14,6 +14,13 @@ aliases: [Eval Binding Flow Tests]
 `bindingFlowProperties`, `testBindings`, `testBranching`, `testLoops` and
 `testUnwindFrameCleanup` exercise checked program evaluation through
 [[Eval Test Coordinator]]. Shared runners compile source before evaluation.
+`testPureCalls` covers closed function bodies in loops and their fallback boundary.
+Its direct kernel probe compiles one source snapshot, extracts its ordinary
+closure and while AST, then checks admission, the exact allowed/refused depth
+boundary, call tally and structured diagnostic equality with ordinary dispatch.
+This proves the optimized path actually runs rather than silently falling back.
+Requires [[Eval Env]], [[Eval Value]], [[Compiler Pipeline]] and [[Diagnostic Model]]
+for that bounded probe; no runtime production semantics are duplicated.
 
 ## Behavior and dependencies
 
@@ -43,6 +50,14 @@ updates or acceptance of failed compilation as successful execution.
   effects and transfers retain ordinary execution and its existing regressions.
 - **Q:** Treat identical optimized modes as the independent oracle? **A:** No;
   compare the unchanged benchmark programs with the pre-change executable too.
+- **Q:** Test only a record-loop total? **A:** Also exercise nested argument
+  calls, lexical free values, local callee shadowing/replacement, defaults, callbacks,
+  lending, overflow and declaration fallback. Register the family explicitly.
+- **Q:** Cover only the unrolled argument counts? **A:** Exercise zero and four
+  parameters as well as nested calls; verify a skipped failing branch too.
+- **Q:** Can clearing scratch invalidate a returned member value? **A:** Test
+  a bound method returned from the final loop call and invoked after loop exit.
+  Its receiver must remain an ordinary immutable value, independent of scratch.
 
 ## Referenced by
 

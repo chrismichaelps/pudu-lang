@@ -31,8 +31,9 @@ nowhere and runs never, so the suite reports success without it.
 The former validates signatures; the latter is a pure utility shared by ordinary
 checking. Resolved Grill Log: register each module without adding dependencies.
 
-Do not introduce runtime behavior, implicit network setup, private governance inputs, or alternate
-compiler semantics through build metadata. Every new library module must be registered explicitly.
+Do not introduce Pudu value/effect semantics, implicit network setup, private governance inputs,
+or alternate compiler semantics through build metadata. The executable's overrideable GC budget
+is an operational policy resolved below. Every new library module must be registered explicitly.
 `Std/Audio/*.pudu` and `Std/Ui/*.pudu` are both source-distribution data, including their nested
 modules. The macOS desktop adapter and Cocoa/CoreGraphics framework linkage are conditional on
 `os(osx)`; other targets compile the typed unsupported implementation in [[Eval Desktop]].
@@ -55,6 +56,17 @@ actually live. No component may escape this package through `..`: Cabal source a
 links, which made a clean `cabal install exe:pudu` fail even though in-tree builds worked.
 
 ## Grill Log
+
+- **Q:** Give every runtime capability a collector for the interpreter's small
+  allocation bursts? **A:** Bound the executable's default GC worker count to
+  two with `-with-rtsopts=-qn2`. Paired normal runs show Arrays 947 → 873 ms,
+  Loop 714 → 649 ms and MultiMap 922 → 899 ms when collection stops
+  synchronizing eight workers. Runtime capabilities and server worker
+  parallelism retain their existing policy; explicit RTS flags can override
+  collection policy. Validate the ordinary benchmark script and concurrent
+  request benchmark after linking the default, rather than reporting flag-only
+  experiments as delivered behavior. No library or repository-test default
+  changes, additional dependency or hard-coded optimization level is introduced.
 
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.

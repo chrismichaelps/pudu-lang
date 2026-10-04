@@ -4,18 +4,33 @@ module Pudu.Eval.BindingFlowSpec
   , testBindings
   , testBranching
   , testLoops
+  , testPureCalls
   , testUnwindFrameCleanup
   ) where
 
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
-import Pudu.Eval.Common (codesOfConstant, evaluate, evaluateStatements, evaluateWith)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (isJust)
+import Data.Text (Text)
+import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Diagnostic (diagnosticCodeText, diagnosticCode, diagnosticHelp, diagnosticMessage, diagnosticSpan)
+import Pudu.Eval (EvalOutcome (..), callClosure, runWithEffects)
+import Pudu.Eval.Common (codesOfConstant, evaluate, evaluateStatements, evaluateWith, outcomeOf, runProgram)
+import Pudu.Eval.Env (Env (..), Evaluator (..), callLimit, withFrame, withTally)
+import Pudu.Eval.Loop.Kernel (pureLoop)
+import Pudu.Eval.Value (Captured (..), Closure (..), Frame (..), Value (..), intOf)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Block (..), Declaration (..), Expression (..), Function (..), FunctionBody (..), Module (..), Statement (..) )
+import Pudu.Source (Offset, SourceName (..), newSource, spanStart, spanEnd)
 
 bindingFlowProperties :: [(String, IO Property)]
 bindingFlowProperties =
   [ ("bindings assignment and blocks evaluate in order", testBindings)
   , ("conditionals and pattern matching select branches", testBranching)
   , ("loops iterate and jumps leave them", testLoops)
+  , ("pure loop calls preserve parameters limits and fallback", testPureCalls)
   , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   ]
 
@@ -245,3 +260,161 @@ testLoops = do
     , counterexample "pure loops retain checked overflow" (overflow === "failed: E7005")
     , counterexample "pure constant loops retain the step refusal" (bounded === ["E7002"])
     ]
+
+testPureCalls :: IO Property
+testPureCalls = do
+  record <- runProgram
+    [ "type Point = { x: Int, y: Int }"
+    , "fn step(p: Point, k: Int) -> Point { Point{x: p.x + k, y: p.y - k} }"
+    ]
+    [ "var p = Point{x: 0, y: 0}", "var index = 0"
+    , "while index < 4 { p = step(p, index)\n index = index + 1 }"
+    ] "(p.x, p.y)"
+  nested <- runProgram
+    [ "fn inc(n: Int) -> Int = n + 1"
+    , "fn pack(a: Int, b: Int, c: Int) -> Int = a * 100 + b * 10 + c"
+    ]
+    [ "var value = 0", "var index = 0"
+    , "while index < 1 { value = pack(inc(value), inc(1), inc(2))\n index = index + 1 }"
+    ] "value"
+  ordered <- runProgram
+    [ "fn pack(a: Int, b: Int, c: Int) -> Int = a * 100 + b * 10 + c" ]
+    [ "var value = 0", "var result = 0", "var index = 0"
+    , "while index < 1 {"
+    , " result = pack({ value = value + 1\n value }, { value = value + 1\n value }, { value = value + 1\n value })"
+    , " index = index + 1", "}"
+    ] "(value, result)"
+  shorthand <- runProgram
+    [ "type Point = { x: Int, y: Int }"
+    , "fn build(x: Int, y: Int) -> Point = Point{x, y}"
+    ]
+    [ "var p = Point{x: 0, y: 0}", "var index = 0"
+    , "while index < 2 { p = build(index, index + 1)\n index = index + 1 }"
+    ] "(p.x, p.y)"
+  empty <- repeated ["fn step() -> Int = 7"] "value + step()"
+  larger <- runProgram
+    [ "fn inc(n: Int) -> Int = n + 1"
+    , "fn pack(a: Int, b: Int, c: Int, d: Int) -> Int = a * 1000 + b * 100 + c * 10 + d"
+    ]
+    [ "var value = 0", "var index = 0"
+    , "while index < 1 { value = pack(inc(0), inc(1), inc(2), inc(3))\n index = index + 1 }"
+    ] "value"
+  untaken <- runProgram
+    [ "fn step(n: Int, zero: Int) -> Int { if n < 1 { n + 1 } else { n / zero } }" ]
+    [ "var value = 0", "var zero = 0"
+    , "while value < 1 { value = step(value, zero) }"
+    ] "value"
+  escaped <- runProgram ["fn select(n: Int) -> fn() -> Str = n.toText"]
+    [ "var render = select(0)", "var index = 0"
+    , "while index < 3 { render = select(index)\n index = index + 1 }"
+    ] "render()"
+  free <- repeated
+    [ "const OFFSET = 7", "fn shift(n: Int) -> Int = n + OFFSET" ] "shift(value)"
+  defaulted <- repeated
+    [ "fn shift(n: Int, amount: Int = 7) -> Int = n + amount" ] "shift(value)"
+  declared <- repeated
+    [ "fn shift(n: Int) -> Int { let amount = 7\n n + amount }" ] "shift(value)"
+  callback <- repeated
+    [ "fn apply(f: fn(Int) -> Int, n: Int) -> Int = f(n)"
+    , "fn shift(n: Int) -> Int = n + 7"
+    ] "apply(shift, value)"
+  recursive <- repeated
+    [ "fn walk(n: Int) -> Int { if n < 1 { 0 } else { walk(n - 1) + 1 } }" ]
+    "value + walk(3)"
+  local <- runProgram []
+    [ "var shift: fn(Int) -> Int = fn(n: Int) -> Int => n + 1"
+    , "var value = 0", "var index = 0"
+    , "while index < 3 { value = shift(value)\n shift = fn(n: Int) -> Int => n + 10\n index = index + 1 }"
+    ] "value"
+  shadow <- runProgram ["fn shift(n: Int) -> Int = n + 7"]
+    [ "let shift = fn(n: Int) -> Int => n + 1", "var value = 0", "var index = 0"
+    , "while index < 3 { value = shift(value)\n index = index + 1 }"
+    ] "value"
+  lent <- runProgram
+    [ "fn bump(n: &mut Int) -> () { *n = *n + 1 }" ]
+    [ "var value = 0", "var index = 0"
+    , "while index < 3 { bump(&mut value)\n index = index + 1 }"
+    ] "value"
+  let overflowDeclarations = ["fn bump(n: UInt8) -> UInt8 = n + 1u8"]
+      overflowBody = ["var value = 255u8", "var index = 0"
+        , "while index < 1 { value = bump(value)\n index = index + 1 }"]
+  overflow <- outcomeOf overflowDeclarations overflowBody "value"
+  ordinary <- outcomeOf overflowDeclarations
+    (take 2 overflowBody <> ["while index < 1 { let marker = 0\n value = bump(value)\n index = index + 1 }"]) "value"
+  boundary <- testPureCallBoundary
+  pure $ conjoin
+    [ counterexample "closed record bodies retain both fields" (record === "(6, -6)")
+    , counterexample "nested arguments finish before parameter installation" (nested === "123")
+    , counterexample "arguments retain left-to-right writes" (ordered === "(3, 123)")
+    , counterexample "record shorthand uses function parameters" (shorthand === "(1, 2)")
+    , counterexample "zero parameters need no scratch" (empty === "21")
+    , counterexample "the general arity path retains nested argument values" (larger === "1234")
+    , counterexample "closed-body branches skip failing arithmetic" (untaken === "1")
+    , counterexample "a returned bound member owns its receiver after scratch cleanup" (escaped === "\"2\"")
+    , counterexample "free values retain lexical dispatch" (free === "21")
+    , counterexample "defaulted functions retain ordinary binding" (defaulted === "21")
+    , counterexample "body declarations retain ordinary scope" (declared === "21")
+    , counterexample "callback bodies retain ordinary dispatch" (callback === "21")
+    , counterexample "recursive bodies retain ordinary depth" (recursive === "9")
+    , counterexample "local function replacement is observed" (local === "21")
+    , counterexample "a local callee shadows its module function" (shadow === "3")
+    , counterexample "exclusive arguments write their original place" (lent === "3")
+    , counterexample "closed-body overflow refuses" (outcomeValue overflow === Nothing)
+    , counterexample "closed-body overflow keeps E7005"
+        (map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics overflow) === ["E7005"])
+    , counterexample "overflow retains ordinary code message help and source offsets"
+        (diagnosticIdentity overflow === diagnosticIdentity ordinary)
+    , boundary
+    ]
+ where
+  repeated declarations expression = runProgram declarations
+    [ "var value = 0", "var index = 0"
+    , "while index < 3 { value = " <> expression <> "\n index = index + 1 }"
+    ] "value"
+
+diagnosticIdentity :: EvalOutcome -> [(Text, Text, Maybe Text, Offset, Offset)]
+diagnosticIdentity outcome =
+  [ (diagnosticCodeText (diagnosticCode diagnostic), diagnosticMessage diagnostic
+    , diagnosticHelp diagnostic, spanStart (diagnosticSpan diagnostic)
+    , spanEnd (diagnosticSpan diagnostic))
+  | diagnostic <- outcomeDiagnostics outcome
+  ]
+
+testPureCallBoundary :: IO Property
+testPureCallBoundary = do
+  source <- newSource (SourceName "pure-loop-boundary.pudu")
+    "module Boundary\nfn bump(n: Int) -> Int = n + 1\nfn main() { var index = 0\n while index < 1 { index = bump(index)\n index = index } }"
+  compiled <- runCompile source
+  case compileModule compiled of
+    Just parsed
+      | [function, entry] <- [value | Located _ (FunctionDeclaration value) <- moduleDeclarations parsed]
+      , Just (Located _ (BlockBody (Located _ Block{blockResult = Just
+          (Located loopSpan (WhileExpression _ condition body))}))) <- functionBody entry
+      , Located _ Block{blockStatements = [Located _ (ExpressionStatement
+          (Located _ (BinaryExpression _ "=" (Located callSpan (CallExpression _ _)))))]} <- body -> do
+          let closure = Closure "bump" function Nothing (Just (Captured [] 0)) Nothing
+              modules = Map.singleton "bump" (FunctionValue closure)
+              atDepth depth (Evaluator action) = Evaluator $ \env -> action env
+                { envDepth = depth, envFrames = [MapFrame modules], envModuleDepth = 1 }
+              loop depth = atDepth depth $ withFrame [("index", intOf 0)] $ do
+                planned <- pureLoop loopSpan condition body
+                case planned of
+                  Nothing -> pure (BoolValue False)
+                  Just code -> do
+                    (_, counts) <- withTally code
+                    pure (BoolValue (Map.lookup "closure call" counts == Just 1))
+          accepted <- runWithEffects True (loop callLimit)
+          refused <- runWithEffects True (loop (callLimit + 1))
+          ordinary <- runWithEffects True $ atDepth (callLimit + 1)
+            (callClosure closure [intOf 0] (Just callSpan))
+          pure $ conjoin
+            [ counterexample "kernel admission and boundary tally are exercised"
+                (outcomeValue accepted === Just (BoolValue True))
+            , counterexample "a call one past the depth boundary refuses"
+                (isJust (outcomeValue refused) === False)
+            , counterexample "depth refusal keeps E7002"
+                (map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics refused) === ["E7002"])
+            , counterexample "depth refusal has the same structured diagnostic"
+                (outcomeDiagnostics refused === outcomeDiagnostics ordinary)
+            ]
+    _ -> pure (counterexample "closed loop boundary fixture did not compile to the expected AST" False)

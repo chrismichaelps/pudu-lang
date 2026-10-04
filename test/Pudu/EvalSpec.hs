@@ -11,6 +11,7 @@ import Pudu.Eval.BindingFlowSpec
   ( testBindings
   , testBranching
   , testLoops
+  , testPureCalls
   , testUnwindFrameCleanup
   )
 import Pudu.Eval.DataSpec
@@ -48,6 +49,7 @@ evalProperties =
   , ("functions defaults and recursion evaluate", testFunctions)
   , ("conditionals and pattern matching select branches", testBranching)
   , ("loops iterate and jumps leave them", testLoops)
+  , ("pure loop calls preserve parameters limits and fallback", testPureCalls)
   , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
