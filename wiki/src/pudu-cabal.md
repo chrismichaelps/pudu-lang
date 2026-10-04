@@ -202,10 +202,12 @@ Resolved Grill Log: use explicit primitives rather than recognizing a library fu
 by name. Preserve persistence, key representatives, duplicate counts, checked Int
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
-Register Eval.MultiMap.Kernel for the bounded pure MultiMap loop intrinsic and
+Register Eval.Loop.Kernel for bounded pure scalar/MultiMap loop regions and
 Eval.Foreign.Binding for unchanged foreign metadata extracted from Eval.Value.
 Resolved Grill Log: both are runtime implementation modules; no dependency or
 public Pudu package interface changes.
+Resolved Grill Log: relocate the former MultiMap kernel to its general loop
+ownership without adding dependencies or broadening admissible calls.
 
 Register Eval.Call.Argument and Eval.Call.Needs for the pre-existing call helper
 extraction included in the complete pending-work delivery.

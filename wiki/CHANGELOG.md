@@ -5,6 +5,31 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Reduce tree runtime state and pure-loop dispatch (#430, #435, #436)
+
+- [[Eval Compile Layout]] validates binding order and lexical scope before
+  admitting slots, fixing a closure initializer that read unit instead of its
+  captured value. Regressions cover earlier reads, branch/arm/block scope,
+  shorthand fields, capture snapshots, nested writes and checked overflow.
+- [[Eval Frame]] gives lexical blocks private binding cells; captures retain
+  immutable snapshots. [[Eval Env]] keeps its existing state after in-place
+  writes. Bare assignments avoid temporary places, and known leaf operands use
+  the shared name/literal paths.
+- [[Eval Loop Kernel]] reuses the complete pure-region proof for scalar loops
+  without requiring a MultiMap call. Call eligibility, diagnostic spans,
+  short-circuiting and constant bounds retain their existing implementations.
+  Paired cold medians fall from 2,312 to 716 ms for Loop tree, 1,215 to 941 ms
+  for Arrays tree and 949 to 805 ms for Maps tree. Loop compiled is 723 ms;
+  Records tree remains 1,666 ms. A scalar continuation experiment increased
+  allocation and was removed. Full native performance parity remains open.
+- [[Repository Gates]] cleans every compiler/test version root, retains one
+  warning configuration and uses the optimized binary for documentation, fixing
+  a stale compiler check and redundant build configurations. Complete validation
+  evidence is recorded in [[handoffs/2026-10-01-derive-integration]].
+- The corrected fresh-build repository gates and all 546 property families in
+  an additional tree-mode suite pass. Required TCP fixtures run with loopback
+  access. Complete Derive graph publication and native parity remain open.
+
 ## 2026-10-04 — Integrate compiler performance with Derive (#431, #435)
 
 - Preserve complete generated source identities and conditional trait evidence

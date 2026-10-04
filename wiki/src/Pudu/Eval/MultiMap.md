@@ -63,6 +63,11 @@ the two primitives; [[Std MultiMap]] provides the public wrappers.
 
 ## Transparent primitive wrappers
 
+The immutable capture proof refuses both SlotFrame and CellFrame. Ordinary
+captures snapshot these into MapFrame; a live mutable frame is never evidence
+that a primitive binding remains fixed. Resolved Grill Log: expand the existing
+mutable-frame refusal when adding lexical block cells.
+
 `multiMapWrapper` recognizes only a synchronous, receiver-free, default-free
 three-parameter closure whose complete body is one call forwarding those parameters
 in order to a captured MultiMap builtin value. The captured binding must resolve
@@ -107,7 +112,7 @@ public field/type change, no altered evaluator mode and no mutation. Retain a
 lazy ordered view for remove/setAll/show and all public Map access. Test signed
 ordering, duplicate increments, snapshots and transition back to generic maps.
 
-[[Eval MultiMap Kernel]] fuses pure loop regions containing these proven
+[[Eval Loop Kernel]] fuses pure loop regions containing these proven
 primitives; original library implementations retain ordinary evaluation and form
 the independent before/after output oracle.
 

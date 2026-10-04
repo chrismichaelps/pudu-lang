@@ -20,6 +20,8 @@ implementations over built-in values. Decimal dispatch regressions cover issue #
 
 `functionClosureProperties` registers `testFunctions`, `testClosures`, `testBuiltinImpls`, and
 `testDecimalImpls` for the shared evaluator suite. Each action returns a QuickCheck `Property`.
+`testSlotScopes` registers binding-order, lexical-scope and capture admission
+regressions, including shorthand fields and retained checked overflow.
 
 ## Governance
 
@@ -42,6 +44,11 @@ implementations over built-in values. Decimal dispatch regressions cover issue #
 - No equality comparison of captured environments, which can contain recursive closures.
 
 ## Grill Log
+- **Q:** What proves slot admission preserves lexical order? **A:** Execute
+  captured-name initializers, reads before a later binder, reads after an inner
+  scope, early captures and record shorthand. Compare exact values and retained
+  runtime failures in both evaluator modes. _Rejected:_ only checking that slot
+  construction returned a map or exercising a single self-shadowing spelling.
 
 - **Q:** Is a single direct Decimal call sufficient? **A:** No; a generic receiver and the two
   qualified forms discover the same runtime owner through distinct call paths. _Rationale:_ the
@@ -53,5 +60,10 @@ implementations over built-in values. Decimal dispatch regressions cover issue #
   _Rejected:_ an arbitrary fallback method or a default success value.
 
 ## Referenced by
+
+The lexical scope matrix also mutates a local after capturing it and writes an
+outer binding through a nested block. Resolved Grill Log: these examples detect
+accidentally shared capture cells and discarded parent writes when block-local
+storage changes; they run against both evaluator modes.
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Operator Access]]

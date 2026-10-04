@@ -1,5 +1,5 @@
-{-| @Eval.MultiMap.Kernel — pure loop regions over the MultiMap primitives. -}
-module Pudu.Eval.MultiMap.Kernel (multiMapLoop) where
+{-| @Eval.Loop.Kernel — complete pure scalar regions and proven primitive calls. -}
+module Pudu.Eval.Loop.Kernel (pureLoop) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
@@ -26,20 +26,19 @@ import Pudu.Source (Span)
 type Slots = IOArray Int Value
 type Code = Slots -> Env -> IO (Result Value)
 data Result a = Yield !a | Stop !(Eval Value)
-data Plan = Plan !Code !(Set Text) !(Set Text) !(Set Text) !Bool
+data Plan = Plan !Code !(Set Text) !(Set Text) !(Set Text)
 
 {-| Eligibility is all-or-nothing; planning reads bindings but executes no source. -}
-multiMapLoop :: Span -> Located Expression -> Located Block -> Evaluator (Maybe (Evaluator Value))
-multiMapLoop spanValue condition body = do
+pureLoop :: Span -> Located Expression -> Located Block -> Evaluator (Maybe (Evaluator Value))
+pureLoop spanValue condition body = do
   let names = Set.toAscList (readsOf condition <> readsOfBlock body)
       layout = Map.fromList (zip names [0 ..])
   test <- planExpression layout condition
   turn <- planBlock layout body
   case (test, turn) of
-    (Just (Plan testCode _ testWrites testCallees testNative),
-      Just (Plan bodyCode _ bodyWrites bodyCallees bodyNative))
-      | testNative || bodyNative
-      , Set.null ((testWrites <> bodyWrites) `Set.intersection` (testCallees <> bodyCallees)) -> do
+    (Just (Plan testCode _ testWrites testCallees),
+      Just (Plan bodyCode _ bodyWrites bodyCallees))
+      | Set.null ((testWrites <> bodyWrites) `Set.intersection` (testCallees <> bodyCallees)) -> do
           values <- mapM lookupName names
           case sequence values of
             Nothing -> pure Nothing
@@ -101,37 +100,37 @@ planExpression :: Map.Map Text Int -> Located Expression -> Evaluator (Maybe Pla
 planExpression layout (Located spanValue expression) = case expression of
   NameExpression (name :| []) -> pure $ do
     position <- Map.lookup name layout
-    pure (Plan (\slots _ -> Yield <$> unsafeReadIOArray slots position) (Set.singleton name) Set.empty Set.empty False)
+    pure (Plan (\slots _ -> Yield <$> unsafeReadIOArray slots position) (Set.singleton name) Set.empty Set.empty)
   LiteralExpression literal -> do
     value <- case literal of
       IntegerValue _ -> do
         selected <- integerKindAt spanValue
         pure (integerLiteralValue selected literal)
       _ -> pure (literalValue literal)
-    pure (Just (Plan (\_ _ -> pure (Yield value)) Set.empty Set.empty Set.empty False))
+    pure (Just (Plan (\_ _ -> pure (Yield value)) Set.empty Set.empty Set.empty))
   UnaryExpression operator operand | operator `elem` ["&", "*", "-", "!", "~"] -> do
     planned <- planExpression layout operand
     pure $ do
-      Plan inner names written callees native <- planned
+      Plan inner names written callees <- planned
       let code = if operator == "&" || operator == "*"
             then inner
             else \slots env -> bindResult (inner slots env) (action env . applyUnary spanValue operator)
-      pure (Plan code names written callees native)
+      pure (Plan code names written callees)
   BinaryExpression (Located _ (NameExpression (name :| []))) "=" right -> do
     planned <- planExpression layout right
     pure $ do
       position <- Map.lookup name layout
-      Plan inner names written callees native <- planned
+      Plan inner names written callees <- planned
       let code slots env = bindResult (inner slots env) $ \value -> do
             unsafeWriteIOArray slots position value
             pure (Yield UnitValue)
-      pure (Plan code (Set.insert name names) (Set.insert name written) callees native)
+      pure (Plan code (Set.insert name names) (Set.insert name written) callees)
   BinaryExpression left operator right | operator `elem` ["+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "&&", "||"] -> do
     lhs <- planExpression layout left
     rhs <- planExpression layout right
     pure $ do
-      a@(Plan leftCode _ _ _ _) <- lhs
-      b@(Plan rightCode _ _ _ _) <- rhs
+      a@(Plan leftCode _ _ _) <- lhs
+      b@(Plan rightCode _ _ _) <- rhs
       let apply = scalar spanValue operator
           code slots env = bindResult (leftCode slots env) $ \x ->
             if operator == "&&" || operator == "||"
@@ -146,23 +145,23 @@ planExpression layout (Located spanValue expression) = case expression of
     args <- traverse (planExpression layout) arguments
     pure $ do
       (prefix, invoke) <- target
-      plans@[Plan first _ _ _ _, Plan second _ _ _ _, Plan third _ _ _ _] <- sequence args
+      plans@[Plan first _ _ _, Plan second _ _ _, Plan third _ _ _] <- sequence args
       let code slots env = bindResult (first slots env) $ \a ->
             bindResult (second slots env) $ \b ->
               bindResult (third slots env) $ \c -> action env (invoke (Just spanValue) [a, b, c])
-          Plan combined names written callees _ = joined code plans
-      pure (Plan combined names written (Set.insert prefix callees) True)
+          Plan combined names written callees = joined code plans
+      pure (Plan combined names written (Set.insert prefix callees))
   BlockExpression block -> planBlock layout block
   IfExpression condition thenBlock elseBranch -> do
     test <- planExpression layout condition
     taken <- planBlock layout thenBlock
     alternative <- case elseBranch of
-      Nothing -> pure (Just (Plan (\_ _ -> pure (Yield UnitValue)) Set.empty Set.empty Set.empty False))
+      Nothing -> pure (Just (Plan (\_ _ -> pure (Yield UnitValue)) Set.empty Set.empty Set.empty))
       Just branch -> planExpression layout branch
     pure $ do
-      a@(Plan testCode _ _ _ _) <- test
-      b@(Plan thenCode _ _ _ _) <- taken
-      c@(Plan elseCode _ _ _ _) <- alternative
+      a@(Plan testCode _ _ _) <- test
+      b@(Plan thenCode _ _ _) <- taken
+      c@(Plan elseCode _ _ _) <- alternative
       let code slots env = bindResult (testCode slots env) $ \value ->
             bindResult (boolean env spanValue value) $ \truth ->
               if truth then thenCode slots env else elseCode slots env
@@ -179,9 +178,9 @@ planBlock layout (Located _ block) = do
     let plans = leading <> maybe [] (: []) trailing
         finish = case trailing of
           Nothing -> \_ _ -> pure (Yield UnitValue)
-          Just (Plan finalCode _ _ _ _) -> finalCode
+          Just (Plan finalCode _ _ _) -> finalCode
         code = foldr before finish leading
-        before (Plan first _ _ _ _) rest slots env = bindResult (first slots env) (\_ -> rest slots env)
+        before (Plan first _ _ _) rest slots env = bindResult (first slots env) (\_ -> rest slots env)
     pure (joined code plans)
  where
   planStatement (Located _ (ExpressionStatement expression)) = planExpression layout expression
@@ -189,10 +188,9 @@ planBlock layout (Located _ block) = do
 
 joined :: Code -> [Plan] -> Plan
 joined code plans = Plan code
-  (Set.unions [names | Plan _ names _ _ _ <- plans])
-  (Set.unions [written | Plan _ _ written _ _ <- plans])
-  (Set.unions [callees | Plan _ _ _ callees _ <- plans])
-  (or [native | Plan _ _ _ _ native <- plans])
+  (Set.unions [names | Plan _ names _ _ <- plans])
+  (Set.unions [written | Plan _ _ written _ <- plans])
+  (Set.unions [callees | Plan _ _ _ callees <- plans])
 
 {-# INLINE mapResult #-}
 mapResult :: (a -> b) -> Result a -> Result b

@@ -89,6 +89,14 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Grill Log
 
+- **Q:** Copy a binding map and Env on every block-local assignment? **A:** Use
+  `CellFrame`, a name map of private value cells, for lexical block frames.
+  _Rationale:_ the measured tree Loop allocates repeatedly for otherwise unchanged
+  environment state. Frames belong to one evaluation; captures obtain immutable
+  snapshots. Module and parameter frames retain their existing representation.
+  _Rejected:_ changing persistent Pudu values, sharing local cells with captures,
+  preallocating unintroduced bindings, or selecting storage by benchmark name.
+
 - **Q:** Should equality of an aggregate compare Decimal storage (#376)? **A:** No; the
   `Eq Value` instance recursively compares existing fields and uses `decimalCompare == EQ` for
   Decimal leaves. _Rationale:_ [[ADR-0007]] makes equality numeric even when a decimal is stored

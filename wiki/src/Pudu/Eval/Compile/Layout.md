@@ -19,10 +19,28 @@ A body gets slots when it declares a local and every name it binds anywhere — 
 and every pattern — is distinct. Then nothing in it shadows anything else, so a name in the layout
 means its slot wherever it is written, and pattern names, which bind through frames above, never
 collide with one. A function literal inside the body is its own body and is not looked into.
+Unique spelling alone is insufficient: ordered access events must also prove
+each slotted reference occurs after its binder and inside that binder's lexical
+scope. Initializers precede their declarations. Branch, arm and block scopes
+restore the previous active set on exit. A lambda contributes the existing
+conservative reachable-name set at its capture point, without allocating its
+own binders in the parent's layout. Record shorthand contributes a name read.
+Unsafe layouts keep ordinary name-based execution, preserving outer captures.
 Names bound by patterns the tree walker binds through a frame of its own — `for`, `while let`,
 `let ... else`, a destructuring `let` — must be distinct too, but take no slot: their value lives
 in that frame, and they are read by name.
 ## Grill Log
+- **Q:** Use pairwise duplicate scans for every body? **A:** Compare the binding
+  inventory's count to a Set's cardinality. _Rationale:_ admission should cost
+  O(n log n) for n bindings, while preserving original slot order. _Rejected:_
+  quadratic `nub` on a large local inventory or sorting slot positions.
+- **Q:** Does unique spelling prove a slotted name is already bound? **A:** No;
+  validate ordered reads against active scoped binders before admitting slots.
+  _Rationale:_ `let value = value + 1` inside a closure must read the captured
+  value before introducing its local; reading its allocated slot yields unit.
+  _Rejected:_ an initializer-only special case, stale values after nested scope
+  exit, dynamic slot occupancy affecting only one evaluator, or zero-filled
+  slots standing in for lexical bindings.
 - **Q:** Track scopes so a shadowing body can still use slots? **A:** No. _Rationale:_ a fixed layout
   maps one name to one position, which is what lets the tree walker read a slot frame by name;
   shadowing already draws a warning, so few bodies are left out. _Rejected:_ a layout that changes

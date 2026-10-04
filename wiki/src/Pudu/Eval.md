@@ -197,6 +197,20 @@ The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanu
 
 ## Places
 
+Assignment to a single bare name evaluates the right-hand side and invokes
+`storeName` directly. Constructing its place evaluates nothing, so this removes
+only a temporary wrapper. Diagnostic spans still come from the target. Other
+assignments resolve the place before the right-hand side as before.
+Resolved Grill Log: specialize a syntax shape whose place has no work, while
+sharing assignment mechanics and diagnostics with [[Eval Place]].
+
+Binary operands have an inline path for a resolved integer and a bare name.
+Other syntax still enters the recursive tree walker, and an unresolved integer
+still consults its inferred kind. Operands remain left-to-right; short-circuit
+operators retain their existing conditional right-hand evaluation. Resolved
+Grill Log: reduce dispatch and temporary continuations for known leaf syntax;
+retain the operator implementation, effects, spans and control outcomes.
+
 Assignment resolves its place through [[Eval Place]] — root and index keys first — then evaluates the right-hand side and stores; a field, an element, and `*r` are places as well as a variable. See [[ADR-0022-lending-a-place]].
 
 Function literals initialize the internal MultiMap proof cache to Nothing.

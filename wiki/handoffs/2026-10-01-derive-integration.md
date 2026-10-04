@@ -267,3 +267,108 @@ The evaluator script reports MultiMap 0.96 s tree / 0.95 s compiled; Arrays,
 Loop and Records tree values remain 1.18/2.19/1.86 s. The user's latest steering
 requires tracing their common tree runtime cost next, after pushing this passing
 checkpoint. Full Derive graph publication remains active and incomplete.
+
+Integration checkpoint ab782f12 is committed and pushed. The prior goal turn
+made verified progress through integration, regression evidence and publication.
+Architect → Runtime/Performance Engineer now owns dependency-layer profiling of
+the tree evaluator, bounded to Eval, Loop, Env, Frame, Place, Call and Operator.
+No implementation change is authorized by a guessed hotspot; complete mirrors
+and resolved Grill Logs remain required before each measured correction.
+The unchanged three-million-iteration Loop run allocates 14.77 GB, retains
+0.27 MB live and spends 2.28 s in the mutator versus 0.20 s elapsed GC. These are
+cumulative allocation and instrument-free RTS timing, not process peak memory.
+Exact next action for this steering: read the separate ticky build's allocation
+attribution, then correct the dominant repeated tree-runtime work and validate
+ordinary scopes, captures, lending, transfers, errors and both evaluator outputs.
+Typed Derive graph publication remains the next complete-feature dependency.
+
+The ticky build attributes roughly 3.55 GB to the expression walker, 2.16 GB
+to assignment state, and substantial additional allocation to places, operator
+results and binding maps on the unchanged Loop. Instrumented counts identify
+layers; performance acceptance must use the ordinary optimized executable.
+Slot reuse requires a semantic prerequisite: the current compiled layout reads
+an uninitialized slot for a closure initializer that shadows its captured name
+(tree prints 6; compiled reports E7001). Architect → Runtime Engineer owns
+Eval.Compile.Layout, FunctionClosureSpec and their mirrors for ordered scoped
+access admission. Resolve before sharing local storage with tree execution.
+The same assignment owns EvalSpec's explicit registration; a filtered run with
+zero selected labels supplies no regression evidence.
+
+The ordered scope matrix now passes in compiled and tree modes. Architect →
+Runtime/Performance Engineer owns the next bounded experiment in Eval, Env,
+Frame, Operator and Place: expose hot result/state helpers to inlining and
+bypass Place construction only for a bare-name assignment. Mirrors resolve
+evaluation order and diagnostic identity before implementation. Keep changes
+only with normal optimized benchmark evidence and semantic regression gates.
+
+The first helper/assignment experiment lowers paired median Loop tree time
+from 2,453 to 2,224 ms, but does not meet the target. The same responsibility
+extends to Eval.Call.Path and its mirror for a shared inline bare-name reader,
+plus Eval's resolved-integer/name operand path. All other AST forms and all
+operator semantics remain on their current execution paths.
+
+Architect → Runtime Engineer additionally owns Eval.Value and Eval.MultiMap with
+their complete mirrors for private CellFrame storage in lexical blocks. Env
+assignment must retain its state object on in-place writes. No public value is
+mutated; capture snapshots and immutable primitive proofs retain their contracts.
+Validate with the ordered scope matrix, capture, lending, control, error and
+full regression suites before accepting ordinary benchmark results.
+
+Private block cells lower Arrays tree median to 979 ms and Loop allocation to
+11.79 GB; Loop remains about 1.83 s. The next measured cut passes scalar binary
+results to their consumer through Eval, Call.Path and Operator, retaining one
+implementation for each operator and exact short-circuit/store order. This is
+tree traversal with private binding cells, not switching to compiled execution.
+
+The continuation experiment increases Loop allocation to 14.72 GB and Arrays
+to 5.41 GB versus the private-cell result; reject it and restore the measured
+operand/cell implementation. The next dependency cut removes the artificial
+MultiMap-presence gate from the already pure scalar kernel. Complete-region
+eligibility, write/callee separation, source diagnostics and unsupported-syntax
+fallback remain mandatory. Own the kernel relocation, Loop, manifest, mirrors
+and regression fixtures before broadening admission.
+
+The same responsibility owns BindingFlowSpec and its mirror for pure scalar
+region success, short-circuit, condition writes, overflow and constant refusal.
+Relocate the existing kernel to Eval.Loop.Kernel and remove only the obsolete
+primitive-presence metadata; every admitted call retains the MultiMap proof.
+
+The runtime gate run exposed an additional validation bug: its first `pudu-*`
+match cleans the repository-test package while retaining old compiler objects.
+Architect → Tooling Engineer owns test/gates.sh and its mirror for precise
+compiler/test-root cleanup. Preserve the same -Werror configuration and optimized
+binary across build/test/documentation, as the separate #436 checkpoint already
+requires. Re-run the gates after this correction and verify unrelated Source.o
+was rebuilt before claiming a clean build.
+
+The ordinary paired cold benchmark now measures medians (tree/compiled ms):
+Loop 716/723, Arrays 941/600, Calls 459/281, Iterate 503/328, Maps 805/564,
+MultiMap 943/929, Records 1,666/881. Every result matches the pre-change
+executable as well as the other evaluator. Three samples include startup and
+RTS statistics with cache disabled; the repository's five-run timing script is
+an additional gate, not the same estimator. Loop allocation falls from
+14.77 to 3.41 GB. Records and native-memory targets remain unmet.
+
+Both ordered-scope and pure-loop families pass in both modes. The corrected
+gate run rebuilds unrelated Source.o and passes its optimized warning gate
+and complete suite. Every corrected repository gate passes, including CLI,
+filesystem, registry, streaming residency, editor and documentation checks.
+All 546 property families also pass in an additional full tree-mode run. The
+restricted-sandbox attempt reports the TCP fixture's early value 1; the same
+fixture returns its expected 26 with loopback access, and the allowed full run
+has no failures. The older gate run also passes, but did not prove
+fresh compiler objects and is not used for that claim.
+
+The requested five-run script completes (tree/compiled seconds): Arrays
+0.94/0.62, Calls 0.61/0.33, Iterate 0.53/0.34, Loop 0.73/0.73, Maps
+0.80/0.57, MultiMap 0.91/0.90, Records 1.65/0.87. These fastest-run numbers
+retain the script's timing method and are separate from the paired cold medians.
+
+Records instrumentation attributes about 1.66 GB to expression evaluation,
+0.89 GB to closure entry and 0.46 GB to parameter-frame setup before this cut.
+Exact next action after checkpoint publication: resolve a complete mirrored
+proof for closed pure function bodies before extending the loop planner to
+remove repeated call setup, then measure the unchanged Records workload.
+Do not admit effects, callbacks, defaults, async, lending, recursion or mutable
+callee bindings without the corresponding proof. Full Derive typed graph
+publication and all seven standard derives remain active and incomplete.

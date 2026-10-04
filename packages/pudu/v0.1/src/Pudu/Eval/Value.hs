@@ -282,18 +282,21 @@ falseValue = BoolValue False
 
 {-| @Eval.Value.Frame — one level of bindings.
 
-    A map frame holds names as they are bound. A slot frame belongs to a
+    A map frame holds names as they are bound; a cell frame updates private
+    block-local cells and snapshots their values for captures. A slot frame belongs to a
     compiled body: its locals sit in an array at positions fixed when the body
     was compiled, named by the layout, and a name bound at run time that the
     body never declared goes to the extra map. Everything that works by name
-    reads a slot frame through its layout, so the two are interchangeable to it. -}
+    reads these representations through the same frame operations. -}
 data Frame
   = MapFrame !(Map Text Value)
+  | CellFrame !(IORef (Map Text (IORef Value)))
   | SlotFrame !(Map Text Int) !(IOArray Int Value) !(IORef (Map Text Value))
 
 instance Show Frame where
   show frame = case frame of
     MapFrame held -> "MapFrame " <> show held
+    CellFrame _ -> "CellFrame"
     SlotFrame layout _ _ -> "SlotFrame " <> show (Map.keys layout)
 
 {-| @Eval.Value.Closure — a callable function.

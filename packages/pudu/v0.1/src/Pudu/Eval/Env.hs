@@ -352,21 +352,32 @@ bind name value =
     new one in the innermost frame. Returns True if the name was found and updated,
     False if no frame contained the binding. -}
 updateExisting :: Text -> Value -> Evaluator Bool
+{-# INLINE updateExisting #-}
 updateExisting name value = Evaluator $ \env -> do
   updated <- go (envFrames env)
   pure $ case updated of
-    Nothing -> Done False env
-    Just updatedFrames -> Done True env{envFrames = updatedFrames}
+    MissingBinding -> Done False env
+    WrittenInPlace -> Done True env
+    RebuiltFrames updatedFrames -> Done True env{envFrames = updatedFrames}
  where
   -- One walk of each frame: a frame that does not bind the name answers
   -- nothing, and one that does is written in the same descent.
   go frames = case frames of
-    [] -> pure Nothing
+    [] -> pure MissingBinding
     current : rest -> do
       assigned <- frameAssign name value current
       case assigned of
-        Just replaced -> pure (Just (replaced : rest))
-        Nothing -> fmap (current :) <$> go rest
+        Just replaced -> pure $ case current of
+          MapFrame _ -> RebuiltFrames (replaced : rest)
+          CellFrame _ -> WrittenInPlace
+          SlotFrame{} -> WrittenInPlace
+        Nothing -> do
+          updated <- go rest
+          pure $ case updated of
+            RebuiltFrames changed -> RebuiltFrames (current : changed)
+            other -> other
+
+data FrameChange = MissingBinding | WrittenInPlace | RebuiltFrames [Frame]
 
 {-| Assignment writes the binding where it was declared rather than creating a
     new one in the innermost frame. -}
@@ -436,6 +447,7 @@ compiledBodies :: Evaluator (Maybe (IORef (Map Span (Evaluator Value))))
 compiledBodies = Evaluator $ \env -> pure (Done (envCompiledBodies env) env)
 
 lookupName :: Text -> Evaluator (Maybe Value)
+{-# INLINE lookupName #-}
 lookupName name =
   Evaluator $ \env -> do
     {-| Counted here rather than at the call sites, because every way a name is
@@ -647,7 +659,7 @@ capturedFrames reachable = Evaluator $ \env -> do
       against. -}
   if envModuleDepth env <= 0 || localCount <= 0
     then do
-      -- A slot frame is written in place, so a capture holds a copy of it.
+      -- Mutable frames are snapshotted before they escape through a capture.
       kept <- mapM (fmap MapFrame . frameSnapshot) frames
       pure (Done (Captured kept (envModuleDepth env)) env)
     else do
@@ -698,7 +710,13 @@ dropInnermostFrame env = case envFrames env of
   _ -> env
 
 withNewFrame :: Evaluator a -> Evaluator a
-withNewFrame = withFrame []
+withNewFrame (Evaluator action) = Evaluator $ \env -> do
+  cells <- newIORef Map.empty
+  outcome <- action env{envFrames = CellFrame cells : envFrames env}
+  pure $ case outcome of
+    Done value next -> Done value (dropInnermostFrame next)
+    Unwound transfer next -> Unwound transfer (dropInnermostFrame next)
+    Aborted stop -> Aborted stop
 
 pushFrame :: Map Text Value -> Evaluator ()
 pushFrame frame = Evaluator $ \env -> pure (Done () env{envFrames = MapFrame frame : envFrames env})

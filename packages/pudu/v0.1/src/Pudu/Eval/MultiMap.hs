@@ -161,3 +161,4 @@ multiMapPrimitive closure = do
     Just value -> Just value
     Nothing -> capturedBinding name rest
   capturedBinding _ (SlotFrame{} : _) = Nothing
+  capturedBinding _ (CellFrame{} : _) = Nothing

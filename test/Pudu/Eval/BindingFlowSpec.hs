@@ -9,7 +9,7 @@ module Pudu.Eval.BindingFlowSpec
 
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
-import Pudu.Eval.Common (evaluate, evaluateStatements, evaluateWith)
+import Pudu.Eval.Common (codesOfConstant, evaluate, evaluateStatements, evaluateWith)
 
 bindingFlowProperties :: [(String, IO Property)]
 bindingFlowProperties =
@@ -220,8 +220,28 @@ testLoops = do
     , "}"
     , "seen"
     ]
+  conditionWrites <- evaluateStatements
+    [ "var index = 0", "var total = 0"
+    , "while { index = index + 1\n index < 5 } { total = total + index }"
+    , "(index, total)"
+    ]
+  shortCircuit <- evaluateStatements
+    [ "var index = 0", "var zero = 0"
+    , "while index < 3 && (true || 1 / zero > 0) { index = index + 1 }"
+    , "index"
+    ]
+  overflow <- evaluateStatements
+    [ "var value = 255u8", "var index = 0"
+    , "while index < 1 { index = index + 1\n value = value + 1u8 }"
+    , "value"
+    ]
+  bounded <- codesOfConstant "{ var count = 0\n while true { count = count + 1 }\n true }"
   pure $ conjoin
     [ counted === "10"
     , counterexample "break leaves the loop" (broken === "4")
     , counterexample "for walks a tuple" (iterated === "6")
+    , counterexample "the terminating condition commits its writes" (conditionWrites === "(5, 10)")
+    , counterexample "short-circuiting skips invalid arithmetic" (shortCircuit === "3")
+    , counterexample "pure loops retain checked overflow" (overflow === "failed: E7005")
+    , counterexample "pure constant loops retain the step refusal" (bounded === ["E7002"])
     ]

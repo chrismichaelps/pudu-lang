@@ -7,6 +7,7 @@ module Pudu.Eval.Call.Path
   , qualifiedCallee
   , qualifiedParts
   , readPath
+  , readName
   , typeArgumentName
   , typeArgumentNames
   ) where
@@ -72,11 +73,7 @@ qualifiedParts expression = case expression of
     longer match is the one the reader meant, and preferring it cannot shadow a
     local. -}
 readPath :: Span -> NonEmpty Text -> Evaluator Value
-readPath spanValue (name :| []) = do
-  found <- lookupName name
-  case found of
-    Just value -> pure value
-    Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
+readPath spanValue (name :| []) = readName spanValue name
 readPath spanValue path@(first :| rest) = do
   local <- if null rest then pure Nothing else lookupLocal first
   linked <- case local of
@@ -96,6 +93,14 @@ readPath spanValue path@(first :| rest) = do
     segment : remaining -> do
       next <- readMember spanValue value segment
       foldMember next remaining
+
+readName :: Span -> Text -> Evaluator Value
+{-# INLINE readName #-}
+readName spanValue name = do
+  found <- lookupName name
+  case found of
+    Just value -> pure value
+    Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
 
 {-| A member chain read as one dotted name, when every part of it is a plain
     identifier and the whole thing is bound. Anything else is `Nothing`, so an

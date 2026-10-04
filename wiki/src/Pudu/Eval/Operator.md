@@ -83,6 +83,13 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Grill Log
 
+- **Q:** Allocate a separate evaluator continuation for each successful integer
+  check? **A:** Allow the check and the integer dispatch to inline into consumers.
+  _Rationale:_ ordinary Loop profiling attributes repeated allocation to these
+  boundaries. The exact result, kind meet and overflow diagnostics remain the
+  shared implementations; measure uninstrumented optimized runs before keeping
+  the optimization.
+
 - **Q:** Why look at the owning sum before the variant? **A:** Because that is where an
   implementation is written. _Rationale:_ `impl Named for Option[Int]` keys under `Option`, and the
   value reaching dispatch is a `Some`; consulting only the variant made the checker and the

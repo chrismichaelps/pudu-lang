@@ -32,7 +32,7 @@ import Pudu.Eval.Env
   , withFrame
   )
 import Pudu.Eval.Keyed (mapEntries, setMembers)
-import Pudu.Eval.MultiMap.Kernel (multiMapLoop)
+import Pudu.Eval.Loop.Kernel (pureLoop)
 import Pudu.Eval.Match (matchPattern)
 import Pudu.Eval.Operator (nominalNameOf)
 import Pudu.Eval.Range (rangeElements)
@@ -62,7 +62,7 @@ data LoopNeeds = LoopNeeds
 
 evaluateWhile :: LoopNeeds -> Span -> Maybe Text -> Located Expression -> Located Block -> Evaluator Value
 evaluateWhile needs spanValue label condition body = do
-  kernel <- multiMapLoop spanValue condition body
+  kernel <- pureLoop spanValue condition body
   case kernel of
     Just native -> native
     Nothing -> loop (0 :: Int)

@@ -23,6 +23,7 @@ Resolve dotted module and member paths, qualified callees, type argument syntaxe
 
 ```haskell
 readPath :: Span -> NonEmpty Text -> Evaluator Value
+readName :: Span -> Text -> Evaluator Value
 pathValue :: Expression -> Evaluator (Maybe Value)
 lastPathSegment :: ModuleName -> Text
 flattenPath :: Expression -> Maybe [Text]
@@ -83,3 +84,7 @@ prefix generation. Dotted paths keep their exact existing algorithm.
 
 Resolved Grill Log: skip provably empty path work, without changing lexical or
 implementation lookup, diagnostic spans, or name-lookup tallies.
+
+`readName` exposes this same bare-name branch for the tree's operand path and
+permits inlining. Resolved Grill Log: share the undefined-name diagnostic and
+lookup tally rather than introducing a second name-resolution policy.

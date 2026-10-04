@@ -26,6 +26,7 @@ import Pudu.Eval.FunctionClosureSpec
   , testBuiltinImpls
   , testClosures
   , testFunctions
+  , testSlotScopes
   )
 import Pudu.Eval.SystemSpec
   ( testAsync
@@ -56,6 +57,7 @@ evalProperties =
   , ("structured scopes join every task they start", testScopes)
   , ("built-in text methods answer with new values", testTextMethods)
   , ("function literals capture the environment they were written in", testClosures)
+  , ("slot admission preserves ordered lexical scope and capture", testSlotScopes)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
   , ("effects answer with a result and are refused at compile time", testEffects)

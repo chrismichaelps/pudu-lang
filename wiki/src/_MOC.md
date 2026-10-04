@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
 
 - [[Derive Record Kernel Spec]] — generated method execution and refusal.
@@ -104,7 +106,7 @@ tags: [moc, module]
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval MultiMap Kernel]] — pure native loop regions containing proven MultiMap primitives.
+- [[Eval Loop Kernel]] — complete pure scalar regions and proven MultiMap primitive calls.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
 

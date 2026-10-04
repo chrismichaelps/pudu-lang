@@ -61,6 +61,14 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ## Algorithm
 
+`withNewFrame` creates a private [[Eval Frame]] CellFrame for lexical block
+bindings, while module/parameter frames keep their existing representation.
+Assignment distinguishes an immutable rebuilt frame stack from an in-place
+cell/slot write; the latter returns the existing Env and frame stack.
+Resolved Grill Log: preserve missing-name search and all scope cleanup paths;
+do not copy unchanged state after a private storage write. Captures continue
+through frameSnapshot before retaining local bindings.
+
 Environment combinators run the nested evaluator directly and normalize both `Done` and `Unwound` outcomes before returning them. Frame cleanup is therefore part of the combinator rather than a monadic continuation that an unwind can skip; there is no caching, mutation, or reflection.
 
 ## Negative Logic (Prohibited Paths)
@@ -126,6 +134,12 @@ and 0.29s compiled before this cut.
 
 Resolved Grill Log: expose existing combinators to optimization; introduce no
 mode override, new state, control-flow policy, or effect behavior.
+
+The measured Loop allocation profile also exposes name lookup and assignment
+as hot cross-module boundaries. `lookupName` and `updateExisting` permit inlining
+so their existing result/environment continuation can fuse with consumers.
+Resolved Grill Log: keep the same frame search, optional tally, method fallback,
+and failure paths; accept only ordinary optimized benchmark improvements.
 
 ## Shared compile-time boundaries
 
