@@ -40,6 +40,7 @@ preludeTypeNames =
 preludeValueNames :: [Text]
 preludeValueNames =
   [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "bucketsOf", "mixHash", "show", "display", "convertInteger"
+  , "multiMapAdd", "multiMapContains"
   , "wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"
   , "wordMapIsSubsetOf", "wordMapIsDisjointFrom"
   , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sha3_256Of", "sha3_512Of", "blake2b256Of", "blake2b512Of", "checksumOf", "hmacSha512Of", "constantTimeEqual", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
@@ -71,7 +72,7 @@ effectValueNames =
   , "spawnProgram", "childReadChunk", "childReadErrorChunk", "childWriteChunk"
   , "childCloseInput", "childWait", "childWaitWithin", "childStop"
   , "listDirectory", "createDirectory"
-  , "renamePath", "createTemporaryFile", "createDirectoryExclusive", "removeEmptyDirectory"
+  , "renamePath", "writeFileAtomically", "createTemporaryFile", "createDirectoryExclusive", "removeEmptyDirectory"
   , "permissionsOf", "setPermissionsOf", "pathIsSymbolicLink", "createSymbolicLink"
   , "canonicalPath", "fileSize", "directoryExists"
   , "openReader", "openWriter", "openAppender"

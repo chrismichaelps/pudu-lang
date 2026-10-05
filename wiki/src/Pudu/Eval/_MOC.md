@@ -5,6 +5,10 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval MultiMap]] — fused persistent append and indexed membership beneath Std.MultiMap.
+
+- [[Eval Function Closure Tests]] — receiver, generic, qualified, and missing Decimal dispatch checks.
+
 - [[Eval Runtime]] — scoped resource ownership shared by evaluation modes.
 - [[Eval Context]] — serialized accepted-state retention across evaluator actions.
 
@@ -42,6 +46,12 @@ tags: [moc, module]
 - [[Eval Range]] — what a range is, and what can be asked of one without walking it.
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
 - [[Eval Method]] — the closed vocabulary of built-in methods a value answers to, and the name each is spelled by.
+- [[Eval Compile]] — function bodies compiled to closures once per run.
+- [[Eval Frame]] — one level of bindings, a name map or a compiled body's slots, read by name.
+- [[Eval Compile Layout]] — whether a compiled body runs on slots, and where its locals sit.
+- [[Eval Compile Cache]] — compiled bodies kept for a run, shared by its threads.
+- [[Eval Rope]] — text built by `+` held as chunks, joined once when read.
+- [[Eval Sort]] — stable natural merge sort by a program's comparison.
 - [[Eval Value]] — runtime values, and the total order the keyed collections are held in.
 - [[Eval Foreign]] — the call into a library written elsewhere, and every check made before the value leaves.
 - [[Eval Env]] — environment frames, control unwinding, and abort diagnostics.
@@ -53,6 +63,21 @@ tags: [moc, module]
 
 Dependency direction: Builtin Definition → Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
 
+- [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
+- [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+
+- [[Runtime Series Map]] — pure numeric occurrence storage beneath Value/MultiMap.
+
+- [[Eval Data Tests]] — structural Decimal equality and retained numeric representation.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Semantics]]
+
+- [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
+
+- [[Eval Loop Kernel]] — complete pure regions, proven MultiMap calls and closed module functions.
+- [[Eval Loop Step]] · [[Eval Loop Step Tests]] — strict unboxed region outcomes, structured refusal/transfer and scratch cleanup.
+
+- [[Eval Call Argument]] — argument values and receiver lending places.
+- [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

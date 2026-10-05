@@ -67,16 +67,16 @@ readIndex spanValue container key = case (container, key) of
     (from, count) <- rangeBounds spanValue key (ByteString.length bytes)
     pure (BytesValue (ByteString.take count (ByteString.drop from bytes)))
   (TupleValue members, IntValue _ index)
-    | index >= 0 && fromInteger index < length members -> pure (members !! fromInteger index)
+    | index >= 0 && index < toInteger (length members) -> pure (members !! fromInteger index)
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
   (ArrayValue members, IntValue _ index)
-    | index >= 0 && fromInteger index < Seq.length members ->
+    | index >= 0 && index < toInteger (Seq.length members) ->
         case Seq.lookup (fromInteger index) members of
           Just value -> pure value
           Nothing -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
   (StrValue text, IntValue _ index)
-    | index >= 0 && fromInteger index < Text.length text ->
+    | index >= 0 && index < toInteger (Text.length text) ->
         pure (CharValue (Text.index text (fromInteger index)))
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
   _ ->
@@ -258,6 +258,7 @@ arrayMethods =
   , ("map", ArrayMap)
   , ("filter", ArrayFilter)
   , ("reduce", ArrayReduce)
+  , ("sortBy", ArraySortBy)
   ]
 
 {-| The nominal type a value belongs to, for the values that belong to one the
@@ -270,6 +271,7 @@ nominalNameOf value = case value of
   IntValue kind _ -> Just (integerKindName kind)
   FloatValue Float32Width _ -> Just "Float32"
   FloatValue Float64Width _ -> Just "Float64"
+  DecimalValue _ -> Just "Decimal"
   StrValue _ -> Just "Str"
   BytesValue _ -> Just "Bytes"
   BucketsValue _ -> Just "Buckets"

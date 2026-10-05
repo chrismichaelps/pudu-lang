@@ -2,14 +2,21 @@
 module Pudu.Type.Check.PatternSpec
   ( patternProperties
   , testExhaustiveness
+  , testTupleCoverage
+  , testNestedConstructorNamespaces
   , testMatchThroughBorrow
   ) where
 
+import qualified Pudu.Compiler.Program.Common as Program
 import Pudu.Type.Check.Common
   ( codes
   , codesOfExpression
   , typeOf
+  , compile
+  , diagnosticContract
   )
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Type.Check.DataSpec (colorProgram)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -17,6 +24,8 @@ patternProperties :: [(String, IO Property)]
 patternProperties =
   [ ("a match reads through a borrow", testMatchThroughBorrow)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
+  , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
+  , ("nested coverage follows canonical constructor owners", testNestedConstructorNamespaces)
   ]
 
 testExhaustiveness :: IO Property
@@ -269,4 +278,105 @@ testMatchThroughBorrow = do
         (stillExhaustive === ["E5001"])
     , counterexample "a character answers for its code" (charCode === "Int")
     , counterexample "a character has no other method" (unknownChar === ["E3005"])
+    ]
+
+{-| Complete products must check, but independent coverage of their columns
+    must never stand in for coverage of every combination. -}
+testTupleCoverage :: IO Property
+testTupleCoverage = do
+  complete <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), Some(_))", "(Some(_), None)", "(None, Some(_))", "(None, None)"])
+  grouped <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), _)", "(None, Some(_))", "(None, None)"])
+  diagonal <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), Some(_))", "(None, None)"])
+  guarded <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(_), _)", "(None, Some(_))", "(None, None) if true"])
+  payload <- codes (program "(Option[Int], Option[Int])"
+    ["(Some(1), _)", "(None, _)"])
+  booleans <- codes (program "(Bool, Bool)"
+    ["(true, true)", "(true, false)", "(false, true)", "(false, false)"])
+  diagonalBool <- codes (program "(Bool, Bool)" ["(true, true)", "(false, false)"])
+  nested <- codes (program "((Option[Int], Bool), Option[Int])"
+    ["((Some(_), _), _)", "((None, true), _)", "((None, false), _)"])
+  alternatives <- codes (program "(Bool, Bool)" ["(true | false, true)", "(_, false)"])
+  let source = Text.unlines (program "(Option[Int], Option[Int])"
+        ["(Some(_), _)", "(None, Some(_))"])
+  missing <- compile source
+  pure $ conjoin
+    [ counterexample "all four combinations" (complete === [])
+    , counterexample "grouped wildcard covers all combinations" (grouped === [])
+    , counterexample "diagonal leaves two combinations" (diagonal === ["E5001"])
+    , counterexample "guarded last combination remains missing" (guarded === ["E5001"])
+    , counterexample "open payload test leaves values" (payload === ["E5001"])
+    , counterexample "boolean product" (booleans === [])
+    , counterexample "boolean diagonal remains incomplete" (diagonalBool === ["E5001"])
+    , counterexample "nested tuple product" (nested === [])
+    , counterexample "alternatives specialize without losing their row" (alternatives === [])
+    , diagnosticContract source "match value" "E5001"
+        "match on (Option[Int], Option[Int]) does not cover every value"
+        (Just "add a wildcard case for the values the arms do not name") missing
+    ]
+ where
+  program :: Text -> [Text] -> [Text]
+  program subject patterns =
+    ["module M", "fn run(value: " <> subject <> ") -> Int {", "  match value {"]
+      <> ["    case " <> held <> " => 0" | held <- patterns]
+      <> ["  }", "}"]
+
+{-| An unrelated dependency's constructors must neither remove nor supply
+    coverage for the canonical type actually carried by an Option. -}
+testNestedConstructorNamespaces :: IO Property
+testNestedConstructorNamespaces = do
+  complete <- Program.codes "test-fixtures/exhaustnamespace/UsesJsonCoverage.pudu"
+  reverseOrder <- Program.codes "test-fixtures/exhaustnamespace/UsesJsonCoverageReversed.pudu"
+  directValue <- Program.runEntry "test-fixtures/exhaustnamespace/UsesJsonCoverage.pudu"
+  indirectValue <- Program.runEntry "test-fixtures/exhaustnamespace/UsesJsonCoverageReversed.pudu"
+  missing <- Program.codes "test-fixtures/exhaustnamespace/RejectsJsonCoverage.pudu"
+  missingMessages <- Program.messages "test-fixtures/exhaustnamespace/RejectsJsonCoverage.pudu"
+  genericProduct <- codes
+    [ "module M"
+    , "type Pair[T] = Empty | Both(T, T)"
+    , "fn run(value: Pair[Bool]) -> Int {"
+    , "  match value {"
+    , "    case Empty => 0"
+    , "    case Both(true, _) => 1"
+    , "    case Both(false, true) => 2"
+    , "    case Both(false, false) => 3"
+    , "  }"
+    , "}"
+    ]
+  genericDiagonal <- codes
+    [ "module M"
+    , "type Pair[T] = Empty | Both(T, T)"
+    , "fn run(value: Pair[Bool]) -> Int {"
+    , "  match value {"
+    , "    case Empty => 0"
+    , "    case Both(true, true) => 1"
+    , "    case Both(false, false) => 2"
+    , "  }"
+    , "}"
+    ]
+  nestedTuple <- codes
+    [ "module M"
+    , "fn run(value: Option[(Bool, Bool)]) -> Int {"
+    , "  match value {"
+    , "    case None => 0"
+    , "    case Some((true, _)) => 1"
+    , "    case Some((false, true)) => 2"
+    , "    case Some((false, false)) => 3"
+    , "  }"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "Json cannot remove nested Option coverage" (complete === [])
+    , counterexample "dependency order cannot select another constructor owner" (reverseOrder === [])
+    , counterexample "every local Atom/Value branch and Json executes" (directValue === Just "\"10:true\"")
+    , counterexample "indirect Json loading preserves runtime output" (indirectValue === directValue)
+    , counterexample "Json cannot supply a missing local Text branch" (missing === ["E5001"])
+    , counterexample "missing nested branch retains constructor diagnostic"
+        (missingMessages === ["match on Option does not cover Some"])
+    , counterexample "generic positional product is instantiated before coverage" (genericProduct === [])
+    , counterexample "generic product correlation remains exact" (genericDiagonal === ["E5001"])
+    , counterexample "a tuple payload is checked at its actual instantiated type" (nestedTuple === [])
     ]

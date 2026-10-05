@@ -4,11 +4,13 @@ module Pudu.Compiler
   , CompileResult (..)
   , FrontendResult (..)
   , compileFrontendWith
+  , compileFrontendWithDependencies
   , emptyCompileContext
   , recoveredSyntax
   , runCompile
   , runCompileWith
   , runFrontend
+  , rejectFrontend
   ) where
 
 import Pudu.Compiler.Literals (resolveLiterals)
@@ -22,7 +24,7 @@ import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Frozen (Frozen)
-import Pudu.Eval.Program (foldModule)
+import Pudu.Eval.Program (foldModuleWith)
 import Pudu.Frontend.Expand (expandModule)
 import Pudu.Semantic
   ( ExportIndex
@@ -65,11 +67,15 @@ data CompileResult = CompileResult
       evaluator reads this to build the literal as the type it is. -}
   , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
+  {-| Every module-scope name's type as inference settled it, for tooling that
+      indexes a tree other than the one checked: the authored text, before
+      derives are elaborated. -}
+  , compileSchemes :: ~[(Text, Scheme)]
   , compileDiagnostics :: ![Diagnostic]
   {-| The methods this module's declarations provide, by owner, as the checker
       declared them. Only this module's own: a program's are the union of its
       modules'. -}
-  , compileMethods :: ![(NominalId, Text, Scheme)]
+  , compileMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The constants folding computed that are plain data, which linking binds
       instead of evaluating their initializers again. -}
   , compileFolded :: ~(Map Text Frozen)
@@ -86,6 +92,23 @@ data CompileContext = CompileContext
 
 emptyCompileContext :: CompileContext
 emptyCompileContext = CompileContext emptyExportIndex emptyInterfaceGraph False
+
+{-| Preserve tooling syntax while the graph's earliest failed phase gates execution. -}
+rejectFrontend :: FrontendResult -> [Diagnostic] -> CompileResult
+rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} findings =
+  CompileResult
+    { compileTokens = frontendTokens
+    , compileModule = Nothing
+    , compileSyntax = frontendModule
+    , compileResolution = Nothing
+    , compileTypes = Nothing
+    , compileIntegerKinds = Map.empty
+    , compileDocs = Nothing
+    , compileDiagnostics = sortDiagnostics (frontendDiagnostics <> findings)
+    , compileMethods = []
+    , compileSchemes = []
+    , compileFolded = Map.empty
+    }
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
 
@@ -105,7 +128,18 @@ runCompileWith :: CompileContext -> Source -> IO CompileResult
 runCompileWith context source = compileFrontendWith context (runFrontend source)
 
 compileFrontendWith :: CompileContext -> FrontendResult -> IO CompileResult
-compileFrontendWith context FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} =
+compileFrontendWith = compileFrontendWithDependencies Map.empty Map.empty []
+
+{-| Compile against checked dependency products so folding sees the same imports
+    as execution. Isolated callers continue to provide no dependency environment. -}
+compileFrontendWithDependencies
+  :: Map Text (Map Text Frozen)
+  -> Map Span Text
+  -> [(Text, Module)]
+  -> CompileContext
+  -> FrontendResult
+  -> IO CompileResult
+compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies context FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} =
   case frontendModule of
         Nothing ->
           pure CompileResult
@@ -118,6 +152,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
             , compileMethods = []
+            , compileSchemes = []
             , compileFolded = Map.empty
             }
         Just original ->
@@ -137,12 +172,13 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 (constantDiagnostics, folded) <-
                   if hasErrors typed
                     then pure ([], Map.empty)
-                    else foldConstants (maybe Map.empty moduleIntegerKinds typing) parsed
+                    else foldConstants dependencyFolded
+                      (Map.union (maybe Map.empty moduleIntegerKinds typing) dependencyKinds) dependencies parsed
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) parsed)
+                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) (maybe Map.empty moduleSelections typing) parsed)
                     , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types
@@ -152,6 +188,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
                     , compileMethods = maybe [] moduleMethods typing
+                    , compileSchemes = maybe [] moduleSchemes typing
                     , compileFolded = folded
                     }
 
@@ -165,10 +202,10 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Map Span Text -> Module -> IO ([Diagnostic], Map Text Frozen)
-foldConstants integerKinds parsed
+foldConstants :: Map Text (Map Text Frozen) -> Map Span Text -> [(Text, Module)] -> Module -> IO ([Diagnostic], Map Text Frozen)
+foldConstants foldedDependencies integerKinds dependencies parsed
   | any hasInitializer (moduleDeclarations parsed) = do
-      (outcome, folded) <- foldModule integerKinds parsed
+      (outcome, folded) <- foldModuleWith foldedDependencies integerKinds dependencies parsed
       pure (outcomeDiagnostics outcome, folded)
   | otherwise = pure ([], Map.empty)
  where

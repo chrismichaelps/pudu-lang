@@ -19,6 +19,8 @@ aliases: [Type Env]
 
 Own checker state, name frames, declared shapes, trait obligations, deferred integer-literal constraints, rigid bounds, and diagnostics for [[Type Check]].
 
+`withAdditionalRigidBounds` answers its action's value. `noteStaticTrait`/`isStaticTrait` track traits declaring a member without `self`; `recordSelection` keeps, by reference span, the types an instantiation chose, produced zonked as `producedSelections`.
+
 ## Interface
 
 The exported signatures are the module header's export list.
@@ -27,7 +29,9 @@ The exported signatures are the module header's export list.
 
 - `recordDeclaredMethod` collects the methods this module's own declarations provide — each impl
   method, each trait default an impl inherits, and each member of a trait the module declares —
-  beside the owner the checker binds them under. `runChecker` publishes them as `producedMethods`.
+  beside the owner the checker binds them under, with the span of the method's name — for a
+  generated method, its anchor in the derive that wrote it. `runChecker` publishes them as
+  `producedMethods`, so a tool can answer where a call's method is declared.
   Interface methods are installed from the graph and are not recorded here: each module reports its
   own, and a program's methods are the union of its modules'.
 
@@ -37,7 +41,20 @@ The exported signatures are the module header's export list.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
 - Trait obligations are registered when a scheme is instantiated at a call site and discharged after the enclosing function's body is checked, while the parameter's own bounds are still in scope and inference has solved the argument types.
 - `withRigidBounds` installs the enclosing declaration's parameter bounds so a generic body can call another generic that demands the same trait; a rigid parameter satisfies a bound its own declaration declared. Bounds from the parameter list and the `where` clause are merged with `(<>)` so a parameter carrying bounds in both places keeps all of them rather than the last entry overwriting the first.
-- `implementsTrait` answers whether a nominal type has an implementation for a trait, read from `declaredImpls` which [[Type Formation]] collects from `impl` declarations.
+- `withAdditionalRigidBounds` extends the existing lexical bounds for compile-time
+  loops and restores them on exit. `withLocalObligations` isolates obligations
+  introduced in that scope; discharge them while loop-local bounds still exist,
+  then restore unresolved enclosing obligations. A loop must not discharge or
+  satisfy obligations raised before its own bounds were introduced.
+- `withDeriveChecking` scopes compile-time loops to generic checking for one definition, restoring
+  the previous setting on exit like `withComptime`. Outside the scope a surviving loop is refused,
+  because instantiation has not run for it.
+- `lookupImplementations` reads full [[Type Implementation Rules]] by canonical
+  target/trait identity. [[Type Trait Proof]] decides satisfaction, including
+  concrete arguments and recursive conditional requirements.
+- Trait obligations retain whether a generic call or dynamic widening requires
+  them. Both discharge after inference under the enclosing bounds; dynamic
+  failures preserve E3032 while call-bound failures preserve E3012.
 - Declared shapes, implementation relationships, and method keys use canonical nominal/trait identity rather than basenames. Imported interface state is merged once before local signatures; local bindings remain in an inner frame.
 - Imported concrete method keys are marked separately from ordinary name bindings. Local implementation installation can therefore diagnose an imported-plus-local provider collision without treating two local declarations as an import-order ambiguity or replacing coherence's duplicate-head diagnostic.
 - A loop frame records the loop's label, the type it produces, and whether it may carry a value out at all. `loop` produces what its `break` statements carry, so every `break` leaving one unifies against the same result variable; `while` and `for` can finish on their own condition without reaching a `break`, so a value carried out of one would exist on some runs and not others, and `E3029` says so rather than inventing a default. A `loop` no `break` leaves is `Never`.
@@ -62,6 +79,14 @@ The exported signatures are the module header's export list.
   by every module, and carrying the variable counter keeps installation variables distinct from the
   module's own. `evalChecker` runs work whose only product is its value, such as that
   installation, discarding what it recorded.
+- `isMethodKey` answers from `stateDeclaredMethodKeys`, the declared methods' qualified keys kept
+  beside the list: it is asked on every call on a built-in type, and scanning thousands of
+  generated methods there made derive-heavy modules quadratic.
+- The snapshot carries the imported traits with a member that takes no `self`
+  (`installedStatic`). A reference whose bounds name such a trait records the types it chose, so
+  `T.decode(json)` in a function whose `T` is inferred at its call still reaches the chosen owner;
+  without the set, only a trait the module itself declared was known to be static, and an imported
+  one ran only when the caller wrote the type argument.
 
 - **`qualifiesSomething` finds a qualifier with one ordered lookup.** A frame's keys are sorted, so
   every name under `Q.` starts at the first key not below it; listing every key of every frame per
@@ -98,6 +123,13 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Replace the enclosing bounds at a nested compile-time loop? **A:** Merge
+  them lexically and restore them after checking. _Rationale:_ nested bodies retain
+  the outer field's capabilities. _Rejected:_ replacement or leaking local bounds.
+- **Q:** Discharge the enclosing obligation queue at a loop exit? **A:** Isolate
+  the loop's queue and discharge only that queue under its bounds. _Rationale:_
+  enclosing inference may still be incomplete, and local assumptions must not
+  prove earlier calls. _Rejected:_ draining all obligations indiscriminately.
 - **Q:** Why `isMethodKey`? **A:** Declared and imported methods are recorded apart from ordinary names, and only that record can tell a method from a module function filed at the same qualified key.
 
 - **Q:** Is one table of variants keyed by name enough? **A:** No; variants are held keyed by their owning type as well. _Rationale:_ a name-keyed table has one entry per name across every module in the graph, so two modules declaring a variant of the same name overwrite one another and the survivor depends on load order. Keyed by owner there is no collision to resolve, and a caller that already knows the type — which a pattern does, once its name has been resolved through the scope — asks a question with one answer. _Rejected:_ a name-keyed table with a tie-break; erroring on a duplicate name, which would refuse two modules that never meet.
@@ -109,6 +141,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 - **Q:** Model an integer literal as `Int` immediately? **A:** No; retain a deferred literal constraint. _Rationale:_ annotations and call parameters must select narrower or wider integer types before fit checking, while a context-free literal still defaults predictably. _Rejected:_ hard-coded `Int`; caller-wide numeric promotion; a special nominal literal type that cannot record its later solution.
 - **Q:** What does a method call on an unsettled integer literal look up? **A:** `settleIntegerLiteral` settles it to `Int` first, and the member is looked up there. _Rationale:_ a member of an open variable was answered with a fresh variable, so `let n = 3` then `n.bogus()` checked and `42.toText()` had no type; `Int` is what finalization would choose for a literal nothing else constrained, so only programs naming a member that does not exist change. The pending constraint is found through its resolved variable, because `let n = 3` has already unified the binding with the literal. _Rejected:_ checking the member against every integer type; leaving the variable open and trusting the name (#366).
 - **Q:** May a nested construct finalize every pending literal? **A:** No; it records the next type-variable identity and selects only constraints in the required creation range. Even within that range, branch/result validation retains unsolved constraints for an enclosing context. _Rationale:_ an annotated `if` or `match`, and an expression used beside another literal, must not default before its outer context is applied. _Rejected:_ global finalization at each diagnostic boundary; count-based stack slicing that nested settlement can invalidate; carrying unresolved shape diagnostics to module end.
+- **Q:** Record every generic instantiation? **A:** No; only those with a parameter bounded by a static trait, so ordinary generic calls pay nothing.
 
 ## Referenced by
 
@@ -117,3 +150,75 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Places
 
 `DeclaredTypes` records `declaredMutableFields`. The state holds the resolver's `var` use spans, the spans of `&mut` expressions a call admitted as its arguments, and the untyped function literal parameters awaiting judgement, with small accessors for [[Check Place]]. See [[ADR-0022-lending-a-place]].
+
+## Complete checker fact identity
+
+Expression types, writable references, lent arguments and signature diagnostic
+suppression use complete Span keys. Same offsets in another snapshot or generated
+node do not alias. Diagnostic suppression is a Set (Span, Text) for logarithmic
+membership, preserving one diagnostic per authored error.
+
+- **Q:** Keep offset-only keys internally? **A:** No. _Rationale:_ generated nodes
+  share authored offsets while holding distinct types and places. _Rejected:_
+  artificial offsets or cross-instantiation state leakage.
+
+## Complete trait evidence
+
+`withRigidBounds` preserves and returns its action's result while restoring the
+previous bounds. Existing unit-valued body checks keep their behavior; generated
+requirement proof can return its closed evidence without mutating the caller.
+Resolved Grill Log: scope combinators restore state and preserve results rather
+than discarding typed products or requiring a second proof outside their bounds.
+
+Scoped rigid bounds and queued call obligations retain complete trait applications. Dynamic widening retains its separate obligation reason. Proof search may infer implementation-local evidence only, without binding caller variables.
+
+Resolved Grill Log: do not erase generic arguments in checker state; canonical owner keys index candidates, never prove satisfaction.
+
+DeclaredTypes also inventories parameter kinds by canonical declaration identity.
+This pure inventory distinguishes constructor-trait shorthand from an omitted
+ordinary trait argument. Resolved Grill Log: only a bound on a constructor with
+one trait parameter of the same kind may supply that constructor implicitly.
+
+## Creation-frontier selection (#435)
+
+Pending integer constraints remain in strictly decreasing creation-identity
+order. Since queries split the recent prefix through [[Type Literal Frontier]],
+and interval queries retain newer facts plus a shared older suffix. Validation
+partitions only that recent prefix into solved and unresolved facts; it never
+walks unrelated older constraints. Selected facts still execute in source order,
+and unsolved branch result literals still wait for the enclosing annotation.
+
+Negation targets one unique literal identity and stops when that identity is
+found or the decreasing queue has passed it. It does not rebuild the older tail.
+
+Resolved Grill Log: preserve deferred inference and diagnostic order while
+exploiting the queue's existing creation invariant. Do not sort, globally drain,
+default early or introduce process-global state. The branch-heavy benchmark
+exposes the former quadratic scan; [[Type Literal Frontier Spec]] proves suffix
+laziness and unchanged integer widths.
+
+## Integer-keyed substitution storage (#435)
+
+The private substitution table uses strict IntMap keys, the exact integer
+identity carried by TypeVar. Freshness, graph-installed counters, alias chains,
+path compression and final substitution semantics remain unchanged. Textual
+name frames and nominal identities continue to use their existing maps.
+
+Resolved Grill Log: the measured checking layer allocates about 172 MB on the
+8,000-branch input. Compare a representation specialized to its existing integer
+keys before retaining the change. Do not reinterpret source offsets as variable
+identities, mutate shared interface state, assign dense array slots to imported
+variables, or change the public Checker API. Keep only a measured improvement
+with full diagnostic and editor regression evidence.
+
+## Demand-driven expression publication (#435)
+
+`CheckerProducts.producedTypes` is intentionally lazy. Diagnostic admission and
+execution still run the complete checker with its live recorded-expression
+state, including deferred collection and place checks. Tooling alone demands
+the final reversed, substituted expression list through [[Type Boundary]].
+
+Resolved Grill Log: the diagnostic-only phase still allocates the complete
+publication spine despite the downstream lookup map being deferred. Defer that
+derived list at its producer, preserving its order, substitutions and consumers.
+Do not remove live recorded facts, defer checking itself, or drop editor answers.

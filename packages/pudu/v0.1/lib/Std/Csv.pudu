@@ -72,6 +72,7 @@ export fn parseWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], Cs
 fn scanWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] {
   let characters = source.chars()
   let size = characters.length()
+  let marks = delimiter.chars()
   var rows: Array[Array[Str]] = []
   var fields: Array[Str] = []
   var current: Array[Str] = []
@@ -98,10 +99,11 @@ fn scanWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] 
       quoted = true
       started = index
       pending = true
-    } else if character == delimiter {
+    } else if startsAt(&characters, index, &marks) {
       fields = fields.push(current.join(""))
       current = []
       pending = true
+      index = index + marks.length() - 1
     } else if character == "\n" {
       fields = fields.push(trimReturn(current.join("")))
       rows = rows.push(fields)
@@ -120,6 +122,18 @@ fn scanWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] 
     rows = rows.push(fields)
   }
   Ok(rows)
+}
+
+/// Whether the delimiter's characters begin at a position. A delimiter of
+/// several characters separates only where all of them appear in order.
+fn startsAt(characters: &Array[Char], at: Int, marks: &Array[Char]) -> Bool {
+  if marks.length() == 0 || at + marks.length() > characters.length() { return false }
+  var offset = 0
+  while offset < marks.length() {
+    if characters[at + offset] != marks[offset] { return false }
+    offset = offset + 1
+  }
+  true
 }
 
 /// A file written where a carriage return precedes each newline still holds

@@ -5,6 +5,66 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+
+- [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
+
+- [[Derive Record Kernel Spec]] — generated method execution and refusal.
+
+- [[Derive Catalogue]] · [[Derive Catalogue Spec]] — canonical graph candidates,
+  requests, generic binders and alias/visibility refusal.
+
+- [[Validated Derive Definitions]] — one generic definition check in its
+  defining lexical environment before request expansion.
+
+- [[Derive Requirement Spec]] — nested conditional inference, rollback and
+  exact refusal without changing ordinary capability proof.
+
+- [[Derive Target Application]] — canonical actual arguments and payload types
+  - [[Resolve Canonical]] — generated paths retain definition lexical scope.
+  - [[Derive Graph Coherence]] — canonical request ownership and overlap admission.
+  - [[Derive Graph]] — definition admission and conditional-head stabilization.
+  - [[Derive Graph Spec]] — real loaded-program captures, conditional heads and refusals.
+  - [[Lsp Impl Members Spec]] — implementation member completion and its quick fix.
+  - [[Derive Library Spec]] — every shipped derive, field callbacks, static selection and the expansion snapshot in both evaluators.
+  - [[Derive Field Callbacks]] · [[Derive Residual Context]] — build/collect unrolling and shared residual state.
+  - [[Derive Expansion Output]] · [[Syntax Printer]] · [[Statement Inlining]] — `pudu expand` text.
+  - Fixtures: [[src/test-fixtures/derive/StdOrder]] · [[src/test-fixtures/derive/StdShow]] · [[src/test-fixtures/derive/StdJson]] · [[src/test-fixtures/derive/StdRow]] · [[src/test-fixtures/derive/Builders]] · [[src/test-fixtures/derive/StaticSelection]] · [[src/test-fixtures/derive/StaticMember]] · [[src/test-fixtures/derive/BuildEscape]] · [[src/test-fixtures/derive/UnmetStdField]] · [[src/test-fixtures/derive/Expand]].
+  - [[Derive Capture Inference]] — resolved private contract dependency closure.
+  without leftover declaration parameters or source-string generation.
+
+- [[Derive Target Spec]] — actual record/sum payload preparation and bounded
+  structural reconstruction of complete formed types.
+
+- [[Derive Cache Spec]] — compile-time content and transitive input closure,
+  verified through actual warm frozen-consumer execution.
+
+- [[Generated Identity Spec]] — generated origins and complete fact identity.
+
+- [[Compiler Benchmark]] · [[Benchmark Guide]] — reproducible cold/warm compiler latency.
+
+- [[Derive Benchmark]] · [[src/bench/derive/DerivedJson]] · [[src/bench/derive/HandwrittenJson]] — derived against hand-written JSON encoding.
+
+- [[Dependency Layer Report]] · [[Dependency Layer Model]] · [[Dependency Layer View]] · [[Dependency Layer Tests]] — offline source layers, import cycles and exclusive measured resource attribution.
+
+- [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
+
+- [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.
+
+- [[src/test-fixtures/listeneridentity/Main]] · [[src/test-fixtures/listeneridentity/Reverse]] · [[src/test-fixtures/listeneridentity/RejectsWrongListener]] · [[src/test-fixtures/listeneridentity/PackageLog/Configuration]] · [[src/test-fixtures/listeneridentity/PackageLog/Sink]] · [[src/test-fixtures/listeneridentity/ZServer]] — actual HTTP server with conflicting package aliases, two traversal orders, and refusal.
+
+- [[src/test-fixtures/exhaustnamespace/UsesJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/UsesJsonCoverageReversed]] · [[src/test-fixtures/exhaustnamespace/RejectsJsonCoverage]] · [[src/test-fixtures/exhaustnamespace/R/Value]] · [[src/test-fixtures/exhaustnamespace/R/Kinds]] · [[src/test-fixtures/exhaustnamespace/R/ZJson]] — module-owned nested constructor coverage and refusal.
+
+- [[src/test-fixtures/stdlib/UsesYamlQuoted]] — quoted escape values, flow delimiters, and typed malformed-text refusal.
+
+- [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodImported]] · [[src/test-fixtures/stdlib/RejectsOptionUnwrapMethodUnimported]] · [[src/test-fixtures/stdlib/UsesOptionUnwrapQualified]] — exact Option.unwrapOr method refusals and qualified success.
+
+- [[src/test-fixtures/latealias/Main]] · [[src/test-fixtures/latealias/RejectsWrongCallback]] · [[src/test-fixtures/latealias/Lib/Sink]] — imported late callback aliases and wrong callback refusal.
+
+- [[Uses Decimal Dispatch]] — Decimal trait receiver, generic, and qualified calls.
+
+- [[Uses Yaml Compact Sequence]] — exact nested compact-sequence trees and depth refusal.
+
 - [[Examples]] — human-run programs and the boundary between demonstrations and release evidence.
 - [[Media Studio Example]] — real-window integration of exact video timing, generated Canvas frames,
   bounded audio graph rendering, and WAV delivery.
@@ -25,6 +85,7 @@ tags: [moc, module]
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
+- [[Std Mutation Harness]] — internal operator-mutation audit of Std against its fixtures.
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 - [[VS Code Grammar]] — the editor extension's TextMate grammar, interpolations included.
 - [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the
@@ -47,6 +108,8 @@ tags: [moc, module]
 - [[Uses Audio Graph]] — exact waveforms, ramps, and mixes, with split renders equal to whole ones.
 - [[Uses Video]] — exact NTSC timing over an hour, cross-scale arithmetic, and track ordering refusals.
 - [[Uses Fs]] — atomic replacement, temporary names, permissions, containment, and non-following removal.
+- [[Atomic Permission Gate]] — real byte/text writes under child-local umasks, existing modes,
+  symlink replacement, refusal output, private scratch files, and temporary-file cleanup.
 - [[Uses Crypto All]] — digests against independent vectors, RFC 4231 keyed digests, and sealing refusals.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
@@ -60,6 +123,9 @@ tags: [moc, module]
 - [[Public HTTP Integration Workflow]] — weekly real-network checks: public HTTP endpoints and the live package index.
 - [[Musl Toolchain Image]] · [[Musl Runtime Builder]] — reproducible local musl construction.
 
+- [[Runtime Series Map]] · [[Runtime Series Map Tests]] — proven persistent
+  constant-payload numeric series with arbitrary sparse overrides.
+
 - [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.
 
 ## Depth Baseline
@@ -69,6 +135,25 @@ tags: [moc, module]
 | DEEP | 3 | [[Lexer Cursor]], [[Parser State]], [[Parser Expression]] |
 | MEDIUM | 17 | [[Source]], [[Diagnostic Model]], [[Token]], [[Lexer Facade]], [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], [[Symbol Scanner]], [[Quoted Scanner]], [[Syntax]], [[Syntax Located]], [[Syntax Name]], [[Syntax Tree]], [[Parser Name]], [[Parser Type]], [[Parser Import]], [[Parser Binding]] |
 
+## Runtime benchmark fixtures
+
+- [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
+
 ## Referenced by
 
 [[00-INDEX]] · [[grammar/haskell]]
+
+- [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
+
+- [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
+- [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
+
+- [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
+
+- [[RejectsMultiMapLoopOverflow]] — native MultiMap loop diagnostic compatibility.
+
+- [[RejectsMultiMapStepLimit]] — native MultiMap loop diagnostic compatibility.
+
+- [[Eval Call Argument]] — argument values and receiver lending places.
+- [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

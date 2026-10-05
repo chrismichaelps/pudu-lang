@@ -23,7 +23,10 @@ import Std.List as List
 /// this is a bag under each key, not a set, because the commonest use is
 /// collecting records that genuinely repeat — two log lines at the same level,
 /// two headers with the same name.
-export type MultiMap[K, V] = { groups: Map[K, Array[V]] }
+///
+/// Beside the groups, every key and value pair carries how many times it is
+/// held, so `contains` answers without walking the key's values.
+export type MultiMap[K, V] = { groups: Map[K, Array[V]], occurrences: Map[(K, V), Int] }
 
 /// A map with no entries.
 ///
@@ -33,7 +36,7 @@ export type MultiMap[K, V] = { groups: Map[K, Array[V]] }
 /// let m: MultiMap[Int, Str] = MultiMap.empty()
 /// MultiMap.isEmpty(&m)  // true
 /// ```
-export fn empty[K, V]() -> MultiMap[K, V] { MultiMap{groups: mapOf([])} }
+export fn empty[K, V]() -> MultiMap[K, V] { MultiMap{groups: mapOf([]), occurrences: mapOf([])} }
 
 /// How many keys have values.
 ///
@@ -115,7 +118,7 @@ export fn containsKey[K, V](map: &MultiMap[K, V], key: K) -> Bool {
 /// MultiMap.contains(&m, 1, "z")  // false
 /// ```
 export fn contains[K, V](map: &MultiMap[K, V], key: K, value: V) -> Bool {
-  get(map, key).contains(value)
+  multiMapContains(map, key, value)
 }
 
 /// How many values a key has.
@@ -138,7 +141,7 @@ export fn count[K, V](map: &MultiMap[K, V], key: K) -> Int { get(map, key).lengt
 /// MultiMap.get(&m, 1)  // ["a", "b"]
 /// ```
 export fn add[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
-  MultiMap{groups: map.groups.insert(key, get(map, key).push(value))}
+  multiMapAdd(map, key, value)
 }
 
 /// The map with several values added under a key, in the order given.
@@ -151,7 +154,10 @@ export fn add[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K, V] {
 /// ```
 export fn addAll[K, V](map: &MultiMap[K, V], key: K, adding: &Array[V]) -> MultiMap[K, V] {
   if adding.length() == 0 { *map } else {
-    MultiMap{groups: map.groups.insert(key, get(map, key).concat(*adding))}
+    MultiMap {
+      groups: map.groups.insert(key, get(map, key).concat(*adding)),
+      occurrences: counted(map.occurrences, key, adding, 1)
+    }
   }
 }
 
@@ -173,7 +179,10 @@ export fn addAll[K, V](map: &MultiMap[K, V], key: K, adding: &Array[V]) -> Multi
 /// ```
 export fn setAll[K, V](map: &MultiMap[K, V], key: K, replacement: &Array[V]) -> MultiMap[K, V] {
   if replacement.length() == 0 { removeKey(map, key) } else {
-    MultiMap{groups: map.groups.insert(key, *replacement)}
+    MultiMap {
+      groups: map.groups.insert(key, *replacement),
+      occurrences: counted(counted(map.occurrences, key, &get(map, key), -1), key, replacement, 1)
+    }
   }
 }
 
@@ -220,7 +229,10 @@ export fn removeAll[K, V](map: &MultiMap[K, V], key: K, value: V) -> MultiMap[K,
 /// MultiMap.keys(&MultiMap.removeKey(&m, 1))  // [2]
 /// ```
 export fn removeKey[K, V](map: &MultiMap[K, V], key: K) -> MultiMap[K, V] {
-  MultiMap{groups: map.groups.remove(key)}
+  MultiMap {
+    groups: map.groups.remove(key),
+    occurrences: counted(map.occurrences, key, &get(map, key), -1)
+  }
 }
 
 /// Every key that has values, in order.
@@ -322,7 +334,7 @@ export fn mapValues[K, A, B](
 ) -> MultiMap[K, B] {
   var out = empty()
   for pair in map.groups.entries() {
-    out = MultiMap{groups: out.groups.insert(pair[0], List.map(&pair[1], transform))}
+    out = setAll(&out, pair[0], &List.map(&pair[1], transform))
   }
   out
 }
@@ -456,4 +468,20 @@ export fn any[K, V](map: &MultiMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
     if holds(pair[0], pair[1]) { return true }
   }
   false
+}
+
+/// Occurrence counts with each value in `moved` under a key changed by `delta`,
+/// a pair whose count reaches nothing being dropped.
+fn counted[K, V](occurrences: Map[(K, V), Int], key: K, moved: &Array[V], delta: Int) -> Map[(K, V), Int] {
+  var out = occurrences
+  for value in moved {
+    let pair = (key, value)
+    let held = match out.get(pair) {
+      case Some(found) => found
+      case None => 0
+    }
+    let next = held + delta
+    out = if next <= 0 { out.remove(pair) } else { out.insert(pair, next) }
+  }
+  out
 }

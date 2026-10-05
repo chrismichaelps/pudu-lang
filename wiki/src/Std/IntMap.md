@@ -2,21 +2,21 @@
 type: module
 path: "@root/lib/Std/IntMap.pudu"
 fidelity: Active
-tags: [module, stdlib, map, patricia-trie, data-structures]
+tags: [module, stdlib, map, data-structures]
 aliases: [Std IntMap]
 ---
 # Std IntMap
 
 ## Purpose
 
-Provide a high-performance, cache-friendly, purely functional bitwise integer map (Patricia Trie),
-inspired directly by Haskell's standard `Data.IntMap` (Okasaki & Gill).
-Specialized for 64-bit integer keys, avoiding hash table collisions, rebalancing rotations, and expensive key comparisons.
+A map of whole numbers held in the runtime's own ordered map, `Map[Int, V]`, so lookup, insertion,
+removal, and the set operations run natively while the API stays the one programs already use.
+Members come back in ascending order, negative numbers first.
 
 ## Interface
 
 ### Types
-- `IntMap[V]`: An immutable bitwise integer trie mapping 64-bit integer keys to values of type `V`.
+- `IntMap[V] = { held: Map[Int, V] }`: an immutable map from whole numbers to values of type `V`.
 - `IntMapEntry[V] = { key: Int, value: V }`: A key-value pairing.
 
 ### Constructors
@@ -50,13 +50,8 @@ Specialized for 64-bit integer keys, avoiding hash table collisions, rebalancing
 
 ## Algorithm and boundaries
 
-Unlike balanced binary search trees (AVL or Red-Black) which require $O(\log N)$ key comparisons and tree rebalancing,
-`IntMap` partitions keys by their binary representation (bits).
-Branches occur on the highest bit where two sub-branches differ (`branchingBit`), computed efficiently using bitwise XOR and highest-bit extraction.
-Signed 64-bit integer keys (two's complement) are supported naturally:
-when the sign bit (bit 63) differs, the critical mask is `-9223372036854775808` (`0x8000_0000_0000_0000`), partitioning negative keys into the right child and non-negative keys into the left child.
-Collection functions (`keys`, `values`, `entries`) and extreme queries (`minKey`, `maxKey`) traverse the sign-bit branch in numerical order (negative subtree before non-negative subtree), ensuring exact sorted ordering across the entire $[-2^{63}, 2^{63}-1]$ domain.
-Search, insertion, and deletion run in $O(\min(N, W))$ time where $W = 64$ is the bit width of the integer key.
+Each function is one call on the held value, or one walk over the smaller side for a set operation
+the runtime does not offer directly. Extreme queries read the ascending members.
 
 ## Grill Log
 
@@ -67,6 +62,11 @@ Search, insertion, and deletion run in $O(\min(N, W))$ time where $W = 64$ is th
 - **Q:** What is the behavior on empty maps?
   **A:** Queries return absence (`None`), set operations preserve identities ($M \cup \emptyset = M$, $M \cap \emptyset = \emptyset$, $M \setminus \emptyset = M$), and `delete`/`adjust` are no-ops returning empty maps without allocating.
 
+- **Q:** Keep the Patricia trie written in Pudu? **A:** No. _Rationale:_ every operation walked the
+  tree in the interpreter and `size` walked all of it; 80,000 mixed operations on `IntMap` took 22.2 s
+  against about 0.7 s on the runtime's map (#424). The earlier rationale above described that trie
+  and no longer applies. _Rejected:_ a native trie, which adds runtime code the ordered map already
+  covers.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Map]] · [[Std HashMap]] · [[architecture/STDLIB]]

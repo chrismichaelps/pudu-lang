@@ -1,0 +1,12 @@
+module RejectsMultiMapOverflow
+
+import Std.MultiMap as MultiMap
+
+fn main() -> Int {
+  let forged: MultiMap.MultiMap[Int, Int] = MultiMap.MultiMap {
+    groups: mapOf([(1, [2])]),
+    occurrences: mapOf([((1, 2), 9223372036854775807)]),
+  }
+  let next = MultiMap.add(&forged, 1, 2)
+  MultiMap.total(&next)
+}

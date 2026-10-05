@@ -1,0 +1,21 @@
+module StdRow
+import Std.Db.Driver as Driver
+import Std.Db.Row {Row, RowError}
+import Std.Db.Row as Rows
+
+type User = { id: Int, @column("display_name") name: Str, nick: Option[Str], score: Decimal } derives Row
+
+export fn main() -> Str {
+  let rows = Driver.Rows {
+    columns: [Driver.Column{name: "id", nativeType: None}, Driver.Column{name: "display_name", nativeType: None},
+      Driver.Column{name: "nick", nativeType: None}, Driver.Column{name: "score", nativeType: None}],
+    rows: [[Driver.IntegerValue(7i64), Driver.TextValue("Ada"), Driver.NullValue, Driver.DecimalValue(1.5d)],
+      [Driver.TextValue("x"), Driver.TextValue("B"), Driver.TextValue("b"), Driver.DecimalValue(2d)]],
+    command: "SELECT" }
+  let first = match User.fromRow(&rows, 0) {
+    case Ok(user) => show(user.id) + user.name + show(user.nick) + show(user.score)
+    case Err(problem) => show(problem)
+  }
+  let second: Result[User, RowError] = User.fromRow(&rows, 1)
+  first + " " + show(second)
+}

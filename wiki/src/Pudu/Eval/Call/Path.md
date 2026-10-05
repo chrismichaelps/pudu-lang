@@ -19,10 +19,13 @@ aliases: [Eval Call Path]
 
 Resolve dotted module and member paths, qualified callees, type argument syntaxes, and longest-binding identifier prefixes during runtime evaluation.
 
+`A.member` with `A` bound to a witness reaches the witnessed owner's method, holding the owner's own arguments for its implementation's parameters (`witnessMethod`, `selectTypes`). `witnessOf` turns written type syntax into witnesses. A generated canonical owner path resolves by its type's own name, and a generated canonical variant path the defining module never imported reads as that variant's constructor.
+
 ## Interface
 
 ```haskell
 readPath :: Span -> NonEmpty Text -> Evaluator Value
+readName :: Span -> Text -> Evaluator Value
 pathValue :: Expression -> Evaluator (Maybe Value)
 lastPathSegment :: ModuleName -> Text
 flattenPath :: Expression -> Maybe [Text]
@@ -67,6 +70,25 @@ typeArgumentName :: Located TypeSyntax -> Text
 - **Q:** Why keep `readMember` in `Pudu.Eval.Operator` rather than here?
   **A:** `readMember` is a general property access operator used across operators, whereas `Path` specifically handles identifier chains and callee prefixes.
 
+- **Q:** Search for `point.x` as a module member before reading `point`? **A:** Not when `point` is a
+  local. _Rationale:_ a value's own name never contains a dot, so a local first segment cannot begin
+  a module path, and the failing search through every module's frame cost a sixth of a record-heavy
+  loop (#423). A first segment that is not local keeps the longest-binding search.
+- **Q:** Let a generated path fall back for any unbound name? **A:** No; only for generated spans, which checking proved.
+
 ## Referenced by
 
 [[Eval Call]] · [[src/Pudu/Eval/_MOC]]
+
+## Single-segment names
+
+A bare name goes directly to lookupName and the existing undefined-name refusal.
+It cannot have a dotted module prefix or trailing member, so it bypasses empty
+prefix generation. Dotted paths keep their exact existing algorithm.
+
+Resolved Grill Log: skip provably empty path work, without changing lexical or
+implementation lookup, diagnostic spans, or name-lookup tallies.
+
+`readName` exposes this same bare-name branch for the tree's operand path and
+permits inlining. Resolved Grill Log: share the undefined-name diagnostic and
+lookup tally rather than introducing a second name-resolution policy.

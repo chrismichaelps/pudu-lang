@@ -1,0 +1,12 @@
+module RejectsOtherModuleMember
+
+import Std.Bytes as ByteSeq
+import Std.Crypto as Crypto
+
+// `sha256Hex` belongs to Crypto, and a program cannot write it unqualified,
+// so the help must not say it can.
+fn main() -> Int {
+  let digest = Crypto.sha256Hex("a")
+  print(digest + ByteSeq.sha256Hex("b"))
+  0
+}

@@ -205,47 +205,40 @@ export fn receiveAll(connection: &Secured) -> Result[Bytes, TlsError] {
 /// Read until a marker arrives, answering what came before it and what came
 /// after.
 ///
-/// The marker can arrive split across two records, so the buffer is searched
-/// whole each time rather than only the newest piece. The remainder is
+/// The marker can arrive split across two records, so each record is searched
+/// together with the bytes before it that could begin a marker, and the
+/// records are joined once when it is found. The limit counts every byte read,
+/// marker included, and no read asks for more than the limit leaves, so a
+/// marker past the limit is reported rather than accepted. The remainder is
 /// answered because it is the start of the next message.
 export fn receiveUntil(
   connection: &Secured,
   marker: &Bytes,
   limit: Int
 ) -> Result[(Bytes, Bytes), TlsError] {
-  var buffer = ByteSeq.empty()
-  var failure: Option[TlsError] = None
-  var found = -1
-  var going = true
-  while going {
-    found = buffer.indexOf(*marker)
-    if found >= 0 {
-      going = false
-    } else {
-      if buffer.length() > limit {
-        failure = Some(Other("the marker did not arrive within " + show(limit) + " bytes"))
-        going = false
-      } else {
-        let chunk = receive(connection, CHUNK)
-        if let Err(reason) = chunk {
-          failure = Some(reason)
-          going = false
-        } else {
-          let piece = Result.unwrapOr(chunk, None)
-          if let Some(bytes) = piece {
-            buffer = buffer.concat(bytes)
-          } else {
-            failure = Some(Closed)
-            going = false
-          }
-        }
-      }
+  if marker.isEmpty() || limit < marker.length() { return Err(Other("invalid delimiter read limit")) }
+  var pieces: Array[Bytes] = []
+  var held = 0
+  var carry = ByteSeq.empty()
+  loop {
+    let capacity = limit - held
+    if capacity <= 0 { return Err(Other("the marker did not arrive within " + show(limit) + " bytes")) }
+    let wanted = if capacity < CHUNK { capacity } else { CHUNK }
+    let piece = match receive(connection, wanted) ? {
+      case None => { return Err(Closed) }
+      case Some(bytes) => bytes
     }
-  }
-  if let Some(reason) = failure {
-    Err(reason)
-  } else {
-    Ok((buffer.take(found), buffer.drop(found + marker.length())))
+    if piece.isEmpty() { return Err(Closed) }
+    let window = carry.concat(piece)
+    let found = window.indexOf(*marker)
+    pieces = pieces.push(piece)
+    if found >= 0 {
+      let whole = ByteSeq.join(&pieces)
+      let at = held - carry.length() + found
+      return Ok((whole.take(at), whole.drop(at + marker.length())))
+    }
+    held = held + piece.length()
+    carry = window.drop(Net.tailStart(window.length(), marker.length()))
   }
 }
 

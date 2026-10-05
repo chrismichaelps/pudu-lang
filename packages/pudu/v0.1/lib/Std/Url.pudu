@@ -12,13 +12,16 @@ export type Url = {
   fragment: Option[Str]
 }
 
+/// The largest TCP port number.
+const LARGEST_PORT: Int = 65535
+
 /// What stopped a URL from being read.
 export type UrlError = NoScheme | NoHost | BadPort(Str)
 
 /// A URL read from text, or what stopped the reader.
 export fn parse(source: Str) -> Result[Url, UrlError] {
   let schemeEnd = source.indexOf("://")
-  if schemeEnd < 0 { Err(NoScheme) } else {
+  if schemeEnd < 0 || !isScheme(source.slice(0, schemeEnd)) { Err(NoScheme) } else {
     let scheme = source.slice(0, schemeEnd).toLower()
     let rest = source.slice(schemeEnd + 3, source.length())
     let authorityEnd = firstOf(rest, "/?#")
@@ -33,13 +36,13 @@ export fn parse(source: Str) -> Result[Url, UrlError] {
       let queryText = if fragmentAt < 0 { tail } else { tail.slice(0, fragmentAt) }
       let fragment =
       if fragmentAt < 0 { None } else {
-        Some(decodeComponent(tail.slice(fragmentAt + 1, tail.length())))
+        Some(decodeEscapes(tail.slice(fragmentAt + 1, tail.length()), false))
       }
       Ok(Url {
           scheme: scheme,
           host: hostAndPort[0],
           port: hostAndPort[1],
-          path: if path.isEmpty() { "/" } else { decodeComponent(path) },
+          path: if path.isEmpty() { "/" } else { decodeEscapes(path, false) },
           query: parseQuery(queryText),
           fragment: fragment
         })
@@ -162,7 +165,15 @@ export fn encodeComponent(value: Str) -> Str {
 /// is not two hex digits is left as written, and text whose escapes do not
 /// spell UTF-8 is returned unchanged, because a caller showing the result is
 /// better served by the original than by a guess.
-export fn decodeComponent(value: Str) -> Str {
+export fn decodeComponent(value: Str) -> Str { decodeEscapes(value, true) }
+
+/// One piece of a path with its percent escapes read back. Unlike
+/// `decodeComponent`, a plus is kept, since in a path it is part of a name.
+export fn decodeSegment(value: Str) -> Str { decodeEscapes(value, false) }
+
+/// Percent escapes read back, and a plus read as a space only where asked: a
+/// form writes a space that way, while in a path or a fragment `c++` is a name.
+fn decodeEscapes(value: Str, plusIsSpace: Bool) -> Str {
   // Text with neither an escape nor a plus holds nothing to read back, and
   // most keys and values are that text.
   if !value.contains("%") && !value.contains("+") { return value }
@@ -178,7 +189,7 @@ export fn decodeComponent(value: Str) -> Str {
       decoded = decoded.push(Option.unwrapOr(convertInteger[UInt8](high * 16 + low), 0u8))
       index = index + 3
     } else {
-      decoded = decoded.push(if octet == 43u8 { 32u8 } else { octet })
+      decoded = decoded.push(if plusIsSpace && octet == 43u8 { 32u8 } else { octet })
       index = index + 1
     }
   }
@@ -239,14 +250,25 @@ fn splitPort(authority: Str) -> Result[(Str, Option[Int]), UrlError] {
     return portAfter(host, after.slice(1, after.length()))
   }
   let colon = hostAndPort.indexOf(":")
+  if colon == 0 { return Err(NoHost) }
   if colon < 0 { Ok((hostAndPort.toLower(), None)) } else {
     portAfter(hostAndPort.slice(0, colon).toLower(), hostAndPort.slice(colon + 1, hostAndPort.length()))
   }
 }
 
+/// A scheme is an ASCII letter followed by letters, digits, `+`, `-`, or `.`.
+fn isScheme(written: Str) -> Bool {
+  !written.isEmpty() && isAsciiLetter(written.charAt(0))
+    && Text.allChars(written, |c: Char| isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.')
+}
+
+fn isAsciiLetter(c: Char) -> Bool { (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+
+/// A port is one TCP port number, so anything past the largest is reported
+/// rather than handed to a connection.
 fn portAfter(host: Str, written: Str) -> Result[(Str, Option[Int]), UrlError] {
   match Text.countOf(written) {
-    case Some(number) => Ok((host, Some(number)))
+    case Some(number) => if number > LARGEST_PORT { Err(BadPort(written)) } else { Ok((host, Some(number))) }
     case None => Err(BadPort(written))
   }
 }

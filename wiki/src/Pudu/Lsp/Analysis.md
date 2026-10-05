@@ -18,6 +18,8 @@ aliases: [Lsp Analysis]
 Compile one open document as the program it is — under the module source root its own path and
 module name give it — and gather everything the editor features read from that compile.
 
+Each analysis also gathers `programTraits`.
+
 ## Interface
 
 ```haskell
@@ -47,12 +49,24 @@ pathOf             :: Text -> Text
   program's sum and record shapes, declared methods, and export index once per analysis.
 - `analyseOver` compiles with the other open documents' text in place of the disk, and records
   every module file the program read — transitive imports included — as `analysisDependencies`.
+- Each analysis keeps `analysisElsewhere` ([[Lsp Diagnostics]]): the text of the other files its
+  findings name and the import that reaches each module file, gathered while the program's sources
+  are at hand so publishing stays pure.
+- Declared methods carry the span of their name, so definition can jump to them.
+- **A cursor is on the authored text.** Elaboration removes `derive` declarations and `derives`
+  clauses before checking, so the compile's own tree, resolution, and index know nothing of them.
+  A document whose tokens use `derive`/`derives` is parsed and macro-expanded as written, then
+  resolved the way the compile resolves (strict exports when the compile was strict) and indexed
+  with the compile's settled schemes; its templates' expression types come from derive-definition
+  checking and are overlaid where the checked info has none. Tree, resolution, index and types then
+  answer hover, definition, references, rename and completion inside derive syntax. A document
+  without derive syntax reuses the compile's products.
 - A `file:` URI is percent-decoded as UTF-8; any other scheme is not a path.
 
 ### Linkage
 
 - **Requires:** [[Compiler Program]], [[Compiler Pipeline]], [[Lexer]], [[Lsp Context]],
-  [[Lsp Documents]], [[Lsp Shapes]].
+  [[Lsp Documents]], [[Lsp Shapes]], [[Lsp Diagnostics]].
 - **Consumed by:** [[Lsp Server]].
 
 ## Negative Logic (Prohibited Paths)
@@ -67,6 +81,7 @@ pathOf             :: Text -> Text
   programs. _Rationale:_ the file and its declared module are the only facts that say where its
   program's modules are, and they are what the command line uses. _Rejected:_ the workspace root as
   source root, which made imports disappear whenever the folder was not exactly the source root.
+- **Q:** Gather traits lazily? **A:** The map is built from interfaces already prepared for the analysis.
 
 ## Referenced by
 

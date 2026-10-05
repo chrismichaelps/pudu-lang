@@ -80,3 +80,15 @@ patternCandidates
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Context]] · [[Lsp Shapes]] · [[Lsp Completion]]
+
+## Repaired snapshot projection
+
+Match subject lookup uses the authored offset index of TypeInfo. The completion
+repair adapter establishes that the queried prefix is unchanged before passing
+facts from a separately ingested repaired snapshot. Full-span compiler queries
+remain strict; generated facts never enter this editor index.
+
+- **Q:** Fall back to offset identity in the compiler? **A:** No; make the editor
+  projection explicit here. _Rationale:_ repair spans intentionally belong to a
+  different snapshot, while generated facts must stay separate. _Rejected:_
+  weakening typeAt for all phases.

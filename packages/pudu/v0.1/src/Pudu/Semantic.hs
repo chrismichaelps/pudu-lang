@@ -19,7 +19,7 @@ module Pudu.Semantic
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Source (spanEnd, spanStart, unOffset)
+import Pudu.Source (Span)
 import Pudu.Semantic.Interface (ExportIndex, emptyExportIndex, exportIndex)
 import Pudu.Semantic.Resolve (Resolution (..), resolveModule, resolveModuleWith)
 import Pudu.Semantic.Symbol
@@ -47,10 +47,10 @@ boundSymbolNames resolution =
     and the resolver is what knows which binding a use reaches through every
     shadowing scope. The checker is handed these spans, keyed as it keys every
     expression, rather than scoping names a second time to rediscover it. -}
-writableReferences :: Resolution -> Set (Int, Int)
+writableReferences :: Resolution -> Set Span
 writableReferences resolution =
   Set.fromList
-    [ (unOffset (spanStart (referenceSpan reference)), unOffset (spanEnd (referenceSpan reference)))
+    [ referenceSpan reference
     | reference <- resolutionReferences resolution
     , Set.member (referenceSymbol reference) mutable
     ]

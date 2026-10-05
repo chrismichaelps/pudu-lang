@@ -29,7 +29,26 @@ identically. A whole number is read by `Std.Text.wholeOf`, so digits past what a
 text rather than a stopped program. Nesting is bounded: each indented block
 costs a reader recursion and the evaluator bounds call depth, so a block that would open more than
 512 levels deep answers `TooDeep` at its line instead of stopping the program.
+Compact sequences at a mapping key's indentation belong to that key even when the mapping
+starts on a list item's dash; parsing resumes at the next sibling key or outer item.
+Quoted keys and values decode YAML escapes through [[Std Yaml Quoted]]. Quote-aware comment,
+colon and comma scans skip escaped double quotes and doubled single quotes. Invalid escapes,
+Unicode non-scalars, trailing text and missing closers return line-numbered typed errors.
+Block scalar line retention and joining belong to [[Std Yaml Block]]. Scalars on list
+items and first compact mapping keys consume exactly their content and resume at siblings.
+Literal/folded forms retain paragraphs, relative indentation, comment-like text and trailing
+spaces; clip, strip and keep chomping apply to physical line breaks.
 ## Grill Log
+- **Q:** Drop blank lines before parsing structure? **A:** Only outside block scalars.
+  _Accepted:_ preserve raw scalar lines through the scalar reader. _Rationale:_ blanks,
+  hashes and indentation are scalar data, and list-item headers open the same scalar form.
+- **Q:** Keep the source spelling inside quoted text? **A:** No. _Accepted:_ YAML escape
+  decoding and doubled single quotes; malformed strings are refused, including in nested flow
+  collections and quoted keys. _Rationale:_ configuration text means its decoded characters.
+- **Q:** Does a compact sequence belong only to a document-level mapping? **A:** No.
+  _Rationale:_ mapping values follow the same indentation rule inside list items.
+  _Accepted:_ consume same-indent dash lines through the depth-checked block reader for an empty
+  mapping value and retain siblings.
 - **Q:** Skip anchors, tags, and merge keys that are not understood? **A:** No. _Rationale:_ a reader
   that skipped one answers with a document that is not the one written. _Accepted:_ refusal.
 - **Q:** Let block nesting recurse until the evaluator's call limit? **A:** No. _Rationale:_ that

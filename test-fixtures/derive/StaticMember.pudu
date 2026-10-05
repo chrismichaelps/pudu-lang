@@ -1,0 +1,16 @@
+module StaticMember
+
+trait Parse { fn read(text: Str) -> Result[Self, Str] }
+
+impl Parse for Str { fn read(text: Str) -> Result[Self, Str] = Ok(text) }
+
+type Point = { x: Int, label: Str }
+
+impl Parse for Point { fn read(text: Str) -> Result[Self, Str] = Ok(Point{x: text.length(), label: text}) }
+
+export fn main() -> Str {
+  match Point.read("abc") {
+    case Ok(point) => show(point.x) + point.label
+    case Err(problem) => problem
+  }
+}

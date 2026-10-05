@@ -201,6 +201,12 @@ declareBuiltinConstructors = do
     (polytype [("K", 0)] [] (FunctionTypeValue False
       [NominalType "Map" [RigidType "K", NominalType "UInt64" []]]
       (NominalType "UInt128" [])))
+  bindName "multiMapAdd"
+    (polytype [("K", 0), ("V", 0)] [] (FunctionTypeValue False
+      [ReferenceTypeValue False multiMapType, RigidType "K", RigidType "V"] multiMapType))
+  bindName "multiMapContains"
+    (polytype [("K", 0), ("V", 0)] [] (FunctionTypeValue False
+      [ReferenceTypeValue False multiMapType, RigidType "K", RigidType "V"] boolType))
   bindName "wordMapMembers"
     (monotype (FunctionTypeValue False
       [NominalType "Map" [NominalType "UInt64" [], NominalType "UInt64" []]]
@@ -335,6 +341,8 @@ declareBuiltinConstructors = do
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
+  stdMultiMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["MultiMap"]))) "MultiMap"
+  multiMapType = NominalType stdMultiMapId [RigidType "K", RigidType "V"]
   stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
   stdXmlTagId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Xml"]))) "Tag"
   flatMapType v = NominalType stdFlatMapId [v]
@@ -384,6 +392,7 @@ effectSignatures =
   , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
   , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("renamePath", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("writeFileAtomically", monotype (FunctionTypeValue False [stringType, bytesType] (resultOf unitTypeValue)))
   , ("createTemporaryFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf stringType)))
   , ("createDirectoryExclusive", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("removeEmptyDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))

@@ -83,6 +83,13 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Grill Log
 
+- **Q:** Allocate a separate evaluator continuation for each successful integer
+  check? **A:** Allow the check and the integer dispatch to inline into consumers.
+  _Rationale:_ ordinary Loop profiling attributes repeated allocation to these
+  boundaries. The exact result, kind meet and overflow diagnostics remain the
+  shared implementations; measure uninstrumented optimized runs before keeping
+  the optimization.
+
 - **Q:** Why look at the owning sum before the variant? **A:** Because that is where an
   implementation is written. _Rationale:_ `impl Named for Option[Int]` keys under `Option`, and the
   value reaching dispatch is a `Some`; consulting only the variant made the checker and the
@@ -96,6 +103,13 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Round only `Float32` literals? **A:** No; normalize each arithmetic result too. _Rationale:_ binary32 precision applies to operations, not just source conversion. _Rejected:_ hidden binary64 intermediates; rounding only when a value is printed.
 
+- **Q:** Append two texts by joining them? **A:** No. _Rationale:_ building text in a loop copied
+  everything written so far at each step. `+` on two texts appends ropes and reads neither side's
+  joined text on the left. _Rejected:_ recognising only `x = x + y`.
+- **Q:** Choose an integer operator by comparing its text against every spelling? **A:** No.
+  _Rationale:_ a loop paid up to twenty text comparisons per operation (#423). `integerFast` reads
+  the operator's one or two characters for the arithmetic and comparison operators and leaves every
+  other operator and every refusal to `integerOperation`, so the two cannot disagree.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
@@ -154,3 +168,12 @@ Index retrieval (`readIndex`), member lookup (`readMember`), type reflection (`n
 ### Resolved Grill Log
 - **Q:** Why extract access logic into a separate module? **A:** Indexing, member dispatch, and method tables form an independent concern from unary and binary arithmetic kernels (~240 lines), scaling both files below 270 lines.
 
+
+## Exported result check
+
+`checkedResult` is exported so [[Eval Compile]] can compute integer operators chosen at compile time
+and still check the result against its kind the same way the general operator path does (#429).
+
+### Resolved Grill Log
+- **Q:** Give the compiled operators a check of their own? **A:** No; one check keeps the bounds and the
+  `E7005` diagnostic identical in both evaluators.

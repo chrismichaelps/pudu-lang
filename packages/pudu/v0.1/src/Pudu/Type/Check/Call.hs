@@ -10,7 +10,9 @@ module Pudu.Type.Check.Call
 import Control.Monad (when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
+import Pudu.Type.Check.Receiver (bindReceiver)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -34,11 +36,13 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( methodScheme
+  , traitMethodScheme
   , targetName
   )
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
   ( NominalId (..)
+  , Scheme (..)
   , nominalKey
   , Type (..)
   )
@@ -86,7 +90,7 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
             pure (instantiated, Nothing)
           Nothing -> do
             targetType <- runCheck checker declared rigid target
-            resolved <- zonk targetType
+            resolved <- throughBorrow =<< zonk targetType
             method <- methodScheme calleeSpan resolved (locatedValue member)
             case method of
               {-| Not a method, so a field, typed from the receiver just checked.
@@ -100,11 +104,10 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
                 pure (found, Nothing)
               Just scheme -> do
                 instantiated <- instantiate calleeSpan scheme
-                (applied, changesReceiver) <- case instantiated of
-                  FunctionTypeValue asynchronous (selfInput : rest) result -> do
-                    exclusive <- exclusiveInput selfInput
-                    pure (FunctionTypeValue asynchronous rest result, exclusive)
-                  other -> pure (other, False)
+                changesReceiver <- case instantiated of
+                  FunctionTypeValue _ (selfInput : _) _ -> exclusiveInput selfInput
+                  _ -> pure False
+                applied <- bindReceiver calleeSpan resolved instantiated
                 when changesReceiver (checkExclusiveReceiver target)
                 recordExpression calleeSpan applied
                 pure (applied, if changesReceiver then Just target else Nothing)
@@ -120,25 +123,36 @@ qualifiedByName declared spanValue target member = case target of
   NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
     Nothing -> pure Nothing
     Just identity -> do
-      let key = nominalKey identity <> "." <> member
-      providers <- ambiguousProviders key
-      case providers of
-        _ : _ -> do
-          report "E3013" spanValue
-            (member <> " is ambiguous for " <> nominalName identity)
-            ( Just
-                ( "name the trait instead: "
-                    <> Text.intercalate " or "
-                      [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-                )
-            )
-          pure (Just ErrorType)
-        [] -> do
-          found <- lookupName key
-          case found of
-            Nothing -> pure Nothing
-            Just scheme -> Just <$> instantiate spanValue scheme
+      -- A module qualifier that exports `member` names that value, even where
+      -- the module also has a type of the qualifier's spelling: `Json.encode`
+      -- is the module's function, not the `Json` type's method.
+      exported <- if Set.member first (declaredQualifiers declared)
+        then lookupName (first <> "." <> member)
+        else pure Nothing
+      case exported of
+        Just _ -> pure Nothing
+        Nothing -> byType identity
   _ -> pure Nothing
+ where
+  byType identity = do
+    let key = nominalKey identity <> "." <> member
+    providers <- ambiguousProviders key
+    case providers of
+      _ : _ -> do
+        report "E3013" spanValue
+          (member <> " is ambiguous for " <> nominalName identity)
+          ( Just
+              ( "name the trait instead: "
+                  <> Text.intercalate " or "
+                    [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
+              )
+          )
+        pure (Just ErrorType)
+      [] -> do
+        found <- lookupName key
+        case found of
+          Nothing -> pure Nothing
+          Just scheme -> Just <$> instantiate spanValue scheme
 
 {-| Resolve a trait-qualified call against the type its receiver actually has.
 
@@ -163,27 +177,47 @@ traitQualifiedCall
   -> Checker (Maybe (Type, [Type]))
 traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
   (MemberExpression target member, receiver : rest)
-    | Just traitIdentity <- namedType (locatedValue target) -> do
-        receiverType <- runCheck checker declared rigid receiver
-        resolved <- throughBorrow =<< zonk receiverType
-        case targetName resolved of
-          Nothing -> pure Nothing
-          Just owner -> do
-            found <- lookupName (nominalKey owner <> "." <> locatedValue member)
-            case found of
-              Nothing -> pure Nothing
-              Just scheme
-                | nominalKey owner == nominalKey traitIdentity -> pure Nothing
-                | otherwise -> do
-                    instantiated <- instantiate calleeSpan scheme
-                    recordExpression calleeSpan instantiated
-                    restTypes <- mapM (runCheck checker declared rigid) rest
-                    pure (Just (instantiated, receiverType : restTypes))
+    | Just traitIdentity <- namedType (locatedValue target)
+    , Set.member traitIdentity (declaredTraitNames declared) -> do
+      declaredMember <- lookupName (nominalKey traitIdentity <> "." <> locatedValue member)
+      -- Only a member taking `self` has a receiver to dispatch on; a static
+      -- member's first argument is ordinary data, so its owner is inferred.
+      if not (maybe False (takesSelf . schemeType) declaredMember) then pure Nothing else do
+          receiverType <- runCheck checker declared rigid receiver
+          resolved <- throughBorrow =<< zonk receiverType
+          case targetName resolved of
+            Nothing -> do
+              found <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
+              case found of
+                Nothing -> pure Nothing
+                Just scheme -> do
+                  instantiated <- instantiate calleeSpan scheme
+                  recordExpression calleeSpan instantiated
+                  restTypes <- mapM (runCheck checker declared rigid) rest
+                  pure (Just (instantiated, receiverType : restTypes))
+            Just owner -> do
+              found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+              case found of
+                Nothing -> pure Nothing
+                Just scheme
+                  | nominalKey owner == nominalKey traitIdentity -> pure Nothing
+                  | otherwise -> do
+                      instantiated <- instantiate calleeSpan scheme
+                      recordExpression calleeSpan instantiated
+                      restTypes <- mapM (runCheck checker declared rigid) rest
+                      pure (Just (instantiated, receiverType : restTypes))
   _ -> pure Nothing
  where
   namedType expression = case expression of
     NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
     _ -> Nothing
+  takesSelf held = case held of
+    FunctionTypeValue _ (first : _) _ -> isSelf first
+    _ -> False
+  isSelf held = case held of
+    RigidType "Self" -> True
+    ReferenceTypeValue _ inner -> isSelf inner
+    _ -> False
 
 {-| The type a borrow refers to, following as many references as were written.
 

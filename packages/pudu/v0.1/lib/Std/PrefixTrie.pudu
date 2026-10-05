@@ -21,12 +21,13 @@ module Std.PrefixTrie
 /// otherwise.
 export type PrefixTrie[V] = {
   value: Option[V],
-  children: Map[Char, PrefixTrie[V]]
+  children: Map[Char, PrefixTrie[V]],
+  count: Int
 }
 
 /// A trie with nothing in it.
 export fn empty[V]() -> PrefixTrie[V] {
-  PrefixTrie{value: None, children: mapOf([])}
+  PrefixTrie{value: None, children: mapOf([]), count: 0}
 }
 
 /// The child under one character, or an empty trie.
@@ -85,13 +86,15 @@ export fn hasPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Bool {
 /// with the trie it came from rather than copied.
 export fn insert[V](trie: &PrefixTrie[V], key: Str, held: V) -> PrefixTrie[V] {
   if key.isEmpty() {
-    PrefixTrie{value: Some(held), children: trie.children}
+    PrefixTrie{value: Some(held), children: trie.children, count: trie.count + 1 - holding(trie)}
   } else {
     let step = key.charAt(0)
-    let rest = key.drop(1)
+    let before = childAt(trie, step)
+    let after = insert(&before, key.drop(1), held)
     PrefixTrie {
       value: trie.value,
-      children: trie.children.insert(step, insert(&childAt(trie, step), rest, held))
+      children: trie.children.insert(step, after),
+      count: trie.count + after.count - before.count
     }
   }
 }
@@ -101,6 +104,14 @@ export fn insert[V](trie: &PrefixTrie[V], key: Str, held: V) -> PrefixTrie[V] {
 /// What decides if a node can be dropped after a removal. Without this a trie
 /// that had a long key removed keeps the whole path it used, so a trie that is
 /// filled and emptied never gives the space back.
+/// One when the node itself holds a value, so a count can be kept on the way up.
+fn holding[V](trie: &PrefixTrie[V]) -> Int {
+  match trie.value {
+    case Some(_) => 1
+    case None => 0
+  }
+}
+
 fn isBare[V](trie: &PrefixTrie[V]) -> Bool {
   if trie.children.size() != 0 { false } else {
     match trie.value {
@@ -116,16 +127,17 @@ fn isBare[V](trie: &PrefixTrie[V]) -> Bool {
 /// up, so removing a key gives back the path it did not share.
 export fn remove[V](trie: &PrefixTrie[V], key: Str) -> PrefixTrie[V] {
   if key.isEmpty() {
-    PrefixTrie{value: None, children: trie.children}
+    PrefixTrie{value: None, children: trie.children, count: trie.count - holding(trie)}
   } else {
     let step = key.charAt(0)
     match trie.children.get(step) {
       case Some(below) => {
         let pruned = remove(&below, key.drop(1))
+        let count = trie.count - below.count + pruned.count
         if isBare(&pruned) {
-          PrefixTrie{value: trie.value, children: trie.children.remove(step)}
+          PrefixTrie{value: trie.value, children: trie.children.remove(step), count: count}
         } else {
-          PrefixTrie{value: trie.value, children: trie.children.insert(step, pruned)}
+          PrefixTrie{value: trie.value, children: trie.children.insert(step, pruned), count: count}
         }
       }
       case None => *trie
@@ -167,7 +179,7 @@ export fn values[V](trie: &PrefixTrie[V]) -> Array[V] {
 }
 
 /// How many keys have values.
-export fn size[V](trie: &PrefixTrie[V]) -> Int { pairs(trie).length() }
+export fn size[V](trie: &PrefixTrie[V]) -> Int { trie.count }
 
 /// Whether the trie holds no keys.
 export fn isEmpty[V](trie: &PrefixTrie[V]) -> Bool { isBare(trie) }
@@ -193,7 +205,10 @@ export fn keysWithPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Array[Str] {
 
 /// How many keys begin with the prefix.
 export fn countWithPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Int {
-  withPrefix(trie, prefix).length()
+  match descend(trie, prefix) {
+    case Some(below) => below.count
+    case None => 0
+  }
 }
 
 /// The trie of everything under a prefix, with the prefix stripped from the

@@ -37,5 +37,7 @@ reject trailing bytes after the declared fields. Unsupported binary columns are 
   by reading more bytes, and must not drive unbounded buffering.
 - **Q:** Accept unread bytes after the declared row? **A:** No; the payload is exactly one row.
 
+- **Q:** Append each bound value to the message as it is written? **A:** No. _Rationale:_ every value
+  copied the message built so far (#413). Pieces are gathered and joined once.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Bytes]]

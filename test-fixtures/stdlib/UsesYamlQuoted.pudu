@@ -1,0 +1,48 @@
+module UsesYamlQuoted
+
+import Std.Yaml as Yaml
+
+fn expect(source: Str, wanted: Yaml.Yaml) -> () {
+  if Yaml.decode(source) != Ok(wanted) { panic(source) }
+}
+
+fn text(source: Str, wanted: Str) -> () {
+  expect("value: " + source, Yaml.Mapping([("value", Yaml.Text(wanted))]))
+}
+
+fn malformed(source: Str, line: Int) -> () {
+  match Yaml.decode(source) {
+    case Err(Yaml.Malformed(at, _)) => { if at != line { panic(source) } }
+    case _ => panic(source)
+  }
+}
+
+fn main() -> Int {
+  text("\"line\\nnext\\tend\"", "line\nnext\tend")
+  text("\"\\0\\a\\b\\t\\n\\v\\f\\r\\e\\ \\\"\\/\\\\\\N\\_\\L\\P\"", "\0\u{7}\u{8}\t\n\u{b}\u{c}\r\u{1b} \"/\\\u{85}\u{a0}\u{2028}\u{2029}")
+  text("\"\\x41\\u03bb\\U0001F642\"", "Aλ🙂")
+  text("\"\\u0000\\U0010FFFF\"", "\0\u{10ffff}")
+  text("'it''s \\n untouched'", "it's \\n untouched")
+  text("\"quote: \\\" # still text\" # comment", "quote: \" # still text")
+  expect("\"key\\tpart\": \"value\"", Yaml.Mapping([("key\tpart", Yaml.Text("value"))]))
+  expect("'it''s: key': 'it''s value'", Yaml.Mapping([("it's: key", Yaml.Text("it's value"))]))
+  expect("values: [\"a\\\",b\", 'c'',d', \"\\u03BB\", [\"\\n\"]]", Yaml.Mapping([
+        ("values", Yaml.List([Yaml.Text("a\",b"), Yaml.Text("c',d"), Yaml.Text("λ"), Yaml.List([Yaml.Text("\n")])]))
+      ]))
+  expect("values: \{\"a\\\": b\": \"\\t\", 'c''d': 'e''f'\}", Yaml.Mapping([
+        ("values", Yaml.Mapping([("a\": b", Yaml.Text("\t")), ("c'd", Yaml.Text("e'f"))]))
+      ]))
+  expect("- \"true\"\n- 1\n- \"1\"", Yaml.List([Yaml.Text("true"), Yaml.Whole(1), Yaml.Text("1")]))
+  malformed("value: \"\\q\"", 1)
+  malformed("value: \"\\x1\"", 1)
+  malformed("value: \"\\uZZZZ\"", 1)
+  malformed("value: \"\\uD800\"", 1)
+  malformed("value: \"\\U00110000\"", 1)
+  malformed("value: \"\\UFFFFFFFF\"", 1)
+  malformed("value: \"closed\" trailing", 1)
+  malformed("first: ok\nnext: [\"\\q\"]", 2)
+  malformed("\"bad\\q\": ok", 1)
+  if Yaml.decode("value: \"open") != Err(Yaml.Unterminated(1)) { panic("missing quote") }
+  if Yaml.decode("value: 'open") != Err(Yaml.Unterminated(1)) { panic("missing single quote") }
+  0
+}

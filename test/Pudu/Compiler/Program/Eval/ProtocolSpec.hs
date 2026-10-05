@@ -62,6 +62,9 @@ testProtocolEvaluation = do
   stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
   cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
   providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
+  yamlBlock <- runEntry "test-fixtures/stdlib/UsesYamlBlock.pudu"
+  yamlQuoted <- runEntry "test-fixtures/stdlib/UsesYamlQuoted.pudu"
+  yamlCompact <- runEntry "test-fixtures/stdlib/UsesYamlCompactSequence.pudu"
   yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
   versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
@@ -73,7 +76,10 @@ testProtocolEvaluation = do
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
-    [ {-| The five lookup tables at both ends and past the end, where a
+    [ counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
+    , counterexample "YAML quoted text decodes escapes and refuses malformed scalars" (yamlQuoted === Just "0")
+    , counterexample "compact YAML sequences preserve nested items and sibling keys" (yamlCompact === Just "0")
+    , {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
           must hold as flat matches. -}
       counterexample
@@ -105,7 +111,7 @@ testProtocolEvaluation = do
         newline that a quoted field swallows. -}
     , counterexample
         "a separated file survives quotes, newlines, and its own separator"
-        (separated === Just "31")
+        (separated === Just "32")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
         given, so nothing is assumed about what else the machine holds.
@@ -121,7 +127,7 @@ testProtocolEvaluation = do
         more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "22")
+        (endpoints === Just "26")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
@@ -182,7 +188,7 @@ testProtocolEvaluation = do
         could produce it. A body line that would end the message is escaped. -}
     , counterexample
         "a message cannot carry more than it says"
-        (posted === Just "46")
+        (posted === Just "47")
     {-| What a client is set up with is said through a bound naming the
         configuring trait alone, which is what checks those settings are usable
         as methods. The protection is checked at the port that decides it and
@@ -214,7 +220,7 @@ testProtocolEvaluation = do
         (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
-        (mimeType === Just "11")
+        (mimeType === Just "15")
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")
@@ -226,7 +232,7 @@ testProtocolEvaluation = do
         (ringBuffer === Just "10")
     , counterexample
         "Varint ULEB128 and signed ZigZag SLEB128 variable-length integer encoding and decoding"
-        (varintCodec === Just "10")
+        (varintCodec === Just "11")
     , counterexample
         "DisjointSet flat array Union-Find with iterative path halving and union-by-rank"
         (disjointSet === Just "10")
@@ -253,7 +259,7 @@ testProtocolEvaluation = do
         (sipHash === Just "10")
     , counterexample
         "IntervalTree augmented 1D interval tree with O(log n + k) stabbing queries"
-        (intervalTree === Just "10")
+        (intervalTree === Just "11")
     {-| A whole archive written and read back, because the two halves are only
         correct together: a header field written at the wrong offset reads back
         at the same wrong offset, and a round trip through one implementation
@@ -314,7 +320,7 @@ testProtocolEvaluation = do
         one of them cannot be written. -}
     , counterexample
         "versions order by number and globs stop at separators"
-        (versionsAndGlobs === Just "29")
+        (versionsAndGlobs === Just "34")
     {-| A SOAP envelope, because the parts that break a reader arrive together
         in one: a prefixed name, a self-closing element, an entity in text,
         and a CDATA section whose content must not be read as either. The
@@ -323,7 +329,7 @@ testProtocolEvaluation = do
         the machine it is running on. -}
     , counterexample
         "an envelope's names, entities, and CDATA survive, and a DTD is refused"
-        (xmlDocuments === Just "18")
+        (xmlDocuments === Just "19")
     {-| A round trip proves the two halves agree; the size proves they agree
         about a real archive rather than about storing everything, which would
         also round-trip. That an archive written here is read by an ordinary
@@ -380,7 +386,7 @@ testProtocolEvaluation = do
         sections, dotted keys, and a document written and read back. -}
     , counterexample
         "a configuration reads back what it was written as"
-        (configured === Just "49")
+        (configured === Just "54")
     {-| Every export of the configuration scanner. Each reading call answers a
         value and where it stopped, and the position is checked beside the
         value every time: a reader answering the right text and the wrong
@@ -470,7 +476,7 @@ testProtocolEvaluation = do
         wrongly. -}
     , counterexample
         "a request reaches the route written for its method, and no other"
-        (routeAll === Just "35")
+        (routeAll === Just "36")
     {-| Every export of the cursor module, each read checked for the value and
         for the cursor that follows it. A reader answering the right number
         without moving on would pass a check that looked only at the value,
@@ -488,7 +494,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "58")
+        (urlAll === Just "67")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

@@ -2,21 +2,21 @@
 type: module
 path: "@root/lib/Std/IntSet.pudu"
 fidelity: Active
-tags: [module, stdlib, set, patricia-trie, data-structures]
+tags: [module, stdlib, set, data-structures]
 aliases: [Std IntSet]
 ---
 # Std IntSet
 
 ## Purpose
 
-Provide a high-performance, cache-friendly, purely functional bitwise integer set (Patricia Trie),
-inspired directly by Haskell's standard `Data.IntSet` (`containers`, Okasaki & Gill).
-Specialized for 64-bit integer elements, avoiding hashing collisions, tree rotation rebalancing, and expensive object comparisons.
+A set of whole numbers held in the runtime's own ordered set, `Set[Int]`, so lookup, insertion,
+removal, and the set operations run natively while the API stays the one programs already use.
+Members come back in ascending order, negative numbers first.
 
 ## Interface
 
 ### Types
-- `IntSet`: An immutable bitwise integer trie storing 64-bit integer values.
+- `IntSet = { held: Set[Int] }`: an immutable set of whole numbers.
 
 ### Constructors
 - `empty() -> IntSet`: An empty integer set.
@@ -54,13 +54,8 @@ Specialized for 64-bit integer elements, avoiding hashing collisions, tree rotat
 
 ## Algorithm and boundaries
 
-Unlike comparison-based binary search trees (AVL or Red-Black) requiring $O(\log N)$ comparisons and balancing rotations,
-`IntSet` partitions elements by their binary representation (bits).
-Branching occurs on the highest bit where two subtrees differ (`branchingBit`), computed efficiently using bitwise XOR and highest-bit extraction.
-Signed 64-bit integer values (two's complement) are supported naturally:
-when the sign bit (bit 63) differs, the critical mask is `-9223372036854775808` (`0x8000_0000_0000_0000`), partitioning negative values into the right child and non-negative values into the left child.
-Collection functions (`toArray`) and extreme queries (`findMin`, `findMax`) traverse the sign-bit branch in numerical order (negative subtree before non-negative subtree), ensuring exact sorted ordering across the entire $[-2^{63}, 2^{63}-1]$ domain.
-All operations run in $O(\min(N, W))$ time where $W = 64$ is the bit width of the integer.
+Each function is one call on the held value, or one walk over the smaller side for a set operation
+the runtime does not offer directly. Extreme queries read the ascending members.
 
 ## Grill Log
 
@@ -71,6 +66,11 @@ All operations run in $O(\min(N, W))$ time where $W = 64$ is the bit width of th
 - **Q:** Does `fromArray` sort the input array?
   **A:** No, `fromArray` constructs the Patricia Trie through incremental bitwise insertions in $O(N \cdot W)$, producing a naturally sorted representation when traversed with `toArray`.
 
+- **Q:** Keep the Patricia trie written in Pudu? **A:** No. _Rationale:_ every operation walked the
+  tree in the interpreter and `size` walked all of it; 80,000 mixed operations on `IntMap` took 22.2 s
+  against about 0.7 s on the runtime's set (#424). The earlier rationale above described that trie
+  and no longer applies. _Rejected:_ a native trie, which adds runtime code the ordered set already
+  covers.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std IntMap]] · [[architecture/STDLIB]]

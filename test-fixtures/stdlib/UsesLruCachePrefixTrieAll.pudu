@@ -263,5 +263,15 @@ export fn main() -> Int {
   let plain = Trie.toMap(&paths)
   if plain.size() == 4 && plain.get("care") == Some(3) { held = held + 1 }
 
+  // Counts follow overwrites, removals of absent keys, and removals that prune.
+  var counted = Trie.fromPairs(&[("tea", 1), ("ten", 2), ("to", 3), ("", 4)])
+  counted = Trie.insert(&counted, "ten", 20)
+  counted = Trie.remove(&counted, "tex")
+  counted = Trie.remove(&counted, "to")
+  if Trie.size(&counted) == 3 && Trie.countWithPrefix(&counted, "te") == 2
+    && Trie.countWithPrefix(&counted, "x") == 0 && Trie.countWithPrefix(&counted, "") == 3 {
+    held = held + 1
+  }
+
   held
 }

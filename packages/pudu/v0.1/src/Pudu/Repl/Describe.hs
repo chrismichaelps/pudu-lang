@@ -17,6 +17,9 @@ import Pudu.Frontend.Syntax.Tree
   ( Foreign (..)
   , Capability (..)
   , Declaration (..)
+  , Derive (..)
+  , DeriveRequest (..)
+  , DeriveShape (..)
   , FieldDeclaration (..)
   , Function (..)
   , Impl (..)
@@ -312,6 +315,12 @@ declarationSummary moduleValue =
     TraitDeclaration value -> "trait " <> locatedValue (traitName value)
     ImplDeclaration value ->
       "impl " <> renderType (implTrait value) <> " for " <> renderType (implTarget value)
+    DeriveDeclaration value ->
+      "derive " <> renderType (deriveTrait value) <> " for "
+        <> locatedValue (deriveParameter value) <> ": " <> shapeName (deriveShape value)
+    DeriveImplDeclaration value ->
+      "derive impl " <> renderType (deriveRequestTrait value) <> " for "
+        <> renderType (deriveRequestTarget value)
     MacroDeclaration value -> "macro " <> locatedValue (macroName value)
     ForeignDeclaration value ->
       "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
@@ -321,6 +330,10 @@ declarationSummary moduleValue =
     Immutable -> "let"
     Mutable -> "let mut"
     CompileTime -> "const"
+
+  shapeName shape = case locatedValue shape of
+    RecordShape -> "Record"
+    SumShape -> "Sum"
 
 {-| Every module the session has pulled in, in the order it asked for them. -}
 importSummary :: Module -> [Text]

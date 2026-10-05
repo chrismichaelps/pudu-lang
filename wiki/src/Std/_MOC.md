@@ -5,6 +5,13 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Meta]] — compile-time field and variant descriptor contracts.
+- [[Std Show]] — rendering helpers, the `Show` trait and its derive.
+
+- [[Std Yaml Block]] — raw scalar lines, literal/folded paragraphs, and physical newline chomping.
+
+- [[src/Std/Yaml/Quoted]] — checked single-line YAML quoting and delimiter scans.
+
 - [[Std Html Build]] — persistent fluent nodes with checked destination migration, eager or deferred
   conditionals, and exact rendering delegated to `Std.Html`.
 - [[Std Html SSR]] — reusable flat or nested typed shells, text or retained-byte plans, exact
@@ -52,6 +59,9 @@ tags: [moc, module, stdlib]
 - [[Std Bench]] — repeated measurement and distribution summaries.
 - [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
 - [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
+- [[Std Time Format Header]] — strict HTTP-date forms and date name tables.
+- [[Std List]] — array operations beyond the built-in methods, with a native stable sort.
+- [[Std Graph]] — directed graphs, walks, orders, and groups.
 - [[Std Concurrent]] — joinable host-thread work.
 - [[Std Concurrent Future]] — typed results from other threads, with races, all-settled, and deadlines.
 - [[Std Concurrent Cancel]] — cooperative cancellation tokens with inherited deadlines.
@@ -162,6 +172,7 @@ tags: [moc, module, stdlib]
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Site]] — the build step a web application calls: pages in parallel, per-host layout and routing.
+- [[Std Semver]] — semantic version parsing, ordering, and selection.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Ip]] — IPv4 and IPv6 addresses, canonical rendering, classification, and network prefixes.
 - [[Std Math]] — generic total numeric algorithms.

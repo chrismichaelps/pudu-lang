@@ -44,7 +44,7 @@ export fn update(adler: UInt32, bytes: &Array[UInt8]) -> UInt32 {
   (s2 << 16) | s1
 }
 
-/// Performs an O(1) rolling update over a sliding window of size `length`.
+/// Rolls the checksum of a sliding window of size `length` forward by one byte, without rereading the window.
 export fn roll(adler: UInt32, oldByte: UInt8, newByte: UInt8, length: Int) -> UInt32 {
   let s1 = adler & 0xffffu32
   let s2 = (adler >> 16) & 0xffffu32

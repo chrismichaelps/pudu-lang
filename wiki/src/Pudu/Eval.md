@@ -19,6 +19,8 @@ aliases: [Evaluator]
 
 Execute a parsed and resolved module by walking its tree, so a program can be run and an interactive session can print values before a backend exists.
 
+Function literals start with no witnesses of their own; they see their creator's through the captured frame.
+
 ## Interface
 
 ### Signatures
@@ -115,6 +117,7 @@ evaluateModule :: Module -> EvalOutcome
 - **A value names the variant it is; an implementation is written for the type that declares it.** Every method lookup on a receiver therefore tries the variant's own name and then what that variant belongs to — a direct call, a trait-qualified call, and the sequence protocol all go through the same two names. Without the second, `impl Shaped for Round` was unreachable from a `Circle` and no trait method worked on any sum at all. The variant's own name is tried first, because a record type is its own owner and must not be looked past.
 
 - **The compiler must terminate; a program need not.** A loop is bounded only while effects are refused, which is exactly when a `const` is being folded and a loop that never ends would be a build that never ends. A program the reader ran is bounded by the machine. A fixed step count applied to both is not a safety property — an input of any size needs more steps than any constant this module could pick, so the bound made every file unreadable rather than making anything safe.
+- **A compile-time loop that reaches evaluation is refused like an unexpanded macro.** Derivation unrolls every loop before checking, so a surviving one means instantiation did not run; `E7001` names that instead of executing template code.
 
 ### Linkage
 
@@ -162,6 +165,7 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 - **Q:** Leave foreign handles alive when evaluation returns or aborts? **A:** No. _Rationale:_ an
   owned result promises deterministic cleanup across every exit path. _Rejected:_ relying on process
   exit or requiring every branch to remember an explicit destructor call.
+- **Q:** Copy witnesses into literals? **A:** No; capture already carries them.
 
 ## Variants
 
@@ -179,6 +183,9 @@ primary diagnostic. Exceptional host termination may have no outcome to carry di
 - **Q:** Collect cleanup diagnostics before teardown? **A:** No; a destructor can fail during
   teardown itself. Close resources before draining the journal, retaining the bracket for exceptional exits.
 
+- **Q:** Which evaluator runs a program? **A:** Compiled bodies, unless `PUDU_EVAL=tree` asks for
+  the tree walker by name. _Rationale:_ the tree walker stays as the reference every fixture is run
+  against in both modes ([[Eval Compile]]), and remains the evaluator for compile-time folding.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Pudu REPL]] · [[Syntax Tree]] · [[Diagnostic Model]] · [[Semantics]]
@@ -193,4 +200,21 @@ The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanu
 
 ## Places
 
+Assignment to a single bare name evaluates the right-hand side and invokes
+`storeName` directly. Constructing its place evaluates nothing, so this removes
+only a temporary wrapper. Diagnostic spans still come from the target. Other
+assignments resolve the place before the right-hand side as before.
+Resolved Grill Log: specialize a syntax shape whose place has no work, while
+sharing assignment mechanics and diagnostics with [[Eval Place]].
+
+Binary operands have an inline path for a resolved integer and a bare name.
+Other syntax still enters the recursive tree walker, and an unresolved integer
+still consults its inferred kind. Operands remain left-to-right; short-circuit
+operators retain their existing conditional right-hand evaluation. Resolved
+Grill Log: reduce dispatch and temporary continuations for known leaf syntax;
+retain the operator implementation, effects, spans and control outcomes.
+
 Assignment resolves its place through [[Eval Place]] — root and index keys first — then evaluates the right-hand side and stores; a field, an element, and `*r` are places as well as a variable. See [[ADR-0022-lending-a-place]].
+
+Function literals initialize the internal MultiMap proof cache to Nothing.
+Resolved Grill Log: literal capture and body evaluation remain unchanged.

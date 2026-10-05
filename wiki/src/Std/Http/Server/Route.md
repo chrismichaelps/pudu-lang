@@ -27,5 +27,9 @@ once and the path the router matches against has it removed, so no handler parse
   page and needs no comparison between patterns. _Rejected:_ scoring specificity.
 - **Q:** Give handlers the connection? **A:** No. _Rationale:_ a handler that cannot reach a socket
   can be checked without binding a port. _Rejected:_ passing the connection through the request.
+- **Q:** Hand a `:name` capture over with its escapes? **A:** No. _Rationale:_ handlers wanted the
+  name, `Ana Paz`, and had to decode it themselves, without reading `+` as a space (#422). The
+  capture reads through `Url.decodeSegment`. A `*rest` capture stays as written, so an escaped
+  slash cannot become a `..` the router never matched.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Server]] · [[Std Http Server Reply]] · [[Std Http]]

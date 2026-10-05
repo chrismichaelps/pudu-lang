@@ -528,6 +528,21 @@ samples =
       , "fn widths() -> UInt8 { 255u8 }"
       , "fn text() -> Str { \"a{1 + 2}b\" }"
       ]
+  , Text.unlines
+      [ "module Derives"
+      , "@json(\"order\") type Order = { @skip cache: Option[Str], id: Int } derives Eq, Hash"
+      , "derive Encode for T: Record {"
+      , "  fn encode(self: &T) -> Str { \"\" }"
+      , "}"
+      , "derive impl Eq for Line"
+      , "fn count(items: Array[Int]) -> Int {"
+      , "  var total = 0"
+      , "  comptime for item: Int in items {"
+      , "    total = total + item"
+      , "  }"
+      , "  total"
+      , "}"
+      ]
   ]
 
 formatOf :: Text -> IO Text

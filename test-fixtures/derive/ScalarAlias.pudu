@@ -1,0 +1,6 @@
+module ScalarAlias
+
+trait Tag { fn tag(self: &Self) -> Str }
+type Meters = Int derives Tag
+derive Tag for T: Sum { fn tag(self: &T) -> Str { "sum" } }
+export fn main() -> Int { 0 }

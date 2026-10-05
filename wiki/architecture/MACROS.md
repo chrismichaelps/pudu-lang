@@ -48,6 +48,8 @@ Typed syntax parameters keep the useful half of both. A parameter declares that 
 - **Definition-site resolution for free names.** A name the macro body *mentions* still resolves where the macro is expanded. Introduced bindings are hygienic today, which is the rule the grammar states; full definition-site resolution needs resolution and expansion to share a representation, and arrives with that slice.
 - **Item and statement macros.** Expression macros come first because they compose with everything already checked. A macro that expands to a declaration changes what the module contains, which interacts with the two-pass collection in [[Name Resolution]] and deserves its own decision.
 
+- **Code generated from a type.** Decided in [[Derive Design]]: reflection over a type's shape, unrolled at compile time, with quasi-quoted item macros as the design after it.
+
 ## Grill Log
 
 - **Q:** Token trees or typed parameters? **A:** Typed parameters. _Rationale:_ the diagnostics describe the call rather than the matcher, and hygiene becomes mechanical because the expander knows which identifiers came from the body. _Rejected:_ C-style textual substitution, which has no parse and no hygiene; `macro_rules!`-style matchers, whose power is pattern matching over unparsed trees and whose errors describe matcher state.
@@ -57,4 +59,4 @@ Typed syntax parameters keep the useful half of both. A parameter declares that 
 
 ## Referenced by
 
-[[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Macro Expansion]]
+[[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Macro Expansion]] · [[Derive Design]]

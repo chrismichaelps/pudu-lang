@@ -64,7 +64,7 @@ columnSortIndicesF64 dataBs nullBs rowCount
           (finalBuf, _) = foldl writeIdx (outBuf, 0) allSorted
        in finalBuf
 
--- | Performs O(log N) binary search over valid portion of sorted permutation index.
+-- | Performs a binary search over the valid portion of sorted permutation index.
 columnBinarySearchU64 :: BS.ByteString -> BS.ByteString -> Int -> Word64 -> Maybe Int
 columnBinarySearchU64 dataBs permBs validCount target
   | validCount <= 0 = Nothing
@@ -84,7 +84,7 @@ columnBinarySearchU64 dataBs permBs validCount target
                     LT -> go (mid + 1) high
                     GT -> go low (mid - 1)
 
--- | Performs O(log N) binary search over valid portion of float sorted permutation index.
+-- | Performs a binary search over the valid portion of float sorted permutation index.
 columnBinarySearchF64 :: BS.ByteString -> BS.ByteString -> Int -> Double -> Maybe Int
 columnBinarySearchF64 dataBs permBs validCount target
   | validCount <= 0 = Nothing

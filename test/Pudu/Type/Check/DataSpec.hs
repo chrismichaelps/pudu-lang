@@ -465,8 +465,15 @@ testDiscardedResult = do
     , "  5"
     , "}"
     ]
+  splitLine <- codes
+    ["module M", "fn g(a: Int) -> Int { a }", "fn run(a: Int) -> Int {", "  g(a)", "  -a + 1", "}"]
+  arithmetic <- codes ["module M", "fn run(a: Int) -> Int {", "  a * 2", "  a", "}"]
+  joined <- codes ["module M", "fn g(a: Int) -> Int { a }", "fn run(a: Int) -> Int {", "  g(a) - a", "}"]
   pure $ conjoin
-    [ counterexample "a discarded push is W3002" (discarded === ["W3002"])
+    [ counterexample "a value split from a line starting with - is W3004" (splitLine === ["W3004"])
+    , counterexample "discarded arithmetic is W3004" (arithmetic === ["W3004"])
+    , counterexample "the joined expression is not warned about" (joined === [])
+    , counterexample "a discarded push is W3002" (discarded === ["W3002"])
     , counterexample "assigning the result back is correct" (assigned === [])
     , counterexample "discarding an answer is not warned about" (asked === [])
     , counterexample "a discarded reverse is W3002" (reversedResult === ["W3002"])

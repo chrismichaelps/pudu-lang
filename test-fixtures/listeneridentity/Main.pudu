@@ -1,0 +1,9 @@
+module Main
+
+import Std.Http.Server as Server
+import PackageLog.Configuration as Configuration
+
+fn main() -> Int {
+  let _configuration = Configuration.create()
+  0
+}

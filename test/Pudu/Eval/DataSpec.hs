@@ -3,12 +3,26 @@ module Pudu.Eval.DataSpec
   ( dataProperties
   , testArrayConcat
   , testData
+  , testDecimalEquality
   , testInterpolation
   , testKeyed
+  , testNumericOccurrences
   , testTextMethods
   ) where
 
+import Control.Monad (foldM)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp, diagnosticMessage, diagnosticSpan)
+import Pudu.Eval (EvalOutcome (..), runWithEffects)
+import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
+import Pudu.Eval.Operator (readIndex)
+import Pudu.Eval.Value (IntPairEntry (..), OrdValue (..), Value (..), intOf, intPairMap)
+import Pudu.IntegerLiteral (IntegerKind (..))
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
+import Pudu.Source (SourceName (..), emptySpan, newSource)
 
 import Pudu.Eval.Common
   ( codesOf
@@ -24,7 +38,9 @@ dataProperties =
   , ("built-in text methods answer with new values", testTextMethods)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
+  , ("numeric occurrence storage preserves representatives and bounds", testNumericOccurrences)
   , ("interpolated strings render their holes", testInterpolation)
+  , ("Decimal equality is numeric inside every aggregate", testDecimalEquality)
   ]
 
 testData :: IO Property
@@ -154,6 +170,95 @@ testKeyed = do
     , counterexample "a map is walked as key and value pairs" (mapLoop === "3")
     ]
 
+testNumericOccurrences :: IO Property
+testNumericOccurrences = do
+  source <- newSource (SourceName "numeric-index.pudu") "index"
+  let spanValue = emptySpan source
+      empty = RecordValue "MultiMap" [("groups", MapValue Map.empty), ("occurrences", MapValue Map.empty)]
+      inputs = [(intOf (toInteger (minBound :: Int)), intOf (toInteger (maxBound :: Int)))
+        , (intOf (-3), intOf (-5)), (intOf 2, intOf (-9)), (intOf 0, intOf 0)
+        , (IntValue (SignedKind 8) (-3), IntValue BigIntKind (-5)), (intOf (-3), intOf (-5))]
+      contents entries = [(key, count) | (OrdValue key, count) <- Map.toAscList entries]
+      matches held expected = case held of
+        RecordValue _ fields | Just (MapValue actual) <- lookup "occurrences" fields ->
+          contents actual == contents expected
+        _ -> False
+      numeric held = case held of
+        RecordValue _ fields | Just (IntPairMapValue index _) <- lookup "occurrences" fields ->
+          case IntMap.lookup (-3) index >>= SeriesMap.lookup (-5) of
+            Just PlatformIntPairEntry{} -> True
+            _ -> False
+        _ -> False
+      walk held expected snapshots remaining = case remaining of
+        [] -> pure (BoolValue (all (uncurry matches) snapshots))
+        (key, value) : rest -> do
+          next <- callMultiMapAdd spanValue [held, key, value]
+          found <- callMultiMapContains spanValue [next, key, value]
+          let updated = Map.insertWith (\_ old -> case old of
+                IntValue kind count -> IntValue kind (count + 1)
+                other -> other) (OrdValue (TupleValue [key, value])) (intOf 1) expected
+          if found == BoolValue True && matches next updated
+            then walk next updated ((next, updated) : snapshots) rest
+            else pure (BoolValue False)
+      counted count = RecordValue "MultiMap"
+        [("groups", MapValue Map.empty), ("occurrences", intPairMap
+          (IntMap.singleton 0 (SeriesMap.singleton 0 (PlatformIntPairEntry count))))]
+      ordinary count = RecordValue "MultiMap"
+        [("groups", MapValue Map.empty), ("occurrences", MapValue
+          (Map.singleton (OrdValue (TupleValue [intOf 0, intOf 0])) count))]
+  promoted <- runWithEffects True $ do
+    first <- callMultiMapAdd spanValue [empty, intOf (-3), intOf (-5)]
+    pure (BoolValue (numeric first))
+  compressed <- runWithEffects True $ do
+    held <- foldM (\prior member -> callMultiMapAdd spanValue [prior, intOf (-3), intOf member])
+      empty [0, 17 .. 1700]
+    absent <- callMultiMapContains spanValue [held, intOf (-3), intOf 8]
+    pure (BoolValue (absent == BoolValue False && case held of
+      RecordValue _ fields | Just (IntPairMapValue index _) <- lookup "occurrences" fields ->
+        maybe False ((== 1) . SeriesMap.storedEntryCount) (IntMap.lookup (-3) index)
+      _ -> False))
+  matrix <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)] inputs)
+  transitions <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)]
+    (inputs <> [(intOf 4, StrValue "member"), (IntValue BigIntKind (2 ^ (100 :: Int)), intOf 4)]))
+  series <- mapM (\members -> runWithEffects True (walk empty Map.empty [(empty, Map.empty)]
+    ([(intOf (-3), intOf member) | member <- members]
+      <> [(IntValue (SignedKind 8) (-3), IntValue BigIntKind (-500)), (intOf (-3), intOf (-500))]
+      <> [(intOf (-3), StrValue "after series")])))
+    [[-500, -483 .. 503], reverse [-500, -483 .. 503]]
+  failures <- mapM (\count -> do
+    specialized <- runWithEffects True (callMultiMapAdd spanValue [counted count, intOf 0, intOf 0])
+    generic <- runWithEffects True (callMultiMapAdd spanValue [ordinary count, intOf 0, intOf 0])
+    pure $ conjoin
+      [ outcomeValue specialized === Nothing
+      , outcomeDiagnostics specialized === outcomeDiagnostics generic
+      , map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics specialized)
+          === [if count == StrValue "bad" then "E7001" else "E7005"]
+      ]) [intOf (toInteger (maxBound :: Int)), IntValue (UnsignedKind 8) 255, StrValue "bad"]
+  wideFirst <- runWithEffects True (walk empty Map.empty []
+    [(IntValue BigIntKind (2 ^ (100 :: Int)), intOf 0)])
+  bounds <- mapM (\(container, index) -> do
+    outcome <- runWithEffects True (readIndex spanValue container (IntValue BigIntKind index))
+    pure $ conjoin
+      [ outcomeValue outcome === Nothing
+      , [(diagnosticCodeText (diagnosticCode diagnostic), diagnosticMessage diagnostic,
+          diagnosticHelp diagnostic, diagnosticSpan diagnostic) | diagnostic <- outcomeDiagnostics outcome]
+          === [("E7004", "index out of range", Nothing, spanValue)]
+      ]) [(container, index) | container <- [ArrayValue (Seq.singleton (intOf 7)), TupleValue [intOf 7], StrValue "x"]
+          , index <- [-1, 1, toInteger (maxBound :: Int) + 1, 2 ^ (100 :: Int)]]
+  pure $ conjoin
+    [ counterexample "platform numeric pairs use compact storage" (outcomeValue promoted === Just (BoolValue True))
+    , counterexample "numeric primitives compress only present series members"
+        (outcomeValue compressed === Just (BoolValue True))
+    , counterexample "ordered keys preserve incoming kinds, counts and snapshots"
+        (outcomeValue matrix === Just (BoolValue True))
+    , counterexample "generic and wide transitions preserve the numeric prefix"
+        (outcomeValue transitions === Just (BoolValue True))
+    , counterexample "a wide first pair remains exact" (outcomeValue wideFirst === Just (BoolValue True))
+    , counterexample "series views retain mixed overwrites and generic transitions"
+        (map outcomeValue series === replicate 2 (Just (BoolValue True)))
+    , conjoin failures, conjoin bounds
+    ]
+
 testInterpolation :: IO Property
 testInterpolation = do
   plain <- runProgram [] ["let name = \"ada\""] "\"hi {name}\""
@@ -247,3 +352,38 @@ testTextMethods = do
     , counterexample "a slice sharing its parent's buffer counts its own scalars" (sharedBuffer === "true")
     , counterexample "an index at the scalar length of a long text is E7004" (pastEnd === ["E7004"])
     ]
+
+
+testDecimalEquality :: IO Property
+testDecimalEquality = do
+  let declarations =
+        [ "type Amount = { value: Decimal }"
+        , "type AmountKind = | Price(Decimal) | Quantity(Decimal)"
+        , "fn absent() -> Option[Decimal] { None }"
+        ]
+      cases =
+        [ ("bare decimals compare numerically", "1.0d == 1.00d", "true")
+        , ("Options compare numerically", "Some(1.0d) == Some(1.00d)", "true")
+        , ("user sum payloads compare numerically", "Price(1.0d) == Price(1.00d)", "true")
+        , ("records compare numerically", "Amount{value: 1.0d} == Amount{value: 1.00d}", "true")
+        , ("tuples compare numerically", "(1.0d, true) == (1.00d, true)", "true")
+        , ("arrays compare numerically", "[1.0d] == [1.00d]", "true")
+        , ("map values compare numerically", "mapOf([(1, 1.0d)]) == mapOf([(1, 1.00d)])", "true")
+        , ("map keys compare numerically", "mapOf([(1.0d, 1)]) == mapOf([(1.00d, 1)])", "true")
+        , ("sets compare numerically", "setOf([1.0d]) == setOf([1.00d])", "true")
+        , ("nested aggregates compare numerically", "Some([Amount{value: 1.0d}]) == Some([Amount{value: 1.00d}])", "true")
+        , ("negative values compare numerically", "Some(-1.0d) == Some(-1.00d)", "true")
+        , ("zero compares numerically", "Some(0.0d) == Some(-0.00d)", "true")
+        , ("unequal numbers remain distinct", "Some(1.0d) == Some(1.01d)", "false")
+        , ("different variants remain distinct", "Price(1.0d) == Quantity(1.00d)", "false")
+        , ("presence differs from absence", "Some(1.0d) == absent()", "false")
+        , ("different fields remain distinct", "(1.0d, true) == (1.00d, false)", "false")
+        , ("array membership follows numeric equality", "[Some(1.0d)].contains(Some(1.00d))", "true")
+        , ("array index lookup follows numeric equality", "[Some(1.0d)].indexOf(Some(1.00d))", "0")
+        , ("missing array value stays absent", "[Some(1.0d)].indexOf(Some(2.00d))", "-1")
+        , ("equality preserves retained scale", "(1.0d, 1.00d)", "(1.0, 1.00)")
+        ]
+  results <- mapM (\(label, expression, expected) -> do
+    actual <- evaluateWith declarations expression
+    pure $ counterexample label (actual === expected)) cases
+  pure $ conjoin results

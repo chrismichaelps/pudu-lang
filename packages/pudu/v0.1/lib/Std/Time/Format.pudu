@@ -1,8 +1,8 @@
 module Std.Time.Format
 
 import Std.Option as Option
-import Std.Text as Text
 import Std.Time.Format.Civil as Civil
+import Std.Time.Format.Header as Header
 
 /// Why text does not name a time.
 export type FormatError
@@ -87,66 +87,7 @@ export fn weekdayOf(millis: Int) -> Int {
 /// Which day of its year a moment falls on, counting the first as one.
 export fn dayOfYear(millis: Int) -> Int {
   let parts = partsOf(millis)
-  daysFromCivil(parts.year, parts.month, parts.day)
-  -daysFromCivil(parts.year, 1, 1)
-    + 1
-}
-
-const WEEKDAY_NAMES: Array[Str] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-const WEEKDAY_FULL: Array[Str] = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday"
-]
-
-const MONTH_NAMES: Array[Str] = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec"
-]
-
-const MONTH_FULL: Array[Str] = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December"
-]
-
-/// The month a name stands for, or nothing when it names no month.
-/// A module-scope constant, so reading a date costs one lookup per name
-/// rather than a walk of twelve.
-const MONTH_NUMBERS: Map[Str, Int] = monthTable()
-
-fn monthTable() -> Map[Str, Int] {
-  var table: Map[Str, Int] = mapOf([])
-  var index = 0
-  while index < 12 {
-    table = table.insert(MONTH_NAMES[index], index + 1)
-    index = index + 1
-  }
-  table
+  daysFromCivil(parts.year, parts.month, parts.day) - daysFromCivil(parts.year, 1, 1) + 1
 }
 
 /// A number written with at least the given count of digits.
@@ -178,83 +119,75 @@ export fn toRfc3339(millis: Int) -> Str {
 /// arrived from a machine keeping local time is read as the moment it names
 /// rather than as the digits it was written with.
 export fn fromRfc3339(text: Str) -> Result[Int, FormatError] {
-  if text.length() < 20 {
-    Err(Malformed(text))
-  } else {
-    let year = digitsAt(text, 0, 4) ?
-    let month = digitsAt(text, 5, 2) ?
-    let day = digitsAt(text, 8, 2) ?
-    let hour = digitsAt(text, 11, 2) ?
-    let minute = digitsAt(text, 14, 2) ?
-    let second = digitsAt(text, 17, 2) ?
-    checkRange("month", month, 1, 12) ?
-    checkRange("day", day, 1, daysInMonth(year, month)) ?
-    checkRange("hour", hour, 0, 23) ?
-    checkRange("minute", minute, 0, 59) ?
-    checkRange("second", second, 0, 60) ?
-    let rest = text.drop(19)
-    let milli = fractionOf(rest)
-    let offset = offsetOf(rest) ?
-    let atZero =
-    millisOf(
-        &Parts {
-        year: year,
-        month: month,
-        day: day,
-        hour: hour,
-        minute: minute,
-        second: second,
-        milli: milli
-      }
-    )
-    Ok(atZero - offset)
-  }
+  if text.length() < 20 || !rfc3339Shaped(text) { return Err(Malformed(text)) }
+  let rest = text.drop(19)
+  let width = fractionWidth(rest)
+  if width == 1 { return Err(Malformed(rest)) }
+  let offset = offsetOf(rest.drop(width)) ?
+  let atZero = checkedMillis(
+      &Parts {
+      year: digitsAt(text, 0, 4) ?,
+      month: digitsAt(text, 5, 2) ?,
+      day: digitsAt(text, 8, 2) ?,
+      hour: digitsAt(text, 11, 2) ?,
+      minute: digitsAt(text, 14, 2) ?,
+      second: digitsAt(text, 17, 2) ?,
+      milli: millisOfFraction(rest.slice(1, width))
+    }
+  ) ?
+  Ok(atZero - offset)
 }
 
-/// The fraction of a second the text carries, in milliseconds.
-/// More than three digits are read and the rest dropped rather than refused: a
-/// value written with microseconds is still the moment it names, and refusing
-/// it would make this reject text that is perfectly well formed.
-fn fractionOf(rest: Str) -> Int {
-  if !rest.startsWith(".") {
-    0
-  } else {
-    var digits = ""
-    var index = 1
-    while index < rest.length() && "0123456789".contains(rest.slice(index, index + 1)) {
-      digits = digits + rest.slice(index, index + 1)
-      index = index + 1
-    }
-    var scaled = digits.take(3)
-    while scaled.length() < 3 { scaled = scaled + "0" }
-    Option.unwrapOr(Text.countOf(scaled), 0)
-  }
+/// The separators between the date and time fields sit where the format puts
+/// them; the date and time may be joined by `T`, `t`, or a space.
+fn rfc3339Shaped(text: Str) -> Bool {
+  text.slice(4, 5) == "-" && text.slice(7, 8) == "-" && "Tt ".contains(text.slice(10, 11))
+    && text.slice(13, 14) == ":" && text.slice(16, 17) == ":"
 }
 
-/// How far from zero the text's offset is, in milliseconds.
-fn offsetOf(rest: Str) -> Result[Int, FormatError] {
-  var index = 0
-  while index < rest.length() && !"Zz+-".contains(rest.slice(index, index + 1)) {
-    index = index + 1
+/// How many characters the fraction of a second takes, its dot included, or
+/// zero when there is none. A dot with no digit after it answers one.
+fn fractionWidth(rest: Str) -> Int {
+  if !rest.startsWith(".") { return 0 }
+  var index = 1
+  while index < rest.length() && Header.digitsAt(rest, index, 1) != None { index = index + 1 }
+  index
+}
+
+/// Fraction digits as milliseconds. More than three digits are read and the
+/// rest dropped rather than refused: a value written with microseconds is still
+/// the moment it names.
+fn millisOfFraction(digits: Str) -> Int {
+  var scaled = digits.take(3)
+  while scaled.length() < 3 { scaled = scaled + "0" }
+  Option.unwrapOr(Header.digitsAt(scaled, 0, 3), 0)
+}
+
+/// How far from zero the offset that ends the text is, in milliseconds: `Z`,
+/// or a sign with hours below 24 and minutes below 60. Nothing may follow it.
+fn offsetOf(tail: Str) -> Result[Int, FormatError] {
+  if tail == "Z" || tail == "z" { return Ok(0) }
+  let marker = tail.take(1)
+  if tail.length() != 6 || (marker != "+" && marker != "-") || tail.slice(3, 4) != ":" {
+    return Err(Malformed(tail))
   }
-  if index >= rest.length() {
-    Err(Malformed(rest))
-  } else {
-    let marker = rest.slice(index, index + 1)
-    if marker == "Z" || marker == "z" {
-      Ok(0)
-    } else {
-      let body = rest.drop(index + 1)
-      if body.length() < 5 {
-        Err(Malformed(rest))
-      } else {
-        let hours = digitsAt(body, 0, 2) ?
-        let minutes = digitsAt(body, 3, 2) ?
-        let size = hours * 3600000 + minutes * 60000
-        Ok(if marker == "-" { 0 - size } else { size })
-      }
-    }
-  }
+  let hours = digitsAt(tail, 1, 2) ?
+  let minutes = digitsAt(tail, 4, 2) ?
+  checkRange("offset hour", hours, 0, 23) ?
+  checkRange("offset minute", minutes, 0, 59) ?
+  let size = hours * 3600000 + minutes * 60000
+  Ok(if marker == "-" { 0 - size } else { size })
+}
+
+/// The moment named by parts whose calendar and clock fields are in range. A
+/// second of 60 is admitted for a leap second and read as the next second.
+fn checkedMillis(parts: &Parts) -> Result[Int, FormatError] {
+  checkRange("month", parts.month, 1, 12) ?
+  checkRange("day", parts.day, 1, daysInMonth(parts.year, parts.month)) ?
+  checkRange("hour", parts.hour, 0, 23) ?
+  checkRange("minute", parts.minute, 0, 59) ?
+  checkRange("second", parts.second, 0, 60) ?
+  Ok(millisOf(parts))
 }
 
 /// A moment written the way a message header carries one.
@@ -262,52 +195,36 @@ fn offsetOf(rest: Str) -> Result[Int, FormatError] {
 /// this is a value two programs exchange, not one a person is shown.
 export fn toHttpDate(millis: Int) -> Str {
   let parts = partsOf(millis)
-  WEEKDAY_NAMES[weekdayOf(millis)] + ", " + padded(parts.day, 2) + " "
-    + MONTH_NAMES[parts.month - 1] + " " + padded(parts.year, 4) + " "
+  Header.WEEKDAY_NAMES[weekdayOf(millis)] + ", " + padded(parts.day, 2) + " "
+    + Header.MONTH_NAMES[parts.month - 1] + " " + padded(parts.year, 4) + " "
     + padded(parts.hour, 2) + ":" + padded(parts.minute, 2) + ":"
     + padded(parts.second, 2) + " GMT"
 }
 
-/// The moment a message header names.
+/// The moment a message header names, in the fixed form
+/// `Sun, 06 Nov 1994 08:49:37 GMT` or either obsolete form a recipient must
+/// still read: `Sunday, 06-Nov-94 08:49:37 GMT` and `Sun Nov  6 08:49:37 1994`.
+/// A two-digit year below 70 is read in this century.
 export fn fromHttpDate(text: Str) -> Result[Int, FormatError] {
-  let trimmed = text.trim()
-  if trimmed.length() < 29 {
-    Err(Malformed(text))
-  } else {
-    let day = digitsAt(trimmed, 5, 2) ?
-    let monthName = trimmed.slice(8, 11)
-    let year = digitsAt(trimmed, 12, 4) ?
-    let hour = digitsAt(trimmed, 17, 2) ?
-    let minute = digitsAt(trimmed, 20, 2) ?
-    let second = digitsAt(trimmed, 23, 2) ?
-    if let Some(month) = MONTH_NUMBERS.get(monthName) {
-      checkRange("day", day, 1, daysInMonth(year, month)) ?
-      Ok(
-        millisOf(
-            &Parts {
-            year: year,
-            month: month,
-            day: day,
-            hour: hour,
-            minute: minute,
-            second: second,
-            milli: 0
-          }
-        )
-      )
-    } else {
-      Err(Malformed(monthName))
+  let Ok(fields) = Header.fieldsOf(text.trim()) else { return Err(Malformed(text)) }
+  checkedMillis(
+      &Parts {
+      year: fields[0],
+      month: fields[1],
+      day: fields[2],
+      hour: fields[3],
+      minute: fields[4],
+      second: fields[5],
+      milli: 0
     }
-  }
+  )
 }
 
-/// The digits at a position read as a number.
+/// The ASCII digits at a position read as a number; a sign or a space is not a digit.
 fn digitsAt(text: Str, at: Int, width: Int) -> Result[Int, FormatError] {
-  if at + width > text.length() {
-    Err(Malformed(text))
-  } else {
-    let piece = text.slice(at, at + width)
-    if let Some(value) = Text.countOf(piece) { Ok(value) } else { Err(Malformed(piece)) }
+  match Header.digitsAt(text, at, width) {
+    case Some(value) => Ok(value)
+    case None => Err(Malformed(text.slice(at, at + width)))
   }
 }
 
@@ -350,10 +267,10 @@ fn directive(name: Str, millis: Int, parts: &Parts) -> Str {
   if name == "S" { return padded(parts.second, 2) }
   if name == "L" { return padded(parts.milli, 3) }
   if name == "j" { return padded(dayOfYear(millis), 3) }
-  if name == "a" { return WEEKDAY_NAMES[weekdayOf(millis)] }
-  if name == "A" { return WEEKDAY_FULL[weekdayOf(millis)] }
-  if name == "b" { return MONTH_NAMES[parts.month - 1] }
-  if name == "B" { return MONTH_FULL[parts.month - 1] }
+  if name == "a" { return Header.WEEKDAY_NAMES[weekdayOf(millis)] }
+  if name == "A" { return Header.WEEKDAY_FULL[weekdayOf(millis)] }
+  if name == "b" { return Header.MONTH_NAMES[parts.month - 1] }
+  if name == "B" { return Header.MONTH_FULL[parts.month - 1] }
   if name == "p" { return if parts.hour < 12 { "AM" } else { "PM" } }
   if name == "I" { return padded(twelveHour(parts.hour), 2) }
   if name == "e" { return show(parts.day) }
@@ -406,7 +323,7 @@ export fn parse(pattern: Str, text: Str) -> Result[Int, FormatError] {
         }
       } else {
         if name == "b" {
-          if let Some(named) = MONTH_NUMBERS.get(text.slice(at, at + 3)) {
+          if let Some(named) = Header.MONTH_NUMBERS.get(text.slice(at, at + 3)) {
             month = named
             at = at + 3
           } else {

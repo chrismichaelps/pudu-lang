@@ -2,8 +2,10 @@
 module Pudu.Eval.FunctionClosureSpec
   ( functionClosureProperties
   , testBuiltinImpls
+  , testDecimalImpls
   , testClosures
   , testFunctions
+  , testSlotScopes
   ) where
 
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
@@ -15,7 +17,71 @@ functionClosureProperties =
   [ ("functions defaults and recursion evaluate", testFunctions)
   , ("function literals capture the environment they were written in", testClosures)
   , ("implementations reach built-in types", testBuiltinImpls)
+  , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
+  , ("slot admission preserves ordered lexical scope and capture", testSlotScopes)
   ]
+
+testSlotScopes :: IO Property
+testSlotScopes = do
+  initializer <- captured
+    ["let value = value + 1", "value"]
+  before <- captured
+    ["let result = value", "let value = 99", "result"]
+  after <- captured
+    ["{ let value = 9\n value }", "value"]
+  earlyCapture <- captured
+    ["let read = fn() -> Int => value", "let value = 9", "read()"]
+  shorthand <- runProgram ["type Point = { value: Int }"]
+    [ "let value = 5"
+    , "let read = fn() -> Int {"
+    , "  let initial = Point{value}"
+    , "  let value = 9"
+    , "  initial.value", "}"
+    ] "read()"
+  branch <- captured
+    [ "var marker = 0"
+    , "if let Some(value) = Some(9) { marker = value }"
+    , "value + marker"
+    ]
+  arm <- captured
+    [ "let marker = 0"
+    , "match Some(9) { case Some(value) => value + marker case None => marker }"
+    , "value"
+    ]
+  condition <- captured
+    [ "var count = 0"
+    , "while count < value { let value = 0\n count = count + 1 }"
+    , "count"
+    ]
+  overflow <- runProgram []
+    [ "let value = 255u8"
+    , "let read = fn() -> UInt8 { let value = value + 1u8\n value }"
+    ] "read()"
+  snapshot <- runProgram []
+    [ "var value = 5"
+    , "let read = fn() -> Int => value"
+    , "value = 9"
+    ] "read()"
+  nestedWrite <- runProgram []
+    [ "var value = 5"
+    , "{ let marker = 1\n value = value + marker }"
+    ] "value"
+  pure $ conjoin
+    [ counterexample "initializer reads the captured binding" (initializer === "6")
+    , counterexample "a later declaration cannot redirect an earlier read" (before === "5")
+    , counterexample "nested scope restores the outer binding" (after === "5")
+    , counterexample "capture precedes the later local binding" (earlyCapture === "5")
+    , counterexample "shorthand fields read the current lexical binding" (shorthand === "5")
+    , counterexample "successful pattern bindings end with their branch" (branch === "14")
+    , counterexample "match arm bindings end with their arm" (arm === "5")
+    , counterexample "loop condition cannot read a body-local slot" (condition === "5")
+    , counterexample "fallback retains checked arithmetic diagnostics" (overflow === "failed: E7005")
+    , counterexample "capture holds a snapshot before later local mutation" (snapshot === "5")
+    , counterexample "a nested frame writes the existing parent binding" (nestedWrite === "6")
+    ]
+ where
+  captured body = runProgram []
+    (["let value = 5", "let read = fn() -> Int {"] <> body <> ["}"]) "read()"
 
 testFunctions :: IO Property
 testFunctions = do
@@ -135,4 +201,27 @@ testBuiltinImpls = do
     , counterexample "an implementation for Result is reachable" (onResult === "9")
     , counterexample "a program's own sum is reachable the same way"
         (onUserSum === "5")
+    ]
+
+
+testDecimalImpls :: IO Property
+testDecimalImpls = do
+  let declarations =
+        [ "trait Doubling { fn twice(self: &Self) -> Self }"
+        , "impl Doubling for Decimal { fn twice(self: &Self) -> Self { *self + *self } }"
+        , "fn doubled[T: Doubling](value: T) -> T { value.twice() }"
+        ]
+  direct <- evaluateWith declarations "2.50d.twice()"
+  generic <- evaluateWith declarations "doubled(-2.50d)"
+  qualified <- evaluateWith declarations "Doubling.twice(&2.50d)"
+  ownerQualified <- evaluateWith declarations "Decimal.twice(&2.50d)"
+  missing <- evaluateWith declarations "2.50d.missing()"
+  rendered <- evaluate "2.50d.toText()"
+  pure $ conjoin
+    [ counterexample "direct dispatch retains Decimal arithmetic and scale" (direct === "5.00")
+    , counterexample "bounded generic dispatch handles negative Decimal values" (generic === "-5.00")
+    , counterexample "trait qualification uses the same Decimal owner" (qualified === "5.00")
+    , counterexample "type qualification reaches the registered implementation" (ownerQualified === "5.00")
+    , counterexample "an absent member is still refused" (missing === "failed: E3005")
+    , counterexample "universal rendering remains the fallback" (rendered === "\"2.50\"")
     ]

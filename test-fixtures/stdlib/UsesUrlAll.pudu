@@ -102,6 +102,15 @@ export fn main() -> Int {
   if Url.decodeComponent("a%20b%26c") == "a b&c" { held = held + 1 }
   // Both spellings of a space are read back as one.
   if Url.decodeComponent("a+b") == "a b" { held = held + 1 }
+  // In a path and a fragment a plus is a plus; only the query reads it as a space.
+  match Url.parse("http://h/lang/c++?q=c+d#x+y") {
+    case Ok(plussed) => {
+      if Url.segments(&plussed) == ["lang", "c++"] && Url.queryValue(&plussed, "q") == Some("c d") && plussed.fragment == Some("x+y") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
   // An escape that is not two hex digits is left as it was written rather
   // than guessed at, so a caller showing the result shows what arrived.
   if Url.decodeComponent("100%") == "100%" { held = held + 1 }
@@ -138,6 +147,19 @@ export fn main() -> Int {
   if bracketed.host == "[::1]" && bracketed.port == Some(8080) { held = held + 1 }
   if read("http://[::1]/").port == None { held = held + 1 }
   if Url.render(&bracketed) == "http://[::1]:8080/x" { held = held + 1 }
+
+  // A port past the largest TCP port, and a port with no host before it, are
+  // reported rather than handed to a connection.
+  if Url.parse("http://example.test:99999/") == Err(Url.BadPort("99999")) { held = held + 1 }
+  if Url.parse("http://[::1]:70000/") == Err(Url.BadPort("70000")) { held = held + 1 }
+  if read("http://example.test:65535/").port == Some(65535) { held = held + 1 }
+  if Url.parse("http://:80/x") == Err(Url.NoHost) { held = held + 1 }
+
+  // A scheme starts with a letter and holds only letters, digits, `+`, `-`, and `.`.
+  if Url.parse("://example.test/") == Err(Url.NoScheme) { held = held + 1 }
+  if Url.parse("ht tp://example.test/") == Err(Url.NoScheme) { held = held + 1 }
+  if Url.parse("1http://example.test/") == Err(Url.NoScheme) { held = held + 1 }
+  if read("svn+ssh.v-2://example.test/").scheme == "svn+ssh.v-2" { held = held + 1 }
 
   held
 }

@@ -2,6 +2,7 @@
 module Pudu.Eval.Operator
   ( applyUnary
   , builtinMethodNamesFor
+  , checkedResult
   , combine
   , nominalNameOf
   , readIndex
@@ -11,6 +12,7 @@ module Pudu.Eval.Operator
 
 import Data.Bits (shiftL, shiftR)
 import Data.Text (Text)
+import qualified Data.Text as Text
 
 import Pudu.DecimalLiteral
   ( Decimal
@@ -31,7 +33,8 @@ import Pudu.Eval.Operator.Access
   , unwrapTry
   )
 import Pudu.Eval.Render (valueKind)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Rope (ropeAppend)
+import Pudu.Eval.Value (Value (..), ropeOfValue)
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
   ( IntegerKind (..)
@@ -76,12 +79,17 @@ applyUnary spanValue operator value = case (operator, value) of
       ("cannot apply " <> operator <> " to a " <> valueKind value) Nothing
 
 combine :: Span -> Text -> Value -> Value -> Evaluator Value
+{-# INLINE combine #-}
 combine spanValue operator left right = case (left, right) of
   (IntValue leftKind a, IntValue rightKind b) ->
-    integerOperation spanValue (integerKindMeet leftKind rightKind) operator a b
+    integerFast spanValue (integerKindMeet leftKind rightKind) operator a b
   (FloatValue leftWidth a, FloatValue rightWidth b)
     | leftWidth == rightWidth -> floatOperation spanValue leftWidth operator a b
   (DecimalValue a, DecimalValue b) -> decimalOperation spanValue operator a b
+  (StrValue _, StrValue _)
+    | operator == "+"
+    , Just a <- ropeOfValue left
+    , Just b <- ropeOfValue right -> pure (RopeText (ropeAppend a b))
   (StrValue a, StrValue b) -> textOperation spanValue operator a b
   (CharValue a, CharValue b) -> comparisonOnly spanValue operator a b
   (BoolValue a, BoolValue b) -> comparisonOnly spanValue operator a b
@@ -91,6 +99,32 @@ combine spanValue operator left right = case (left, right) of
     abortAt (Just spanValue) "E7001"
       ("cannot apply " <> operator <> " to a " <> valueKind left <> " and a " <> valueKind right)
       Nothing
+
+{-| The integer operators a loop spends its time on, chosen by reading the
+    operator's one or two characters rather than comparing it against every
+    spelling in turn. Anything else, and every refusal, is `integerOperation`'s,
+    so the two cannot disagree about what an operator means. -}
+integerFast :: Span -> IntegerKind -> Text -> Integer -> Integer -> Evaluator Value
+{-# INLINE integerFast #-}
+integerFast spanValue kind operator left right = case Text.uncons operator of
+  Just (first, rest)
+    | Text.null rest -> case first of
+        '+' -> checkedResult spanValue kind "add" (left + right)
+        '-' -> checkedResult spanValue kind "subtract" (left - right)
+        '*' -> checkedResult spanValue kind "multiply" (left * right)
+        '%' | right /= 0 -> pure (IntValue kind (rem left right))
+        '<' -> pure (BoolValue (left < right))
+        '>' -> pure (BoolValue (left > right))
+        _ -> general
+    | Text.length rest == 1 && Text.head rest == '=' -> case first of
+        '=' -> pure (BoolValue (left == right))
+        '!' -> pure (BoolValue (left /= right))
+        '<' -> pure (BoolValue (left <= right))
+        '>' -> pure (BoolValue (left >= right))
+        _ -> general
+  _ -> general
+ where
+  general = integerOperation spanValue kind operator left right
 
 {-| Apply an operator to two integers of a shared kind.
 
@@ -139,6 +173,7 @@ integerOperation spanValue kind operator left right = case operator of
     seeing `UInt8` in it learns why the answer did not fit; the operator is
     already on the line in front of them. -}
 checkedResult :: Span -> IntegerKind -> Text -> Integer -> Evaluator Value
+{-# INLINE checkedResult #-}
 checkedResult spanValue kind what value
   | integerKindFits kind value = pure (IntValue kind value)
   | otherwise =

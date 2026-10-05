@@ -1,6 +1,7 @@
 {-| @Type.Check.Pattern.Module — checks patterns against the type they match -}
 module Pudu.Type.Check.Pattern
   ( bindPattern
+  , canonicalVariant
   , freshFor
   , recordFieldsFor
   , substituteRigid
@@ -30,6 +31,7 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
 
 {-| The variant a pattern names, found the way an expression finds one.
@@ -194,19 +196,6 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
 freshFor :: [Text] -> Checker [(Text, Type)]
 freshFor = mapM (\name -> (,) name <$> freshVariable)
 
-substituteRigid :: [(Text, Type)] -> Type -> Type
-substituteRigid replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  NominalType name arguments -> NominalType name (map (substituteRigid replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substituteRigid replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substituteRigid replacements) inputs)
-      (substituteRigid replacements result)
-  ReferenceTypeValue mutable target ->
-    ReferenceTypeValue mutable (substituteRigid replacements target)
-  other -> other
-
 {-| A record's declared field types, with the type's own parameters replaced by
     the arguments the subject carries.
 
@@ -272,3 +261,18 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
   case fieldPatternValue field of
     Just nested -> bindPattern declared rigid nested fieldType
     Nothing -> bindName name (monotype fieldType)
+
+{-| A generated construction names a variant through its canonical owner,
+    `Module.Type.Variant`, which its defining module need not import. Typed
+    exactly as the constructor bound in the owner's module: the owner applied
+    to fresh parameters, behind a function of the payload when it has one. -}
+canonicalVariant :: DeclaredTypes -> ModuleName -> Checker (Maybe Type)
+canonicalVariant declared path = do
+  variant <- variantForPath declared path (NonEmpty.last (moduleNameSegments path))
+  case variant of
+    Nothing -> pure Nothing
+    Just (owner, ownerParams, declaredPayload) -> do
+      replacements <- freshFor ownerParams
+      let ownerType = NominalType owner (map snd replacements)
+          payload = map (substituteRigid replacements) declaredPayload
+      pure (Just (if null payload then ownerType else FunctionTypeValue False payload ownerType))

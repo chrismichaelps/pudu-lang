@@ -47,10 +47,12 @@ writes (`add`, `addAll`, `setAll`, `remove`, `removeAll`, `removeKey`), and `map
 
 ## Algorithm
 
-One `Map[K, Array[V]]`. Every write goes through `setAll`, which is the single place that decides
-whether a key survives: given an empty array it removes the key rather than storing one. Routing
-`remove`, `removeAll`, and `filterValues` through it is what makes the invariant hold in one place
-instead of at four call sites.
+An ordered `Map[K, Array[V]]` keeps groups and an ordered `Map[(K, V), Int]` counts
+occurrences. `add` delegates to the pure `multiMapAdd` primitive in [[Eval MultiMap]],
+appending one value and incrementing its count with one traversal of each map.
+`contains` delegates to `multiMapContains`, which performs one indexed lookup.
+Other writes maintain both maps; `setAll` removes empty groups and adjusts counts
+for replacement, so `remove`, `removeAll`, and filters retain the no-empty-key rule.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -86,6 +88,25 @@ DEPTH 0.40 (MEDIUM). One invariant, funnelled through one function so it is stat
   exist, then "absent" and "present but empty" are one case, and an `Option` would ask the caller to
   handle a branch that never occurs. _Rejected:_ `Option[Array[V]]`.
 
+- **Q:** Answer `contains` by searching the key's values? **A:** No. _Rationale:_ asking it for every
+  value under a large key grew with the square of the key's size; 640,000 entries took 56.3 s (#425).
+  An `occurrences` map counts each key and value pair, kept by `add`, `addAll`, `setAll`, `removeKey`,
+  and `mapValues`, and `add` is written straight through as the commonest operation: the same work
+  now takes 7.8 s, most of it the interpreter rather than the map.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]]
+
+## Fused add and membership
+
+Resolved Grill Log: a 640,000-value compiled workload allocates 15.6 GB because
+`add` separately reads and writes both maps through interpreted methods. Fuse these
+updates into explicit pure primitives while keeping the record, ordered key
+representatives, duplicate counts, overflow checks, and all public signatures.
+[[Eval MultiMap]] implements the primitive; [[2026-10-01-multimap-performance]]
+records measurements and validation. The benchmark size and script remain fixed.
+
+Integer-pair occurrence maps use a persistent numeric index with an ordinary
+ordered Map view for public operations. [[Eval MultiMap Kernel]] fuses eligible
+pure loop regions in both evaluator modes. No public signatures, ordering, group
+sequence, duplicate counts or persistence guarantees change.

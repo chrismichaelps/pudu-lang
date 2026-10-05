@@ -22,10 +22,17 @@ Digits naming more than an `Int` holds, in any base, are not a whole number: the
 each multiplication, and the word is kept as written rather than stopping the program reading it. A
 date or time is recognised by shape and kept as text, because which of the format's four it is, is a
 question [[Std Time Format]] answers.
+`isNumber` is the format's number grammar: integers without leading zeros, signs only in base ten,
+floats with digits on both sides of the point and after the exponent marker, signed `inf`/`nan`,
+and every underscore between two digits.
+
 ## Grill Log
 - **Q:** Parse moments here? **A:** No. _Rationale:_ the four shapes differ in what they leave
   unsaid, and choosing one would invent a zone or a day. _Rejected:_ converting to a host instant.
 - **Q:** Refuse a document over one scalar escape that cannot be represented? **A:** No.
   _Rationale:_ the rest of the file is still readable. _Rejected:_ failing the whole read.
+- **Q:** Treat every word that is not a whole number as a float kept as written? **A:** No.
+  _Rationale:_ `abc` and `1.` would then read as values. _Rejected:_ `Fractional` as a catch-all.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Toml]] · [[Std Toml Read]]

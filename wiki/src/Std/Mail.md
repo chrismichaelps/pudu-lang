@@ -52,6 +52,9 @@ the part that can be checked exhaustively.
 - **Q:** Include sending here? **A:** No. _Rationale:_ the message is where a mistake is silent and
   costly, and it can be checked completely without a network. Mixing the two would make the
   checkable part need a server. _Rejected:_ one module.
+- **Q:** Accept a mailbox or domain with an empty piece between dots? **A:** No. _Rationale:_
+  `.a@b.c` and `a..b@c.d` were accepted and refused later by the mail server (#417). Both halves
+  must be dot-separated pieces, none empty.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Safe]] · [[Std Tls]] · [[Std Validate]]
 

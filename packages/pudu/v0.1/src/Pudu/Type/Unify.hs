@@ -7,8 +7,7 @@ module Pudu.Type.Unify
 
 import Data.Text (Text)
 import Pudu.Source (Span)
-import Control.Monad (unless)
-import Pudu.Type.Env (Checker, implementsTrait, report, reportedAt, resolveVariable, setVariable)
+import Pudu.Type.Env (Checker, addDynamicObligation, report, resolveVariable, setVariable)
 import Pudu.Type.Value
   ( Type (..)
   , TypeVar
@@ -47,19 +46,16 @@ unify spanValue expected actual = do
       | length leftArgs == length rightArgs -> do
           solvedHead <- unify spanValue leftHead rightHead
           AppliedType solvedHead <$> unifyAll spanValue leftArgs rightArgs
-    {-| A constructor variable meets a named constructor carrying at least as
-        many arguments. The variable takes the constructor with the arguments it
-        does not consume, and the rest are matched pairwise. -}
+    {-| Select a complete named constructor of the same arity. Leftover prefix
+        arguments would manufacture the partial application ADR-0014 forbids. -}
     (AppliedType leftHead leftArgs, NominalType rightName rightArgs)
-      | length rightArgs >= length leftArgs -> do
-          let (kept, matched) = splitAt (length rightArgs - length leftArgs) rightArgs
-          _ <- unify spanValue leftHead (NominalType rightName kept)
-          NominalType rightName . (kept <>) <$> unifyAll spanValue leftArgs matched
+      | length rightArgs == length leftArgs -> do
+          _ <- unify spanValue leftHead (NominalType rightName [])
+          NominalType rightName <$> unifyAll spanValue leftArgs rightArgs
     (NominalType leftName leftArgs, AppliedType rightHead rightArgs)
-      | length leftArgs >= length rightArgs -> do
-          let (kept, matched) = splitAt (length leftArgs - length rightArgs) leftArgs
-          _ <- unify spanValue (NominalType leftName kept) rightHead
-          NominalType leftName . (kept <>) <$> unifyAll spanValue matched rightArgs
+      | length leftArgs == length rightArgs -> do
+          _ <- unify spanValue (NominalType leftName []) rightHead
+          NominalType leftName <$> unifyAll spanValue leftArgs rightArgs
     (TupleTypeValue leftMembers, TupleTypeValue rightMembers)
       | length leftMembers == length rightMembers ->
           TupleTypeValue <$> unifyAll spanValue leftMembers rightMembers
@@ -106,22 +102,9 @@ unify spanValue expected actual = do
         oriented — its message names the expected type first — so a widening
         can only happen where a `dynamic` was asked for. The reverse would be a
         narrowing, which needs a match, not an assignment. -}
-    (DynamicTypeValue traitIdentity, NominalType concrete _) -> do
-      implements <- implementsTrait concrete traitIdentity
-      if implements
-        then pure left
-        else do
-          seen <- reportedAt spanValue "E3032"
-          unless seen $
-            report "E3032" spanValue
-              (nominalName concrete <> " does not implement " <> nominalName traitIdentity)
-              ( Just
-                  ( "implement it for this type, or use a type that does; a dynamic "
-                      <> nominalName traitIdentity
-                      <> " holds only values that implement it"
-                  )
-              )
-          pure ErrorType
+    (DynamicTypeValue traitIdentity, NominalType _ _) -> do
+      addDynamicObligation spanValue right traitIdentity
+      pure left
     _ -> mismatch spanValue left right
 
 {-| Check an actual type against an expected one. The message names the

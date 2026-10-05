@@ -9,6 +9,7 @@ module Pudu.Eval.Call
   , applyFunction
   , awaitTask
   , callClosure
+  , callMember
   , evaluateCall
   , evaluateCallee
   , evaluateScope
@@ -21,6 +22,7 @@ module Pudu.Eval.Call
 
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Data.Char (isUpper)
 import qualified Data.Text as Text
 import Pudu.Eval.Builtin
   ( callArrayMethod
@@ -48,18 +50,25 @@ import Control.Concurrent.MVar (newEmptyMVar, putMVar)
 import Control.Exception (SomeException, try)
 import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
+import Pudu.Eval.Call.Argument (argumentOf, receiverOf)
+import Pudu.Eval.Call.Needs (CallNeeds (..))
 import Pudu.Eval.Call.Path
-  ( lastPathSegment
+  ( flattenPath
+  , lastPathSegment
   , pathValue
   , qualifiedCallee
   , readPath
+  , selectTypes
   , typeArgumentNames
+  , witnessOf
   )
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Foreign (callForeign)
+import Pudu.Eval.Compile.Cache (compiledBody)
 import Pudu.Eval.Env
   ( tally
+  , compiledBodies
   , currentConcurrentStore
   , withCaptured
   , adoptChild
@@ -85,20 +94,18 @@ import Pudu.Eval.Loop
 import Pudu.Eval.Operator (readMember, unwrapTry)
 import Pudu.Eval.Place
   ( Lent (..)
-  , Place
   , exclusiveParameters
   , noneLent
-  , placeOf
-  , plainPlace
-  , readPlace
   , storePlace
   , withFrameKeeping
   )
+import Pudu.Eval.MultiMap (multiMapPrimitive, multiMapWrapper)
 import Pudu.Eval.Range (callRangeMethod)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Captured (..)
+  , Frame (..)
   , Closure (..)
   , intOf
   , Value (..)
@@ -112,15 +119,6 @@ import Pudu.Frontend.Syntax.Tree
   , Parameter (..)
   )
 import Pudu.Source (Span)
-
-{-| @Eval.Call.Needs — what a call needs of the evaluator around it.
-
-    An argument is an expression and a function's body is a block. Both reach
-    calls again, which is why they arrive rather than being imported. -}
-data CallNeeds = CallNeeds
-  { callEvaluate :: Located Expression -> Evaluator Value
-  , callBlock :: Located Block -> Evaluator Value
-  }
 
 {-| A member in callee position prefers a method over a field of the same name,
     matching how the same call is typed: `value.name()` reads as a call, and a
@@ -140,10 +138,25 @@ evaluateCall needs spanValue callee arguments = do
       {-| The callee under a type application is read as an ordinary expression
           rather than as a callee, because a qualified name is what carries type
           arguments and reading it as a path is what resolves it. -}
-      target <- callEvaluate needs inner
-      case target of
-        BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
-        _ -> dispatchCall needs spanValue lent target values
+      -- Witnesses are built only for a callee that binds them.
+      let chosen = case locatedValue callee of
+            TypeApplication _ written -> mapM witnessOf written
+            _ -> pure []
+      qualified <- qualifiedCallee inner values
+      case (qualified, locatedValue inner) of
+        (Nothing, MemberExpression target (Located _ member)) | not (isPath target) -> do
+          (receiverPlace, receiver) <- receiverOf needs target
+          selected <- chosen
+          callMemberSelecting (selectTypes selected) needs spanValue (locatedSpan inner)
+            lent{lentSelf = receiverPlace} True receiver member values
+        _ -> do
+          target <- maybe (callEvaluate needs inner) pure qualified
+          case target of
+            BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
+            FunctionValue closure -> do
+              selected <- chosen
+              dispatchCall needs spanValue lent (FunctionValue (selectTypes selected closure)) values
+            _ -> dispatchCall needs spanValue lent target values
     Nothing -> do
       qualified <- qualifiedCallee callee values
       case qualified of
@@ -151,66 +164,41 @@ evaluateCall needs spanValue callee arguments = do
         Nothing -> case locatedValue callee of
           MemberExpression target (Located _ member) -> do
             (receiverPlace, receiver) <- receiverOf needs target
-            let lentHere = lent{lentSelf = receiverPlace}
-            case receiver of
-              StrValue text -> case callStringMethodFast spanValue member text values of
-                Just direct -> direct
-                Nothing -> fallbackWith lentHere receiver member values
-              _ -> fallbackWith lentHere receiver member values
+            callMember needs spanValue (locatedSpan callee) lent{lentSelf = receiverPlace} True receiver member values
           _ -> do
             target <- evaluateCallee needs callee
             dispatchCall needs spanValue lent target values
- where
-  fallbackWith lentHere receiver member vals = do
-    owners <- receiverOwners receiver
-    method <- firstBound (\owner -> lookupMethod (owner <> "." <> member)) owners
-    calleeVal <- case method of
-      Just (FunctionValue closure) ->
-        pure (FunctionValue closure{closureSelf = Just receiver})
-      _ -> readMember (locatedSpan callee) receiver member
-    dispatchCall needs spanValue lentHere calleeVal vals
 
-{-| An argument's value, and the place it was lent from when the argument is
-    `&mut place` or names a binding that may itself be an exclusive reference
-    being lent on. Which of those a call hands back to is decided by the
-    parameters of the function it reaches. -}
-argumentOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
-argumentOf needs argument = case locatedValue argument of
-  UnaryExpression "&mut" operand -> lentFrom needs operand
-  NameExpression names | length names == 1 -> do
-    value <- callEvaluate needs argument
-    pure (plainPlace argument, value)
+{-| A callee's target that names a type or module rather than a value: the
+    leading segment of a written path, capitalised as nominals are. -}
+isPath :: Located Expression -> Bool
+isPath (Located _ expression) = case flattenPath expression of
+  Just (first : _) | Just (initial, _) <- Text.uncons first -> isUpper initial
+  _ -> False
+
+{-| A method called on a receiver already evaluated, with its arguments: an
+    implementation written for the receiver's type, else the member the value
+    itself carries. `implemented` is false only when no implementation anywhere
+    declares a method of this name, which skips looking for one. -}
+callMember :: CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value] -> Evaluator Value
+callMember = callMemberSelecting id
+
+{-| A method call whose callee carries chosen types for its parameters. -}
+callMemberSelecting
+  :: (Closure -> Closure) -> CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value]
+  -> Evaluator Value
+callMemberSelecting select needs spanValue memberSpan lent implemented receiver member values = case receiver of
+  StrValue text
+    | Just direct <- callStringMethodFast spanValue member text values -> direct
   _ -> do
-    value <- callEvaluate needs argument
-    pure (Nothing, value)
-
-{-| A receiver chosen by an element is read through its place, so the index is
-    evaluated once whether or not the method turns out to change the receiver. -}
-receiverOf :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
-receiverOf needs target
-  | chosenByElement (locatedValue target) = lentFrom needs target
-  | otherwise = do
-      value <- callEvaluate needs target
-      pure (plainPlace target, value)
- where
-  chosenByElement expression = case expression of
-    IndexExpression _ _ -> True
-    MemberExpression inner _ -> chosenByElement (locatedValue inner)
-    UnaryExpression "*" operand -> chosenByElement (locatedValue operand)
-    _ -> False
-
-lentFrom :: CallNeeds -> Located Expression -> Evaluator (Maybe Place, Value)
-lentFrom needs operand = do
-  found <- placeOf (callEvaluate needs) operand
-  case found of
-    Just place -> do
-      value <- readPlace place
-      pure (Just place, value)
-    Nothing -> do
-      value <- callEvaluate needs operand
-      pure (Nothing, value)
-
-{-| The type arguments a callee carries, and the callee under them. -}
+    method <-
+      if implemented
+        then receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
+        else pure Nothing
+    calleeVal <- case method of
+      Just (FunctionValue closure) -> pure (FunctionValue (select closure{closureSelf = Just receiver}))
+      _ -> readMember memberSpan receiver member
+    dispatchCall needs spanValue lent calleeVal values
 
 {-| Apply an evaluated callee to evaluated arguments. -}
 dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
@@ -332,11 +320,14 @@ evaluateScope needs spanValue body = do
     what keeps a scope from reporting success while a task it owned did not. -}
 
 scopeTo :: [Map Text Value] -> Value -> Value
-scopeTo environment value = case value of
+scopeTo environment = \value -> case value of
   FunctionValue closure@Closure{closureCaptured = Nothing} ->
-    FunctionValue closure
-      { closureCaptured = Just (Captured environment (length environment)) }
+    let scoped = closure{closureCaptured = Just captured}
+     in FunctionValue scoped{closureMultiMap = multiMapPrimitive scoped}
   other -> other
+ where
+  -- Built once for every declaration scoped to the same environment.
+  captured = Captured (map MapFrame environment) (length environment)
 
 
 {-| Start a prepared closure body. Async calls retain these bindings in a cold
@@ -364,9 +355,16 @@ runClosureKeeping needs closure bindings kept callSpan = do
 closureOutcome :: CallNeeds -> Closure -> Evaluator (Either Unwind Value)
 closureOutcome needs closure = catchUnwind $ case functionBody (closureFunction closure) of
   Nothing -> pure UnitValue
-  Just (Located _ body) -> case body of
-    BlockBody block -> callBlock needs block
-    ExpressionBody expression -> callEvaluate needs expression
+  Just (Located bodySpan body) -> do
+    cache <- compiledBodies
+    case cache of
+      Just compiled -> do
+        let parameters = map (locatedValue . parameterName . locatedValue) (functionParameters (closureFunction closure))
+        code <- compiledBody compiled bodySpan (callCompile needs parameters body)
+        code
+      Nothing -> case body of
+        BlockBody block -> callBlock needs block
+        ExpressionBody expression -> callEvaluate needs expression
 
 settled :: Maybe Span -> Either Unwind Value -> Evaluator Value
 settled callSpan outcome = case outcome of
@@ -423,7 +421,13 @@ callClosure needs closure arguments = callClosureLending needs closure arguments
 {-| Call a closure, handing each `&mut` parameter's final value back to the
     place its argument was lent from. -}
 callClosureLending :: CallNeeds -> Closure -> [Value] -> Lent -> Maybe Span -> Evaluator Value
-callClosureLending needs closure arguments lent callSpan = do
+callClosureLending needs closure arguments lent callSpan
+  | [_, _, _] <- arguments
+  , Just invoke <- multiMapWrapper closure = invoke callSpan arguments
+  | otherwise = ordinaryClosureLending needs closure arguments lent callSpan
+
+ordinaryClosureLending :: CallNeeds -> Closure -> [Value] -> Lent -> Maybe Span -> Evaluator Value
+ordinaryClosureLending needs closure arguments lent callSpan = do
   tally "closure call"
   let value = closureFunction closure
       parameters = functionParameters value
@@ -437,7 +441,8 @@ callClosureLending needs closure arguments lent callSpan = do
         , (Located _ parameter, Just place) <-
             take 1 (drop position (zip parameters (places <> repeat Nothing)))
         ]
-  bindings <- bindArguments needs parameters supplied callSpan
+  supplied' <- bindArguments needs parameters supplied callSpan
+  let bindings = closureWitnesses closure <> supplied'
   if functionAsync value
     then do
       let task = TaskValue closure bindings callSpan

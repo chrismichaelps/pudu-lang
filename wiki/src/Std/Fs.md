@@ -73,6 +73,22 @@ and remove only when a rename cannot reach the destination.
 Resolved Grill Log: replacement by rename, names claimed by creation, scoped cleanup, non-following removal,
 real-location containment, and portable permissions.
 
+## Atomic byte replacement (#385)
+
+`writeAtomically(path, &contents)` delegates to `writeFileAtomically(path, *contents)`
+and classifies the host refusal with the destination path. `writeTextAtomically`
+uses the same primitive after UTF-8 encoding. New files follow the same ordinary
+creation permissions as `Std.Io.write`; replacements preserve existing full modes,
+including group/other and executable bits. Existing symlinks supply their referent's
+permissions, and rename replaces the link without modifying its target; dangling
+links follow new-file creation policy. `temporaryFileIn` retains private scratch
+permissions. [[Atomic Permission Gate]] checks both APIs under isolated POSIX masks,
+existing modes, scratch privacy, symlink target preservation and failure cleanup.
+
+Resolved Grill Log: ordinary atomic outputs follow default creation policy and
+existing full permissions; private scratch retains its separate owner-only contract.
+No numeric mode is added to the public portable API.
+
 ## Referenced by
 
 Depends on [[Std Bytes]], [[Std Env]], [[Std Io]], and [[Std Path]].

@@ -31,7 +31,9 @@ import Pudu.Type.Check.ControlFlowSpec
   , testTry
   )
 import Pudu.Type.Check.PatternSpec
-  ( testExhaustiveness
+  ( testNestedConstructorNamespaces
+  , testTupleCoverage
+  , testExhaustiveness
   , testMatchThroughBorrow
   )
 import Pudu.Type.Check.PlaceSpec (testPlaces)
@@ -53,6 +55,19 @@ import Pudu.Type.Check.SystemSpec
   , testScopes
   , testUnsafe
   )
+import Pudu.Type.Check.DeriveSpec
+  ( testDeriveChecked
+  , testDeriveContracts
+  , testDeriveLoopSources
+  , testDeriveLoopBounds
+  , testDeriveImportedContract
+  , testDeriveSubstitution
+  , testDeriveLoopChecked
+  , testDeriveLoopMistakeOnce
+  , testDeriveMistakeOnce
+  , testDeriveRequestUnchecked
+  , testDeriveFixtures
+  )
 import Pudu.Type.Check.TraitSpec
   ( testAmbiguousMethod
   , testBounds
@@ -65,7 +80,9 @@ import Pudu.Type.Check.TraitSpec
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a generic alias stands for what it names", testGenericAliases)
+  [ ("nested constructor coverage follows canonical module identities", testNestedConstructorNamespaces)
+  , ("tuple coverage retains correlated Option combinations", testTupleCoverage)
+  , ("a generic alias stands for what it names", testGenericAliases)
   , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
   , ("maps and sets are typed by what they hold", testKeyedTypes)
   , ("a tuple is indexed by a literal position", testTupleIndex)
@@ -90,6 +107,17 @@ typeProperties =
   , ("? unwraps a Result inside a Result-returning function", testTry)
   , ("async calls normalize task channels and await them", testAsync)
   , ("trait methods dispatch on the receiver type", testTraits)
+  , ("a sound derive definition checks clean", testDeriveChecked)
+  , ("derive contracts validate every ordinary trait", testDeriveContracts)
+  , ("derive loop sources check before body bindings", testDeriveLoopSources)
+  , ("derive loops preserve bounds and isolate obligations", testDeriveLoopBounds)
+  , ("derive contracts use canonical imported signatures", testDeriveImportedContract)
+  , ("derive substitution preserves complete function contracts", testDeriveSubstitution)
+  , ("a derive mistake reports once at the definition", testDeriveMistakeOnce)
+  , ("a sound compile-time loop checks clean", testDeriveLoopChecked)
+  , ("a loop body mistake reports once", testDeriveLoopMistakeOnce)
+  , ("a derive request needs no checking", testDeriveRequestUnchecked)
+  , ("derive fixtures check, run, and diagnose", testDeriveFixtures)
   , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("a variant may name its payload", testNamedVariants)

@@ -24,17 +24,21 @@ Parse `type` declarations into their three shapes — record, sum, and alias —
 ### Signatures
 
 ```haskell
-parseTypeDeclaration :: Visibility -> Parser (Located Declaration)
+parseTypeDeclaration :: [Located Attribute] -> Visibility -> Parser (Located Declaration)
 ```
 
 ### Governance
 
 - One keyword declares all three shapes, matching [[grammar/pudu]]: `enum` and `struct` stay reserved rather than becoming second spellings of the same thing.
-- Visibility is supplied by the orchestrator that consumed `export`.
+- Visibility is supplied by the orchestrator that consumed `export`; leading attributes arrive the same way.
+- A trailing `derives` clause names traits in written order with the declaration span covering it. A missing entry is `E1065`; a repeated trait is `E1066` and both entries are kept. `| derives` with no trait-shaped follower ends the sum so the variant parser reports the lowercase name.
 - The declared name is uppercase through [[Parser Name]]'s `E1011` rule; field names use the `E1012` value-name rule.
 - Definition dispatch is structural: `{` opens a record, a leading `|` opens a sum, and an uppercase name is a sum exactly when a `|` follows its first variant at bracket depth zero. Everything else is an alias for one type reference.
 - The sum lookahead is bounded to 512 tokens and stops at the next declaration start, so a malformed definition can never make it walk the file.
 - Record fields are immutable unless marked `mut`, preserving the ownership rule in [[architecture/SEMANTICS]] as syntax.
+- Fields and variants admit leading attributes; their spans start at the first attribute.
+- Type declaration spans also start at the first leading attribute and include
+  the full definition and derives clause.
 - Variants carry a unit, positional, or record payload; payload types are ordinary references through [[Parser Type]].
 - Field and variant iteration require token progress and stop on a latched budget.
 

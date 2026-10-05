@@ -6,6 +6,16 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compile-Time Dependency Closure]] — transitive source inputs of expansion
+  and folding, including ordinary pure helper bodies.
+
+- [[Program Reflection Spec]] — loaded Meta accessor and heterogeneous-sequence checks.
+
+- [[Compiler Product Publication]] — cache admission and analysis/execution product lifetime.
+
+- [[Compiler Constants]] — transitive checked products selected for imported constant folds.
+- [[Program Cache Spec]] — cold/warm product and constant dependency regression checks.
+
 - [[Compiler Program]] — dependency discovery, module graph ordering, and cross-module interface
   orchestration.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.

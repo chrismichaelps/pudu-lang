@@ -4,16 +4,21 @@ module Pudu.Compiler.Program.CacheSpec
   , testCacheEquivalence
   , testCacheInvalidation
   , testFoldedConstants
+  , testImportedConstants
+  , testProductPublication
   ) where
 
 import Control.Monad (forM_)
 import qualified Data.ByteString as ByteString
 import Data.Text (Text)
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileResult (..))
+import Data.Maybe (isJust, isNothing)
+import Pudu.Compiler (CompileResult (..), FrontendResult (..))
 import Pudu.Compiler.Cache (disabledCache, openProductCacheAt)
+import Pudu.Compiler.Product (ProductUse (..), frontendFor)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
+  , compileProgram
   , compileProgramCached
   , programDependencies
   , programFolded
@@ -31,6 +36,7 @@ import Pudu.Eval.Program
   )
 import Pudu.Eval.Render (renderValue)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Source (SourceName (..), newSource)
 import System.Directory (createDirectoryIfMissing, getModificationTime, listDirectory, setModificationTime)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -71,7 +77,7 @@ testCacheEquivalence = withSystemTempDirectory "pudu-cache" $ \root -> do
     , "test-fixtures/comptimehigher/Main.pudu"
     ]
   compareRuns root path = do
-    fresh <- observed =<< compileProgramCached disabledCache path
+    fresh <- observed =<< compileProgram path
     cache <- openProductCacheAt root
     cold <- observed =<< compileProgramCached cache path
     rereading <- openProductCacheAt root
@@ -80,6 +86,64 @@ testCacheEquivalence = withSystemTempDirectory "pudu-cache" $ \root -> do
       [ counterexample (path <> ": the storing run matches compiling from source") (cold === fresh)
       , counterexample (path <> ": the reading run matches compiling from source") (warm === fresh)
       ]
+
+testProductPublication :: IO Property
+testProductPublication = withSystemTempDirectory "pudu-products" $ \root -> do
+  let entry = root </> "Main.pudu"
+      cacheRoot = root </> "cache"
+  TextIO.writeFile entry
+    "module Main\n/// A narrow constant retains its checked width.\nconst SMALL: Int8 = 7\nexport fn main() -> Int8 { SMALL }\n"
+  analysis <- compileProgram entry
+  uncached <- compileProgramCached disabledCache entry
+  cold <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  warm <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  answers <- traverse observed [analysis, uncached, cold, warm]
+  TextIO.writeFile entry "module Main\nfn main() -> Int8 { true }\n"
+  rejected <- traverse (\compile -> compile entry >>= observed)
+    [compileProgram, compileProgramCached disabledCache]
+  frontendProducts <- traverse (compareFrontends cacheRoot)
+    [ "module Main\n/// Keep the comment for analysis.\nfn main() -> Int { 7 }\n"
+    , "module Main\nfn main() -> Int { § }\n"
+    , "module Main\nfn main() -> Int { 7\n"
+    ]
+  pure $ conjoin
+    [ conjoin frontendProducts
+    , counterexample "full analysis retains every editor product"
+        (all analysisPublished (Map.elems (programModules analysis)))
+    , counterexample "execution drops analysis products even when the cache is cold"
+        (all executionPublished (concatMap (Map.elems . programModules) [uncached, cold, warm]))
+    , counterexample "publication retains checked execution and link order"
+        (answers === replicate 4 ([], ["Main"], Just "7"))
+    , counterexample "literal width survives every publication mode"
+        (map (Map.elems . programIntegerKinds) [analysis, uncached, cold, warm]
+          === replicate 4 ["Int8"])
+    , counterexample "rejected source retains diagnostics without an executable product"
+        (rejected === replicate 2 ([ ("E3001", "expected Int8, found Bool") ], ["Main"], Nothing))
+    ]
+ where
+  compareFrontends cacheRoot text = do
+    source <- newSource (SourceName "Frontend.pudu") text
+    cache <- openProductCacheAt cacheRoot
+    analysis <- frontendFor AnalysisProducts disabledCache source
+    uncached <- frontendFor ExecutionProducts disabledCache source
+    cold <- frontendFor ExecutionProducts cache source
+    warm <- frontendFor ExecutionProducts cache source
+    retained <- frontendFor AnalysisProducts cache source
+    pure $ conjoin
+      [ counterexample "execution releases tokens before discovery, preserving recovery"
+          ([uncached, cold, warm] === replicate 3 analysis{frontendTokens = []})
+      , counterexample "analysis against a populated cache retains lossless tokens"
+          (retained === analysis)
+      , counterexample "analysis includes at least its canonical EOF token"
+          (not (null (frontendTokens retained)))
+      ]
+  analysisPublished compiled =
+    not (null (compileTokens compiled)) && isJust (compileResolution compiled)
+      && isJust (compileTypes compiled) && isJust (compileDocs compiled)
+  executionPublished compiled =
+    null (compileTokens compiled) && isNothing (compileResolution compiled)
+      && isNothing (compileTypes compiled) && isNothing (compileDocs compiled)
+      && null (compileMethods compiled) && compileSyntax compiled == compileModule compiled
 
 {-| A stored product is only ever the product of exactly this input.
 
@@ -178,3 +242,43 @@ testFoldedConstants = do
         , counterexample ("linking does less work: " <> show (sum reusedWork, sum evaluatedWork))
             (sum reusedWork < sum evaluatedWork)
         ]
+
+{-| Imported constructors and pure calls fold in their declaration scopes across
+    all import forms, including transitive constants and reused checked products. -}
+testImportedConstants :: IO Property
+testImportedConstants = withSystemTempDirectory "pudu-imported-constants" $ \root -> do
+  let project = root </> "project"
+      entry = project </> "Main.pudu"
+      cacheRoot = root </> "cache"
+  createDirectoryIfMissing True (project </> "Lib")
+  TextIO.writeFile (project </> "Lib" </> "Colors.pudu")
+    "module Lib.Colors\nexport type Color = Red | Green\nexport const BASE: Int = 20\nexport fn show() -> Int { 7 }\n"
+  TextIO.writeFile (project </> "Lib" </> "Palette.pudu")
+    "module Lib.Palette\nimport Lib.Colors as C\nexport const SIZE: Int = C.BASE + 1\nexport fn answer() -> Int { SIZE * 2 }\n"
+  TextIO.writeFile entry
+    "module Main\nimport Lib.Colors as C\nimport Lib.Colors\nimport Lib.Colors {BASE, show}\nimport Lib.Palette as P\nconst ALL: Array[C.Color] = [C.Red, C.Green]\nconst OTHERS: Array[Colors.Color] = [Colors.Green, Colors.Red]\nconst TOTAL: Int = P.answer() + BASE + show()\nfn main() -> Int { ALL.length() + OTHERS.length() + TOTAL }\n"
+  freshProgram <- compileProgramCached disabledCache entry
+  fresh <- observed freshProgram
+  coldProgram <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  cold <- observed coldProgram
+  warmProgram <- openProductCacheAt cacheRoot >>= (`compileProgramCached` entry)
+  warm <- observed warmProgram
+  TextIO.writeFile (project </> "Lib" </> "Effects.pudu")
+    "module Lib.Effects\nexport fn read() -> Result[Str, Str] { readFile(\"must-not-be-read\") }\n"
+  TextIO.writeFile entry
+    "module Main\nimport Lib.Effects as E\nconst BAD: Result[Str, Str] = E.read()\nfn main() -> Int { 0 }\n"
+  refused <- compileProgramCached disabledCache entry
+  let folded = Map.findWithDefault Map.empty "Main" (programFolded freshProgram)
+      codes = map (diagnosticCodeText . diagnosticCode) . programDiagnostics
+  pure $ conjoin
+    [ counterexample "aliases, default qualifiers, selected imports and transitive calls fold"
+        (fresh === ([], ["Lib.Colors", "Lib.Palette", "Main"], Just "73"))
+    , counterexample "imported constructor arrays and pure calls produce frozen values"
+        (filter (`Map.notMember` folded) ["ALL", "OTHERS", "TOTAL"] === [])
+    , counterexample "a cold cache agrees with a fresh compile" (cold === fresh)
+    , counterexample "a warm cache retains imported frozen values" (warm === fresh)
+    , counterexample "an imported call cannot perform IO during folding"
+        (codes refused === ["E7009"])
+    , counterexample "an effectful initializer never produces an executable module"
+        (case rootCompileResult refused >>= compileModule of Nothing -> True; Just _ -> False)
+    ]

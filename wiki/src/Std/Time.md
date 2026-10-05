@@ -17,5 +17,8 @@ Calendar and formatting host failures remain `Result`; conversions compose the r
 A field read from text answers its fallback when its digits spell more than an `Int` holds, checked before each multiplication.
 ## Grill Log
 - **Q:** Why keep `Instant` and `Duration` distinct when both hold milliseconds? **A:** One is a point and one an amount; mixing them silently would make invalid arithmetic readable. _Rejected:_ one numeric alias.
+- **Q:** Take whole seconds by integer division? **A:** No. _Rationale:_ division rounds toward
+  zero, so an instant before the epoch named the second after it, against the documented promise
+  (#419). A negative remainder steps back one.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

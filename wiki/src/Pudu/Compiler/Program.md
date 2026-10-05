@@ -71,6 +71,20 @@ compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO Progra
   same interfaces is not expanded, resolved, or checked. The compile context is built only when a
   module has to be checked. Reused modules carry no tokens, resolution, types, or documentation,
   so tooling that reads those compiles with `compileProgram`.
+- [[Compiler Product Publication]] now applies that execution-only publication
+  to cold and cache-disabled cached calls too. `compileProgram` and in-memory
+  source/overlay entry points retain full analysis. Cache keys, checking phases,
+  diagnostics, source snapshots and graph context remain unchanged.
+- Discovery carries the selected product use to [[Compiler Product Publication]].
+  An executable frontend drops its tokens as soon as parsing and diagnostic
+  admission finish, before the graph retains it. Full analysis retains tokens
+  and bypasses frontend cache reuse. All subsequent semantic phases consume
+  syntax rather than lossless tokens; documentation remains an analysis product.
+- Before checking modules, `finish` materializes diagnostics from frontends that
+  did not admit a module. This releases the discovery frontend table as pending
+  entries are consumed instead of retaining every token stream for a final map
+  difference. Each valid module contributes its frontend findings through its
+  compile result exactly once.
 - `finish` prepares one [[Type Interface Graph]] from every admitted module's interface and every
   module checks against it, so interface order, collection, and installation happen once per
   program rather than once per module.
@@ -92,6 +106,15 @@ compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO Progra
 - **Consumed by:** [[Pudu CLI]], [[Repl Session]], focused graph tests, and later build/package tooling.
 
 ## Algorithm
+
+Loaded graphs pass through [[Derive Graph]] before final interfaces are prepared.
+Use elaborated modules for body checking, folding and executable products; use
+original loaded sources for content/cache keys. If elaboration has errors,
+`rejectFrontend` retains each original syntax product and its own findings while
+withholding all executable products, without resolving/checking callers again.
+Generated methods reside with their lexical definitions, while their request
+ownership was validated before publication. Resolved Grill Log: this ordering
+admits generated conditional heads before callers and prevents diagnostic cascades.
 
 Parse the root, derive its source root, construct one [[Compiler Library]] resolution context, then
 chase each import name to its canonical `.pudu` path while memoizing loaded frontends and failed
@@ -126,6 +149,11 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 
 ## Grill Log
 
+- **Q:** Use the same publication for tooling and execution? **A:** Choose the
+  explicit product use at the entry point. _Rationale:_ execution cannot retain
+  token/doc/type closures merely because the cache was cold. _Rejected:_ cache
+  state deciding memory lifetime, incomplete editor facts, or late frontend
+  aggregation that keeps processed token streams alive.
 - **Q:** Should the resolver open imported files? **A:** No; the program compiler loads sources and passes interfaces inward. _Rationale:_ lexical/name phases stay deterministic and testable over values, while filesystem failures have one owner. _Rejected:_ lazy IO during lookup; global module cache inside the resolver.
 - **Q:** How is a module path chosen before manifests exist? **A:** Derive the source root by removing the declared module suffix from the root path, then map every absolute module name below it. _Rationale:_ this implements [[grammar/pudu]]'s manifest-relative invariant without inventing search paths. _Rejected:_ current-directory search; recursive directory scan; several candidate paths.
 - **Q:** Why SCCs rather than rejecting every cycle? **A:** [[architecture/SEMANTICS]] admits cycles for signatures. _Rationale:_ interface skeletons break signature cycles without module-load execution. _Rejected:_ naive DFS order; unconditional cycle error; fixed-point body checking.
@@ -141,9 +169,32 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
 
 ## Variants
 
+## Compile-time cache dependencies
+
+Before graph fingerprinting, [[Compile-Time Dependency Closure]] inventories
+constant and derive roots and their transitive loaded imports. Modules in this
+closure contribute full source fingerprints, including private/ordinary helper
+bodies; other modules contribute their existing position-free interface keys.
+This deliberately permits additional safe misses after source relocation in a
+compile-time dependency. It changes neither discovery nor body-checking order.
+
+Resolved Grill Log: frozen constants and generated code observe pure ordinary
+calls too. Do not reuse a consumer solely because a helper's public signature
+stayed unchanged; no timestamps, direct-callee guess or global state.
+
 - A project manifest later supplies the source root and additional package roots without changing graph or interface semantics.
 - Incremental builds may cache frontend/interface fingerprints behind the same deterministic result.
 
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Pipeline]] · [[Pudu CLI]] · [[Repl Session]] · [[Type Interface]] · [[Semantic Interface]] · [[Type Interface Graph]] · [[Compiler Cache]]
+
+## Dependency-aware folding (#373)
+
+Compilation accumulates checked products in dependency order. A module with constants receives
+only its checked transitive imports through [[Compiler Constants]], in graph order, including their frozen constants and literal
+kinds. Cached products contribute the same inputs as freshly checked products. Cycles still admit
+signatures; a value depending on an unavailable cyclic initializer remains a diagnostic.
+
+Resolved Grill Log: link checked dependency products for a fold, never untyped frontend trees or
+unrelated modules compiled earlier. The evaluator retains capability denial while installing imports.

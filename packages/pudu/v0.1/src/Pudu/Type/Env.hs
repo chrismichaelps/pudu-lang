@@ -15,6 +15,8 @@ module Pudu.Type.Env
   , isComptimeFunction
   , inComptime
   , withComptime
+  , inDeriveChecking
+  , withDeriveChecking
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
   , inheritRestrictions
@@ -55,6 +57,9 @@ module Pudu.Type.Env
   , recordUnwrittenParameter
   , takeUnwrittenParameters
   , recordExpression
+  , recordSelection
+  , noteStaticTrait
+  , isStaticTrait
   , report
   , reportedAt
   , negateIntegerLiteral
@@ -62,14 +67,19 @@ module Pudu.Type.Env
   , rigidBoundsOf
   , rigidSatisfies
   , takeObligations
+  , TraitObligation (..)
+  , ObligationKind (..)
   , warn
   , withRigidBounds
-  , implementsTrait
+  , withAdditionalRigidBounds
+  , withLocalObligations
+  , lookupImplementations
   , ambiguousProviders
   , markAmbiguousMethod
   , methodProvider
   , recordMethodProvider
   , addObligation
+  , addDynamicObligation
   , resolveVariable
   , runChecker
   , evalChecker
@@ -82,6 +92,8 @@ module Pudu.Type.Env
   ) where
 
 import Data.Bits (finiteBitSize)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.List (partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -97,9 +109,12 @@ import Pudu.Diagnostic
   , sortDiagnostics
   , withHelp
   )
+import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Capability (..))
-import Pudu.Source (Span, spanEnd, spanStart, unOffset)
+import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
+import Pudu.Type.Frontier (splitSince, splitBetween)
+import Pudu.Type.Implementation (ImplementationRule)
 import Pudu.Type.Value
   ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, nominalKey, renderType )
 
@@ -109,6 +124,7 @@ import Pudu.Type.Value
     introduced, which is how a construction or a pattern finds its shape. -}
 data DeclaredTypes = DeclaredTypes
   { declaredNames :: !(Map Text NominalId)
+  , declaredKinds :: !(Map NominalId [Int])
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
   {-| The record fields declared `mut`, which are the only fields an
@@ -127,7 +143,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
   , declaredVariantFields :: !(Map Text [Text])
   , declaredOwners :: !(Map NominalId [Text])
-  , declaredImpls :: !(Map NominalId [NominalId])
+  , declaredImpls :: !(Map (NominalId, NominalId) [ImplementationRule])
   , declaredAliases :: !(Map Text ([Text], Type))
   , declaredTraitNames :: !(Set NominalId)
   {-| The module qualifiers whose interface was found.
@@ -139,10 +155,17 @@ data DeclaredTypes = DeclaredTypes
   }
   deriving stock (Eq, Show)
 
+data ObligationKind = CallBound | DynamicWidening
+  deriving stock (Eq, Show)
+
+data TraitObligation = TraitObligation !ObligationKind !Span !Type !Type
+  deriving stock (Eq, Show)
+
 emptyDeclared :: DeclaredTypes
 emptyDeclared =
   DeclaredTypes
     { declaredNames = Map.empty
+    , declaredKinds = Map.empty
     , declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredMutableFields = Set.empty
@@ -163,7 +186,7 @@ emptyDeclared =
     shared resolved representation is the slice that removes this duplication. -}
 data CheckerState = CheckerState
   { stateNext :: !Int
-  , stateSubstitution :: !(Map TypeVar Type)
+  , stateSubstitution :: !(IntMap Type)
   , stateFrames :: ![Map Text Scheme]
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
@@ -179,7 +202,7 @@ data CheckerState = CheckerState
       and leaves the original alone, so the depth is kept in order to tell a
       name the closure declared from one it only captured. -}
   , stateClosureDepths :: ![Int]
-  , stateReportedSpans :: ![((Int, Int), Text)]
+  , stateReportedSpans :: !(Set (Span, Text))
   , stateUnsafeFunctions :: !(Map Text [Capability])
   {-| Whether each declared function may run at compile time.
 
@@ -201,10 +224,15 @@ data CheckerState = CheckerState
       name absent from the map is a parameter, a local, or a value obtained some
       other way, about which nothing is claimed. -}
   , stateInComptime :: !Bool
-  , stateObligations :: ![(Span, Type, NominalId)]
+  {-| Whether derive definitions are being checked. A compile-time loop inside
+      one checks rigidly under its `where` bounds; anywhere else it is refused
+      because instantiation has not run. Scoped like `withComptime`, restoring
+      the previous setting on exit. -}
+  , stateInDeriveChecking :: !Bool
+  , stateObligations :: ![TraitObligation]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateIntegerKinds :: ![(Span, Text)]
-  , stateRigidBounds :: !(Map Text [NominalId])
+  , stateRigidBounds :: !(Map Text [Type])
   {-| Uses of names that reach a `var` binding, from the resolver. -}
   , stateWritableNames :: !(Set SpanKey)
   {-| The `&mut` expressions written directly as a call's arguments, the one
@@ -216,10 +244,20 @@ data CheckerState = CheckerState
   , stateDiagnosticsRev :: ![Diagnostic]
   {-| The methods this module's own declarations provide — its impls, the
       trait defaults those inherit, and its traits' members — by owner. -}
-  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
+  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme, Span)]
+  {-| The same methods' qualified keys, which `isMethodKey` asks of every call
+      on a built-in type. -}
+  , stateDeclaredMethodKeys :: !(Set Text)
+  {-| Traits declaring a member that takes no `self`. A parameter bounded by
+      one of them may be called through statically, which needs its chosen
+      type at run time. -}
+  , stateStaticTraits :: !(Set NominalId)
+  {-| Instantiations of parameters bounded by a static trait, by the span of
+      the reference that instantiated them, in the scheme's parameter order. -}
+  , stateSelectionsRev :: ![(Span, [Type])]
   }
 
-type SpanKey = (Int, Int)
+type SpanKey = Span
 
 data IntegerConstraint = IntegerConstraint
   { integerConstraintSpan :: !Span
@@ -229,11 +267,13 @@ data IntegerConstraint = IntegerConstraint
 
 {-| @Type.Env.Products — the types a run recorded and what it diagnosed -}
 data CheckerProducts = CheckerProducts
-  { producedTypes :: ![(SpanKey, Type)]
+  {-| Final expression facts are demanded by tooling; live checking still uses
+      stateTypes, so diagnostic-only publication need not rebuild this list. -}
+  { producedTypes :: ~[(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
   {-| What `recordDeclaredMethod` collected, in declaration order. -}
-  , producedMethods :: ![(NominalId, Text, Scheme)]
+  , producedMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The type inference settled on for each integer literal.
 
       A literal written without a suffix is not a platform `Int` merely because
@@ -243,6 +283,8 @@ data CheckerProducts = CheckerProducts
       suffixless literal as a platform integer, so the width a declaration
       promised was never enforced on it. -}
   , producedIntegerKinds :: ![(Span, Text)]
+  {-| Every recorded static selection with inference settled. -}
+  , producedSelections :: ![(Span, [Type])]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -282,12 +324,14 @@ runChecker (Checker action) = case action initialState of
     , stateDiagnosticsRev = diagnostics
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
+    , stateSelectionsRev = selections
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
+      , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -296,7 +340,7 @@ runChecker (Checker action) = case action initialState of
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: Map TypeVar Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes :: IntMap Type -> [Map Text Scheme] -> [(Text, Scheme)]
 finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
@@ -308,7 +352,7 @@ initialState :: CheckerState
 initialState =
   CheckerState
     { stateNext = 0
-    , stateSubstitution = Map.empty
+    , stateSubstitution = IntMap.empty
     , stateFrames = [Map.empty]
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
@@ -318,10 +362,11 @@ initialState =
     , stateUnsafeFrames = []
     , stateLoopFrames = []
     , stateClosureDepths = []
-    , stateReportedSpans = []
+    , stateReportedSpans = Set.empty
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = Map.empty
     , stateInComptime = False
+    , stateInDeriveChecking = False
     , stateObligations = []
     , stateIntegerLiterals = []
     , stateIntegerKinds = []
@@ -331,6 +376,9 @@ initialState =
     , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
     , stateDeclaredMethodsRev = []
+    , stateDeclaredMethodKeys = Set.empty
+    , stateStaticTraits = Set.empty
+    , stateSelectionsRev = []
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -344,6 +392,9 @@ data InstalledNames = InstalledNames
   { installedFrame :: !(Map Text Scheme)
   , installedUnsafe :: !(Map Text [Capability])
   , installedComptime :: !(Map Text Bool)
+  {-| The imported traits with a member that takes no `self`, whose calls
+      through a bounded parameter must carry the types a reference chose. -}
+  , installedStatic :: !(Set NominalId)
   , installedNext :: !Int
   }
 
@@ -352,6 +403,7 @@ instance Eq InstalledNames where
     installedFrame left == installedFrame right
       && installedUnsafe left == installedUnsafe right
       && installedComptime left == installedComptime right
+      && installedStatic left == installedStatic right
       && installedNext left == installedNext right
 
 instance Show InstalledNames where
@@ -366,19 +418,28 @@ installedNames =
             [] -> Map.empty
         , installedUnsafe = stateUnsafeFunctions state
         , installedComptime = stateComptimeFunctions state
+        , installedStatic = stateStaticTraits state
         , installedNext = stateNext state
         }
     , state
     )
 
-{-| Begin from installed names, before anything of the module's own is bound. -}
 {-| Record a method this module's declarations provide for `owner`, so tooling
     can offer what a value of that type — or a parameter bounded by that trait —
-    can be called with, from the same facts a call is checked against. -}
-recordDeclaredMethod :: NominalId -> Text -> Scheme -> Checker ()
-recordDeclaredMethod owner name scheme =
-  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme) : stateDeclaredMethodsRev state})
+    can be called with, from the same facts a call is checked against. The span
+    is the method's name: for a generated method, its anchor in the derive that
+    wrote it. -}
+recordDeclaredMethod :: NominalId -> Located Text -> Scheme -> Checker ()
+recordDeclaredMethod owner (Located at name) scheme =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateDeclaredMethodsRev = (owner, name, scheme, at) : stateDeclaredMethodsRev state
+        , stateDeclaredMethodKeys = Set.insert (nominalKey owner <> "." <> name) (stateDeclaredMethodKeys state)
+        }
+    )
 
+{-| Begin from installed names, before anything of the module's own is bound. -}
 installNames :: InstalledNames -> Checker ()
 installNames installed =
   Checker $ \state ->
@@ -389,6 +450,7 @@ installNames installed =
             [] -> [installedFrame installed]
         , stateUnsafeFunctions = stateUnsafeFunctions state <> installedUnsafe installed
         , stateComptimeFunctions = stateComptimeFunctions state <> installedComptime installed
+        , stateStaticTraits = stateStaticTraits state <> installedStatic installed
         , stateNext = max (stateNext state) (installedNext installed)
         }
     )
@@ -405,7 +467,7 @@ constrainIntegerLiteral spanValue value selectedType =
         substitutions = case selectedType of
           Nothing -> stateSubstitution state
           Just name ->
-            Map.insert variable (NominalType (NominalId Nothing name) []) (stateSubstitution state)
+            IntMap.insert (stateNext state) (NominalType (NominalId Nothing name) []) (stateSubstitution state)
         constraint = IntegerConstraint spanValue value variable
      in ( VariableType variable
         , state
@@ -447,6 +509,17 @@ negateIntegerLiteral typeValue = case typeValue of
 {-| The whole span is the key, not its offsets. Two files hold a literal at the
     same offsets all the time, and the evaluator reads one table for a program
     and every module it depends on. -}
+noteStaticTrait :: NominalId -> Checker ()
+noteStaticTrait owner =
+  Checker $ \state -> ((), state{stateStaticTraits = Set.insert owner (stateStaticTraits state)})
+
+isStaticTrait :: NominalId -> Checker Bool
+isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits state), state)
+
+recordSelection :: Span -> [Type] -> Checker ()
+recordSelection spanValue chosen =
+  Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =
   Checker $ \state ->
@@ -463,12 +536,12 @@ integerLiteralCheckpoint =
 
 finalizeIntegerLiteralsSince :: Int -> Checker ()
 finalizeIntegerLiteralsSince checkpoint = do
-  constraints <- takeIntegerConstraintsMatching (createdSince checkpoint)
+  constraints <- takeIntegerConstraintsWith (splitSince literalCreation checkpoint)
   mapM_ finalizeIntegerConstraint constraints
 
 finalizeIntegerLiteralsBetween :: Int -> Int -> Checker ()
 finalizeIntegerLiteralsBetween start end = do
-  constraints <- takeIntegerConstraintsMatching (createdBetween start end)
+  constraints <- takeIntegerConstraintsWith (splitBetween literalCreation start end)
   mapM_ finalizeIntegerConstraint constraints
 
 validateIntegerLiteralsSince :: Int -> Checker ()
@@ -517,36 +590,30 @@ takeIntegerConstraints =
     , state{stateIntegerLiterals = []}
     )
 
-takeIntegerConstraintsMatching
-  :: (IntegerConstraint -> Bool) -> Checker [IntegerConstraint]
-takeIntegerConstraintsMatching matches =
+takeIntegerConstraintsWith
+  :: ([IntegerConstraint] -> ([IntegerConstraint], [IntegerConstraint]))
+  -> Checker [IntegerConstraint]
+takeIntegerConstraintsWith select =
   Checker $ \state ->
     let constraints = stateIntegerLiterals state
-        (selected, retained) = partition matches constraints
+        (selected, retained) = select constraints
      in (reverse selected, state{stateIntegerLiterals = retained})
 
 takeResolvedIntegerConstraintsSince :: Int -> Checker [IntegerConstraint]
 takeResolvedIntegerConstraintsSince checkpoint =
   Checker $ \state ->
-    let constraints = stateIntegerLiterals state
-        isResolved constraint =
-          createdSince checkpoint constraint
-            && case resolveFinal (stateSubstitution state)
-              (VariableType (integerConstraintVariable constraint)) of
-                VariableType _ -> False
-                _ -> True
-        (selected, retained) = partition isResolved constraints
-     in (reverse selected, state{stateIntegerLiterals = retained})
+    let (recent, older) = splitSince literalCreation checkpoint (stateIntegerLiterals state)
+        isResolved constraint = case resolveFinal (stateSubstitution state)
+          (VariableType (integerConstraintVariable constraint)) of
+            VariableType _ -> False
+            _ -> True
+        (selected, unresolved) = partition isResolved recent
+     in (reverse selected, state{stateIntegerLiterals = unresolved <> older})
 
-createdSince :: Int -> IntegerConstraint -> Bool
-createdSince checkpoint constraint =
+literalCreation :: IntegerConstraint -> Int
+literalCreation constraint =
   let TypeVar identity = integerConstraintVariable constraint
-   in identity >= checkpoint
-
-createdBetween :: Int -> Int -> IntegerConstraint -> Bool
-createdBetween start end constraint =
-  let TypeVar identity = integerConstraintVariable constraint
-   in identity >= start && identity < end
+   in identity
 
 {-| What a variable stands for, remembering it for every link on the way.
 
@@ -571,20 +638,19 @@ resolveRemembering variable = do
 
 
 negateMatching :: TypeVar -> [IntegerConstraint] -> (Bool, [IntegerConstraint])
-negateMatching variable constraints = case constraints of
+negateMatching variable@(TypeVar requested) constraints = case constraints of
   [] -> (False, [])
-  constraint : rest ->
-    let (foundRest, updatedRest) = negateMatching variable rest
-     in if integerConstraintVariable constraint == variable
-          then
-            ( True
-            , constraint{integerConstraintValue = negate (integerConstraintValue constraint)} : updatedRest
-            )
-          else (foundRest, constraint : updatedRest)
+  constraint : rest
+    | literalCreation constraint < requested -> (False, constraints)
+    | integerConstraintVariable constraint == variable ->
+        (True, constraint{integerConstraintValue = negate (integerConstraintValue constraint)} : rest)
+    | otherwise ->
+        let (found, updated) = negateMatching variable rest
+         in (found, constraint : updated)
 
-resolveFinal :: Map TypeVar Type -> Type -> Type
+resolveFinal :: IntMap Type -> Type -> Type
 resolveFinal substitutions typeValue = case typeValue of
-  VariableType variable -> case Map.lookup variable substitutions of
+  VariableType (TypeVar identity) -> case IntMap.lookup identity substitutions of
     Nothing -> typeValue
     Just found -> resolveFinal substitutions found
   NominalType name arguments -> NominalType name (map (resolveFinal substitutions) arguments)
@@ -600,13 +666,13 @@ resolveFinal substitutions typeValue = case typeValue of
 
 {-| Read what an inference variable has been solved to, if anything. -}
 resolveVariable :: TypeVar -> Checker (Maybe Type)
-resolveVariable variable =
-  Checker $ \state -> (Map.lookup variable (stateSubstitution state), state)
+resolveVariable (TypeVar identity) =
+  Checker $ \state -> (IntMap.lookup identity (stateSubstitution state), state)
 
 setVariable :: TypeVar -> Type -> Checker ()
-setVariable variable typeValue =
+setVariable (TypeVar identity) typeValue =
   Checker $ \state ->
-    ((), state{stateSubstitution = Map.insert variable typeValue (stateSubstitution state)})
+    ((), state{stateSubstitution = IntMap.insert identity typeValue (stateSubstitution state)})
 
 bindName :: Text -> Scheme -> Checker ()
 bindName name scheme =
@@ -629,7 +695,7 @@ isMethodKey :: Text -> Checker Bool
 isMethodKey key =
   Checker $ \state ->
     ( Set.member key (stateImportedMethods state)
-        || any (\(owner, name, _) -> nominalKey owner <> "." <> name == key) (stateDeclaredMethodsRev state)
+        || Set.member key (stateDeclaredMethodKeys state)
     , state
     )
 
@@ -779,7 +845,7 @@ lookupRecordedExpression spanValue =
   Checker $ \state -> (lookup (keyOf spanValue) (stateTypes state), state)
 
 keyOf :: Span -> SpanKey
-keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+keyOf = id
 
 setWritableNames :: Set SpanKey -> Checker ()
 setWritableNames names = Checker $ \state -> ((), state{stateWritableNames = names})
@@ -814,43 +880,68 @@ takeUnwrittenParameters =
 
 {-| Record that a type must implement a trait. Obligations are proved after the
     body is checked, when inference has solved what the argument types are. -}
-addObligation :: Span -> Type -> NominalId -> Checker ()
-addObligation spanValue typeValue traitText =
-  Checker $ \state ->
-    ((), state{stateObligations = (spanValue, typeValue, traitText) : stateObligations state})
+addObligation :: Span -> Type -> Type -> Checker ()
+addObligation = queueObligation CallBound
 
-takeObligations :: Checker [(Span, Type, NominalId)]
+addDynamicObligation :: Span -> Type -> NominalId -> Checker ()
+addDynamicObligation at target owner = queueObligation DynamicWidening at target (NominalType owner [])
+
+queueObligation :: ObligationKind -> Span -> Type -> Type -> Checker ()
+queueObligation kind spanValue typeValue traitText =
+  Checker $ \state ->
+    ((), state{stateObligations = TraitObligation kind spanValue typeValue traitText : stateObligations state})
+
+takeObligations :: Checker [TraitObligation]
 takeObligations =
   Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
+
+{-| Keep enclosing obligations pending while a nested rigid scope checks and
+    discharges its own. Remaining obligations retain their original order. -}
+withLocalObligations :: Checker a -> Checker a
+withLocalObligations (Checker action) = Checker $ \state ->
+  let (result, next) = action state{stateObligations = []}
+   in (result, next{stateObligations = stateObligations next <> stateObligations state})
 
 {-| The bounds the enclosing declaration's own parameters carry, which is how a
     generic body may call another generic that demands the same trait. Bounds
     from the parameter list and the `where` clause are merged with `(<>`) so a
     parameter that carries bounds in both places keeps all of them rather than
     the last entry overwriting the first. -}
-withRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
+withRigidBounds :: [(Text, [Type])] -> Checker a -> Checker a
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.fromListWith (<>) bounds)
-  _ <- action
+  result <- action
   setRigidBounds previous
+  pure result
 
-currentRigidBounds :: Checker (Map Text [NominalId])
+withAdditionalRigidBounds :: [(Text, [Type])] -> Checker a -> Checker a
+withAdditionalRigidBounds bounds action = do
+  previous <- currentRigidBounds
+  setRigidBounds (Map.unionWith (<>) previous (Map.fromListWith (<>) bounds))
+  result <- action
+  setRigidBounds previous
+  pure result
+
+currentRigidBounds :: Checker (Map Text [Type])
 currentRigidBounds = Checker $ \state -> (stateRigidBounds state, state)
 
-setRigidBounds :: Map Text [NominalId] -> Checker ()
+setRigidBounds :: Map Text [Type] -> Checker ()
 setRigidBounds bounds = Checker $ \state -> ((), state{stateRigidBounds = bounds})
 
 {-| The traits a rigid parameter was declared to satisfy. A method call on it
     is answered by those traits, which is what a bound is for. -}
-rigidBoundsOf :: Text -> Checker [NominalId]
+rigidBoundsOf :: Text -> Checker [Type]
 rigidBoundsOf name =
   Checker $ \state -> (maybe [] id (Map.lookup name (stateRigidBounds state)), state)
 
 rigidSatisfies :: Text -> NominalId -> Checker Bool
 rigidSatisfies name traitText =
   Checker $ \state ->
-    (maybe False (elem traitText) (Map.lookup name (stateRigidBounds state)), state)
+    (maybe False (any owns) (Map.lookup name (stateRigidBounds state)), state)
+ where
+  owns (NominalType owner _) = owner == traitText
+  owns _ = False
 
 {-| Which trait supplied a method binding. Two traits providing the same member
     for one type is an ambiguity the reader must resolve, and this is what lets
@@ -1027,6 +1118,23 @@ withComptime inside action = do
 inComptime :: Checker Bool
 inComptime = Checker $ \state -> (stateInComptime state, state)
 
+{-| Run an action while checking a derive definition, restoring the previous
+    setting on exit so a nested ordinary declaration is unaffected. A
+    compile-time loop met inside checks rigidly under its `where` bounds;
+    anywhere else it is refused because instantiation has not run. -}
+withDeriveChecking :: Bool -> Checker a -> Checker ()
+withDeriveChecking inside action = do
+  previous <- inDeriveChecking
+  setDeriveChecking inside
+  _ <- action
+  setDeriveChecking previous
+
+inDeriveChecking :: Checker Bool
+inDeriveChecking = Checker $ \state -> (stateInDeriveChecking state, state)
+
+setDeriveChecking :: Bool -> Checker ()
+setDeriveChecking inside = Checker $ \state -> ((), state{stateInDeriveChecking = inside})
+
 setComptime :: Bool -> Checker ()
 setComptime inside = Checker $ \state -> ((), state{stateInComptime = inside})
 
@@ -1069,9 +1177,9 @@ inheritRestrictions from to =
 reportedAt :: Span -> Text -> Checker Bool
 reportedAt spanValue code =
   Checker $ \state ->
-    let key = ((unOffset (spanStart spanValue), unOffset (spanEnd spanValue)), code)
-        seen = key `elem` stateReportedSpans state
-     in (seen, state{stateReportedSpans = key : stateReportedSpans state})
+    let key = (spanValue, code)
+        seen = Set.member key (stateReportedSpans state)
+     in (seen, state{stateReportedSpans = Set.insert key (stateReportedSpans state)})
 
 {-| Record that two traits provide the same member for one type. Declaring both
     is legal; only an unqualified call has to choose, so the ambiguity is stored
@@ -1092,10 +1200,10 @@ ambiguousProviders :: Text -> Checker [NominalId]
 ambiguousProviders key =
   Checker $ \state -> (Map.findWithDefault [] key (stateAmbiguousMethods state), state)
 
-implementsTrait :: NominalId -> NominalId -> Checker Bool
-implementsTrait owner traitText =
+lookupImplementations :: NominalId -> NominalId -> Checker [ImplementationRule]
+lookupImplementations owner trait =
   Checker $ \state ->
-    ( maybe False (elem traitText) (Map.lookup owner (declaredImpls (stateDeclared state)))
+    ( Map.findWithDefault [] (owner, trait) (declaredImpls (stateDeclared state))
     , state
     )
 

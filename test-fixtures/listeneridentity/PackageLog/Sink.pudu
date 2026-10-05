@@ -1,0 +1,6 @@
+module PackageLog.Sink
+
+export type Report = { message: Str }
+export type Listener = fn(&Report) -> ()
+
+export fn listen(_listener: Listener) -> () {}

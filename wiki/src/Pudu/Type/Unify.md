@@ -15,6 +15,11 @@ aliases: [Type Unify]
 
 # Type Unify
 
+An applied constructor variable matches a named application only at the same
+complete argument count. The selected head is the bare named constructor;
+no leftover prefix arguments form a partial constructor. Resolved Grill Log:
+ADR-0014 forbids partial applications in inference as well as written bounds.
+
 - **Two restricted functions agree when they require the same abilities and the functions underneath
   them agree.** Exactly the same set, in both directions. One requiring more cannot stand where less
   is expected — that is the laundering this exists to stop — and one requiring less cannot stand
@@ -51,6 +56,16 @@ The exported signatures are the module header's export list.
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
+
+Dynamic widening records a complete concrete obligation for [[Type Trait Proof]]
+at the ordinary post-inference boundary. An integer field can settle before its
+conditional capability is tested. Failure retains E3032; specialized or conditional
+implementations cannot admit an incompatible application by owner alone.
+
+- **Q:** Prove conditional widening immediately? **A:** No; retain the obligation
+  until body inference settles. _Rationale:_ Box{held: 1} initially contains a fresh
+  literal variable, whose Ready implementation becomes knowable only after
+  settlement. _Rejected:_ rejecting a valid literal or defaulting it prematurely.
 
 Direct structural recursion over the type or syntax shape, with the checker's substitution consulted whenever a variable is reached.
 

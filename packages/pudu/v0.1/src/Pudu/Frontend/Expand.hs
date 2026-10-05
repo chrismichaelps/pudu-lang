@@ -19,7 +19,9 @@ import Pudu.Frontend.Expand.Substitute (substituteExpression)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
   , Declaration (..)
+  , Derive (..)
   , Expression (..)
   , FieldInit (..)
   , Function (..)
@@ -45,12 +47,14 @@ import Pudu.Source (Span)
 expandModule :: Module -> (Module, [Diagnostic])
 expandModule moduleValue =
   let macros = collectMacros (moduleDeclarations moduleValue)
-      state = ExpandState{stateNext = 0, stateDiagnosticsRev = []}
+      state = ExpandState{stateNext = 0, stateChanged = False, stateDiagnosticsRev = []}
       (declarations, finalState) =
         runExpand (mapM (expandDeclaration macros 0) (moduleDeclarations moduleValue)) state
-   in ( moduleValue{moduleDeclarations = declarations}
-      , sortDiagnostics (reverse (stateDiagnosticsRev finalState))
-      )
+      findings = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
+      expanded
+        | not (stateChanged finalState) && null findings = moduleValue
+        | otherwise = moduleValue{moduleDeclarations = declarations}
+   in (expanded, findings)
 
 collectMacros :: [Located Declaration] -> Map Text Macro
 collectMacros declarations =
@@ -61,6 +65,7 @@ collectMacros declarations =
 
 data ExpandState = ExpandState
   { stateNext :: !Int
+  , stateChanged :: !Bool
   , stateDiagnosticsRev :: ![Diagnostic]
   }
 
@@ -90,6 +95,9 @@ instance Monad Expand where
 
 fresh :: Expand Int
 fresh = Expand $ \state -> (stateNext state, state{stateNext = stateNext state + 1})
+
+markChanged :: Expand ()
+markChanged = Expand $ \state -> ((), state{stateChanged = True})
 
 report :: Text -> Span -> Text -> Maybe Text -> Expand ()
 report code spanValue message help =
@@ -123,6 +131,9 @@ expandDeclaration macros depth (Located declarationSpan declaration) = case decl
   ImplDeclaration value -> do
     functions <- mapM (expandLocatedFunction macros depth) (implFunctions value)
     pure (Located declarationSpan (ImplDeclaration value{implFunctions = functions}))
+  DeriveDeclaration value -> do
+    functions <- mapM (expandLocatedFunction macros depth) (deriveFunctions value)
+    pure (Located declarationSpan (DeriveDeclaration value{deriveFunctions = functions}))
   _ -> pure (Located declarationSpan declaration)
 
 expandLocatedFunction :: Map Text Macro -> Int -> Located Function -> Expand (Located Function)
@@ -174,6 +185,7 @@ expandStatement macros depth (Located statementSpan statement) = case statement 
 expandExpression :: Map Text Macro -> Int -> Located Expression -> Expand (Located Expression)
 expandExpression macros depth located@(Located expressionSpan expression) = case expression of
   MacroCall name arguments -> do
+    markChanged
     expandedArguments <- mapM (expandExpression macros depth) arguments
     expandCall macros depth expressionSpan name expandedArguments
   UnaryExpression operator operand ->
@@ -191,6 +203,8 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth callee
           <*> mapM (expandExpression macros depth) arguments
       )
+  LambdaExpression function ->
+    rebuild (LambdaExpression <$> expandFunction macros depth function)
   MemberExpression target member ->
     rebuild (MemberExpression <$> expandExpression macros depth target <*> pure member)
   IndexExpression target index ->
@@ -265,6 +279,13 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth iterated
           <*> expandBlock macros depth body
       )
+  {-| A compile-time loop keeps its surface: the source list and the body are
+      macro-expanded where they stand, while the element binding, its type,
+      and the bounds stay exactly as written for the derivation phase. -}
+  ComptimeForExpression loop -> do
+    source <- expandExpression macros depth (comptimeForSource loop)
+    body <- expandBlock macros depth (comptimeForBody loop)
+    rebuild (pure (ComptimeForExpression loop{comptimeForSource = source, comptimeForBody = body}))
   _ -> pure located
  where
   rebuild build' = Located expressionSpan <$> build'
@@ -366,4 +387,3 @@ kindHelp kind = case kind of
   ExpressionKind -> "pass any expression"
   IdentifierKind -> "pass a bare name"
   BlockKind -> "pass a block in braces"
-

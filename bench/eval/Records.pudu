@@ -1,0 +1,13 @@
+module Records
+type Point = { x: Int, y: Int }
+fn step(p: Point, k: Int) -> Point { Point{x: p.x + k, y: p.y - k} }
+fn main() -> Int {
+  var p = Point{x: 0, y: 0}
+  var i = 0
+  while i < 1000000 {
+    p = step(p, i % 5)
+    i = i + 1
+  }
+  print(display(p.x + p.y))
+  0
+}

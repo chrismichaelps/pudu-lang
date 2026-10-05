@@ -21,6 +21,7 @@ module Pudu.Eval.Place
   , plainPlace
   , readPlace
   , storePlace
+  , storeName
   , withFrameKeeping
   ) where
 
@@ -28,10 +29,11 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
+import Pudu.Eval.Frame (frameSnapshot)
 import Pudu.Eval.Env (Env (..), Eval (..), Evaluator (..), abortAt, lookupName, updateExisting)
 import Pudu.Eval.Operator (readIndex, readMember)
 import Pudu.Eval.Render (valueKind)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Value (Frame (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Expression (..)
@@ -98,6 +100,7 @@ readPlace (Place spanValue root steps) = do
 {-| Store a value into a place: the binding at its root is given a copy of what
     it held with the one field or element along the path replaced. -}
 storePlace :: Place -> Value -> Evaluator ()
+storePlace (Place spanValue root []) value = storeName spanValue root value
 storePlace (Place spanValue root steps) value = do
   found <- lookupName root
   case found of
@@ -131,18 +134,33 @@ storePlace (Place spanValue root steps) value = do
         abortAt (Just spanValue) "E7001"
           ("an element of a " <> valueKind current <> " cannot be assigned") Nothing
 
+storeName :: Span -> Text -> Value -> Evaluator ()
+{-# INLINE storeName #-}
+storeName spanValue root value = do
+  -- A plain assignment needs nothing of the old value, so it is not looked up.
+  stored <- updateExisting root value
+  if stored
+    then pure ()
+    else do
+      found <- lookupName root
+      case found of
+        Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> root) Nothing
+        Just _ -> abortAt (Just spanValue) "E7001" (root <> " is not a binding that can be assigned") Nothing
+
 {-| Run a function body in a frame of its parameters, answering the final value
     of the named ones beside the body's result. -}
 withFrameKeeping :: [(Text, Value)] -> [Text] -> Evaluator a -> Evaluator (a, [Value])
 withFrameKeeping bindings kept (Evaluator action) =
   Evaluator $ \env -> do
-    outcome <- action env{envFrames = Map.fromList bindings : envFrames env}
-    pure $ case outcome of
+    outcome <- action env{envFrames = MapFrame (Map.fromList bindings) : envFrames env}
+    case outcome of
       Done value next -> case envFrames next of
-        frame : rest -> Done (value, map (finalIn frame) kept) next{envFrames = rest}
-        [] -> Done (value, map (finalIn Map.empty) kept) next
-      Unwound transfer next -> Unwound transfer next{envFrames = drop 1 (envFrames next)}
-      Aborted stop -> Aborted stop
+        frame : rest -> do
+          held <- frameSnapshot frame
+          pure (Done (value, map (finalIn held) kept) next{envFrames = rest})
+        [] -> pure (Done (value, map (finalIn Map.empty) kept) next)
+      Unwound transfer next -> pure (Unwound transfer next{envFrames = drop 1 (envFrames next)})
+      Aborted stop -> pure (Aborted stop)
  where
   finalIn frame name = Map.findWithDefault (maybe UnitValue id (lookup name bindings)) name frame
 

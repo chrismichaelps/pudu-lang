@@ -279,7 +279,14 @@ splitExponent text = case Text.break (\scalar -> scalar == 'e' || scalar == 'E')
     | Text.null rest -> Just (mantissa, 0)
     | otherwise -> do
         value <- readSignedInteger (Text.drop 1 rest)
-        pure (mantissa, fromIntegral value)
+        if abs value > exponentLimit then Nothing else pure (mantissa, fromInteger value)
+
+{-| The largest exponent magnitude a decimal text may carry: decimal128's own
+    limit. Past it the text names no value this type is meant to hold, and a
+    positive exponent would otherwise size the coefficient, so one short field
+    could demand an arbitrarily large allocation. -}
+exponentLimit :: Integer
+exponentLimit = 6144
 
 readMantissa :: Text -> Maybe (Integer, Int)
 readMantissa text = do

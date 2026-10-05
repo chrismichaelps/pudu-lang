@@ -26,8 +26,8 @@ traitAliases                :: DeclaredTypes -> DeclaredTypes
 adoptDeclaredSignature      :: Function -> [Type] -> Type -> Scheme -> Checker ()
 requireFunctionAnnotations  :: Function -> Checker ()
 requireInterfaceAnnotations :: Function -> Checker ()
-selfBoundAsBound            :: NominalId -> [(Text, [NominalId])]
-selfRigid                   :: NominalId -> [Text]
+selfBoundAsBound            :: [(Text, Int)] -> NominalId -> [(Text, [Type])]
+selfRigid                   :: NominalId -> [(Text, Int)]
 nonMutatingMethods          :: [Text]
 ```
 
@@ -72,6 +72,14 @@ implies. No inference, no recursion.
   and `checkAgainst`. _Rejected:_ cutting by line count and discovering the
   cycles afterwards.
 
+- **Q:** Warn on a discarded `sortBy`? **A:** Yes. _Rationale:_ it answers a new array like `filter`,
+  so writing it as a statement does nothing.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Complete trait evidence
+
+The implicit Self bound retains the trait application with all enclosing trait parameters rigid.
+
+Resolved Grill Log: Self: Holds[T] in a generic default method is the same contract as the trait, not an argument-free owner relation.

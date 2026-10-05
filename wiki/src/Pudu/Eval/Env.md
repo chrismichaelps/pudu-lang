@@ -61,6 +61,14 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ## Algorithm
 
+`withNewFrame` creates a private [[Eval Frame]] CellFrame for lexical block
+bindings, while module/parameter frames keep their existing representation.
+Assignment distinguishes an immutable rebuilt frame stack from an in-place
+cell/slot write; the latter returns the existing Env and frame stack.
+Resolved Grill Log: preserve missing-name search and all scope cleanup paths;
+do not copy unchanged state after a private storage write. Captures continue
+through frameSnapshot before retaining local bindings.
+
 Environment combinators run the nested evaluator directly and normalize both `Done` and `Unwound` outcomes before returning them. Frame cleanup is therefore part of the combinator rather than a monadic continuation that an unwind can skip; there is no caching, mutation, or reflection.
 
 ## Negative Logic (Prohibited Paths)
@@ -100,6 +108,42 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Why introduce `updateExisting` alongside `update`?
   **A:** Updating a mutable binding previously required searching the frame hierarchy with `lookupName` to check existence and then searching again to write the new value; `updateExisting` performs the traversal and mutation in a single pass, returning a boolean indicating whether the binding was present.
 
+- **Q:** Update a binding by testing membership and then inserting? **A:** No. _Rationale:_ that
+  walked each frame's map twice per assignment (#423); `alterF` replaces the value in the walk that
+  finds it. `lookupLocal` answers from the frames calls and blocks pushed, so a dotted read can tell
+  a local from a module member without searching module scope.
+- **Q:** Where does a run keep compiled bodies? **A:** In `envCompiledBodies`, set only by a
+  program's run; `Nothing` everywhere else, so compile-time evaluation stays on the tree walker.
+  `lookupModule` answers from module scope alone, which is what lets [[Eval Compile]] resolve a
+  module's function once; `runtimeIO` runs the runtime's own bookkeeping, never refused for lack of
+  effects.
+- **Q:** Keep frames as name maps only? **A:** No. _Rationale:_ a frame is now a [[Eval Frame]],
+  either a map or a compiled body's slot frame. `enterSlots` turns a call's parameter frame into its
+  body's slot frame and points `envSlots` at the array for the call, restoring the caller's on every
+  exit; `readSlot` and `writeSlot` are that body's code reading and writing by position.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## MultiMap execution allocation
+
+Inline the small Evaluator Functor/Applicative/Monad combinators so nested pure
+primitive calls can fuse their Done/environment continuations at -O2. The three
+result paths remain identical. The MultiMap loop-only control measured 1.29s tree
+and 0.29s compiled before this cut.
+
+Resolved Grill Log: expose existing combinators to optimization; introduce no
+mode override, new state, control-flow policy, or effect behavior.
+
+The measured Loop allocation profile also exposes name lookup and assignment
+as hot cross-module boundaries. `lookupName` and `updateExisting` permit inlining
+so their existing result/environment continuation can fuse with consumers.
+Resolved Grill Log: keep the same frame search, optional tally, method fallback,
+and failure paths; accept only ordinary optimized benchmark improvements.
+
+## Shared compile-time boundaries
+
+[[Compile Time Limits]] supplies the existing depth/iteration constants to both
+evaluation and derive residualization. Runtime loop policy and thresholds remain
+unchanged. Resolved Grill Log: one phase-neutral declaration prevents nested
+compiler expansion and ordinary constant evaluation from drifting apart.

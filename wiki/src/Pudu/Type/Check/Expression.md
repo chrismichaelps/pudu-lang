@@ -15,9 +15,16 @@ aliases: [Type Check Expression]
 
 # Type Check Expression
 
+Compile-time loop bounds validate through [[Type Check Bound]] under their fresh
+rigid field parameters. Invalid bounds withhold the loop body while retaining
+source/element checks. Resolved Grill Log: a malformed capability cannot become
+an abstract assumption merely because no concrete request exists yet.
+
 ## Purpose
 
 Decide what an expression's type is.
+
+In derive checking, a call whose callee is a field callback is checked by `checkBuildCall`. A generated multi-segment name naming a canonical variant is typed as that variant's constructor even when the defining module does not import its owner.
 
 ## Interface
 
@@ -56,6 +63,17 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
   and compares its loans with the callee's parameter types before unifying them.
 - A non-empty `SetExpression` unifies all member types and produces `Set[T]`. The empty form creates
   one local inference variable; expected-type contexts may determine it before a statement boundary.
+- A compile-time loop that reaches checking is `E3090` outside a derive definition, where
+  instantiation has nothing to unroll. Inside one it checks generically: the `where` subjects bind
+  rigid, the element binds at its ascribed type, and the body checks under both.
+  Its source checks before the element is bound. Ordinary sources must have
+  Array[Element] type; canonical Std.Meta.Fields[T] and Variants[T] validate
+  their descriptor and owner through [[Type Check Reflection]]. An unbound F in
+  canonical Field[T, F] binds rigidly even when no capability is required.
+  The source check is mandatory even in an unused derive. New rigid subjects
+  are deduplicated, enclosing identities and bounds persist, and local obligations
+  discharge before those bounds are restored. The binder retains error poison on
+  a source mismatch so body uses do not repeat the same defect.
 
 ### Linkage
 
@@ -98,7 +116,14 @@ through the record.
   **A:** To satisfy file length contracts (< 500 lines) and isolate sub-expression scope and branch checking
   from expression AST dispatch. _Rationale:_ arms, closures, and loops represent distinct control-flow boundaries
   that can be checked via parameterised runners without cyclic dependencies.
+- **Q:** Require the defining module to import every target? **A:** No; generated constructions name owners canonically.
 
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Complete trait evidence
+
+Compile-time loop where bounds are formed under enclosing and fresh loop-local parameters and retain their full trait applications.
+
+Resolved Grill Log: fields bounded by a generic trait must not receive arbitrary trait arguments during generic derive checking.

@@ -100,6 +100,9 @@ magnitudes and decides the last digit from the doubled remainder compared agains
   lived in the compiler regardless. _Rejected:_ splitting the exactness guarantee across the
   boundary, where a user could replace it.
 
+- **Q:** Narrow a text exponent to a machine integer as read? **A:** No. _Rationale:_ it wrapped, so
+  `1e18446744073709551617` read as `10`, and a positive exponent sizes the coefficient. An
+  exponent past decimal128's 6144 is refused. _Rejected:_ a limit on the coefficient alone.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[ADR-0007]] · [[grammar/pudu]] · [[architecture/STDLIB]] · [[Integer Literal]] · [[Float Literal]]

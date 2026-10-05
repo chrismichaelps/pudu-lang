@@ -10,6 +10,8 @@ aliases: [Std Json]
 # Std Json
 ## Purpose
 Decode, encode, inspect, and immutably transform JSON values with positioned parse errors.
+`Encode`/`Decode` traits, `DecodeError{path, expected, found}` with `DecodeStep` and `explainDecode`. Impls for Int, Str, Bool, Float64, Decimal, `Array[A]` and `Option[A]`. `derive Encode` writes records as objects and sums as one-key objects (list, object or empty list payloads), honouring `@json` and `@skip`. `derive Decode` ignores unknown keys, refuses a consumed key written twice, applies `@default(json)` to a missing field and otherwise reads null, and locates every failure by path.
+
 ## Interface
 Exports `Json`, `JsonError`, compact/pretty encoding, field/index/path lookup, typed projections, constructors, key updates, and error explanation.
 `foldLines(file, seed, step)` folds a JSON Lines file one value to a line, skipping blank lines, and
@@ -61,6 +63,10 @@ established byte-for-byte formatting. Writing the 3.26 MB document takes 0.12 s 
 `Writing`-stack encoder, which built each string one character at a time, took 12.2 s; 91 documents
 encode to identical compact and pretty text either way, including every control character.
 
+A number follows RFC 8259 exactly: an optional `-`, then `0` or digits not starting with `0`, then
+optionally `.` with at least one digit, then optionally `e`/`E`, an optional sign, and at least one
+digit. Anything else is `Unexpected` at the first position that breaks the grammar.
+
 ## Evidence
 
 - A focused executable fixture covers plain text; quote, slash, reverse-solidus, named and unnamed control, BMP,
@@ -105,5 +111,12 @@ encode to identical compact and pretty text either way, including every control 
   then have two sources that must agree forever. _Accepted:_ the native decoder answers only what it
   reads exactly as the library does, and every other text takes the library's reader. _Rejected:_ a
   native error vocabulary.
+- **Q:** Take a number as the longest run of number characters and let the value decide? **A:** No.
+  _Rationale:_ `01`, `1.`, and `1e` then decode as numbers from text that is not JSON. _Rejected:_
+  lenient number runs.
+- **Q:** Implement Encode and Decode for `Json` itself? **A:** Yes. A JSON value encodes as itself and any JSON, `null` included, decodes as itself, so a derived record may hold a `Json` field, an `Option[Json]`, or an `Array[Json]`. `Json.encode` and `Json.decode` stay the module's functions: a module qualifier that exports a name selects that export before a same-spelled type's method ([[Type Check Call]]). _Rejected:_ leaving `Json` without impls, which refused every derive over a JSON-valued field.
+- **Q:** Name derive callback parameters `field`? **A:** No; the module exports `field`, and a parameter of that name shadows it (`W2001`). They are `member`.
+- **Q:** How is a default written? **A:** As JSON text; text that is not JSON is the string itself, so `@default("guest")` and `@default(0)` both work.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Json]]

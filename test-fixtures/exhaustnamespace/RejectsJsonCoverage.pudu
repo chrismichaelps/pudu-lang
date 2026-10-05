@@ -1,0 +1,17 @@
+module RejectsJsonCoverage
+
+import Std.Json as Json
+import R.Value as V
+
+fn kind(held: &Option[V.Value]) -> Int {
+  match held {
+    case None => 0
+    case Some(V.Scalar(V.Null)) => 1
+    case Some(V.Scalar(V.Boolean(_))) => 2
+    case Some(V.Many(_)) => 4
+  }
+}
+
+export fn main() -> Int {
+  if Json.isNull(&Json.Null) { kind(&None) } else { 9 }
+}

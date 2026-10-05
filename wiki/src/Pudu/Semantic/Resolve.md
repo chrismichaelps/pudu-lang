@@ -19,6 +19,8 @@ aliases: [Name Resolution]
 
 Resolve every name in a parsed module to a symbol, or diagnose it, producing the symbol table and reference map that typing and ownership consume.
 
+Inside a derive definition, a function literal binds a Meta `Field[T, F]` parameter's F and its `where` subjects rigidly before walking, as a compile-time loop does; this is what a build or collect callback needs. Other literals resolve unchanged.
+
 ## Interface
 
 ### Signatures
@@ -63,6 +65,16 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 - A recovered `InvalidDeclaration`, `InvalidExpression`, or `InvalidPattern` introduces no symbol and no reference, so a parse error never produces a second resolution error for the same defect.
 - An `if let` subject resolves before its pattern binds. The successful bindings occupy one fresh
   frame around the then block only; the else expression resolves outside that frame.
+- A `derives` entry resolves as a type reference, and so do a derive's trait and a request's trait
+  and target. A derive binds its type parameter rigidly and walks its member bodies, without
+  declaring them callable: collection declares nothing for either derive form. A compile-time
+  loop walks its source, binds its `where` subjects as rigid loop-local type variables, then
+  walks the element type, the bounds, and the body with only the element value bound. The
+  subjects are declared by the clause the way a generic header declares its parameters, so
+  every position naming them resolves without leaking outward.
+  A canonical Meta.Field[T, F] annotation also introduces an unbound F without a
+  where capability. The import must resolve in TypeSpace; a same-spelled local
+  Field cannot introduce a type parameter.
 
 ### Linkage
 
@@ -112,6 +124,7 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 - **Q:** Does resolution interpret duplicate Set members? **A:** No. _Rationale:_ equality and
   ordering require values and types; resolution only walks every expression the writer supplied.
   _Rejected:_ syntactic duplicate detection.
+- **Q:** Bind callback type variables only when the callee is `Meta.build`? **A:** No; resolution has no types. A genuine Meta field annotation is the signal, and ordinary literals have none.
 
 ## Variants
 
@@ -120,3 +133,34 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Semantic]] · [[Resolve Context]] · [[Symbol Model]] · [[Scope Model]] · [[Semantic Prelude]] · [[Syntax Tree]] · [[Semantics]]
+
+## Reflection and rigid-scope hardening
+
+Reflection import classification is computed once by [[Resolve Reflection]],
+including selected names as well as aliases. E2018 is attached once when the
+resolved symbol is a Std.Meta import outside a derive. Each reference uses its
+actual namespace, so an unrelated value shadow cannot disable a type refusal.
+[[Resolve Bindings]] owns the unchanged pattern walk. Repeated loop constraint
+subjects bind once; an enclosing type parameter is reused rather than shadowed.
+
+Resolved Grill Log: enforce the restriction on resolved references, not only
+member syntax; selected and first-class imports cannot bypass it. Preserve
+unknown-name diagnostics and ordinary lexical shadowing.
+
+## Generic bound scope
+
+Generated implementations remain in the definition module's ordinary lexical
+frame. Their fully qualified target/type/static-constructor paths have already
+been formed by graph elaboration; [[Resolve Canonical]] recognizes those only
+within the scoped generated-Impl boundary. Bind generic parameters, Self, value
+parameters and locals normally so writable references and lexical shadowing stay
+authoritative. No imports or exported bindings are synthesized.
+Resolved Grill Log: reuse the module's lexical frame rather than transplanting
+unqualified bodies to the request module. Authored implementations, including
+macro-generated expressions within them, never enable this boundary.
+
+Bind all generic parameter declarations before resolving any parameter bound.
+Self-referential and forward parameter applications therefore resolve within the
+header's complete scope. Value parameters and defaults retain left-to-right
+activation. Resolved Grill Log: Mapper[F] in F's own bound names that constructor,
+not an unresolved module type or a same-spelled outer declaration.

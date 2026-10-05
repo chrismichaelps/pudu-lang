@@ -1,0 +1,141 @@
+module Std.Time.Format.Header
+
+/// Abbreviated weekday names, Sunday first, as message headers and `%a` write them.
+export const WEEKDAY_NAMES: Array[Str] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+/// Full weekday names, Sunday first, as `%A` and the obsolete header form write them.
+export const WEEKDAY_FULL: Array[Str] = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday"
+]
+
+/// Abbreviated month names, January first.
+export const MONTH_NAMES: Array[Str] = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+]
+
+/// Full month names, January first.
+export const MONTH_FULL: Array[Str] = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+]
+
+/// The month an abbreviated name stands for, counting January as one.
+export const MONTH_NUMBERS: Map[Str, Int] = monthTable()
+
+/// Two-digit years below this are read in the twenty-first century, the rest in
+/// the twentieth, which is the epoch's own convention for the obsolete form.
+const CENTURY_PIVOT: Int = 70
+
+fn monthTable() -> Map[Str, Int] {
+  var table: Map[Str, Int] = mapOf([])
+  var index = 0
+  while index < 12 {
+    table = table.insert(MONTH_NAMES[index], index + 1)
+    index = index + 1
+  }
+  table
+}
+
+/// The number the ASCII digits at a position spell, or nothing when any of
+/// them is not a digit. No sign and no surrounding space is admitted.
+export fn digitsAt(text: Str, at: Int, width: Int) -> Option[Int] {
+  if at < 0 || at + width > text.length() { return None }
+  var value = 0
+  for here in text.slice(at, at + width).chars() {
+    if here < '0' || here > '9' { return None }
+    value = value * 10 + (here.code() - '0'.code())
+  }
+  Some(value)
+}
+
+/// The year, month, day, hour, minute, and second an HTTP date writes, in
+/// order, from any of the three forms a recipient reads:
+/// `Sun, 06 Nov 1994 08:49:37 GMT`, the obsolete
+/// `Sunday, 06-Nov-94 08:49:37 GMT`, and the obsolete `Sun Nov  6 08:49:37 1994`.
+///
+/// Only the shape is judged here; the failure is the text. Calendar and clock
+/// ranges are the caller's, which holds the calendar.
+export fn fieldsOf(text: Str) -> Result[Array[Int], Str] {
+  let comma = text.indexOf(",")
+  let found = if comma == 3 {
+    fixedFields(text)
+  } else if comma > 3 {
+    obsoleteFields(text, comma)
+  } else {
+    asctimeFields(text)
+  }
+  match found {
+    case Some(fields) => Ok(fields)
+    case None => Err(text)
+  }
+}
+
+fn fixedFields(text: Str) -> Option[Array[Int]] {
+  if text.length() != 29 || !WEEKDAY_NAMES.contains(text.take(3)) { return None }
+  if !marked(text, &[(3, ", "), (7, " "), (11, " "), (16, " "), (25, " GMT")]) { return None }
+  let month = MONTH_NUMBERS.get(text.slice(8, 11)) ?
+  let clock = clockAt(text, 17) ?
+  Some([digitsAt(text, 12, 4) ?, month, digitsAt(text, 5, 2) ?, clock[0], clock[1], clock[2]])
+}
+
+fn obsoleteFields(text: Str, comma: Int) -> Option[Array[Int]] {
+  if !WEEKDAY_FULL.contains(text.take(comma)) { return None }
+  let rest = text.drop(comma)
+  if rest.length() != 24 { return None }
+  if !marked(rest, &[(0, ", "), (4, "-"), (8, "-"), (11, " "), (20, " GMT")]) { return None }
+  let month = MONTH_NUMBERS.get(rest.slice(5, 8)) ?
+  let short = digitsAt(rest, 9, 2) ?
+  let year = if short < CENTURY_PIVOT { 2000 + short } else { 1900 + short }
+  let clock = clockAt(rest, 12) ?
+  Some([year, month, digitsAt(rest, 2, 2) ?, clock[0], clock[1], clock[2]])
+}
+
+fn asctimeFields(text: Str) -> Option[Array[Int]] {
+  if text.length() != 24 || !WEEKDAY_NAMES.contains(text.take(3)) { return None }
+  if !marked(text, &[(3, " "), (7, " "), (10, " "), (19, " ")]) { return None }
+  let month = MONTH_NUMBERS.get(text.slice(4, 7)) ?
+  let day = if text.slice(8, 9) == " " { digitsAt(text, 9, 1) ? } else { digitsAt(text, 8, 2) ? }
+  let clock = clockAt(text, 11) ?
+  Some([digitsAt(text, 20, 4) ?, month, day, clock[0], clock[1], clock[2]])
+}
+
+/// `HH:MM:SS` at a position, as three numbers.
+fn clockAt(text: Str, at: Int) -> Option[Array[Int]] {
+  if !marked(text, &[(at + 2, ":"), (at + 5, ":")]) { return None }
+  Some([digitsAt(text, at, 2) ?, digitsAt(text, at + 3, 2) ?, digitsAt(text, at + 6, 2) ?])
+}
+
+/// Whether each literal piece sits at its position.
+fn marked(text: Str, pieces: &Array[(Int, Str)]) -> Bool {
+  for piece in pieces {
+    if text.slice(piece[0], piece[0] + piece[1].length()) != piece[1] { return false }
+  }
+  true
+}

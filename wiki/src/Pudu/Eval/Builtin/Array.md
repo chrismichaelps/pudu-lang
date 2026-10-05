@@ -47,6 +47,8 @@ callArrayMethod :: Apply -> Span -> ArrayMethod -> Value -> [Value] -> Evaluator
 - No operating system effect execution; effects belong to `Eval.Effect`.
 
 ## Grill Log
-
+- **Q:** Add a native `sortBy`? **A:** Yes. _Rationale:_ sorting in Pudu interpreted every merge
+  step. `sortBy` runs [[Eval Sort]] and calls only the comparison through the evaluator; a
+  comparison answering anything but a Boolean is `E7001`.
 - **Q:** Why extract array methods into a dedicated submodule? **A:** `callArrayMethod` carries the only `Apply` capability parameter and represents ~100 lines of self-contained higher-order dispatch logic, isolating evaluator callback dependencies from pure primitive operations.
 - **Q:** Why use `foldr collectText` for `ArrayJoin` instead of `mapM asText`? **A:** Calling monadic evaluator actions for each element in an array forces unnecessary bind/return allocations and execution overhead during HTML rendering and string generation loops. A pure fold extracts the `Text` values in a single pass without evaluator monad cycles.

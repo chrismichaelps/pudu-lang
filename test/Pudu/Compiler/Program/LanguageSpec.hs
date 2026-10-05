@@ -13,7 +13,7 @@ import qualified Data.Set as Set
 import Pudu.Compiler.Program.Common
   ( codes, runEntry, runEntryValue, runtimeCodes, runtimeDetails )
 import Pudu.Eval.Match (matchPattern)
-import Pudu.Eval.Value (Captured (..), Closure (..), Value (..), intOf)
+import Pudu.Eval.Value (Captured (..), Closure (..), Frame (..), Value (..), intOf)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Pattern (..))
 import Pudu.Source (SourceName (SourceName), emptySpan, newSource)
@@ -94,7 +94,7 @@ testCapturedScope = do
               }
           }) ->
             let locals = take (length frames - moduleDepth) frames
-                names = Map.keysSet (Map.unions locals)
+                names = Map.keysSet (Map.unions [held | MapFrame held <- locals])
              in Just
                   ( length locals
                   , Set.member "kept" names

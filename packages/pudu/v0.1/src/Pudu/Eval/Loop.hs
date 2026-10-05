@@ -18,6 +18,7 @@ module Pudu.Eval.Loop
 import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Comptime.Limits (iterationLimit)
 import Pudu.Eval.Env
   ( effectsAdmitted
   , variantOwner
@@ -31,6 +32,7 @@ import Pudu.Eval.Env
   , withFrame
   )
 import Pudu.Eval.Keyed (mapEntries, setMembers)
+import Pudu.Eval.Loop.Kernel (pureLoop)
 import Pudu.Eval.Match (matchPattern)
 import Pudu.Eval.Operator (nominalNameOf)
 import Pudu.Eval.Range (rangeElements)
@@ -59,7 +61,11 @@ data LoopNeeds = LoopNeeds
   }
 
 evaluateWhile :: LoopNeeds -> Span -> Maybe Text -> Located Expression -> Located Block -> Evaluator Value
-evaluateWhile needs spanValue label condition body = loop (0 :: Int)
+evaluateWhile needs spanValue label condition body = do
+  kernel <- pureLoop spanValue condition body
+  case kernel of
+    Just native -> native
+    Nothing -> loop (0 :: Int)
  where
   loop iterations = do
     stop <- exceededStepLimit iterations
@@ -279,8 +285,6 @@ exceededStepLimit iterations
   | iterations <= iterationLimit = pure False
   | otherwise = not <$> effectsAdmitted
 
-iterationLimit :: Int
-iterationLimit = 100000
 
 {-| Assignment writes to an existing binding; `&&` and `||` short-circuit; every
     other operator evaluates both operands left to right. -}

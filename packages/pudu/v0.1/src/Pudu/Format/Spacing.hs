@@ -291,6 +291,11 @@ braceKinds pieces
     {-| An empty pair right after a name is a record construction with no
         fields — `Silent{}` — and stays tight like any other. -}
     first : _ | closesImmediately first -> True
+    {-| An attribute opens a field the way a name does: `{ @json("id") id: Int }`
+        holds its fields tight. A label is told apart by what follows the name —
+        a loop keyword rather than an argument list, `mut`, or a field name — so
+        `{ @outer loop {} }` keeps its block spacing. -}
+    first : second : third : _ | isAttributeStart first second third -> True
     {-| A leading `..` is a record written as a change to another, which is a
         record construction and is written tight like the rest. No block begins
         with a range. -}
@@ -310,6 +315,14 @@ braceKinds pieces
       _ -> False
 
   isFieldStart scalar = scalar == '_' || (scalar >= 'a' && scalar <= 'z')
+
+  isAttributeStart first second third = case (tokenKind first, tokenKind second, tokenKind third) of
+    (Symbol SymAt, Identifier name, Symbol SymLeftParen) | isFieldName name -> True
+    (Symbol SymAt, Identifier name, Keyword KwMut) | isFieldName name -> True
+    (Symbol SymAt, Identifier name, Identifier field) | isFieldName name && isFieldName field -> True
+    _ -> False
+   where
+    isFieldName value = maybe False (isFieldStart . fst) (Text.uncons value)
 
   closesImmediately token = case tokenKind token of
     Symbol SymRightBrace -> True

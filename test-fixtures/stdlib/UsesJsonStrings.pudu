@@ -87,6 +87,12 @@ export fn main() -> Int {
   }
   let _removedValues = Io.removeIfPresent(values)
   let _removedBroken = Io.removeIfPresent(broken)
+  // A number is JSON's grammar exactly: no leading zero, and digits on both
+  // sides of a point and after an exponent marker.
+  if !rejectsAt("01", 0) || !rejectsAt("-01", 0) || !rejectsAt("[01]", 1) { return 0 - 1 }
+  if !rejectsAt("1.", 2) || !rejectsAt("-.5", 0) || !rejectsAt("1e", 2) || !rejectsAt("1e+", 3) { return 0 - 1 }
+  let Ok(Json.Fractional(small)) = Json.decode("-0.0E-2") else { return 0 - 1 }
+  if small != "-0.0E-2" { return 0 - 1 }
   // A suite answers what held. Every claim above stops the run when it does
   // not, so reaching here means all of them did.
   20

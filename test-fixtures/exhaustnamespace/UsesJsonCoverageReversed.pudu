@@ -1,0 +1,13 @@
+module UsesJsonCoverageReversed
+
+import R.Kinds as Kinds
+import R.Value as V
+import R.ZJson as Json
+
+export fn main() -> Str {
+  let total = Kinds.kind(&None) + Kinds.kind(&Some(V.Scalar(V.Null)))
+    + Kinds.kind(&Some(V.Scalar(V.Boolean(true))))
+    + Kinds.kind(&Some(V.Scalar(V.Text("hello"))))
+    + Kinds.kind(&Some(V.Many([])))
+  "{total}:{Json.is_null()}"
+}

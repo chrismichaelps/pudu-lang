@@ -247,6 +247,7 @@ data ArrayMethod
   | ArrayMap
   | ArrayFilter
   | ArrayReduce
+  | ArraySortBy
   deriving stock (Eq, Show)
 
 {-| The name a text method answers to, which is the same spelling the checker
@@ -303,3 +304,4 @@ arrayMethodName method = case method of
   ArrayMap -> "map"
   ArrayFilter -> "filter"
   ArrayReduce -> "reduce"
+  ArraySortBy -> "sortBy"

@@ -26,13 +26,13 @@ Decide what a block and the statements in it mean, and what checking a value
 data StatementNeeds = StatementNeeds
   { statementExpression  :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
   , statementDeclaration :: DeclaredTypes -> Located Declaration -> Checker ()
-  , statementFunction    :: FunctionRole -> DeclaredTypes -> [Text] -> [(Text, [NominalId])] -> Maybe NominalId -> Function -> Checker ()
+  , statementFunction    :: FunctionRole -> DeclaredTypes -> [Text] -> [(Text, [Type])] -> Maybe NominalId -> Function -> Checker ()
   }
 
 checkBlock        :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Block -> Checker Type
 checkAgainst      :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
 checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Block -> Checker Type
-checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [NominalId])] -> Maybe NominalId -> Located Function -> Checker ()
+checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Type])] -> Maybe NominalId -> Located Function -> Checker ()
 ```
 
 ### Governance
@@ -120,6 +120,11 @@ exception.
   consumer such as `let … else`, because it leaves `if`, `match`, and contextual
   checking with contradictory answers. Resolved for issue #146.
 
+- **Q:** Warn on every discarded scalar answer? **A:** No. _Rationale:_ discarding an answer is
+  pointless, not wrong. `W3004` covers what no writer means: a statement that is only arithmetic,
+  a comparison, a literal, or a name, and a statement with a value followed by a line whose
+  expression begins with `-`, which the line break split from it. _Rejected:_ a type-only rule,
+  which flagged deliberate discards of `contains` and user methods.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Expression]]
@@ -127,3 +132,9 @@ exception.
 ## Places
 
 A local binding's annotation and inferred type are checked by [[Check Place]], which refuses one that would hold an exclusive reference. See [[ADR-0022-lending-a-place]].
+
+## Complete trait evidence
+
+StatementNeeds and checkMember carry full trait applications for enclosing rigid bounds.
+
+Resolved Grill Log: the recursive statement/function seam must not erase evidence preserved by declaration checking.

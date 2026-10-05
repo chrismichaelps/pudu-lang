@@ -34,7 +34,7 @@ import Data.Kind (Type)
 import Data.Word (Word64, Word8)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, Nat, natVal, type (+))
-import Pudu.Source (Source, Span, mkSpan, offsetFromInt, sourceName, spanEnd, spanSource, spanStart, unOffset)
+import Pudu.Source (Source, Span, emptySpan, mkSpan, offsetFromInt, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 
 {-| A value's bytes, and how to read them back.
 
@@ -258,7 +258,7 @@ restoreDeferred = do
     pointing into the wrong text. -}
 instance Persist Span where
   persist source value
-    | spanSource value == sourceName source =
+    | sameSpanSource value (emptySpan source), spanOrigin value == Nothing =
         putUnsigned (unOffset (spanStart value)) <> putUnsigned (unOffset (spanEnd value) - unOffset (spanStart value))
     | otherwise = Builder.word8 0xff <> Builder.word8 0xff <> Builder.word8 0xff <> Builder.word8 0xff <> Builder.word8 0x7f
   restore = do

@@ -240,6 +240,41 @@ export fn wholeOf(word: Str) -> Option[Int] {
   }
 }
 
+/// Whether a word that is not a truth or a moment is written as the format
+/// writes a number.
+///
+/// Integers have no leading zero and a sign only in base ten; a float has
+/// digits on both sides of its point and after its exponent marker; `inf` and
+/// `nan` may carry a sign; every underscore sits between two digits.
+export fn isNumber(word: Str) -> Bool {
+  let unsigned = if word.startsWith("+") || word.startsWith("-") { word.drop(1) } else { word }
+  if unsigned == "inf" || unsigned == "nan" { return true }
+  if word.startsWith("0x") { return isDigitRun(word.drop(2), "0123456789abcdef") }
+  if word.startsWith("0o") { return isDigitRun(word.drop(2), "01234567") }
+  if word.startsWith("0b") { return isDigitRun(word.drop(2), "01") }
+  let marker = unsigned.toLower().indexOf("e")
+  let mantissa = if marker >= 0 { unsigned.take(marker) } else { unsigned }
+  let point = mantissa.indexOf(".")
+  let whole = if point >= 0 { mantissa.take(point) } else { mantissa }
+  if !isDigitRun(whole, DIGITS) || (whole.length() > 1 && whole.startsWith("0")) { return false }
+  if point >= 0 && !isDigitRun(mantissa.drop(point + 1), DIGITS) { return false }
+  if marker >= 0 {
+    let exponent = unsigned.drop(marker + 1)
+    let digits = if exponent.startsWith("+") || exponent.startsWith("-") { exponent.drop(1) } else { exponent }
+    if !isDigitRun(digits, DIGITS) { return false }
+  }
+  true
+}
+
+/// Whether text is digits of an alphabet with each underscore between two of them.
+fn isDigitRun(text: Str, alphabet: Str) -> Bool {
+  if text.isEmpty() || text.startsWith("_") || text.endsWith("_") || text.contains("__") { return false }
+  for character in text.toLower().chars() {
+    if character != '_' && !alphabet.contains(character.toText()) { return false }
+  }
+  true
+}
+
 /// The number a run of digits names in a base, or nothing when a character is
 /// not a digit of it or the digits name more than an `Int` holds.
 ///

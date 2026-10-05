@@ -51,6 +51,8 @@ allowlist regression.
 
 [[Uses Site All]] (40) registers [[Std Site]] in a temporary directory.
 
+[[Uses Decimal Dispatch]] (5) proves Decimal receiver, generic, and qualified dispatch.
+
 ## Grill Log
 
 - **Q:** Accept a minimum fixture count? **A:** No. _Rationale:_ one new passing check could hide one

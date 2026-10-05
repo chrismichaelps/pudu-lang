@@ -1,0 +1,11 @@
+module RejectsMultiMapLoopOverflow
+import Std.MultiMap as MultiMap
+fn main() -> Int {
+  var bag: MultiMap.MultiMap[Int8, Int8] = MultiMap.empty()
+  var i: Int8 = 126i8
+  while i <= 127i8 {
+    bag = MultiMap.add(&bag, i, i)
+    i = i + 1i8
+  }
+  0
+}

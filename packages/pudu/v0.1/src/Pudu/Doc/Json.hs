@@ -51,7 +51,7 @@ encodeSignature signature =
     ,
       ( "constraints"
       , array
-          [ object [("variable", string name), ("bounds", array (map string bounds))]
+          [ object [("variable", string name), ("bounds", array (map (string . renderSigType) bounds))]
           | (name, bounds) <- signatureConstraints signature
           ]
       )

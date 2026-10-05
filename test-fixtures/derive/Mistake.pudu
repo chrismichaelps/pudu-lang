@@ -1,0 +1,7 @@
+module Mistake
+
+trait Tag { fn tag(self: &Self) -> Str }
+
+derive Tag for T: Record {
+  fn tag(self: &T) -> Str { 1 }
+}

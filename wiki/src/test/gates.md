@@ -33,7 +33,20 @@ safe fixing, compiler acceptance, and a clean second lint without modifying repo
 [[Diagnostic Code Gate]] audits the intentional reuse of compiler warning identities by lint policy
 and output instead of allowing a second, incompatible lint-only code vocabulary.
 
+[[Atomic Permission Gate]] exercises both public atomic-write APIs through that same binary,
+checking process-umask creation modes, existing-file modes, private scratch files, symlink
+replacement, failure output, and temporary-file cleanup on POSIX systems.
+
 ## Grill Log
+
+- **Q:** Clean only the first `pudu-*` directory? **A:** No; clean every compiler
+  and repository-test version root using `pudu-[0-9]*` and `pudu-tests-[0-9]*`.
+  _Rationale:_ the broad first match can select tests and retain all compiler
+  objects. Other dependency packages and source files remain untouched.
+- **Q:** Change GHC options between build and test or invoke a different binary
+  for documentation? **A:** No; test retains `-Werror` and documentation uses the
+  already resolved optimized executable. _Rationale:_ changing configurations
+  recompiles packages and breaks the gate's shared-binary evidence.
 
 - **Q:** Stop after the first gate? **A:** No. _Rationale:_ one release run should expose every
   independent repair needed. _Rejected:_ fail-fast orchestration.
@@ -41,8 +54,9 @@ and output instead of allowing a second, incompatible lint-only code vocabulary.
   a production surface and distribution lookup differs outside the checkout. _Accepted:_ the
   generated-project workflow is mandatory in this gate.
 
-Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary.
+Resolved Grill Log: every release-relevant boundary runs against the same freshly optimized binary,
+including externally observable filesystem modes that portable permission booleans cannot prove.
 
 ## Referenced by
 
-[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Pudu CLI]]
+[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Atomic Permission Gate]] · [[Pudu CLI]]

@@ -5,6 +5,18 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-01-derive-integration]] — complete derive integration, committing each validated slice; no PR yet.
+
+- [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).
+
+- [[2026-10-04-compiler-performance]] — measured compiler checking latency (issue #435).
+
+- [[2026-10-01-multimap-performance]] — focused MultiMap kernels and benchmark evidence.
+
+- [[2026-09-30-atomic-file-permissions]] — issue #385 atomic creation and replacement permissions (complete).
+
+- [[2026-09-29-production-bugs]] — completed eleven-issue production bug repair, validation, direct dev publication and closure.
+
 - [[2026-09-24-desktop-and-framework]] — issues #321–#323 standard library, application framework, and desktop toolkit (active).
 - [[2026-09-23-init-package-release]] — issue #302 generated package project, release, and download chain (complete).
 
@@ -113,6 +125,9 @@ tags: [moc, handoff]
 - [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
 - [[2026-08-31-json-string-decoding]] — standard-library handoff for linear, strict JSON string escape decoding and encoding.
 - [[2026-09-15-places-and-documentation-book]] — language and website handoff for assignment through `&mut`, `mut` fields, and array elements, and the twenty-chapter documentation.
+- [[2026-09-30-slot-frames-plan]] — slot frames for compiled bodies, done.
+- [[2026-09-30-compiled-evaluation-plan]] — compiled function bodies, Plan A done; slot frames next.
+- [[2026-09-30-std-layer-sweep]] — Std defects found layer by layer through the import graph (#395–#420).
 - [[2026-09-16-playground-editor]] — website playground editor, language-server repair, and confined runs.
 
 ## Referenced by

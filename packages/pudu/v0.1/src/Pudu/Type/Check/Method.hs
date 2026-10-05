@@ -1,6 +1,7 @@
 {-| @Type.Check.Method.Module — types trait and implementation methods -}
 module Pudu.Type.Check.Method
   ( declareBounds
+  , declareBoundsWith
   , declareMethods
   , declareInterfaceMethods
   , declareBuiltinConstructors
@@ -9,6 +10,7 @@ module Pudu.Type.Check.Method
   , implBounds
   , implRigid
   , methodScheme
+  , traitMethodScheme
   , targetName
   , traitBounds
   , traitRigid
@@ -38,12 +40,12 @@ import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
-  ( Checker
+  ( noteStaticTrait
+  , Checker
   , DeclaredTypes (..)
   , bindImportedMethod
   , bindName
   , recordDeclaredMethod
-  , implementsTrait
   , ambiguousProviders
   , markAmbiguousMethod
   , methodProvider
@@ -53,16 +55,21 @@ import Pudu.Type.Env
   , isMethodKey
   , report
   , rigidBoundsOf
-  , rigidSatisfies
+  , lookupTypeParams
+  , addObligation
   , takeObligations
+  , TraitObligation (..)
+  , ObligationKind (..)
   )
 import Pudu.Semantic.Prelude (wiredInTypeNames)
-import Pudu.Type.Marker (isMarkerTrait, satisfiesMarker)
-import Pudu.Type.Unify (zonk)
-import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
+import Pudu.Type.Marker (isMarkerTrait)
+import Pudu.Type.Proof (TraitProof (..), implementsTrait, inferBound)
+import Pudu.Type.Substitute (substituteRigid)
+import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Formation (declaredParameterType, formBoundFor, formOptionalType, formType)
 import Pudu.Type.Value
   ( NominalId (..)
-  , Scheme
+  , Scheme (..)
   , Type (..)
   , monotype
   , nominalKey
@@ -109,7 +116,7 @@ declareTraitMember
   :: DeclaredTypes
   -> NominalId
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Located Function
   -> Checker ()
 declareTraitMember declared owner traitParams bounds (Located _ method) = do
@@ -117,10 +124,13 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
   let scheme =
-        polytype rigid (bounds <> declareBounds declared method)
+        polytype rigid (bounds <> declareBoundsWith declared traitParams method)
           (FunctionTypeValue (functionAsync method) inputs result)
   bindName (methodKey owner (locatedValue (functionName method))) scheme
-  recordDeclaredMethod owner (locatedValue (functionName method)) scheme
+  recordDeclaredMethod owner (functionName method) scheme
+  case functionParameters method of
+    Located _ first : _ | locatedValue (Tree.parameterName first) == "self" -> pure ()
+    _ -> noteStaticTrait owner
 
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
@@ -193,7 +203,7 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
         not rejectCollision
           && maybe False (\earlier -> Just earlier /= providing) provider
   let scheme =
-        polytype rigid (implBounds declared value <> declareBounds aliases method)
+        polytype rigid (implBounds declared value <> declareBoundsWith aliases (implRigid value) method)
           (FunctionTypeValue (functionAsync method) inputs result)
   if importedCollision
     then do
@@ -209,7 +219,7 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
         then bindImportedMethod key scheme
         else do
           bindName key scheme
-          recordDeclaredMethod owner (locatedValue (functionName method)) scheme
+          recordDeclaredMethod owner (functionName method) scheme
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}
@@ -304,39 +314,42 @@ dischargeObligations = do
   dischargeAll [] obligations
  where
   dischargeAll _ [] = pure ()
-  dischargeAll seen ((spanValue, typeValue, traitText) : rest) = do
+  dischargeAll seen (TraitObligation kind spanValue typeValue written : rest) = do
     resolved <- zonk typeValue
-    let key = (spanValue, resolved, traitText)
-    unless (key `elem` seen) (discharge spanValue resolved traitText)
+    bound <- zonk written
+    let key = (kind, spanValue, resolved, bound)
+    unless (key `elem` seen) (discharge kind spanValue resolved bound)
     dischargeAll (key : seen) rest
 
-  discharge spanValue resolved traitText =
+  discharge kind spanValue resolved bound =
     case resolved of
       ErrorType -> pure ()
       VariableType _ -> pure ()
-      RigidType name -> do
-        satisfied <- rigidSatisfies name traitText
-        unless satisfied (unsatisfied spanValue resolved traitText)
-      NominalType owner _ -> do
-        implemented <- implementsTrait owner traitText
-        satisfied <- if implemented then pure True else marker traitText resolved
-        unless satisfied (unsatisfied spanValue resolved traitText)
       _ -> do
-        satisfied <- marker traitText resolved
-        unless satisfied (unsatisfied spanValue resolved traitText)
-
-  {-| A compiler-controlled marker is decided by the value's structure, not by
-      a declaration, so it is consulted when no implementation was written. -}
-  marker traitIdentity resolved
-    | isMarkerTrait traitIdentity = satisfiesMarker traitIdentity resolved
-    | otherwise = pure False
+        case (kind, bound) of
+          (DynamicWidening, NominalType owner _) -> do
+            satisfied <- implementsTrait resolved owner
+            unless satisfied (unsatisfied kind spanValue resolved bound)
+          _ -> do
+            (answer, proposals) <- inferBound resolved bound
+            case answer of
+              Proven -> mapM_ (\(variable, selected) -> () <$ unify spanValue (VariableType variable) selected) proposals
+              ProofAmbiguous -> report "E3012" spanValue
+                ("cannot determine a unique " <> renderType bound <> " implementation for " <> renderType resolved)
+                (Just "state the missing type argument explicitly")
+              _ -> unsatisfied kind spanValue resolved bound
   {-| A marker cannot be implemented by hand, so telling the reader to write an
       implementation would send them at a diagnostic that rejects it. -}
-  unsatisfied spanValue resolved traitIdentity =
+  unsatisfied DynamicWidening spanValue resolved bound =
+    report "E3032" spanValue
+      (renderType resolved <> " does not implement " <> renderType bound)
+      (Just ("implement it for this type, or use a type that does; a dynamic "
+        <> renderType bound <> " holds only values that implement it"))
+  unsatisfied CallBound spanValue resolved bound =
     report "E3012" spanValue
-      (renderType resolved <> " does not implement " <> nominalName traitIdentity)
+      (renderType resolved <> " does not implement " <> renderType bound)
       ( Just
-          ( if isMarkerTrait traitIdentity
+          ( if maybe False isMarkerTrait (targetName bound)
               then
                 "this marker follows the type's structure; a value that owns a resource does not satisfy it"
               else "implement the trait for this type, or relax the bound"
@@ -349,45 +362,47 @@ effectNames = map fst effectSignatures
 {-| The trait bounds a function's generic parameters carry, from the parameter
     list and from its `where` clause alike: both are obligations a call must
     satisfy, and [[grammar/pudu]] gives them the same meaning. -}
-declareBounds :: DeclaredTypes -> Function -> [(Text, [NominalId])]
-declareBounds declared value =
-  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
+declareBounds :: DeclaredTypes -> Function -> [(Text, [Type])]
+declareBounds declared = declareBoundsWith declared []
+
+declareBoundsWith :: DeclaredTypes -> [(Text, Int)] -> Function -> [(Text, [Type])]
+declareBoundsWith declared enclosing value =
+  [ (locatedValue (typeParamName param), map (form (locatedValue (typeParamName param))) (typeParamBounds param))
   | Located _ param <- functionTypeParams value
   ]
-    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+    <> [ (locatedValue (constraintSubject constraint), map (form (locatedValue (constraintSubject constraint))) (constraintBounds constraint))
        | Located _ constraint <- functionConstraints value
        ]
+ where
+  form = formBoundFor declared (enclosing <> functionRigid value)
 
 {-| The bounds an implementation's own type parameters carry, so a method may
     call what those bounds promise. `impl[N: Ord + Add] Sequence[N, N] for
     Range[N]` means `N` has `before` and `plus` inside every method here, and
     without installing them the methods were told `N has no method before`
     about a parameter whose declaration says it does. -}
-implBounds :: DeclaredTypes -> Impl -> [(Text, [NominalId])]
+implBounds :: DeclaredTypes -> Impl -> [(Text, [Type])]
 implBounds declared value =
-  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
+  [ (locatedValue (typeParamName param), map (form (locatedValue (typeParamName param))) (typeParamBounds param))
   | Located _ param <- implTypeParams value
   ]
-    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+    <> [ (locatedValue (constraintSubject constraint), map (form (locatedValue (constraintSubject constraint))) (constraintBounds constraint))
        | Located _ constraint <- implConstraints value
        ]
+ where
+  form = formBoundFor declared (implRigid value)
 
 {-| The bounds a trait's own type parameters carry. -}
-traitBounds :: DeclaredTypes -> Trait -> [(Text, [NominalId])]
+traitBounds :: DeclaredTypes -> Trait -> [(Text, [Type])]
 traitBounds declared value =
-  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
+  [ (locatedValue (typeParamName param), map (form (locatedValue (typeParamName param))) (typeParamBounds param))
   | Located _ param <- traitTypeParams value
   ]
-    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+    <> [ (locatedValue (constraintSubject constraint), map (form (locatedValue (constraintSubject constraint))) (constraintBounds constraint))
        | Located _ constraint <- traitConstraints value
        ]
-
-boundName :: DeclaredTypes -> Located Tree.TypeSyntax -> NominalId
-boundName declared (Located _ syntax) = case syntax of
-  Tree.NamedType path _ ->
-    Map.findWithDefault (NominalId Nothing (moduleNameText path))
-      (moduleNameText path) (declaredNames declared)
-  _ -> NominalId Nothing Text.empty
+ where
+  form = formBoundFor declared (traitRigid value)
 
 {-| Find a method for a receiver: on a nominal type through its
     implementations, on a rigid parameter through the traits its bounds
@@ -427,19 +442,48 @@ methodScheme spanValue receiver member = case receiver of
       type `F` would. The arguments say what the container holds and never which
       trait provides a member. -}
   AppliedType head' _ -> methodScheme spanValue head' member
-  RigidType name -> do
-    bounds <- rigidBoundsOf name
-    providers <- filterM provides bounds
-    case providers of
-      [] -> pure Nothing
-      [traitText] -> lookupName (nominalKey traitText <> "." <> member)
-      _ -> do
-        report "E3013" spanValue
-          (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
-          (Just "disambiguate with a qualified call or remove a trait bound")
-        pure (Just (monotype ErrorType))
+  RigidType name -> rigidBoundsOf name >>= selectBounds spanValue receiver member
+  _ -> pure Nothing
+
+traitMethodScheme :: Span -> Type -> NominalId -> Text -> Checker (Maybe Scheme)
+traitMethodScheme at receiver owner member = case receiver of
+  RigidType name -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
+  AppliedType (RigidType name) _ -> rigidBoundsOf name >>= selectBounds at receiver member . filter owns
   _ -> pure Nothing
  where
-  provides traitText = do
-    found <- lookupName (nominalKey traitText <> "." <> member)
+  owns (NominalType identity _) = identity == owner
+  owns _ = False
+
+selectBounds :: Span -> Type -> Text -> [Type] -> Checker (Maybe Scheme)
+selectBounds at receiver member bounds = do
+  providers <- filterM provides bounds
+  case providers of
+    [] -> pure Nothing
+    [bound@(NominalType owner _)] -> do
+      found <- lookupName (nominalKey owner <> "." <> member)
+      traverse (specializeBound at receiver bound) found
+    _ -> do
+      report "E3013" at
+        (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map renderType providers))
+        (Just "disambiguate with a qualified call or remove a trait bound")
+      pure (Just (monotype ErrorType))
+ where
+  provides (NominalType owner _) = do
+    found <- lookupName (nominalKey owner <> "." <> member)
     pure (case found of Nothing -> False; Just _ -> True)
+  provides _ = pure False
+
+specializeBound :: Span -> Type -> Type -> Scheme -> Checker Scheme
+specializeBound at receiver (NominalType owner arguments) scheme = do
+  parameters <- maybe [] id <$> lookupTypeParams owner
+  let replacements = ("Self", receiver) : zip parameters arguments
+      replace = substituteRigid replacements
+  mapM_ (\(name, bounds) -> case lookup name replacements of
+    Just subject -> mapM_ (addObligation at subject . replace) bounds
+    Nothing -> pure ()) (schemeBounds scheme)
+  pure scheme
+    { schemeParams = filter (\(name, _) -> name `notElem` map fst replacements) (schemeParams scheme)
+    , schemeBounds = [(name, map replace bounds) | (name, bounds) <- schemeBounds scheme
+        , name `notElem` map fst replacements]
+    , schemeType = replace (schemeType scheme) }
+specializeBound _ _ _ scheme = pure scheme

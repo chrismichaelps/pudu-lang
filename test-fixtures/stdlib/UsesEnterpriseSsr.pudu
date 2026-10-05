@@ -598,6 +598,14 @@ export fn main() -> Int {
     && totpUri.contains("digits=6") {
     passed = passed + 1
   }
+  // RFC 6238's SHA-256 vector at 59 seconds, at eight digits, and at lengths
+  // the lookup of standard sizes did not cover.
+  let rfcCfg = Totp.config("12345678901234567890123456789012".toBytes(), "Acme Corp", "alice@example.com")
+  if Totp.generate(&Totp.TotpConfig{..rfcCfg, digits: 8}, 59) == "46119246"
+    && Totp.generate(&Totp.TotpConfig{..rfcCfg, digits: 4}, 59) == "9246"
+    && Totp.generate(&Totp.TotpConfig{..rfcCfg, digits: 10}, 59) == "0746119246" {
+    passed = passed + 1
+  }
 
   let totpSt: Totp.TotpState = Totp.state()
   let codeT0 = Totp.generate(&totpCfg, 0)

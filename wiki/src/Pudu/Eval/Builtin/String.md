@@ -67,6 +67,9 @@ characterMember :: Text -> Char -> Bool
 - **Q:** Why use `escapeHtmlText` with `Builder` rather than repeated string replaces? **A:** Five sequential `.replace()` calls parse and reallocate intermediate text buffers five times. The builder scans in chunks and writes entities directly to a lazy buffer in a single pass.
 - **Q:** Why use `textCount`? **A:** Converting an arbitrary-precision `Integer` from Pudu source directly to machine `Int` can overflow or cause out-of-range memory faults if unvalidated. Clamping against `textBytes` guarantees safe machine integer conversion.
 
+- **Q:** Pass an empty needle to the host text search? **A:** No. _Rationale:_ the host search
+  refuses it with an uncaught error that ended the program; an empty needle is found at 0, matching
+  `contains` and `startsWith`.
 ## Reading numbers from text (#349)
 
 `toInt`, `toFloat`, and `toDecimal` dispatch (and take the direct path) to [[Eval Builtin TextNumber]]

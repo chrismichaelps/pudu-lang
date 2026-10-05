@@ -5,8 +5,30 @@ tags: [moc, module]
 
 # Type Module Map
 
+- [[Type Check Bound]] — definition-time trait application and kind admission.
+- [[Type Formation Builtins]] — fixed language constructor and carrier inventory.
+- [[Type Trait Dispatch Spec]] — dispatch, generic bounds and coherence evidence.
+
+- [[Type Implementation Rules]] — complete concrete heads and conditional bounds.
+- [[Type Trait Proof]] — bounded capability proof for calls and derive publication.
+- [[Trait Evidence Matching]] — local inference without caller mutation.
+- [[Type Formation Shells]] — pure declaration identities before formed types.
+
+- [[Type Check Reflection]] — owner-specific heterogeneous metadata iteration.
+- [[Type Check Receiver]] — specialization shared by called and captured methods.
+
+- [[Type Literal Frontier]] · [[Type Literal Frontier Spec]] — bounded deferred-literal selection.
+
+- [[Type Formation Order]] — dependency ordering of transparent aliases before data fields.
+- [[Type Interface Spec]] — imported generic and late-alias checks and callback refusals.
+
+- [[Type Check Pattern Spec]] — correlated product coverage and missing-pattern diagnostics.
+
 - [[Type Boundary]] — the phase entry point and the published type map.
 - [[Type Value]] — formed types, schemes, and how a type is rendered.
+- [[Type Substitution]] — total rigid substitution preserving function contracts.
+- [[Type Check Derive]] — generic canonical trait contract validation for every derive.
+- [[Type Check Derive Spec]] — trait-independent contract and scoped obligation regressions.
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.
 - [[Type Formation]] — type syntax to formed type, and what declarations contribute.
 - [[Type Interface]] — exported signatures, canonical declaration identity, and import-scoped implementation visibility.
@@ -30,7 +52,13 @@ tags: [moc, module]
 - [[Type Check Foreign]] — the type a foreign declaration gives its functions, and what its own declaration can be wrong about.
 - [[Type Check Data Spec]] — exact record, collection, constructor, and qualified-pattern regressions.
 
-Dependency direction: Value → Env → Unify/Formation → Rule/Pattern/Method/Coherence/Import → Check → Boundary.
+Dependency direction: Value/Substitute → Implementation → Env → Formation and Proof/Match/Marker → Proof → Method → Rule/Call/Pattern/Coherence/Import → Check → Boundary.
+
+Full trait applications survive Value/Scheme → scoped Env bounds → call obligations →
+Proof → method specialization. Canonical owners index candidates at the proof layer;
+only complete head matching and discharged premises establish evidence.
+
+- [[Type Test Coordinator]] — executable registration of checker regression properties.
 
 ## Referenced by
 

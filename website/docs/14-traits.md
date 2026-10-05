@@ -125,3 +125,7 @@ fn main() -> Int {
 ```
 
 A concrete value becomes a `dynamic` one wherever that is what the context expects. Going the other way — from a `dynamic` value back to a concrete type — is never automatic.
+
+## Implementations a type can derive
+
+Many traits have one obvious implementation: compare every field, hash every field, show every field. A type asks for those with `derives Eq, Hash, Show` rather than writing them, and a library can write its own derive once for every type. See [Derives](/docs/derives).

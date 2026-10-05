@@ -22,6 +22,15 @@ keeps the connection open beyond the client's deadline. Success proves message f
 EOF, ends the response. The Lambda fixture checks request identifiers and response/error paths against
 a local Runtime API implementation.
 
+The YAML compact-sequence regression compares complete nested trees and succeeds only when
+all checks run; its entry result is exactly zero. [[Uses Yaml Compact Sequence]] owns the cases.
+
+[[Uses Yaml Quoted]] verifies escaped/doubled quotes, Unicode scalars, mapping/flow delimiters,
+and exact typed failures at physical line numbers.
+
+[[Uses Yaml Block]] compares complete scalar/list/mapping trees and checks literal/folded
+paragraphs, indentation, physical final newlines, chomping modes and malformed indentation.
+
 ## Grill Log
 
 - **Q:** Accept any positive fixture count? **A:** No. _Rationale:_ a skipped branch could still look

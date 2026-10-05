@@ -1,6 +1,7 @@
 module UsesHtml
 
-import Std.Html {BadScheme, Control, Handler}
+import Std.Html {BadName, BadScheme, Control, Handler}
+import Std.Html.Bounded as Bounded
 import Std.Html as Html
 import Std.Result as Result
 
@@ -247,6 +248,22 @@ export fn main() -> Int {
   // compared in a test rather than matched against a pattern.
   if Html.render(&nested) == Html.render(&nested) { held = held + 1 }
 
+  // A name cannot be escaped, so one that is not a plain name is never
+  // written as one: the attribute is left out, the element's tags are left out
+  // while its children stay, and `attribute` refuses it.
+  let spaced = Html.element("a", &[("x onclick", "alert(1)"), ("id", "i")], &[])
+  if Html.render(&spaced) == "<a id=\"i\"></a>" { held = held + 1 }
+  let quoted = Html.element("a", &[("title\"><script>", "v")], &[Html.text("t")])
+  if Html.render(&quoted) == "<a>t</a>" { held = held + 1 }
+  let tagged = Html.element("img src=x onerror=alert(1)", &[], &[Html.text("kept")])
+  if Html.render(&tagged) == "kept" { held = held + 1 }
+  if let Err(BadName(_)) = Html.attribute("x onclick", "alert(1)") { held = held + 1 }
+  if Html.attribute("data-x_y.z:w", "v") == Ok(("data-x_y.z:w", "v")) { held = held + 1 }
+  for view in [spaced, quoted, tagged] {
+    if let Ok(bounded) = Bounded.render(&view, 1000) {
+      if bounded.parts.join("") == Html.render(&view) { held = held + 1 }
+    }
+  }
   held
 }
 

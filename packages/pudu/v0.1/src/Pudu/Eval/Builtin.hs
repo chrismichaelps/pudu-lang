@@ -29,6 +29,7 @@ import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Eval.Csv as Csv
 import qualified Pudu.Eval.Json as Json
+import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
 import qualified Pudu.Eval.Xml as Xml
 import qualified Pudu.Eval.SwissTable as Swiss
 import qualified Pudu.Runtime.Word as Word
@@ -199,6 +200,8 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
     , IntValue _ toGain
     ]) ->
       pure (optionalBytes (AudioKernel.rampBytes source channels start fromFrame fromGain toFrame toGain))
+  (MultiMapAddBuiltin, values) -> callMultiMapAdd spanValue values
+  (MultiMapContainsBuiltin, values) -> callMultiMapContains spanValue values
   (WordMapUnionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapUnion" Word.WordUnion values
   (WordMapIntersectionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapIntersection" Word.WordIntersection values
   (WordMapDifferenceBuiltin, values) -> callWordMapAlgebra spanValue "wordMapDifference" Word.WordDifference values
@@ -284,6 +287,8 @@ isHashingBuiltin builtin = case builtin of
   DeriveKeyBuiltin -> True
   AudioToneBytesBuiltin -> True
   AudioRampBytesBuiltin -> True
+  MultiMapAddBuiltin -> True
+  MultiMapContainsBuiltin -> True
   WordMapUnionBuiltin -> True
   WordMapIntersectionBuiltin -> True
   WordMapDifferenceBuiltin -> True

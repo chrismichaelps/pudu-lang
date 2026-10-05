@@ -50,6 +50,15 @@ fn main() -> Int {
   if refusal("1X=2") == "line 1: invalid key '1X'" { held = held + 1 }
   if refusal("A=\"open\nstill open") == "line 1: quoted value is not closed" { held = held + 1 }
   if refusal("A='open") == "line 1: quoted value is not closed" { held = held + 1 }
+  // Only space or a comment may follow a closing quote.
+  if refusal("A=\"a\"b") == "line 1: text follows the closing quote" && refusal("A='a' b") == "line 1: text follows the closing quote" {
+    held = held + 1
+  }
+  // A quoted value spanning lines keeps the space that ends its first line.
+  match Dotenv.parse("A=\"x  \n y\" # note\n") {
+    case Ok(spanning) => { if Dotenv.lookup(&spanning, "A") == Some("x  \n y") { held = held + 1 } }
+    case Err(_) => {}
+  }
   match Dotenv.load("/nonexistent/pudu/settings.env") {
     case Err(Dotenv.Unreadable(path, _)) => { if path == "/nonexistent/pudu/settings.env" { held = held + 1 } }
     case _ => {}

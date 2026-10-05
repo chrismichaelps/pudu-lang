@@ -200,5 +200,13 @@ fn invalidMailbox(value: Str) -> Bool {
   for character in value.chars() {
     if " <>(),;:\"[]\\".contains(character.toText()) { return true }
   }
-  false
+  let at = value.indexOf("@")
+  !dotAtom(value.take(at)) || !dotAtom(value.drop(at + 1))
+}
+
+/// Whether text is dot-separated pieces with none of them empty: no leading or
+/// trailing dot and no two dots together, which a mail server refuses in both
+/// the mailbox name and the domain.
+fn dotAtom(part: Str) -> Bool {
+  !part.isEmpty() && !part.startsWith(".") && !part.endsWith(".") && !part.contains("..")
 }

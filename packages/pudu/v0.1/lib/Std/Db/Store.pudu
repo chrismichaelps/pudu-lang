@@ -154,9 +154,13 @@ export fn forParent[T](
 /// The keys of several parents, for the statement that loads their children.
 export fn keysOf[P](parents: &Array[P], identity: fn(P) -> Option[Str]) -> Array[Option[Str]] {
   var found: Array[Option[Str]] = []
+  var seen: Set[Option[Str]] = setOf([])
   for parent in parents {
     let key = identity(parent)
-    if !found.contains(key) { found = found.push(key) }
+    if !seen.contains(key) {
+      seen = seen.insert(key)
+      found = found.push(key)
+    }
   }
   found
 }

@@ -91,5 +91,18 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // Membership follows every change: a duplicate stays held until its last
+  // copy goes, and replacing, dropping, or transforming a key's values moves it.
+  var bag = MultiMap.add(&MultiMap.add(&MultiMap.add(&MultiMap.empty(), 1, "a"), 1, "a"), 2, "b")
+  let afterOne = MultiMap.contains(&MultiMap.remove(&bag, 1, "a"), 1, "a")
+  let afterAll = MultiMap.contains(&MultiMap.removeAll(&bag, 1, "a"), 1, "a")
+  bag = MultiMap.setAll(&bag, 2, &["c"])
+  let replaced = !MultiMap.contains(&bag, 2, "b") && MultiMap.contains(&bag, 2, "c")
+  let dropped = !MultiMap.contains(&MultiMap.removeKey(&bag, 1), 1, "a")
+  let shouted = MultiMap.mapValues(&bag, fn(text: Str) -> Str => text.toUpper())
+  if afterOne && !afterAll && replaced && dropped && MultiMap.contains(&shouted, 2, "C") && !MultiMap.contains(&shouted, 2, "c") {
+    held = held + 1
+  }
+
   held
 }

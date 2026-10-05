@@ -50,14 +50,16 @@ fn powerOfTwo(n: Int) -> Int {
   }
 }
 
-fn powerOfTen(digits: Int) -> Int {
-  match digits {
-    case 6 => 1000000
-    case 7 => 10000000
-    case 8 => 100000000
-    case 9 => 1000000000
-    case _ => 1000000
+/// The modulus that leaves a code of this many digits. The truncated value
+/// holds at most ten digits, so a longer code keeps the whole value, padded.
+fn modulusOf(digits: Int) -> Int {
+  var modulus = 1
+  var counted = 0
+  while counted < digits && counted < 10 {
+    modulus = modulus * 10
+    counted = counted + 1
   }
+  modulus
 }
 
 /// Initializes standard TOTP configuration with 6 digits, 30-second interval, and 1-step skew tolerance.
@@ -143,7 +145,7 @@ fn generateForStep(cfg: &TotpConfig, step: Int) -> Str {
   let b3 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(digest.at(offset + 3), 0u8)), 0)
 
   let p = ((b0 % 128) * 16777216) + (b1 * 65536) + (b2 * 256) + b3
-  let codeInt = p % powerOfTen(cfg.digits)
+  let codeInt = p % modulusOf(cfg.digits)
 
   var codeStr = show(codeInt)
   while codeStr.length() < cfg.digits {

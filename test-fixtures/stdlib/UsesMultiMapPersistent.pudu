@@ -1,0 +1,40 @@
+module UsesMultiMapPersistent
+
+import Std.MultiMap as MultiMap
+
+const BASE: MultiMap.MultiMap[Int, Int] = MultiMap.add(&MultiMap.empty(), 1, 7)
+
+fn multiMapContains(map: &MultiMap.MultiMap[Int, Int], key: Int, value: Int) -> Bool {
+  false
+}
+
+fn shadowed(map: &MultiMap.MultiMap[Int, Int], key: Int, value: Int) -> Bool {
+  multiMapContains(map, key, value)
+}
+
+export fn main() -> Int {
+  let first = MultiMap.fromPairs(&[(1, "a"), (1, "a"), (2, "b")])
+  let next = MultiMap.add(&first, 1, "c")
+  var checked = 0
+  if MultiMap.get(&first, 1) == ["a", "a"] { checked = checked + 1 }
+  if MultiMap.get(&next, 1) == ["a", "a", "c"] { checked = checked + 1 }
+  if MultiMap.total(&next) == 4 && MultiMap.size(&next) == 2 { checked = checked + 1 }
+  if MultiMap.contains(&next, 1, "a") && MultiMap.contains(&next, 1, "c") { checked = checked + 1 }
+  if !MultiMap.contains(&next, 1, "b") && !MultiMap.contains(&next, 9, "a") { checked = checked + 1 }
+  let once = MultiMap.remove(&next, 1, "a")
+  let twice = MultiMap.remove(&once, 1, "a")
+  if MultiMap.contains(&once, 1, "a") && !MultiMap.contains(&twice, 1, "a") { checked = checked + 1 }
+  if MultiMap.get(&twice, 1) == ["c"] { checked = checked + 1 }
+  let cleared = MultiMap.setAll(&next, 1, &[])
+  if !MultiMap.containsKey(&cleared, 1) && !MultiMap.contains(&cleared, 1, "a") { checked = checked + 1 }
+  if MultiMap.contains(&BASE, 1, 7) && MultiMap.total(&BASE) == 1 { checked = checked + 1 }
+  let nested = MultiMap.add(&MultiMap.empty(), (1, "key"), [1, 2])
+  if MultiMap.contains(&nested, (1, "key"), [1, 2]) && !MultiMap.contains(&nested, (1, "key"), [2, 1]) { checked = checked + 1 }
+  let decimals = MultiMap.add(&MultiMap.add(&MultiMap.empty(), 1.50d, 2.00d), 1.5d, 2.0d)
+  if MultiMap.size(&decimals) == 1 && MultiMap.count(&decimals, 1.5d) == 2 && show(MultiMap.keys(&decimals)) == "[1.5]" { checked = checked + 1 }
+  if MultiMap.contains(&MultiMap.remove(&decimals, 1.5d, 2.0d), 1.50d, 2.00d) { checked = checked + 1 }
+  if !shadowed(&BASE, 1, 7) && MultiMap.contains(&BASE, 1, 7) { checked = checked + 1 }
+  print(show(MultiMap.keys(&decimals)))
+  if checked == 13 { print("multimap checks: 13") } else { panic("MultiMap persistence regression") }
+  0
+}

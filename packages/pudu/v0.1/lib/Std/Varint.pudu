@@ -58,7 +58,8 @@ export fn encodeUleb128(value: UInt64) -> Array[UInt8] {
   out
 }
 
-/// Decodes an unsigned 64-bit integer from LEB128 bytes starting at `offset`.
+/// Decodes an unsigned 64-bit integer from LEB128 bytes starting at `offset`,
+/// or nothing when the bytes end early or spell a value past 64 bits.
 export fn decodeUleb128(bytes: &Array[UInt8], offset: Int) -> Option[VarintDecodeResult] {
   let len = bytes.length()
   if offset < 0 || offset >= len {
@@ -73,7 +74,8 @@ export fn decodeUleb128(bytes: &Array[UInt8], offset: Int) -> Option[VarintDecod
     let b = bytes[i]
     let u = byteToUInt64(b)
     let chunk = u & 0x7fu64
-    if shift > 63 {
+    // The tenth byte holds bit 63 alone; anything more is past 64 bits.
+    if shift > 63 || (shift == 63 && chunk > 1u64) {
       return None
     }
     result = result | (chunk << shift)

@@ -107,5 +107,11 @@ export fn main() -> Int {
   let offset = Time.localOffsetMinutes()
   if offset > 0 - 1441 && offset < 1441 { held = held + 1 }
 
+  // Before the epoch the whole second is the one at or before the instant.
+  if Time.toSeconds(&Time.instantOf(-1)) == -1 && Time.toSeconds(&Time.instantOf(-1000)) == -1
+    && Time.toSeconds(&Time.instantOf(-1001)) == -2 {
+    held = held + 1
+  }
+
   held
 }

@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
   ( Builtin (..)
@@ -24,8 +26,12 @@ module Pudu.Eval.Value
   , charMethodName
   , stringMethodName
   , Captured (..)
+  , Frame (..)
   , Closure (..)
-  , Value (..)
+  , Value (.., StrValue, MapValue)
+  , intPairMap
+  , IntPairEntry (..)
+  , ropeOfValue
   , ForeignBinding (..)
   , ForeignClaim (..)
   , ForeignRelease (..)
@@ -43,6 +49,9 @@ import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text)
+import Data.IORef (IORef)
+import GHC.IOArray (IOArray)
+import Pudu.Eval.Rope (Rope, ropeOf, ropeText)
 import Pudu.Eval.Method
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
 import Pudu.Eval.Builtin.Definition (Builtin (..), builtinName)
@@ -51,9 +60,15 @@ import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Data.Int (Int64)
 import Pudu.FloatLiteral (FloatWidth)
-import Pudu.Foreign.Crossing (Crossing)
+import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
+import Pudu.Runtime.SeriesMap (SeriesMap)
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
+
+{-| Strict metadata avoids retaining the temporary numeric conversion tuple. -}
+data IntPairEntry = PlatformIntPairEntry !Value | IntPairEntry !IntegerKind !IntegerKind !Value
+  deriving stock (Show)
 
 {-| @Eval.Value.Runtime — one evaluated result.
 
@@ -70,7 +85,11 @@ data Value
   = IntValue !IntegerKind !Integer
   | FloatValue !FloatWidth !Double
   | DecimalValue !Decimal
-  | StrValue !Text
+  {-| Text as one contiguous value: every text that was not built by `+`. -}
+  | FlatText !Text
+  {-| Text built by `+`, held as the chunks it was appended from so that
+      building one a piece at a time does not copy it at every step. -}
+  | RopeText !Rope
   {-| A byte sequence is its own value rather than an `Array[UInt8]`.
 
       An array holds each element as a separate runtime value and reaches the
@@ -104,7 +123,9 @@ data Value
   | UnitValue
   | TupleValue ![Value]
   | ArrayValue !(Seq Value)
-  | MapValue !(Map OrdValue Value)
+  | OrderedMapValue !(Map OrdValue Value)
+  {-| Numeric occurrence storage with its ordered view computed only on demand. -}
+  | IntPairMapValue !(IntMap (SeriesMap IntPairEntry)) ~(Map OrdValue Value)
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
@@ -140,76 +161,105 @@ data Value
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
-  deriving stock (Eq, Show)
+  {-| The type a call chose for a parameter bounded by a trait with a static
+      member: the owner its methods are installed under and the owner's own
+      arguments. Bound under the parameter's name, so `A.decode(json)` finds
+      the selected owner's method without any value to dispatch on. -}
+  | TypeWitnessValue !Text ![Value]
+  deriving stock (Show)
 
-{-| Everything the runtime needs to make one foreign call.
+{-| Both map representations expose the same persistent ordered contents. -}
+pattern MapValue :: Map OrdValue Value -> Value
+pattern MapValue entries <- (mapOfValue -> Just entries)
+  where
+    MapValue entries = OrderedMapValue entries
 
-    Resolved from the declaration rather than looked up per call: the library
-    name, the symbol, and how each value crosses. Nothing here is decided while
-    the program is running, so a call is a call rather than a search. -}
-data ForeignBinding = ForeignBinding
-  { foreignBindingLibrary :: !Text
-  {-| Whether the result is one the library keeps rather than gives away. -}
-  , foreignBindingBorrowedResult :: !Bool
-  {-| Whether the result is another reference the library counts, which owes a
-      release of its own even where an existing reference is the same address. -}
-  , foreignBindingCountedResult :: !Bool
-  {-| The ABI version the declaration named, which the platform's own naming
-      puts inside the file name rather than beside it. -}
-  , foreignBindingVersion :: !(Maybe Text)
-  , foreignBindingSymbol :: !Text
-  {-| How every native argument crosses, slots included: the bridge needs a kind
-      for each position whether the value is sent or written back. -}
-  , foreignBindingArguments :: ![Crossing]
-  {-| Which of those positions the library writes rather than reads, in the same
-      order. An ordinary argument carries nothing here. -}
-  , foreignBindingSlots :: ![Maybe ForeignSlot]
-  , foreignBindingResult :: !Crossing
-  , foreignBindingReleasedBy :: !(Maybe ForeignRelease)
-  {-| The handle type this function releases, when it is a release.
+mapOfValue :: Value -> Maybe (Map OrdValue Value)
+mapOfValue value = case value of
+  OrderedMapValue entries -> Just entries
+  IntPairMapValue _ entries -> Just entries
+  _ -> Nothing
 
-      Known from the declaration rather than guessed at the call: a release is
-      whatever some function in the same block named after `by`. -}
-  , foreignBindingReleases :: !(Maybe Text)
-  }
-  deriving stock (Eq, Show)
+{-| The view is lazy and shared; native integer updates never force it. -}
+intPairMap :: IntMap (SeriesMap IntPairEntry) -> Value
+intPairMap index = IntPairMapValue index $ Map.fromDistinctAscList
+  [ (OrdValue (TupleValue [IntValue keyKind (toInteger number), IntValue valueKind (toInteger member)]), count)
+  | (number, values) <- IntMap.toAscList index
+  , (member, entry) <- SeriesMap.toAscList values
+  , let (keyKind, valueKind, count) = case entry of
+          PlatformIntPairEntry value -> (defaultIntegerKind, defaultIntegerKind, value)
+          IntPairEntry a b value -> (a, b, value)
+  ]
 
-{-| One argument the library writes rather than reads.
+{-| A text value, read as its whole text and built from one.
 
-    Carries what the slot answers with rather than what the caller sends: the
-    handle type when it is a handle, so the address it receives can be claimed
-    under the same name a direct result would be, and the destructor that claim
-    retains. -}
-data ForeignSlot = ForeignSlot
-  { foreignSlotCrossing :: !Crossing
-  , foreignSlotReleasedBy :: !(Maybe ForeignRelease)
-  }
-  deriving stock (Eq, Show)
+    Matching joins an appended text once and keeps the join, so every reader
+    sees plain text; `+` on two texts appends ropes instead of copying. Text
+    that was never appended to stays flat and carries no rope. -}
+{-# INLINE StrValue #-}
+pattern StrValue :: Text -> Value
+pattern StrValue text <- (textOf -> Just text)
+  where
+    StrValue text = FlatText text
 
-{-| The exact native destructor an owned result retains for runtime teardown. -}
-{-| Whether the program owes a release for a handle it holds.
+{-| The whole text of a text value, joining an appended one once. -}
+textOf :: Value -> Maybe Text
+{-# INLINE textOf #-}
+textOf value = case value of
+  FlatText text -> Just text
+  RopeText rope -> Just (ropeText rope)
+  _ -> Nothing
 
-    A library hands back two different things through one C type. Some of them
-    it gives away, and the program must release exactly once. Others it keeps —
-    a default font, the text of its last error, the surface a context draws to —
-    and releasing one of those frees something the library is still using.
+{-| A text value as a rope, ready to be appended to without copying. -}
+ropeOfValue :: Value -> Maybe Rope
+ropeOfValue value = case value of
+  FlatText text -> Just (ropeOf text)
+  RopeText rope -> Just rope
+  _ -> Nothing
 
-    Which it is cannot be read off the address, so it is carried beside it. A
-    borrowed handle has no claim in the store, is never leased, is never
-    released at teardown, and is refused if it reaches a release. -}
-data ForeignClaim
-  = {-| The generation of this handle's claim, which the store admitted. -}
-    OwnedClaim !Integer
-  | {-| The library keeps it. Nothing on this side releases it, ever. -}
-    BorrowedClaim
-  deriving stock (Eq, Show)
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
-data ForeignRelease = ForeignRelease
-  { foreignReleaseLibrary :: !Text
-  , foreignReleaseVersion :: !(Maybe Text)
-  , foreignReleaseSymbol :: !Text
-  }
-  deriving stock (Eq, Show)
+{-| Aggregate equality follows numeric Decimal equality without changing the
+    retained scale or the identity of closures and foreign handle claims. -}
+instance Eq Value where
+  left == right = case (left, right) of
+    (IntValue kindA a, IntValue kindB b) -> kindA == kindB && a == b
+    (FloatValue widthA a, FloatValue widthB b) -> widthA == widthB && a == b
+    (DecimalValue a, DecimalValue b) -> decimalCompare a b == EQ
+    (StrValue a, StrValue b) -> a == b
+    (BytesValue a, BytesValue b) -> a == b
+    (BucketsValue a, BucketsValue b) -> a == b
+    (CharValue a, CharValue b) -> a == b
+    (BoolValue a, BoolValue b) -> a == b
+    (TupleValue a, TupleValue b) -> a == b
+    (ArrayValue a, ArrayValue b) -> a == b
+    (MapValue a, MapValue b) -> a == b
+    (SetValue a, SetValue b) -> a == b
+    (FunctionValue a, FunctionValue b) -> a == b
+    (BuiltinValue a, BuiltinValue b) -> a == b
+    (TextMethodValue a, TextMethodValue b) -> a == b
+    (ForeignValue a, ForeignValue b) -> a == b
+    (NullValue, NullValue) -> True
+    (UnitValue, UnitValue) -> True
+    (RecordValue tagA a, RecordValue tagB b) -> tagA == tagB && a == b
+    (VariantValue tagA a, VariantValue tagB b) -> tagA == tagB && a == b
+    (ArrayMethodValue tagA a, ArrayMethodValue tagB b) -> tagA == tagB && a == b
+    (StringMethodValue tagA a, StringMethodValue tagB b) -> tagA == tagB && a == b
+    (CharMethodValue tagA a, CharMethodValue tagB b) -> tagA == tagB && a == b
+    (MapMethodValue tagA a, MapMethodValue tagB b) -> tagA == tagB && a == b
+    (SetMethodValue tagA a, SetMethodValue tagB b) -> tagA == tagB && a == b
+    (RangeMethodValue tagA a, RangeMethodValue tagB b) -> tagA == tagB && a == b
+    (BytesMethodValue tagA a, BytesMethodValue tagB b) -> tagA == tagB && a == b
+    (BucketsMethodValue tagA a, BucketsMethodValue tagB b) -> tagA == tagB && a == b
+    (RangeValue lowA inclusiveA highA, RangeValue lowB inclusiveB highB) ->
+      lowA == lowB && inclusiveA == inclusiveB && highA == highB
+    (TaskValue closureA bindingsA spanA, TaskValue closureB bindingsB spanB) ->
+      closureA == closureB && bindingsA == bindingsB && spanA == spanB
+    (ForeignHandleValue nameA addressA claimA, ForeignHandleValue nameB addressB claimB) ->
+      nameA == nameB && addressA == addressB && claimA == claimB
+    (TypeWitnessValue ownerA argumentsA, TypeWitnessValue ownerB argumentsB) ->
+      ownerA == ownerB && argumentsA == argumentsB
+    _ -> False
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
     index, a scalar value. That is the type the language gives an unsuffixed
@@ -247,6 +297,25 @@ falseValue = BoolValue False
     is: a method the compiler knows the semantics of can be typed exactly, and
     an unknown one is reported rather than dispatched. -}
 
+{-| @Eval.Value.Frame — one level of bindings.
+
+    A map frame holds names as they are bound; a cell frame updates private
+    block-local cells and snapshots their values for captures. A slot frame belongs to a
+    compiled body: its locals sit in an array at positions fixed when the body
+    was compiled, named by the layout, and a name bound at run time that the
+    body never declared goes to the extra map. Everything that works by name
+    reads these representations through the same frame operations. -}
+data Frame
+  = MapFrame !(Map Text Value)
+  | CellFrame !(IORef (Map Text (IORef Value)))
+  | SlotFrame !(Map Text Int) !(IOArray Int Value) !(IORef (Map Text Value))
+
+instance Show Frame where
+  show frame = case frame of
+    MapFrame held -> "MapFrame " <> show held
+    CellFrame _ -> "CellFrame"
+    SlotFrame layout _ _ -> "SlotFrame " <> show (Map.keys layout)
+
 {-| @Eval.Value.Closure — a callable function.
 
     `closureSelf` is present when the function was reached as a method: the
@@ -260,7 +329,7 @@ falseValue = BoolValue False
     boundary travels with either capture so a nested literal can still tell
     durable module bindings from transient call locals. -}
 data Captured = Captured
-  { capturedEnvironment :: ![Map Text Value]
+  { capturedEnvironment :: ![Frame]
   , capturedModuleDepth :: !Int
   }
   deriving stock (Show)
@@ -270,6 +339,10 @@ data Closure = Closure
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe Captured)
+  {-| Type witnesses bound in the body's frame beside its parameters. -}
+  , closureWitnesses :: ![(Text, Value)]
+  {-| Proven after immutable capture; forced once by the first invocation. -}
+  , closureMultiMap :: ~(Maybe (Span, Builtin))
   }
   deriving stock (Show)
 
@@ -430,3 +503,4 @@ shapeRank value = case value of
   RangeValue{} -> 27
   RangeMethodValue _ _ -> 28
   TextMethodValue _ -> 29
+  TypeWitnessValue _ _ -> 30

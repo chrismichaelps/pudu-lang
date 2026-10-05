@@ -1,0 +1,10 @@
+module Lib.Sink
+
+export type Sink = { attach: fn(Listener) -> () }
+export type Report = { message: Str }
+export type Listener = Handler[Report]
+export type Handler[T] = fn(&T) -> ()
+
+export fn none() -> Sink {
+  Sink{attach: fn(_listener: Listener) -> () {}}
+}

@@ -15,6 +15,12 @@ aliases: [Type Check Record]
 
 # Type Check Record
 
+The shared pattern/record substitution now preserves applied constructor fields,
+so Higher{held: [1]} infers its named Array constructor. Generic constructors
+must match complete arities; [[Type Unify]] refuses inferred partial applications.
+Resolved Grill Log: constructor inference must retain the same arity rules as
+explicit trait argument validation.
+
 ## Purpose
 
 Check a record construction, and a variant that names its payload.

@@ -14,6 +14,7 @@ Everything is one command: `pudu`. It checks, runs, tests, formats, and document
 | `pudu fmt <path>...` | rewrites files in the one supported format |
 | `pudu fmt --check <path>...` | reports unformatted files without changing them |
 | `pudu lint <path>...` | analyzes programs, with `--fix` for safe fixes |
+| `pudu expand <file>` | prints the implementations a file's `derives` produce |
 | `pudu doc <file>...` | describes every name a program declares, as text, `--json`, or `--html` |
 | `pudu search <query> <file>...` | finds a name, or a type shape such as `Array[a] -> a` |
 | `pudu build <file>` | writes one file that runs anywhere the compiler runs |
@@ -76,8 +77,11 @@ The products live in the user's cache directory, `$XDG_CACHE_HOME/pudu` or `~/.c
 
 - diagnostics as you type, with the same codes and help as the command line;
 - hover with the inferred type, and for a name another module exports, that module's documentation;
-- go to definition, into another module's file for an imported name, and to a module's file from its import;
+- go to definition, into another module's file for an imported name, to a module's file from its import, and from a method call to the method it runs — a derived method opens the derive that wrote it;
 - completion of a value's fields and methods, a module's exports after `Io.`, whole module paths after `import`, a selection's names inside `import Std.List { … }`, a match arm's variants after `case`, and a record literal's unset fields inside `Point{ … }`;
+- inside `impl Trait for Type { }`, the trait's unwritten members as complete methods, and a quick fix that writes every required one;
+- hover, definition, and completion in derive syntax: a `derives` entry, a `derive … for` header, and a derive's `field` and `variant`;
+- a finding in an imported module shown at the import that reaches it, with its help on a line of its own and its notes as links;
 - signature help, references, rename, highlights, inlay hints for inferred types, the outline, workspace symbols, and formatting.
 
 A document that is half written still gets answers: the server reads what it can of an unfinished line, and a request asked again at the same place is answered from what it already compiled. While it works it keeps reading, so a newer edit replaces an older one still waiting and a cancelled request stops its work.

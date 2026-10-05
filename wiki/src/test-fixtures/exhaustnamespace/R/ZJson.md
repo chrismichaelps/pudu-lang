@@ -1,0 +1,38 @@
+---
+type: module
+path: "@root/test-fixtures/exhaustnamespace/R/ZJson.pudu"
+fidelity: Active
+subsystem: "[[Testing]]"
+grammar: "[[grammar/pudu]]"
+tags: [fixture, exhaustiveness]
+---
+
+# Exhaust Namespace R ZJson
+
+## Purpose
+
+Wrap Std.Json behind a project module sorted after R.Kinds so the dependency graph observes another constructor-loading order.
+
+## Interface
+
+`is_null() -> Bool` delegates to Std.Json.isNull for Json.Null.
+
+## Algorithm
+
+Static graph compilation uses canonical constructor owners; successful entries exercise the classifier and Json independently.
+
+## Negative Logic
+
+No basename-dependent constructor coverage or wildcard repair of the complete classifier.
+
+## Edge Cases
+
+Importing same-named Json variants neither removes nor supplies coverage for the local Atom type.
+
+## Grill Log
+
+- **Q:** Why use a module graph rather than one unit source? **A:** The regression requires unrelated loaded declarations to share constructor names. _Rationale:_ a single-source check cannot reproduce that environment. _Rejected:_ only testing local constructor names (#378).
+
+## Referenced by
+
+[[Type Exhaust]] · [[Type Check Pattern Spec]]

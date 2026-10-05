@@ -1,6 +1,7 @@
 {-| @Program.Parser.Expression.Control — parses the branching and looping forms -}
 module Pudu.Frontend.Parser.Expression.Control
   ( ExpressionParsers (..)
+  , parseComptimeFor
   , parseFor
   , parseIf
   , parseLabelled
@@ -12,7 +13,9 @@ module Pudu.Frontend.Parser.Expression.Control
   ) where
 
 import Data.Text (Text)
+import Pudu.Frontend.Parser.Declaration.Generic (parseWhereClause)
 import Pudu.Frontend.Parser.Expression.Recovery (labelWithoutLoop, mergedOrLeft)
+import Pudu.Frontend.Parser.Name (expectValueIdentifier)
 import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.State
   ( BlockParser
@@ -29,9 +32,11 @@ import Pudu.Frontend.Parser.State
   , expectIdentifier
   , peekToken
   )
+import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Expression (..)
+  ( ComptimeFor (..)
+  , Expression (..)
   , FieldPattern (..)
   , MatchArm (..)
   , Pattern (..)
@@ -326,4 +331,34 @@ parseFor parsers blockParser label = do
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
         (ForExpression label binder iterated body)
+    )
+
+{-| `comptime for element: Type in list where Bounds { body }`. The element is
+    a binding with its type written down rather than a general pattern:
+    unrolling needs one type per element, and the typed binding states it.
+    The source is read as a scrutinee for the same reason a `for` iterable
+    is — a record construction before the `where` would be ambiguous with the
+    body that follows it. -}
+parseComptimeFor :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
+parseComptimeFor parsers blockParser = do
+  start <- advanceToken
+  _ <- expectKeyword KwFor "after comptime to open a compile-time loop"
+  element <- expectValueIdentifier "for the loop element"
+  _ <- expectSymbol ":" "after the loop element"
+  elementType <- parseTypeSyntax
+  _ <- expectKeyword KwIn "between the element type and the iterated list"
+  source <- scrutineeOf parsers blockParser
+  constraints <- parseWhereClause
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan start) (locatedSpan body))
+        ( ComptimeForExpression
+            ComptimeFor
+              { comptimeForElement = element
+              , comptimeForType = elementType
+              , comptimeForSource = source
+              , comptimeForConstraints = constraints
+              , comptimeForBody = body
+              }
+        )
     )

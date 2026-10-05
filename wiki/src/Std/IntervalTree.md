@@ -52,6 +52,10 @@ Indexes closed integer intervals $[low, high]$, augmenting each node with the ma
 - **Q:** Can intervals have negative coordinates?
   **A:** Yes, intervals operate over the full 64-bit signed integer range `Int`.
 
+- **Q:** Insert into a plain binary search tree? **A:** No. _Rationale:_ intervals arriving in
+  order made a chain that every insert and query walked end to end. Nodes carry a height and
+  rebalance by rotation, recomputing each subtree's greatest end. _Rejected:_ rebuilding the whole
+  tree after a burst of inserts.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Tree]] · [[architecture/STDLIB]]

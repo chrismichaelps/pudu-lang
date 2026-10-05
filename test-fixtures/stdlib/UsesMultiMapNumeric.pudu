@@ -1,0 +1,71 @@
+module UsesMultiMapNumeric
+
+import Std.MultiMap as MultiMap
+
+fn unrelated(value: Int) -> Int { value + 1 }
+
+export fn main() -> Int {
+  var checked = 0
+  let empty: MultiMap.MultiMap[Int, Int] = MultiMap.empty()
+  let first = MultiMap.add(&empty, -3, -5)
+  let second = MultiMap.add(&first, -3, -5)
+  let third = MultiMap.add(&second, 2, -9)
+  if MultiMap.total(&empty) == 0 && !MultiMap.contains(&empty, -3, -5) { checked = checked + 1 }
+  if MultiMap.total(&first) == 1 && first.occurrences.get((-3, -5)) == Some(1) { checked = checked + 1 }
+  if second.occurrences.get((-3, -5)) == Some(2) && MultiMap.get(&second, -3) == [-5, -5] { checked = checked + 1 }
+  if third.occurrences.keys() == [(-3, -5), (2, -9)] { checked = checked + 1 }
+  if show(third.occurrences) == "\{(-3, -5): 2, (2, -9): 1\}" { checked = checked + 1 }
+  let removed = MultiMap.remove(&third, -3, -5)
+  let rebuilt = MultiMap.add(&removed, -3, -5)
+  if removed.occurrences.get((-3, -5)) == Some(1) && rebuilt.occurrences == third.occurrences { checked = checked + 1 }
+  let cleared = MultiMap.setAll(&third, -3, &[])
+  if cleared.occurrences.keys() == [(2, -9)] && third.occurrences.size() == 2 { checked = checked + 1 }
+  let large = MultiMap.add(&MultiMap.empty(), 18446744073709551615u128, 18446744073709551614u128)
+  if MultiMap.contains(&large, 18446744073709551615u128, 18446744073709551614u128) { checked = checked + 1 }
+  var bag: MultiMap.MultiMap[Int, Int] = MultiMap.empty()
+  var i = -41
+  while i < 79 {
+    bag = MultiMap.add(&bag, i % 7, i % 13)
+    if i % 2 == 0 { bag = MultiMap.add(&bag, i % 7, i % 13) }
+    i = i + 1
+  }
+  if i == 79 && MultiMap.total(&bag) == 180 { checked = checked + 1 }
+  var hits = 0
+  i = -41
+  while i < 79 {
+    if MultiMap.contains(&bag, i % 7, i % 13) && i < 19 { hits = hits + 1 }
+    i = i + 1
+  }
+  if hits == 60 { checked = checked + 1 }
+  var fallback: MultiMap.MultiMap[Int, Int] = MultiMap.empty()
+  i = 0
+  while i < 7 {
+    fallback = MultiMap.add(&fallback, i, unrelated(i))
+    i = i + 1
+  }
+  if MultiMap.total(&fallback) == 7 && MultiMap.contains(&fallback, 6, 7) { checked = checked + 1 }
+  i = 0
+  while i < 9 {
+    fallback = MultiMap.add(&fallback, i, i)
+    if i == 3 { break }
+    i = i + 1
+  }
+  if i == 3 && MultiMap.total(&fallback) == 11 { checked = checked + 1 }
+  var zero = 0
+  i = 0
+  while i < 3 {
+    if MultiMap.contains(&bag, 99, 99) && 1 / zero > 0 { hits = hits + 100 }
+    if MultiMap.contains(&bag, 0, 0) || 1 / zero > 0 { hits = hits + 1 }
+    i = i + 1
+  }
+  if hits == 63 { checked = checked + 1 }
+  i = 0
+  var conditioned: MultiMap.MultiMap[Int, Int] = MultiMap.empty()
+  while { i = i + 1
+    i < 5 } {
+    conditioned = MultiMap.add(&conditioned, i, i * 2)
+  }
+  if i == 5 && MultiMap.total(&conditioned) == 4 && MultiMap.contains(&conditioned, 4, 8) { checked = checked + 1 }
+  if checked == 14 { print("multimap numeric checks: 14") } else { panic("MultiMap numeric regression") }
+  0
+}

@@ -1,0 +1,21 @@
+module UsesDecimalDispatch
+
+trait Doubling {
+  fn twice(self: &Self) -> Self
+}
+
+impl Doubling for Decimal {
+  fn twice(self: &Self) -> Self { *self + *self }
+}
+
+fn doubled[T: Doubling](value: T) -> T { value.twice() }
+
+fn main() -> Int {
+  var held = 0
+  if 2.50d.twice() == 5.00d { held = held + 1 }
+  if doubled(-2.50d) == -5.00d { held = held + 1 }
+  if Doubling.twice(&2.50d) == 5.00d { held = held + 1 }
+  if Decimal.twice(&2.50d) == 5.00d { held = held + 1 }
+  if doubled(2.50d).toText() == "5.00" { held = held + 1 }
+  held
+}

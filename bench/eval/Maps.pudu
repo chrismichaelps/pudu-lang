@@ -1,0 +1,20 @@
+module Maps
+fn main() -> Int {
+  var m: Map[Int, Int] = mapOf([])
+  var i = 0
+  while i < 300000 {
+    m = m.insert(i % 50000, i)
+    i = i + 1
+  }
+  var total = 0
+  i = 0
+  while i < 300000 {
+    match m.get(i % 60000) {
+      case Some(v) => { total = total + v }
+      case None => {}
+    }
+    i = i + 1
+  }
+  print(display(total))
+  0
+}

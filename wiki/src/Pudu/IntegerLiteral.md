@@ -151,3 +151,13 @@ BigInt dispatch are unchanged.
 ### Resolved Grill Log
 - **Q:** Right-shift an unmasked wide unsigned operand? **A:** No; normalize to its declared bit pattern first.
 - **Q:** Use logical shifting for signed values? **A:** No; use an arithmetic signed carrier or the exact fallback.
+
+## Platform integer bounds
+
+`integerKindFits` checks the platform signed kind, which is the default for unannotated integers,
+against bounds computed once for the target pointer width, instead of looking them up for each
+result (#429). Every other kind keeps the general bounds lookup.
+
+### Resolved Grill Log
+- **Q:** Precompute the bounds of every kind? **A:** No; only the platform default is hot, and the
+  other kinds already answer from a constant table.

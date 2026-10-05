@@ -59,5 +59,7 @@ sees a form where another sees something else.
 - **Q:** Bound the whole body rather than each part? **A:** Both, and each while reading.
   _Rationale:_ a per-part bound alone lets enough parts add up to anything, and a whole-body bound
   alone lets one part be the whole of it. _Rejected:_ one bound; checking after reading.
+- **Q:** Keep distinct field names by searching the kept array? **A:** No. _Rationale:_ a client's
+  form with many parts made the server search every kept name per part (#414). A set decides.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http]] · [[Std Http Server]] · [[Std Http Safe]] · [[ADR-0017 What the Web Layer Refuses]]

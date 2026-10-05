@@ -1,0 +1,10 @@
+module Expand
+
+import Std.Json {Decode, Encode}
+import Std.Order {Eq}
+
+type Line = { sku: Str, @json("qty") quantity: Int, @skip note: Option[Str] } derives Eq, Encode, Decode
+
+type Shape = Dot | Circle(Int) derives Eq, Encode
+
+export fn main() -> Int { 0 }

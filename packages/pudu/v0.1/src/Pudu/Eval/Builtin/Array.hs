@@ -5,6 +5,7 @@ module Pudu.Eval.Builtin.Array
   ) where
 
 import Control.Monad (foldM)
+import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 
@@ -22,6 +23,7 @@ import Pudu.Eval.Array
   , arraySlice
   )
 import Pudu.Eval.Env (Evaluator (..), abortAt)
+import Pudu.Eval.Sort (sortWith)
 import Pudu.Eval.Value (ArrayMethod (..), Value (..), intOf)
 import Pudu.Source (Span)
 
@@ -112,7 +114,20 @@ callArrayMethod apply spanValue method receiver arguments = case method of
         foldM (\acc element -> apply spanValue closureValue [acc, element]) initial elements
       _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "reduce" 2
+  ArraySortBy -> case arguments of
+    [closureValue] -> case receiver of
+      ArrayValue elements -> do
+        ordered <- sortWith (goesBefore closureValue) (toList elements)
+        pure (ArrayValue (Seq.fromList ordered))
+      _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
+    _ -> wrongArity "sortBy" 1
  where
+  goesBefore closureValue left right = do
+    result <- apply spanValue closureValue [left, right]
+    case result of
+      BoolValue flag -> pure flag
+      _ -> abortAt (Just spanValue) "E7001" "sortBy comparison must return Bool" Nothing
+
   keepAccepted closureValue kept element = do
     accepted <- acceptByFunction apply spanValue closureValue element
     let next = if accepted then kept Seq.|> element else kept

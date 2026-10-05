@@ -18,6 +18,8 @@ aliases: [Lsp Shapes]
 The declared shape of every sum and record type a program can see, keyed by canonical identity, for
 completion to turn a checked type into candidates: a subject's variants, a receiver's fields.
 
+`TraitShape` and `programTraits` give every visible trait's members by canonical name, each beside whether it has a default: a document's own by body, an interface's by its default set.
+
 ## Interface
 
 ```haskell
@@ -66,6 +68,7 @@ renderTypeSyntax :: Map Text Type -> Located TypeSyntax -> Text
   alive for each module of every ordinary run. _Rationale:_ the tree and the interface graph are
   already held, and a checked receiver type is already canonical. _Rejected:_ a per-module copy of
   every imported declaration kept for the life of a program.
+- **Q:** Keep bodies of imported trait members? **A:** No; interfaces strip them and name defaults instead, which is all a stub needs.
 
 ## Referenced by
 

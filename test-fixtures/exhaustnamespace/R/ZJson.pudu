@@ -1,0 +1,5 @@
+module R.ZJson
+
+import Std.Json as Json
+
+export fn is_null() -> Bool { Json.isNull(&Json.Null) }

@@ -148,6 +148,12 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // Numbers follow the format's grammar, and a table header names a table once.
+  if Result.isErr(&Read.read("a = 01\n")) { held = held + 1 }
+  if Result.isErr(&Read.read("a = 1__0\n")) && Result.isErr(&Read.read("a = _1\n")) { held = held + 1 }
+  if Result.isErr(&Read.read("a = 1.\n")) && Result.isErr(&Read.read("a = abc\n")) { held = held + 1 }
+  if Read.read("[t]\nx = 1\n[t]\ny = 2\n") == Err(Toml.Duplicate("t")) { held = held + 1 }
+  if Read.read("n = 0xDEAD_beef\nf = 9_224_617.445_991\n[a.b]\n[a]\n") == Ok(Toml.Table([("n", Whole(3735928559)), ("f", Toml.Fractional("9_224_617.445_991")), ("a", Toml.Table([("b", Toml.Table([]))]))])) { held = held + 1 }
   held
 }
 

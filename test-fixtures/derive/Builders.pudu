@@ -1,0 +1,57 @@
+module Builders
+import Std.Meta
+
+trait Parse { fn parse(text: Str) -> Result[Self, Str] }
+impl Parse for Int {
+  fn parse(text: Str) -> Result[Self, Str] = if text == "bad" { Err("bad int") } else { Ok(text.length()) }
+}
+impl Parse for Str { fn parse(text: Str) -> Result[Self, Str] = Ok(text) }
+
+fn lookup(source: Map[Str, Str], key: Str) -> Result[Str, Str] = match source.get(key) {
+  case Some(found) => Ok(found)
+  case None => Err("missing " + key)
+}
+
+derive Parse for T: Record {
+  fn parse(text: Str) -> Result[T, Str] {
+    let source = mapOf([("a", text), ("b", "bee"), ("c", "x")])
+    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, Str] where F: Parse {
+        if field.has("fixed") { return F.parse(field.attributeOr("fixed", "")) }
+        let raw = lookup(source, field.name) ?
+        F.parse(raw)
+      })
+  }
+}
+
+derive Parse for T: Sum {
+  fn parse(text: Str) -> Result[T, Str] {
+    var out: Result[T, Str] = Err("no variant " + text)
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.name == text {
+        out = variant.build(fn(field: Meta.Field[T, F]) -> Result[F, Str] where F: Parse { F.parse(field.name) })
+      }
+    }
+    out
+  }
+}
+
+type P = { a: Int, b: Str, @fixed("zz") c: Str } derives Parse
+type Q = { a: Int, missing: Str } derives Parse
+type Shape = Dot | Pair(Int, Str) | Named{size: Int, label: Str} derives Parse
+
+fn render(r: Result[P, Str]) -> Str = match r { case Ok(p) => p.a.toText() + p.b + p.c case Err(e) => e }
+
+export fn main() -> Str {
+  let q = match Q.parse("abc") { case Ok(_) => "ok" case Err(e) => e }
+  let shapes = [Shape.parse("Dot"), Shape.parse("Pair"), Shape.parse("Named"), Shape.parse("Nope")]
+  var text = ""
+  for shape in shapes {
+    text = text + match shape {
+      case Ok(Shape.Dot) => "dot"
+      case Ok(Shape.Pair(n, s)) => "pair" + n.toText() + s
+      case Ok(Shape.Named{size, label}) => "named" + size.toText() + label
+      case Err(e) => e
+    } + ","
+  }
+  render(P.parse("abc")) + ";" + render(P.parse("bad")) + ";" + q + ";" + text
+}

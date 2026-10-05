@@ -1,0 +1,54 @@
+module StdJson
+import Std.Json
+import Std.Json {Encode, Decode, DecodeError}
+
+type Line = { sku: Str, qty: Int } derives Encode, Decode
+type Order = {
+  @json("order_id") id: Int,
+  lines: Array[Line],
+  note: Option[Str],
+  @default("7") priority: Int,
+  @skip cache: Option[Str]
+} derives Encode, Decode
+type Shape = Dot | @json("circle") Circle(Int) | Rect{w: Int, h: Int} derives Encode, Decode
+type Page[T] = { items: Array[T], next: Option[Int] } derives Encode, Decode
+type Tree = Leaf | Node(Array[Tree]) derives Encode, Decode
+
+fn read[T: Decode](text: Str) -> Str {
+  match Json.decode(text) {
+    case Ok(value) => match T.decode(&value) {
+      case Ok(_) => "ok"
+      case Err(problem) => Json.explainDecode(&problem)
+    }
+    case Err(problem) => Json.explain(&problem)
+  }
+}
+
+fn roundShape(shape: Shape) -> Str {
+  let written = Json.encode(&shape.encode())
+  match Shape.decode(&shape.encode()) {
+    case Ok(back) => written + (if Json.encode(&back.encode()) == written { "=" } else { "!" })
+    case Err(problem) => Json.explainDecode(&problem)
+  }
+}
+
+export fn main() -> Str {
+  let order = Order{id: 1, lines: [Line{sku: "a", qty: 2}], note: None, priority: 3, cache: Some("x")}
+  let encoded = Json.encode(&order.encode())
+  let back: Result[Order, DecodeError] = Order.decode(&order.encode())
+  let fields = match back {
+    case Ok(o) => show(o.id) + show(o.priority) + show(o.cache == None) + o.lines[0].sku
+    case Err(p) => Json.explainDecode(&p)
+  }
+  let page: Page[Line] = Page{items: [Line{sku: "z", qty: 1}], next: Some(2)}
+  let tree = Tree.Node([Tree.Leaf, Tree.Node([])])
+  encoded + "\n" + fields + "\n"
+    + read[Order]("\{\"order_id\": 5, \"lines\": [], \"extra\": true\}") + "\n"
+    + read[Order]("\{\"order_id\": 5, \"lines\": [\{\"sku\": \"a\", \"qty\": \"two\"\}]\}") + "\n"
+    + read[Order]("\{\"lines\": []\}") + "\n"
+    + read[Order]("\{\"order_id\": 1, \"order_id\": 2, \"lines\": []\}") + "\n"
+    + roundShape(Shape.Dot) + roundShape(Shape.Circle(4)) + roundShape(Shape.Rect{w: 1, h: 2}) + "\n"
+    + read[Shape]("\{\"Square\": []\}") + "\n"
+    + Json.encode(&page.encode()) + " " + read[Page[Line]](Json.encode(&page.encode())) + "\n"
+    + Json.encode(&tree.encode()) + " " + read[Tree](Json.encode(&tree.encode()))
+}

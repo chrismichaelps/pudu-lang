@@ -2,36 +2,73 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 
-{-| @Compiler.Literals — resolves integer literals once, after checking
+{-| @Compiler.Literals — resolves checked facts into syntax once, after checking
 
     A literal's kind and value are fixed once checking has run, so the module
     the evaluator runs carries them as `ResolvedInteger` rather than as text to
     parse on every evaluation. The kind is chosen by the evaluator's own rule,
     `integerLiteralValue`, so the rewritten module means what the parsed one
-    did. A literal that does not parse is left for the evaluator to answer. -}
+    did. A literal that does not parse is left for the evaluator to answer.
+
+    A reference that chose types for parameters bounded by a trait with a
+    static member is rewritten to apply them explicitly, in the declaration's
+    parameter order, so the call carries the selection erasure would lose. -}
 module Pudu.Compiler.Literals
   ( resolveLiterals
   ) where
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Type.Equality ((:~:) (..))
 import Data.Typeable (Typeable, eqT)
 import GHC.Generics
 import Pudu.Eval.Match (integerLiteralValue)
 import Pudu.Eval.Value (Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
 import Pudu.IntegerLiteral (IntegerKind, parseIntegerLiteral)
 import Pudu.Source (Span)
+import Pudu.Type.Value (Type (..), nominalKey)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
-resolveLiterals :: Map Span Text -> Module -> Module
-resolveLiterals = walk
+resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module
+resolveLiterals kinds selections = walk (Facts kinds selections)
+
+data Facts = Facts
+  { factKinds :: !(Map Span Text)
+  , factSelections :: !(Map Span [Type])
+  }
+
+{-| The reference with its selection applied. An explicit application already
+    carries the written prefix of the same list, so it is replaced whole. -}
+select :: Span -> [Type] -> Expression -> Expression
+select spanValue chosen value = case value of
+  TypeApplication target _ -> TypeApplication target written
+  _ -> TypeApplication (Located spanValue value) written
+ where
+  written = map (typeSyntax spanValue) chosen
+
+{-| A settled type as the syntax naming it. A nominal keeps its full key, so
+    only a parameter is written with one segment; what has no name is invalid
+    and selects nothing. -}
+typeSyntax :: Span -> Type -> Located TypeSyntax
+typeSyntax spanValue held = Located spanValue $ case held of
+  NominalType owner arguments -> case Text.splitOn "." (nominalKey owner) of
+    first : rest -> NamedType (ModuleName (first :| rest)) (map recurse arguments)
+    [] -> InvalidType
+  RigidType name -> NamedType (ModuleName (NonEmpty.singleton name)) []
+  TupleTypeValue members -> TupleType (map recurse members)
+  ReferenceTypeValue mutable target -> ReferenceType mutable (recurse target)
+  UnitTypeValue -> UnitType
+  _ -> InvalidType
+ where
+  recurse = typeSyntax spanValue
 
 {-| A literal as the evaluator would build it, when its text parses. -}
 resolveOne :: Map Span Text -> Span -> Literal -> Literal
@@ -43,12 +80,12 @@ resolveOne kinds spanValue literal = case literal of
   _ -> literal
 
 class Walk a where
-  walk :: Map Span Text -> a -> a
-  default walk :: (Generic a, GWalk (Rep a)) => Map Span Text -> a -> a
+  walk :: Facts -> a -> a
+  default walk :: (Generic a, GWalk (Rep a)) => Facts -> a -> a
   walk kinds = to . gwalk kinds . from
 
 class GWalk f where
-  gwalk :: Map Span Text -> f p -> f p
+  gwalk :: Facts -> f p -> f p
 
 instance GWalk V1 where
   gwalk _ value = value
@@ -73,8 +110,11 @@ instance (GWalk f, GWalk g) => GWalk (f :*: g) where
     literal, where the span that keys its kind is at hand. -}
 instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
-    Just Refl | LiteralExpression literal <- value ->
-      Located spanValue (LiteralExpression (resolveOne kinds spanValue literal))
+    Just Refl
+      | LiteralExpression literal <- value ->
+          Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
+      | Just chosen <- Map.lookup spanValue (factSelections kinds) ->
+          Located spanValue (select spanValue chosen (walk kinds value))
     _ -> Located spanValue (walk kinds value)
 
 instance Walk a => Walk (Maybe a) where
@@ -132,6 +172,11 @@ instance Walk Impl
 instance Walk Macro
 instance Walk MacroParam
 instance Walk MacroKind
+instance Walk Attribute
+instance Walk DeriveShape
+instance Walk Derive
+instance Walk DeriveRequest
+instance Walk ComptimeFor
 instance Walk Parameter
 instance Walk TypeSyntax
 instance Walk FunctionBody

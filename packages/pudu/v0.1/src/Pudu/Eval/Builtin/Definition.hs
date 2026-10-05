@@ -122,6 +122,8 @@ data Builtin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
+  | MultiMapAddBuiltin
+  | MultiMapContainsBuiltin
   | WordMapUnionBuiltin
   | WordMapIntersectionBuiltin
   | WordMapDifferenceBuiltin
@@ -137,6 +139,7 @@ data Builtin
   | EnvironmentBuiltin
   | TemporaryDirectoryBuiltin
   | RenamePathBuiltin
+  | WriteFileAtomicallyBuiltin
   | CreateTemporaryFileBuiltin
   | CreateDirectoryExclusiveBuiltin
   | RemoveEmptyDirectoryBuiltin
@@ -330,6 +333,8 @@ builtinName value = case value of
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"
+  MultiMapAddBuiltin -> "multiMapAdd"
+  MultiMapContainsBuiltin -> "multiMapContains"
   WordMapUnionBuiltin -> "wordMapUnion"
   WordMapIntersectionBuiltin -> "wordMapIntersection"
   WordMapDifferenceBuiltin -> "wordMapDifference"
@@ -345,6 +350,7 @@ builtinName value = case value of
   EnvironmentBuiltin -> "environment"
   TemporaryDirectoryBuiltin -> "temporaryPath"
   RenamePathBuiltin -> "renamePath"
+  WriteFileAtomicallyBuiltin -> "writeFileAtomically"
   CreateTemporaryFileBuiltin -> "createTemporaryFile"
   CreateDirectoryExclusiveBuiltin -> "createDirectoryExclusive"
   RemoveEmptyDirectoryBuiltin -> "removeEmptyDirectory"

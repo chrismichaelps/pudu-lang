@@ -8,6 +8,10 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register [[Compiler Product Publication]] as the bounded cache-admission and
+product-lifetime boundary. Resolved Grill Log: preserve compiler phases and
+cache identity; full analysis remains available independently of executable reuse.
+
 ## Purpose and interface
 
 Declare package metadata, compiler library modules, executable components, test components, compiler
@@ -23,8 +27,20 @@ nowhere and runs never, so the suite reports success without it.
 
 ## Invariants and negative logic
 
-Do not introduce runtime behavior, implicit network setup, private governance inputs, or alternate
-compiler semantics through build metadata. Every new library module must be registered explicitly.
+[[Type Check Derive]] and [[Type Substitution]] are explicit production modules.
+[[Derive Catalogue]] is an explicit production module for the graph-local
+canonical candidate/request inventory; registration adds no dependency.
+Register [[Validated Derive Definitions]] as the abstract definition admission
+boundary, reusing semantic resolution and the existing checker.
+Register [[Derive Target Application]] for direct bounded type reconstruction.
+Register [[Compile-Time Dependency Closure]] as the pure graph cache-dependency
+inventory, with no new dependency.
+The former validates signatures; the latter is a pure utility shared by ordinary
+checking. Resolved Grill Log: register each module without adding dependencies.
+
+Do not introduce Pudu value/effect semantics, implicit network setup, private governance inputs,
+or alternate compiler semantics through build metadata. The executable's overrideable GC budget
+is an operational policy resolved below. Every new library module must be registered explicitly.
 `Std/Audio/*.pudu` and `Std/Ui/*.pudu` are both source-distribution data, including their nested
 modules. The macOS desktop adapter and Cocoa/CoreGraphics framework linkage are conditional on
 `os(osx)`; other targets compile the typed unsupported implementation in [[Eval Desktop]].
@@ -48,6 +64,17 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
 
 ## Grill Log
 
+- **Q:** Give every runtime capability a collector for the interpreter's small
+  allocation bursts? **A:** Bound the executable's default GC worker count to
+  two with `-with-rtsopts=-qn2`. Paired normal runs show Arrays 947 → 873 ms,
+  Loop 714 → 649 ms and MultiMap 922 → 899 ms when collection stops
+  synchronizing eight workers. Runtime capabilities and server worker
+  parallelism retain their existing policy; explicit RTS flags can override
+  collection policy. Validate the ordinary benchmark script and concurrent
+  request benchmark after linking the default, rather than reporting flag-only
+  experiments as delivered behavior. No library or repository-test default
+  changes, additional dependency or hard-coded optimization level is introduced.
+
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
   keeps source distributions and builds aware of the implementation dependency.
 - **Q:** Add a dependency for ownership cleanup? **A:** No; the existing base, STM, containers, and
@@ -67,6 +94,15 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   consumed by the thin CLI and its tests.
 
 ## Referenced by
+
+The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
+boundary; it introduces no surface-language dependency.
+[[Derive Graph Coherence]] shares the isolated trait evidence matcher for request
+ownership and typed overlap admission.
+[[Derive Graph]] publishes admitted conditional evidence before ordinary compiler
+interfaces and body checking.
+[[Derive Capture Inference]] admits ordinary unwritten private contracts once
+through resolved transitive dependencies before generic template checking.
 
 [[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]] ·
 [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]]
@@ -167,3 +203,89 @@ Registers `Pudu.Eval.Checksum` in the library's exposed modules; it needs no new
 ## Runtime packs (#355)
 
 Registers `Pudu.Cli.RuntimePack`; it uses the already-linked `zlib` and the package HTTP client.
+
+## Alias dependency ordering (#372)
+
+Register [[Type Formation Order]] as a library module. Resolved Grill Log: transparent aliases
+are formed in dependency order before record/sum fields, with deterministic cycles left for
+existing formation diagnostics; no new package is required.
+
+## Imported constant dependencies (#373)
+
+Register [[Compiler Constants]] for transitive checked dependency selection. Resolved Grill Log:
+selection is bounded and cycle-safe, and folds use existing dependency products without new IO.
+
+## Fused MultiMap operations
+
+The pure primitives `multiMapAdd[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` and
+`multiMapContains[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` preserve the library's
+record shape and ordered maps. [[Eval MultiMap]] owns their runtime implementation.
+`add` appends to the group and increments its occurrence count with one tree traversal
+per map; `contains` performs one occurrence lookup. They are registered by name,
+typed with the canonical library nominal identity, installed, and dispatched as pure
+builtins, so aliases, first-class wrappers, shadowing, and constant folding retain
+ordinary call semantics.
+
+Resolved Grill Log: use explicit primitives rather than recognizing a library function
+by name. Preserve persistence, key representatives, duplicate counts, checked Int
+overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
+
+Register Eval.Loop.Kernel for bounded pure scalar/MultiMap loop regions and
+Eval.Foreign.Binding for unchanged foreign metadata extracted from Eval.Value.
+Resolved Grill Log: both are runtime implementation modules; no dependency or
+public Pudu package interface changes.
+Register [[Eval Loop Step]] for the kernel's internal unboxed success/refusal
+channel. Resolved Grill Log: use only base primitives and existing Eval types,
+with no new dependency, production flag, evaluator mode or native toolchain.
+Resolved Grill Log: relocate the former MultiMap kernel to its general loop
+ownership without adding dependencies or broadening admissible calls.
+
+Register Eval.Call.Argument and Eval.Call.Needs for the pre-existing call helper
+extraction included in the complete pending-work delivery.
+
+## Derive resolution hardening
+
+Register Resolve.Reflection and Resolve.Bindings. Resolved Grill Log: pure
+import classification and the existing pattern walk require no new dependencies.
+
+Register [[Type Check Reflection]] and [[Type Check Receiver]]. Resolved Grill
+Log: typed descriptors and receiver specialization reuse existing checker and
+canonical type primitives without introducing dependencies.
+
+## Derive record expansion modules
+
+Register [[Type Check Bound]] for declaration-time application validation.
+Register [[Type Formation Builtins]] for the fixed type/carrier inventory.
+Resolved Grill Log: ordinary generic definitions and derive members consume the
+same canonical parameter-kind inventory without a new package dependency.
+
+Register [[Type Implementation Rules]] and [[Type Trait Proof]] without new
+dependencies. Resolved Grill Log: formed heads and bounded proof serve ordinary
+checking and derive field publication through one semantic path.
+Register [[Type Formation Shells]] for the unchanged pure nominal shell pass.
+Register [[Trait Evidence Matching]] for isolated conditional-parameter inference.
+
+Register [[Derive Record Residualizer]], [[Derive Residual State]],
+[[Derive Reflection Facts]] and [[Compile Time Limits]] without new dependencies.
+Resolved Grill Log: the pure phase kernel is independently testable while graph
+publication and field proof remain explicit subsequent consumers.
+
+Register [[Syntax Cache Provenance]] for the checked-product storage boundary.
+Resolved Grill Log: validate authored identity before deferred encoding, without
+changing the warm-reader format or adding dependencies.
+
+Register [[Type Literal Frontier]], a pure bounded pending-constraint selector;
+no dependencies or public Pudu syntax change. Resolved Grill Log: the checker
+retains ownership and uses its existing monotone fresh-variable invariant.
+
+Register [[Runtime Series Map]] without dependencies or flags. Resolved Grill Log:
+internal persistent numeric compression belongs to a pure storage module; ordinary
+compiler/evaluator modes and public library interfaces remain unchanged.
+
+Register [[Derive Field Callbacks]], [[Derive Residual Context]], [[Derive
+Expansion Output]], [[Syntax Printer]] and [[Statement Inlining]] without new
+dependencies. Resolved Grill Log: callback unrolling and the shared context
+split the residualizer below 500 lines; printing and inlining are pure syntax
+passes the CLI and the residualizer share.
+
+Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.

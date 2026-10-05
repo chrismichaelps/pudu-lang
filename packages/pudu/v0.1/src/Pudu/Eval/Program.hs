@@ -17,6 +17,7 @@ module Pudu.Eval.Program
   , evaluateProgramTallied
   , evaluateProgramTalliedFolded
   , foldModule
+  , foldModuleWith
   , linkedNames
   ) where
 
@@ -44,12 +45,12 @@ import Pudu.Eval.Env
 import Pudu.Eval.Frozen (Frozen, freeze, thaw)
 import Pudu.Eval.Install
   ( installBuiltinConstructors
-  , loadDeclarations
   , loadModuleDeclarations
   , loadModuleDeclarationsWith
   )
 import Pudu.Eval.Value
   ( Closure (..)
+  , Frame (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -203,7 +204,7 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
   unless reuseDeclarations $ do
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
-      { envFrames = [Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
     builtins <- linkDependencies dependencies
     pushFrame builtins
     pushFrame Map.empty
@@ -239,16 +240,28 @@ evaluateModule integerKinds moduleValue = fst <$> foldModule integerKinds module
 {-| Fold a module's constants: evaluate them with effects denied, and answer
     with what went wrong and with every constant whose value is plain data.
 
-    Folding runs the module alone, with nothing but the language in scope, so a
-    constant that compiles is one whose value is fixed by its own module; the
-    values answered are what linking would compute, and linking installs them
-    instead of computing them again. -}
+    The isolated entry supplies no dependencies; program compilation supplies
+    checked imports through `foldModuleWith`. -}
 foldModule :: Map.Map Span Text -> Module -> IO (EvalOutcome, Map.Map Text Frozen)
-foldModule integerKinds moduleValue = do
+foldModule integerKinds = foldModuleWith Map.empty integerKinds []
+
+{-| Fold with checked imports linked exactly as they are during execution.
+    Dependency linking and imported calls both retain the denial of effects. -}
+foldModuleWith
+  :: Map.Map Text (Map.Map Text Frozen)
+  -> Map.Map Span Text
+  -> [(Text, Module)]
+  -> Module
+  -> IO (EvalOutcome, Map.Map Text Frozen)
+foldModuleWith foldedDependencies integerKinds dependencies moduleValue = do
   found <- newIORef Map.empty
   outcome <- runWithEffects False $ do
     withIntegerKinds integerKinds
-    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    builtins <- linkDependenciesFolded foldedDependencies dependencies
+    pushFrame builtins
+    pushFrame Map.empty
+    installImportAliases (moduleImports moduleValue)
+    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     frame <- currentFrame
     Evaluator $ \env -> do
       writeIORef found (Map.mapMaybe freeze (Map.restrictKeys frame constants))
@@ -414,7 +427,7 @@ linkDependenciesFolded folded dependencies = do
     scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
     pure (Map.union (Map.mapKeysMonotonic ((path <> ".") <>) scoped) published)
 
-  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = frames})
+  setFrames frames = Evaluator $ \env -> pure (Done () env{envFrames = map MapFrame frames})
 
 {-| Give a declared function the environment of the module that declared it.
 
@@ -450,16 +463,17 @@ installImportAliases = mapM_ (installOne . locatedValue)
       Just value -> bind item value
       Nothing -> pure ()
 
+  -- Linking runs before any compiled body, so every frame here is a map frame.
   republish path prefix = Evaluator $ \env -> pure $
     let qualified = path <> "."
         select frame =
           Map.mapKeysMonotonic (\name -> prefix <> Text.drop (Text.length qualified) name)
             (Map.takeWhileAntitone (Text.isPrefixOf qualified) (snd (Map.split qualified frame)))
-        published = Map.unions (map select (envFrames env))
+        published = Map.unions [select held | MapFrame held <- envFrames env]
      in case envFrames env of
-          current : rest ->
-            Done () env{envFrames = Map.union published current : rest}
-          [] -> Done () env{envFrames = [published]}
+          MapFrame current : rest ->
+            Done () env{envFrames = MapFrame (Map.union published current) : rest}
+          _ -> Done () env{envFrames = MapFrame published : envFrames env}
 
 
 

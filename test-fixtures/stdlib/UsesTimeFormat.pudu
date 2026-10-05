@@ -58,6 +58,8 @@ export fn main() -> Int {
   // The first of January 1970 was a Thursday, which the count has to agree on.
   if Format.weekdayOf(0) == 4 { held = held + 1 }
   if Format.dayOfYear(0) == 1 { held = held + 1 }
+  // Every other day counts from its own year's first, not only the epoch's.
+  if Format.dayOfYear(-1) == 365 && Format.dayOfYear(1735603200000) == 366 { held = held + 1 }
 
   // The interchange form, both directions.
   if Format.toRfc3339(0) == "1970-01-01T00:00:00Z" { held = held + 1 }
@@ -88,6 +90,28 @@ export fn main() -> Int {
   // The form a message header carries, which is always at zero offset and
   // always in English because the format says so.
   if Format.toHttpDate(0) == "Thu, 01 Jan 1970 00:00:00 GMT" { held = held + 1 }
+  // The two obsolete header forms a recipient must still read.
+  if Result.unwrapOr(Format.fromHttpDate("Thursday, 01-Jan-70 00:00:01 GMT"), -1) == 1000
+    && Result.unwrapOr(Format.fromHttpDate("Thu Jan  1 00:00:02 1970"), -1) == 2000 {
+    held = held + 1
+  }
+  // A clock past its range, a zone other than GMT, and trailing text are refused.
+  if Result.isErr(&Format.fromHttpDate("Thu, 01 Jan 1970 99:99:99 GMT"))
+    && Result.isErr(&Format.fromHttpDate("Thu, 01 Jan 1970 00:00:00 XYZ"))
+    && Result.isErr(&Format.fromHttpDate("Thu, 01 Jan 1970 00:00:00 GMT later")) {
+    held = held + 1
+  }
+  // Interchange text must have its separators, a whole offset, and nothing after it.
+  if Result.isErr(&Format.fromRfc3339("1970/01/01T00:00:00Z"))
+    && Result.isErr(&Format.fromRfc3339("1970-01-01T00:00:00junkZ"))
+    && Result.isErr(&Format.fromRfc3339("1970-01-01T00:00:00Zjunk"))
+    && Result.isErr(&Format.fromRfc3339("1970-01-01T00:00:00.Z")) {
+    held = held + 1
+  }
+  if Format.fromRfc3339("1970-01-01T00:00:00+24:00") == Err(OutOfRange("offset hour", 24))
+    && Format.fromRfc3339("1970-01-01T 0:00:00Z") == Err(Malformed(" 0")) {
+    held = held + 1
+  }
   if Result.unwrapOr(Format.fromHttpDate("Thu, 01 Jan 1970 00:00:00 GMT"), -1) == 0 {
     held = held + 1
   }

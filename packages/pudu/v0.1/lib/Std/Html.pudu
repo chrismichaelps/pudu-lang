@@ -36,6 +36,7 @@ export type Unsafe
   = BadScheme(Str)
   | Handler(Str)
   | Control(Str)
+  | BadName(Str)
 
 /// The schemes a destination may name.
 ///
@@ -261,6 +262,8 @@ export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
   let lowered = name.trim().toLower()
   if lowered.startsWith("on") {
     Err(Handler(name))
+  } else if !isName(name) {
+    Err(BadName(name))
   } else {
     if hasControl(name) || hasControl(value) {
       Err(Control(name))
@@ -277,6 +280,29 @@ export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
 
 /// Whether an attribute name is one whose value would be a program.
 export fn isHandler(name: Str) -> Bool { name.trim().toLower().startsWith("on") }
+
+/// Whether a name can be written as an element or attribute name as it is.
+///
+/// Names cannot be escaped, so anything past an ASCII letter followed by
+/// letters, digits, and `NAME_PUNCTUATION` could end the tag or start another
+/// attribute. The renderers leave such an attribute out and write such an
+/// element's children without its tags.
+export fn isName(name: Str) -> Bool {
+  if name.isEmpty() || !isAsciiLetter(name.charAt(0)) { return false }
+  for character in name.chars() {
+    if !isAsciiLetter(character) && !(character >= '0' && character <= '9') && !NAME_PUNCTUATION.contains(character.toText()) {
+      return false
+    }
+  }
+  true
+}
+
+/// The punctuation a name may hold after its first letter.
+const NAME_PUNCTUATION: Str = "-_.:"
+
+fn isAsciiLetter(character: Char) -> Bool {
+  (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+}
 
 /// Where a scheme ends in a destination, or nothing when it names none.
 ///
@@ -301,17 +327,16 @@ fn schemeEnd(written: Str) -> Int {
 
 const SCHEME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyz0123456789+-."
 
-/// Whether text carries a character that would break out of where it is
-/// written, including the ones that are invisible.
+/// Whether text carries a control character: a line break or tab that would
+/// break out of where it is written, or any other invisible one. A browser
+/// drops control characters before reading a destination's scheme, so
+/// `\u{1}javascript:` runs as `javascript:`; none belongs in a value unescaped.
 fn hasControl(value: Str) -> Bool {
-  var found = false
-  var index = 0
-  while index < value.length() && !found {
-    let character = value.slice(index, index + 1)
-    if character == "\n" || character == "\r" || character == "\t" { found = true }
-    index = index + 1
+  for character in value.chars() {
+    let code = character.code()
+    if code < 32 || code == 127 { return true }
   }
-  found
+  false
 }
 
 /// What a refusal says.
@@ -320,6 +345,7 @@ export fn explainUnsafe(problem: &Unsafe) -> Str {
     case BadScheme(scheme) => "a destination may not name the scheme " + scheme
     case Handler(_name) => "an attribute whose value would be a program is not written here"
     case Control(_name) => "that carries a character which would break out of where it is written"
+    case BadName(_name) => "an element or attribute name must be a letter followed by letters, digits, '-', '_', '.', or ':'"
   }
 }
 
@@ -379,6 +405,13 @@ fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
             index = 0
           }
         }
+        case Element(name, _, children) if !isName(name) => {
+          if children.length() > 0 {
+            pending = pending.push(Resume(current, index))
+            current = children
+            index = 0
+          }
+        }
         case Element(name, attributes, children) => {
           out = appendAttributes(&attributes, out.push("<" + name))
           if VOID_ELEMENTS.contains(name) {
@@ -429,7 +462,7 @@ export fn escapeScalar(value: Char) -> Str {
 fn appendAttributes(attributes: &Array[(Str, Str)], initial: Array[Str]) -> Array[Str] {
   var pieces = initial
   for entry in attributes {
-    if !isHandler(entry[0]) {
+    if !isHandler(entry[0]) && isName(entry[0]) {
       pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
     }
   }

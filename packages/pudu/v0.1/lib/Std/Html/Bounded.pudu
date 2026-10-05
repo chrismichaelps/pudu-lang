@@ -90,7 +90,7 @@ fn appendElementStart(
   var state = appendSized("<", 1, initial, maximum) ?
   state = appendRaw(name, state, maximum) ?
   for entry in attributes {
-    if !Html.isHandler(entry[0]) {
+    if !Html.isHandler(entry[0]) && Html.isName(entry[0]) {
       state = appendSized(" ", 1, state, maximum) ?
       state = appendRaw(entry[0], state, maximum) ?
       state = appendSized("=\"", 2, state, maximum) ?
@@ -137,6 +137,13 @@ export fn render(view: &Html.Html, maximum: Int) -> Result[Rendered, RenderError
         case Html.Text(content) => { state = appendEscaped(content, state, maximum) ? }
         case Html.Trusted(markup) => { state = appendRaw(markup, state, maximum) ? }
         case Html.Fragment(children) => {
+          if children.length() > 0 {
+            pending = pending.push(Resume(current, index))
+            current = children
+            index = 0
+          }
+        }
+        case Html.Element(name, _, children) if !Html.isName(name) => {
           if children.length() > 0 {
             pending = pending.push(Resume(current, index))
             current = children

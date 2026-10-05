@@ -99,8 +99,14 @@ export fn toMillis(value: &Instant) -> Int { value.millis }
 ///
 /// ```
 /// Time.toSeconds(&Time.instantOf(1999))  // 1
+/// Time.toSeconds(&Time.instantOf(-1))    // -1
 /// ```
-export fn toSeconds(value: &Instant) -> Int { value.millis / 1000 }
+export fn toSeconds(value: &Instant) -> Int {
+  // Division rounds toward zero, which for an instant before the epoch would
+  // name the second after it; stepping back one keeps the answer at or before.
+  let whole = value.millis / 1000
+  if value.millis % 1000 < 0 { whole - 1 } else { whole }
+}
 
 /// A duration of milliseconds.
 ///

@@ -1,5 +1,7 @@
 module Pudu.Frontend.ExpandSpec (expandProperties) where
 
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
@@ -7,7 +9,25 @@ import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateEntryPoint)
 import Pudu.Eval.Render (renderValue)
-import Pudu.Source (SourceName (SourceName), newSource)
+import Pudu.Frontend.Expand (expandModule)
+import Pudu.Frontend.Expand.Substitute (substituteExpression)
+import Pudu.Frontend.Lexer (LexResult (..), lexSource)
+import Pudu.Frontend.Parser (ParseResult (..), parseModule)
+import Pudu.Frontend.Syntax
+  ( Block (..)
+  , ComptimeFor (..)
+  , Declaration (..)
+  , Derive (..)
+  , Expression (..)
+  , Function (..)
+  , FunctionBody (..)
+  , Located (..)
+  , Module (..)
+  , Parameter (..)
+  , Statement (..)
+  )
+import Pudu.Frontend.Token (Token)
+import Pudu.Source (Source, SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 expandProperties :: [(String, IO Property)]
@@ -17,7 +37,91 @@ expandProperties =
   , ("parameter kinds are checked against the call", testKinds)
   , ("introduced bindings cannot capture or leak", testHygiene)
   , ("a call that cannot expand reports once", testFailures)
+  , ("derive surface keeps its shape while macro calls expand", testDeriveSurface)
+  , ("a surviving compile-time loop reports E3090", testComptimeDiagnostic)
+  , ("a loop element renames with its body", testComptimeHygiene)
+  , ("lambda block and expression bodies expand before resolution", testLambdaExpansion)
+  , ("macro lambda parameters preserve lexical argument scope", testLambdaHygiene)
+  , ("shared lambda function payload preserves default scope", testLambdaDefaults)
   ]
+
+testLambdaExpansion :: IO Property
+testLambdaExpansion = do
+  body <- evaluateWith ["macro twice(value: expr) = value + value"]
+    "(fn(n: Int) -> Int { twice!(n) })(3)"
+  expressionBody <- evaluateWith ["macro twice(value: expr) = value + value"]
+    "(fn(n: Int) => twice!(n))(2)"
+  unknownBody <- codes
+    ["module M", "fn run() -> Int { (fn() -> Int { missing!(1) })() }"]
+  unknownExpression <- codes
+    ["module M", "fn run() -> Int { (fn() => missing!(1))() }"]
+  pure $ conjoin
+    [ counterexample "lambda body expands" (body === "6")
+    , counterexample "lambda expression body expands" (expressionBody === "4")
+    , counterexample "unknown call in a lambda body reports once"
+        (unknownBody === ["E1047"])
+    , counterexample "unknown call in a lambda expression reports once"
+        (unknownExpression === ["E1047"])
+    ]
+
+testLambdaHygiene :: IO Property
+testLambdaHygiene = do
+  captured <- evaluateStatements
+    [ "macro closure(value: expr) = fn(hidden: Int) -> Int { value + hidden }"
+    , "let hidden = 10", "closure!(hidden)(2)"
+    ]
+  shadowed <- evaluateWith
+    ["macro closure(value: expr) = fn(value: Int) -> Int { value }"]
+    "closure!(10)(2)"
+  nested <- evaluateWith
+    [ "macro closure(value: expr) = fn(value: Int) -> Int {"
+    , "  let inner = fn(value: Int) -> Int { value }"
+    , "  inner(3) + value", "}"
+    ] "closure!(10)(2)"
+  pure $ conjoin
+    [ counterexample "inserted caller argument avoids the lambda parameter"
+        (captured === "12")
+    , counterexample "parameter masks a same-named macro argument" (shadowed === "2")
+    , counterexample "nested parameter scope returns to its enclosing parameter" (nested === "5")
+    ]
+
+testLambdaDefaults :: IO Property
+testLambdaDefaults = do
+  source <- newSource (SourceName "defaults.pudu") (Text.unlines
+    [ "module M", "macro twice(value: expr) = value + value"
+    , "fn defaults(value: Int = twice!(value), next: Int = value) -> Int { next }"
+    ])
+  pure $ case parseModule source (lexTokensOf source) of
+    ParseResult (Just moduleValue) _ -> case moduleDeclarations moduleValue of
+      [macro, Located spanValue (FunctionDeclaration function)] ->
+        let lambda = Located spanValue (LambdaExpression function)
+            caller = Located spanValue (NameExpression ("caller" :| []))
+            substituted = substituteExpression (Map.singleton "value" caller) 0 Map.empty spanValue lambda
+            wrapper = Located spanValue (FunctionDeclaration function
+              { functionParameters = []
+              , functionBody = Just (Located spanValue (ExpressionBody substituted))
+              })
+            (expanded, diagnostics) = expandModule moduleValue
+              { moduleDeclarations = [macro, wrapper] }
+         in case locatedValue substituted of
+          LambdaExpression changed -> case functionParameters changed of
+            [Located _ first, Located _ second] -> conjoin
+              [ counterexample "own default keeps the caller argument" $
+                  case parameterDefault first of
+                    Just (Located _ (MacroCall name arguments)) ->
+                      conjoin [locatedValue name === "twice", arguments === [caller]]
+                    _ -> counterexample "macro call retained before expansion" False
+              , counterexample "later default follows the earlier parameter" $
+                  fmap locatedValue (parameterDefault second)
+                    === Just (NameExpression (locatedValue (parameterName first) :| []))
+              , counterexample "shared function defaults are expanded"
+                  (macroCallCount (countNodes expanded) === 0)
+              , counterexample "shared function traversal has no findings" (null diagnostics)
+              ]
+            _ -> counterexample "two lambda parameters retained" False
+          _ -> counterexample "lambda constructor retained" False
+      _ -> counterexample "macro and function parsed" False
+    _ -> counterexample "shared function defaults parse" False
 
 testExpansion :: IO Property
 testExpansion = do
@@ -183,6 +287,173 @@ codes :: [Text] -> IO [Text]
 codes inputLines = do
   source <- newSource (SourceName "expand.pudu") (Text.unlines inputLines)
   codesOf <$> runCompile source
+
+testDeriveSurface :: IO Property
+testDeriveSurface = do
+  source <- newSource (SourceName "derive.pudu") (Text.unlines
+    [ "module M"
+    , "macro twice(value: expr) = value + value"
+    , "derive Encode for T: Record {"
+    , "  fn encode(self: &T, text: Str = twice!(\"x\")) -> Str {"
+    , "    let callback = fn(value: Str) -> Str { twice!(value) }"
+    , "    callback(text)"
+    , "  }"
+    , "}"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for item: Int in twice!(items) {"
+    , "    total = total + item"
+    , "  }"
+    , "  total"
+    , "}"
+    ])
+  pure $ case parseModule source (lexTokensOf source) of
+    ParseResult Nothing _ -> counterexample "module parses" False
+    ParseResult (Just moduleValue) _ ->
+      let (expanded, diagnostics) = expandModule moduleValue
+          counts = countNodes expanded
+       in conjoin
+        [ counterexample "no expansion diagnostics" (null diagnostics)
+        , counterexample "one derive kept" (deriveCount counts === 1)
+        , counterexample "one compile-time loop kept" (comptimeCount counts === 1)
+        , counterexample "every macro call expanded" (macroCallCount counts === 0)
+        ]
+
+testComptimeDiagnostic :: IO Property
+testComptimeDiagnostic = do
+  found <- codes
+    [ "module M"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for item: Int in items {"
+    , "    total = total + item"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  pure $ counterexample "E3090 names the missing phase" ("E3090" `elem` found)
+
+testComptimeHygiene :: IO Property
+testComptimeHygiene = do
+  source <- newSource (SourceName "derive.pudu") (Text.unlines
+    [ "module M"
+    , "macro build(items: expr) = comptime for item: Int in items { item }"
+    , "fn run() -> Int { build!([1]) }"
+    ])
+  pure $ case parseModule source (lexTokensOf source) of
+    ParseResult Nothing _ -> counterexample "module parses" False
+    ParseResult (Just moduleValue) _ ->
+      let (expanded, _) = expandModule moduleValue
+       in case findLoop expanded of
+        Nothing -> counterexample "one compile-time loop" False
+        Just loop -> conjoin
+          [ counterexample "element renamed" (element /= "item")
+          , counterexample "body follows the binding" (filter (== element) (bodyRefs loop) === [element])
+          , counterexample "source substituted" (isExpandedSource (comptimeForSource loop))
+          ]
+         where
+          element = locatedValue (comptimeForElement loop)
+
+findLoop :: Module -> Maybe ComptimeFor
+findLoop moduleValue = searchDeclarations (moduleDeclarations moduleValue)
+ where
+  searchDeclarations [] = Nothing
+  searchDeclarations (Located _ declaration : rest) = case declaration of
+    FunctionDeclaration function -> case functionBody function of
+      Just locatedBody -> case locatedValue locatedBody of
+        BlockBody locatedBlock -> case searchBlock locatedBlock of
+          Just loop -> Just loop
+          Nothing -> searchDeclarations rest
+        _ -> searchDeclarations rest
+      Nothing -> searchDeclarations rest
+    _ -> searchDeclarations rest
+  searchBlock (Located _ block) = case searchStatements (blockStatements block) of
+    Just loop -> Just loop
+    Nothing -> case blockResult block of
+      Just expression -> searchExpression expression
+      Nothing -> Nothing
+  searchStatements [] = Nothing
+  searchStatements (Located _ statement : rest) = case statement of
+    ExpressionStatement expression -> case searchExpression expression of
+      Just loop -> Just loop
+      Nothing -> searchStatements rest
+    _ -> searchStatements rest
+  searchExpression expression = case locatedValue expression of
+    ComptimeForExpression loop -> Just loop
+    _ -> Nothing
+
+bodyRefs :: ComptimeFor -> [Text]
+bodyRefs loop = case locatedValue (comptimeForBody loop) of
+  Block statements result ->
+    concatMap statementRefs statements <> foldMap expressionRefs result
+ where
+  statementRefs statement = case locatedValue statement of
+    ExpressionStatement expression -> expressionRefs expression
+    _ -> []
+  expressionRefs expression = case locatedValue expression of
+    NameExpression (single :| []) -> [single]
+    BinaryExpression left _ right -> expressionRefs left <> expressionRefs right
+    _ -> []
+
+isExpandedSource :: Located Expression -> Bool
+isExpandedSource expression = case locatedValue expression of
+  MacroCall _ _ -> False
+  _ -> True
+
+lexTokensOf :: Source -> [Token]
+lexTokensOf source = case lexSource source of
+  LexResult{lexTokens} -> lexTokens
+
+data NodeCounts = NodeCounts
+  { deriveCount :: Int
+  , comptimeCount :: Int
+  , macroCallCount :: Int
+  }
+
+countNodes :: Module -> NodeCounts
+countNodes moduleValue = foldMap countDeclaration (moduleDeclarations moduleValue)
+ where
+  zero = NodeCounts 0 0 0
+  one derive comptime macro = NodeCounts derive comptime macro
+  countDeclaration (Located _ declaration) = case declaration of
+    DeriveDeclaration value ->
+      one 1 0 0 <> foldMap (countFunction . locatedValue) (deriveFunctions value)
+    FunctionDeclaration function -> countFunction function
+    BindingDeclaration _ _ _ _ expression -> countExpression expression
+    _ -> zero
+  countFunction function =
+    foldMap (foldMap countExpression . parameterDefault . locatedValue)
+      (functionParameters function) <> foldMap countBody (functionBody function)
+  countBody (Located _ body) = case body of
+    BlockBody block -> countBlock block
+    ExpressionBody expression -> countExpression expression
+  countBlock (Located _ block) =
+    foldMap countStatement (blockStatements block)
+      <> foldMap countExpression (blockResult block)
+  countStatement statement = case locatedValue statement of
+    ExpressionStatement expression -> countExpression expression
+    DeclarationStatement nested -> countDeclaration nested
+    ReturnStatement result -> foldMap countExpression result
+    _ -> zero
+  countExpression expression = case locatedValue expression of
+    MacroCall _ arguments -> one 0 0 1 <> foldMap countExpression arguments
+    ComptimeForExpression loop ->
+      one 0 1 0 <> countExpression (comptimeForSource loop) <> countBlock (comptimeForBody loop)
+    CallExpression callee arguments ->
+      countExpression callee <> foldMap countExpression arguments
+    LambdaExpression function -> countFunction function
+    BlockExpression block -> countBlock block
+    _ -> zero
+
+instance Semigroup NodeCounts where
+  left <> right = NodeCounts
+    { deriveCount = deriveCount left + deriveCount right
+    , comptimeCount = comptimeCount left + comptimeCount right
+    , macroCallCount = macroCallCount left + macroCallCount right
+    }
+
+instance Monoid NodeCounts where
+  mempty = NodeCounts 0 0 0
 
 codesOf :: CompileResult -> [Text]
 codesOf result = map (diagnosticCodeText . diagnosticCode) (compileDiagnostics result)

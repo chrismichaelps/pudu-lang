@@ -22,6 +22,7 @@ import Pudu.Type.Interface
   )
 import Pudu.Type.Interface.Graph (ImportTypes (..), importsFor, prepareInterfaces)
 import Pudu.Type.Value (canonicalNominal)
+import Pudu.Compiler.Program.Common (codes, runEntry)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 interfaceProperties :: [(String, IO Property)]
@@ -30,7 +31,35 @@ interfaceProperties =
   , ("type interfaces retain private nominal shells", testPrivateShells)
   , ("selected imports map canonical names and values", testSelectedImports)
   , ("trait defaults remain discoverable without bodies", testDefaults)
+  , ("imported record fields expand later chained function aliases", testLateAliases)
+  , ("a package alias cannot replace the HTTP server's Listener", testListenerIdentity)
   ]
+
+testListenerIdentity :: IO Property
+testListenerIdentity = do
+  accepted <- codes "test-fixtures/listeneridentity/Main.pudu"
+  reversed <- codes "test-fixtures/listeneridentity/Reverse.pudu"
+  reversedResult <- runEntry "test-fixtures/listeneridentity/Reverse.pudu"
+  result <- runEntry "test-fixtures/listeneridentity/Main.pudu"
+  refused <- codes "test-fixtures/listeneridentity/RejectsWrongListener.pudu"
+  pure $ conjoin
+    [ accepted === []
+    , reversed === []
+    , reversedResult === Just "0"
+    , result === Just "0"
+    , refused === ["E3001"]
+    ]
+
+testLateAliases :: IO Property
+testLateAliases = do
+  accepted <- codes "test-fixtures/latealias/Main.pudu"
+  result <- runEntry "test-fixtures/latealias/Main.pudu"
+  refused <- codes "test-fixtures/latealias/RejectsWrongCallback.pudu"
+  pure $ conjoin
+    [ accepted === []
+    , result === Just "0"
+    , refused === ["E3001"]
+    ]
 
 testBodyFree :: IO Property
 testBodyFree = withModule librarySource $ \library ->

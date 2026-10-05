@@ -99,6 +99,10 @@ DEPTH 0.50 (MEDIUM). One walk, one collection, and a pruning rule that keeps rem
   Unicode scalar rather than a byte. _Rejected:_ a fixed-width child array, which is a byte-oriented
   design in a language whose text is not bytes.
 
+- **Q:** Count keys by collecting them? **A:** No. _Rationale:_ `size` and `countWithPrefix` built
+  every pair only to measure the array. Each node holds the count beneath it, adjusted by the
+  child's change on the way back up from an insert or removal. _Rejected:_ a count on the root
+  alone, which cannot answer for a prefix.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

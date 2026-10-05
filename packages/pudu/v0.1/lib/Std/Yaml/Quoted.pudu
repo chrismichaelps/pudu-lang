@@ -1,0 +1,162 @@
+module Std.Yaml.Quoted
+
+import Std.Char as Char
+import Std.Text as Reading
+
+/// A quoted scalar that cannot be decoded.
+export type Problem = Unterminated | Invalid(Str)
+
+/// Advance past a quote without treating its contents as document syntax.
+fn end(chars: &Array[Char], start: Int) -> Int {
+  let quote = chars[start]
+  var index = start + 1
+  while index < chars.length() {
+    if quote == '"' && chars[index] == '\\' {
+      index = index + 2
+    } else if chars[index] == quote {
+      if quote == '\'' && index + 1 < chars.length() && chars[index + 1] == quote {
+        index = index + 2
+      } else {
+        return index + 1
+      }
+    } else {
+      index = index + 1
+    }
+  }
+  chars.length()
+}
+
+/// The mapping colon outside quoted spans, or -1 when none is written.
+export fn colon(value: Str) -> Int {
+  if !value.contains("\"") && !value.contains("'") {
+    let spaced = value.indexOf(": ")
+    return if spaced >= 0 { spaced } else if value.endsWith(":") { value.length() - 1 } else { -1 }
+  }
+  let chars = value.chars()
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '"' || here == '\'' {
+      index = end(&chars, index)
+    } else if here == ':' && (index + 1 == chars.length() || chars[index + 1] == ' ') {
+      return index
+    } else {
+      index = index + 1
+    }
+  }
+  -1
+}
+
+/// Remove a separated comment while preserving hashes inside quoted spans.
+export fn comment(value: Str) -> Str {
+  if !value.contains("#") { return value }
+  let chars = value.chars()
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '"' || here == '\'' {
+      index = end(&chars, index)
+    } else if here == '#' && (index == 0 || chars[index - 1] == ' ') {
+      return Reading.trimEnd(value.take(index))
+    } else {
+      index = index + 1
+    }
+  }
+  value
+}
+
+/// Split flow entries at commas outside quotes and nested collections.
+export fn pieces(value: Str) -> Array[Str] {
+  let chars = value.chars()
+  var held: Array[Str] = []
+  var depth = 0
+  var start = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '"' || here == '\'' {
+      index = end(&chars, index)
+      continue
+    }
+    if here == '[' || here == '{' { depth = depth + 1 }
+    if here == ']' || here == '}' { depth = depth - 1 }
+    if here == ',' && depth == 0 {
+      held = held.push(value.drop(start).take(index - start))
+      start = index + 1
+    }
+    index = index + 1
+  }
+  held.push(value.drop(start))
+}
+
+/// Decode a single-line quoted scalar, preserving plain text unchanged.
+///
+/// Invalid escapes and Unicode non-scalars are refused rather than retained.
+export fn decode(value: Str) -> Result[Str, Problem] {
+  if !value.startsWith("\"") && !value.startsWith("'") { return Ok(value) }
+  let chars = value.chars()
+  let quote = chars[0]
+  var index = 1
+  var parts: Array[Str] = []
+  while index < chars.length() {
+    let here = chars[index]
+    if here == quote {
+      if quote == '\'' && index + 1 < chars.length() && chars[index + 1] == quote {
+        parts = parts.push("'")
+        index = index + 2
+        continue
+      }
+      if index + 1 != chars.length() { return Err(Invalid("text follows a quoted scalar")) }
+      return Ok(parts.join(""))
+    }
+    if quote == '"' && here == '\\' {
+      index = index + 1
+      if index >= chars.length() { return Err(Unterminated) }
+      let escaped = chars[index]
+      if escaped == 'x' || escaped == 'u' || escaped == 'U' {
+        let width = if escaped == 'x' { 2 } else if escaped == 'u' { 4 } else { 8 }
+        if index + width >= chars.length() { return Err(Invalid("truncated Unicode escape")) }
+        var code = 0
+        var offset = 1
+        while offset <= width {
+          let digit = "0123456789abcdef".indexOf(chars[index + offset].toText().toLower())
+          if digit < 0 { return Err(Invalid("invalid Unicode escape")) }
+          code = code * 16 + digit
+          offset = offset + 1
+        }
+        match Char.fromCode(code) {
+          case Some(decoded) => parts = parts.push(decoded.toText())
+          case None => { return Err(Invalid("Unicode escape is not a scalar value")) }
+        }
+        index = index + width + 1
+        continue
+      }
+      let decoded = match escaped {
+        case '0' => "\0"
+        case 'a' => "\u{7}"
+        case 'b' => "\u{8}"
+        case 't' => "\t"
+        case '\t' => "\t"
+        case 'n' => "\n"
+        case 'v' => "\u{b}"
+        case 'f' => "\u{c}"
+        case 'r' => "\r"
+        case 'e' => "\u{1b}"
+        case ' ' => " "
+        case '"' => "\""
+        case '/' => "/"
+        case '\\' => "\\"
+        case 'N' => "\u{85}"
+        case '_' => "\u{a0}"
+        case 'L' => "\u{2028}"
+        case 'P' => "\u{2029}"
+        case _ => { return Err(Invalid("unknown quoted scalar escape")) }
+      }
+      parts = parts.push(decoded)
+    } else {
+      parts = parts.push(here.toText())
+    }
+    index = index + 1
+  }
+  Err(Unterminated)
+}

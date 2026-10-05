@@ -25,6 +25,7 @@ renderValue value = case value of
   FloatValue _ number -> Text.pack (show number)
   DecimalValue number -> renderDecimal number
   StrValue text -> "\"" <> escape text <> "\""
+  CharValue '\'' -> "'\\''"
   CharValue character -> "'" <> escape (Text.singleton character) <> "'"
   BoolValue flag -> if flag then "true" else "false"
   NullValue -> "null"
@@ -68,6 +69,7 @@ renderValue value = case value of
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
+  TypeWitnessValue owner _ -> "<type " <> owner <> ">"
   {-| Bytes print as hexadecimal pairs rather than as the text they might
       decode to. A sequence being inspected is usually one that did not decode,
       and rendering it as text would hide the bytes the reader is looking for
@@ -100,6 +102,7 @@ valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
   ForeignHandleValue name _ _ -> name
+  TypeWitnessValue owner _ -> "type " <> owner
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"

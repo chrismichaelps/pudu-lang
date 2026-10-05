@@ -2,7 +2,7 @@ module Std.FenwickTree
 
 import Std.List as List
 
-/// A low-level Binary Indexed Tree for O(log n) prefix sums and point updates.
+/// A low-level Binary Indexed Tree for prefix sums and point updates that touch one node per bit of the index.
 export type FenwickTree = {
   tree: Array[Int],
   size: Int,
@@ -29,7 +29,7 @@ export fn create(elementCount: Int) -> FenwickTree {
   }
 }
 
-/// Builds a Fenwick tree in strict O(n) linear time from an array of initial values.
+/// Builds a Fenwick tree from an array of initial values in a single pass.
 export fn fromArray(values: &Array[Int]) -> FenwickTree {
   let n = values.length()
   let treeSize = n + 1
@@ -63,7 +63,7 @@ export fn size(ft: &FenwickTree) -> Int {
   ft.size
 }
 
-/// Adds `delta` to the 1-based element at `index` in O(log n) time.
+/// Adds `delta` to the 1-based element at `index`.
 export fn add(ft: &FenwickTree, index: Int, delta: Int) -> Option[FenwickTree] {
   if index < 1 || index > ft.size {
     return None
@@ -82,7 +82,7 @@ export fn add(ft: &FenwickTree, index: Int, delta: Int) -> Option[FenwickTree] {
     })
 }
 
-/// Computes the prefix sum up to 1-based `index` in O(log n) time.
+/// Computes the prefix sum up to 1-based `index`.
 export fn prefixSum(ft: &FenwickTree, index: Int) -> Option[Int] {
   if index < 0 || index > ft.size {
     return None
@@ -99,7 +99,7 @@ export fn prefixSum(ft: &FenwickTree, index: Int) -> Option[Int] {
   Some(sum)
 }
 
-/// Computes the range sum [left, right] inclusive in O(log n) time.
+/// Computes the range sum [left, right] inclusive.
 export fn rangeSum(ft: &FenwickTree, left: Int, right: Int) -> Option[Int] {
   if left < 1 || left > right || right > ft.size {
     return None
@@ -115,7 +115,7 @@ export fn rangeSum(ft: &FenwickTree, left: Int, right: Int) -> Option[Int] {
   Some(sumR &- sumL)
 }
 
-/// Retrieves the single value at 1-based `index` in O(log n) time.
+/// Retrieves the single value at 1-based `index`.
 export fn get(ft: &FenwickTree, index: Int) -> Option[Int] {
   if index < 1 || index > ft.size {
     return None
@@ -136,7 +136,7 @@ export fn set(ft: &FenwickTree, index: Int, value: Int) -> Option[FenwickTree] {
   add(ft, index, delta)
 }
 
-/// Finds the smallest 1-based index whose prefix sum is >= `targetSum` in O(log n) time.
+/// Finds the smallest 1-based index whose prefix sum is >= `targetSum`.
 export fn findPrefix(ft: &FenwickTree, targetSum: Int) -> Option[Int] {
   let totalSum = match prefixSum(ft, ft.size) {
     case Some(s) => s

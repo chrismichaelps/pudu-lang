@@ -35,6 +35,9 @@ unwrapTry :: Span -> Value -> Evaluator Value
   strict non-negative bounds checking, raising `E7004` on out-of-range indices. A tuple does not
   admit a range slice because its positions may have different types; the checker and evaluator
   enforce the same boundary.
+  Compare exact Integer indices with the container length before narrowing to
+  host Int. A wider positive integer must never wrap into a valid position or a
+  negative offset; this also protects text access from a host indexing exception.
 - `readMember` searches records and nominal sums before falling back to built-in method tables (`Array`, `Str`, `Map`, `Set`, `Bytes`, `Buckets`, `Char`), mapping member names (such as `escapeHtml` -> `StringEscapeHtml`) to their closed method representations.
 - `unwrapTry` returns the inner value for `Ok` and `Some`, or unwinds with `ReturnUnwind` for `Err` and `None`.
 - `builtinMethodNamesFor` provides IDE/REPL autocompletion by reading from the exact same method tables used during evaluation dispatch.
@@ -51,6 +54,16 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 ## Grill Log
 
+- **Q:** Narrow a scalar index before checking the upper bound? **A:** No; test
+  the mathematical index against the lifted host length first. _Rationale:_ an
+  out-of-host-range integer can wrap into a small or negative Int. Only a proven
+  in-range index may reach host access; retain the existing E7004 message/span.
+
+- **Q:** How does a Decimal reach a user implementation (#371)? **A:** `nominalNameOf` returns
+  `Decimal` for `DecimalValue`, so direct, generic, and trait-qualified calls use the same lookup
+  as other scalar types. _Rationale:_ Decimal already admits implementations during checking;
+  runtime owner discovery must preserve that contract. _Rejected:_ adding built-in Decimal
+  methods or accepting unknown members without an implementation.
 - **Q:** Why extract access and method lookup into `Eval.Operator.Access`? **A:** `readIndex`, `readMember`, `unwrapTry`, and the built-in method lookup tables form a cohesive access and inspection boundary (~240 lines) distinct from arithmetic and comparison operators, bringing `Eval.Operator` well below the 500-line limit.
 - **Q:** Why include `escapeHtml` in `stringMethods`? **A:** Mapping `escapeHtml` in the static `stringMethods` table ensures it is discovered during member evaluation and included in `builtinMethodNamesFor` suggestions.
 

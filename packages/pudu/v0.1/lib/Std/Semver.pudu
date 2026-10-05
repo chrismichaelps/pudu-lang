@@ -23,6 +23,7 @@ export type VersionError
   | LeadingZero(Str)
   | NotANumber(Str)
   | EmptyIdentifier
+  | BadIdentifier(Str)
 
 /// Read a version.
 ///
@@ -44,13 +45,10 @@ export fn parse(text: Str) -> Result[Version, VersionError] {
     let tail = core.drop(dash + 1)
     core = core.take(dash)
     prerelease = tail.split(".")
-    var index = 0
-    while index < prerelease.length() {
-      if prerelease[index].isEmpty() {
-        return Err(EmptyIdentifier)
-      }
-      index = index + 1
-    }
+    for identifier in prerelease { checkIdentifier(identifier, true) ? }
+  }
+  if plus >= 0 {
+    for identifier in build.split(".") { checkIdentifier(identifier, false) ? }
   }
 
   let parts = core.split(".")
@@ -61,6 +59,23 @@ export fn parse(text: Str) -> Result[Version, VersionError] {
   let minor = numberOf(parts[1]) ?
   let patch = numberOf(parts[2]) ?
   Ok(Version{major: major, minor: minor, patch: patch, prerelease: prerelease, build: build})
+}
+
+/// An identifier is ASCII letters, digits, and `-`. A prerelease identifier of
+/// digits alone is a number, so the leading-zero rule of the core applies to it.
+fn checkIdentifier(identifier: Str, numeric: Bool) -> Result[(), VersionError] {
+  if identifier.isEmpty() { return Err(EmptyIdentifier) }
+  var digits = true
+  for character in identifier.chars() {
+    let digit = character >= '0' && character <= '9'
+    let letter = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+    if !digit && !letter && character != '-' { return Err(BadIdentifier(identifier)) }
+    if !digit { digits = false }
+  }
+  if numeric && digits && identifier.length() > 1 && identifier.startsWith("0") {
+    return Err(LeadingZero(identifier))
+  }
+  Ok(())
 }
 
 fn numberOf(text: Str) -> Result[Int, VersionError] {
@@ -246,6 +261,7 @@ export fn explain(reason: &VersionError) -> Str {
     case NotThreeNumbers => "a version is three numbers separated by dots"
     case LeadingZero(part) => "`" + part + "` has a leading zero, so it names no single version"
     case NotANumber(part) => "`" + part + "` is not a number"
-    case EmptyIdentifier => "the prerelease has an empty identifier"
+    case EmptyIdentifier => "the prerelease or build has an empty identifier"
+    case BadIdentifier(part) => "`" + part + "` may hold only ASCII letters, digits, and `-`"
   }
 }

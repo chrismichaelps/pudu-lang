@@ -17,6 +17,8 @@ aliases: [Lsp Code Action]
 
 Provide context-sensitive code actions and quick fixes for the editor cursor range.
 
+Implementations lacking required members are offered [[Lsp Impl Members]]' quick fix before formatting.
+
 ## Interface
 
 ```haskell
@@ -41,6 +43,7 @@ codeActionsAt :: Text -> Analysis -> Range -> Json -> Json
 ## Grill Log
 
 - **Q:** Why offer formatting as a code action? **A:** Users often trigger formatting via the Quick Fix lightbulb or quick action menu in addition to explicit format commands.
+- **Q:** Require a diagnostic to offer the fix? **A:** No; the range alone selects the implementation.
 
 ## Referenced by
 

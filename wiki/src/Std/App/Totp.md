@@ -63,6 +63,10 @@ Multi-factor authentication (MFA) implementing RFC 6238 Time-Based One-Time Pass
 - **Q:** What happens if a client's clock is slightly out of sync?
   **A:** The configurable `skewSteps` parameter (defaulting to 1) checks $T-1$, $T$, and $T+1$, accommodating transmission latency and local device clock drift up to 30 seconds in either direction.
 
+- **Q:** Take the code's modulus from a lookup of standard lengths? **A:** No. _Rationale:_ it fell
+  back to six digits for any other length, so a four- or ten-digit configuration wrote a six-digit
+  code (#418). The modulus is ten to the length, capped at ten digits, which the truncated value
+  never exceeds. _Rejected:_ refusing lengths outside six to eight, which `digits` already admits.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std App Password]] · [[Std App Session]] · [[Std App Secret]] · [[architecture/WEB]] · [[ADR-0017 What the Web Layer Refuses]]

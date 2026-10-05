@@ -5,6 +5,7 @@ module Pudu.Lsp.Protocol
   , Position (..)
   , Range (..)
   , errorResponse
+  , fileUri
   , frame
   , notification
   , positionOf
@@ -16,11 +17,13 @@ module Pudu.Lsp.Protocol
   ) where
 
 import qualified Data.ByteString as ByteString
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Word (Word8)
 import Pudu.Lsp.Json (Json (..), encode, integerOf, lookupField, parse, textOf)
+import Numeric (showHex)
 import System.IO (Handle, hIsEOF)
 
 {-| @Lsp.Protocol.Message — one message read off the wire.
@@ -253,3 +256,13 @@ notification method parameters =
         , ("params", parameters)
         ]
     )
+
+{-| The `file:` URI of an absolute path, each byte outside the unreserved set
+    and `/` percent-encoded as UTF-8, the form editors send and compare. -}
+fileUri :: FilePath -> Text
+fileUri path = "file://" <> Text.concat (map encoded (ByteString.unpack (Encoding.encodeUtf8 (Text.pack path))))
+ where
+  encoded byte
+    | kept (toEnum (fromIntegral byte)) = Text.singleton (toEnum (fromIntegral byte))
+    | otherwise = "%" <> Text.toUpper (Text.justifyRight 2 '0' (Text.pack (showHex byte "")))
+  kept scalar = isAsciiUpper scalar || isAsciiLower scalar || isDigit scalar || scalar `elem` ("-._~/" :: String)

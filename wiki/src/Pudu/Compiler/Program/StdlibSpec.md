@@ -46,6 +46,8 @@ DEPTH 0.62 (DEEP). It crosses source discovery, interfaces, resolution, and type
 
 ## Grill Log
 
+- **Q:** How is Option module/function separation protected? **A:** Imported and unimported `unwrapOr` receiver calls each produce exactly one `E3005` naming the member, while a qualified function call checks and returns `(3, 7)` for present and absent values. _Rejected:_ only testing `map` or only proving rejection.
+
 - **Q:** Why test the constructor typo here as well as in isolated type tests? **A:** A module qualifier is recognizable only when its interface has been loaded. _Rationale:_ isolated compilation intentionally treats imports opaquely. _Rejected:_ a local type as a stand-in for module export behavior.
 
 ## Referenced by
@@ -61,3 +63,7 @@ methods take no arguments.
 
 `RejectsToTextMisuse` asserts `["E3001", "E3003"]`: the result is text, and the method takes no
 arguments.
+
+## Option module functions (#383)
+
+[[Rejects Option Unwrap Method Imported]] and [[Rejects Option Unwrap Method Unimported]] both assert `["E3005"]` and a message containing `unwrapOr`. [[Uses Option Unwrap Qualified]] asserts no checker diagnostics and exact evaluation `Just "(3, 7)"`. The existing aliased `map` refusal remains covered.

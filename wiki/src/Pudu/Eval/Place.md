@@ -30,6 +30,7 @@ placeOf :: (Located Expression -> Evaluator Value) -> Located Expression -> Eval
 plainPlace :: Located Expression -> Maybe Place
 readPlace :: Place -> Evaluator Value
 storePlace :: Place -> Value -> Evaluator ()
+storeName :: Span -> Text -> Value -> Evaluator ()
 withFrameKeeping :: [(Text, Value)] -> [Text] -> Evaluator a -> Evaluator (a, [Value])
 exclusiveParameters :: Function -> [Int]
 ```
@@ -48,3 +49,22 @@ exclusiveParameters :: Function -> [Int]
 
 Resolved Grill Log: a place is re-read from its root at store time rather than held as a pointer into
 a value, because values are immutable and the root is the only thing that changes.
+
+## Grill Log
+
+- **Q:** Construct a Place for every assignment to one bare name? **A:** No.
+  _Rationale:_ no index or field needs evaluation there. `storeName` owns the
+  existing one-pass binding update and exact missing/nonassignable diagnostics;
+  both the general Place path and the tree's bare-name assignment use it.
+  Nested places keep their original index-before-right-hand-side ordering.
+
+- **Q:** Look a name up before a plain assignment to it? **A:** No. _Rationale:_ with no field or
+  index step the old value is never used, so the search was wasted on every `x = value` (#423).
+  The lookup happens only to name the failure when the update finds no binding.
+
+- **Q:** Read a lent parameter's final value from a map? **A:** From a snapshot of the frame.
+  _Rationale:_ a compiled body may have turned the parameter frame into a slot frame, whose values
+  are read through its layout.
+## Referenced by
+
+[[src/Pudu/Eval/_MOC]] · [[Eval Env]]

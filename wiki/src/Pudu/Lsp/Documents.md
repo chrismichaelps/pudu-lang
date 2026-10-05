@@ -19,10 +19,13 @@ aliases: [Lsp Documents]
 
 What the server knows about each open document: one compile's answers, kept by the URI the editor named them with.
 
+`analysisTraits` holds the program's trait shapes.
+
 ## Interface
 
 ```haskell
-data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, analysisMethods, analysisExports, analysisDependencies, .. }
+type DeclaredMethod = (Text, Scheme, Span)
+data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisElsewhere, analysisFileIndex, analysisProgramIndex, analysisTypes, analysisTokens, analysisModule, analysisSums, analysisRecords, analysisMethods, analysisExports, analysisDependencies, .. }
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
@@ -58,12 +61,20 @@ uriOf            :: Json -> Maybe Text
   declaration the reader is nowhere near. `analysisProgramIndex` holds every module's and answers
   questions keyed by name, where an imported function counts as much as a local one: completion and
   signature help.
+- `analysisDiagnostics` is every module's findings as the compile reported them; `analysisElsewhere`
+  holds what [[Lsp Diagnostics]] needs to place those located in other files.
+- `analysisMethods` keeps each declared method's name span beside its scheme, which definition
+  answers with.
 - A document the editor closed is forgotten rather than kept, so a stale answer about a file nobody has open cannot be given.
 
 ### Linkage
 
 - **Requires:** [[Compiler Pipeline]], [[Doc Index]], [[Source Text]], [[Lsp Context]].
 - **Consumed by:** [[Lsp Server]].
+
+## Grill Log
+
+- **Q:** Rebuild trait shapes per request? **A:** No; once per analysis, like sums and records.
 
 ## Referenced by
 

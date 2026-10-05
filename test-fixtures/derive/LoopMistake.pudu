@@ -1,0 +1,13 @@
+module LoopMistake
+
+trait Tag { fn tag(self: &Self) -> Str }
+
+derive Tag for T: Record {
+  fn tag(self: &T) -> Str {
+    var out = ""
+    comptime for x: Int in [1, 2] {
+      out = 1
+    }
+    out
+  }
+}

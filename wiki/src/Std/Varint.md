@@ -40,6 +40,7 @@ Packs 64-bit integers into 1 to 10 bytes depending on magnitude, reducing bandwi
    $$\text{ZigZag}(n) = \begin{cases} 2n & \text{if } n \ge 0 \\ -2n - 1 & \text{if } n < 0 \end{cases}$$
    Thus $-1$ serializes in exactly 1 byte (`0x01u8`).
 
+`decodeUleb128` refuses a tenth byte above 1, since only bit 63 remains for it.
 ## Grill Log
 
 - **Q:** Why cap decode at 10 bytes?
@@ -47,6 +48,9 @@ Packs 64-bit integers into 1 to 10 bytes depending on magnitude, reducing bandwi
 - **Q:** Why provide both unsigned and signed ZigZag codecs?
   **A:** ULEB128 is standard for unsigned counters, lengths, and indices (e.g. Wasm, DWARF). ZigZag SLEB128 is essential for signed data where small negative offsets are common (e.g. Protobuf, Avro, delta encoding).
 
+- **Q:** Shift a tenth byte's full seven bits and keep what fits? **A:** No. _Rationale:_ the
+  bits past 64 were lost silently, so an overlong or altered encoding decoded as another value.
+  _Rejected:_ masking the overflow away.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Bytes]] · [[architecture/STDLIB]]

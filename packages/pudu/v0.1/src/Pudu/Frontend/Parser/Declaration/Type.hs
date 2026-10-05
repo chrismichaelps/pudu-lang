@@ -3,6 +3,7 @@ module Pudu.Frontend.Parser.Declaration.Type
   ( parseTypeDeclaration
   ) where
 
+import Pudu.Frontend.Parser.Declaration.Derive (parseAttributes, parseDerivesClause, peekDerivesClause)
 import Pudu.Frontend.Parser.Declaration.Generic (parseTypeParams)
 import Pudu.Frontend.Parser.Name (expectUpperIdentifier, expectValueIdentifier)
 import Pudu.Frontend.Parser.State
@@ -23,7 +24,8 @@ import Pudu.Frontend.Parser.State
 import Pudu.Frontend.Parser.Type (parseTypeList, parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( Attribute
+  , Declaration (..)
   , FieldDeclaration (..)
   , TypeDeclarationValue (..)
   , TypeDefinition (..)
@@ -34,23 +36,36 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Frontend.Token (Keyword (KwMut, KwType), Token (..), TokenKind (..))
 import Pudu.Source (Span, mergeSpans)
 
-{-| Parse `type Name[params] = definition`. Visibility is supplied by the
-    orchestrator that consumed `export`. -}
-parseTypeDeclaration :: Visibility -> Parser (Located Declaration)
-parseTypeDeclaration visibility = do
+{-| Parse `type Name[params] = definition` with leading attributes. Visibility
+    is supplied by the orchestrator that consumed `export`; the derives clause
+    belongs to the definition it follows, on any of the three shapes. -}
+parseTypeDeclaration :: [Located Attribute] -> Visibility -> Parser (Located Declaration)
+parseTypeDeclaration attributes visibility = do
   keyword <- expectKeyword KwType "to start a type declaration"
   name <- expectUpperIdentifier "after type"
   typeParams <- parseTypeParams
   _ <- expectSymbol "=" "before the type definition"
   definition <- parseDefinition
+  clause <- parseDerivesClause
+  let endSpan = case clause of
+        Nothing -> locatedSpan definition
+        Just (clauseSpan, _) -> clauseSpan
+      derives = case clause of
+        Nothing -> []
+        Just (_, entries) -> entries
+      startSpan = case attributes of
+        [] -> tokenSpan keyword
+        first : _ -> locatedSpan first
   pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan definition))
+    ( Located (mergedOrLeft startSpan endSpan)
         ( TypeDeclaration
             TypeDeclarationValue
               { typeVisibility = visibility
+              , typeAttributes = attributes
               , typeName = name
               , typeTypeParams = typeParams
               , typeDefinition = definition
+              , typeDerives = derives
               }
         )
     )
@@ -105,22 +120,30 @@ parseSum = do
 
 parseVariantTail :: Located Variant -> [Located Variant] -> Parser [Located Variant]
 parseVariantTail first reversed = do
-  pipe <- matchSymbol "|"
-  exhausted <- budgetExhausted
-  case pipe of
-    Nothing -> pure (reverse reversed)
-    Just _ | exhausted -> pure (reverse reversed)
-    Just _ -> do
-      before <- peekToken
-      next <- parseVariant
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else parseVariantTail first (next : reversed)
+  following <- peekDerivesClause
+  if following
+    then pure (reverse reversed)
+    else do
+      pipe <- matchSymbol "|"
+      exhausted <- budgetExhausted
+      case pipe of
+        Nothing -> pure (reverse reversed)
+        Just _ | exhausted -> pure (reverse reversed)
+        Just _ -> do
+          before <- peekToken
+          next <- parseVariant
+          after <- peekToken
+          if before == after
+            then pure (reverse reversed)
+            else parseVariantTail first (next : reversed)
 
 parseVariant :: Parser (Located Variant)
 parseVariant = do
+  attributes <- parseAttributes
   name <- expectUpperIdentifier "for the variant"
+  let startSpan = case attributes of
+        [] -> locatedSpan name
+        first : _ -> mergedOrLeft (locatedSpan first) (locatedSpan name)
   kind <- peekKind
   if isSymbol "(" kind
     then do
@@ -128,20 +151,20 @@ parseVariant = do
       payload <- parseTypeList ")"
       closing <- expectSymbol ")" "to close the variant payload"
       pure
-        ( Located (mergedOrLeft (locatedSpan name) (tokenSpan closing))
-            Variant{variantName = name, variantPayload = TuplePayload payload}
+        ( Located (mergedOrLeft startSpan (tokenSpan closing))
+            Variant{variantAttributes = attributes, variantName = name, variantPayload = TuplePayload payload}
         )
     else if isSymbol "{" kind
       then do
         (fields, endSpan) <- parseFieldBlock
         pure
-          ( Located (mergedOrLeft (locatedSpan name) endSpan)
-              Variant{variantName = name, variantPayload = RecordPayload fields}
+          ( Located (mergedOrLeft startSpan endSpan)
+              Variant{variantAttributes = attributes, variantName = name, variantPayload = RecordPayload fields}
           )
       else
         pure
-          ( Located (locatedSpan name)
-              Variant{variantName = name, variantPayload = UnitPayload}
+          ( Located startSpan
+              Variant{variantAttributes = attributes, variantName = name, variantPayload = UnitPayload}
           )
 
 parseRecordDefinition :: Parser (Located TypeDefinition)
@@ -177,19 +200,28 @@ parseFields reversed = do
             Just _ -> parseFields (field : reversed)
 
 {-| Record fields are immutable unless marked `mut`, matching the ownership
-    rules in [[architecture/SEMANTICS]]. -}
+    rules in [[architecture/SEMANTICS]]. Attributes precede everything the
+    field declares. -}
 parseField :: Parser (Located FieldDeclaration)
 parseField = do
+  attributes <- parseAttributes
   mutable <- matchKeyword KwMut
   start <- peekToken
   name <- expectValueIdentifier "for the record field"
   _ <- expectSymbol ":" "before the field type"
   fieldSyntax <- parseTypeSyntax
-  let startSpan = maybe (tokenSpan start) tokenSpan mutable
+  let attributeSpan = case attributes of
+        [] -> Nothing
+        first : _ -> Just (locatedSpan first)
+      startSpan = case (attributeSpan, mutable) of
+        (Just held, _) -> held
+        (Nothing, Just token) -> tokenSpan token
+        (Nothing, Nothing) -> tokenSpan start
   pure
     ( Located (mergedOrLeft startSpan (locatedSpan fieldSyntax))
         FieldDeclaration
           { fieldMutable = maybe False (const True) mutable
+          , fieldAttributes = attributes
           , fieldName = name
           , fieldType = fieldSyntax
           }

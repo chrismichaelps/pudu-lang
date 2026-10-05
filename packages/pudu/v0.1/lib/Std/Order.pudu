@@ -1,5 +1,7 @@
 module Std.Order
 
+import Std.Meta
+
 /// How one value stands to another.
 ///
 /// Three answers rather than a number, so a comparison cannot be confused with a
@@ -518,4 +520,174 @@ impl Ord for Str { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*ot
 impl Ord for Char { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Bool {
   fn before(self: &Self, other: &Self) -> Bool { !(*self) && (*other) }
+}
+
+/// Containers compare, hash, and order through their elements, so a derive
+/// over a field holding one needs nothing written for it.
+impl [A: Eq] Eq for Array[A] {
+  fn equals(self: &Self, other: &Self) -> Bool {
+    if self.length() != other.length() { return false }
+    var index = 0
+    while index < self.length() {
+      if !self[index].equals(&other[index]) { return false }
+      index = index + 1
+    }
+    true
+  }
+}
+
+impl [A: Eq] Eq for Option[A] {
+  fn equals(self: &Self, other: &Self) -> Bool {
+    match *self {
+      case Some(mine) => match *other {
+        case Some(theirs) => mine.equals(&theirs)
+        case None => false
+      }
+      case None => match *other {
+        case Some(_) => false
+        case None => true
+      }
+    }
+  }
+}
+
+impl [A: Hash] Hash for Array[A] {
+  fn hash(self: &Self) -> Int {
+    var result = mixHash(self.length())
+    for item in *self { result = mixHash(result ^ item.hash()) }
+    result
+  }
+}
+
+impl [A: Hash] Hash for Option[A] {
+  fn hash(self: &Self) -> Int {
+    match *self {
+      case Some(held) => mixHash(1 ^ held.hash())
+      case None => 0
+    }
+  }
+}
+
+/// Arrays order lexicographically: the first differing element decides, and a
+/// prefix comes before every array it begins.
+impl [A: Ord] Ord for Array[A] {
+  fn before(self: &Self, other: &Self) -> Bool {
+    var index = 0
+    while index < self.length() && index < other.length() {
+      if self[index].before(&other[index]) { return true }
+      if other[index].before(&self[index]) { return false }
+      index = index + 1
+    }
+    self.length() < other.length()
+  }
+}
+
+/// An absent value comes before every present one.
+impl [A: Ord] Ord for Option[A] {
+  fn before(self: &Self, other: &Self) -> Bool {
+    match *other {
+      case Some(theirs) => match *self {
+        case Some(mine) => mine.before(&theirs)
+        case None => true
+      }
+      case None => false
+    }
+  }
+}
+
+/// Equality field by field, in declaration order. Every field's type must
+/// itself be `Eq`.
+///
+/// ## Examples
+///
+/// ```
+/// type Point = { x: Int, y: Int } derives Eq
+/// ```
+export derive Eq for T: Record {
+  fn equals(self: &T, other: &T) -> Bool {
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Eq {
+      if !field.get(self).equals(&field.get(other)) { return false }
+    }
+    true
+  }
+}
+
+/// Equality of a sum: the same variant, then its payload field by field.
+export derive Eq for T: Sum {
+  fn equals(self: &T, other: &T) -> Bool {
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        if !variant.matches(other) { return false }
+        comptime for field: Meta.Field[T, F] in variant.fields() where F: Eq {
+          if !field.get(self).equals(&field.get(other)) { return false }
+        }
+        return true
+      }
+    }
+    false
+  }
+}
+
+/// A hash mixing every field's hash in declaration order, so values that are
+/// equal field by field hash the same.
+export derive Hash for T: Record {
+  fn hash(self: &T) -> Int {
+    var result = 0
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Hash {
+      result = mixHash(result ^ field.get(self).hash())
+    }
+    result
+  }
+}
+
+/// A hash mixing the variant's declaration index with its payload's hashes.
+export derive Hash for T: Sum {
+  fn hash(self: &T) -> Int {
+    var result = 0
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        result = mixHash(variant.index)
+        comptime for field: Meta.Field[T, F] in variant.fields() where F: Hash {
+          result = mixHash(result ^ field.get(self).hash())
+        }
+      }
+    }
+    result
+  }
+}
+
+/// Lexicographic order over the fields in declaration order. Each field is
+/// asked in both directions, so a field equal under its order passes the
+/// decision to the next one without needing `Eq`.
+export derive Ord for T: Record {
+  fn before(self: &T, other: &T) -> Bool {
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Ord {
+      if field.get(self).before(&field.get(other)) { return true }
+      if field.get(other).before(&field.get(self)) { return false }
+    }
+    false
+  }
+}
+
+/// Variants order by declaration; within one variant, its payload orders
+/// lexicographically.
+export derive Ord for T: Sum {
+  fn before(self: &T, other: &T) -> Bool {
+    var mine = 0
+    var theirs = 0
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) { mine = variant.index }
+      if variant.matches(other) { theirs = variant.index }
+    }
+    if mine != theirs { return mine < theirs }
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        comptime for field: Meta.Field[T, F] in variant.fields() where F: Ord {
+          if field.get(self).before(&field.get(other)) { return true }
+          if field.get(other).before(&field.get(self)) { return false }
+        }
+      }
+    }
+    false
+  }
 }

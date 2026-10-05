@@ -1,0 +1,9 @@
+module RejectsWrongListener
+
+import Std.Net as Net
+import PackageLog.Sink as Sink
+
+fn main() -> Int {
+  Sink.listen(Net.Listener{token: 0})
+  0
+}

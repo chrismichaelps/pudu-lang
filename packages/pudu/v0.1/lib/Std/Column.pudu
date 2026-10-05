@@ -433,7 +433,7 @@ export fn sortIndices(col: &ColumnU64) -> Buffer.Buffer {
   Buffer.fromBytes(idxBytes)
 }
 
-/// Performs an O(log N) binary search over the valid portion of a sorted column.
+/// Performs a binary search over the valid portion of a sorted column.
 ///
 /// Returns the matched row offset if found, or None if target is absent.
 export fn binarySearch(col: &ColumnU64, indices: &Buffer.Buffer, target: UInt64) -> Option[Int] {
@@ -467,7 +467,7 @@ export fn sortIndicesF64(col: &ColumnF64) -> Buffer.Buffer {
   Buffer.fromBytes(idxBytes)
 }
 
-/// Performs an O(log N) binary search over the valid portion of a sorted float column.
+/// Performs a binary search over the valid portion of a sorted float column.
 export fn binarySearchF64(col: &ColumnF64, indices: &Buffer.Buffer, target: Float64) -> Option[Int] {
   let validCount = col.length - col.nullCount
   if validCount <= 0 {

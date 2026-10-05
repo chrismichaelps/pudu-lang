@@ -11,6 +11,8 @@ aliases: [Std Db Row]
 Read backend-neutral query results into application values without treating malformed rows,
 missing columns, SQL NULL, or wrong storage kinds as interchangeable.
 
+`Column.fromColumn(rows, row, name)` reads one named column through the strict readers, for Str, Int64, Int, Decimal, Float64, Bool, Bytes and `Option[A]` (null as None). `Row.fromRow(rows, row)` reads a record; `derive Row` builds every field through `Column`, honouring `@column("name")`.
+
 ## Interface and algorithm
 `value` locates a uniquely named column and validates the requested row's width. Duplicate column
 names are ambiguous, not first-match wins; callers can alias columns or use `at` by index.
@@ -24,6 +26,10 @@ Driver.Value variant, with no implicit numeric narrowing, parsing, or text conve
 - **Q:** Choose the first duplicate column? **A:** No; ambiguous names need SQL aliases or explicit indices.
 - **Q:** Guess native types from text? **A:** No; PostgreSQL wire text and SQLite native cells retain their actual variants. Application parsers make conversions explicit.
 - **Q:** Expose the bad cell in diagnostics? **A:** No; errors carry positions, column names and expected kinds, never database values.
+
+## Grill Log
+
+- **Q:** Accept any column kind for an Int? **A:** No; a whole number that does not fit is WrongKind, as is any other kind.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db Driver]] · [[Std App Database]] · [[architecture/STDLIB]]

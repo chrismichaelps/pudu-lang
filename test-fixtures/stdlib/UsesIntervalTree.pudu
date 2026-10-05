@@ -116,5 +116,18 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // Intervals inserted in order still form a shallow tree that answers correctly.
+  var ordered = IntervalTree.empty()
+  var start = 0
+  while start < 1024 {
+    ordered = IntervalTree.insert(&ordered, IntervalTree.Interval{low: start, high: start + 1})
+    start = start + 1
+  }
+  if ordered.root[0].height <= 11 && IntervalTree.size(&ordered) == 1024
+    && IntervalTree.pointQuery(&ordered, 500).length() == 2
+    && IntervalTree.toIntervals(&ordered).length() == 1024 {
+    held = held + 1
+  }
+
   held
 }

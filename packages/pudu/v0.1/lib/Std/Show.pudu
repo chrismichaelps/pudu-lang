@@ -1,5 +1,7 @@
 module Std.Show
 
+import Std.Meta
+
 /// Any value rendered the way the prompt renders it.
 /// Text renders with its quotes, so a rendered `"1"` is never mistaken for the
 /// number. Use `text` when the quotes are not wanted.
@@ -128,4 +130,101 @@ fn padTo(value: Str, width: Int) -> Str {
   var out = value
   while out.length() < width { out = out + " " }
   out
+}
+
+/// A type that renders itself as text for a reader.
+///
+/// The rendering names the type and its fields in declaration order, as the
+/// prompt renders a value: text keeps its quotes, so `"1"` is never mistaken
+/// for the number.
+///
+/// ## Examples
+///
+/// ```
+/// type Point = { x: Int, y: Int } derives Show
+/// Point{x: 1, y: 2}.show()  // "Point\{x: 1, y: 2\}"
+/// ```
+export trait Show {
+  /// The value rendered for a reader.
+  fn show(self: &Self) -> Str
+}
+
+/// Every wired-in type renders as the prompt renders it.
+impl Show for Int { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Int8 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Int16 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Int32 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Int64 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Int128 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt8 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt16 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt32 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt64 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for UInt128 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for BigInt { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Float32 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Float64 { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Decimal { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Str { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Char { fn show(self: &Self) -> Str { show(*self) } }
+impl Show for Bool { fn show(self: &Self) -> Str { show(*self) } }
+
+impl [A: Show] Show for Array[A] {
+  fn show(self: &Self) -> Str {
+    var out = "["
+    var separator = ""
+    for item in *self {
+      out = out + separator + item.show()
+      separator = ", "
+    }
+    out + "]"
+  }
+}
+
+impl [A: Show] Show for Option[A] {
+  fn show(self: &Self) -> Str {
+    match *self {
+      case Some(held) => "Some(" + held.show() + ")"
+      case None => "None"
+    }
+  }
+}
+
+/// A record rendered as its name and its fields in declaration order.
+export derive Show for T: Record {
+  fn show(self: &T) -> Str {
+    var out = Meta.nameOf[T]() + "\{"
+    var separator = ""
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Show {
+      out = out + separator + field.name + ": " + field.get(self).show()
+      separator = ", "
+    }
+    out + "\}"
+  }
+}
+
+/// A sum rendered as its variant: a unit variant by name, a positional
+/// payload in parentheses, and a named payload as a record is.
+export derive Show for T: Sum {
+  fn show(self: &T) -> Str {
+    var out = ""
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        var payload = ""
+        var separator = ""
+        var positional = false
+        comptime for field: Meta.Field[T, F] in variant.fields() where F: Show {
+          if field.name == "0" { positional = true }
+          let shown = field.get(self).show()
+          payload = payload + separator + if positional { shown } else { field.name + ": " + shown }
+          separator = ", "
+        }
+        out = if separator == "" { variant.name } else {
+          if positional { variant.name + "(" + payload + ")" } else { variant.name + "\{" + payload + "\}" }
+        }
+      }
+    }
+    out
+  }
 }

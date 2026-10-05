@@ -12,7 +12,7 @@ module Pudu.Type.Check.Statement
   , checkMember
   ) where
 
-import Control.Monad (when)
+import Control.Monad (when, zipWithM_)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -72,7 +72,7 @@ data StatementNeeds = StatementNeeds
       FunctionRole
       -> DeclaredTypes
       -> [(Text, Int)]
-      -> [(Text, [NominalId])]
+      -> [(Text, [Type])]
       -> Maybe NominalId
       -> Function
       -> Checker ()
@@ -82,7 +82,7 @@ data StatementNeeds = StatementNeeds
     an outer binding of the same name is the one a later use reads. -}
 checkBlock :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
 checkBlock needs declared rigid (Located _ block) = inTypeScopeWith $ do
-  mapM_ (checkStatement needs declared rigid) (blockStatements block)
+  checkStatements needs declared rigid block
   case blockResult block of
     Nothing -> pure (resultlessBlockType block)
     Just expression -> statementExpression needs declared rigid expression
@@ -100,8 +100,26 @@ resultlessBlockType block = case reverse (blockStatements block) of
   Located _ (ContinueStatement _) : _ -> NeverType
   _ -> UnitTypeValue
 
-checkStatement :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Statement -> Checker ()
-checkStatement needs declared rigid (Located spanValue statement) = case statement of
+{-| Check a block's statements in order, telling each whether the entry after
+    it begins with a unary minus, which is where a line break has split one
+    expression into two statements. -}
+checkStatements :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Block -> Checker ()
+checkStatements needs declared rigid block =
+  zipWithM_ (checkStatement needs declared rigid) followers statements
+ where
+  statements = blockStatements block
+  followers = map (negated . leading) (drop 1 statements) <> [negated (blockResult block)]
+  leading (Located _ statement) = case statement of
+    ExpressionStatement expression -> Just expression
+    _ -> Nothing
+  negated = maybe False (startsNegated . locatedValue)
+  startsNegated = \case
+    UnaryExpression "-" _ -> True
+    BinaryExpression left _ _ -> startsNegated (locatedValue left)
+    _ -> False
+
+checkStatement :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Bool -> Located Statement -> Checker ()
+checkStatement needs declared rigid beforeNegation (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name annotation value)) -> do
     expected <- formOptionalType declared rigid annotation
     actual <- case annotation of
@@ -122,6 +140,7 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
     inferred <- statementExpression needs declared rigid expression
     requireConcreteSetLiteral (locatedSpan expression) (locatedValue expression) inferred
     reportDiscardedResult needs declared rigid expression
+    reportDiscardedValue inferred beforeNegation expression
   ReturnStatement value -> do
     actual <- case value of
       Nothing -> pure UnitTypeValue
@@ -294,7 +313,7 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
     is. -}
 checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Type -> Located Block -> Checker Type
 checkBlockAgainst needs declared rigid expected (Located blockSpan block) = inTypeScopeWith $ do
-  mapM_ (checkStatement needs declared rigid) (blockStatements block)
+  checkStatements needs declared rigid block
   case blockResult block of
     Nothing -> do
       let actual = resultlessBlockType block
@@ -310,6 +329,38 @@ checkArmAgainst needs declared rigid expected subject (Located _ arm) = inTypeSc
   mapM_ (checkGuard needs declared rigid) (armGuard arm)
   _ <- checkAgainst needs declared rigid expected (armBody arm)
   pure ()
+
+{-| An expression statement whose value is lost where no reader meant it to
+    be. Two shapes: arithmetic, a comparison, a literal, or a name, whose only
+    work is the value; and any statement with a value that is followed by a
+    line beginning with `-`, which a line break has split from it, so the first
+    line's value is dropped and the second is negated alone. A call standing
+    alone is an answer the writer asked for and is not warned about. -}
+reportDiscardedValue :: Type -> Bool -> Located Expression -> Checker ()
+reportDiscardedValue inferred beforeNegation (Located spanValue expression) = do
+  resolved <- zonk inferred
+  when (isPureValue expression || (beforeNegation && carriesValue resolved)) $
+    warn "W3004"
+      spanValue
+      "this value is computed and never used"
+      ( Just
+          "bind it, return it, or join it to the line above; a line that starts with - begins a new statement"
+      )
+ where
+  isPureValue value = case value of
+    LiteralExpression _ -> True
+    NameExpression _ -> True
+    UnaryExpression operator _ -> operator `elem` ["-", "!", "~"]
+    BinaryExpression _ operator _ -> operator `elem` pureOperators
+    _ -> False
+  pureOperators =
+    ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&", "|", "^", "<<", ">>"]
+  carriesValue resolved = case resolved of
+    UnitTypeValue -> False
+    NeverType -> False
+    ErrorType -> False
+    VariableType _ -> False
+    _ -> True
 
 reportDiscardedResult :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker ()
 reportDiscardedResult needs declared rigid (Located spanValue expression) = case expression of
@@ -344,7 +395,7 @@ checkMember
   :: StatementNeeds
   -> DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Located Function
   -> Checker ()

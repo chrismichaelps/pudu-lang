@@ -27,6 +27,9 @@ aliases: [Type Check Rule]
 
 Own the closed operator, call, member, and index rules for [[Type Check]].
 
+Captured nominal and rigid-bound methods use [[Type Check Receiver]] exactly as
+immediate calls do: self unifies before it is removed, and default arity survives.
+
 ### Governance
 
 - A range's two ends **meet each other before either meets `Int`**, so a range written between two
@@ -93,7 +96,12 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 - **Requires:** [[Float Literal]], [[Integer Literal]], [[Semantic Prelude]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
+`instantiate` and `instantiateWith` record a static selection when a non-`Self` parameter is bounded by a static trait: every parameter's chosen type, in the scheme's order.
+
 ## Algorithm
+
+Scheme instantiation and rigid member substitution use [[Type Substitution]],
+preserving nested function default arity and unsafe requirements.
 
 Dispatch on the operator, the receiver's type, or the pattern's shape, unifying against what the construct requires. A `NominalType "Array" [element]` receiver routes to `arrayMethodType`, which returns the function type for each built-in array method (`length`, `get`, `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`, `reverse`, `map`, `filter`, `reduce`), threading the element type through higher-order methods so `map` and `filter` type-check correctly.
 
@@ -147,6 +155,13 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   a generic missing-export diagnostic.
 - **Q:** Why type `escapeHtml` in the core type checker rather than in `Std.Html`? **A:** `escapeHtml` is wired as a zero-argument built-in method on primitive `Str` values returning `Str`. Typing it in `stringMethodType` ensures that `.escapeHtml()` is recognized statically across all modules and in standard library implementations without circular dependencies.
 
+- **Q:** Type `sortBy`? **A:** `fn(fn(T, T) -> Bool) -> Array[T]`. _Rationale:_ the comparison says
+  whether its first argument goes before its second, as [[Std List]] always has.
+- **Q:** Suggest the bare name whenever the environment holds it? **A:** No. _Rationale:_ the
+  checker's environment holds other modules' declarations by bare name, so `ByteSeq.sha256Hex`
+  suggested a name the resolver then refused (#415). Only a prelude value is suggested.
+- **Q:** Record a trait member's `Self`? **A:** No; the owner the call names settles it.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
@@ -170,3 +185,9 @@ as `fn() -> Str` rather than an unchecked fresh variable.
 
 Resolved Grill Log: typed as the universal method only where nothing declared answers, so an
 implementation's own signature governs its calls; the evaluator makes the same choice at run time.
+
+## Complete trait evidence
+
+Call instantiation substitutes both sides of every full trait obligation. Rigid member access delegates scheme selection to Type.Check.Method, sharing trait-argument specialization with immediate calls.
+
+Resolved Grill Log: no second identity-only rigid resolver; a captured method keeps the same concrete result as an immediate call.

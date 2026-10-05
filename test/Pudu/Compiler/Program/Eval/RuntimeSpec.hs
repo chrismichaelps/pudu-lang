@@ -18,6 +18,7 @@ testRuntimeEvaluation = do
   hashing <- runEntry "test-fixtures/stdlib/UsesCrypto.pudu"
   parsing <- runEntry "test-fixtures/stdlib/UsesParse.pudu"
   labelled <- runEntry "test-fixtures/stdlib/UsesLabels.pudu"
+  decimalDispatch <- runEntry "test-fixtures/stdlib/UsesDecimalDispatch.pudu"
   exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
@@ -87,7 +88,8 @@ testRuntimeEvaluation = do
   quantities <- runEntry "test-fixtures/stdlib/UsesHumanAll.pudu"
   addressed <- runEntry "test-fixtures/stdlib/UsesIpAll.pudu"
   pure $ conjoin
-    [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
+    [ counterexample "Decimal methods dispatch through every checked call form" (decimalDispatch === Just "5")
+    , {-| Eighteen writes: a var, fields, nested fields, elements, and places
           lent with &mut and handed back after a plain finish, `return`, and
           `?`, through methods, trait-qualified calls, and a place lent on. -}
       counterexample "a place is written, lent, and handed back on every exit"
@@ -101,7 +103,7 @@ testRuntimeEvaluation = do
     , counterexample "statistics answer for enough data and refuse too little"
         (statistics === Just "27")
     , counterexample "an environment file reads, expands, renders back, and refuses by line"
-        (settings === Just "17")
+        (settings === Just "19")
     , counterexample "terminal styles write the sequences they name and strip back to text"
         (styled === Just "13")
     {-| Futures, cancellation, races, and deadlines, including work that
@@ -167,7 +169,7 @@ testRuntimeEvaluation = do
         found to refuse rather than answer nothing. -}
     , counterexample
         "every text operation answers what it says it answers"
-        (textual === Just "91")
+        (textual === Just "92")
     {-| Every export of the option and result modules, each asked of a value
         that is there and one that is not. These two exist for the absent
         case, so a check that only covered the present one would be the half
@@ -335,7 +337,7 @@ testRuntimeEvaluation = do
         the clock are asked only what holds of any reading. -}
     , counterexample
         "every time operation answers for a stated moment"
-        (moments === Just "40")
+        (moments === Just "41")
     {-| Every export of the parser module, on text it accepts and text it
         refuses. A parser is only worth its name if it also refuses, and
         `run` insists the whole text is consumed, so one that stopped early is
@@ -376,7 +378,7 @@ testRuntimeEvaluation = do
         centuries a naive leap-year rule gets wrong. -}
     , counterexample
         "a moment written as text reads back as the moment it named"
-        (calendars === Just "50")
+        (calendars === Just "55")
     {-| Readings are built rather than timed: a check against the clock would
         answer differently on a machine that was busy, and a failure for that
         reason says nothing about the code. -}
@@ -394,7 +396,7 @@ testRuntimeEvaluation = do
         (aliasDispatch === Just "224")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "109")
+        (enterpriseSsr === Just "110")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")
@@ -470,7 +472,7 @@ testRuntimeEvaluation = do
     , counterexample "a declared width is enforced wherever the value came from"
         (declaredWidths === Just "63")
     , counterexample "decimal arithmetic is exact and rounds only when told"
-        (exact === Just "12")
+        (exact === Just "13")
     , counterexample "a generic trait's parameters follow its implementation"
         (generic === Just "5")
     , counterexample "a user type and lazy adapters use the open sequence protocol"

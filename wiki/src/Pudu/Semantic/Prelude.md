@@ -75,10 +75,6 @@ DEPTH 0.30 (SHALLOW by intent). It is a single normative list; deepening it befo
 - **Q:** Are wired-in and prelude names one list or two? **A:** Two, in separate scope layers. _Rationale:_ splitting wired-in types from the prelude module is what makes the prelude replaceable while keeping primitives inviolable, and Pudu wants both properties. _Rejected:_ one flat builtin list, which would make `Int` shadowable and `Drop` unremovable — precisely backwards.
 - **Q:** How is the implicit import disabled? **A:** By importing the prelude explicitly. _Rationale:_ it reuses syntax the language already has instead of adding a pragma or compiler flag. _Rejected:_ a `NoImplicitPrelude`-style flag before the language has any flags.
 
-## Referenced by
-
-[[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
-
 ## Cryptographic primitive names
 
 The pure value vocabulary includes `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`,
@@ -205,3 +201,31 @@ Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot 
 ## Native checksum name (#343)
 
 Adds `checksumOf` to the pure value vocabulary so [[Std Checksum]] resolves it without a capability.
+
+## Atomic byte replacement (#385)
+
+`writeFileAtomically` is present in `preludeValueNames` so [[Std Fs]] can resolve
+its atomic byte replacement effect. [[Type Check Prelude]] owns the signature and
+[[Eval Effect]] owns dispatch and admission.
+
+Resolved Grill Log: register only the primitive's name here; retain phase-owned
+arity, typing and filesystem behavior.
+
+## Referenced by
+
+[[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
+
+## Fused MultiMap operations
+
+The pure primitives `multiMapAdd[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` and
+`multiMapContains[K, V](&Std.MultiMap.MultiMap[K, V], K, V)` preserve the library's
+record shape and ordered maps. [[Eval MultiMap]] owns their runtime implementation.
+`add` appends to the group and increments its occurrence count with one tree traversal
+per map; `contains` performs one occurrence lookup. They are registered by name,
+typed with the canonical library nominal identity, installed, and dispatched as pure
+builtins, so aliases, first-class wrappers, shadowing, and constant folding retain
+ordinary call semantics.
+
+Resolved Grill Log: use explicit primitives rather than recognizing a library function
+by name. Preserve persistence, key representatives, duplicate counts, checked Int
+overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.

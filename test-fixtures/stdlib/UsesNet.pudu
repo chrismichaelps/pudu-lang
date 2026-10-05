@@ -3,7 +3,7 @@ module UsesNet
 import Std.Bytes as ByteSeq
 import Std.Channel as Channel
 import Std.Concurrent as Concurrent
-import Std.Net {Closed, NetOperationTimedOut}
+import Std.Net {Closed, NetOperationTimedOut, Other}
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
@@ -72,6 +72,7 @@ export fn main() -> Int {
   held = held + invalidatesTimedOutRead()
   held = held + invalidatesTimedOutSend()
   held = held + acceptsAndFolds()
+  held = held + boundsMarkerAndExactReads()
 
   // A second listener answers with a port of its own, so binding twice does
   // not silently hand back the same endpoint.
@@ -85,6 +86,33 @@ export fn main() -> Int {
       if Result.isOk(&Net.closeListener(&one)) { held = held + 1 }
       if Result.isOk(&Net.closeListener(&two)) { held = held + 1 }
     }
+  }
+
+  // A long body whose four-byte marker arrives split over separate writes is
+  // read whole, with what follows the marker kept.
+  let split = Net.listenLocal(0)
+  if let Ok(splitListener) = split {
+    let splitPort = Result.unwrapOr(Net.portOf(&splitListener), 0)
+    let body = "b".repeat(300000)
+    let sender = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&splitListener, 1, fn(connection: Net.Connection) -> Bool {
+            let _body = Net.sendText(&connection, body + "\r\n")
+            let _rest = Net.sendText(&connection, "\r")
+            let _last = Net.sendText(&connection, "\nnext")
+            false
+          })
+        let _closed = Net.closeListener(&splitListener)
+        ()
+      })
+    let read = Net.withConnection("127.0.0.1", splitPort, fn(connection: Net.Connection) -> Result[(Bytes, Bytes), Net.NetError] {
+        Net.receiveUntil(&connection, &ByteSeq.fromText("\r\n\r\n"), 400000)
+      })
+    if let Ok(parts) = read {
+      if parts[0].length() == 300000 && Net.tailStart(10, 4) == 7 && Net.tailStart(2, 4) == 0 {
+        held = held + 1
+      }
+    }
+    if let Ok(worker) = sender { let _joined = Concurrent.join(&worker) }
   }
 
   held
@@ -158,6 +186,34 @@ fn acceptsAndFolds() -> Int {
     let folded = Option.unwrapOr(Result.unwrapOr(Channel.receive(&fromServer), None), "")
     if folded == "bytes 10" { held = held + 1 }
 
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    held
+  } else {
+    0
+  }
+}
+
+/// A marker past the limit, an empty marker, and a negative exact count are
+/// each reported rather than answered.
+fn boundsMarkerAndExactReads() -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(connection: Net.Connection) -> Bool {
+            let _sent = Net.sendText(&connection, "abcdefghij\n")
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    var held = 0
+    if let Ok(connection) = Net.connect("127.0.0.1", port) {
+      if let Err(Other(_)) = Net.receiveUntil(&connection, &ByteSeq.fromText("\n"), 4) { held = held + 1 }
+      if let Err(Other(_)) = Net.receiveUntil(&connection, &ByteSeq.empty(), 4) { held = held + 1 }
+      if let Err(Other(_)) = Net.receiveExactly(&connection, -1) { held = held + 1 }
+      let _closed = Net.close(&connection)
+    }
     if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
     held
   } else {
