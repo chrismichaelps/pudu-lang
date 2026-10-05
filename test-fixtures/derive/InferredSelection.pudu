@@ -1,0 +1,17 @@
+module InferredSelection
+
+import Std.Json
+import Std.Json {Decode, Encode}
+
+type Point = { x: Int, y: Int } derives Json.Encode, Json.Decode
+
+fn back[T: Encode + Decode](value: &T) -> Str {
+  match T.decode(&value.encode()) {
+    case Ok(read) => Json.encode(&read.encode())
+    case Err(problem) => Json.explainDecode(&problem)
+  }
+}
+
+fn twice[T: Encode + Decode](value: &T) -> Str { back(value) + back[T](value) }
+
+export fn main() -> Str { back(&1) + twice(&"s") + back(&[true]) + back(&Point{x: 1, y: 2}) }

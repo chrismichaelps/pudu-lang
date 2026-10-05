@@ -67,6 +67,10 @@ data CompileResult = CompileResult
       evaluator reads this to build the literal as the type it is. -}
   , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
+  {-| Every module-scope name's type as inference settled it, for tooling that
+      indexes a tree other than the one checked: the authored text, before
+      derives are elaborated. -}
+  , compileSchemes :: ~[(Text, Scheme)]
   , compileDiagnostics :: ![Diagnostic]
   {-| The methods this module's declarations provide, by owner, as the checker
       declared them. Only this module's own: a program's are the union of its
@@ -102,6 +106,7 @@ rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostic
     , compileDocs = Nothing
     , compileDiagnostics = sortDiagnostics (frontendDiagnostics <> findings)
     , compileMethods = []
+    , compileSchemes = []
     , compileFolded = Map.empty
     }
 
@@ -147,6 +152,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
             , compileMethods = []
+            , compileSchemes = []
             , compileFolded = Map.empty
             }
         Just original ->
@@ -182,6 +188,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
                     , compileMethods = maybe [] moduleMethods typing
+                    , compileSchemes = maybe [] moduleSchemes typing
                     , compileFolded = folded
                     }
 

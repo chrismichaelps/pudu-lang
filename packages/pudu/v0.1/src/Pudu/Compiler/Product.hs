@@ -26,6 +26,7 @@ publishProduct ExecutionProducts compiled = compiled
   , compileTypes = Nothing
   , compileDocs = Nothing
   , compileMethods = []
+  , compileSchemes = []
   }
 
 frontendFor :: ProductUse -> ProductCache -> Source -> IO FrontendResult
@@ -57,6 +58,7 @@ checkedFor ExecutionProducts cache graph source frontend compile = do
         , compileDocs = Nothing
         , compileDiagnostics = []
         , compileMethods = []
+        , compileSchemes = []
         , compileFolded = checkedFolded reused
         }
     Nothing -> do

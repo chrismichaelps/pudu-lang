@@ -61,6 +61,7 @@ test-suite pudu-test
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec
+    Pudu.Lsp.DeriveToolingSpec
     Pudu.Lsp.DiagnosticsSpec
     Pudu.Lsp.ImplMembersSpec
     Pudu.Lsp.MethodDefinitionSpec

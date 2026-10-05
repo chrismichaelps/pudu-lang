@@ -245,6 +245,9 @@ data CheckerState = CheckerState
   {-| The methods this module's own declarations provide — its impls, the
       trait defaults those inherit, and its traits' members — by owner. -}
   , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme, Span)]
+  {-| The same methods' qualified keys, which `isMethodKey` asks of every call
+      on a built-in type. -}
+  , stateDeclaredMethodKeys :: !(Set Text)
   {-| Traits declaring a member that takes no `self`. A parameter bounded by
       one of them may be called through statically, which needs its chosen
       type at run time. -}
@@ -373,6 +376,7 @@ initialState =
     , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
     , stateDeclaredMethodsRev = []
+    , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
     }
@@ -388,6 +392,9 @@ data InstalledNames = InstalledNames
   { installedFrame :: !(Map Text Scheme)
   , installedUnsafe :: !(Map Text [Capability])
   , installedComptime :: !(Map Text Bool)
+  {-| The imported traits with a member that takes no `self`, whose calls
+      through a bounded parameter must carry the types a reference chose. -}
+  , installedStatic :: !(Set NominalId)
   , installedNext :: !Int
   }
 
@@ -396,6 +403,7 @@ instance Eq InstalledNames where
     installedFrame left == installedFrame right
       && installedUnsafe left == installedUnsafe right
       && installedComptime left == installedComptime right
+      && installedStatic left == installedStatic right
       && installedNext left == installedNext right
 
 instance Show InstalledNames where
@@ -410,21 +418,28 @@ installedNames =
             [] -> Map.empty
         , installedUnsafe = stateUnsafeFunctions state
         , installedComptime = stateComptimeFunctions state
+        , installedStatic = stateStaticTraits state
         , installedNext = stateNext state
         }
     , state
     )
 
-{-| Begin from installed names, before anything of the module's own is bound. -}
 {-| Record a method this module's declarations provide for `owner`, so tooling
     can offer what a value of that type — or a parameter bounded by that trait —
-    can be called with, from the same facts a call is checked against. -}
-{-| A method a declaration of this module provides, with the span of its
-    name: for a generated method, its anchor in the derive that wrote it. -}
+    can be called with, from the same facts a call is checked against. The span
+    is the method's name: for a generated method, its anchor in the derive that
+    wrote it. -}
 recordDeclaredMethod :: NominalId -> Located Text -> Scheme -> Checker ()
 recordDeclaredMethod owner (Located at name) scheme =
-  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme, at) : stateDeclaredMethodsRev state})
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateDeclaredMethodsRev = (owner, name, scheme, at) : stateDeclaredMethodsRev state
+        , stateDeclaredMethodKeys = Set.insert (nominalKey owner <> "." <> name) (stateDeclaredMethodKeys state)
+        }
+    )
 
+{-| Begin from installed names, before anything of the module's own is bound. -}
 installNames :: InstalledNames -> Checker ()
 installNames installed =
   Checker $ \state ->
@@ -435,6 +450,7 @@ installNames installed =
             [] -> [installedFrame installed]
         , stateUnsafeFunctions = stateUnsafeFunctions state <> installedUnsafe installed
         , stateComptimeFunctions = stateComptimeFunctions state <> installedComptime installed
+        , stateStaticTraits = stateStaticTraits state <> installedStatic installed
         , stateNext = max (stateNext state) (installedNext installed)
         }
     )
@@ -679,7 +695,7 @@ isMethodKey :: Text -> Checker Bool
 isMethodKey key =
   Checker $ \state ->
     ( Set.member key (stateImportedMethods state)
-        || any (\(owner, name, _, _) -> nominalKey owner <> "." <> name == key) (stateDeclaredMethodsRev state)
+        || Set.member key (stateDeclaredMethodKeys state)
     , state
     )
 

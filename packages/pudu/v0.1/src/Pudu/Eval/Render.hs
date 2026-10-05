@@ -25,6 +25,7 @@ renderValue value = case value of
   FloatValue _ number -> Text.pack (show number)
   DecimalValue number -> renderDecimal number
   StrValue text -> "\"" <> escape text <> "\""
+  CharValue '\'' -> "'\\''"
   CharValue character -> "'" <> escape (Text.singleton character) <> "'"
   BoolValue flag -> if flag then "true" else "false"
   NullValue -> "null"

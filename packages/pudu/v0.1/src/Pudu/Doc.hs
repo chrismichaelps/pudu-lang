@@ -4,6 +4,7 @@ module Pudu.Doc
   , DocIndex (..)
   , DocKind (..)
   , buildIndex
+  , buildIndexFrom
   , entriesFor
   , kindLabel
   , renderEntry
@@ -93,7 +94,12 @@ instance Monoid DocIndex where
     signature is never reconstructed from the written syntax, because the
     written syntax is optional and the inferred type is not. -}
 buildIndex :: [Token] -> ModuleTypes -> Module -> DocIndex
-buildIndex tokens types moduleValue =
+buildIndex tokens types = buildIndexFrom tokens (moduleSchemes types)
+
+{-| `buildIndex` from the settled schemes alone, for a tree other than the one
+    those schemes were checked from but declaring the same names. -}
+buildIndexFrom :: [Token] -> [(Text, Scheme)] -> Module -> DocIndex
+buildIndexFrom tokens settled moduleValue =
   DocIndex (concat (snd (List.mapAccumL step moduleStart (moduleDeclarations moduleValue))))
  where
   moduleStart = unOffset (spanStart (moduleSpan moduleValue))
@@ -107,7 +113,7 @@ buildIndex tokens types moduleValue =
     )
 
   owner = moduleNameText (locatedValue (moduleName moduleValue))
-  schemes = Map.fromList (moduleSchemes types)
+  schemes = Map.fromList settled
   docs = docComments tokens
   traitDocs = Map.fromList (concatMap declarationTraitDocs (moduleDeclarations moduleValue))
 

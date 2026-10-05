@@ -33,6 +33,10 @@ deriveLibraryProperties =
   , ("static calls through a generic parameter reach the selected owner", runs "StaticSelection"
       "\"4;5/6;67qpairleftqpairright\"")
   , ("a static member answers its own owner rather than its first argument's", runs "StaticMember" "\"3abc\"")
+  , ("an inferred type argument selects through an imported trait", runs "InferredSelection"
+      "\"1\\\"s\\\"\\\"s\\\"[true]{\\\"x\\\":1,\\\"y\\\":2}\"")
+  , ("derived Show escapes quote characters as their literals do", runs "ShowChars"
+      "\"Marks{quote: '\\\\'', double: '\\\\\\\"', line: '\\\\n', text: \\\"it's\\\"}\"")
   , ("field callbacks answer only what their construction can hold", refuses "BuildEscape"
       [ ("E3001", "a build callback answers its field type F, or Result[F, E] for an E that is not F, not Result[F, F]")
       , ("E3001", "expected F, found Str")
@@ -46,6 +50,7 @@ deriveLibraryProperties =
   , ("a JSON value is its own JSON, and Json.encode stays the module's function", runs "StdJsonValue"
       "\"{\\\"id\\\":1,\\\"payload\\\":{\\\"k\\\":\\\"v\\\"},\\\"extra\\\":null,\\\"tags\\\":[2,null]} = null\"")
   , ("a payload read from another variant panics naming the variant", panics "SumMismatch" "expected Shape.Circle")
+  , ("a hundred types with six derives each check without exhausting coherence", manyRequests)
   , ("expansion prints exactly the implementations a module requested", expands)
   , ("a same-module expansion written in place of its derives runs the same", expandsInPlace)
   ]
@@ -132,6 +137,24 @@ expandsInPlace = do
     line : rest
       | "derive " `Text.isPrefixOf` line -> withoutDerives (drop 1 (dropWhile (/= "}") rest))
       | otherwise -> Text.replace " derives Describe" "" line : withoutDerives rest
+
+{-| Six hundred requests over records and sums that cannot overlap: coherence
+    compares heads that could, so a large valid program is never refused. -}
+manyRequests :: IO Property
+manyRequests = do
+  let derives = " derives Eq, Hash, Ord, Show, Json.Encode, Json.Decode"
+      declarations index =
+        [ "type R" <> index <> " = { a: Int, b: Str, c: Option[Int] }" <> derives
+        , "type S" <> index <> " = A" <> index <> " | B" <> index <> "(Int) | C" <> index <> "{r: R" <> index <> "}" <> derives
+        ]
+      text = Text.unlines $
+        [ "module ManyRequests", "import Std.Json", "import Std.Order {Eq, Hash, Ord}", "import Std.Show {Show}" ]
+          <> concatMap (declarations . Text.pack . show) [0 :: Int .. 49]
+          <> ["export fn main() -> Int { 0 }"]
+  source <- newSource (SourceName "test-fixtures/derive/ManyRequests.pudu") text
+  program <- compileProgramSourceOver Map.empty "test-fixtures/derive" source
+  pure $ counterexample (show (map diagnosticMessage (programDiagnostics program)))
+    (map diagnosticMessage (programDiagnostics program) === [])
 
 inMode :: String -> IO a -> IO a
 inMode mode action = do

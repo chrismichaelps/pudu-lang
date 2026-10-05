@@ -4,6 +4,7 @@ module Pudu.Type.Check
   , checkModuleDetailed
   , checkDeriveDefinitions
   , checkDeriveDefinitionsWith
+  , checkDeriveDefinitionTypes
   , checkModuleWith
   ) where
 
@@ -161,6 +162,14 @@ checkDeriveDefinitionsWith :: Set Span -> ImportTypes -> Set Span -> Module -> [
 checkDeriveDefinitionsWith inferred imported writable moduleValue =
   producedDiagnostics (runChecker
     (setWritableNames writable >> checkUnit (DeriveDefinitions inferred) imported moduleValue))
+
+{-| What checking the templates gave each of their expressions, for tooling: a
+    template is checked once, generically, and its generated copies hold
+    request-specific types under the same text. -}
+checkDeriveDefinitionTypes :: ImportTypes -> Set Span -> Module -> [(Span, Type)]
+checkDeriveDefinitionTypes imported writable moduleValue =
+  producedTypes (runChecker
+    (setWritableNames writable >> checkUnit (DeriveDefinitions Set.empty) imported moduleValue))
 
 checkUnit :: CheckingScope -> ImportTypes -> Module -> Checker ()
 checkUnit scope imported moduleValue = do

@@ -1,0 +1,7 @@
+module ShowChars
+
+import Std.Show {Show}
+
+type Marks = { quote: Char, double: Char, line: Char, text: Str } derives Show
+
+export fn main() -> Str { Marks{quote: '\'', double: '"', line: '\n', text: "it's"}.show() }

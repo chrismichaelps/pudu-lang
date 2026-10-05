@@ -7,6 +7,8 @@ module Pudu.Type
   , checkTypes
   , checkTypesDetailed
   , checkTypesWith
+  , deriveDefinitionTypes
+  , overlayTypes
   , renderType
   , typeAt
   , typeAtOffsets
@@ -134,6 +136,18 @@ typeAt :: TypeInfo -> Span -> Maybe Type
 typeAt (TypeInfo _ entries) spanValue = Map.lookup spanValue entries
 
 {-| Offset queries describe authored text in this module's snapshot only. -}
+{-| The types derive templates' own expressions were checked with, which the
+    checked module's info has no entry for: its generated copies carry
+    generated spans. -}
+deriveDefinitionTypes :: ImportTypes -> Module -> TypeInfo
+deriveDefinitionTypes imported moduleValue =
+  typeInfoFor moduleValue (Check.checkDeriveDefinitionTypes imported (writableIn moduleValue) moduleValue)
+
+{-| The first info, with the second's answers for what the first never typed. -}
+overlayTypes :: TypeInfo -> TypeInfo -> TypeInfo
+overlayTypes (TypeInfo offsets spans) (TypeInfo extraOffsets extraSpans) =
+  TypeInfo (Map.union offsets extraOffsets) (Map.union spans extraSpans)
+
 typeInfoFor :: Module -> [(Span, Type)] -> TypeInfo
 typeInfoFor moduleValue entries = TypeInfo authored (Map.fromList entries)
  where
