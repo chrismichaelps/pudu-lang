@@ -101,7 +101,7 @@ Decimal output is required; semantic equality alone cannot detect this regressio
 ## Integer-pair dependency cut
 
 For a host-Int-sized IntValue key and value, an empty occurrence Map promotes to
-a persistent nested IntMap. Later integer updates descend the numeric key and
+a persistent outer IntMap and inner SeriesMap. Later integer updates descend the numeric key and
 value indexes directly and retain original key/value kind tags plus count.
 Nonempty generic maps stay generic. Contains reads the numeric index directly;
 noninteger or out-of-host-range arguments use its cached ordinary Map view.
@@ -135,3 +135,15 @@ successful invocation need not copy Env to enter and leave an unobservable extra
 depth. Failure at the boundary still delegates to descend with the original span.
 Resolved Grill Log: eliminate depth record copies only for these two closed pure
 kernels; preserve the original recursion refusal and all general closure behavior.
+
+## Persistent series payloads
+
+The inner numeric index uses [[Runtime Series Map]]. Supply an exact compression
+predicate only for PlatformIntPairEntry with platform-signed count one. Every
+duplicate still combines the original count, takes incoming kinds, and creates a
+sparse override. Mixed kinds/counts never collapse by semantic equality. Contains
+uses series lookup; groups remain persistent Map/Sequence storage.
+
+Resolved Grill Log: replace only the inner persistent storage behind the existing
+lazy Map view. Reuse touched-count validation and shared overflow diagnostics.
+Arbitrary members and old snapshots retain ordinary behavior; no input rewrite.

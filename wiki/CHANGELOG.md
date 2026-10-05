@@ -5,6 +5,39 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Compress persistent numeric series (#435)
+
+- [[Runtime Series Map]] proves a fully populated constant-payload arithmetic
+  series from three stored points, then shares its base with arbitrary sparse
+  additions and overrides. Signed bounds use exact unsigned distances. Only
+  representation-equivalent payloads compress; no absent key is synthesized.
+- [[Eval MultiMap]] supplies a narrow platform-kind/count-one predicate; every
+  duplicate retains incoming kinds and checked counts. [[Eval Value]] keeps its
+  lazy ordinary ordered-map view. Public maps, groups and snapshots stay persistent.
+- [[Runtime Series Map Tests]] compare generated histories, touched results,
+  every snapshot, ordering, gaps and host boundaries to ordinary strict IntMap.
+  Structural assertions prove long runs use one stored base payload. Extended
+  [[Eval Data Tests]] verify actual primitive compression, missing members,
+  mixed-kind overwrites, generic transitions and exact existing diagnostics.
+  Both focused families pass 200 tests in each evaluator mode.
+- Three alternating cold samples against d2362820 measure MultiMap tree
+  818 → 665 ms and compiled 838 → 669 ms; output is identical. Peak RSS
+  falls about 255–260 → 159 MB, while cumulative allocation falls 2.69 →
+  2.55 GB. Keep these different measures distinct. Other workload allocation
+  is unchanged; no broad timing or compiler-latency speedup is claimed.
+- Every fresh repository gate passes and all 550 property families pass in the
+  additional full tree run. The original script reports tree/compiled ms:
+  Arrays 740/560, Calls 430/270, Iterate 420/300, Loop 550/550,
+  Maps 760/550, MultiMap 640/650 and Records 350/350. All outputs match.
+- The complete compiler harness passes. Its first all-214-Std cold median is
+  1088 ms / 98 ms warm; the same-input before/after follow-up gives
+  996 → 966 ms cold and 87 → 87 ms warm, with startup 27 → 25 ms.
+  No compiler speedup is claimed. An initial Iterate compiled difference
+  (287 → 311 ms) reverses in a recheck (308 → 297 ms); Records rechecks
+  at 342 → 347 ms tree and 347 → 346 ms compiled. Preserve these variations.
+  Local GHC is 9.10.3; locked 9.14.1, whole-command sub-millisecond execution
+  and native speed/memory parity remain unverified.
+
 ## 2026-10-04 — Remove boxed loop-region outcomes (#435)
 
 - [[Eval Loop Step]] carries strict success/refusal alternatives through an

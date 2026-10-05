@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Tree
   ( Block (..), Expression (..), Function (..), FunctionBody (..), Parameter (..) )
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindFits, integerKindMeet)
 import Pudu.Source (Span)
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
 
 {-| Append and count with one traversal of each index. Both trees remain
     persistent, and overwrites keep the same representative as Map insertion. -}
@@ -90,12 +91,15 @@ insertOccurrence spanValue occurrences key value = case (occurrences, integerPai
           | keyKind == defaultIntegerKind && valueKind == defaultIntegerKind = PlatformIntPairEntry count
           | otherwise = IntPairEntry keyKind valueKind count
         update existing =
-          let values = maybe IntMap.empty id existing
-              (previous, next) = IntMap.insertLookupWithKey
+          let values = maybe SeriesMap.empty id existing
+              (previous, next) = SeriesMap.insertLookupWithKey sameUnit
                 (\_ _ old -> entry (incrementCount (entryCount old)))
                 member (entry (intOf 1)) values
            in (fmap entryCount previous, Just next)
      in (held, intPairMap nextIndex)
+  sameUnit (PlatformIntPairEntry (IntValue kind 1)) (PlatformIntPairEntry (IntValue other 1)) =
+    kind == defaultIntegerKind && other == defaultIntegerKind
+  sameUnit _ _ = False
   entryCount (PlatformIntPairEntry count) = count
   entryCount (IntPairEntry _ _ count) = count
   increment _ _ old = incrementCount old
@@ -106,7 +110,7 @@ insertOccurrence spanValue occurrences key value = case (occurrences, integerPai
 containsOccurrence :: Span -> Value -> Value -> Value -> Evaluator Value
 containsOccurrence spanValue occurrences key value = case (occurrences, integerPair key value) of
   (IntPairMapValue index _, Just (number, member, _, _)) ->
-    pure (BoolValue (maybe False (IntMap.member member) (IntMap.lookup number index)))
+    pure (BoolValue (maybe False (maybe False (const True) . SeriesMap.lookup member) (IntMap.lookup number index)))
   (MapValue entries, _) ->
     pure (BoolValue (Map.member (OrdValue (TupleValue [key, value])) entries))
   _ -> abortAt (Just spanValue) "E7001" "multiMapContains expects occurrence maps" Nothing

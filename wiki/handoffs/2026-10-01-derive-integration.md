@@ -540,3 +540,43 @@ work as active. Exact next action: resolve a complete Runtime.SeriesMap mirror
 and storage property oracles, then integrate persistent constant-payload numeric
 series behind the existing lazy ordered-map view; preserve arbitrary input,
 kind representatives, duplicate counts, diagnostics and every old snapshot.
+
+Checkpoint d2362820 is committed and pushed. Architect → Runtime Engineer owns
+Runtime.SeriesMap, Eval.Value, Eval.MultiMap, SeriesMapSpec, DataSpec, EvalSpec,
+manifest registration and their complete mirrors for the resolved persistent
+series experiment. No other agents run. Prove generic insertion/snapshot laws
+before accepting runtime timing and memory evidence; compare all seven workloads
+and compiler latency, preserving all prior diagnostics and arbitrary inputs.
+Exact next action: implement the complete mirrors, run storage/runtime properties,
+then measure against d2362820 before the full fresh gate and publication.
+
+The storage and numeric-runtime families pass 200 tests in each mode. Actual
+primitive storage compresses a 101-member stride-17 series to one payload;
+missing congruence positions remain absent. Generated histories retain exact
+incoming representatives and every snapshot versus ordinary strict IntMap.
+Three alternating cold samples against d2362820 measure MultiMap 818/838 →
+665/669 ms (tree/compiled), RSS 255–260 → 159 MB and cumulative allocation
+2.69 → 2.55 GB. Every output matches. All other workload allocations remain
+unchanged; individual timing differences are not a claimed broad speedup.
+Fresh full gates are running. Exact next action: finish those gates, full tree
+suite, unchanged timing script and compiler harness before commit/push; then
+refresh measured graph reports. Native parity and typed Derive delivery remain
+incomplete. The broader next dependency cuts are scalar boxing and call frames.
+
+All fresh repository gates pass; all 550 families also pass in a complete tree
+run. The requested script reports tree/compiled ms: Arrays 740/560,
+Calls 430/270, Iterate 420/300, Loop 550/550, Maps 760/550,
+MultiMap 640/650 and Records 350/350. All seven stdout/stderr pairs match.
+The compiler harness first measures all-214-Std at 1088 ms cold / 98 ms warm;
+a same-input before/after comparison gives 996 → 966 ms cold, 87 → 87 ms
+warm and startup 27 → 25 ms. No compiler speedup is claimed. Iterate's initial
+compiled difference (287 → 311) does not repeat (308 → 297); Records rechecks
+342 → 347 tree and 347 → 346 compiled. Other allocations remain unchanged.
+The locked 9.14.1 matrix is unverified locally; GHC 9.10.3 passes. All required
+checks for this bounded storage change are complete. Publish and push it now;
+separate fresh instrumentation/report captures are running, including a full
+Std compiler check. Native parity and full typed Derive delivery remain active.
+Exact next action: finish the eight fresh dependency-layer reports, identify the
+largest remaining compiler/runtime owner, and resolve its next bounded allocation
+cut in complete mirrors before implementation. Scalar storage and call-frame
+setup are candidates; measured attribution chooses the next cut.

@@ -10,6 +10,7 @@ module Pudu.Eval.DataSpec
   , testTextMethods
   ) where
 
+import Control.Monad (foldM)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
@@ -20,6 +21,7 @@ import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
 import Pudu.Eval.Operator (readIndex)
 import Pudu.Eval.Value (IntPairEntry (..), OrdValue (..), Value (..), intOf, intPairMap)
 import Pudu.IntegerLiteral (IntegerKind (..))
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
 import Pudu.Source (SourceName (..), emptySpan, newSource)
 
 import Pudu.Eval.Common
@@ -183,7 +185,7 @@ testNumericOccurrences = do
         _ -> False
       numeric held = case held of
         RecordValue _ fields | Just (IntPairMapValue index _) <- lookup "occurrences" fields ->
-          case IntMap.lookup (-3) index >>= IntMap.lookup (-5) of
+          case IntMap.lookup (-3) index >>= SeriesMap.lookup (-5) of
             Just PlatformIntPairEntry{} -> True
             _ -> False
         _ -> False
@@ -200,16 +202,29 @@ testNumericOccurrences = do
             else pure (BoolValue False)
       counted count = RecordValue "MultiMap"
         [("groups", MapValue Map.empty), ("occurrences", intPairMap
-          (IntMap.singleton 0 (IntMap.singleton 0 (PlatformIntPairEntry count))))]
+          (IntMap.singleton 0 (SeriesMap.singleton 0 (PlatformIntPairEntry count))))]
       ordinary count = RecordValue "MultiMap"
         [("groups", MapValue Map.empty), ("occurrences", MapValue
           (Map.singleton (OrdValue (TupleValue [intOf 0, intOf 0])) count))]
   promoted <- runWithEffects True $ do
     first <- callMultiMapAdd spanValue [empty, intOf (-3), intOf (-5)]
     pure (BoolValue (numeric first))
+  compressed <- runWithEffects True $ do
+    held <- foldM (\prior member -> callMultiMapAdd spanValue [prior, intOf (-3), intOf member])
+      empty [0, 17 .. 1700]
+    absent <- callMultiMapContains spanValue [held, intOf (-3), intOf 8]
+    pure (BoolValue (absent == BoolValue False && case held of
+      RecordValue _ fields | Just (IntPairMapValue index _) <- lookup "occurrences" fields ->
+        maybe False ((== 1) . SeriesMap.storedEntryCount) (IntMap.lookup (-3) index)
+      _ -> False))
   matrix <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)] inputs)
   transitions <- runWithEffects True (walk empty Map.empty [(empty, Map.empty)]
     (inputs <> [(intOf 4, StrValue "member"), (IntValue BigIntKind (2 ^ (100 :: Int)), intOf 4)]))
+  series <- mapM (\members -> runWithEffects True (walk empty Map.empty [(empty, Map.empty)]
+    ([(intOf (-3), intOf member) | member <- members]
+      <> [(IntValue (SignedKind 8) (-3), IntValue BigIntKind (-500)), (intOf (-3), intOf (-500))]
+      <> [(intOf (-3), StrValue "after series")])))
+    [[-500, -483 .. 503], reverse [-500, -483 .. 503]]
   failures <- mapM (\count -> do
     specialized <- runWithEffects True (callMultiMapAdd spanValue [counted count, intOf 0, intOf 0])
     generic <- runWithEffects True (callMultiMapAdd spanValue [ordinary count, intOf 0, intOf 0])
@@ -232,11 +247,15 @@ testNumericOccurrences = do
           , index <- [-1, 1, toInteger (maxBound :: Int) + 1, 2 ^ (100 :: Int)]]
   pure $ conjoin
     [ counterexample "platform numeric pairs use compact storage" (outcomeValue promoted === Just (BoolValue True))
+    , counterexample "numeric primitives compress only present series members"
+        (outcomeValue compressed === Just (BoolValue True))
     , counterexample "ordered keys preserve incoming kinds, counts and snapshots"
         (outcomeValue matrix === Just (BoolValue True))
     , counterexample "generic and wide transitions preserve the numeric prefix"
         (outcomeValue transitions === Just (BoolValue True))
     , counterexample "a wide first pair remains exact" (outcomeValue wideFirst === Just (BoolValue True))
+    , counterexample "series views retain mixed overwrites and generic transitions"
+        (map outcomeValue series === replicate 2 (Just (BoolValue True)))
     , conjoin failures, conjoin bounds
     ]
 

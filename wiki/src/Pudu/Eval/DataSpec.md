@@ -68,3 +68,12 @@ mixed integer kinds in a well-typed Pudu Map. Ordinary fixtures remain required.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]
+
+## Numeric series integration
+
+Update raw numeric storage construction/lookup through [[Runtime Series Map]],
+then exercise positive and negative strides, duplicate mixed-kind overwrites,
+count increments and generic transitions against ordinary ordered insertion.
+Retain every prefix snapshot and assert actual primitive compression plus missing
+congruence positions. Resolved Grill Log: pure storage properties do not
+replace runtime kind, overflow, malformed-count or lazy-view compatibility checks.

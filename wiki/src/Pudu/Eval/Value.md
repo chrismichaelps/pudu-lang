@@ -167,12 +167,12 @@ the behaviour is the same for every kind of value.
 ## MultiMap integer-pair storage
 
 `MapValue` is a bundled bidirectional pattern covering the ordinary ordered map
-and `IntPairMapValue`. The latter holds a persistent nested IntMap of original
+and `IntPairMapValue`. The latter holds a persistent outer IntMap/inner SeriesMap of original
 key/value kind tags and occurrence counts plus an intentionally lazy, memoized ordered Map view.
 Only Eval.MultiMap creates/updates this representation. All existing Map methods,
 rendering, equality, freezing and ordering consume the same MapValue view.
 Integer payloads must fit host Int; otherwise use the generic representation.
-Signed ascending IntMap traversal produces lexicographic tuple ordering. Reconstruct
+Signed ascending numeric-index traversal produces lexicographic tuple ordering. Reconstruct
 integer values from the two numeric index keys only when the ordered view is read;
 each entry retains incoming integer kind tags and the original count value.
 `IntPairEntry` stores those three fields strictly: lazy tuple selectors could keep
@@ -208,3 +208,12 @@ execution metadata. A receiver disables its use.
 Resolved Grill Log: cache only the body proof and captured builtin identity.
 A callee with the same spelling is insufficient, and borrowed/exclusive/default/
 async behavior still decides eligibility before caching.
+
+## Series-backed numeric occurrences
+
+The outer index remains IntMap; its inner values become [[Runtime Series Map]]
+of IntPairEntry. The lazy ordered Map view enumerates its exact ascending contents.
+All keys/kinds/counts and public Map operations retain the existing contract.
+
+Resolved Grill Log: let generic pure storage own series proof and sparse overrides;
+Value only projects ordered entries. No evaluator proof, mutation or eager view.

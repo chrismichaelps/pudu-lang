@@ -26,7 +26,7 @@ Separating this package makes the compiler's source distribution self-contained:
 
 - The test package declares no library or executable shipped to users.
 - Test sources remain single-copy under `test/`; the package layout changes, not test behavior.
-- The suite depends on `pudu == 0.1.0` so it cannot silently validate a different compiler version.
+- The suite depends on `pudu == 0.1.2` so it cannot silently validate a different compiler version.
 - The native C++ fixture remains test-only and uses the same platform export flags.
 - [[Pudu CLI Init Spec]] is registered explicitly and uses `temporary` for isolated filesystem
   evidence and `filepath` for portable project paths.
@@ -74,3 +74,7 @@ Register [[Type Literal Frontier Spec]] for generated ordered-selection laws,
 unvisited-suffix proof and actual width/diagnostic compatibility. No new testing
 dependency. Resolved Grill Log: deterministic work evidence accompanies the
 benchmark; no host-specific timing gate.
+
+Register [[Runtime Series Map Tests]]. Resolved Grill Log: storage snapshot,
+representative and signed-boundary laws execute through the actual coordinator
+without a new test dependency.

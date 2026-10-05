@@ -41,6 +41,7 @@ import Pudu.Eval.SystemSpec
   , testUnsafeRegions
   )
 import Pudu.Eval.LoopStepSpec (testLoopSteps)
+import Pudu.Runtime.SeriesMapSpec (testSeriesMaps)
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
@@ -66,6 +67,7 @@ evalProperties =
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
   , ("numeric occurrence storage preserves representatives and bounds", testNumericOccurrences)
+  , ("persistent series maps preserve all snapshots and representatives", testSeriesMaps)
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("interpolated strings render their holes", testInterpolation)
   , ("calendar time and subprocesses answer with results", testClock)

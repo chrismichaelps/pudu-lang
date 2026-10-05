@@ -261,3 +261,7 @@ changing the warm-reader format or adding dependencies.
 Register [[Type Literal Frontier]], a pure bounded pending-constraint selector;
 no dependencies or public Pudu syntax change. Resolved Grill Log: the checker
 retains ownership and uses its existing monotone fresh-variable invariant.
+
+Register [[Runtime Series Map]] without dependencies or flags. Resolved Grill Log:
+internal persistent numeric compression belongs to a pure storage module; ordinary
+compiler/evaluator modes and public library interfaces remain unchanged.

@@ -315,6 +315,7 @@ library
     Pudu.Eval.Loop.Step
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
+    Pudu.Runtime.SeriesMap
     Pudu.Runtime.Buffer
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable

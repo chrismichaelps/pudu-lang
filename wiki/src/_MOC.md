@@ -93,6 +93,9 @@ tags: [moc, module]
 - [[Public HTTP Integration Workflow]] — weekly real-network checks: public HTTP endpoints and the live package index.
 - [[Musl Toolchain Image]] · [[Musl Runtime Builder]] — reproducible local musl construction.
 
+- [[Runtime Series Map]] · [[Runtime Series Map Tests]] — proven persistent
+  constant-payload numeric series with arbitrary sparse overrides.
+
 - [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.
 
 ## Depth Baseline

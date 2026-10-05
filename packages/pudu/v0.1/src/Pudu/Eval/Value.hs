@@ -63,6 +63,8 @@ import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
+import Pudu.Runtime.SeriesMap (SeriesMap)
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
 
 {-| Strict metadata avoids retaining the temporary numeric conversion tuple. -}
 data IntPairEntry = PlatformIntPairEntry !Value | IntPairEntry !IntegerKind !IntegerKind !Value
@@ -123,7 +125,7 @@ data Value
   | ArrayValue !(Seq Value)
   | OrderedMapValue !(Map OrdValue Value)
   {-| Numeric occurrence storage with its ordered view computed only on demand. -}
-  | IntPairMapValue !(IntMap (IntMap IntPairEntry)) ~(Map OrdValue Value)
+  | IntPairMapValue !(IntMap (SeriesMap IntPairEntry)) ~(Map OrdValue Value)
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
@@ -174,11 +176,11 @@ mapOfValue value = case value of
   _ -> Nothing
 
 {-| The view is lazy and shared; native integer updates never force it. -}
-intPairMap :: IntMap (IntMap IntPairEntry) -> Value
+intPairMap :: IntMap (SeriesMap IntPairEntry) -> Value
 intPairMap index = IntPairMapValue index $ Map.fromDistinctAscList
   [ (OrdValue (TupleValue [IntValue keyKind (toInteger number), IntValue valueKind (toInteger member)]), count)
   | (number, values) <- IntMap.toAscList index
-  , (member, entry) <- IntMap.toAscList values
+  , (member, entry) <- SeriesMap.toAscList values
   , let (keyKind, valueKind, count) = case entry of
           PlatformIntPairEntry value -> (defaultIntegerKind, defaultIntegerKind, value)
           IntPairEntry a b value -> (a, b, value)

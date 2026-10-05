@@ -45,3 +45,7 @@ family. Resolved Grill Log: extend the executed family rather than an uncalled
 local property list.
 
 [[src/Pudu/_MOC]] · [[Eval Function Closure Tests]] · [[Eval Data Tests]]
+
+Register `testSeriesMaps` from [[Runtime Series Map Tests]]. Resolved Grill Log:
+execute generated persistent storage laws in the actual suite, alongside the
+existing runtime numeric-kind and diagnostic tests.
