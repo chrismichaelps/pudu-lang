@@ -5,6 +5,48 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+
+- [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
+
+- [[Derive Record Kernel Spec]] — generated method execution and refusal.
+
+- [[Derive Catalogue]] · [[Derive Catalogue Spec]] — canonical graph candidates,
+  requests, generic binders and alias/visibility refusal.
+
+- [[Validated Derive Definitions]] — one generic definition check in its
+  defining lexical environment before request expansion.
+
+- [[Derive Requirement Spec]] — nested conditional inference, rollback and
+  exact refusal without changing ordinary capability proof.
+
+- [[Derive Target Application]] — canonical actual arguments and payload types
+  - [[Resolve Canonical]] — generated paths retain definition lexical scope.
+  - [[Derive Graph Coherence]] — canonical request ownership and overlap admission.
+  - [[Derive Graph]] — definition admission and conditional-head stabilization.
+  - [[Derive Graph Spec]] — real loaded-program captures, conditional heads and refusals.
+  - [[Lsp Impl Members Spec]] — implementation member completion and its quick fix.
+  - [[Derive Library Spec]] — every shipped derive, field callbacks, static selection and the expansion snapshot in both evaluators.
+  - [[Derive Field Callbacks]] · [[Derive Residual Context]] — build/collect unrolling and shared residual state.
+  - [[Derive Expansion Output]] · [[Syntax Printer]] · [[Statement Inlining]] — `pudu expand` text.
+  - Fixtures: [[src/test-fixtures/derive/StdOrder]] · [[src/test-fixtures/derive/StdShow]] · [[src/test-fixtures/derive/StdJson]] · [[src/test-fixtures/derive/StdRow]] · [[src/test-fixtures/derive/Builders]] · [[src/test-fixtures/derive/StaticSelection]] · [[src/test-fixtures/derive/StaticMember]] · [[src/test-fixtures/derive/BuildEscape]] · [[src/test-fixtures/derive/UnmetStdField]] · [[src/test-fixtures/derive/Expand]].
+  - [[Derive Capture Inference]] — resolved private contract dependency closure.
+  without leftover declaration parameters or source-string generation.
+
+- [[Derive Target Spec]] — actual record/sum payload preparation and bounded
+  structural reconstruction of complete formed types.
+
+- [[Derive Cache Spec]] — compile-time content and transitive input closure,
+  verified through actual warm frozen-consumer execution.
+
+- [[Generated Identity Spec]] — generated origins and complete fact identity.
+
+- [[Compiler Benchmark]] · [[Benchmark Guide]] — reproducible cold/warm compiler latency.
+
+- [[Derive Benchmark]] · [[src/bench/derive/DerivedJson]] · [[src/bench/derive/HandwrittenJson]] — derived against hand-written JSON encoding.
+
+- [[Dependency Layer Report]] · [[Dependency Layer Model]] · [[Dependency Layer View]] · [[Dependency Layer Tests]] — offline source layers, import cycles and exclusive measured resource attribution.
+
 - [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
 
 - [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.
@@ -81,6 +123,9 @@ tags: [moc, module]
 - [[Public HTTP Integration Workflow]] — weekly real-network checks: public HTTP endpoints and the live package index.
 - [[Musl Toolchain Image]] · [[Musl Runtime Builder]] — reproducible local musl construction.
 
+- [[Runtime Series Map]] · [[Runtime Series Map Tests]] — proven persistent
+  constant-payload numeric series with arbitrary sparse overrides.
+
 - [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.
 
 ## Depth Baseline
@@ -90,13 +135,19 @@ tags: [moc, module]
 | DEEP | 3 | [[Lexer Cursor]], [[Parser State]], [[Parser Expression]] |
 | MEDIUM | 17 | [[Source]], [[Diagnostic Model]], [[Token]], [[Lexer Facade]], [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], [[Symbol Scanner]], [[Quoted Scanner]], [[Syntax]], [[Syntax Located]], [[Syntax Name]], [[Syntax Tree]], [[Parser Name]], [[Parser Type]], [[Parser Import]], [[Parser Binding]] |
 
+## Runtime benchmark fixtures
+
+- [[HTTP Benchmark Service]] — real three-route service with an explicit connection budget.
+
 ## Referenced by
 
 [[00-INDEX]] · [[grammar/haskell]]
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval MultiMap Kernel]] — pure native loop regions containing proven MultiMap primitives.
+- [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
+- [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.
 

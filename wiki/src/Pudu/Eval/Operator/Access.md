@@ -35,6 +35,9 @@ unwrapTry :: Span -> Value -> Evaluator Value
   strict non-negative bounds checking, raising `E7004` on out-of-range indices. A tuple does not
   admit a range slice because its positions may have different types; the checker and evaluator
   enforce the same boundary.
+  Compare exact Integer indices with the container length before narrowing to
+  host Int. A wider positive integer must never wrap into a valid position or a
+  negative offset; this also protects text access from a host indexing exception.
 - `readMember` searches records and nominal sums before falling back to built-in method tables (`Array`, `Str`, `Map`, `Set`, `Bytes`, `Buckets`, `Char`), mapping member names (such as `escapeHtml` -> `StringEscapeHtml`) to their closed method representations.
 - `unwrapTry` returns the inner value for `Ok` and `Some`, or unwinds with `ReturnUnwind` for `Err` and `None`.
 - `builtinMethodNamesFor` provides IDE/REPL autocompletion by reading from the exact same method tables used during evaluation dispatch.
@@ -50,6 +53,11 @@ unwrapTry :: Span -> Value -> Evaluator Value
 - No host exceptions; all indexing and member access failures raise `E7xxx` diagnostics.
 
 ## Grill Log
+
+- **Q:** Narrow a scalar index before checking the upper bound? **A:** No; test
+  the mathematical index against the lifted host length first. _Rationale:_ an
+  out-of-host-range integer can wrap into a small or negative Int. Only a proven
+  in-range index may reach host access; retain the existing E7004 message/span.
 
 - **Q:** How does a Decimal reach a user implementation (#371)? **A:** `nominalNameOf` returns
   `Decimal` for `DecimalValue`, so direct, generic, and trait-qualified calls use the same lookup

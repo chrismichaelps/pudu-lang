@@ -21,6 +21,8 @@ Own runtime values, including retained floating precision, foreign bindings and 
 builtin functions, and the total order the keyed collections are held in. How a value prints
 belongs to [[Eval Render]].
 
+`TypeWitnessValue owner arguments` is the type a call selected for a parameter. `Closure` carries `closureWitnesses`, bound in the body's frame beside its parameters.
+
 ## Interface
 
 The exported signatures are the module header's export list; evaluator runtime modules consume this
@@ -89,6 +91,14 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 ## Grill Log
 
+- **Q:** Copy a binding map and Env on every block-local assignment? **A:** Use
+  `CellFrame`, a name map of private value cells, for lexical block frames.
+  _Rationale:_ the measured tree Loop allocates repeatedly for otherwise unchanged
+  environment state. Frames belong to one evaluation; captures obtain immutable
+  snapshots. Module and parameter frames retain their existing representation.
+  _Rejected:_ changing persistent Pudu values, sharing local cells with captures,
+  preallocating unintroduced bindings, or selecting storage by benchmark name.
+
 - **Q:** Should equality of an aggregate compare Decimal storage (#376)? **A:** No; the
   `Eq Value` instance recursively compares existing fields and uses `decimalCompare == EQ` for
   Decimal leaves. _Rationale:_ [[ADR-0007]] makes equality numeric even when a decimal is stored
@@ -107,6 +117,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   stack. _Rationale:_ frames and the boundary that classifies them form one captured environment.
   _Rejected:_ replacing only `envFrames` in `withCaptured`.
 - **Q:** Does moving the order in push this file past the size target? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table then moved to [[Eval Builtin Definition]]. Foreign handles then took it to 548, and the built-in method vocabulary moved to [[Eval Method]], leaving 328. Each extraction followed the same seam — a closed tag set and its name table, depending on no runtime value — and each is re-exported here, so no call site learned that anything moved. _Rationale:_ size accounting must describe the current source honestly, and a limit is worth keeping only if the split follows the code rather than the line count. _Rejected:_ claiming an old measurement is current; splitting the file arbitrarily to fit.
+- **Q:** Represent a witness as a record or text? **A:** No; a distinct value cannot be confused with program data.
 
 ## Foreign handle generations
 
@@ -159,13 +170,18 @@ the behaviour is the same for every kind of value.
 ## MultiMap integer-pair storage
 
 `MapValue` is a bundled bidirectional pattern covering the ordinary ordered map
-and `IntPairMapValue`. The latter holds a persistent nested IntMap of original
-key/value/count triples plus an intentionally lazy, memoized ordered Map view.
+and `IntPairMapValue`. The latter holds a persistent outer IntMap/inner SeriesMap of original
+key/value kind tags and occurrence counts plus an intentionally lazy, memoized ordered Map view.
 Only Eval.MultiMap creates/updates this representation. All existing Map methods,
 rendering, equality, freezing and ordering consume the same MapValue view.
 Integer payloads must fit host Int; otherwise use the generic representation.
-Signed ascending IntMap traversal produces lexicographic tuple ordering; incoming
-representatives and integer kind tags remain in each stored triple.
+Signed ascending numeric-index traversal produces lexicographic tuple ordering. Reconstruct
+integer values from the two numeric index keys only when the ordered view is read;
+each entry retains incoming integer kind tags and the original count value.
+`IntPairEntry` stores those three fields strictly: lazy tuple selectors could keep
+the entire conversion tuple and its numeric payloads alive, defeating compaction.
+`PlatformIntPairEntry` omits both tags when both are the platform signed kind;
+the constructor itself proves those tags. Mixed kinds retain explicit tags.
 Foreign binding/slot/claim/release records move unchanged to [[Eval Foreign Binding]]
 and remain re-exported here to keep Value below the default file-size limit.
 
@@ -174,6 +190,16 @@ change the public record fields. The cached Map view is lazy because eagerly
 rebuilding it per add would make construction quadratic. Noninteger additions and
 ordinary Map operations materialize that view and use existing behavior. Equal
 numeric keys retain the incoming tuple's representatives, including kind tags.
+Resolved Grill Log: numeric payloads already live in the IntMap keys. Keeping
+another boxed key and value per occurrence retains redundant objects. Exact host
+fit checks make reconstruction lossless at both signed boundaries; kind tags must
+still replace on equal keys, and arbitrary-width inputs retain ordinary maps.
+Resolved Grill Log: force the compact entry's tags/count at insertion, so its
+selectors cannot retain the conversion tuple. The count remains an ordinary
+Value, preserving arbitrary precision, malformed-entry and overflow semantics.
+Resolved Grill Log: the common platform pair needs only its count pointer. Keep
+an explicit tagged alternative for every other kind combination, and select the
+constructor from incoming kinds on each update, including equal-pair overwrites.
 
 ## Proven wrapper cache
 
@@ -185,3 +211,12 @@ execution metadata. A receiver disables its use.
 Resolved Grill Log: cache only the body proof and captured builtin identity.
 A callee with the same spelling is insufficient, and borrowed/exclusive/default/
 async behavior still decides eligibility before caching.
+
+## Series-backed numeric occurrences
+
+The outer index remains IntMap; its inner values become [[Runtime Series Map]]
+of IntPairEntry. The lazy ordered Map view enumerates its exact ascending contents.
+All keys/kinds/counts and public Map operations retain the existing contract.
+
+Resolved Grill Log: let generic pure storage own series proof and sparse overrides;
+Value only projects ordered entries. No evaluator proof, mutation or eager view.

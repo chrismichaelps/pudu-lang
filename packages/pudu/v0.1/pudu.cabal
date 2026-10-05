@@ -89,10 +89,12 @@ library
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache
+    Pudu.Compiler.ComptimeDependencies
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program
+    Pudu.Compiler.Product
     Pudu.Diagnostic
     Pudu.Diagnostic.Render
     Pudu.Eval
@@ -177,6 +179,7 @@ library
     Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block
+    Pudu.Frontend.Parser.Declaration.Derive
     Pudu.Foreign.Call
     Pudu.Foreign.Call.Library
     Pudu.Foreign.Crossing
@@ -199,6 +202,9 @@ library
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Stored
+    Pudu.Frontend.Syntax.Inline
+    Pudu.Frontend.Syntax.Print
+    Pudu.Frontend.Syntax.Provenance
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
     Pudu.DecimalLiteral
@@ -210,6 +216,8 @@ library
     Pudu.Lsp.Json
     Pudu.Lsp.Documents
     Pudu.Lsp.Definition
+    Pudu.Lsp.Diagnostics
+    Pudu.Lsp.MethodOwner
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
     Pudu.Lsp.References
@@ -223,6 +231,7 @@ library
     Pudu.Lsp.Completion
     Pudu.Lsp.Context
     Pudu.Lsp.PatternCompletion
+    Pudu.Lsp.ImplMembers
     Pudu.Lsp.ImportCompletion
     Pudu.Lsp.ModuleCatalog
     Pudu.Lsp.Shapes
@@ -254,12 +263,14 @@ library
     Pudu.Semantic.Interface
     Pudu.Type
     Pudu.Type.Check
+    Pudu.Type.Check.Bound
     Pudu.Type.Check.Foreign
     Pudu.Type.Check.Import
     Pudu.Type.Check.Install
     Pudu.Type.Check.Call
     Pudu.Type.Check.Collection
     Pudu.Type.Check.Coherence
+    Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
@@ -267,6 +278,8 @@ library
     Pudu.Type.Check.Place
     Pudu.Type.Check.Expression
     Pudu.Type.Check.Expression.Control
+    Pudu.Type.Check.Reflection
+    Pudu.Type.Check.Receiver
     Pudu.Type.Check.Prelude
     Pudu.Type.Check.Record
     Pudu.Type.Check.Propagation
@@ -274,26 +287,53 @@ library
     Pudu.Type.Check.Signature
     Pudu.Type.Check.Statement
     Pudu.Type.Env
+    Pudu.Type.Frontier
     Pudu.Type.Exhaust
     Pudu.Type.Formation
+    Pudu.Type.Formation.Builtin
     Pudu.Type.Formation.Order
+    Pudu.Type.Formation.Shell
     Pudu.Type.Marker
+    Pudu.Type.Implementation
+    Pudu.Type.Proof
+    Pudu.Type.Proof.Match
     Pudu.Type.Interface
     Pudu.Type.Interface.Graph
     Pudu.Type.Unify
     Pudu.Type.Value
+    Pudu.Type.Substitute
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Resolve.Canonical
+    Pudu.Semantic.Resolve.Reflection
+    Pudu.Semantic.Resolve.Bindings
     Pudu.Semantic.Scope
     Pudu.Semantic.ScopeIndex
     Pudu.Semantic.Symbol
     Pudu.Source
+    Pudu.Comptime.Limits
+    Pudu.Derive.State
+    Pudu.Derive.Syntax
+    Pudu.Derive.Sum
+    Pudu.Derive.Reflection
+    Pudu.Derive.Build
+    Pudu.Derive.Context
+    Pudu.Derive.Record
+    Pudu.Derive.Catalogue
+    Pudu.Derive.Definition
+    Pudu.Derive.Target
+    Pudu.Derive.Coherence
+    Pudu.Derive.Graph
+    Pudu.Derive.Expand
+    Pudu.Derive.Inference
     Pudu.Runtime.Word
     Pudu.Eval.MultiMap
-    Pudu.Eval.MultiMap.Kernel
+    Pudu.Eval.Loop.Kernel
+    Pudu.Eval.Loop.Step
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
+    Pudu.Runtime.SeriesMap
     Pudu.Runtime.Buffer
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable
@@ -342,7 +382,7 @@ executable pudu
   import:           warnings
   hs-source-dirs:   app
   main-is:          Main.hs
-  ghc-options:      -threaded -rtsopts
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-qn2
   build-depends:
     base >=4.20 && <4.23,
     containers >=0.6 && <0.8,

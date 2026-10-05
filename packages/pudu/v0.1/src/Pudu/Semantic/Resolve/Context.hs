@@ -16,10 +16,19 @@ module Pudu.Semantic.Resolve.Context
   , resolveExpressionName
   , resolveTypeName
   , resolveValueName
+  , setReflectionImports
+  , declareLoopTypeParameter
+  , declareReflectedTypeParameter
+  , inDeriveDefinition
+  , withDeriveDefinition
+  , withCanonicalTypes
+  , canonicalTypesInScope
   , runResolver
   ) where
 
 import Data.Maybe (listToMaybe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -32,7 +41,8 @@ import Pudu.Diagnostic
   , withRelated
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Visibility (Private))
+import Pudu.Frontend.Syntax.Tree (Import (..), TypeSyntax, Visibility (Private))
+import Pudu.Semantic.Resolve.Reflection (reflectionImports, fieldTypeParameter)
 import Pudu.Semantic.Scope
   ( ScopeStack
   , declareSymbol
@@ -69,6 +79,14 @@ data ResolveState = ResolveState
   {-| Where the bindings being declared now become visible, when that is later
       than their names: a `let` is visible after its statement. -}
   , stateVisibleAfter :: !(Maybe Int)
+  {-| Canonical reflection imports, including selections, classified once.
+      Uses are checked against the resolved namespace and symbol origin. -}
+  , stateReflectionImports :: !(Set (Namespace, Text))
+  {-| Whether a derive definition's members are being walked. Compile-time
+      reflection is refused everywhere else, because only derivation unrolls
+      the code that names it. -}
+  , stateInDerive :: !Bool
+  , stateCanonicalTypes :: !Bool
   }
 
 {-| @Semantic.Resolve.Products — everything one resolution run produced -}
@@ -125,19 +143,13 @@ initialState =
     , stateFramesRev = [(0, Frame Nothing Nothing)]
     , stateBindingsRev = []
     , stateVisibleAfter = Nothing
+    , stateReflectionImports = Set.empty
+    , stateInDerive = False
+    , stateCanonicalTypes = False
     }
 
-{-| Run an action inside one more enclosing loop.
-
-    Labels live on their own stack rather than in the ordinary scope, because
-    they are not names: nothing evaluates a label, nothing shadows a value with
-    one, and a label is legal only in the two statements that can name it. The
-    stack runs innermost first, which is the order `break` searches.
-
-    A label repeating one already enclosing it is a warning rather than an
-    error. The program still means something definite — the inner label wins,
-    since it is nearer — but the outer loop has become unreachable by name, and
-    that is almost always a mistake in the making rather than a plan. -}
+{-| Labels have an independent stack; duplicate labels warn but select the
+    innermost enclosing loop. -}
 insideLoop :: Maybe (Located Text) -> Resolver a -> Resolver a
 insideLoop label action = do
   enclosing <- readLoops
@@ -172,12 +184,7 @@ resolveLoopTarget keyword spanValue label = do
           emit "E2017" Error labelSpan ("no enclosing loop is labelled @" <> name)
             (Just "label the loop you meant, or drop the label to leave the nearest one")
 
-{-| Run an action with no enclosing loop, whatever surrounds it.
-
-    A function body is not inside the loop that happens to contain its
-    definition. A closure written in a loop and called long after it has
-    finished cannot leave a loop that is no longer running, so `break` inside
-    one is out of every loop even when the text around it is not. -}
+{-| A closure cannot transfer control into the loop enclosing its definition. -}
 outsideLoops :: Resolver a -> Resolver a
 outsideLoops action = do
   enclosing <- readLoops
@@ -192,6 +199,72 @@ readLoops = Resolver $ \state -> (stateLoops state, state)
 modifyLoops :: ([Maybe Text] -> [Maybe Text]) -> Resolver ()
 modifyLoops transform =
   Resolver $ \state -> ((), state{stateLoops = transform (stateLoops state)})
+
+setReflectionImports :: [Located Import] -> Resolver ()
+setReflectionImports imports =
+  Resolver $ \state -> ((), state{stateReflectionImports = reflectionImports imports})
+
+{-| A repeated constraint augments a type parameter rather than declaring it
+    again. Enclosing parameters retain their identity inside nested loops. -}
+declareLoopTypeParameter :: Located Text -> Resolver ()
+declareLoopTypeParameter name = do
+  existing <- lookupCurrent TypeSpace (locatedValue name)
+  case existing of
+    Just _ -> pure ()
+    Nothing -> declareNamed TypeSpace TypeParamOrigin Private False name
+
+declareReflectedTypeParameter :: Located TypeSyntax -> Resolver ()
+declareReflectedTypeParameter annotation = case fieldTypeParameter annotation of
+  Nothing -> pure ()
+  Just (qualifier, parameter) -> do
+    found <- lookupCurrent TypeSpace qualifier
+    reflection <- Resolver $ \state ->
+      (Set.member (TypeSpace, qualifier) (stateReflectionImports state), state)
+    case found of
+      Just symbol | reflection && symbolOrigin symbol == ImportOrigin -> declareLoopTypeParameter parameter
+      _ -> pure ()
+
+inDeriveDefinition :: Resolver Bool
+inDeriveDefinition = Resolver $ \state -> (stateInDerive state, state)
+
+modifyDerive :: (Bool -> Bool) -> Resolver ()
+modifyDerive transform =
+  Resolver $ \state -> ((), state{stateInDerive = transform (stateInDerive state)})
+
+{-| Run an action inside a derive definition, restoring the previous setting
+    on exit so a nested ordinary declaration is unaffected. -}
+withDeriveDefinition :: Bool -> Resolver a -> Resolver a
+withDeriveDefinition inside action = do
+  previous <- inDeriveDefinition
+  modifyDerive (const inside)
+  result <- action
+  modifyDerive (const previous)
+  pure result
+
+canonicalTypesInScope :: Resolver Bool
+canonicalTypesInScope = Resolver $ \state -> (stateCanonicalTypes state, state)
+
+withCanonicalTypes :: Bool -> Resolver a -> Resolver a
+withCanonicalTypes formed (Resolver action) = Resolver $ \state ->
+  let (result, next) = action state{stateCanonicalTypes = formed}
+   in (result, next{stateCanonicalTypes = stateCanonicalTypes state})
+
+{-| Check the symbol actually selected, once, for every expression/type path.
+    Syntactic member checks miss selected imports and first-class values. -}
+recordResolvedReference :: Span -> Symbol -> Resolver ()
+recordResolvedReference at symbol = do
+  recordReference (Reference at (symbolId symbol))
+  restricted <- Resolver $ \state ->
+    ( not (stateInDerive state)
+        && symbolOrigin symbol == ImportOrigin
+        && Set.member (symbolNamespace symbol, symbolName symbol) (stateReflectionImports state)
+    , state
+    )
+  if restricted
+    then emit "E2018" Error at
+      ("compile-time reflection `" <> symbolName symbol <> "` is only named from derive definitions")
+      (Just "move the reflection into a derive body")
+    else pure ()
 
 {-| Run an action inside a fresh lexical frame. The frame is discarded on exit,
     so nothing a nested scope declared can leak outward. -}
@@ -310,7 +383,7 @@ resolveExpressionName spanValue name = do
     else do
       value <- lookupCurrent ValueSpace name
       case value of
-        Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+        Just symbol -> recordResolvedReference spanValue symbol
         Nothing -> do
           typeSymbol <- lookupCurrent TypeSpace name
           case typeSymbol of
@@ -328,11 +401,11 @@ resolveUnambiguous :: Span -> Text -> Resolver ()
 resolveUnambiguous spanValue name = do
   value <- lookupCurrent ValueSpace name
   case value of
-    Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+    Just symbol -> recordResolvedReference spanValue symbol
     Nothing -> do
       typeSymbol <- lookupCurrent TypeSpace name
       case typeSymbol of
-        Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+        Just symbol -> recordResolvedReference spanValue symbol
         Nothing ->
           emit "E2010" Error spanValue ("unresolved value name " <> name)
             (Just "declare the name, import it, or check the spelling")
@@ -341,7 +414,7 @@ resolveTypeName :: Span -> Text -> Resolver ()
 resolveTypeName spanValue name = do
   found <- lookupCurrent TypeSpace name
   case found of
-    Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+    Just symbol -> recordResolvedReference spanValue symbol
     Nothing ->
       emit "E2011" Error spanValue ("unresolved type name " <> name)
         (Just "declare the type, import it, or check the spelling")

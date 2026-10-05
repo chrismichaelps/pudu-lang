@@ -15,17 +15,24 @@ aliases: [Type Check]
 
 # Type Check
 
+Written bounds are validated by [[Type Check Bound]] before checking each
+declaration body. An invalid header withholds that body's assumptions; imported
+bodies remain excluded. Resolved Grill Log: unused generic definitions must
+not establish evidence whose trait argument count or kind is invalid.
+
 ## Purpose
 
 Check every declaration, statement, and expression in a module against the types its declarations promise, inferring what the language allows to be left unwritten.
+
+`checkModuleDetailed` also answers the module's static selections.
 
 ## Interface
 
 ### Signatures
 
 ```haskell
-checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
-checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModule :: Set Span -> Module -> ([(Span, Type)], [Diagnostic])
+checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 ```
 
 ### Governance
@@ -96,6 +103,12 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
 - Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected. `E3014` rejects a module that owns neither the trait nor the target's expanded nominal declaration, while `E3015` rejects duplicate heads; body checking can continue to preserve useful independent diagnostics.
+- A derive definition checks each member once, generically: its type parameter is rigid with no
+  bounds of its own, members check like impl methods without a `Self` type, and interface
+  annotations are required for the same reason implementations require them. A compile-time loop
+  inside checks with its `where` subjects rigid and its element bound at the ascribed type; the
+  source is checked once against its metadata sequence or ordinary Array element type. A
+  request carries no members and needs no checking.
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
 - Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, `while` and `for` are unit while `loop` takes the type its `break` statements carry, and `return` is checked against the enclosing function's declared result.
@@ -121,6 +134,17 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ## Algorithm
 
+`checkDeriveDefinitionsWith` additionally receives resolved name spans of captured
+module declarations needing ordinary inference. Check those bodies against the
+shared signature frame before any generic derive body, then check each template
+once. Its existing wrapper supplies an empty set. Whole-module checking keeps its
+existing declaration order. Resolved Grill Log: preserve private inference without
+checking unrelated ordinary callers before generated interfaces exist.
+
+Validate each derive's canonical trait/member contract with [[Type Check Derive]]
+after signatures are installed. Generic bodies still check once, independently
+of requests; contract validation does not instantiate or evaluate them.
+
 Collect declared shapes and signatures, check trait implementation ownership and duplicate-head coherence over the complete declaration list, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
 
 ## Negative Logic (Prohibited Paths)
@@ -143,6 +167,11 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
+  _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
+  copies carry generated spans and request-specific types. `checkDeriveDefinitionTypes` runs the
+  same scoped check and answers its types. _Rejected:_ typing templates from one arbitrary request.
+
 - **Q:** Let module inference retain an unresolved Set element? **A:** No. _Rationale:_ module
   bindings feed tooling and imported interfaces; exporting an unconstrained variable would make
   their type depend on later consumers. _Rejected:_ generalizing the empty Set at module scope.
@@ -155,6 +184,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 - **Q:** Should imported implementations be appended to the local declarations? **A:** No; install their interface schemes and relationships separately. _Rationale:_ concatenation would make the consumer appear to own dependency impls and re-run `E3014`/`E3015`. _Rejected:_ a synthetic combined module.
 - **Q:** Infer an omitted method annotation again in each consumer? **A:** No; require a complete interface signature with `E3010`. _Rationale:_ a body-free cycle has no stable evidence from which to reconstruct inference, so fresh consumer variables would change the public contract by context. _Rejected:_ contextual reconstruction; carrying dependency bodies into the consumer checker.
 - **Q:** Default integer literals before checking their context? **A:** No; validate solved constraints after annotations, arguments, operators, and branches unify, but leave an unresolved branch/result constraint for its enclosing context. Force a default only when a rule needs a concrete shape or at the body boundary. _Rationale:_ eager global defaulting recreates the issue where every width except `Int` is unusable, while creation-range settlement lets non-task `.await` name `Int` without stealing the contextual type of an `if` or `match` result. _Rejected:_ eager defaulting; defaulting every literal at a nested expression boundary; implicit narrowing from `Int`.
+- **Q:** Produce selections per declaration? **A:** No; once per module, zonked with its final substitution.
 
 ## Variants
 
@@ -167,3 +197,33 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 ## Places
 
 The module is checked with the set of spans that use a `var` binding, from resolution. A function's parameter and result types, a module binding's type, and a type declaration's fields go to [[Check Place]], and after each top-level declaration a function literal's untyped parameters are judged there. See [[ADR-0022-lending-a-place]].
+
+## Generated identity boundary
+
+Checker entry points consume `Set Span` writable references and publish
+`[(Span, Type)]` expression facts. Full snapshot and generated identities survive
+all product boundaries; [[Type Boundary]] creates the authored editor index.
+
+## Definition checking boundary
+
+`checkDeriveDefinitions :: ImportTypes -> Set Span -> Module -> [Diagnostic]`
+installs the same declarations and signature environment as ordinary checking,
+validates canonical derive contracts and checks only their generic bodies.
+Ordinary declaration bodies and coherence wait for the generated graph. The
+graph phase consumes this result once per defining module and removes admitted
+template declarations from the executable module before ordinary checking.
+The existing full-module APIs retain their isolated-source behavior.
+
+Resolved Grill Log: separate definition admission from request instantiation;
+reuse one signature preparation path and the existing generic member checker.
+Do not validate templates against individual requested field types, check
+ordinary callers before generated heads exist, or recheck template bodies in
+the final graph walk. Invalid definition modules retain their diagnostics and
+publish no validated template product.
+Resolved Grill Log: offset-only signatures would undo generated identity.
+
+## Complete trait evidence
+
+Function and member checking propagate full formed bounds. A trait default installs Self with its enclosing trait arguments; an implementation method forms its own bounds under implementation parameters.
+
+Resolved Grill Log: full bound evidence remains in scope until deferred obligations discharge, including trait default and derive bodies.

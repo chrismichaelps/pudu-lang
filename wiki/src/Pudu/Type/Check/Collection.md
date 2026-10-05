@@ -33,6 +33,7 @@ requireConcreteSetLiteral :: Span -> Expression -> Type -> Checker ()
   `E3037` with an annotation example.
 - Non-empty Sets and empty Sets whose context supplied `T` are unchanged. This module neither
   infers members nor defaults a type.
+- A compile-time loop contributes its source and its body to the empty-set search, like a `for` loop.
 
 ### Linkage
 

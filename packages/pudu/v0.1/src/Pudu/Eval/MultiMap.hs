@@ -16,12 +16,13 @@ import Pudu.Eval.Operator (checkedResult)
 import Pudu.Eval.Place (exclusiveParameters)
 import Pudu.Eval.Order (comparableValue)
 import Pudu.Eval.Value
-  ( Builtin (..), Captured (..), Closure (..), Frame (..), OrdValue (..), Value (..), intOf, intPairMap )
+  ( Builtin (..), Captured (..), Closure (..), Frame (..), IntPairEntry (..), OrdValue (..), Value (..), intOf, intPairMap )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..), Expression (..), Function (..), FunctionBody (..), Parameter (..) )
-import Pudu.IntegerLiteral (defaultIntegerKind, integerKindFits, integerKindMeet)
+import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindFits, integerKindMeet)
 import Pudu.Source (Span)
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
 
 {-| Append and count with one traversal of each index. Both trees remain
     persistent, and overwrites keep the same representative as Map insertion. -}
@@ -67,9 +68,9 @@ callMultiMapContains spanValue arguments = case arguments of
   _ -> abortAt (Just spanValue) "E7003" "multiMapContains expects three arguments" Nothing
 
 {-| Only integer pairs fitting the host index enter the numeric representation. -}
-integerPair :: Value -> Value -> Maybe (Int, Int)
-integerPair (IntValue _ key) (IntValue _ value)
-  | fits key && fits value = Just (fromInteger key, fromInteger value)
+integerPair :: Value -> Value -> Maybe (Int, Int, IntegerKind, IntegerKind)
+integerPair (IntValue keyKind key) (IntValue valueKind value)
+  | fits key && fits value = Just (fromInteger key, fromInteger value, keyKind, valueKind)
  where
   fits number = number >= toInteger (minBound :: Int) && number <= toInteger (maxBound :: Int)
 integerPair _ _ = Nothing
@@ -84,15 +85,23 @@ insertOccurrence spanValue occurrences key value = case (occurrences, integerPai
      in pure (held, MapValue next)
   _ -> abortAt (Just spanValue) "E7001" "multiMapAdd expects occurrence maps" Nothing
  where
-  indexed index (number, member) =
+  indexed index (number, member, keyKind, valueKind) =
     let (held, nextIndex) = IntMap.alterF update number index
+        entry count
+          | keyKind == defaultIntegerKind && valueKind == defaultIntegerKind = PlatformIntPairEntry count
+          | otherwise = IntPairEntry keyKind valueKind count
         update existing =
-          let values = maybe IntMap.empty id existing
-              (previous, next) = IntMap.insertLookupWithKey
-                (\_ _ (_, _, old) -> (key, value, incrementCount old))
-                member (key, value, intOf 1) values
-           in (fmap (\(_, _, old) -> old) previous, Just next)
+          let values = maybe SeriesMap.empty id existing
+              (previous, next) = SeriesMap.insertLookupWithKey sameUnit
+                (\_ _ old -> entry (incrementCount (entryCount old)))
+                member (entry (intOf 1)) values
+           in (fmap entryCount previous, Just next)
      in (held, intPairMap nextIndex)
+  sameUnit (PlatformIntPairEntry (IntValue kind 1)) (PlatformIntPairEntry (IntValue other 1)) =
+    kind == defaultIntegerKind && other == defaultIntegerKind
+  sameUnit _ _ = False
+  entryCount (PlatformIntPairEntry count) = count
+  entryCount (IntPairEntry _ _ count) = count
   increment _ _ old = incrementCount old
   incrementCount (IntValue kind count) =
     IntValue (integerKindMeet kind defaultIntegerKind) (count + 1)
@@ -100,8 +109,8 @@ insertOccurrence spanValue occurrences key value = case (occurrences, integerPai
 
 containsOccurrence :: Span -> Value -> Value -> Value -> Evaluator Value
 containsOccurrence spanValue occurrences key value = case (occurrences, integerPair key value) of
-  (IntPairMapValue index _, Just (number, member)) ->
-    pure (BoolValue (maybe False (IntMap.member member) (IntMap.lookup number index)))
+  (IntPairMapValue index _, Just (number, member, _, _)) ->
+    pure (BoolValue (maybe False (maybe False (const True) . SeriesMap.lookup member) (IntMap.lookup number index)))
   (MapValue entries, _) ->
     pure (BoolValue (Map.member (OrdValue (TupleValue [key, value])) entries))
   _ -> abortAt (Just spanValue) "E7001" "multiMapContains expects occurrence maps" Nothing
@@ -161,3 +170,4 @@ multiMapPrimitive closure = do
     Just value -> Just value
     Nothing -> capturedBinding name rest
   capturedBinding _ (SlotFrame{} : _) = Nothing
+  capturedBinding _ (CellFrame{} : _) = Nothing

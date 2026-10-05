@@ -42,7 +42,14 @@ import_decl      = "import", module_path, import_suffix? ;
 import_suffix    = "as", upper_ident
                  | "{", import_item, (",", import_item)*, ","?, "}" ;
 import_item      = ident ;
-top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
+top_declaration  = attribute*, "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl | derive_decl | derive_impl_decl) ;
+attribute        = "@", lower_ident, ("(", literal, (",", literal)*, ","?, ")")? ;
+literal          = integer | decimal | string | char | "true" | "false" | "null" ;
+type_decl        = "type", upper_ident, type_params?, "=", type_definition, derives_clause? ;
+derives_clause   = "derives", trait_ref, (",", trait_ref)*, ","? ;
+trait_ref        = type_ref ;
+derive_decl      = "derive", trait_ref, "for", lower_ident, ":", ("Record" | "Sum"), "{", function_decl*, "}" ;
+derive_impl_decl = "derive", "impl", trait_ref, "for", type_ref ;
 macro_decl       = "macro", lower_ident, "(", macro_params?, ")", ("=", expression | block) ;
 macro_params     = macro_param, (",", macro_param)*, ","? ;
 macro_param      = lower_ident, ":", macro_kind ;
@@ -175,6 +182,7 @@ while_expr       = loop_label?, "while", expression, block ;
 while_let_expr   = loop_label?, "while", "let", pattern, "=", expression, block ;
 loop_expr        = loop_label?, "loop", block ;
 for_expr         = loop_label?, "for", pattern, "in", expression, block ;
+comptime_for_expr = "comptime", "for", lower_ident, ":", type_ref, "in", expression, where_clause?, block ;
 ```
 
 - An array literal `[a, b, c]` builds an `Array[T]` value. `[]` is the empty array. Arrays are immutable persistent sequences backed by a fingertree: `push`, `insert`, and `remove` return new arrays with structural sharing, so no update copies the entire collection. Built-in methods: `length()`, `get(i)`, `indexOf(x)`, `contains(x)`, `push(x)`, `pop()`, `insert(i, x)`, `remove(i)`, `slice(i, j)`, `reverse()`, `map(f)`, `filter(f)`, `reduce(f, init)`, `sortBy(before)`. `sortBy` is a stable sort by a comparison that answers whether its first argument goes before its second. Indexing an array with `arr[i]` reads the element; out-of-bounds is `E7004`. `for x in arr` iterates elements.
@@ -203,6 +211,7 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - A parenthesized expression groups; adding a comma makes it a tuple, and `(e,)` is the one-member tuple. This mirrors the type grammar, where `(T)` groups and `(T,)` is a tuple.
 - `while` and `for` are expressions of type `()`; `loop` has the type its `break` statements carry, and `Never` when it has none. Their bodies are blocks, and `break`/`continue` are statements valid only inside them.
 - A loop may be labelled by writing `@name` directly before it. `break @name` and `continue @name` act on the loop that label names rather than the nearest enclosing one, which is how a search leaves an outer loop from inside an inner one. The `@` is required: without it, `break outer` could not be told apart from breaking with the value of a binding called `outer`.
+- A compile-time loop binds one name with its type written down — `comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Encode { ... }` — because unrolling needs one type per element. The optional `where` clause is the ordinary generic constraint list.
 - A label may name only a loop (`E1053`). A `break` or `continue` outside every loop is `E2016`, and one naming a label no enclosing loop carries is `E2017`; both are reported before the program runs. A label repeating one already enclosing it is `W2002` — the inner one wins, but the outer loop can no longer be named.
 - A function body is never inside a loop that encloses its definition: a closure may outlive the loop entirely, so a `break` written in one is `E2016`.
 - Sum variants are namespaced by their type; qualification is required when ambiguous.
@@ -314,6 +323,8 @@ scope_expr       = "async", "with", "scope", block ;
 
 - Traits declare behavior contracts without stored state.
 - Implementations are coherent: at least the trait or implementing nominal type must be declared in the current module.
+- A type opts into generated implementations with a trailing `derives` clause naming each trait once; `derive Trait for Param: Shape { ... }` defines the strategy and `derive impl Trait for Type` requests one from another module under the orphan rules.
+- Types, fields, and variants carry attributes (`@name` or `@name(literal, ...)`), inert data only compile-time code reads.
 - Static dispatch is the default for generic trait bounds. Dynamic dispatch requires an explicit future trait-object form and is not in v1.
 - Overlapping implementations and implicit conversions are prohibited.
 

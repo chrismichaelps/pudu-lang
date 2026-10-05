@@ -1,0 +1,13 @@
+module StdShow
+import Std.Show {Show}
+
+type Point = { x: Int, label: Str } derives Show
+type Box[A] = { held: Option[A] } derives Show
+type Shape = Dot | Circle(Float64) | Rect{w: Int, h: Int} derives Show
+type Tree = Leaf | Node(Array[Tree]) derives Show
+
+export fn main() -> Str {
+  let b: Box[Point] = Box{held: Some(Point{x: 1, label: "a"})}
+  Point{x: 1, label: "a"}.show() + " " + b.show() + " " + Shape.Dot.show() + " " + Shape.Circle(1.5).show()
+    + " " + Shape.Rect{w: 2, h: 3}.show() + " " + Tree.Node([Tree.Leaf, Tree.Node([])]).show()
+}

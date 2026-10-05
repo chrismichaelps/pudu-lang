@@ -26,6 +26,7 @@ Parse `trait` contracts and `impl` blocks, both of which contain only function m
 ```haskell
 parseTrait :: Visibility -> Parser (Located Declaration)
 parseImpl :: Parser (Located Declaration)
+parseMembers :: Bool -> [Located Function] -> Parser [Located Function]
 ```
 
 ### Governance
@@ -36,11 +37,12 @@ parseImpl :: Parser (Located Declaration)
 - `impl` has no visibility of its own: an implementation is as public as the trait and type it connects, which is a semantic rule rather than a syntactic marker.
 - Coherence is deliberately not parser work: [[Type Check Coherence]] enforces module ownership and exact duplicate heads, while general unification overlap remains a later resolved-type rule.
 - Generic parameters and `where` clauses come from [[Parser Generic]] in both forms.
+- The member loop is shared with derive bodies, which are function-only for the same reason traits are.
 
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Name]], [[Parser Type]], [[Parser Generic]], [[Parser Function]], [[Syntax Tree]], [[grammar/pudu]].
-- **Consumed by:** [[Parser Declaration]].
+- **Consumed by:** [[Parser Declaration]], [[Parser Derive Declaration]].
 
 ## Algorithm
 

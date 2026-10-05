@@ -1,6 +1,7 @@
 {-| @Program.Parser.Declaration.Trait — parses trait contracts and impls -}
 module Pudu.Frontend.Parser.Declaration.Trait
   ( parseImpl
+  , parseMembers
   , parseTrait
   ) where
 

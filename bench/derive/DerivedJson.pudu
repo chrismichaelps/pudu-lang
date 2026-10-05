@@ -1,0 +1,31 @@
+module DerivedJson
+
+import Std.Json
+import Std.Json {Encode}
+
+type Line = { sku: Str, quantity: Int, price: Decimal } derives Encode
+
+type Order = {
+  @json("order_id") id: Int,
+  customer: Str,
+  lines: Array[Line],
+  note: Option[Str],
+  @skip cache: Option[Str]
+} derives Encode
+
+export fn main() -> Str {
+  var total = 0
+  var index = 0
+  while index < 40000 {
+    let order = Order {
+      id: index,
+      customer: "customer",
+      lines: [Line{sku: "a", quantity: index, price: 1.25d}, Line{sku: "b", quantity: 2, price: 3.5d}],
+      note: if index % 2 == 0 { Some("rush") } else { None },
+      cache: None
+    }
+    total = total + Json.encode(&order.encode()).length()
+    index = index + 1
+  }
+  show(total)
+}

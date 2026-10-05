@@ -22,7 +22,7 @@ module Pudu.Type.Check.Rule
   , unaryType
   ) where
 
-import Control.Monad (filterM, unless)
+import Control.Monad (unless, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -36,9 +36,14 @@ import Pudu.IntegerLiteral
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Type.Formation (builtinTypeNames)
+import Pudu.Type.Substitute (substituteRigid)
+import Pudu.Type.Check.Receiver (bindReceiver)
+import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , isStaticTrait
+  , recordSelection
   , useCapability
   , insideUnsafe
   , useUnsafeRegion
@@ -55,7 +60,6 @@ import Pudu.Type.Env
   , negateIntegerLiteral
   , report
   , settleIntegerLiteral
-  , rigidBoundsOf
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
@@ -314,39 +318,7 @@ enclosingFunctionType binding = do
 
 {-| Replace a declaration's rigid parameters with a use's arguments. -}
 substituteRigidType :: [(Text, Type)] -> Type -> Type
-substituteRigidType replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  {-| A parameter of higher kind is replaced in head position and its arguments
-      are replaced beneath it. When the replacement is a constructor that can
-      take them, the application collapses into that constructor rather than
-      staying an application of something already known. -}
-  AppliedType head' arguments ->
-    applyType
-      (substituteRigidType replacements head')
-      (map (substituteRigidType replacements) arguments)
-  NominalType name arguments ->
-    NominalType name (map (substituteRigidType replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substituteRigidType replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substituteRigidType replacements) inputs)
-      (substituteRigidType replacements result)
-  ReferenceTypeValue mutable target ->
-    ReferenceTypeValue mutable (substituteRigidType replacements target)
-  other -> other
-
-{-| A constructor applied to arguments.
-
-    A named constructor takes them into itself, because that is the type it
-    already is: `F[A]` with `F` solved to `Option` is `Option[A]`, not an
-    application of `Option` to `A`. Anything still unsolved stays an
-    application, which is what a later substitution will collapse. -}
-applyType :: Type -> [Type] -> Type
-applyType head' arguments = case head' of
-  _ | null arguments -> head'
-  NominalType identity existing -> NominalType identity (existing <> arguments)
-  AppliedType inner existing -> applyType inner (existing <> arguments)
-  _ -> AppliedType head' arguments
+substituteRigidType = substituteRigid
 
 {-| `?` yields a carrier's payload and returns that carrier's failure from the
     enclosing function. Which carrier is meant is read from the function's own
@@ -393,6 +365,7 @@ instantiate spanValue scheme
   | otherwise = do
       replacements <- mapM (\(name, _) -> (,) name <$> freshVariable) (schemeParams scheme)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      recordStaticSelection spanValue scheme replacements
       pure (substitute replacements (schemeType scheme))
 
 {-| Instantiate a scheme with the types the caller wrote.
@@ -424,27 +397,17 @@ instantiateWith spanValue scheme arguments
       inferred <- mapM (const freshVariable) (drop (length arguments) (schemeParams scheme))
       let replacements = zip (map fst (schemeParams scheme)) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      recordStaticSelection spanValue scheme replacements
       pure (substitute replacements (schemeType scheme))
 
-obligationsFor :: Span -> [(Text, Type)] -> (Text, [NominalId]) -> Checker ()
+obligationsFor :: Span -> [(Text, Type)] -> (Text, [Type]) -> Checker ()
 obligationsFor spanValue replacements (name, bounds) =
   case lookup name replacements of
     Nothing -> pure ()
-    Just assigned -> mapM_ (addObligation spanValue assigned) bounds
+    Just assigned -> mapM_ (addObligation spanValue assigned . substituteRigid replacements) bounds
 
 substitute :: [(Text, Type)] -> Type -> Type
-substitute replacements typeValue = case typeValue of
-  RigidType name -> maybe typeValue id (lookup name replacements)
-  AppliedType head' arguments ->
-    applyType (substitute replacements head') (map (substitute replacements) arguments)
-  NominalType name arguments -> NominalType name (map (substitute replacements) arguments)
-  TupleTypeValue members -> TupleTypeValue (map (substitute replacements) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
-      (map (substitute replacements) inputs)
-      (substitute replacements result)
-  ReferenceTypeValue mutable target -> ReferenceTypeValue mutable (substitute replacements target)
-  other -> other
+substitute = substituteRigid
 
 unaryType :: Span -> Text -> Type -> Checker Type
 unaryType spanValue operator operand = case operator of
@@ -682,17 +645,15 @@ memberType spanValue targetType member = do
             if length parameters == length arguments
               then substituteRigidType (zip parameters arguments) found
               else found
-        Nothing -> methodType spanValue name member
+        Nothing -> methodType spanValue (NominalType name arguments) name member
     RigidType name -> do
-      bounds <- rigidBoundsOf name
-      rigidMethod spanValue name bounds member
+      rigidMethod spanValue resolved name member
     {-| A parameter of higher kind carries its bounds on the parameter, so a
         receiver of type `F[A]` finds its members where a receiver of type `F`
         would. The arguments say what the container holds, never which trait
         provides a member. -}
     AppliedType (RigidType name) _ -> do
-      bounds <- rigidBoundsOf name
-      rigidMethod spanValue name bounds member
+      rigidMethod spanValue resolved name member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
     _ | member == textMember -> pure textMethodType
     _ -> do
@@ -1018,40 +979,22 @@ textMethodType = FunctionTypeValue False [] stringType
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
     silently picking the first trait. -}
-rigidMethod :: Span -> Text -> [NominalId] -> Text -> Checker Type
-rigidMethod spanValue name bounds member = do
-  providers <- filterM provides bounds
-  case providers of
-    [] | member == textMember -> pure textMethodType
-    [] -> do
+rigidMethod :: Span -> Type -> Text -> Text -> Checker Type
+rigidMethod spanValue receiver name member = do
+  found <- methodScheme spanValue receiver member
+  case found of
+    Nothing | member == textMember -> pure textMethodType
+    Nothing -> do
       report "E3005" spanValue (name <> " has no method " <> member)
         (Just "add a trait bound that declares the method")
       pure ErrorType
-    [traitText] -> do
-      found <- lookupName (nominalKey traitText <> "." <> member)
-      case found of
-        Nothing -> pure ErrorType
-        Just scheme -> do
-          instantiated <- instantiate spanValue scheme
-          case instantiated of
-            FunctionTypeValue asynchronous (_ : inputs) result ->
-              pure (FunctionTypeValue asynchronous inputs result)
-            other -> pure other
-    _ -> do
-      report "E3013" spanValue
-        (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
-        (Just "disambiguate with a qualified call or remove a trait bound")
-      pure ErrorType
- where
-  provides traitText = do
-    found <- lookupName (nominalKey traitText <> "." <> member)
-    pure (case found of Nothing -> False; Just _ -> True)
+    Just scheme -> instantiate spanValue scheme >>= bindReceiver spanValue receiver
 
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself
     has the method's type with that parameter already supplied. -}
-methodType :: Span -> NominalId -> Text -> Checker Type
-methodType spanValue owner member = do
+methodType :: Span -> Type -> NominalId -> Text -> Checker Type
+methodType spanValue receiver owner member = do
   let key = nominalKey owner <> "." <> member
   providers <- ambiguousProviders key
   named <- lookupName key
@@ -1070,10 +1013,7 @@ methodType spanValue owner member = do
       pure ErrorType
     (_, Just scheme) -> do
       instantiated <- instantiate spanValue scheme
-      case instantiated of
-        FunctionTypeValue asynchronous (_ : rest) result ->
-          pure (FunctionTypeValue asynchronous rest result)
-        other -> pure other
+      bindReceiver spanValue receiver instantiated
 
 {-| The type of one member of a tuple.
 
@@ -1137,3 +1077,17 @@ elementType spanValue position targetType = do
       report "E3006" spanValue ("a " <> renderType resolved <> " cannot be indexed")
         (Just "index a string, an array, or a tuple")
       pure ErrorType
+
+{-| A parameter bounded by a trait with a static member may be called through
+    (`A.decode(json)`), which reads no value to dispatch on. The types this
+    reference chose for every parameter are kept, in the scheme's order, so the
+    call can carry them. `Self` is a trait member's own receiver type and is
+    settled by the owner the call names. -}
+recordStaticSelection :: Span -> Scheme -> [(Text, Type)] -> Checker ()
+recordStaticSelection spanValue scheme replacements = do
+  static <- or <$> sequence
+    [ isStaticTrait owner
+    | (subject, bounds) <- schemeBounds scheme, subject /= "Self"
+    , NominalType owner _ <- bounds ]
+  when (static && all ((/= "Self") . fst) (schemeParams scheme)) $
+    recordSelection spanValue (map snd replacements)

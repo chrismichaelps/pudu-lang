@@ -29,6 +29,9 @@ The exported signatures are the module header's export list.
 - A request and a notification are separated at the point of decoding rather than checked later, because replying to a notification is the one protocol error a client cannot recover from.
 - Only `Content-Length` is acted on. An unknown header is skipped rather than refused, so a newer client can still talk to an older server.
 - A client that sends a bare LF instead of CRLF is understood rather than hung up on.
+- `fileUri` writes an absolute path as a `file:` URI, percent-encoding every byte outside the
+  unreserved set and `/` as UTF-8: the form editors send and compare. Definition and diagnostics
+  both name other files with it.
 - A `Position` is a zero-based line and a **UTF-16** offset within it, which is what the protocol specifies and what an editor's cursor reports.
 - Reading a frame answers **which of four things happened**, not whether it worked: the stream ended, the frame was not addressed to the server, the frame could not be read, or a message arrived. Only the first ends a session, and collapsing them into one absent value is what let a single unreadable frame stop the server.
 - A message with no `method` is a **client's reply** to something the server asked. It is ordinary traffic and is told apart from a frame that could not be read at all, because a server that grows one request to the client would otherwise be killed by the answer.

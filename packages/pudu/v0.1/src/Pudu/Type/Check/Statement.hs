@@ -72,7 +72,7 @@ data StatementNeeds = StatementNeeds
       FunctionRole
       -> DeclaredTypes
       -> [(Text, Int)]
-      -> [(Text, [NominalId])]
+      -> [(Text, [Type])]
       -> Maybe NominalId
       -> Function
       -> Checker ()
@@ -395,7 +395,7 @@ checkMember
   :: StatementNeeds
   -> DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Located Function
   -> Checker ()

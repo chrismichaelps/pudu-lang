@@ -1,0 +1,82 @@
+module Std.Meta
+
+/// Compile-time reflection over type shapes.
+///
+/// Every name declared here may only be named from derive definitions.
+/// Descriptor values have no runtime representation. Their declarations
+/// provide compile-time signatures; instantiation must eliminate every use.
+
+/// One field of the record `T`, holding values of type `F`.
+export type Field[T, F] = { name: Str }
+
+/// One variant of the sum `T`: its name, its zero-based declaration position,
+/// and whether its payload, when it has one, is written by position.
+export type Variant[T] = { name: Str, index: Int, positional: Bool }
+
+/// A heterogeneous sequence of fields belonging to `T`.
+export type Fields[T] = {}
+
+/// A sequence of variants belonging to `T`.
+export type Variants[T] = {}
+
+/// The declared name of `T`.
+export fn nameOf[T]() -> Str { panic("Meta runs at compile time") }
+
+/// One `Field[T, F]` per field of the record `T`, in declaration order.
+export fn fields[T]() -> Fields[T] { panic("Meta runs at compile time") }
+
+/// One `Variant[T]` per variant of the sum `T`, in declaration order.
+export fn variants[T]() -> Variants[T] { panic("Meta runs at compile time") }
+
+/// A record of `T`, with `each` applied to every field.
+export fn build[T, F](each: fn(Field[T, F]) -> F) -> T { panic("Meta runs at compile time") }
+
+/// An array holding what `each` answers for every field of the record `T`,
+/// in declaration order. A field whose answer is `None` is left out.
+export fn collect[T, F, E](each: fn(Field[T, F]) -> Option[E]) -> Array[E] { panic("Meta runs at compile time") }
+
+/// Reading one field's shape and attributes.
+export trait FieldAccess[T, F] {
+  /// The field's value read from a record of the owning type.
+  fn get(self: &Self, value: &T) -> F
+  /// The field's value written into a record of the owning type.
+  fn set(self: &Self, value: &mut T, held: F) -> ()
+  /// Whether the field carries the named attribute.
+  fn has(self: &Self, name: Str) -> Bool
+  /// The named attribute's argument, or the fallback when absent.
+  fn attributeOr[A](self: &Self, name: Str, fallback: A) -> A
+}
+
+impl [T, F] FieldAccess[T, F] for Field[T, F] {
+  fn get(self: &Self, value: &T) -> F { panic("Meta runs at compile time") }
+  fn set(self: &Self, value: &mut T, held: F) -> () { panic("Meta runs at compile time") }
+  fn has(self: &Self, name: Str) -> Bool { panic("Meta runs at compile time") }
+  fn attributeOr[A](self: &Self, name: Str, fallback: A) -> A { panic("Meta runs at compile time") }
+}
+
+/// Reading one variant's shape.
+export trait VariantAccess[T] {
+  /// The variant's payload fields.
+  fn fields(self: &Self) -> Fields[T]
+  /// Whether a value holds this variant.
+  fn matches(self: &Self, value: &T) -> Bool
+  /// Whether the variant carries the named attribute.
+  fn has(self: &Self, name: Str) -> Bool
+  /// The variant attribute argument, or its fallback.
+  fn attributeOr[A](self: &Self, name: Str, fallback: A) -> A
+  /// Construct this variant by producing each field.
+  fn build[F](self: &Self, each: fn(Field[T, F]) -> F) -> T
+  /// An array holding what `each` answers for every payload field.
+  fn collect[F, E](self: &Self, each: fn(Field[T, F]) -> Option[E]) -> Array[E]
+}
+
+impl [T] VariantAccess[T] for Variant[T] {
+  fn fields(self: &Self) -> Fields[T] { panic("Meta runs at compile time") }
+  fn matches(self: &Self, value: &T) -> Bool { panic("Meta runs at compile time") }
+  fn has(self: &Self, name: Str) -> Bool { panic("Meta runs at compile time") }
+  fn attributeOr[A](self: &Self, name: Str, fallback: A) -> A { panic("Meta runs at compile time") }
+  fn build[F](self: &Self, each: fn(Field[T, F]) -> F) -> T { panic("Meta runs at compile time") }
+  fn collect[F, E](self: &Self, each: fn(Field[T, F]) -> Option[E]) -> Array[E] {
+    panic("Meta runs at compile time")
+  }
+}

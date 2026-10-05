@@ -1,0 +1,25 @@
+module StdOrder
+import Std.Order {Eq, Hash, Ord}
+
+type Point = { x: Int, y: Int } derives Eq, Hash, Ord
+type Pair[A] = { left: A, right: A } derives Eq, Ord
+type Shape = Dot | Circle(Int) | Rect{w: Int, h: Int} derives Eq, Hash, Ord
+type Tree = Leaf | Node(Array[Tree], Int) derives Eq, Ord
+
+fn flag(value: Bool) -> Str = if value { "T" } else { "F" }
+
+export fn main() -> Str {
+  let a = Point{x: 1, y: 2}
+  let b = Point{x: 1, y: 3}
+  let p: Pair[Str] = Pair{left: "a", right: "b"}
+  let q: Pair[Str] = Pair{left: "a", right: "c"}
+  let t1 = Tree.Node([Tree.Leaf], 1)
+  let t2 = Tree.Node([Tree.Leaf, Tree.Leaf], 1)
+  flag(a.equals(&a)) + flag(a.equals(&b)) + flag(a.before(&b)) + flag(b.before(&a))
+    + flag(a.hash() == Point{x: 1, y: 2}.hash()) + flag(a.hash() == b.hash())
+    + "|" + flag(p.equals(&q)) + flag(p.before(&q))
+    + "|" + flag(Shape.Dot.before(&Shape.Circle(0))) + flag(Shape.Circle(5).before(&Shape.Circle(4)))
+    + flag(Shape.Rect{w: 1, h: 2}.equals(&Shape.Rect{w: 1, h: 2})) + flag(Shape.Rect{w: 1, h: 2}.equals(&Shape.Circle(1)))
+    + flag(Shape.Circle(2).hash() == Shape.Circle(2).hash()) + flag(Shape.Dot.hash() == Shape.Circle(0).hash())
+    + "|" + flag(t1.equals(&t1)) + flag(t1.equals(&t2)) + flag(t1.before(&t2))
+}

@@ -15,7 +15,6 @@ module Pudu.Compiler.Program
 
 import Control.Monad (foldM)
 import Control.Exception (IOException, try)
-import Data.ByteString (ByteString)
 import Data.Graph (SCC, flattenSCC, stronglyConnComp)
 import Data.List (isSuffixOf, sort)
 import Data.List.NonEmpty (toList)
@@ -32,19 +31,18 @@ import Pudu.Compiler
   , compileFrontendWith
   , compileFrontendWithDependencies
   , runFrontend
+  , rejectFrontend
   )
 import Pudu.Compiler.Cache
-  ( CheckedProduct (..)
-  , ProductCache
+  ( ProductCache
   , disabledCache
   , graphFingerprint
   , interfaceKey
-  , lookupChecked
-  , lookupFrontend
   , pruneProducts
-  , storeChecked
-  , storeFrontend
+  , sourceFingerprint
   )
+import Pudu.Compiler.ComptimeDependencies (compiletimeDependencies)
+import Pudu.Compiler.Product (ProductUse (..), checkedFor, frontendFor, publishProduct)
 import Pudu.Compiler.Constants (foldingInputs)
 import Pudu.Compiler.Library
   ( ResolutionContext
@@ -55,6 +53,7 @@ import Pudu.Compiler.Library
   , resolutionTriedRoots
   )
 import Pudu.Doc (DocIndex)
+import Pudu.Derive.Graph (elaborateGraph)
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -62,6 +61,7 @@ import Pudu.Diagnostic
   , diagnostic
   , mkDiagnosticCode
   , sortDiagnostics
+  , hasErrors
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -146,7 +146,7 @@ programFolded result =
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
 compileProgram :: FilePath -> IO ProgramResult
-compileProgram = compileProgramCached disabledCache
+compileProgram = compileProgramWith AnalysisProducts disabledCache
 {-| Compile a program, reusing what an earlier run stored for modules that have
     not changed.
 
@@ -155,7 +155,10 @@ compileProgram = compileProgramCached disabledCache
     and documentation are not kept, so tooling that reads those compiles with
     `compileProgram`. -}
 compileProgramCached :: ProductCache -> FilePath -> IO ProgramResult
-compileProgramCached cache rootPath = do
+compileProgramCached = compileProgramWith ExecutionProducts
+
+compileProgramWith :: ProductUse -> ProductCache -> FilePath -> IO ProgramResult
+compileProgramWith products cache rootPath = do
   rootRead <- readSource rootPath
   case rootRead of
     Left _ -> do
@@ -163,7 +166,7 @@ compileProgramCached cache rootPath = do
       pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
         (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True))
     Right rootSource -> do
-      rootFrontend <- frontendFor cache rootSource
+      rootFrontend <- frontendFor products cache rootSource
       case frontendModule rootFrontend of
         Nothing ->
           pure
@@ -177,10 +180,10 @@ compileProgramCached cache rootPath = do
                   emptyContext = CompileContext (exportIndex Map.empty) emptyInterfaceGraph True
               compiled <- compileFrontendWith emptyContext rootFrontend
               pure
-                (ProgramResult (Just rootName) (Map.singleton rootName compiled)
+                (ProgramResult (Just rootName) (Map.singleton rootName (publishProduct products compiled))
                   [rootSource] (Map.singleton rootName rootSource) [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
-            else discoverFrom cache Map.empty sourceRoot rootSource rootFrontend rootModule
+            else discoverFrom products cache Map.empty sourceRoot rootSource rootFrontend rootModule
 
 {-| Compile a program whose root is already in memory.
 
@@ -213,20 +216,20 @@ compileProgramSourceOver overlay sourceRoot rootSource = do
             (frontendDiagnostics rootFrontend)
             (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True)
         )
-    Just rootModule -> discoverFrom disabledCache overlay sourceRoot rootSource rootFrontend rootModule
+    Just rootModule -> discoverFrom AnalysisProducts disabledCache overlay sourceRoot rootSource rootFrontend rootModule
 
 {-| Walk a root module's imports and compile everything the walk reaches. -}
-discoverFrom :: ProductCache -> Map FilePath Text.Text -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
-discoverFrom cache overlay sourceRoot rootSource rootFrontend rootModule = do
+discoverFrom :: ProductUse -> ProductCache -> Map FilePath Text.Text -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom products cache overlay sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
   resolution <- newResolutionContext sourceRoot
-  discovered <- discover cache overlay resolution
+  discovered <- discover products cache overlay resolution
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
     Set.empty
     (resolutionDiagnostics resolution)
     (importsOf rootModule)
-  finish cache rootName discovered
+  finish products cache rootName discovered
 
 data Discovery = Discovery
   { discoveredFrontends :: !(Map ModuleName FrontendResult)
@@ -235,7 +238,8 @@ data Discovery = Discovery
   }
 
 discover
-  :: ProductCache
+  :: ProductUse
+  -> ProductCache
   -> Map FilePath Text.Text
   -> ResolutionContext
   -> Map ModuleName FrontendResult
@@ -244,13 +248,13 @@ discover
   -> [Diagnostic]
   -> [(Located Import, ModuleName)]
   -> IO Discovery
-discover cache overlay resolution frontends sources failed diagnostics pending = case pending of
+discover products cache overlay resolution frontends sources failed diagnostics pending = case pending of
   [] -> pure (Discovery frontends sources diagnostics)
   (locatedImport, requested) : rest
     | Map.member requested frontends ->
-        discover cache overlay resolution frontends sources failed diagnostics rest
+        discover products cache overlay resolution frontends sources failed diagnostics rest
     | Set.member requested failed ->
-        discover cache overlay resolution frontends sources failed
+        discover products cache overlay resolution frontends sources failed
           (diagnostics <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport)
           rest
     | otherwise -> do
@@ -258,16 +262,16 @@ discover cache overlay resolution frontends sources failed diagnostics pending =
         loaded <- readFirstFrom overlay [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
-            discover cache overlay resolution frontends sources (Set.insert requested failed)
+            discover products cache overlay resolution frontends sources (Set.insert requested failed)
               ( diagnostics
                   <> missingModule requested (resolutionTriedRoots resolution requested) locatedImport
               )
               rest
           Right source -> do
-            frontend <- frontendFor cache source
+            frontend <- frontendFor products cache source
             case frontendModule frontend of
               Nothing ->
-                discover cache overlay resolution
+                discover products cache overlay resolution
                   (Map.insert requested frontend frontends)
                   (Map.insert requested source sources)
                   failed
@@ -275,100 +279,64 @@ discover cache overlay resolution frontends sources failed diagnostics pending =
               Just parsed ->
                 let actual = locatedValue (moduleName parsed)
                  in if actual /= requested
-                      then discover cache overlay resolution
+                      then discover products cache overlay resolution
                         (Map.insert requested frontend{frontendModule = Nothing} frontends)
                         (Map.insert requested source sources)
                         failed
                         (diagnostics <> pathMismatch requested (moduleName parsed)) rest
-                      else discover cache overlay resolution
+                      else discover products cache overlay resolution
                         (Map.insert requested frontend frontends)
                         (Map.insert requested source sources)
                         failed
                         diagnostics (importsOf parsed <> rest)
 
-finish :: ProductCache -> ModuleName -> Discovery -> IO ProgramResult
-finish cache rootName discovered = do
-  let validModules = Map.mapMaybe frontendModule (discoveredFrontends discovered)
+finish :: ProductUse -> ProductCache -> ModuleName -> Discovery -> IO ProgramResult
+finish products cache rootName Discovery{discoveredFrontends, discoveredSources, discoveredDiagnostics} = do
+  let originalModules = Map.mapMaybe frontendModule discoveredFrontends
+      (validModules, deriveErrors) = elaborateGraph originalModules
       interfaces = prepareInterfaces (Map.map interfaceSkeleton validModules)
       context = CompileContext (exportIndex validModules) interfaces True
       order = dependencyOrder validModules
       pending =
-        [ (name, frontend)
+        [ (name, frontend{frontendModule = Map.lookup name validModules})
         | name <- order
-        , Just frontend <- [Map.lookup name (discoveredFrontends discovered)]
+        , Just frontend <- [Map.lookup name discoveredFrontends]
         ]
+      preliminary = discoveredDiagnostics <>
+        concatMap frontendDiagnostics
+          [frontend | frontend <- Map.elems discoveredFrontends,
+            Nothing <- [frontendModule frontend]]
+  {-| Rejected frontend findings must not keep the discovery token table alive
+      after its admitted entries have been consumed. -}
+  length preliminary `seq` pure ()
   {-| Modules compile in dependency order, one at a time, because compiling a
       module folds its constants and folding runs the evaluator. -}
+  let compiletimeInputs = compiletimeDependencies originalModules
   keys <- mapM
-    (\(name, source) -> (,) (moduleNameText name) <$> interfaceKey cache source)
-    (Map.toList (discoveredSources discovered))
+    (\(name, source) -> (,) (moduleNameText name) <$> if Set.member name compiletimeInputs
+      then pure (sourceFingerprint source) else interfaceKey cache source)
+    (Map.toList discoveredSources)
   let graph = graphFingerprint keys
       compileOne compiled (name, frontend) = do
         let (folded, kinds, modules) = foldingInputs validModules order name compiled
             compile = compileFrontendWithDependencies folded kinds modules context frontend
-        result <- case Map.lookup name (discoveredSources discovered) of
-          Nothing -> compile
-          Just source -> checkedFor cache graph source frontend compile
+        result <- case Map.lookup name discoveredSources of
+          Nothing -> publishProduct products <$> compile
+          Just source -> checkedFor products cache graph source frontend compile
         pure (Map.insert name result compiled)
-  compiled <- foldM compileOne Map.empty pending
+  compiled <- if any hasErrors (Map.elems deriveErrors)
+    then pure (Map.mapWithKey (\name frontend -> publishProduct products
+      (rejectFrontend frontend (Map.findWithDefault [] name deriveErrors))) discoveredFrontends)
+    else foldM compileOne Map.empty pending
   pruneProducts cache
-  let uncompiled = Map.difference (discoveredFrontends discovered) compiled
-      diagnostics = sortDiagnostics
-        ( discoveredDiagnostics discovered
-            <> concatMap frontendDiagnostics (Map.elems uncompiled)
-            <> concatMap compileDiagnostics (Map.elems compiled)
-        )
+  let diagnostics = sortDiagnostics
+        (preliminary <> concatMap compileDiagnostics (Map.elems compiled))
   pure
     ( ProgramResult (Just rootName) compiled
-        (Map.elems (discoveredSources discovered))
-        (discoveredSources discovered)
+        (Map.elems discoveredSources)
+        discoveredSources
         order diagnostics context
     )
-
-{-| A module's frontend, from the cache when this exact text was parsed before.
-
-    Only a parse that produced no diagnostic is stored, so a diagnostic is
-    always the one this run's parser gives. -}
-frontendFor :: ProductCache -> Source -> IO FrontendResult
-frontendFor cache source = do
-  stored <- lookupFrontend cache source
-  case stored of
-    Just parsed -> pure (FrontendResult [] (Just parsed) [])
-    Nothing -> do
-      let frontend = runFrontend source
-      case frontendModule frontend of
-        Just parsed | null (frontendDiagnostics frontend) -> storeFrontend cache source parsed
-        _ -> pure ()
-      pure frontend
-
-{-| A module's check, from the cache when this text was checked before in a
-    program of exactly these modules. Only a check that produced no diagnostic
-    is stored, for the same reason as a parse. -}
-checkedFor :: ProductCache -> ByteString -> Source -> FrontendResult -> IO CompileResult -> IO CompileResult
-checkedFor cache graph source frontend compile = do
-  stored <- lookupChecked cache graph source
-  case stored of
-    Just reused ->
-      pure CompileResult
-        { compileTokens = frontendTokens frontend
-        , compileModule = Just (checkedModule reused)
-        , compileSyntax = Just (checkedModule reused)
-        , compileResolution = Nothing
-        , compileTypes = Nothing
-        , compileIntegerKinds = checkedIntegerKinds reused
-        , compileDocs = Nothing
-        , compileDiagnostics = []
-        , compileMethods = []
-        , compileFolded = checkedFolded reused
-        }
-    Nothing -> do
-      compiled <- compile
-      case compileModule compiled of
-        Just checked | null (compileDiagnostics compiled) ->
-          storeChecked cache graph source
-            (CheckedProduct checked (compileIntegerKinds compiled) (compileFolded compiled))
-        _ -> pure ()
-      pure compiled
 
 dependencyOrder :: Map ModuleName Module -> [ModuleName]
 dependencyOrder modules =

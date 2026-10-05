@@ -89,4 +89,16 @@ DEPTH 0.72 (DEEP). One entry point hides local declaration cataloging, cycle-saf
 
 ## Referenced by
 
+## Generated ownership boundary
+
+[[Derive Graph Coherence]] checks generated ownership against the request's
+canonical trait and target owners, plus overlap against all ordinary/generated
+heads. This module continues checking compiler-controlled markers and duplicate
+syntax for all implementations; its local spelling-based ownership check applies
+only to authored implementations. Generated methods reside in the defining
+module for lexical capture, and must not acquire ownership from that placement.
+Resolved Grill Log: a generated span cannot launder an orphan request; the graph
+must admit that request before producing an ordinary generated Impl. Reject
+pretending the definition module wrote the request or adding consumer imports.
+
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Method]] · [[Parser Trait]]

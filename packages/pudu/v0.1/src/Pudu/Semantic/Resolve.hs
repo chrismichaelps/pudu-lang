@@ -5,20 +5,21 @@ module Pudu.Semantic.Resolve
   , resolveModuleWith
   ) where
 
-import Data.List.NonEmpty (NonEmpty (..))
+import Control.Monad (when)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
-  ( ArrayRest (..)
-  , Block (..)
+  ( Block (..)
+  , ComptimeFor (..)
   , Constraint (..)
   , Declaration (..)
+  , Derive (..)
+  , DeriveRequest (..)
   , Expression (..)
   , FieldDeclaration (..)
   , FieldInit (..)
-  , FieldPattern (..)
   , Foreign (..)
   , ForeignFunction (..)
   , ForeignParameter (..)
@@ -29,7 +30,6 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   , Module (..)
   , Parameter (..)
-  , Pattern (..)
   , Statement (..)
   , Trait (..)
   , TypeDeclarationValue (..)
@@ -65,15 +65,22 @@ import Pudu.Semantic.Resolve.Context
   , outsideLoops
   , recordVariantSymbol
   , visibleAfter
-  , resolveExpressionName
   , resolveLoopTarget
   , resolveTypeName
   , resolveValueName
+  , setReflectionImports
+  , declareLoopTypeParameter
+  , declareReflectedTypeParameter
+  , inDeriveDefinition
+  , withDeriveDefinition
+  , withCanonicalTypes
   , runResolver
   )
+import Pudu.Semantic.Resolve.Bindings (bindPattern, bindPatternWith)
+import Pudu.Semantic.Resolve.Canonical (resolveHead, resolveMemberHead, resolveConstructorPath, resolveTypePath)
 import Pudu.Semantic.ScopeIndex (ScopeIndex, delimitedExtent, spanExtent, spanningExtent)
 import Pudu.Semantic.Symbol (Namespace (..), Reference, Symbol (..), SymbolOrigin (..))
-import Pudu.Source (Span, spanEnd, unOffset)
+import Pudu.Source (Span, spanEnd, spanOrigin, unOffset)
 
 {-| @Semantic.Resolve.Result — the symbol table and reference map later phases
     consume, separate from the diagnostics produced alongside them -}
@@ -124,6 +131,7 @@ resolveUnit prepared moduleValue = do
       case prepared of
         Nothing -> mapM_ collectImport (moduleImports moduleValue)
         Just bindings -> mapM_ collectPreparedImport bindings
+      setReflectionImports (moduleImports moduleValue)
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
       mapM_ markAmbiguousVariant (repeatedVariants (moduleDeclarations moduleValue))
       mapM_ walkDeclaration (moduleDeclarations moduleValue)
@@ -166,7 +174,7 @@ collectImport :: Located Import -> Resolver ()
 collectImport (Located spanValue value) = case importAlias value of
   Just alias -> external (locatedValue alias) (locatedSpan alias)
   Nothing -> case importItems value of
-    [] -> external (lastSegment (locatedValue (importModule value))) spanValue
+    [] -> external (moduleQualifier (locatedValue (importModule value))) spanValue
     items -> mapM_ (\item -> external (locatedValue item) (locatedSpan item)) items
  where
   external name nameSpan = do
@@ -184,10 +192,6 @@ collectPreparedImport = mapM_ declare
       False
       (Located (bindingSpan binding) (bindingName binding))
 
-lastSegment :: ModuleName -> Text
-lastSegment (ModuleName segments) = case segments of
-  first :| rest -> last (first : rest)
-
 {-| Collect every module-scope declaration before walking any body, so module
     order cannot change what resolves. -}
 collectDeclaration :: Located Declaration -> Resolver ()
@@ -203,6 +207,12 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
   MacroDeclaration _ -> pure ()
+  {-| A derive declares no namespace entry: its members are checked once at
+      the definition by derive checking, never called by name, and a request
+      carries no members at all. Both stay visible here so a later slice can
+      resolve their member bodies once the rigid treatment exists. -}
+  DeriveDeclaration _ -> pure ()
+  DeriveImplDeclaration _ -> pure ()
   {-| Every function a foreign block declares is a module-scope name, since the
       declaration is the only definition of it that exists. The block's own
       visibility carries to all of them: they were written together because they
@@ -236,21 +246,36 @@ walkDeclaration (Located spanValue declaration) = case declaration of
     walkExpression value
   FunctionDeclaration value -> walkFunction spanValue value
   TypeDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (typeTypeParams value)
+    bindTypeParams (typeTypeParams value)
+    mapM_ walkType (typeDerives value)
     walkDefinition (typeDefinition value)
   TraitDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (traitTypeParams value)
+    bindTypeParams (traitTypeParams value)
     bindSelf
     mapM_ walkConstraint (traitConstraints value)
     mapM_ (\(Located at member) -> walkFunction at member) (traitMembers value)
-  ImplDeclaration value -> inScopeOver (spanExtent spanValue) $ do
-    mapM_ bindTypeParam (implTypeParams value)
-    bindSelf
-    walkType (implTrait value)
-    walkType (implTarget value)
-    mapM_ walkConstraint (implConstraints value)
-    mapM_ (\(Located at member) -> walkFunction at member) (implFunctions value)
+  ImplDeclaration value -> withCanonicalTypes (spanOrigin spanValue /= Nothing) $
+    inScopeOver (spanExtent spanValue) $ do
+      bindTypeParams (implTypeParams value)
+      bindSelf
+      walkType (implTrait value)
+      walkType (implTarget value)
+      mapM_ walkConstraint (implConstraints value)
+      mapM_ (\(Located at member) -> walkFunction at member) (implFunctions value)
   MacroDeclaration _ -> pure ()
+  {-| A derive's trait resolves like any other reference. Its members walk
+      with the derive flag set, so reflection inside resolves while the
+      refusal still guards every other position. Member names stay
+      undeclared: template functions are never called by name. A request's
+      trait and target are ordinary references. -}
+  DeriveDeclaration value -> inScopeOver (spanExtent spanValue) $ do
+    declareNamed TypeSpace TypeParamOrigin Private False (deriveParameter value)
+    walkType (deriveTrait value)
+    withDeriveDefinition True $
+      mapM_ (\(Located at member) -> walkFunction at member) (deriveFunctions value)
+  DeriveImplDeclaration value -> do
+    walkType (deriveRequestTrait value)
+    walkType (deriveRequestTarget value)
   ForeignDeclaration value ->
     mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
@@ -266,12 +291,28 @@ walkForeignFunction function = do
 {-| A parameter is visible to the defaults of later parameters and to the body,
     which is exactly the left-to-right rule for default arguments. -}
 walkFunction :: Span -> Function -> Resolver ()
-walkFunction spanValue value = outsideLoops $ inScopeOver (spanExtent spanValue) $ do
-  mapM_ bindTypeParam (functionTypeParams value)
+walkFunction = walkFunctionWith (pure ())
+
+walkFunctionWith :: Resolver () -> Span -> Function -> Resolver ()
+walkFunctionWith binders spanValue value = outsideLoops $ inScopeOver (spanExtent spanValue) $ do
+  binders
+  bindTypeParams (functionTypeParams value)
   mapM_ bindParameter (functionParameters value)
   mapM_ walkType (functionReturn value)
   mapM_ walkConstraint (functionConstraints value)
   mapM_ walkBody (functionBody value)
+
+{-| A derive's build callback binds its `Field[T, F]` type and `where`
+    subjects rigidly, exactly as a compile-time loop does. Only a genuine
+    Std.Meta field annotation introduces F, so other function literals keep
+    ordinary resolution. -}
+callbackBinders :: Function -> Resolver ()
+callbackBinders value = do
+  inside <- inDeriveDefinition
+  when inside $ do
+    mapM_ declareReflectedTypeParameter
+      [annotation | Located _ held <- functionParameters value, Just annotation <- [parameterType held]]
+    mapM_ (declareLoopTypeParameter . constraintSubject . locatedValue) (functionConstraints value)
 
 bindParameter :: Located Parameter -> Resolver ()
 bindParameter (Located _ parameter) = do
@@ -279,10 +320,10 @@ bindParameter (Located _ parameter) = do
   mapM_ walkExpression (parameterDefault parameter)
   declareNamed ValueSpace ParameterOrigin Private False (parameterName parameter)
 
-bindTypeParam :: Located TypeParam -> Resolver ()
-bindTypeParam (Located _ value) = do
-  mapM_ walkType (typeParamBounds value)
-  declareNamed TypeSpace TypeParamOrigin Private False (typeParamName value)
+bindTypeParams :: [Located TypeParam] -> Resolver ()
+bindTypeParams parameters = do
+  mapM_ (declareNamed TypeSpace TypeParamOrigin Private False . typeParamName . locatedValue) parameters
+  mapM_ (mapM_ walkType . typeParamBounds . locatedValue) parameters
 
 bindSelf :: Resolver ()
 bindSelf = declareBuiltin TypeSpace "Self"
@@ -371,7 +412,7 @@ walkExpression (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> walkBlock body
   MacroCall _ arguments -> mapM_ walkExpression arguments
   ScopeExpression body -> walkBlock body
-  LambdaExpression value -> walkFunction spanValue value
+  LambdaExpression value -> walkFunctionWith (callbackBinders value) spanValue value
   TypeApplication target arguments -> do
     walkExpression target
     mapM_ walkType arguments
@@ -412,6 +453,18 @@ walkExpression (Located spanValue expression) = case expression of
     insideLoop label $ inScopeOver (spanningExtent (locatedSpan binder) (locatedSpan body)) $ do
       bindPattern binder
       walkBlock body
+  {-| The source resolves outside the element's scope. Metadata field types and
+      `where` subjects bind rigidly before their annotation and body resolve. -}
+  ComptimeForExpression loop -> do
+    walkExpression (comptimeForSource loop)
+    inScopeOver (spanningExtent (locatedSpan (comptimeForElement loop)) (locatedSpan (comptimeForBody loop))) $ do
+      declareReflectedTypeParameter (comptimeForType loop)
+      mapM_ (declareLoopTypeParameter . constraintSubject . locatedValue)
+        (comptimeForConstraints loop)
+      walkType (comptimeForType loop)
+      mapM_ walkConstraint (comptimeForConstraints loop)
+      declareNamed ValueSpace PatternOrigin Private False (comptimeForElement loop)
+      walkBlock (comptimeForBody loop)
   InvalidExpression -> pure ()
 
 {-| A field written without a value refers to the binding with the field's own
@@ -427,46 +480,6 @@ walkArm (Located spanValue arm) = inScopeOver (spanExtent spanValue) $ do
   mapM_ walkExpression (armGuard arm)
   walkExpression (armBody arm)
 
-{-| Pattern bindings enter the arm's own frame; a constructor path is resolved
-    in the type namespace, and its payload patterns bind in turn. -}
-bindPattern :: Located Pattern -> Resolver ()
-bindPattern = bindPatternWith False
-
-{-| Bind a pattern's names, and say whether they may be assigned.
-
-    A match arm and a `let` bind names that may not; `var (a, b) = pair` binds
-    names that may, and the difference has to reach every name the pattern
-    introduces rather than only the one an ordinary `var` would have named. -}
-bindPatternWith :: Bool -> Located Pattern -> Resolver ()
-bindPatternWith mutable (Located patternSpan value) = case value of
-  WildcardPattern -> pure ()
-  BindingPattern name -> declareNamed ValueSpace PatternOrigin Private mutable name
-  LiteralPattern _ -> pure ()
-  RangePattern{} -> pure ()
-  TuplePattern members -> mapM_ recurse members
-  ArrayPattern prefix rest suffix -> do
-    mapM_ recurse prefix
-    case rest of
-      Just (BoundRest name) -> declareNamed ValueSpace PatternOrigin Private mutable name
-      _ -> pure ()
-    mapM_ recurse suffix
-  ConstructorPattern path arguments -> do
-    resolveConstructorPath patternSpan path
-    mapM_ recurse arguments
-  RecordPattern path fields _ -> do
-    mapM_ (resolveConstructorPath patternSpan) path
-    mapM_ (bindFieldPatternWith mutable) fields
-  AlternativePattern alternatives -> mapM_ recurse alternatives
-  InvalidPattern -> pure ()
- where
-  recurse = bindPatternWith mutable
-
-bindFieldPatternWith :: Bool -> Located FieldPattern -> Resolver ()
-bindFieldPatternWith mutable (Located _ field) = case fieldPatternValue field of
-  Just nested -> bindPatternWith mutable nested
-  Nothing ->
-    declareNamed ValueSpace PatternOrigin Private mutable (fieldPatternName field)
-
 walkType :: Located TypeSyntax -> Resolver ()
 walkType (Located typeSpan value) = case value of
   DynamicType path -> resolveTypePath typeSpan path
@@ -480,25 +493,10 @@ walkType (Located typeSpan value) = case value of
   UnitType -> pure ()
   InvalidType -> pure ()
 
-{-| Only the first segment of a path is resolved. Later segments are member,
-    field, or variant selections whose meaning requires types, so resolution
-    neither invents nor rejects them. -}
-resolveHead :: Span -> NonEmpty Text -> Resolver ()
-resolveHead spanValue (first :| _) = resolveExpressionName spanValue first
-
 {-| A member may qualify a variant with its type, so its bare target retains
     the type fallback that an ordinary value expression deliberately rejects.
-    A computed target is still an ordinary expression and is walked normally. -}
+    Computed targets use the ordinary expression walk. -}
 walkMemberTarget :: Located Expression -> Resolver ()
 walkMemberTarget target@(Located spanValue expression) = case expression of
-  NameExpression (first :| _) -> resolveValueName spanValue first
+  NameExpression path -> resolveMemberHead spanValue path
   _ -> walkExpression target
-
-{-| A constructor path resolves like any value name: an unqualified variant is
-    a value binding, and a qualified path such as `Shape.Circle` reaches its
-    type. -}
-resolveConstructorPath :: Span -> ModuleName -> Resolver ()
-resolveConstructorPath spanValue (ModuleName (first :| _)) = resolveValueName spanValue first
-
-resolveTypePath :: Span -> ModuleName -> Resolver ()
-resolveTypePath spanValue (ModuleName (first :| _)) = resolveTypeName spanValue first

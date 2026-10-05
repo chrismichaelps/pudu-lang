@@ -33,6 +33,7 @@ parseMatch    :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
 parseLabelled :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
 parseWhile, parseLoop, parseFor
   :: ExpressionParsers -> BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
+parseComptimeFor :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
 ```
 
 ### Governance
@@ -54,6 +55,9 @@ parseWhile, parseLoop, parseFor
 - A label is `@name` before the loop it names, and only a loop may carry one. A label followed by
   anything else is `E1053`, reported at the label — the part the reader deletes to make the program
   legal again.
+- `comptime for element: Type in list where Bounds { body }` binds one name with its type written
+  down rather than a general pattern, because unrolling needs one type per element. The source reads
+  as a scrutinee like a `for` iterable, and the bounds reuse the ordinary `where` clause.
 - `match` requires at least one arm (`E1051`). A match with none is a scrutinee evaluated for
   nothing, and admitting it would make the exhaustiveness checker's job undefined.
 - Arm iteration is bounded by required token progress and stops on an exhausted budget, so a hostile

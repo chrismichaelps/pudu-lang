@@ -10,20 +10,27 @@ module Pudu.Type.Check.Expression
   ) where
 
 import Control.Monad (foldM, unless, when)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
+  , Constraint (..)
   , Expression (..)
   , Parameter
   )
-import Pudu.Source (Span)
+import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Source (Span, spanOrigin)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , bindName
   , finalizeIntegerLiteralsBetween
   , finalizeIntegerLiteralsSince
   , freshVariable
+  , inDeriveChecking
   , inTypeScope
   , inTypeScopeWith
   , integerLiteralCheckpoint
@@ -32,8 +39,13 @@ import Pudu.Type.Env
   , recordExpression
   , report
   , validateIntegerLiteralsSince
+  , withAdditionalRigidBounds
+  , withLocalObligations
   )
-import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant)
+import Pudu.Type.Check.Reflection
+  ( checkBuildCall, checkSequenceElement, fieldCallee, reflectedParameters )
+import Pudu.Type.Check.Bound (checkBounds)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
@@ -86,12 +98,14 @@ import Pudu.Type.Check.Expression.Control
   , literalIndex
   )
 import Pudu.Type.Exhaust (checkExhaustive)
-import Pudu.Type.Formation (formType)
+import Pudu.Type.Formation (formBoundFor, formOptionalType, formType)
+import Pudu.Type.Check.Method (dischargeObligations)
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Type (..)
   , boolType
   , integerType
+  , monotype
   )
 
 {-| @Check.Expression.CheckSurroundings — what an expression needs of the
@@ -122,6 +136,10 @@ inferExpression
   :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> Checker Type
 inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
+  NameExpression names@(_ :| (_ : _))
+    | Just _ <- spanOrigin spanValue -> do
+        generated <- canonicalVariant declared (ModuleName names)
+        maybe (nameType spanValue names) pure generated
   NameExpression names -> do
     found <- nameType spanValue names
     checkExclusiveCapture spanValue names found
@@ -145,9 +163,15 @@ inferExpression around declared rigid spanValue expression = case expression of
         callType spanValue calleeType argumentTypes
       Nothing -> do
         (calleeType, receiver) <- checkCalleeLending (expressionChecker around) declared rigid callee
-        argumentTypes <- mapM (checkExpression around declared rigid) arguments
-        checkLending calleeType receiver arguments argumentTypes
-        callType spanValue calleeType argumentTypes
+        checking <- inDeriveChecking
+        building <- if checking then fieldCallee <$> zonk calleeType else pure Nothing
+        case (building, arguments) of
+          (Just shape, [callback]) ->
+            checkBuildCall (checkExpression around) declared rigid spanValue shape callback
+          _ -> do
+            argumentTypes <- mapM (checkExpression around declared rigid) arguments
+            checkLending calleeType receiver arguments argumentTypes
+            callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
     {-| A variant that named its payload is refused here rather than inside
         qualified member typing, which a call reaches twice — once for the
@@ -211,6 +235,14 @@ inferExpression around declared rigid spanValue expression = case expression of
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Set" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
+  ComptimeForExpression loop -> do
+    checking <- inDeriveChecking
+    if checking
+      then checkComptimeLoop around declared rigid (Located spanValue loop)
+      else do
+        report "E3090" spanValue "a compile-time loop outside a derive needs derive instantiation"
+          (Just "move the loop into a derive definition")
+        pure ErrorType
   LambdaExpression value ->
     lambdaType
       (aroundParameter around declared rigid)
@@ -382,9 +414,46 @@ inferExpression around declared rigid spanValue expression = case expression of
         pure ErrorType
   InvalidExpression -> pure ErrorType
 
+{-| Check one compile-time loop generically: the `where` subjects bind as
+    rigid loop-local variables, the element binds at its ascribed type, the
+    bounds install, and the body checks under both through the surrounding
+    chain, so a nested loop checks the same way. Its source is checked before
+    the element is bound, and local obligations discharge before the bounds
+    disappear without touching the enclosing queue. The loop answers the
+    unit type like every other loop, because unrolling repeats the body
+    rather than producing one value. -}
+checkComptimeLoop
+  :: CheckSurroundings
+  -> DeclaredTypes
+  -> [(Text, Int)]
+  -> Located ComptimeFor
+  -> Checker Type
+checkComptimeLoop around declared rigid (Located _ loop) = do
+  let variables = Map.toList (Map.fromList
+        (reflectedParameters declared rigid (comptimeForType loop) <>
+        [(name, 0) | Located _ constraint <- comptimeForConstraints loop
+        , let name = locatedValue (constraintSubject constraint), name `notElem` map fst rigid]))
+      rigidHere = rigid <> variables
+      bounds =
+        [ (locatedValue (constraintSubject constraint), map (formBoundFor declared rigidHere (locatedValue (constraintSubject constraint))) (constraintBounds constraint))
+        | Located _ constraint <- comptimeForConstraints loop
+        ]
+  loopElementType <- formOptionalType declared rigidHere (Just (comptimeForType loop))
+  sourceType <- checkExpression around declared rigid (comptimeForSource loop)
+  element <- checkSequenceElement (locatedSpan (comptimeForSource loop)) declared rigid loopElementType sourceType
+  admitted <- checkBounds declared rigidHere
+    [(locatedValue (constraintSubject constraint), constraintBounds constraint)
+    | Located _ constraint <- comptimeForConstraints loop]
+  when admitted $ withAdditionalRigidBounds bounds $ withLocalObligations $ inTypeScope $ do
+    recordExpression (locatedSpan (comptimeForElement loop)) element
+    bindName (locatedValue (comptimeForElement loop)) (monotype element)
+    _ <- aroundBlock around declared rigidHere (comptimeForBody loop)
+    dischargeObligations
+    pure ()
+  pure UnitTypeValue
+
 {-| The two directions a field's value may be checked in, handed to record
     construction so it can reach back into checking without importing it. -}
 checkValue :: CheckSurroundings -> CheckValue
 checkValue around =
   CheckValue{valueOf = checkExpression around, valueAgainst = aroundAgainst around}
-

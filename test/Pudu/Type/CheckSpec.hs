@@ -55,6 +55,19 @@ import Pudu.Type.Check.SystemSpec
   , testScopes
   , testUnsafe
   )
+import Pudu.Type.Check.DeriveSpec
+  ( testDeriveChecked
+  , testDeriveContracts
+  , testDeriveLoopSources
+  , testDeriveLoopBounds
+  , testDeriveImportedContract
+  , testDeriveSubstitution
+  , testDeriveLoopChecked
+  , testDeriveLoopMistakeOnce
+  , testDeriveMistakeOnce
+  , testDeriveRequestUnchecked
+  , testDeriveFixtures
+  )
 import Pudu.Type.Check.TraitSpec
   ( testAmbiguousMethod
   , testBounds
@@ -94,6 +107,17 @@ typeProperties =
   , ("? unwraps a Result inside a Result-returning function", testTry)
   , ("async calls normalize task channels and await them", testAsync)
   , ("trait methods dispatch on the receiver type", testTraits)
+  , ("a sound derive definition checks clean", testDeriveChecked)
+  , ("derive contracts validate every ordinary trait", testDeriveContracts)
+  , ("derive loop sources check before body bindings", testDeriveLoopSources)
+  , ("derive loops preserve bounds and isolate obligations", testDeriveLoopBounds)
+  , ("derive contracts use canonical imported signatures", testDeriveImportedContract)
+  , ("derive substitution preserves complete function contracts", testDeriveSubstitution)
+  , ("a derive mistake reports once at the definition", testDeriveMistakeOnce)
+  , ("a sound compile-time loop checks clean", testDeriveLoopChecked)
+  , ("a loop body mistake reports once", testDeriveLoopMistakeOnce)
+  , ("a derive request needs no checking", testDeriveRequestUnchecked)
+  , ("derive fixtures check, run, and diagnose", testDeriveFixtures)
   , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("a variant may name its payload", testNamedVariants)

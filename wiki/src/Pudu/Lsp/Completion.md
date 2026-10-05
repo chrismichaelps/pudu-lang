@@ -21,6 +21,8 @@ the fields or methods of the value. Ordinary value positions retain bindings in 
 imports, the everyday prelude, keywords, and built-in types. `completionRepaired` answers from a
 [[Lsp Repair|repaired copy]] when the written text has no types.
 
+Inside an implementation's body, outside every member body, completion answers [[Lsp Impl Members]] first: the trait's unwritten members. Keyword completion also offers the contextual `derive` and `derives`.
+
 ## Interface
 
 ```haskell
@@ -37,8 +39,9 @@ source root; the catalog is run only when the cursor is at an import site.
   from [[Lsp Shapes]] by the receiver type's canonical identity, with its type arguments
   substituted into each field's declared type; a `mut` field's detail says `mut`. References are
   unwrapped and aliases arrive expanded by the checker.
-- Methods come from the methods the program's modules declared (`analysisMethods`), by the owner the
-  checker looks a call up under: a nominal type's methods including inherited trait defaults, a
+- Methods come from the methods the program's modules declared (`analysisMethods`), by the owners
+  [[Lsp Method Owner]] names — the ones the checker looks a call up under, and the ones definition
+  reads: a nominal type's methods including inherited trait defaults, a
   `dynamic` trait's members, an applied type's head, and for a type parameter the members of the
   traits its bounds and `where` clauses name. A bound's trait is found by how this module can write
   it: its own trait, a selectively imported one, or through an import's qualifier. A wired-in type
@@ -121,6 +124,8 @@ source root; the catalog is run only when the cursor is at an import site.
   preserve their nominal owner. _Rationale:_ the type checker already resolved the exact subject;
   using that identity prevents unrelated variants from leaking into the list. _Rejected:_ searching
   every documented name for constructor-shaped entries.
+- **Q:** Let the syntax context decide impl bodies? **A:** No; a body at member level holds only members, and the context classifier reads `Type {` as a record or type position.
+- **Q:** Offer `derive`/`derives` though they are not keywords? **A:** Yes; a declaration is where they begin.
 
 ## Referenced by
 

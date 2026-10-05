@@ -25,6 +25,8 @@ interpolation opens.
 - A keyword the lexer reserves only to refuse (`task`, `spawn`) is still coloured as a keyword, so a
   reader sees the word is not an identifier before the diagnostic explains it.
 
+`derive` at a declaration start and `derives` before a trait name are keywords; `@name` before a loop or after `break`/`continue` is a label, and any other `@name` is an attribute. Labels are matched before keywords so `break @outer` keeps its label.
+
 ## Grill Log
 
 - **Q:** Colour interpolations, or leave them as string text? **A:** Colour them as embedded Pudu
@@ -34,6 +36,8 @@ interpolation opens.
 - **Q:** How is the grammar checked? **A:** By tokenizing sample lines with the same TextMate
   engine the editor runs, covering an interpolation with a nested string, escaped braces, and a
   record literal on the next line.
+- **Q:** Highlight `derive` everywhere? **A:** No; both words are contextual identifiers, so only their grammatical positions are keywords.
+- **Q:** Tell labels from attributes by spelling? **A:** By position; both are `@name`.
 
 ## Referenced by
 

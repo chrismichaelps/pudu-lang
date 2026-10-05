@@ -1,11 +1,16 @@
 {-| @Program.Syntax.Tree — models recoverable surface structure -}
 module Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..)
+  , Attribute (..)
   , BindingKind (..)
   , Block (..)
   , Capability (..)
+  , ComptimeFor (..)
   , Constraint (..)
   , Declaration (..)
+  , Derive (..)
+  , DeriveRequest (..)
+  , DeriveShape (..)
   , Expression (..)
   , FieldDeclaration (..)
   , FieldInit (..)
@@ -96,6 +101,12 @@ data Declaration
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
   | MacroDeclaration !Macro
+  {-| A derive definition or a standalone derive request. Both stay in the
+      tree exactly as written: checking happens once at the definition and
+      instantiation produces ordinary impls later, so neither phase may see
+      the other one's node in place of these. -}
+  | DeriveDeclaration !Derive
+  | DeriveImplDeclaration !DeriveRequest
   {-| A library written elsewhere, and the functions this program calls in it.
 
       Declared in a block because the library is what they share: it is opened
@@ -158,9 +169,14 @@ data Constraint = Constraint
 {-| @Type.Syntax.Declaration — names a record, sum, or alias definition -}
 data TypeDeclarationValue = TypeDeclarationValue
   { typeVisibility :: !Visibility
+  , typeAttributes :: ![Located Attribute]
   , typeName :: !(Located Text)
   , typeTypeParams :: ![Located TypeParam]
   , typeDefinition :: !(Located TypeDefinition)
+  {-| The derives clause, in written order. Shape checking belongs to a later
+      phase; the tree keeps what was named so a duplicate names the same entry
+      the parser already kept. -}
+  , typeDerives :: ![Located TypeSyntax]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -175,6 +191,7 @@ data TypeDefinition
 {-| @Type.Syntax.Field — one record field and its declared mutability -}
 data FieldDeclaration = FieldDeclaration
   { fieldMutable :: !Bool
+  , fieldAttributes :: ![Located Attribute]
   , fieldName :: !(Located Text)
   , fieldType :: !(Located TypeSyntax)
   }
@@ -182,7 +199,8 @@ data FieldDeclaration = FieldDeclaration
 
 {-| @Type.Syntax.Variant — one sum variant and its payload shape -}
 data Variant = Variant
-  { variantName :: !(Located Text)
+  { variantAttributes :: ![Located Attribute]
+  , variantName :: !(Located Text)
   , variantPayload :: !VariantPayload
   }
   deriving stock (Eq, Show, Generic)
@@ -498,5 +516,65 @@ data Expression
       !(Located Block)
   | LoopExpression !(Maybe (Located Text)) !(Located Block)
   | ForExpression !(Maybe (Located Text)) !(Located Pattern) !(Located Expression) !(Located Block)
+  {-| `comptime for element: Type in list where Bounds { body }`. The element
+      is a binding with its type written down, rather than a general pattern:
+      unrolling needs one type per element, and a binding with an ascribed
+      type is exactly what states it. General destructuring stays a later
+      design; the tree keeps the typed binding so no phase invents one. -}
+  | ComptimeForExpression !ComptimeFor
   | InvalidExpression
+  deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.Attribute — inert compile-time metadata on a declaration.
+
+    An attribute is a name with literal arguments only: unsigned integers,
+    decimals, strings, chars, `true`, `false`, and `null`. Anything else would
+    need evaluation to stay inert, and a leading `-` parses as negation
+    rather than as part of the number. Attributes are read by compile-time
+    code alone; the tree carries them so later phases never re-lex them. -}
+data Attribute = Attribute
+  { attributeName :: !(Located Text)
+  , attributeArguments :: ![Located Literal]
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.DeriveShape — the kind of type a derive accepts. -}
+data DeriveShape = RecordShape | SumShape
+  deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
+
+{-| @Program.Syntax.Derive — a trait's implementation strategy for one shape.
+
+    Members are ordinary functions checked once at the definition; a use site
+    only proves bounds. The trait and target stay type syntax so resolution
+    treats them like every other written reference. -}
+data Derive = Derive
+  { deriveVisibility :: !Visibility
+  , deriveTrait :: !(Located TypeSyntax)
+  , deriveParameter :: !(Located Text)
+  , deriveShape :: !(Located DeriveShape)
+  , deriveFunctions :: ![Located Function]
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.DeriveRequest — `derive impl X for T` written apart from
+    the type, under the existing orphan rules. -}
+data DeriveRequest = DeriveRequest
+  { deriveRequestTrait :: !(Located TypeSyntax)
+  , deriveRequestTarget :: !(Located TypeSyntax)
+  }
+  deriving stock (Eq, Show, Generic)
+
+{-| @Program.Syntax.ComptimeFor — one compile-time unrolled loop.
+
+    The source list is known while compiling and each element may have its
+    own type, which is why the construct unrolls rather than looping. The
+    `where` bounds state what every element's types must satisfy; they reuse
+    the ordinary constraint node so generic checking needs no second shape. -}
+data ComptimeFor = ComptimeFor
+  { comptimeForElement :: !(Located Text)
+  , comptimeForType :: !(Located TypeSyntax)
+  , comptimeForSource :: !(Located Expression)
+  , comptimeForConstraints :: ![Located Constraint]
+  , comptimeForBody :: !(Located Block)
+  }
   deriving stock (Eq, Show, Generic)

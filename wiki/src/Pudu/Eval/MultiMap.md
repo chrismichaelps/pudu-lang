@@ -63,6 +63,11 @@ the two primitives; [[Std MultiMap]] provides the public wrappers.
 
 ## Transparent primitive wrappers
 
+The immutable capture proof refuses both SlotFrame and CellFrame. Ordinary
+captures snapshot these into MapFrame; a live mutable frame is never evidence
+that a primitive binding remains fixed. Resolved Grill Log: expand the existing
+mutable-frame refusal when adding lexical block cells.
+
 `multiMapWrapper` recognizes only a synchronous, receiver-free, default-free
 three-parameter closure whose complete body is one call forwarding those parameters
 in order to a captured MultiMap builtin value. The captured binding must resolve
@@ -96,18 +101,29 @@ Decimal output is required; semantic equality alone cannot detect this regressio
 ## Integer-pair dependency cut
 
 For a host-Int-sized IntValue key and value, an empty occurrence Map promotes to
-a persistent nested IntMap. Later integer updates descend the numeric key and
-value indexes directly and retain original key/value representatives plus count.
+a persistent outer IntMap and inner SeriesMap. Later integer updates descend the numeric key and
+value indexes directly and retain original key/value kind tags plus count.
 Nonempty generic maps stay generic. Contains reads the numeric index directly;
 noninteger or out-of-host-range arguments use its cached ordinary Map view.
 Groups remain ordinary persistent Map/Sequence storage. All updates are immutable.
+The numeric index keys supply the integer payloads for the lazy ordered view;
+entries retain only both kind tags and the original count. This removes duplicate
+boxed numeric storage without interning, normalizing kinds or mutating snapshots.
+Construct strict IntPairEntry fields before publishing the persistent index;
+unevaluated tuple selectors must not retain the temporary conversion payloads.
+Platform signed pairs use the compact constructor whose identity supplies both
+kind tags; mixed kinds use the explicit-tag entry. Count validation is shared.
 
 Resolved Grill Log: a specialized index requires no benchmark recognition, no
 public field/type change, no altered evaluator mode and no mutation. Retain a
 lazy ordered view for remove/setAll/show and all public Map access. Test signed
 ordering, duplicate increments, snapshots and transition back to generic maps.
+Resolved Grill Log: preserve the incoming kinds on every equal-pair overwrite;
+reconstruct only host-sized integers from exact index keys. Compare the ordered
+view against ordinary insertion, including mixed kinds, both host boundaries,
+out-of-host-width and noninteger transitions, malformed counts and overflow.
 
-[[Eval MultiMap Kernel]] fuses pure loop regions containing these proven
+[[Eval Loop Kernel]] fuses pure loop regions containing these proven
 primitives; original library implementations retain ordinary evaluation and form
 the independent before/after output oracle.
 
@@ -119,3 +135,15 @@ successful invocation need not copy Env to enter and leave an unobservable extra
 depth. Failure at the boundary still delegates to descend with the original span.
 Resolved Grill Log: eliminate depth record copies only for these two closed pure
 kernels; preserve the original recursion refusal and all general closure behavior.
+
+## Persistent series payloads
+
+The inner numeric index uses [[Runtime Series Map]]. Supply an exact compression
+predicate only for PlatformIntPairEntry with platform-signed count one. Every
+duplicate still combines the original count, takes incoming kinds, and creates a
+sparse override. Mixed kinds/counts never collapse by semantic equality. Contains
+uses series lookup; groups remain persistent Map/Sequence storage.
+
+Resolved Grill Log: replace only the inner persistent storage behind the existing
+lazy Map view. Reuse touched-count validation and shared overflow diagnostics.
+Arbitrary members and old snapshots retain ordinary behavior; no input rewrite.

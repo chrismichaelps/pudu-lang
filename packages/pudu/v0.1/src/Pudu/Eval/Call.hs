@@ -22,6 +22,7 @@ module Pudu.Eval.Call
 
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Data.Char (isUpper)
 import qualified Data.Text as Text
 import Pudu.Eval.Builtin
   ( callArrayMethod
@@ -52,11 +53,14 @@ import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
 import Pudu.Eval.Call.Argument (argumentOf, receiverOf)
 import Pudu.Eval.Call.Needs (CallNeeds (..))
 import Pudu.Eval.Call.Path
-  ( lastPathSegment
+  ( flattenPath
+  , lastPathSegment
   , pathValue
   , qualifiedCallee
   , readPath
+  , selectTypes
   , typeArgumentNames
+  , witnessOf
   )
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
@@ -134,10 +138,25 @@ evaluateCall needs spanValue callee arguments = do
       {-| The callee under a type application is read as an ordinary expression
           rather than as a callee, because a qualified name is what carries type
           arguments and reading it as a path is what resolves it. -}
-      target <- callEvaluate needs inner
-      case target of
-        BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
-        _ -> dispatchCall needs spanValue lent target values
+      -- Witnesses are built only for a callee that binds them.
+      let chosen = case locatedValue callee of
+            TypeApplication _ written -> mapM witnessOf written
+            _ -> pure []
+      qualified <- qualifiedCallee inner values
+      case (qualified, locatedValue inner) of
+        (Nothing, MemberExpression target (Located _ member)) | not (isPath target) -> do
+          (receiverPlace, receiver) <- receiverOf needs target
+          selected <- chosen
+          callMemberSelecting (selectTypes selected) needs spanValue (locatedSpan inner)
+            lent{lentSelf = receiverPlace} True receiver member values
+        _ -> do
+          target <- maybe (callEvaluate needs inner) pure qualified
+          case target of
+            BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
+            FunctionValue closure -> do
+              selected <- chosen
+              dispatchCall needs spanValue lent (FunctionValue (selectTypes selected closure)) values
+            _ -> dispatchCall needs spanValue lent target values
     Nothing -> do
       qualified <- qualifiedCallee callee values
       case qualified of
@@ -150,12 +169,25 @@ evaluateCall needs spanValue callee arguments = do
             target <- evaluateCallee needs callee
             dispatchCall needs spanValue lent target values
 
+{-| A callee's target that names a type or module rather than a value: the
+    leading segment of a written path, capitalised as nominals are. -}
+isPath :: Located Expression -> Bool
+isPath (Located _ expression) = case flattenPath expression of
+  Just (first : _) | Just (initial, _) <- Text.uncons first -> isUpper initial
+  _ -> False
+
 {-| A method called on a receiver already evaluated, with its arguments: an
     implementation written for the receiver's type, else the member the value
     itself carries. `implemented` is false only when no implementation anywhere
     declares a method of this name, which skips looking for one. -}
 callMember :: CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value] -> Evaluator Value
-callMember needs spanValue memberSpan lent implemented receiver member values = case receiver of
+callMember = callMemberSelecting id
+
+{-| A method call whose callee carries chosen types for its parameters. -}
+callMemberSelecting
+  :: (Closure -> Closure) -> CallNeeds -> Span -> Span -> Lent -> Bool -> Value -> Text -> [Value]
+  -> Evaluator Value
+callMemberSelecting select needs spanValue memberSpan lent implemented receiver member values = case receiver of
   StrValue text
     | Just direct <- callStringMethodFast spanValue member text values -> direct
   _ -> do
@@ -164,7 +196,7 @@ callMember needs spanValue memberSpan lent implemented receiver member values = 
         then receiverOwners receiver >>= firstBound (\owner -> lookupMethod (owner <> "." <> member))
         else pure Nothing
     calleeVal <- case method of
-      Just (FunctionValue closure) -> pure (FunctionValue closure{closureSelf = Just receiver})
+      Just (FunctionValue closure) -> pure (FunctionValue (select closure{closureSelf = Just receiver}))
       _ -> readMember memberSpan receiver member
     dispatchCall needs spanValue lent calleeVal values
 
@@ -409,7 +441,8 @@ ordinaryClosureLending needs closure arguments lent callSpan = do
         , (Located _ parameter, Just place) <-
             take 1 (drop position (zip parameters (places <> repeat Nothing)))
         ]
-  bindings <- bindArguments needs parameters supplied callSpan
+  supplied' <- bindArguments needs parameters supplied callSpan
+  let bindings = closureWitnesses closure <> supplied'
   if functionAsync value
     then do
       let task = TaskValue closure bindings callSpan

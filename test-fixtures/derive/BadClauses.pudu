@@ -1,0 +1,12 @@
+module BadClauses
+
+@sealed trait Tag { fn tag(self: &Self) -> Str }
+
+type A = { id: Int } derives Tag, Tag
+
+type B = { id: Int } derives
+
+type C = { @json(id) id: Int }
+
+derive Tag for T: Table {
+}

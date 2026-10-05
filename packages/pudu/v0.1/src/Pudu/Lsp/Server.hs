@@ -25,21 +25,12 @@ import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic
-  ( Diagnostic
-  , Severity (..)
-  , diagnosticCode
-  , diagnosticCodeText
-  , diagnosticHelp
-  , diagnosticMessage
-  , diagnosticSeverity
-  , diagnosticSpan
-  )
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Analysis (analyse, analyseIn, analyseOver, documentSourceRoot, fileUriPath)
 import Pudu.Lsp.CodeAction (codeActionsAt)
 import Pudu.Lsp.Completion (completionAt, completionRepaired)
 import Pudu.Lsp.Definition (definitionAcross, definitionAt)
+import qualified Pudu.Lsp.Diagnostics as Diagnostics
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
@@ -83,7 +74,6 @@ import Pudu.Lsp.Rename (prepareRenameAt, renameAt)
 import Pudu.Lsp.SemanticTokens (semanticTokensFull, semanticTokensLegend)
 import Pudu.Lsp.SignatureHelp (signatureHelpAt, signatureHelpRepaired)
 import Pudu.Lsp.WorkspaceSymbols (workspaceSymbolsAt)
-import Pudu.Source (spanEnd, spanStart, unOffset)
 import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.IO
   ( BufferMode (NoBuffering)
@@ -171,7 +161,7 @@ prepare session documents message = do
     _ -> pure (answer documents' message)
   -- Another open document whose program read the one that changed was
   -- analysed again, and what it reports may have changed with it.
-  let republished = [publish uri (diagnosticEntries (analysisOf uri documents'')) | uri <- touched]
+  let republished = [publish uri (diagnosticEntries uri (analysisOf uri documents'')) | uri <- touched]
   mapM_ (evaluate . Text.length) (replies <> republished)
   pure (documents'', replies <> republished)
  where
@@ -337,7 +327,7 @@ answer documents message = case message of
 
   published parameters = case uriOf parameters of
     Nothing -> []
-    Just uri -> [publish uri (diagnosticEntries (analysisOf uri documents))]
+    Just uri -> [publish uri (diagnosticEntries uri (analysisOf uri documents))]
 
 handler :: Text -> Maybe (Documents -> Json -> Json)
 handler method = case method of
@@ -404,33 +394,12 @@ publish uri entries =
     "textDocument/publishDiagnostics"
     (JsonObject [("uri", JsonText uri), ("diagnostics", JsonArray entries)])
 
-diagnosticEntries :: Maybe Analysis -> [Json]
-diagnosticEntries found = case found of
+diagnosticEntries :: Text -> Maybe Analysis -> [Json]
+diagnosticEntries uri found = case found of
   Nothing -> []
-  Just value -> map (diagnosticJson (analysisText value)) (analysisDiagnostics value)
-
-diagnosticJson :: Text -> Diagnostic -> Json
-diagnosticJson content value =
-  JsonObject
-    [ ("range", rangeJson (rangeOfOffsets content start end))
-    , ("severity", JsonNumber (fromIntegral (severityCode (diagnosticSeverity value))))
-    , ("code", JsonText (diagnosticCodeText (diagnosticCode value)))
-    , ("source", JsonText "pudu")
-    , ("message", JsonText message)
-    ]
- where
-  spanValue = diagnosticSpan value
-  start = unOffset (spanStart spanValue)
-  end = unOffset (spanEnd spanValue)
-  message = case diagnosticHelp value of
-    Nothing -> diagnosticMessage value
-    Just guidance -> diagnosticMessage value <> "\n\n" <> guidance
-
-severityCode :: Severity -> Int
-severityCode severity = case severity of
-  Error -> 1
-  Warning -> 2
-  Note -> 3
+  Just value ->
+    Diagnostics.diagnosticEntries uri (analysisText value) (analysisSource value) (analysisElsewhere value)
+      (analysisDiagnostics value)
 
 hover :: Documents -> Json -> Json
 hover documents parameters = case located documents parameters of

@@ -49,9 +49,22 @@ test-suite pudu-test
     Pudu.DecimalLiteralSpec
     Pudu.VersionSpec
     Pudu.DiagnosticSpec
+    Pudu.GeneratedIdentitySpec
+    Pudu.Derive.RecordSpec
+    Pudu.Derive.CatalogueSpec
+    Pudu.Derive.RequirementsSpec
+    Pudu.Derive.TargetSpec
+    Pudu.Derive.CacheSpec
+    Pudu.Derive.GraphSpec
+    Pudu.Derive.LibrarySpec
+    Pudu.Type.ImplementationSpec
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec
+    Pudu.Lsp.DeriveToolingSpec
+    Pudu.Lsp.DiagnosticsSpec
+    Pudu.Lsp.ImplMembersSpec
+    Pudu.Lsp.MethodDefinitionSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Lsp.SchedulerSpec
@@ -64,6 +77,7 @@ test-suite pudu-test
     Pudu.Compiler.Program.ForeignSpec
     Pudu.Compiler.Program.LanguageSpec
     Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.ReflectionSpec
     Pudu.Compiler.Program.EvalSpec
     Pudu.Compiler.Program.Eval.DataSpec
     Pudu.Compiler.Program.Eval.CompiledSpec
@@ -85,6 +99,7 @@ test-suite pudu-test
     Pudu.Frontend.ParserBlockSpec
     Pudu.Frontend.ParserFunctionSpec
     Pudu.Frontend.ParserModuleSpec
+    Pudu.Frontend.ParserDeriveSpec
     Pudu.Frontend.ParserPatternSpec
     Pudu.Frontend.ParserTypeDeclarationSpec
     Pudu.Frontend.ParserExpressionSpec
@@ -100,6 +115,8 @@ test-suite pudu-test
     Pudu.Eval.Common
     Pudu.Eval.ArithmeticSpec
     Pudu.Eval.BindingFlowSpec
+    Pudu.Eval.LoopStepSpec
+    Pudu.Runtime.SeriesMapSpec
     Pudu.Eval.DataSpec
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
@@ -111,10 +128,12 @@ test-suite pudu-test
     Pudu.Repl.Session.ContextSpec
     Pudu.Repl.Session.EvaluationSpec
     Pudu.Semantic.ResolveSpec
+    Pudu.Semantic.ReflectionSpec
     Pudu.Type.CheckSpec
     Pudu.Type.Check.Common
     Pudu.Type.Check.PrimitiveSpec
     Pudu.Type.Check.DataSpec
+    Pudu.Type.Check.DeriveSpec
     Pudu.Type.Check.ControlFlowSpec
     Pudu.Type.Check.PatternSpec
     Pudu.Type.Check.PlaceSpec
@@ -123,6 +142,7 @@ test-suite pudu-test
     Pudu.Type.Check.SystemSpec
     Pudu.Type.Check.ImportSpec
     Pudu.Type.InterfaceSpec
+    Pudu.Type.FrontierSpec
   build-depends:
     base >=4.20 && <4.23,
     bytestring >=0.11 && <0.13,

@@ -21,6 +21,8 @@ Put a module's declarations into the environment before anything runs: functions
 bindings, variant constructors, implementation methods, and then the constants that may reference
 them.
 
+An installed method lists its implementation's type parameters before its own, the order a static selection lists the types it chose.
+
 ## Interface
 
 ```haskell
@@ -82,6 +84,7 @@ against it, then evaluate each constant in declaration order.
   installing the foreign block. _Rationale:_ `symbol "MemFree"` proves local and native names may
   differ, and cleanup must call the same declaration explicit release calls. _Rejected:_ guessing
   the exported symbol from the Pudu name.
+- **Q:** Store impl parameters separately? **A:** No; the function's parameter list is what selection binds against.
 
 ## Referenced by
 

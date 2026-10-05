@@ -8,6 +8,10 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register [[Eval Loop Step Tests]] explicitly. Resolved Grill Log: the internal
+channel's typed refusal/transfer and cleanup semantics execute in the full suite
+without adding dependencies or relying only on successful kernel values.
+
 ## Purpose and interface
 
 Declare the repository-only `pudu-tests` package and its `pudu-test` exit-code suite. The package is
@@ -22,7 +26,7 @@ Separating this package makes the compiler's source distribution self-contained:
 
 - The test package declares no library or executable shipped to users.
 - Test sources remain single-copy under `test/`; the package layout changes, not test behavior.
-- The suite depends on `pudu == 0.1.0` so it cannot silently validate a different compiler version.
+- The suite depends on `pudu == 0.1.2` so it cannot silently validate a different compiler version.
 - The native C++ fixture remains test-only and uses the same platform export flags.
 - [[Pudu CLI Init Spec]] is registered explicitly and uses `temporary` for isolated filesystem
   evidence and `filepath` for portable project paths.
@@ -45,4 +49,53 @@ Separating this package makes the compiler's source distribution self-contained:
 
 ## Referenced by
 
+[[Derive Graph Spec]] is explicitly registered for real program elaboration,
+lexical capture, conditional rules and diagnostic/output checks in both modes.
+
 [[Pudu Cabal Manifest]] · [[Pudu Cabal Project]] · [[Release Readiness and Native UI Canvas]]
+
+Reflection Resolution Spec is registered beside ordinary resolution properties,
+covering selected and first-class metadata imports, namespace shadowing and
+repeated rigid loop bounds. Resolved Grill Log: explicit registration makes
+these boundary tests execute in the full suite.
+
+[[Program Reflection Spec]] is registered explicitly and aggregated by [[Program
+Spec]]. Resolved Grill Log: temporary complete programs check the actual shipped
+Meta facade and imported method schemes, including refusal diagnostics.
+
+[[Generated Identity Spec]] is registered explicitly. Resolved Grill Log: source,
+checker and persistence identity regressions execute in the full suite.
+
+[[Derive Record Kernel Spec]] is registered explicitly and exercises generated ordinary
+implementations in both evaluator modes. Resolved Grill Log: actual expansion output
+is checked, with graph publication retained as a distinct integration gate.
+
+Register [[Type Implementation Proof Spec]]. Resolved Grill Log: ordinary caller,
+dynamic, imported and bounded solver regressions execute through the shared proof.
+
+Register [[Type Literal Frontier Spec]] for generated ordered-selection laws,
+unvisited-suffix proof and actual width/diagnostic compatibility. No new testing
+dependency. Resolved Grill Log: deterministic work evidence accompanies the
+benchmark; no host-specific timing gate.
+
+Register [[Runtime Series Map Tests]]. Resolved Grill Log: storage snapshot,
+representative and signed-boundary laws execute through the actual coordinator
+without a new test dependency.
+
+Register [[Derive Catalogue Spec]] explicitly with no new dependency. Resolved
+Grill Log: canonical inventory and refusal evidence run in the complete suite.
+
+Register [[Derive Requirement Spec]] explicitly. Resolved Grill Log: shared
+solver inference, rollback and bounded refusals execute in the complete suite.
+
+Register [[Derive Target Spec]]. Resolved Grill Log: canonical payload preparation
+and structural type reconstruction run without implying executable graph delivery.
+
+Register [[Derive Cache Spec]]. Resolved Grill Log: actual warm frozen consumers,
+compile-time content keys and transitive/cyclic import closure execute in the suite.
+
+Register [[Derive Library Spec]]. Resolved Grill Log: every shipped derive,
+field callbacks, static selection and the expansion snapshot run in both
+evaluators within the complete suite.
+
+Register [[Lsp Impl Members Spec]]. Resolved Grill Log: implementation member completion and its quick fix run through the server's request path in the complete suite.

@@ -19,6 +19,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Pudu.Compiler (CompileContext (..), CompileResult (..), recoveredSyntax)
+import Pudu.Doc (DocIndex, buildIndexFrom)
+import Pudu.Frontend.Expand (expandModule)
+import Pudu.Frontend.Syntax.Tree (Module)
+import Pudu.Frontend.Token (Token (..), TokenKind (..))
+import Pudu.Semantic (Resolution, resolveModule, resolveModuleWith)
+import Pudu.Type (TypeInfo, deriveDefinitionTypes, overlayTypes)
+import Pudu.Type.Interface.Graph (importsFor)
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgramSourceOver
@@ -28,10 +35,11 @@ import Pudu.Compiler.Program
   )
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.Context (declaredModule)
-import Pudu.Lsp.Documents (Analysis (..))
-import Pudu.Lsp.Shapes (programRecords, programSums)
-import Pudu.Source (SourceName (..), newSource, sourceName)
-import Pudu.Type.Value (Scheme, nominalKey)
+import Pudu.Lsp.Diagnostics (elsewhereFor)
+import Pudu.Lsp.Documents (Analysis (..), DeclaredMethod)
+import Pudu.Lsp.Shapes (programRecords, programSums, programTraits)
+import Pudu.Source (Source, SourceName (..), newSource, sourceName)
+import Pudu.Type.Value (nominalKey)
 import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
 import System.FilePath (addTrailingPathSeparator, normalise, takeDirectory, (</>))
 
@@ -59,19 +67,34 @@ analyseOver overlay root uri content = do
   -- Only a document whose root did not parse needs the recovered tree, and
   -- only then is it built.
   let recovered = recoveredSyntax source
+      compiledRoot = rootCompileResult program
+      tokens = maybe (fst recovered) compileTokens compiledRoot
+      authored = compiledRoot >>= authoredView source tokens (programContext program)
+      written = case authored of
+        Just view -> Just (authoredTree view)
+        Nothing -> maybe (snd recovered) compileSyntax compiledRoot
+  elsewhere <- elsewhereFor source written program
   pure
     Analysis
       { analysisText = content
       , analysisSource = source
       , analysisDiagnostics = programDiagnostics program
-      , analysisFileIndex = fromMaybe mempty (rootCompileResult program >>= compileDocs)
+      , analysisElsewhere = elsewhere
+      , analysisFileIndex = case authored of
+          Just view -> authoredDocs view
+          Nothing -> fromMaybe mempty (compiledRoot >>= compileDocs)
       , analysisProgramIndex = programDocs program
-      , analysisResolution = rootCompileResult program >>= compileResolution
-      , analysisTypes = rootCompileResult program >>= compileTypes
-      , analysisTokens = maybe (fst recovered) compileTokens (rootCompileResult program)
-      , analysisModule = maybe (snd recovered) compileSyntax (rootCompileResult program)
+      , analysisResolution = case authored of
+          Just view -> Just (authoredResolution view)
+          Nothing -> compiledRoot >>= compileResolution
+      , analysisTypes = case (authored, compiledRoot >>= compileTypes) of
+          (Just view, Just checked) -> Just (overlayTypes checked (authoredTypes view))
+          (_, checked) -> checked
+      , analysisTokens = tokens
+      , analysisModule = written
       , analysisSums = programSums program
       , analysisRecords = programRecords program
+      , analysisTraits = programTraits program
       , analysisMethods = programMethods program
       , analysisExports = contextExports (programContext program)
       , analysisDependencies =
@@ -82,15 +105,52 @@ analyseOver overlay root uri content = do
             ]
       }
 
+{-| The document as written, when it uses derive syntax: its tree with the
+    `derive` declarations and `derives` clauses elaboration removes before
+    checking, resolved and indexed the way the compile resolves and indexes
+    the checked tree. A cursor is on authored text, so hover, definition,
+    references, and completion context answer from this; types and methods
+    still come from the checked program. A document without derive syntax
+    has nothing elaboration removed and reuses the compile's own products. -}
+data AuthoredView = AuthoredView
+  { authoredTree :: !Module
+  , authoredResolution :: !Resolution
+  , authoredDocs :: !DocIndex
+  {-| What each template expression was checked as, once and generically. -}
+  , authoredTypes :: !TypeInfo
+  }
+
+authoredView :: Source -> [Token] -> CompileContext -> CompileResult -> Maybe AuthoredView
+authoredView source tokens context compiled
+  | not (any derives tokens) = Nothing
+  | Nothing <- compileSyntax compiled = Nothing
+  | otherwise = do
+      parsed <- snd (recoveredSyntax source)
+      let (expanded, _) = expandModule parsed
+          (resolution, _) =
+            if contextStrictImports context
+              then resolveModuleWith (contextExports context) expanded
+              else resolveModule expanded
+      pure AuthoredView
+        { authoredTree = expanded
+        , authoredResolution = resolution
+        , authoredDocs = buildIndexFrom tokens (compileSchemes compiled) expanded
+        , authoredTypes = deriveDefinitionTypes (importsFor (contextTypes context) expanded) expanded
+        }
+ where
+  derives token = case tokenKind token of
+    Identifier word -> word == "derive" || word == "derives"
+    _ -> False
+
 {-| The methods every module of the program declared, by the canonical key of
     their owner. Each module's check publishes only its own, so the program's
     are the union, gathered once per analysis. -}
-programMethods :: ProgramResult -> Map Text [(Text, Scheme)]
+programMethods :: ProgramResult -> Map Text [DeclaredMethod]
 programMethods program =
   Map.fromListWith (flip (<>))
-    [ (nominalKey owner, [(name, scheme)])
+    [ (nominalKey owner, [(name, scheme, at)])
     | compiled <- Map.elems (programModules program)
-    , (owner, name, scheme) <- compileMethods compiled
+    , (owner, name, scheme, at) <- compileMethods compiled
     ]
 
 {-| The module source root a document's imports are resolved from.

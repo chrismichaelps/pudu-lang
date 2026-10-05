@@ -7,6 +7,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , ComptimeFor (..)
   , Expression (..)
   , FieldInit (..)
   , MatchArm (..)
@@ -69,6 +70,8 @@ emptySets located@(Located _ expression) = case expression of
   WhileLetExpression _ _ subject body -> descend [subject] <> blockEmptySets body
   LoopExpression _ body -> blockEmptySets body
   ForExpression _ _ source body -> descend [source] <> blockEmptySets body
+  ComptimeForExpression loop ->
+    descend [comptimeForSource loop] <> blockEmptySets (comptimeForBody loop)
   LiteralExpression _ -> []
   NameExpression _ -> []
   {-| A literal's body is ordinary expression, and an empty set written inside

@@ -20,6 +20,13 @@ representation-preserving rendering.
 Import each selected focused test explicitly and expose a stable descriptive label. Every
 registered property executes through the same structured diagnostic or evaluator test harness;
 adding a helper to an unused secondary property list is insufficient registration.
+Register `testPureCalls` for closed-body calls and their fallback boundary.
+Register `testNumericOccurrences` for persistent numeric-index storage and exact
+scalar-index refusal at the shared primitive boundary.
+Register `testLoopSteps` for ordered success, structured refusal/transfer and
+scratch cleanup through the unboxed region channel.
+Explicitly register `testSlotScopes` from [[Eval Function Closure Tests]] so
+binding-order, scope and capture admission regressions execute in the full suite.
 
 ## Negative logic
 
@@ -32,4 +39,13 @@ No implementation semantics or broad exception suppression belong in the coordin
 
 ## Referenced by
 
+[[Eval Binding Flow Tests]] covers pure-loop kernel result, condition-write,
+short-circuit, overflow and constant-limit evidence through its registered loop
+family. Resolved Grill Log: extend the executed family rather than an uncalled
+local property list.
+
 [[src/Pudu/_MOC]] · [[Eval Function Closure Tests]] · [[Eval Data Tests]]
+
+Register `testSeriesMaps` from [[Runtime Series Map Tests]]. Resolved Grill Log:
+execute generated persistent storage laws in the actual suite, alongside the
+existing runtime numeric-kind and diagnostic tests.

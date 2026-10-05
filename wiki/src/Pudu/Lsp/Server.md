@@ -30,7 +30,8 @@ data Analysis = Analysis
   , analysisModule       :: !(Maybe Module)
   , analysisSums         :: !(Map Text SumShape)
   , analysisRecords      :: !(Map Text RecordShape)
-  , analysisMethods      :: !(Map Text [(Text, Scheme)])   -- every module's declared methods, by owner
+  , analysisElsewhere    :: !Elsewhere                     -- other files the findings name
+  , analysisMethods      :: !(Map Text [DeclaredMethod])   -- every module's declared methods, by owner, with name spans
   , analysisExports      :: !ExportIndex                   -- the program's export index
   }
 data Documents
@@ -96,6 +97,10 @@ serverCapabilities :: Json
   from its own path and module name, as the command line derives it; folders only root a file with
   no header and an untitled buffer. A repaired or probe text is compiled under the written
   document's root, so it reaches the same modules.
+- **Diagnostics are published where the reader can act.** [[Lsp Diagnostics]] places each of the
+  program's findings in the open document: this document's at their range, an imported module's
+  error at the import that reaches it, another module's warning nowhere. Help is its own `help:`
+  line and notes are related locations.
 - Every new language surface joins the real stdio-session fixture. The fixture opens a clean
   compatibility document and requires an empty diagnostic list, so an editor cannot silently keep
   an older parser or checker contract while command-line-only tests advance.

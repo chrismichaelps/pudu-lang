@@ -11,6 +11,7 @@ import Pudu.Eval.BindingFlowSpec
   ( testBindings
   , testBranching
   , testLoops
+  , testPureCalls
   , testUnwindFrameCleanup
   )
 import Pudu.Eval.DataSpec
@@ -19,6 +20,7 @@ import Pudu.Eval.DataSpec
   , testData
   , testInterpolation
   , testKeyed
+  , testNumericOccurrences
   , testTextMethods
   )
 import Pudu.Eval.FunctionClosureSpec
@@ -26,6 +28,7 @@ import Pudu.Eval.FunctionClosureSpec
   , testBuiltinImpls
   , testClosures
   , testFunctions
+  , testSlotScopes
   )
 import Pudu.Eval.SystemSpec
   ( testAsync
@@ -37,6 +40,8 @@ import Pudu.Eval.SystemSpec
   , testScopes
   , testUnsafeRegions
   )
+import Pudu.Eval.LoopStepSpec (testLoopSteps)
+import Pudu.Runtime.SeriesMapSpec (testSeriesMaps)
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
@@ -47,6 +52,8 @@ evalProperties =
   , ("functions defaults and recursion evaluate", testFunctions)
   , ("conditionals and pattern matching select branches", testBranching)
   , ("loops iterate and jumps leave them", testLoops)
+  , ("pure loop calls preserve parameters limits and fallback", testPureCalls)
+  , ("loop step results preserve ordering refusals and cleanup", testLoopSteps)
   , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
@@ -56,8 +63,11 @@ evalProperties =
   , ("structured scopes join every task they start", testScopes)
   , ("built-in text methods answer with new values", testTextMethods)
   , ("function literals capture the environment they were written in", testClosures)
+  , ("slot admission preserves ordered lexical scope and capture", testSlotScopes)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
+  , ("numeric occurrence storage preserves representatives and bounds", testNumericOccurrences)
+  , ("persistent series maps preserve all snapshots and representatives", testSeriesMaps)
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("interpolated strings render their holes", testInterpolation)
   , ("calendar time and subprocesses answer with results", testClock)

@@ -77,3 +77,7 @@ DEPTH 0.30 (SHALLOW by intent). It is a serializer.
 ## Referenced by
 
 [[src/Pudu/Doc/_MOC]] · [[Doc Index]] · [[Doc Site]]
+
+Bound applications retain their existing JSON string shape at the protocol edge,
+rendered from the structural SigType bound representation. Resolved Grill Log:
+keep the existing consumer shape while preserving generic arguments internally.

@@ -26,7 +26,7 @@ Give an inferred type a form that can be compared, ranked, and printed.
 ```haskell
 data SigType = SigCon !Text ![SigType] | SigVar !Text | SigRef !Bool !SigType
              | SigTuple ![SigType] | SigFun ![SigType] !SigType | SigUnit | SigNever | SigUnknown
-data Signature = Signature { signatureConstraints :: ![(Text, [Text])]
+data Signature = Signature { signatureConstraints :: ![(Text, [SigType])]
                            , signatureArguments :: ![SigType], signatureResult :: !SigType }
 schemeSignature :: Scheme -> Signature
 alphaNormalise :: Signature -> Signature
@@ -88,3 +88,16 @@ DEPTH 0.50 (MEDIUM). Two normal forms and one projection, each with a stated pur
 ## Referenced by
 
 [[src/Pudu/Doc/_MOC]] · [[Doc Index]] · [[Doc Search]]
+
+## Complete trait evidence
+
+Scheme bound rendering uses the complete formed trait application so documentation preserves generic obligations.
+
+Resolved Grill Log: displaying just the owner would misstate a public generic signature.
+
+Bound applications are stored as SigType trees, including their variables.
+Alpha normalization renames variables occurring only in bounds after the argument
+and result variables; display renaming includes bound arguments too. Complete
+applications stay structural until rendering. Resolved Grill Log: retaining a
+rendered Holds[A] string would make alpha-equivalent generic declarations compare
+differently and leave inference counters in displayed bounds.

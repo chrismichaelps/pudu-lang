@@ -25,7 +25,6 @@ import Pudu.Type.Value
   , capabilityList
   , capabilityName
   , nominalKey
-  , nominalName
   )
 
 {-| @Doc.Signature.Type — one inferred type in the shape search compares.
@@ -60,7 +59,7 @@ data SigType
     A non-callable declaration has no arguments and its type as the result, so
     a constant and a nullary function are searched by the same shape. -}
 data Signature = Signature
-  { signatureConstraints :: ![(Text, [Text])]
+  { signatureConstraints :: ![(Text, [SigType])]
   {-| What calling this declaration requires of whoever calls it.
 
       Kept beside the arguments rather than wrapped around them, so the
@@ -94,7 +93,7 @@ schemeSignature scheme = case unwrapped of
     RestrictedType capabilities inner -> (capabilityList capabilities, inner)
     other -> ([], other)
   bounds =
-    [ (name, map nominalName obligations)
+    [ (name, map sigTypeFromType obligations)
     | (name, obligations) <- schemeBounds scheme
     , not (null obligations)
     ]
@@ -152,7 +151,7 @@ alphaNormalise signature =
  where
   mapping = Map.fromList (zip (orderedVariables signature) canonicalNames)
 
-  renameConstraint (name, obligations) = (Map.findWithDefault name name mapping, obligations)
+  renameConstraint (name, obligations) = (Map.findWithDefault name name mapping, map rename obligations)
 
   rename sigType = case sigType of
     SigVar name -> SigVar (Map.findWithDefault name name mapping)
@@ -176,7 +175,9 @@ canonicalNames = map (\index -> "%" <> Text.pack (show index)) [(0 :: Int) ..]
 readableVariables :: Signature -> Signature
 readableVariables signature =
   signature
-    { signatureArguments = map rename (signatureArguments signature)
+    { signatureConstraints = [(Map.findWithDefault name name mapping, map rename bounds)
+        | (name, bounds) <- signatureConstraints signature]
+    , signatureArguments = map rename (signatureArguments signature)
     , signatureResult = rename (signatureResult signature)
     }
  where
@@ -195,7 +196,8 @@ readableVariables signature =
 {-| Variables in order of first appearance across arguments then result. -}
 orderedVariables :: Signature -> [Text]
 orderedVariables signature =
-  distinct (concatMap collect (signatureArguments signature) <> collect (signatureResult signature))
+  distinct (concatMap collect (signatureArguments signature) <> collect (signatureResult signature)
+    <> concat [name : concatMap collect bounds | (name, bounds) <- signatureConstraints signature])
  where
   collect sigType = case sigType of
     SigVar name -> [name]
@@ -225,16 +227,7 @@ letterNames =
 {-| Every variable a signature mentions, which decides whether a query is
     polymorphic and therefore whether it can match a concrete signature. -}
 typeVariables :: Signature -> Set Text
-typeVariables signature = foldMap gather (signatureResult signature : signatureArguments signature)
- where
-  gather sigType = case sigType of
-    SigVar name -> Set.singleton name
-    SigCon _ arguments -> foldMap gather arguments
-    SigRef _ target -> gather target
-    SigTuple members -> foldMap gather members
-    SigFun inputs result -> foldMap gather inputs <> gather result
-    SigRestricted _ inner -> gather inner
-    _ -> Set.empty
+typeVariables = Set.fromList . orderedVariables
 
 {-| How many arguments a signature takes, which is the cheapest thing a search
     can reject on. -}
@@ -292,7 +285,7 @@ renderSignature original =
     bounds -> " where " <> Text.intercalate ", " bounds
 
   rendered =
-    [ name <> ": " <> Text.intercalate " + " obligations
+    [ name <> ": " <> Text.intercalate " + " (map renderSigType obligations)
     | (name, obligations) <- signatureConstraints signature
     , not (null obligations)
     ]

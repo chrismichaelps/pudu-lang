@@ -72,6 +72,7 @@ synchronizeDeclaration :: Parser ()
 
 - Constructor/state fields are internal; current peek/advance are O(1) over a strict remaining-token list and lookahead is O(k), with grammar callers restricted to bounded `k`.
 - Input is normalized to exactly one canonical final EOF at the supplied source end; a supplied EOF contributes only its trailing trivia, never foreign span/kind/lexeme data.
+- A declaration start includes `@` and the identifier `derive`: recovery stops at attribute-prefixed declarations and derive definitions. Both stay ordinary elsewhere — this predicate is only ever asked where a declaration may start. The sum-lookahead's `offset > 0` guard keeps an attributed first variant scanning, since attribute arguments are literals and can never hide a depth-zero `|`.
 - Expectations diagnose without host failure; synthetic tokens are never returned as ordinary input.
 - Textual symbol requests resolve through the closed `SymbolKind` vocabulary; parser modules cannot construct symbol kinds from raw text.
 - Parser-owned error construction validates opaque diagnostic codes once in this module.

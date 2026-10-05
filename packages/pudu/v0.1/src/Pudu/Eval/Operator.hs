@@ -79,6 +79,7 @@ applyUnary spanValue operator value = case (operator, value) of
       ("cannot apply " <> operator <> " to a " <> valueKind value) Nothing
 
 combine :: Span -> Text -> Value -> Value -> Evaluator Value
+{-# INLINE combine #-}
 combine spanValue operator left right = case (left, right) of
   (IntValue leftKind a, IntValue rightKind b) ->
     integerFast spanValue (integerKindMeet leftKind rightKind) operator a b
@@ -104,6 +105,7 @@ combine spanValue operator left right = case (left, right) of
     spelling in turn. Anything else, and every refusal, is `integerOperation`'s,
     so the two cannot disagree about what an operator means. -}
 integerFast :: Span -> IntegerKind -> Text -> Integer -> Integer -> Evaluator Value
+{-# INLINE integerFast #-}
 integerFast spanValue kind operator left right = case Text.uncons operator of
   Just (first, rest)
     | Text.null rest -> case first of
@@ -171,6 +173,7 @@ integerOperation spanValue kind operator left right = case operator of
     seeing `UInt8` in it learns why the answer did not fit; the operator is
     already on the line in front of them. -}
 checkedResult :: Span -> IntegerKind -> Text -> Integer -> Evaluator Value
+{-# INLINE checkedResult #-}
 checkedResult spanValue kind what value
   | integerKindFits kind value = pure (IntValue kind value)
   | otherwise =

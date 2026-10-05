@@ -40,6 +40,19 @@ saturating forms, which are three different operators and read as three.
 Inside a string, an interpolation's `{expression}` is coloured as the code it
 is, braces and all, while `\{` and `\}` stay escapes of the text around it.
 
+`derive` and `derives` are coloured as keywords where a declaration uses them
+and nowhere else, since both stay ordinary names elsewhere. An `@name` before a
+loop or after `break` and `continue` is a label; any other `@name`, such as
+`@json("id")`, is an attribute.
+
+## Implementing a trait
+
+Inside `impl Trait for Type { }` completion offers each member the trait
+declares that the implementation has not written, as a whole method with the
+trait's signature, required members first. The quick fix "Implement missing
+members" writes every required one at once, each with a body that panics until
+it is filled in.
+
 ## Installing
 
 1. Build the compiler and put it on your `PATH`:

@@ -16,15 +16,19 @@ import Pudu.Frontend.Syntax.Located (Located (..), locatedValue)
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..)
   , Block (..)
+  , ComptimeFor (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
   , FieldPattern (..)
+  , Function (..)
+  , FunctionBody (..)
   , MatchArm (..)
+  , Parameter (..)
   , Pattern (..)
   , Statement (..)
   )
-import Pudu.Source (Span)
+import Pudu.Source (Span, generatedSpan)
 
 hygienicName :: Text -> Int -> Text
 hygienicName name identifier = name <> "%" <> Text.pack (show identifier)
@@ -46,9 +50,8 @@ patternNames (Located _ pattern') = case pattern' of
   fieldNames (Located _ field) =
     maybe [locatedValue (fieldPatternName field)] patternNames (fieldPatternValue field)
 
-{-| Substitute arguments for parameters, apply the hygienic renames, and retag
-    every node with the call's span so a diagnostic inside an expansion points
-    at the call the reader wrote. -}
+{-| Substitute arguments and scoped hygienic names. Expressions use the call
+    span; lambda body keys retain generated identity for compiled caching. -}
 substituteExpression
   :: Map Text (Located Expression)
   -> Int
@@ -67,6 +70,8 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
     at (BinaryExpression (recurse left) operator (recurse right))
   CallExpression callee arguments ->
     at (CallExpression (recurse callee) (map recurse arguments))
+  LambdaExpression function ->
+    at (LambdaExpression (substituteFunction bindings identifier renames callSpan function))
   MemberExpression target member -> at (MemberExpression (recurse target) member)
   IndexExpression target index -> at (IndexExpression (recurse target) (recurse index))
   RangeExpression lower inclusive upper ->
@@ -107,6 +112,23 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
   LoopExpression label body -> at (LoopExpression label (recurseBlock body))
   ForExpression label binder iterated body ->
     at (ForExpression label binder (recurse iterated) (recurseBlock body))
+  {-| A compile-time loop binds its element for the body alone: the source
+      list is substituted before the binding exists, while the body sees the
+      element under a hygienic name. The element type and bounds are
+      declarations about types rather than value bindings, so neither is
+      renamed nor substituted. -}
+  ComptimeForExpression loop ->
+    let element = locatedValue (comptimeForElement loop)
+        local = Map.singleton element (hygienicName element identifier)
+        bodyRenames = Map.union local renames
+     in at ( ComptimeForExpression
+               loop
+                 { comptimeForElement =
+                     Located callSpan (Map.findWithDefault element element bodyRenames)
+                 , comptimeForSource = recurse (comptimeForSource loop)
+                 , comptimeForBody = recurseBlockWith bodyRenames (comptimeForBody loop)
+                 }
+           )
   MacroCall name arguments -> at (MacroCall name (map recurse arguments))
   other -> at other
  where
@@ -118,6 +140,45 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
   recurseArm (Located _ arm) =
     Located callSpan arm{armGuard = fmap recurse (armGuard arm), armBody = recurse (armBody arm)}
   recurseBlock = recurseBlockWith renames
+  recurseBlockWith active = substituteBlock bindings identifier active callSpan
+
+substituteFunction :: Map Text (Located Expression) -> Int -> Map Text Text -> Span -> Function -> Function
+substituteFunction bindings identifier renames callSpan function =
+  let (parameters, bodyBindings, bodyRenames) =
+        walkParameters bindings renames (functionParameters function)
+   in function
+        { functionParameters = parameters
+        , functionBody = fmap (walkBody bodyBindings bodyRenames) (functionBody function)
+        }
+ where
+  -- A parameter's default sees earlier parameters; its binder then masks a
+  -- same-named macro argument for later defaults and the function body.
+  walkParameters activeBindings activeRenames parameters = case parameters of
+    [] -> ([], activeBindings, activeRenames)
+    Located _ parameter : rest ->
+      let original = locatedValue (parameterName parameter)
+          freshName = hygienicName original identifier
+          parameter' = Located callSpan parameter
+            { parameterName = Located callSpan freshName
+            , parameterDefault = fmap
+                (substituteExpression activeBindings identifier activeRenames callSpan)
+                (parameterDefault parameter)
+            }
+          (rest', finalBindings, finalRenames) = walkParameters
+            (Map.delete original activeBindings)
+            (Map.insert original freshName activeRenames) rest
+       in (parameter' : rest', finalBindings, finalRenames)
+  walkBody activeBindings activeRenames (Located definition body) =
+    Located (generatedSpan identifier definition callSpan) $ case body of
+      BlockBody block ->
+        BlockBody (substituteBlock activeBindings identifier activeRenames callSpan block)
+      ExpressionBody expression -> ExpressionBody
+        (substituteExpression activeBindings identifier activeRenames callSpan expression)
+
+substituteBlock
+  :: Map Text (Located Expression) -> Int -> Map Text Text -> Span -> Located Block -> Located Block
+substituteBlock bindings identifier renames callSpan = recurseBlockWith renames
+ where
   recurseBlockWith active (Located _ block) =
     let (statements, resultRenames) = recurseStatements active (blockStatements block)
      in Located callSpan
@@ -179,8 +240,7 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
              in (Located callSpan statement', after)
           other -> unchanged other
 
-{-| Give an argument the call's span so its diagnostics stay where it was
-    written, not where the macro body placed it. -}
+{-| Preserve caller syntax and its authored diagnostic location. -}
 retag :: Span -> Located Expression -> Located Expression
 retag _ argument = argument
 

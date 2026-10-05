@@ -51,6 +51,8 @@ importSummary :: Module -> [Text]
   tell a compiler-provided type from a declared one and should not have to.
 - The session's synthetic wrapper function is filtered out of `declarationSummary`: it is an
   artifact of how entries are compiled, not something the reader declared.
+- Derive members document under the derived type parameter like impl members under their target;
+  a request carries no members and gets no entries.
 
 ### Linkage
 

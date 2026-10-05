@@ -23,6 +23,9 @@ Aggregate the layered program-compiler properties into one list for the package 
 
 `programProperties :: [(String, IO Property)]`.
 
+[[Program Reflection Spec]] contributes loaded Std.Meta definition and refusal
+properties, explicitly registered alongside the existing program properties.
+
 ### Linkage
 
 - **Requires:** [[Program Graph Spec]], [[Standard Library Program Spec]],
@@ -32,6 +35,10 @@ Aggregate the layered program-compiler properties into one list for the package 
 ## Algorithm
 
 List each imported property with its description; no property is built here.
+
+Register [[Program Cache Spec]]'s product-publication boundary: full analysis,
+cold/warm executable results and rejected-source diagnostics. Resolved Grill Log:
+the product policy must have observable execution and tooling contract evidence.
 
 ## Negative Logic (Prohibited Paths)
 

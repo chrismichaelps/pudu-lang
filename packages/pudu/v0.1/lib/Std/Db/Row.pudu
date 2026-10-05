@@ -1,6 +1,7 @@
 module Std.Db.Row
 
 import Std.Db.Driver as Driver
+import Std.Meta
 
 /// Why a value could not be read out of a result set.
 export type RowError
@@ -135,4 +136,78 @@ export fn optional[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Option[
   if count == 0 { return Ok(None) }
   if count > 1 { return Err(TooManyRows(count)) }
   Ok(Some(mapper(*result, 0) ?))
+}
+
+/// A type one named column of a row reads as, through the strict readers
+/// above: a null is refused unless the type is an `Option`.
+export trait Column {
+  /// The named column of a row read as this type.
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError]
+}
+
+impl Column for Str {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { text(rows, row, name) }
+}
+
+impl Column for Int64 {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { integer(rows, row, name) }
+}
+
+/// A platform integer reads a whole-number column it can hold.
+impl Column for Int {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] {
+    match convertInteger[Int](integer(rows, row, name) ?) {
+      case Some(held) => Ok(held)
+      case None => Err(WrongKind(name, "Int"))
+    }
+  }
+}
+
+impl Column for Decimal {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { decimal(rows, row, name) }
+}
+
+impl Column for Float64 {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { real(rows, row, name) }
+}
+
+impl Column for Bool {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { truth(rows, row, name) }
+}
+
+impl Column for Bytes {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] { bytes(rows, row, name) }
+}
+
+/// A null column is `None`; anything else must read as the content.
+impl [A: Column] Column for Option[A] {
+  fn fromColumn(rows: &Driver.Rows, row: Int, name: Str) -> Result[Self, RowError] {
+    match nullable(rows, row, name) ? {
+      case None => Ok(None)
+      case Some(_) => Ok(Some(A.fromColumn(rows, row, name) ?))
+    }
+  }
+}
+
+/// A type one row of a result set reads as.
+///
+/// ## Examples
+///
+/// ```
+/// type User = { id: Int64, @column("display_name") name: Str } derives Row
+/// User.fromRow(&rows, 0)
+/// ```
+export trait Row {
+  /// The row at a position read as this type.
+  fn fromRow(rows: &Driver.Rows, row: Int) -> Result[Self, RowError]
+}
+
+/// A record reads each field from the column of its name, or of the name
+/// `@column("name")` gives; the first column that does not read stops it.
+export derive Row for T: Record {
+  fn fromRow(rows: &Driver.Rows, row: Int) -> Result[T, RowError] {
+    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, RowError] where F: Column {
+        F.fromColumn(rows, row, field.attributeOr("column", field.name))
+      })
+  }
 }

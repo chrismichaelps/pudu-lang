@@ -15,9 +15,19 @@ aliases: [Type Formation]
 
 # Type Formation
 
+Application arguments are formed in their declared parameter-kind positions.
+A bare higher-kind rigid is retained as a constructor when a canonical receiving
+parameter requires that arity, including trait heads and ordinary generic types.
+Arguments otherwise remain value types. [[Type Check Bound]] validates complete
+trait applications before their evidence is assumed. Resolved Grill Log:
+forming an explicit Mapper[F] must preserve F's constructor identity without
+relaxing the ordinary E3038 check on a value-position bare constructor parameter.
+
 ## Purpose
 
 Own type syntax to formed type, and what declarations contribute for [[Type Check]].
+
+`namedIdentity` resolves a written path; a qualified path no scope binds is the canonical `Module.Type` spelling generated code uses, and names that module's declaration.
 
 ## Interface
 
@@ -66,6 +76,18 @@ The exported signatures are the module header's export list.
 
 ## Algorithm
 
+Implementation collection forms heads under their own rigid parameters and
+retains full target/trait applications and parameter/where requirements in
+[[Type Implementation Rules]], indexed by canonical target/trait identity.
+The pure first shell pass lives in [[Type Formation Shells]], keeping identity
+registration separate from formed aliases, shapes and implementation evidence.
+The fixed language type and carrier inventory lives in [[Type Formation Builtins]].
+
+- **Q:** Does an owner relationship prove every application? **A:** Only an
+  unconditional constructor-wide rule does. _Rationale:_ specialized arguments
+  and parameter bounds belong to the implementation. _Rejected:_ erasing heads
+  and conditions during declaration collection.
+
 Direct structural recursion over the type or syntax shape, with the checker's substitution consulted whenever a variable is reached.
 
 Collection introduces every nominal shell first, orders local aliases by their alias dependencies
@@ -112,6 +134,7 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 - **Q:** Why keep the names at all, when the payload is positional either way? **A:** Because a construction and a pattern say which element they mean by naming it. _Rationale:_ the payload is what the type system needs and the names are what the reader needs; dropping them made `Circle{radius: 2}` compile to a positional constructor and then fail far from the declaration. _Rejected:_ discarding the names as the first version did.
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
 - **Q:** Where are import aliases interpreted? **A:** [[Type Interface]] produces canonical path bindings; formation only consumes them. _Rationale:_ import policy stays out of recursive type construction. _Rejected:_ inspecting `Import` syntax inside every `formType` call.
+- **Q:** Keep the module-less fallback identity? **A:** No; it filed generated impl heads under an owner no type had, so proofs never found them.
 
 ## Referenced by
 
@@ -120,3 +143,27 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 ## Places
 
 Collecting a record also records which of its fields are declared `mut`, for local and imported types alike. See [[ADR-0022-lending-a-place]].
+
+## Complete trait evidence
+
+formBoundType preserves bound syntax as a canonical application under all enclosing rigid parameters, using the same formNamed alias expansion as ordinary formation. It projects already resolved signature syntax; formation diagnostics remain the checked formation boundary.
+
+Resolved Grill Log: bound projection must retain nested references, tuples, functions, capabilities and constructor applications, not just the trait head.
+
+formBoundFor additionally preserves the existing constructor-bound shorthand:
+F[_]: Mappable means Mappable[F] when the canonical trait has exactly one
+parameter of matching constructor kind. Other omitted applications do not receive
+invented arguments. Resolved Grill Log: ordinary trait arguments remain exact,
+while constructor capability syntax keeps its established generic meaning.
+
+A bare higher-kind rigid appearing in a bound application denotes its constructor,
+not an empty application of that constructor. Explicit Mapper[F] and the matching
+constructor-bound shorthand form the same evidence. Resolved Grill Log: preserve
+constructor identity until the member applies it to its own item parameters.
+
+Implementation conditions project each requirement under its subject through
+formBoundFor, preserving the same constructor shorthand as scoped member bounds.
+Transparent aliases share total [[Type Substitution]], including applied heads,
+unsafe wrappers and function default counts. Resolved Grill Log: declaration
+rules, member assumptions and alias applications cannot use different meanings
+for the same full generic bound.

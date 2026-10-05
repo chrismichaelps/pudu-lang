@@ -2,12 +2,16 @@
 module Pudu.Type.Check
   ( checkModule
   , checkModuleDetailed
+  , checkDeriveDefinitions
+  , checkDeriveDefinitionsWith
+  , checkDeriveDefinitionTypes
   , checkModuleWith
   ) where
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -15,6 +19,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Declaration (..)
+  , Derive (..)
   , Expression (..)
   , Function (..)
   , FunctionBody (..)
@@ -38,6 +43,7 @@ import Pudu.Type.Env
   , recordUnsafeFunction
   , recordComptimeFunction
   , withComptime
+  , withDeriveChecking
   , lookupName
   , recordExpression
   , report
@@ -58,6 +64,8 @@ import Pudu.Type.Check.Safety
   ( requireComptimePurity
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Bound (checkDeclarationBounds)
+import Pudu.Type.Check.Derive (checkDeriveContracts)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Expression (CheckSurroundings (..))
 import qualified Pudu.Type.Check.Expression as Expression
@@ -76,6 +84,7 @@ import Pudu.Type.Check.Rule
   )
 import Pudu.Type.Check.Method
   ( declareBounds
+  , declareBoundsWith
   , declareMethods
   , declareTraitMembers
   , dischargeObligations
@@ -110,14 +119,14 @@ import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
-checkModule :: Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModule :: Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModule = checkModuleWith emptyImportTypes
 
 {-| The set is the spans of every use of a `var` binding, which resolution
     already knows; see [[Check Place]]. -}
-checkModuleWith :: ImportTypes -> Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -128,20 +137,42 @@ checkModuleWith imported writable moduleValue =
     from the compiler's. -}
 checkModuleDetailed
   :: ImportTypes
-  -> Set (Int, Int)
+  -> Set Span
   -> Module
-  -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
-  let products = runChecker (setWritableNames writable >> checkUnit imported moduleValue)
+  let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
       , producedSchemes products
       , producedIntegerKinds products
       , producedMethods products
+      , producedSelections products
       , producedDiagnostics products
       )
 
-checkUnit :: ImportTypes -> Module -> Checker ()
-checkUnit imported moduleValue = do
+data CheckingScope = WholeModule | DeriveDefinitions !(Set Span)
+  deriving stock (Eq)
+
+{-| Admit templates in their defining environment before requests supply any
+    concrete fields. Ordinary bodies wait for the generated interface graph. -}
+checkDeriveDefinitions :: ImportTypes -> Set Span -> Module -> [Diagnostic]
+checkDeriveDefinitions = checkDeriveDefinitionsWith Set.empty
+
+checkDeriveDefinitionsWith :: Set Span -> ImportTypes -> Set Span -> Module -> [Diagnostic]
+checkDeriveDefinitionsWith inferred imported writable moduleValue =
+  producedDiagnostics (runChecker
+    (setWritableNames writable >> checkUnit (DeriveDefinitions inferred) imported moduleValue))
+
+{-| What checking the templates gave each of their expressions, for tooling: a
+    template is checked once, generically, and its generated copies hold
+    request-specific types under the same text. -}
+checkDeriveDefinitionTypes :: ImportTypes -> Set Span -> Module -> [(Span, Type)]
+checkDeriveDefinitionTypes imported writable moduleValue =
+  producedTypes (runChecker
+    (setWritableNames writable >> checkUnit (DeriveDefinitions Set.empty) imported moduleValue))
+
+checkUnit :: CheckingScope -> ImportTypes -> Module -> Checker ()
+checkUnit scope imported moduleValue = do
   dependencyDeclared <- collectImportedDeclared imported
   declared <- collectDeclaredFrom dependencyDeclared
     (locatedValue (moduleName moduleValue))
@@ -154,14 +185,26 @@ checkUnit imported moduleValue = do
   let traits = traitTable declared (moduleDeclarations moduleValue)
   let layouts = recordLayouts (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
-  checkCoherence (moduleDeclarations moduleValue)
+  when (scope == WholeModule) (checkCoherence (moduleDeclarations moduleValue))
+  checkDeriveContracts declared imported moduleValue
   {-| A function literal's unwritten parameter types are settled once the
       declaration holding it is, so they are judged declaration by declaration. -}
   mapM_
-    (\declaration -> checkDeclaration declared layouts declaration >> requireWrittenExclusive)
-    (moduleDeclarations moduleValue)
+    (\declaration -> do
+      admitted <- checkDeclarationBounds declared declaration
+      when admitted (checkDeclaration declared layouts declaration >> requireWrittenExclusive))
+    (selectedDeclarations (moduleDeclarations moduleValue))
   finalizeIntegerLiterals
   dischargeObligations
+ where
+  selectedDeclarations values = case scope of
+    WholeModule -> values
+    DeriveDefinitions inferred -> filter (inferenceNeeded inferred) values <>
+      [value | value@(Located _ (DeriveDeclaration _)) <- values]
+  inferenceNeeded inferred (Located _ declaration) = case declaration of
+    FunctionDeclaration value -> Set.member (locatedSpan (functionName value)) inferred
+    BindingDeclaration _ _ name _ _ -> Set.member (locatedSpan name) inferred
+    _ -> False
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature
@@ -258,14 +301,32 @@ checkDeclaration declared layouts (Located _ declaration) = case declaration of
       mapM_
         (checkMember (implAliases declared value) (implRigid value) (implBounds declared value) Nothing)
         (implFunctions value)
+  DeriveDeclaration value -> checkDerive declared value
+  DeriveImplDeclaration _ -> pure ()
   ForeignDeclaration value -> checkForeign layouts value
   _ -> pure ()
+
+{-| Check each derive member once, generically: the derived type parameter is
+    rigid with no bounds of its own, and members are checked like impl methods
+    without a Self type, since `self` arrives as an explicit parameter. The
+    flag scopes compile-time loops to rigid checking for the members alone; a
+    request carries no members. Interface annotations are required for the same
+    reason implementations require them: the generated impl must show the
+    signature the definition proved. -}
+checkDerive :: DeclaredTypes -> Derive -> Checker ()
+checkDerive declared value = do
+  let rigid = [(locatedValue (deriveParameter value), 0)]
+  mapM_ (requireInterfaceAnnotations "derive member" . locatedValue) (deriveFunctions value)
+  withDeriveChecking True $
+    mapM_
+      (checkMember declared rigid [] Nothing)
+      (deriveFunctions value)
 
 checkFunctionWith
   :: FunctionRole
   -> DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Function
   -> Checker ()
@@ -276,7 +337,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
       formed as a nominal type named `T` while `self.value` gave the real one,
       so the two disagreed while printing identically. -}
   let rigid = enclosing <> functionRigid value <> foldMap selfRigid selfBound
-      bounds = enclosingBounds <> declareBounds declared value <> foldMap selfBoundAsBound selfBound
+      bounds = enclosingBounds <> declareBoundsWith declared enclosing value <> foldMap (selfBoundAsBound enclosing) selfBound
   requireFunctionAnnotations value
   requireComptimePurity value
   declaredScheme <- case role of
@@ -360,7 +421,7 @@ checkBlock = Statement.checkBlock statementNeeds
 checkMember
   :: DeclaredTypes
   -> [(Text, Int)]
-  -> [(Text, [NominalId])]
+  -> [(Text, [Type])]
   -> Maybe NominalId
   -> Located Function
   -> Checker ()

@@ -38,12 +38,26 @@ expandModule :: Module -> (Module, [Diagnostic])
 - Expansion is bounded. A macro that expands into itself exhausts the depth budget and reports at the call that started it, rather than looping.
 - Expanded syntax carries the call's span. A diagnostic inside an expansion therefore points at what the reader wrote, not at a position in a body they may not have read.
 - A call that cannot expand becomes an explicit invalid node, so later phases do not explain the same defect a second time.
+- When the complete walk encounters no macro call and reports no finding,
+  return the original module tree. An explicit change witness records every
+  call before expansion or rejection; hygiene identity allocation does not
+  decide tree sharing. The walk still detects unknown calls.
+- Lambda parameter defaults and bodies use the same expansion walk as named
+  functions, including callbacks inside derive members. Type parameters,
+  annotations and `where` clauses remain intact for later phases.
+- Substituted lambda body keys retain generated definition/invocation identity
+  through [[Macro Substitution]], so nested closures do not alias compiled code.
 - Expansion walks an `IfLetExpression` subject, then block, and else branch while retaining its
   pattern and surface constructor. Pattern binding semantics remain owned by resolution and typing.
 - An `if let` pattern's bindings are macro-introduced names. Hygiene renames both each binding and
   its uses in the success block; record shorthand keeps the field selector and becomes an explicit
   nested binding when its local name must change. The subject and else branch exclude those local
   renames because the successful bindings are not in scope there.
+- A derive declaration's member bodies expand like an impl's, and a compile-time loop expands its
+  source list and body while keeping the element binding, its type, and the bounds exactly as
+  written. The loop's element is renamed inside the body alone: the source is substituted before
+  the binding exists, matching the `if let` rule, while the element type and bounds declare types
+  rather than binding values and are never renamed.
 - A `SetExpression` is traversed member by member in source order in both expansion and hygienic
   substitution. Its constructor and member order are retained.
 
@@ -74,6 +88,16 @@ DEPTH 0.78 (DEEP). One entry point hides collection, kind checking, hygiene rena
 
 ## Grill Log
 
+- **Q:** Keep a reconstructed tree when expansion changed nothing? **A:** Share
+  the original after the complete walk records no macro calls and no findings.
+  _Rationale:_ expansion allocates about 27 MB on the branch-heavy input and can
+  retain a second tree. _Rejected:_ skipping the walk when no macro is declared,
+  which would suppress E1047 for an unknown call; structural equality rescans;
+  coupling syntax changes to the hygiene counter.
+- **Q:** Can a lambda be an opaque leaf? **A:** No; walk its defaults and body
+  through the function traversal. _Rationale:_ derive callbacks may contain
+  valid or unknown macro calls, and both must reach expansion before resolution.
+  _Rejected:_ returning the original lambda without inspecting its children.
 - **Q:** Where does expansion belong in the pipeline? **A:** Between parsing and resolution. _Rationale:_ [[architecture/SEMANTICS]] says so, and it means no later phase carries a case for a construct that should already be gone. _Rejected:_ expanding during resolution, which would make the resolver's two passes see different trees.
 - **Q:** How is hygiene enforced? **A:** By renaming each introduced binding at expansion and carrying that rename only through its lexical scope. _Rationale:_ a precomputed body-wide map cannot distinguish a successful pattern branch from its else branch or following expressions; a scope-local environment preserves the language's binding rules mechanically. _Rejected:_ a body-wide rename map; syntax contexts threaded through untyped token trees; trusting authors to pick unlikely names.
 - **Q:** What span does expanded syntax carry? **A:** The call's. _Rationale:_ a reader debugging a diagnostic can see the call; they may never have opened the macro. _Rejected:_ the definition's span, which points into code the reader did not write; synthetic spans, which point nowhere.
@@ -90,4 +114,4 @@ DEPTH 0.78 (DEEP). One entry point hides collection, kind checking, hygiene rena
 
 ## Referenced by
 
-[[src/Pudu/Frontend/_MOC]] · [[Macro Design]] · [[Compiler Pipeline]] · [[Name Resolution]] · [[Syntax Tree]]
+[[src/Pudu/Frontend/_MOC]] · [[Macro Expansion Spec]] · [[Macro Design]] · [[Compiler Pipeline]] · [[Name Resolution]] · [[Syntax Tree]]

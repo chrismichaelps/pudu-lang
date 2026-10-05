@@ -4,10 +4,26 @@ Three tools, in the order they are worth reaching for. Asked out of order the
 last one is a haystack: a dump of the whole compiler is megabytes, and only a
 measurement says which page of it to read.
 
+## Whole-compiler latency
+
+```bash
+P=$(cabal list-bin exe:pudu --enable-optimization=2)
+node bench/compiler.mjs "$P" --json > compiler-benchmark.json
+```
+
+Measures actual startup, declarations, statement bodies, generic evidence,
+constant folding, module graphs and the standard library. Each case has explicit
+cache-disabled, first cached and warm samples. JSON retains wall milliseconds,
+RTS CPU, allocation, residency and binary/host identity. Unexpected diagnostics
+fail the harness; the intentional invalid-source case verifies E3001. Results
+cover Pudu checking. Bootstrap Haskell build and program execution are measured
+separately. Compare the same inputs, flags and cache policy before and after a
+compiler fix.
+
 ## 1. Where does the cost grow
 
 ```bash
-node bench/scaling.mjs "$(cabal list-bin exe:pudu)"
+node bench/scaling.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Builds inputs at doubling sizes and reports the ratio between them. Near 2 is
@@ -24,7 +40,7 @@ timed, because a program that does not run is not a fast one.
 ## 1a. How a program's module count costs
 
 ```bash
-node bench/graph.mjs "$(cabal list-bin exe:pudu)"
+node bench/graph.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Checks generated sparse programs of 25 to 200 modules and reports time and
@@ -35,7 +51,7 @@ graph, which is what preparing interfaces once per program removed.
 ## 1b. What one request costs
 
 ```bash
-node bench/request.mjs "$(cabal list-bin exe:pudu)"
+node bench/request.mjs "$(cabal list-bin exe:pudu --enable-optimization=2)"
 ```
 
 Starts the service in `bench/service`, issues requests over a real socket, and
@@ -60,6 +76,45 @@ bench/profile.sh check some/file.pudu
 ```
 
 A cost-centre report. Names the module and function to look at next.
+
+## 2a. Follow costs through dependency layers
+
+```bash
+node bench/layers.mjs --profile pudu.prof --out /tmp/pudu-layers.html --label "check workload"
+node --test bench/layers.test.mjs
+```
+
+The offline report groups source imports into dependency layers, from foundations
+at layer zero to their callers. Treemap area selects exclusive allocated bytes,
+sampled CPU, closure entries, module count or coupling. Select a module to see
+its hottest cost centres, source path, imports and importers. Search and layer
+controls narrow the graph; the table retains zero and unmeasured costs. Actual
+source-import cycles, including SOURCE edges, are listed separately.
+
+Use a fresh profile from the workload being investigated. `.prof` uses individual
+costs from the call tree; `.ticky` uses allocation by each closure and entry
+counts. The companion JSON records source and profile hashes, but these do not
+prove that the supplied profile matches the source build. Modules outside the
+selected root and unattributed costs remain visible. Without `--profile`, the
+report is structural only. It never reads private project inputs or builds a binary.
+
+For a separate low-level allocation build:
+
+```bash
+cabal build exe:pudu --builddir=/tmp/pudu-ticky --enable-optimization=2 --ghc-options=-ticky
+P=$(cabal list-bin exe:pudu --builddir=/tmp/pudu-ticky --enable-optimization=2 --ghc-options=-ticky)
+PUDU_EVAL=tree PUDU_CACHE=off PUDU_LIB=$PWD/packages/pudu/v0.1/lib "$P" run bench/eval/MultiMap.pudu +RTS -r/tmp/multimap.ticky -RTS
+node bench/layers.mjs --profile /tmp/multimap.ticky --out /tmp/multimap-layers.html --label "MultiMap tree"
+```
+
+Ticky runs use an instrumented debug runtime: use their allocation attribution
+to locate work, then time the ordinary optimized executable for acceptance.
+Cumulative allocation is different from RSS or retained heap. Import edges are
+investigation context and do not establish a bug or its causal call path.
+CPP imports are conservative across branches; generated/preprocessed modules
+outside the selected source root are not resolved. See the
+[GHC profiling guide](https://downloads.haskell.org/ghc/9.10.3/docs/users_guide/profiling.html)
+for the individual/inherited and ticky counter definitions.
 
 ## 3. What the optimiser made of that function
 
@@ -87,6 +142,17 @@ written only for a module the build actually compiles: touching a source does
 not cause that, since cabal decides by content hash, and deleting an object file
 does not either, since cabal trusts its own record over the file system. A
 directory with no record compiles everything. The first run takes minutes.
+
+## Derived against hand-written
+
+```bash
+bench/derive.sh "$(cabal list-bin exe:pudu --enable-optimization=2)"
+```
+
+Runs a derived `Json.Encode` and the hand-written encoder of the same orders,
+five times per evaluator, and reports the fastest run of each. Both print the
+total encoded length and the script refuses to report when they differ, so a
+faster derive cannot be a different one.
 
 ## What this cannot show
 

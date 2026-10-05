@@ -124,7 +124,7 @@ testRecovery = do
     ]
 
 parseType :: Text -> IO Parsed
-parseType = parseWith (parseTypeDeclaration Private)
+parseType = parseWith (parseTypeDeclaration [] Private)
 
 parseTraitInput :: Text -> IO Parsed
 parseTraitInput = parseWith (parseTrait Private)

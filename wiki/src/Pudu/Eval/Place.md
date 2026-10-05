@@ -30,6 +30,7 @@ placeOf :: (Located Expression -> Evaluator Value) -> Located Expression -> Eval
 plainPlace :: Located Expression -> Maybe Place
 readPlace :: Place -> Evaluator Value
 storePlace :: Place -> Value -> Evaluator ()
+storeName :: Span -> Text -> Value -> Evaluator ()
 withFrameKeeping :: [(Text, Value)] -> [Text] -> Evaluator a -> Evaluator (a, [Value])
 exclusiveParameters :: Function -> [Int]
 ```
@@ -50,6 +51,12 @@ Resolved Grill Log: a place is re-read from its root at store time rather than h
 a value, because values are immutable and the root is the only thing that changes.
 
 ## Grill Log
+
+- **Q:** Construct a Place for every assignment to one bare name? **A:** No.
+  _Rationale:_ no index or field needs evaluation there. `storeName` owns the
+  existing one-pass binding update and exact missing/nonassignable diagnostics;
+  both the general Place path and the tree's bare-name assignment use it.
+  Nested places keep their original index-before-right-hand-side ordering.
 
 - **Q:** Look a name up before a plain assignment to it? **A:** No. _Rationale:_ with no field or
   index step the old value is never used, so the search was wasted on every `x = value` (#423).

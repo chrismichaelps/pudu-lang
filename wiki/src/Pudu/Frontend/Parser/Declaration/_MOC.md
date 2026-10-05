@@ -12,6 +12,7 @@ tags: [moc, module]
 - [[Parser Generic]] — bracketed type parameters, bounds, and `where` constraint clauses shared by every generic construct.
 - [[Parser Type Declaration]] — record, sum, and alias `type` declarations.
 - [[Parser Trait]] — trait contracts and `impl` blocks.
+- [[Parser Derive Declaration]] — attributes, `derives` clauses, and `derive` definitions and requests.
 - [[Parser Macro]] — typed syntax transformers, whose parameters declare the syntax each accepts.
 - [[Parser Declaration Foreign]] — a block declaring a library written elsewhere, the functions it exports, and what releases an owned result.
 

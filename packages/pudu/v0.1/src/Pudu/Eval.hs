@@ -14,6 +14,7 @@ module Pudu.Eval
   ) where
 
 import Data.Map.Strict (Map)
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
@@ -52,11 +53,12 @@ import Pudu.Eval.Call
   , readPath
   )
 import qualified Pudu.Eval.Call as Call
+import Pudu.Eval.Call.Path (readName)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Keyed (setContains, setFromMembers)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Order (comparableValue)
-import Pudu.Eval.Place (placeOf, storePlace)
+import Pudu.Eval.Place (placeOf, storeName, storePlace)
 import Pudu.Eval.Capture (reachableNames)
 import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
@@ -312,7 +314,7 @@ evaluateHere (Located spanValue expression) = case expression of
         whole stack kept every value that happened to be in scope alive for as
         long as the literal was. -}
     captured <- capturedFrames (reachableNames value)
-    pure (FunctionValue (Closure lambdaName value Nothing (Just captured) Nothing))
+    pure (FunctionValue (Closure lambdaName value Nothing (Just captured) [] Nothing))
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
@@ -369,6 +371,11 @@ evaluateHere (Located spanValue expression) = case expression of
   ForExpression label binder iterated body -> do
     sequence' <- evaluate iterated
     evaluateFor loopNeeds spanValue (fmap locatedValue label) binder sequence' body
+  {-| A compile-time loop is unrolled before checking, so one that reaches
+      evaluation means derive instantiation did not run: the same refusal
+      class as an unexpanded macro call. -}
+  ComptimeForExpression _ ->
+    abortAt (Just spanValue) "E7001" "compile-time loop reached evaluation unexpanded" Nothing
   InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
 
 evaluateFieldInit :: Span -> Located FieldInit -> Evaluator (Text, Value)
@@ -407,33 +414,45 @@ evaluateGuard guard = case guard of
 
 applyBinary :: Span -> Located Expression -> Text -> Located Expression -> Evaluator Value
 applyBinary spanValue left operator right = case operator of
-  "=" -> do
-    target <- placeOf evaluate left
-    case target of
-      Just place -> do
-        value <- evaluate right
-        storePlace place value
-        pure UnitValue
-      Nothing -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing
+  "=" -> case left of
+    Located targetSpan (NameExpression (name :| [])) -> do
+      value <- evaluateOperand right
+      storeName targetSpan name value
+      pure UnitValue
+    _ -> do
+      target <- placeOf evaluate left
+      case target of
+        Just place -> do
+          value <- evaluateOperand right
+          storePlace place value
+          pure UnitValue
+        Nothing -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing
   "&&" -> do
-    leftValue <- evaluate left
+    leftValue <- evaluateOperand left
     truth <- expectBool spanValue leftValue
-    if not truth then pure (BoolValue False) else evaluate right >>= expectBoolValue spanValue
+    if not truth then pure (BoolValue False) else evaluateOperand right >>= expectBoolValue spanValue
   "||" -> do
-    leftValue <- evaluate left
+    leftValue <- evaluateOperand left
     truth <- expectBool spanValue leftValue
-    if truth then pure (BoolValue True) else evaluate right >>= expectBoolValue spanValue
+    if truth then pure (BoolValue True) else evaluateOperand right >>= expectBoolValue spanValue
   "in" -> do
-    candidate <- evaluate left
-    container <- evaluate right
+    candidate <- evaluateOperand left
+    container <- evaluateOperand right
     case container of
       SetValue _ -> pure (BoolValue (setContains container candidate))
       _ -> abortAt (Just spanValue) "E7001"
         ("membership needs a Set, found a " <> valueKind container) Nothing
   _ -> do
-    leftValue <- evaluate left
-    rightValue <- evaluate right
+    leftValue <- evaluateOperand left
+    rightValue <- evaluateOperand right
     combine spanValue operator leftValue rightValue
+
+evaluateOperand :: Located Expression -> Evaluator Value
+{-# INLINE evaluateOperand #-}
+evaluateOperand located@(Located spanValue expression) = case expression of
+  LiteralExpression (ResolvedInteger kind number) -> pure (IntValue kind number)
+  NameExpression (name :| []) -> readName spanValue name
+  _ -> evaluate located
 
 expectBoolValue :: Span -> Value -> Evaluator Value
 expectBoolValue spanValue value = BoolValue <$> expectBool spanValue value

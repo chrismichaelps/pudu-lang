@@ -1,0 +1,42 @@
+module HandwrittenJson
+
+import Std.Json
+import Std.Json {Encode}
+
+type Line = { sku: Str, quantity: Int, price: Decimal }
+
+type Order = { id: Int, customer: Str, lines: Array[Line], note: Option[Str], cache: Option[Str] }
+
+impl Encode for Line {
+  fn encode(self: &Self) -> Json {
+    Json.Object([("sku", self.sku.encode()), ("quantity", self.quantity.encode()), ("price", self.price.encode())])
+  }
+}
+
+impl Encode for Order {
+  fn encode(self: &Self) -> Json {
+    Json.Object([
+        ("order_id", self.id.encode()),
+        ("customer", self.customer.encode()),
+        ("lines", self.lines.encode()),
+        ("note", self.note.encode())
+      ])
+  }
+}
+
+export fn main() -> Str {
+  var total = 0
+  var index = 0
+  while index < 40000 {
+    let order = Order {
+      id: index,
+      customer: "customer",
+      lines: [Line{sku: "a", quantity: index, price: 1.25d}, Line{sku: "b", quantity: 2, price: 3.5d}],
+      note: if index % 2 == 0 { Some("rush") } else { None },
+      cache: None
+    }
+    total = total + Json.encode(&order.encode()).length()
+    index = index + 1
+  }
+  show(total)
+}

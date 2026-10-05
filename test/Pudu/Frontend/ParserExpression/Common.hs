@@ -35,6 +35,7 @@ import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
 import Pudu.Frontend.Syntax
   ( ArrayRest (..)
   , Block (..)
+  , ComptimeFor (..)
   , Expression (..)
   , FieldInit (..)
   , FieldPattern (..)
@@ -122,6 +123,9 @@ shape (Located _ expression) = case expression of
   LoopExpression label _ -> labelShape label <> "loop"
   ForExpression label binder iterated _ ->
     labelShape label <> "for " <> patternShape binder <> " in " <> shape iterated
+  ComptimeForExpression loop ->
+    "comptime for " <> locatedValue (comptimeForElement loop)
+      <> " in " <> shape (comptimeForSource loop)
   TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate "," (map shape members) <> "]"
   SetExpression members -> "#{" <> Text.intercalate "," (map shape members) <> "}"

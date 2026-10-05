@@ -19,6 +19,8 @@ aliases: [Type Check Method]
 
 Give an implementation's functions the types they have as methods of their target, let an implementation inherit the trait defaults it does not override, bind trait members under the trait's own name so a bounded parameter can find them, register and discharge the trait obligations a call raises, and resolve a method on a nominal type or a bounded rigid parameter.
 
+Declaring a trait member whose first parameter is not `self` marks the trait static.
+
 ## Interface
 
 ### Signatures
@@ -27,11 +29,11 @@ Give an implementation's functions the types they have as methods of their targe
 declareMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Impl -> Checker ()
 declareInterfaceMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Set (NominalId, Text) -> Impl -> Checker ()
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
-declareBounds :: DeclaredTypes -> Function -> [(Text, [NominalId])]
+declareBounds :: DeclaredTypes -> Function -> [(Text, [Type])]
 declareBuiltinConstructors :: Checker ()
 dischargeObligations :: Checker ()
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
-functionRigid :: Function -> [Text]
+functionRigid :: Function -> [(Text, Int)]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
 traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located Function]
 ```
@@ -40,12 +42,14 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 - Every method a module's own impl declares, inherited defaults included, and every member its own
   traits declare is recorded with `recordDeclaredMethod` under the same owner and scheme it is bound
-  with, so tooling offers exactly what `methodScheme` would find. An imported impl's methods are
+  with, and the name's span, so tooling offers exactly what `methodScheme` would find and can say
+  where it was written. An imported impl's methods are
   bound with `bindImportedMethod` and recorded by the module that declared them.
 
 - A trait's own type parameters are rigid inside its members, exactly as a function's are inside its body. Without that they were formed as nominal types named after the parameter, so `trait Holds[T]` gave `get` a result of some type literally called `T` that nothing could be, and every use reported `expected Int, found T`.
 
 - Two traits may declare the same member for one type. Declaring both is legal; only an unqualified call has to choose, so the ambiguity is recorded when the second implementation binds and reported at the call that cannot resolve it, naming both qualified forms.
+- `formBoundType` forms one written bound as a complete canonical application for bound installation, including from compile-time loop `where` clauses.
 
 - A bound naming a compiler-controlled marker is proved by [[Type Marker]] from the type's structure when no implementation was written, which is what lets `Int` satisfy `Copy` without any module declaring it.
 
@@ -75,7 +79,13 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ## Algorithm
 
-Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target and with implementation-plus-method bounds retained in its scheme, then bind every trait default the implementation did not override. For a trait, bind its members under the trait's own name with `Self` rigid and retain trait-plus-member bounds. For a function, collect its parameter bounds; at each call site, instantiation registers the obligations the bounds impose; after the body, discharge them by checking the resolved argument type against the trait, through `implementsTrait` for a nominal type or `rigidSatisfies` for a rigid parameter.
+Concrete nominal obligations pass their complete resolved type to
+[[Type Trait Proof]]. Specialized targets and conditional requirements cannot be erased to
+constructor identity. The same proof serves derive field publication.
+The queue distinguishes generic-call bounds from dynamic widening. Discharge
+both after inference; preserve their E3012/E3032 diagnostics and real source spans.
+
+Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target and with implementation-plus-method bounds retained in its scheme, then bind every trait default the implementation did not override. For a trait, bind its members under the trait's own name with `Self` rigid and retain trait-plus-member bounds. For a function, collect its parameter bounds; at each call site, instantiation registers the obligations the bounds impose; after the body, discharge them by checking the resolved argument type against the trait, through [[Type Trait Proof]] for complete nominal and scoped rigid applications.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -102,7 +112,26 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 - **Q:** Field or method when both spell the same name? **A:** The method, in callee position only. _Rationale:_ `value.name()` reads as a call, and a field holding a function can still be called by parenthesizing it. _Rejected:_ field always wins, which makes a method unreachable; method always wins, which hides a field.
 - **Q:** What should `methodScheme` return when bounds are ambiguous? **A:** `Just (monotype ErrorType)`, not `Nothing`. _Rationale:_ `checkCallee` falls through to `checkExpression` on `Nothing`, which re-enters `rigidMethod` and reports `E3013` a second time. Returning an error scheme keeps the call site typed as an error and stops the duplicate. _Rejected:_ returning `Nothing`, which duplicated the diagnostic; suppressing `E3013` in `rigidMethod`, which would lose the diagnostic for non-call member access.
 - **Q:** Can imported methods reuse `Owner.Method` basename keys? **A:** No; keys carry canonical owner identity and member spelling. _Rationale:_ `A.User.show` and `B.User.show` must never collide. _Rejected:_ last-segment owner keys; import-local aliases in method keys.
+- **Q:** Infer staticness from uses? **A:** No; from the declaration, so imported traits agree.
 
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Coherence]] · [[Evaluator]]
+
+## Complete trait evidence
+
+declareBoundsWith forms method bounds with the enclosing rigid parameters as well as method-local parameters. Rigid method selection specializes the trait parameters from its scoped application and Self from the receiver before freshening remaining method parameters. Calls and captured methods share this scheme selection. Obligation discharge proves full applications after zonking subjects and bounds.
+
+Resolved Grill Log: a rigid Holds[Int] receiver returns Int from get; a fresh unrelated trait argument would permit a Bool result the declaration never promised.
+
+Ordinary call obligations use inferBound after body inference. Commit only unique,
+complete proposals via ordinary unification; ambiguous evidence reports E3012 with
+help to state the missing type argument. Marker and dynamic obligations retain
+their prior diagnostic distinctions. Resolved Grill Log: unsuccessful evidence
+cannot change caller constraints; successful inference is a separate explicit phase.
+
+traitMethodScheme filters rigid evidence by the explicitly selected canonical
+trait before shared bound-member lookup. An explicit qualifier disambiguates two
+different traits, but two applications of the same trait remain ambiguous.
+Resolved Grill Log: immediate, captured and trait-qualified generic receiver
+calls must preserve the same full trait application.

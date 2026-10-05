@@ -64,6 +64,9 @@ tags: [moc, module]
 Dependency direction: Builtin Definition → Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
 
 - [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
+- [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+
+- [[Runtime Series Map]] — pure numeric occurrence storage beneath Value/MultiMap.
 
 - [[Eval Data Tests]] — structural Decimal equality and retained numeric representation.
 
@@ -73,7 +76,8 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Foreign Binding]] — native metadata extracted unchanged from runtime values.
 
-- [[Eval MultiMap Kernel]] — pure native loop regions containing proven MultiMap primitives.
+- [[Eval Loop Kernel]] — complete pure regions, proven MultiMap calls and closed module functions.
+- [[Eval Loop Step]] · [[Eval Loop Step Tests]] — strict unboxed region outcomes, structured refusal/transfer and scratch cleanup.
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

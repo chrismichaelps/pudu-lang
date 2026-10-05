@@ -40,6 +40,8 @@ outlinePattern :: Located Pattern -> Text
   structure, not the runtime's sorted and deduplicated value.
 - `IfLetExpression` renders as `if let PATTERN = EXPRESSION`, retaining the surface distinction
   from an exhaustive `match` while omitting branch bodies like ordinary `if`.
+- Derive declarations render as `derive` and requests as `derive impl`; a compile-time loop renders
+  as `comptime for ELEMENT in SOURCE`, omitting the body like every other loop outline.
 
 ### Linkage
 

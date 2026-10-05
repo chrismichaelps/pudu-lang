@@ -1,0 +1,10 @@
+module UnknownNames
+
+type A = { id: Int } derives Nope
+
+derive Nope for T: Record {
+}
+
+derive impl AlsoNope for Line
+
+type Line = { sku: Str }

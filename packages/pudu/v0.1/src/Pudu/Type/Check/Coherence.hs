@@ -23,7 +23,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeParam (..)
   , TypeSyntax (..)
   )
-import Pudu.Source (Span)
+import Pudu.Source (Span, spanOrigin)
 import Pudu.Type.Env (Checker, report)
 import Pudu.Type.Marker (isUserImplementable)
 import Pudu.Type.Value (NominalId (..), capabilityName)
@@ -60,7 +60,8 @@ checkCoherence :: [Located Declaration] -> Checker ()
 checkCoherence declarations = do
   let local = collectLocalDeclarations declarations
   mapM_ checkCompilerControlled (implementations declarations)
-  mapM_ (checkOwnership local) (implementations declarations)
+  mapM_ (checkOwnership local)
+    [value | Located at (ImplDeclaration value) <- declarations, spanOrigin at == Nothing]
   _ <- foldM checkDuplicate Set.empty (implementationHeads declarations)
   pure ()
 

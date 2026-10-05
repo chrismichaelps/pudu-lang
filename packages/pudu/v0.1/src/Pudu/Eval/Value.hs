@@ -30,6 +30,7 @@ module Pudu.Eval.Value
   , Closure (..)
   , Value (.., StrValue, MapValue)
   , intPairMap
+  , IntPairEntry (..)
   , ropeOfValue
   , ForeignBinding (..)
   , ForeignClaim (..)
@@ -62,6 +63,12 @@ import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Eval.Foreign.Binding (ForeignBinding (..), ForeignClaim (..), ForeignRelease (..), ForeignSlot (..))
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
+import Pudu.Runtime.SeriesMap (SeriesMap)
+import qualified Pudu.Runtime.SeriesMap as SeriesMap
+
+{-| Strict metadata avoids retaining the temporary numeric conversion tuple. -}
+data IntPairEntry = PlatformIntPairEntry !Value | IntPairEntry !IntegerKind !IntegerKind !Value
+  deriving stock (Show)
 
 {-| @Eval.Value.Runtime — one evaluated result.
 
@@ -118,7 +125,7 @@ data Value
   | ArrayValue !(Seq Value)
   | OrderedMapValue !(Map OrdValue Value)
   {-| Numeric occurrence storage with its ordered view computed only on demand. -}
-  | IntPairMapValue !(IntMap (IntMap (Value, Value, Value))) ~(Map OrdValue Value)
+  | IntPairMapValue !(IntMap (SeriesMap IntPairEntry)) ~(Map OrdValue Value)
   | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
@@ -154,6 +161,11 @@ data Value
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
+  {-| The type a call chose for a parameter bounded by a trait with a static
+      member: the owner its methods are installed under and the owner's own
+      arguments. Bound under the parameter's name, so `A.decode(json)` finds
+      the selected owner's method without any value to dispatch on. -}
+  | TypeWitnessValue !Text ![Value]
   deriving stock (Show)
 
 {-| Both map representations expose the same persistent ordered contents. -}
@@ -169,11 +181,14 @@ mapOfValue value = case value of
   _ -> Nothing
 
 {-| The view is lazy and shared; native integer updates never force it. -}
-intPairMap :: IntMap (IntMap (Value, Value, Value)) -> Value
+intPairMap :: IntMap (SeriesMap IntPairEntry) -> Value
 intPairMap index = IntPairMapValue index $ Map.fromDistinctAscList
-  [ (OrdValue (TupleValue [key, value]), count)
-  | values <- IntMap.elems index
-  , (key, value, count) <- IntMap.elems values
+  [ (OrdValue (TupleValue [IntValue keyKind (toInteger number), IntValue valueKind (toInteger member)]), count)
+  | (number, values) <- IntMap.toAscList index
+  , (member, entry) <- SeriesMap.toAscList values
+  , let (keyKind, valueKind, count) = case entry of
+          PlatformIntPairEntry value -> (defaultIntegerKind, defaultIntegerKind, value)
+          IntPairEntry a b value -> (a, b, value)
   ]
 
 {-| A text value, read as its whole text and built from one.
@@ -202,7 +217,7 @@ ropeOfValue value = case value of
   RopeText rope -> Just rope
   _ -> Nothing
 
-{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue #-}
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}
@@ -242,6 +257,8 @@ instance Eq Value where
       closureA == closureB && bindingsA == bindingsB && spanA == spanB
     (ForeignHandleValue nameA addressA claimA, ForeignHandleValue nameB addressB claimB) ->
       nameA == nameB && addressA == addressB && claimA == claimB
+    (TypeWitnessValue ownerA argumentsA, TypeWitnessValue ownerB argumentsB) ->
+      ownerA == ownerB && argumentsA == argumentsB
     _ -> False
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
@@ -282,18 +299,21 @@ falseValue = BoolValue False
 
 {-| @Eval.Value.Frame — one level of bindings.
 
-    A map frame holds names as they are bound. A slot frame belongs to a
+    A map frame holds names as they are bound; a cell frame updates private
+    block-local cells and snapshots their values for captures. A slot frame belongs to a
     compiled body: its locals sit in an array at positions fixed when the body
     was compiled, named by the layout, and a name bound at run time that the
     body never declared goes to the extra map. Everything that works by name
-    reads a slot frame through its layout, so the two are interchangeable to it. -}
+    reads these representations through the same frame operations. -}
 data Frame
   = MapFrame !(Map Text Value)
+  | CellFrame !(IORef (Map Text (IORef Value)))
   | SlotFrame !(Map Text Int) !(IOArray Int Value) !(IORef (Map Text Value))
 
 instance Show Frame where
   show frame = case frame of
     MapFrame held -> "MapFrame " <> show held
+    CellFrame _ -> "CellFrame"
     SlotFrame layout _ _ -> "SlotFrame " <> show (Map.keys layout)
 
 {-| @Eval.Value.Closure — a callable function.
@@ -319,6 +339,8 @@ data Closure = Closure
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe Captured)
+  {-| Type witnesses bound in the body's frame beside its parameters. -}
+  , closureWitnesses :: ![(Text, Value)]
   {-| Proven after immutable capture; forced once by the first invocation. -}
   , closureMultiMap :: ~(Maybe (Span, Builtin))
   }
@@ -481,3 +503,4 @@ shapeRank value = case value of
   RangeValue{} -> 27
   RangeMethodValue _ _ -> 28
   TextMethodValue _ -> 29
+  TypeWitnessValue _ _ -> 30

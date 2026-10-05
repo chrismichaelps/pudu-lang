@@ -5,6 +5,9 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Meta]] — compile-time field and variant descriptor contracts.
+- [[Std Show]] — rendering helpers, the `Show` trait and its derive.
+
 - [[Std Yaml Block]] — raw scalar lines, literal/folded paragraphs, and physical newline chomping.
 
 - [[src/Std/Yaml/Quoted]] — checked single-line YAML quoting and delimiter scans.

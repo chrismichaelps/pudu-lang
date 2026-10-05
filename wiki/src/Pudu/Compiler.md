@@ -21,6 +21,8 @@ aliases: [Compiler Pipeline]
 
 Provide the public phase orchestration entry point. In the first slice it lexes and parses [[Source Text]], combines ordered [[Diagnostic]] values, and withholds syntax when blocking errors exist. It will deepen as semantic/runtime/backend products are added.
 
+The executable module is rewritten with both integer kinds and static selections.
+
 ## Interface
 
 ### Signatures
@@ -39,7 +41,7 @@ data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
   , compileSyntax :: !(Maybe Module)   -- tooling tree; never linked or evaluated
-  , compileMethods :: ![(NominalId, Text, Scheme)]  -- this module's declared methods, by owner
+  , compileMethods :: ![(NominalId, Text, Scheme, Span)]  -- this module's declared methods, by owner, with name spans
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   , compileDiagnostics :: ![Diagnostic]
@@ -90,6 +92,8 @@ runCompileWith :: CompileContext -> Source -> IO CompileResult
   adding a match arm is looking at a non-exhaustive match, and the tree is exactly what it needs.
   `compileModule` alone is the executable product; nothing links or evaluates `compileSyntax`.
   It is the parsed tree after [[Compiler Literals]] resolves its integer literals.
+- `compileSchemes` keeps inference's settled schemes lazily, so tooling can index the authored
+  tree — with the derive declarations elaboration removed — against the same signatures.
 - `compileMethods` is only the module's own methods, which keeps it proportional to the module; a
   product reused from the cache carries none, so tooling compiles without the cache.
 - Diagnostics are combined and sorted once at the boundary.
@@ -136,12 +140,20 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
   error must not cost the editor its syntax. _Rejected:_ relaxing `compileModule` admission, which
   would let a rejected module reach linking.
 - **Q:** Should program compilation re-run the frontend after graph discovery? **A:** No; pass the saved `FrontendResult` into `compileFrontendWith`. _Rationale:_ a module is parsed once per program compile and phase provenance stays stable. _Rejected:_ calling `runCompile` again for every loaded source.
+- **Q:** Apply selections to the tooling syntax too? **A:** No; tooling reads what was written.
 
 ## Variants
 
 - Split tooling analysis and build pipelines once type checking exists, sharing explicit phase products rather than boolean flags.
 
 ## Referenced by
+
+`rejectFrontend` retains parsed syntax/tokens and phase diagnostics while
+withholding executable/resolution/type/fold products after graph elaboration
+fails. [[Compiler Program]] uses it for the whole failed graph so a template
+author error cannot become one missing-method error per caller. Resolved Grill
+Log: preserve authored tooling syntax and report only the earliest failed phase;
+never cache rejected generated evidence or run constants after phase refusal.
 
 [[src/Pudu/_MOC]] · [[architecture/LANGUAGE]] · [[architecture/OVERVIEW]] · [[Tooling]]
 

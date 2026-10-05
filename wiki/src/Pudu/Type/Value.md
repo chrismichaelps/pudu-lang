@@ -26,9 +26,9 @@ Own formed types, schemes with trait bounds, and rendering for [[Type Check]].
 ```haskell
 data NominalId = NominalId { nominalModule :: !(Maybe ModuleName), nominalName :: !Text }
 data Type = ... | NominalType !NominalId ![Type] | VariableType !TypeVar | RigidType !Text | ErrorType
-data Scheme = Scheme { schemeParams :: ![Text], schemeBounds :: ![(Text, [NominalId])], schemeType :: !Type }
+data Scheme = Scheme { schemeParams :: ![(Text, Int)], schemeBounds :: ![(Text, [Type])], schemeType :: !Type }
 monotype :: Type -> Scheme
-polytype :: [Text] -> [(Text, [NominalId])] -> Type -> Scheme
+polytype :: [(Text, Int)] -> [(Text, [Type])] -> Type -> Scheme
 ```
 
 ### Governance
@@ -82,3 +82,9 @@ DEPTH 0.4 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Complete trait evidence
+
+Scheme bounds retain complete formed trait applications. Every rigid parameter occurring in an application is substituted together with the bounded subject during instantiation. Trait identity alone cannot distinguish Holds[Int] from Holds[Bool].
+
+Resolved Grill Log: preserve arguments in the shared Scheme contract rather than recovering them from method bodies or caller context.

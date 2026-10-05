@@ -5,6 +5,487 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-05 — Derive tooling limits closed (#431)
+
+- Editors publish each finding where the reader can act on it ([[Lsp Diagnostics]]): a
+  finding's offsets are read only against the file its span names. This document's
+  findings keep their range; an imported module's error appears at the import that
+  reaches it as `Module: message`, with its own location related; another module's
+  warning is not published on the importer. Help is its own `help:` line and every
+  note is a related location, so `derive requested here` is clickable. Repairs mark
+  only this document's declarations broken ([[Lsp Repair]]).
+- Go to definition answers method calls ([[Lsp Definition]]): the checker records each
+  declared method's name span ([[Type Env]], [[Type Check Method]]), and the owners
+  completion already used ([[Lsp Method Owner]]) select the declaration — an impl
+  method, a static method, a trait member through a type parameter or an inherited
+  default, and for a derived method the derive that wrote it, library derives included.
+- `pudu expand` text checks where it stands: [[Syntax Printer]] writes the home
+  module's own names bare, and [[Derive Sum Residualizer]] lowers payload reads to
+  `let … else { panic("expected Owner.Variant") }`, replacing the refutable `let`
+  only generated code could hold. Same-module expansions written in place of their
+  derives run identically in both evaluators.
+- `Json` implements `Encode` and `Decode` ([[Std Json]]); `Json.encode`/`Json.decode`
+  stay module functions because a module qualifier's export precedes a same-spelled
+  type's method ([[Type Check Call]]). Std.Json's derive callbacks no longer shadow `field`.
+- Fixed: a static call through a type parameter bounded by an imported trait
+  (`T.decode(json)` with `T: Json.Decode`) ran only when the caller wrote the type
+  argument; inferred, it failed with `undefined name T`. Installed interface names now
+  carry which imported traits have a static member ([[Type Env]]).
+- The editor answers from the authored text in derive syntax ([[Lsp Analysis]]):
+  `derives` entries and `derive … for` headers hover and define their trait, a template's
+  member is described as the derive's, and template metadata (`field`, `variant`) hovers
+  and completes with the types definition checking gave it ([[Type Check]]).
+- Fixed: derive-heavy modules refused or slowed quadratically. Generated-head coherence
+  compared every pair of heads and exhausted its budget at 100 types with six derives
+  (E3093); it now compares heads by trait and target constructor
+  ([[Derive Graph Coherence]]). `isMethodKey` scanned every declared method on each call
+  on a built-in type; it reads a key set ([[Type Env]]). 400 types with 2,400 requests
+  check in 1.52 s at -O2, doubling from 0.76 s at 200 types and 0.38 s at 100.
+- Fixed: the quote character rendered as `'''`; it renders `'\''` ([[Eval Render]]).
+- Diagnostics: an empty `derives` is reported at `derives`, not at the next line's
+  declaration ([[Parser Derive Declaration]]); build and collect refusals each name their own
+  callback kind and the answer found ([[Type Check Reflection]]).
+
+## 2026-10-05 — Typed derives and compile-time shape reflection (#431)
+
+- Ordinary, user-writable derives reach delivery: [[Derive Graph]] elaborates
+  canonical requests from checked definitions into ordinary impls before any body
+  is checked, and checking and both evaluators see only generated code.
+  [[Derive Field Callbacks]] unrolls `Meta.build`, `variant.build`, and the new
+  `Meta.collect`/`variant.collect`: a `Result` build stops at the first `Err`,
+  `return` answers a field, `?` ends a build or answers a collect field's `None`,
+  and a collect whose answers fold is a plain array literal. `variant.positional`
+  folds per variant.
+- Static calls through a generic parameter (`A.decode(json)`) now run. Checking
+  records the types a reference chose for parameters bounded by a trait with a
+  member that takes no `self` ([[Type Env]], [[Check Rule]]);
+  [[Compiler Literals]] writes them as explicit type applications; [[Eval Call]]
+  binds them as `TypeWitnessValue`s ([[Eval Value]]) that [[Eval Call Path]]
+  dispatches through, nested containers included. Other calls are unchanged.
+- Fixed: a static member named through its type (`Point.read(text)`) was typed
+  by the impl for its first argument's type whenever one existed
+  ([[Type Check Call]]). Generated impl heads naming another module's type are filed
+  under the canonical owner ([[Type Formation]]), so trait proofs, recursive
+  fields and cross-module derives see them; field proofs form canonical types
+  with the graph's names. E3092 now reads `Owner.field: Type does not implement
+  Trait, which derive Trait requires of every field` at the authored field with
+  one request note ([[Source]] `authoredSpan`).
+- Std ships `derive Eq`, `Hash` and `Ord` ([[Std Order]], with `Array`/`Option`
+  impls), `Show` ([[Std Show]]), `Json.Encode`/`Json.Decode` with located
+  `DecodeError` paths ([[Std Json]]) and `Db.Row` over a strict `Column` trait
+  ([[Std Db Row]]), each over records, sums, generic and recursive types.
+- Inside `impl Trait for Type { }` the language server offers the trait's
+  unwritten members as method snippets, required ones first and defaults as
+  overrides, and a quick fix writes every required member
+  ([[Lsp Impl Members]]). Completion offers `derive`/`derives`; the VS Code
+  grammar (extension 0.6.0) colours derive words and attributes.
+- `pudu expand <file>` prints the requested implementations
+  ([[Derive Expansion Output]], [[Syntax Printer]], [[Statement Inlining]]).
+- [[Derive Library Spec]] runs every shipped derive, field callbacks, static
+  selection, definition and field refusals and the expansion snapshot in both
+  evaluators. [[Derive Benchmark]]: derived JSON encoding equals the
+  hand-written encoder (0.96/0.78 s against 0.96/0.77 s tree/compiled, fastest
+  of five, identical output).
+
+## 2026-10-04 — Compress persistent numeric series (#435)
+
+- [[Runtime Series Map]] proves a fully populated constant-payload arithmetic
+  series from three stored points, then shares its base with arbitrary sparse
+  additions and overrides. Signed bounds use exact unsigned distances. Only
+  representation-equivalent payloads compress; no absent key is synthesized.
+- [[Eval MultiMap]] supplies a narrow platform-kind/count-one predicate; every
+  duplicate retains incoming kinds and checked counts. [[Eval Value]] keeps its
+  lazy ordinary ordered-map view. Public maps, groups and snapshots stay persistent.
+- [[Runtime Series Map Tests]] compare generated histories, touched results,
+  every snapshot, ordering, gaps and host boundaries to ordinary strict IntMap.
+  Structural assertions prove long runs use one stored base payload. Extended
+  [[Eval Data Tests]] verify actual primitive compression, missing members,
+  mixed-kind overwrites, generic transitions and exact existing diagnostics.
+  Both focused families pass 200 tests in each evaluator mode.
+- Three alternating cold samples against d2362820 measure MultiMap tree
+  818 → 665 ms and compiled 838 → 669 ms; output is identical. Peak RSS
+  falls about 255–260 → 159 MB, while cumulative allocation falls 2.69 →
+  2.55 GB. Keep these different measures distinct. Other workload allocation
+  is unchanged; no broad timing or compiler-latency speedup is claimed.
+- Every fresh repository gate passes and all 550 property families pass in the
+  additional full tree run. The original script reports tree/compiled ms:
+  Arrays 740/560, Calls 430/270, Iterate 420/300, Loop 550/550,
+  Maps 760/550, MultiMap 640/650 and Records 350/350. All outputs match.
+- The complete compiler harness passes. Its first all-214-Std cold median is
+  1088 ms / 98 ms warm; the same-input before/after follow-up gives
+  996 → 966 ms cold and 87 → 87 ms warm, with startup 27 → 25 ms.
+  No compiler speedup is claimed. An initial Iterate compiled difference
+  (287 → 311 ms) reverses in a recheck (308 → 297 ms); Records rechecks
+  at 342 → 347 ms tree and 347 → 346 ms compiled. Preserve these variations.
+  Local GHC is 9.10.3; locked 9.14.1, whole-command sub-millisecond execution
+  and native speed/memory parity remain unverified.
+
+## 2026-10-04 — Remove boxed loop-region outcomes (#435)
+
+- [[Eval Loop Step]] carries strict success/refusal alternatives through an
+  unboxed state-token channel. [[Eval Loop Kernel]] converts once at the region
+  boundary, preserving complete admission, shared operators, lexical commit,
+  call depth/tally, short-circuit order and closed-call scratch cleanup.
+  No new syntax, callee admission, evaluator mode or native backend is introduced.
+- [[Eval Loop Step Tests]], registered by [[Eval Test Coordinator]] and
+  [[Pudu Test Cabal Manifest]], verify ordered success, skipped work after
+  exact ordinary refusal, return transfer, cleanup and escaped immutable values.
+  Existing loop families pass in both modes. Every fresh repository gate passes;
+  all 549 property families pass in an additional complete tree run.
+- The original five-run script reports tree/compiled ms: Arrays 770/570,
+  Calls 440/270, Iterate 450/320, Loop 570/570, Maps 750/560,
+  MultiMap 800/800 and Records 350/360. All seven stdout/stderr pairs match.
+  These are script minima; they do not establish a host-independent bound.
+- The complete compiler harness passes its diagnostic/output checks. The first
+  all-214-Std cold median is 1100 ms (87 ms warm); a follow-up before/after
+  comparison gives 976 → 981 ms cold and 100 → 87 ms warm. Startup is
+  25 → 27 ms, with 4000-unit syntax/evidence cases at 63–187 ms after the
+  change. Native resource parity and sub-millisecond whole-command latency remain
+  unproven; GHC 9.10.3 is local and the locked 9.14.1 matrix is unverified here.
+- Three alternating before/after samples of unchanged workloads give cold
+  tree/compiled medians: Loop 659/650 → 545/534 ms, Records
+  412/411 → 334/336 ms and MultiMap 879/891 → 836/827 ms.
+  Loop allocation falls 3.41 → 2.33 GB (32%), Records 1.92 → 1.27 GB
+  (34%) and MultiMap 3.26 → 2.69 GB (17%). All outputs match.
+- Arrays allocation falls 3.49 → 3.31 GB tree and 2.25 → 2.07 GB
+  compiled; Iterate falls 1.92 → 1.84 and 1.13 → 1.06 GB. An apparent
+  Arrays timing regression (789 → 892 ms tree) does not repeat in an
+  additional pair (920 → 790 ms); no timing claim is made for it. Calls
+  and Maps allocation is unchanged. MultiMap RSS slightly rises 256 → 260 MB;
+  Loop/Records RSS stays about 76 MB. Lower allocation is not a retained-memory
+  or native-speed guarantee. Whole-command sub-millisecond execution remains unmet.
+
+## 2026-10-04 — Add measured dependency-layer treemaps (#435)
+
+- [[Dependency Layer Report]] emits offline HTML and JSON for Haskell source
+  import layers and strongly connected components. [[Dependency Layer Model]]
+  joins exclusive .prof CPU/allocation or ticky allocation/entry rows; inherited
+  costs and allocations of closures are excluded from allocations by closures.
+- [[Dependency Layer View]] supplies layer/search/metric controls, ordered tables,
+  source/cost-centre details and imports/importers navigation. Unknown measures,
+  unmatched owners, hashes, conservative CPP edges and instrumentation limitations
+  remain explicit. No remote asset, private input or implicit build is used.
+- All nine [[Dependency Layer Tests]] pass, including 6000-module chains, cycles,
+  individual-cost oracles, malformed profiles, unsafe numeric input, HTML escape
+  boundaries and input-overwrite refusals. Actual browser smoke verifies search,
+  module selection, dependency navigation, layer and metric controls.
+- A fresh GHC 9.10.3 optimized ticky build runs all seven unchanged tree workloads
+  successfully. The current source graph has 263 modules, 32 layers and no source
+  import SCC cycles. Loop attributes 3.24 GB to [[Eval Loop Kernel]]; Calls
+  attributes 1.27 GB to [[Eval]], 1.10 GB to [[Eval Call]] and 0.55 GB to
+  [[Eval Env]]. MultiMap splits measured cost between the loop layer (1.31 GB)
+  and [[Eval MultiMap]] (1.00 GB). These instrumented cumulative allocations
+  identify investigation layers; they are not wall times or retained memory.
+
+## 2026-10-04 — Admit indexed loops and compact numeric occurrences (#435)
+
+- [[Eval Loop Kernel]] admits complete pure receiver/index regions in loops and
+  closed bodies. Their order and the existing shared index diagnostic remain
+  unchanged. [[Eval Operator Access]] checks the exact Integer upper bound before
+  narrowing; huge positive array, tuple and text indices now reliably refuse
+  with E7004 instead of wrapping to a host position.
+- [[Eval Value]] and [[Eval MultiMap]] store numeric coordinates once in the
+  persistent IntMap keys, with strict count entries and a compact common integer
+  kind. The lazy ordered view reconstructs the last inserted representatives,
+  retaining signed order, immutable snapshots and ordinary Map interoperability.
+- [[Eval Data Tests]], [[Eval Binding Flow Tests]] and [[Eval Test Coordinator]]
+  exercise real promotion, mixed-kind overwrites, extreme coordinates, generic
+  fallback, retained snapshots, exact refusal equality and actual indexed-region
+  admission. Every fresh repository gate passes; an additional complete tree
+  run passes all 548 property families. Local GHC is 9.10.3.
+- The unchanged five-run script reports tree/compiled milliseconds: Arrays
+  750/580, Calls 430/270, Iterate 420/310, Loop 670/700, Maps 770/550,
+  MultiMap 870/850, Records 420/430. All seven output pairs match.
+  These are script minima and do not promise a host-independent time bound.
+- Three alternating cold samples compare identical inputs with the preceding
+  binary: Arrays tree median 911 → 756 ms and allocation 4.60 → 3.49 GB;
+  Iterate tree 482 → 415 ms and 2.36 → 1.92 GB; MultiMap tree
+  977 → 878 ms and compiled 926 → 900 ms. MultiMap peak RSS falls
+  from 273 to 256 MB, while cumulative allocation rises 3.17 → 3.26 GB
+  (about 2.7%). Native execution/memory parity and full Derive delivery remain open.
+
+## 2026-10-04 — Remove closed-call setup and collector fanout (#435)
+
+- [[Eval Loop Kernel]] admits complete parameter-only synchronous module
+  bodies, with immutable record construction/member access inside those bodies.
+  A separate proof retains all ordinary capture, recursion, callback, default,
+  lending, effect and transfer paths. Arguments finish before shared scratch
+  installation; returned values own their payloads and scratch clears per call.
+- [[Eval Binding Flow Tests]] and [[Eval Test Coordinator]] exercise actual
+  admission, zero/larger arities, nested argument order, shorthand records,
+  bound receiver escape, local shadowing/replacement, fallback and exact
+  overflow/depth diagnostics, including an ordinary-dispatch oracle.
+- [[Pudu Cabal Manifest]] bounds default GC collection to two workers;
+  [[Pudu CLI]] retains its existing all-core runtime capability policy.
+  [[HTTP Benchmark Service]] reads its budget from carried argument zero,
+  correcting a larger harness run that silently stopped after 2000 connections.
+- The unchanged five-run evaluator script reports tree/compiled ms: Arrays
+  880/590, Calls 420/280, Iterate 480/320, Loop 660/660, Maps 750/550,
+  MultiMap 910/910, Records 420/420. These are script minima, not cold medians.
+  Paired cold Records medians before the collector cut fall from 1758/970 to
+  518/512 ms; allocation falls from 9.81/5.29 to 1.92 GB. RSS remains about
+  76 MB in that pass. Native execution and memory parity are still unmet.
+- Compiler medians with the delivered default and no extra RTS tuning are
+  28 ms startup, 68–188 ms for the 4000-unit syntax/evidence workloads,
+  42–141 ms for 25–200-module graphs, 172 ms for library composition and
+  962 ms cold / 96 ms warm for all 214 standard modules.
+- Three paired service runs with 1200 requests per route and 16 concurrent
+  clients complete. Median before/after throughput (requests/s) is
+  plain 4182/4248, JSON 4012/4038 and page 3380/3179, with overlapping
+  sample ranges. The smaller run is noisy and the initial larger run fails
+  at the fixture's incorrect budget; neither supports a sustained comparison.
+  Fresh full repository gates pass, and an additional full tree run passes all
+  547 property families. Local validation uses GHC 9.10.3; the locked GHC 9.14.1
+  CI matrix remains unverified locally. Complete typed Derive graph publication
+  and the standard derives remain unfinished.
+
+## 2026-10-04 — Reduce tree runtime state and pure-loop dispatch (#430, #435, #436)
+
+- [[Eval Compile Layout]] validates binding order and lexical scope before
+  admitting slots, fixing a closure initializer that read unit instead of its
+  captured value. Regressions cover earlier reads, branch/arm/block scope,
+  shorthand fields, capture snapshots, nested writes and checked overflow.
+- [[Eval Frame]] gives lexical blocks private binding cells; captures retain
+  immutable snapshots. [[Eval Env]] keeps its existing state after in-place
+  writes. Bare assignments avoid temporary places, and known leaf operands use
+  the shared name/literal paths.
+- [[Eval Loop Kernel]] reuses the complete pure-region proof for scalar loops
+  without requiring a MultiMap call. Call eligibility, diagnostic spans,
+  short-circuiting and constant bounds retain their existing implementations.
+  Paired cold medians fall from 2,312 to 716 ms for Loop tree, 1,215 to 941 ms
+  for Arrays tree and 949 to 805 ms for Maps tree. Loop compiled is 723 ms;
+  Records tree remains 1,666 ms. A scalar continuation experiment increased
+  allocation and was removed. Full native performance parity remains open.
+- [[Repository Gates]] cleans every compiler/test version root, retains one
+  warning configuration and uses the optimized binary for documentation, fixing
+  a stale compiler check and redundant build configurations. Complete validation
+  evidence is recorded in [[handoffs/2026-10-01-derive-integration]].
+- The corrected fresh-build repository gates and all 546 property families in
+  an additional tree-mode suite pass. Required TCP fixtures run with loopback
+  access. Complete Derive graph publication and native parity remain open.
+
+## 2026-10-04 — Integrate compiler performance with Derive (#431, #435)
+
+- Preserve complete generated source identities and conditional trait evidence
+  while integrating bounded literal frontiers, integer substitutions and compact
+  execution products. With the same 214-module library, cold compiler medians
+  fall from 1,103 to 121 ms for 4,000 branches and from 1,155 to 932 ms for all Std.
+  Separate all-Std measurements still exceed one second; native memory parity
+  remains open. [[handoffs/2026-10-01-derive-integration]] records raw evidence.
+- [[Macro Expansion]] walks lambda bodies inside derive callbacks and records an
+  explicit change witness before sharing unchanged syntax. [[Macro Substitution]]
+  masks macro arguments at lambda parameter binders and retains generated body
+  identity, fixing nested closures that selected each other's compiled code.
+  Authored lambda syntax remains unchanged.
+- All 545 optimized property families, warning-as-error build, formatter,
+  diagnostics, editor and documentation parity pass. Focused lambda tests pass
+  in both evaluators. MultiMap measures 0.96 s tree / 0.95 s compiled; the tree
+  Arrays, Loop and Records costs and complete Derive delivery remain pending.
+
+## 2026-10-04 — Early frontend release and deferred checker facts (#435)
+
+- [[Compiler Product Publication]] releases executable token streams immediately
+  after parsing, before discovery retains a module. Analysis against a populated
+  cache still runs the lossless frontend. Recovery findings remain identical.
+- [[Type Env]] defers only its final expression-type publication list; live
+  collection/place checks still use all recorded facts. The 8,000-branch check
+  now allocates about 402 MB and peaks near 158 MB RSS. Early frontend release
+  lowers RSS from about 185 MB; the deferred list saves another 8.1 MB allocation.
+  The post-frontier baseline was 525 MB allocation and 194 MB RSS under the same
+  default RTS policy.
+- All 465 property families, optimized -Werror, formatter, diagnostics, editor,
+  documentation and evaluator agreement checks pass. The whole compiler corpus
+  measures 122 ms for 4,000 branches, 135 ms for 200 modules and a 974 ms cold
+  all-Std median (98 ms warm). All-Std still peaks near 316 MB RSS, so native
+  compiler memory parity remains open. [[handoffs/2026-10-04-compiler-performance]]
+  preserves the first-run and allocation evidence.
+
+## 2026-10-04 — Bounded executable product lifetime (#435)
+
+- [[Compiler Product Publication]] applies the warm cache's execution contract
+  to cold checks, retaining syntax, integer kinds, constants and diagnostics.
+  Editor, documentation and REPL entry points retain their full analysis facts.
+  [[Compiler Program]] releases rejected frontend bookkeeping before checking.
+- [[Macro Expansion]] still walks every declaration and diagnoses rejected macros; it
+  shares the original tree when no expansion changed syntax. All-Std maximum
+  live heap falls from roughly 228 MB to 127 MB. The 8,000-branch workload peaks
+  near 185 MB RSS and checks in 233–236 ms after its first run. This does not
+  establish C/C++ memory parity.
+- All 465 property families, optimized warnings-as-errors, CLI formatting,
+  diagnostic inventory, live LSP, documentation parity and evaluator output
+  agreement pass. The whole compiler corpus reports a 975 ms all-Std cold
+  median and 87 ms warm median; [[handoffs/2026-10-04-compiler-performance]]
+  records the raw first-run cost and remaining memory work.
+
+## 2026-10-04 — Demand-driven type lookup and integer substitutions (#435)
+
+- [[Type Boundary]] builds its expression lookup map only when a tooling caller
+  reads it. [[Type Env]] stores inference substitutions by their existing
+  integer variable identity. Diagnostics, literal widths and published types
+  retain their existing meaning.
+- The unchanged 8,000-branch check allocates about 414 MB versus 525 MB after the
+  frontier fix. All 464 property families and live language-server checks pass.
+  Peak RSS stays near 194 MB with the default eight capabilities; this change
+  reduces allocation and does not establish native-compiler memory parity.
+
+## 2026-10-04 — Bounded integer-literal frontier work (#435)
+
+- [[Type Env]] selects recent literal constraints through [[Type Literal Frontier]]
+  without scanning unrelated older facts. Sign updates stop at the unique literal
+  identity. Deferred widths and E3018 remain unchanged.
+- [[Compiler Benchmark]] measures cold, first-cache and warm compiler work with
+  verified diagnostics, raw milliseconds and RTS memory statistics. An optimized
+  8,000-branch check falls from 4,105 to 287 ms and from 16.90 GB to 525 MB total
+  allocation on GHC 9.10.3. This is allocation over the run, not peak RSS.
+- All 464 property families, the warning-as-error build and diagnostic inventory
+  pass. [[handoffs/2026-10-04-compiler-performance]] records the remaining whole-Std
+  and peak-memory work; native compiler parity is not established.
+
+## 2026-10-04 — Admit generic evidence by complete kind (issue #431)
+
+- Validate written generic bounds and ordinary implementation heads before
+  bodies assume them. Refuse non-traits, wrong argument counts, partial
+  constructors and mismatched constructor arities with one E3048 at the full
+  bound. Preserve isolated editor buffers whose imported kinds are unavailable.
+- Form higher-kind arguments in their declared positions and share total rigid
+  substitution with aggregate inference. Conditional constructor shorthand
+  retains its complete premise; inference cannot select a partial named head.
+- Focused admission matrices and all 538 optimized property families pass with
+  -Werror on GHC 9.10.3. CLI checks, formatting and diagnostic-code validation
+  pass. Graph publication and complete Derive delivery remain pending.
+
+## 2026-10-04 — Complete conditional trait evidence (issue #431)
+
+- Preserve canonical target and trait applications, repeated parameter
+  correlations and implementation premises throughout checking. Scoped generic
+  bounds, direct and captured methods, trait-qualified calls and documentation
+  share the full application rather than an owner-only relationship.
+- Prove conditional evidence with bounded, isolated search. Backtrack when later
+  premises fail, delay unresolved subjects and commit caller inference only when
+  complete applications agree. Refuse circular evidence, ambiguous inference and
+  exhausted budgets. Dynamic widening retains its E3032 diagnostic boundary.
+- Bind generic headers before resolving their bounds, retaining self/forward
+  references and constructor-bound shorthand. Missing names and duplicate
+  parameters remain diagnostics. The full optimized suite passes 537 property
+  families with -Werror on GHC 9.10.3; CLI evaluation agrees in both modes,
+  formatting and diagnostic-code checks pass. A 1,000-layer conditional proof
+  measures 0.0104s CPU; this is proof-layer evidence, not derived JSON performance.
+- Generated-head publication, callback construction, Sum and standard-library
+  integration, cache invalidation, expansion output and runtime performance
+  remain required. Complete Derive delivery is not yet ready for dev.
+
+## 2026-10-03 — Record residualization and deferred cache fence (issue #431)
+
+- Residualize arbitrary validated record derives into ordinary checked impls,
+  preserving heterogeneous field reads, mutable writes, strict fallback effects,
+  declaration order, lexical bindings and distinct generated identities. Return
+  located field obligations separately; refuse metadata escapes and exhausted
+  depth, iteration or syntax budgets without a partial product.
+- Centralize the existing compile-time depth and iteration constants. Runtime
+  behavior and thresholds remain unchanged. Refuse unsupported generated or
+  foreign syntax and integer facts before deferred cache storage; ordinary
+  products still restore their complete bodies.
+- Loaded-program kernel tests execute real generated reads and writes in both
+  evaluators. The full optimized suite passes 528 property families with -Werror
+  on GHC 9.10.3. Kernel expansion of 500/1,000/2,000/4,000 fields measures
+  0.0003/0.0004/0.0006/0.0019 seconds CPU; this excludes checking and execution.
+  Graph request publication, field-bound proof, Sum/build/Std integration and
+  end-to-end performance remain required before complete delivery.
+
+## 2026-10-03 — Generated span and checker identity (issue #431)
+
+- Retain bounded authored definition/request anchors and a per-request ordinal
+  on generated spans. Complete identities distinguish types, writable references,
+  lent arguments and diagnostic suppression across instantiations. Central
+  diagnostic construction adds both authored locations.
+- Preserve fast authored editor offset queries alongside full-span compiler facts.
+  REPL compatibility deliberately uses its rebased offset projection. Completion
+  from a repaired snapshot explicitly queries the unchanged authored prefix.
+- Refuse persistence of generated provenance and foreign same-name snapshots
+  rather than losing their identities. Four focused property families cover source,
+  checker, editor, diagnostic and serialization boundaries. Focused completion
+  regressions and the full optimized suite pass 523 families with -Werror on
+  GHC 9.10.3. Actual metadata residualization remains the next dependency layer.
+
+
+## 2026-10-03 — Typed metadata sequences and method receivers (issue #431)
+
+- Declare the Std.Meta facade with owner-specific get/set/matches, name properties,
+  typed attribute fallback and variant payload access. Fields[T]/Variants[T] preserve
+  heterogeneous iteration; canonical imports introduce an abstract field parameter
+  without requiring a capability bound. Refuse concrete or enclosing field types.
+- Bind instantiated method self to its actual receiver before exposing the rest of
+  the function. Direct calls and captured methods share this rule; applied owner
+  arguments cannot drift with later arguments or expected results. Existing
+  constructor-wide Array implementations retain their receiver application.
+- Loaded-program matrices cover metadata ownership, aliases, selected imports,
+  captures, numeric constraints, rigid bounds, sequence misuse and ordinary generic
+  methods. The optimized full suite passes 519 properties with -Werror on GHC 9.10.3.
+  Four thousand metadata-loop definitions check in 0.666s CPU with zero diagnostics;
+  this is definition checking, not generated-code runtime evidence. CLI diagnostics
+  point at the offending authored call. Callback polymorphism, Result construction
+  and actual residualization remain required before complete feature delivery.
+
+## 2026-10-02 — Canonical derive contracts and scoped loops (issue #433)
+
+- Validate every derive against its ordinary canonical trait contract once at
+  the definition. E3091 refuses invalid heads, arity, missing/extra/duplicate
+  members, signature differences and stronger method bounds. Imported defaults
+  and generic, alpha-renamed methods follow the same path.
+- Check loop sources against their element annotation. Preserve enclosing rigid
+  bounds and isolate local obligations so later assumptions cannot prove earlier
+  calls. Share total rigid substitution with ordinary checking, preserving unsafe
+  wrappers, higher-kind applications and function default arity.
+- Five new property families and a contract matrix cover user traits, imports,
+  generics, mutability, asyncness, kinds and nested bounds. The optimized full suite
+  passes 516 properties with `-Werror`. Metadata elaboration and generated impls
+  remain subsequent layers; these fixtures prove definition checking.
+
+## 2026-10-02 — Derive parser recovery and identity (issue #430)
+
+- Recover an invalid attribute as one balanced argument region and preserve
+  following declarations. Include attribute delimiters and leading type
+  attributes in spans. Detect repeated generic derive entries using structural
+  keys without source locations, with set lookup instead of repeated list scans.
+- Four new properties cover recovery, EOF, structural duplicates and spans.
+  Focused checks and the full optimized suite pass 511 properties with `-Werror`.
+
+## 2026-10-02 — Resolved reflection boundaries (issues #432, #434)
+
+- Refuse compile-time metadata at the resolved value/type reference boundary,
+  including selected imports, held functions and module values. Lexical shadowing
+  follows the namespace selected. Classify imports once per module and reuse
+  enclosing or repeated rigid loop parameters instead of redeclaring them.
+- Extract pattern binding without changing its behavior. Focused refusal and
+  scope properties pass; the full optimized suite passes 507 properties with
+  `-Werror`. Metadata typing and residualization remain subsequent layers.
+
+## Unreleased — Generic derive checking (issue #433)
+
+- Every derive member checks once at its definition with the derived type
+  parameter rigid: mistakes report once, at the definition. Compile-time loops
+  inside check with their `where` subjects rigid and the element bound at its
+  ascribed type; outside a derive a surviving loop is `E3090`. Requests carry
+  no members and need no checking.
+
+## Unreleased — Derive resolution rigid binding (issue #432)
+
+- A derive binds its type parameter rigidly and walks its member bodies without
+  declaring them callable. A compile-time loop binds its `where` subjects as
+  rigid loop-local type variables before the element type, bounds, and body
+  walk, so every position naming them resolves without leaking outward.
+
+## Unreleased — Derive frontend syntax (issue #430)
+
+- The surface language admits attributes, trailing `derives` clauses, `derive`
+  definitions and `derive impl` requests, and `comptime for` loops with `where`
+  bounds, all preserved through persistence, macro expansion, and formatting.
+  Resolution walks name-like positions and skips rigid ones; a surviving
+  compile-time loop reports `E3090`; evaluation refuses one as unexpanded.
+  New diagnostics `E1064`–`E1068` report misplaced attributes, malformed or
+  repeated derives entries, non-literal attribute arguments, and bad derive
+  shapes, each once.
+
 ## 2026-10-01 — Persistent MultiMap kernels below one second
 
 - [[Std MultiMap]] uses proven pure primitives for persistent append and indexed

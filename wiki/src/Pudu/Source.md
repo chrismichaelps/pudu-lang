@@ -21,6 +21,8 @@ aliases: [Source]
 
 Represent immutable [[Source Text]] identity and half-open spans while centralizing offset validation and user-facing line/column lookup.
 
+`authoredSpan` drops a span's generated identity, keeping its authored offsets.
+
 ## Interface
 
 ### Signatures
@@ -66,7 +68,7 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - Lines/columns are one-based for user display.
 - Constructors validate ordering and source bounds; raw record constructors are not exported.
 - `newSource` computes scalar length once. Span checks and `sourceLength` use the cached strict field, so token emission cannot rescan the full source for every span.
-- Public accessors are total. Accessors, cached length, span equality, and `mergeSpans` are O(1); content-free `Show` is O(source-name length); `offsetPosition` is O(prefix scalars).
+- Public accessors are total. Accessors, cached length, span equality, and `mergeSpans` are O(1); content-free `Show` is O(source-name length); `offsetPosition` is O(log line count).
 - `newSource` is the only identity-minting effect. All span construction, traversal, merging, and later compiler phases remain pure.
 
 - **A position is found, not counted to.** Where each line begins is built once, in the pass that already reads the text, and `offsetPosition` looks the answer up. Folding over the first *n* characters cost what it skipped, and every caller asks per token rather than once — laying out a file asked for every token it held, which made formatting cost the square of the file's size and checking it nearly as much.
@@ -87,6 +89,24 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - **Requires:** [[Source Text]], [[grammar/haskell]].
 - **Consumed by:** [[Diagnostic Model]], [[Token]], and later compiler phases.
 
+## Generated provenance contract
+
+`generatedSpan :: Int -> Span -> Span -> Span` retains the definition span's real
+bounded offsets and records its definition span, request span and deterministic
+per-request node ordinal. `spanOrigin :: Span -> Maybe (Span, Span, Int)` exposes
+that provenance. Eq/Ord include the origin so generated nodes sharing text remain
+distinct in fact maps. Ordinary spans keep their existing identity and ordering.
+Origins store two compact authored anchors, never recursive origin chains; regenerating
+a node strips the input origins. Equality and ordering remain bounded O(1).
+`sameSpanSource` compares snapshot identity independent of offsets and origin.
+Merge preserves equal origins and clears incompatible origins, while retaining
+ordinary source bounds. Diagnostic construction adds authored related locations.
+
+- **Q:** Invent offsets for generated nodes? **A:** No. Use a hidden origin identity
+  with real bounded spans. _Rationale:_ editor and diagnostic positions remain
+  authored while type and body caches distinguish instantiations. _Rejected:_
+  negative offsets or synthetic text pretending to be source.
+
 ## Algorithm
 
 1. At ingestion, mint an opaque process-unique snapshot identity and store it with source name, decoded text, and strict cached scalar length.
@@ -94,14 +114,14 @@ offsetPosition :: Source -> Offset -> Maybe Position
 3. Construct non-negative offsets and reject negative advancement or `Int` overflow before addition.
 4. Validate span offsets as non-negative, ordered, and no greater than the cached source length.
 5. Merge only spans carrying the same opaque snapshot identity, choosing minimum start and maximum end in O(1).
-6. Convert an offset with a strict `Text` fold over the prefix, counting CRLF as one break without allocating an intermediate character list.
+6. Find the preceding immutable line-start entry and subtract its offset, preserving CRLF positions in logarithmic time.
 
 ## Negative Logic (Prohibited Paths)
 
 - Do not expose invalid raw span construction.
 - Do not compare/merge spans from different source snapshots, even when their display names match.
 - Do not derive structural `Eq` for `Source`, or structural `Ord`/unbounded `Show` for `Span`; these would traverse or reveal source content.
-- Do not cache mutable line maps in this value; introduce an immutable index module only after profiling proves need.
+- No mutable line maps or recursive generated-origin chains.
 - Do not use `String` indexing.
 
 ## Edge Cases
@@ -115,19 +135,20 @@ offsetPosition :: Source -> Offset -> Maybe Position
 
 ## Depth
 
-DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions. Deletion would scatter off-by-one/source-identity policy through every phase. Initial position lookup is linear and intentionally simple for EXPLORING maturity.
+DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions. Deletion would scatter off-by-one/source-identity policy through every phase. Position lookup uses an immutable line index justified by formatter profiling.
 
 ## Grill Log
 
 - **Q:** Why keep the whole map rather than a line count? **A:** Because a column needs the line's own start. _Rationale:_ knowing which line an offset falls on is half the answer; subtracting the line's start is what gives the column, and storing both costs one entry per line rather than one per character. _Rejected:_ counting newlines on demand, which is what this replaced.
 - **Q:** Bytes, scalars, or graphemes for stored offsets? **A:** Unicode scalar indices for v0.1 because Haskell `Text` traversal and lexer semantics align; document artifact tooling conversions later. _Rationale:_ correctness before premature byte-index optimization. _Rejected:_ pretending `Text` offsets are UTF-8 bytes; grapheme indices (wrong for compiler tokens).
 - **Q:** Should invalid spans clamp? **A:** No; return `Nothing`. _Rationale:_ clamping hides compiler defects and corrupts diagnostics. _Rejected:_ permissive normalization.
-- **Q:** Should position lookup be indexed now? **A:** No; keep linear until diagnostic rendering benchmarks justify a source index. _Rationale:_ no measured workload. _Rejected:_ eager line tables in every source.
+- **Q:** Should each position rescan its text prefix? **A:** No; measured formatter costs justify immutable line starts. _Rationale:_ per-token prefix scans made formatting quadratic. _Rejected:_ repeated prefix folding.
 - **Q:** Can offset arithmetic rely on machine `Int` wraparound? **A:** No; validate the delta and remaining headroom before addition. _Rationale:_ wrapped offsets could forge apparently valid spans. _Rejected:_ add first and validate the wrapped result.
 - **Q:** Recompute `Text.length` for every span? **A:** No; cache scalar length in the hidden immutable source value. _Rationale:_ lexer token emission must remain linear rather than rescan the source per token. _Rejected:_ repeated full-text length checks; exposing an unchecked cached field.
 - **Q:** Materialize a `[Char]` to compute positions? **A:** No; fold `Text` strictly with CRLF state. _Rationale:_ position rendering should allocate no source-sized list. _Rejected:_ `Text.unpack` traversal.
 - **Q:** Is display name or source content sufficient identity? **A:** No; `newSource` mints an opaque runtime `Unique` at ingestion and spans copy that compact identity. _Rationale:_ editors reuse names, content equality is O(source), hashes can collide, and caller-supplied numeric IDs are forgeable. _Rejected:_ comparing only `SourceName`; content-backed equality; unchecked IDs; global unsafe counters.
 - **Q:** Does IO identity pollute compiler phases? **A:** No; only source ingestion mints identity. _Rationale:_ loading/inserting a source is already a boundary operation, while every consumer receives an immutable value and remains pure. _Rejected:_ source-sized equality in hot paths to preserve a superficially pure constructor.
+- **Q:** Rebuild the authored span from its origin? **A:** No; a generated span's offsets already are its authored anchor's.
 
 ## Variants
 

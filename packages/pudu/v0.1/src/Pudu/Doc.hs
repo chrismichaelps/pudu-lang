@@ -4,6 +4,7 @@ module Pudu.Doc
   , DocIndex (..)
   , DocKind (..)
   , buildIndex
+  , buildIndexFrom
   , entriesFor
   , kindLabel
   , renderEntry
@@ -22,6 +23,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Derive (..)
   , Foreign (..)
   , ForeignFunction (..)
   , Function (..)
@@ -92,7 +94,12 @@ instance Monoid DocIndex where
     signature is never reconstructed from the written syntax, because the
     written syntax is optional and the inferred type is not. -}
 buildIndex :: [Token] -> ModuleTypes -> Module -> DocIndex
-buildIndex tokens types moduleValue =
+buildIndex tokens types = buildIndexFrom tokens (moduleSchemes types)
+
+{-| `buildIndex` from the settled schemes alone, for a tree other than the one
+    those schemes were checked from but declaring the same names. -}
+buildIndexFrom :: [Token] -> [(Text, Scheme)] -> Module -> DocIndex
+buildIndexFrom tokens settled moduleValue =
   DocIndex (concat (snd (List.mapAccumL step moduleStart (moduleDeclarations moduleValue))))
  where
   moduleStart = unOffset (spanStart (moduleSpan moduleValue))
@@ -106,7 +113,7 @@ buildIndex tokens types moduleValue =
     )
 
   owner = moduleNameText (locatedValue (moduleName moduleValue))
-  schemes = Map.fromList (moduleSchemes types)
+  schemes = Map.fromList settled
   docs = docComments tokens
   traitDocs = Map.fromList (concatMap declarationTraitDocs (moduleDeclarations moduleValue))
 
@@ -145,6 +152,13 @@ buildIndex tokens types moduleValue =
       make lowerBound (locatedValue (traitName value)) DocTrait declarationSpan (locatedValue (traitName value))
         : memberEntries (traitMember (locatedValue (traitName value))) declarationSpan (traitMembers value)
     ImplDeclaration value -> memberEntries (implMember value) declarationSpan (implFunctions value)
+    {-| Derive members document like impl members under the derived type
+        parameter: they are implementations with a definition site, and the
+        parameter is the only name the derive introduces for its target. A
+        request carries no members. -}
+    DeriveDeclaration value ->
+      memberEntries (deriveMember value) declarationSpan (deriveFunctions value)
+    DeriveImplDeclaration _ -> []
     MacroDeclaration value ->
       [make lowerBound (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
     {-| A foreign declaration is the only description of those functions that
@@ -202,6 +216,14 @@ buildIndex tokens types moduleValue =
       (DocMethod (implLabel holder))
       memberSpan
       (implLabel holder <> "." <> locatedValue (functionName value))
+
+  deriveMember holder lowerBound (Located memberSpan value) =
+    make
+      lowerBound
+      (locatedValue (functionName value))
+      (DocMethod ("derive " <> locatedValue (deriveParameter holder)))
+      memberSpan
+      (locatedValue (deriveParameter holder) <> "." <> locatedValue (functionName value))
 
   make = makeWith []
 

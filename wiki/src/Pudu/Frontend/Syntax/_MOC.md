@@ -5,8 +5,12 @@ tags: [moc, module]
 
 # Syntax Internals Map
 
+- [[Syntax Cache Provenance]] — refuse unsupported spans before deferred storage.
+
 - [[Syntax Located]] — uniform source locations and safe span composition.
 - [[Syntax Name]] — dotted module/name paths.
+- [[Syntax Printer]] — checked syntax rendered back to Pudu source.
+- [[Statement Inlining]] — splices statement blocks that bind nothing.
 - [[Syntax Tree]] — mutually recursive untyped declarations, blocks, statements, types, and expressions.
 
 The mutually recursive tree remains one data-only file; behavior belongs to parser and semantic modules.

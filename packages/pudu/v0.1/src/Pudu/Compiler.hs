@@ -10,6 +10,7 @@ module Pudu.Compiler
   , runCompile
   , runCompileWith
   , runFrontend
+  , rejectFrontend
   ) where
 
 import Pudu.Compiler.Literals (resolveLiterals)
@@ -66,11 +67,15 @@ data CompileResult = CompileResult
       evaluator reads this to build the literal as the type it is. -}
   , compileIntegerKinds :: ~(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
+  {-| Every module-scope name's type as inference settled it, for tooling that
+      indexes a tree other than the one checked: the authored text, before
+      derives are elaborated. -}
+  , compileSchemes :: ~[(Text, Scheme)]
   , compileDiagnostics :: ![Diagnostic]
   {-| The methods this module's declarations provide, by owner, as the checker
       declared them. Only this module's own: a program's are the union of its
       modules'. -}
-  , compileMethods :: ![(NominalId, Text, Scheme)]
+  , compileMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The constants folding computed that are plain data, which linking binds
       instead of evaluating their initializers again. -}
   , compileFolded :: ~(Map Text Frozen)
@@ -87,6 +92,23 @@ data CompileContext = CompileContext
 
 emptyCompileContext :: CompileContext
 emptyCompileContext = CompileContext emptyExportIndex emptyInterfaceGraph False
+
+{-| Preserve tooling syntax while the graph's earliest failed phase gates execution. -}
+rejectFrontend :: FrontendResult -> [Diagnostic] -> CompileResult
+rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} findings =
+  CompileResult
+    { compileTokens = frontendTokens
+    , compileModule = Nothing
+    , compileSyntax = frontendModule
+    , compileResolution = Nothing
+    , compileTypes = Nothing
+    , compileIntegerKinds = Map.empty
+    , compileDocs = Nothing
+    , compileDiagnostics = sortDiagnostics (frontendDiagnostics <> findings)
+    , compileMethods = []
+    , compileSchemes = []
+    , compileFolded = Map.empty
+    }
 
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
 
@@ -130,6 +152,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
             , compileMethods = []
+            , compileSchemes = []
             , compileFolded = Map.empty
             }
         Just original ->
@@ -155,7 +178,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) parsed)
+                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) (maybe Map.empty moduleSelections typing) parsed)
                     , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types
@@ -165,6 +188,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
                     , compileMethods = maybe [] moduleMethods typing
+                    , compileSchemes = maybe [] moduleSchemes typing
                     , compileFolded = folded
                     }
 

@@ -240,5 +240,7 @@ declarationShape (Located _ declaration) = case declaration of
   TraitDeclaration value -> "trait " <> locatedValue (traitName value)
   ImplDeclaration _ -> "impl"
   MacroDeclaration _ -> "macro"
+  DeriveDeclaration _ -> "derive"
+  DeriveImplDeclaration _ -> "derive impl"
   ForeignDeclaration value -> "foreign " <> locatedValue (foreignLibrary value)
   InvalidDeclaration -> "invalid"

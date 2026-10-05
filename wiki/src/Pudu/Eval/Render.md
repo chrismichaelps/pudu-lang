@@ -19,6 +19,8 @@ aliases: [Eval Render]
 
 How a runtime value prints, and the short shape-name a diagnostic calls it by.
 
+A type witness renders as `<type Owner>`.
+
 ## Interface
 
 ### Signatures
@@ -63,6 +65,7 @@ Direct structural recursion over the value shape. No caching, no mutation, no re
 - A function, task, foreign handle, or partially applied built-in method prints as an opaque tag naming what it is,
   because none of them has a written form to print.
 - An empty map prints as `{}` and an empty set as `#{}`, which is what distinguishes them.
+- The quote character prints as `'\''`, the way its literal is written; `'''` is no literal.
 
 ## Depth
 
@@ -81,6 +84,7 @@ DEPTH 0.30 (LOW). Two total functions over one closed set of shapes.
   it answers the same question `renderValue` does — what do I call this for a reader — and the two
   are changed together whenever a value shape is added. _Rejected:_ keeping it in [[Eval Value]],
   which would split one concern across two files to keep an import list shorter.
+- **Q:** Hide witnesses from rendering? **A:** No; a debugger must be able to show them.
 
 ## Foreign generation metadata
 

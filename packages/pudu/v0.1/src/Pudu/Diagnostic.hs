@@ -25,7 +25,7 @@ import Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Source (Offset, SourceName, Span, spanEnd, spanSource, spanStart)
+import Pudu.Source (Offset, SourceName, Span, spanEnd, spanOrigin, spanSource, spanStart)
 
 {-| @Diagnostic.Compiler.Code — preserves stable failure identity -}
 newtype DiagnosticCode = DiagnosticCode {unDiagnosticCode :: Text}
@@ -77,7 +77,10 @@ diagnostic code severity spanValue message =
           , spanValue
           , messageValue = nonEmptyMessage code message
           , helpValue = Nothing
-          , relatedValues = Seq.empty
+          , relatedValues = case spanOrigin spanValue of
+              Nothing -> Seq.empty
+              Just (definition, request, _) -> Seq.fromList
+                [Related definition "derive definition", Related request "derive requested here"]
           }
     else Nothing
 

@@ -39,6 +39,15 @@ replacement, failure output, and temporary-file cleanup on POSIX systems.
 
 ## Grill Log
 
+- **Q:** Clean only the first `pudu-*` directory? **A:** No; clean every compiler
+  and repository-test version root using `pudu-[0-9]*` and `pudu-tests-[0-9]*`.
+  _Rationale:_ the broad first match can select tests and retain all compiler
+  objects. Other dependency packages and source files remain untouched.
+- **Q:** Change GHC options between build and test or invoke a different binary
+  for documentation? **A:** No; test retains `-Werror` and documentation uses the
+  already resolved optimized executable. _Rationale:_ changing configurations
+  recompiles packages and breaks the gate's shared-binary evidence.
+
 - **Q:** Stop after the first gate? **A:** No. _Rationale:_ one release run should expose every
   independent repair needed. _Rejected:_ fail-fast orchestration.
 - **Q:** Let scaffold behavior live only in a manual command? **A:** No. _Rationale:_ onboarding is

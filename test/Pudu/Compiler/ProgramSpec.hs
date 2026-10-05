@@ -15,6 +15,7 @@ import Pudu.Compiler.Program.CacheSpec
   , testCacheInvalidation
   , testFoldedConstants
   , testImportedConstants
+  , testProductPublication
   )
 import Pudu.Compiler.Program.GraphSpec
   ( testDiscoveryFailures
@@ -36,6 +37,7 @@ import Pudu.Compiler.Program.LanguageSpec
   , testRangesAndSlices
   )
 import Pudu.Compiler.Program.StdlibSpec (testResolutionFreshness, testStandardLibrary)
+import Pudu.Compiler.Program.ReflectionSpec (reflectionProgramProperties)
 import Pudu.Compiler.Program.TypeBoundarySpec
   ( testQualifiedTypeNames
   , testReplLoadContext
@@ -46,7 +48,7 @@ import Test.QuickCheck (Property)
 {-| Aggregated properties covering dependency graph discovery, interfaces,
     type boundaries, foreign crossings, and standard library evaluation. -}
 programProperties :: [(String, IO Property)]
-programProperties =
+programProperties = reflectionProgramProperties <>
   [ ("program compilation resolves imported trait methods", testImportedMethods)
   , ("program compilation preserves module privacy and trait scope", testImportFailures)
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
@@ -57,6 +59,7 @@ programProperties =
   , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   , ("stored products compile and run exactly as source does", testCacheEquivalence)
+  , ("compiler publication bounds executable products and retains analysis", testProductPublication)
   , ("stored products are never reused for changed input", testCacheInvalidation)
   , ("damaged stored products fall back and are replaced", testCacheCorruption)
   , ("folded constants are bound at link instead of evaluated again", testFoldedConstants)

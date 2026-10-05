@@ -3,9 +3,9 @@ module Pudu.Semantic.ResolveSpec (resolveProperties) where
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler (CompileResult (..), FrontendResult (..), runCompile, runFrontend)
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticRelated)
-import Pudu.Semantic (Resolution (..), Symbol (..))
+import Pudu.Semantic (Resolution (..), Symbol (..), resolveModule)
 import Pudu.Semantic.ScopeIndex (emptyScopeIndex)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -26,6 +26,17 @@ resolveProperties =
   , ("imports bind external names in both namespaces", testImports)
   , ("exports list only public module declarations", testExports)
   , ("a parse error suppresses resolution entirely", testParseErrorGate)
+  , ("derive traits and requests resolve like other references", testDeriveReferences)
+  , ("unknown derive names resolve nowhere", testDeriveUnknown)
+  , ("loop where-subjects bind rigidly for the loop", testLoopBinders)
+  , ("unbound loop variables still diagnose", testLoopFreeVariable)
+  , ("loop binders do not leak outward", testLoopNoLeak)
+  , ("derive members are not callable", testDeriveNotCallable)
+  , ("reflection outside derives is E2018", testMetaRefused)
+  , ("reflection inside derives resolves", testMetaAllowed)
+  , ("reflection refusal follows imports, not spelling", testMetaAlias)
+  , ("reflection in type positions is refused", testMetaTypePosition)
+  , ("unknown qualifiers keep their own diagnostic", testMetaUnknown)
   ]
 
 testOrderIndependence :: IO Property
@@ -352,6 +363,198 @@ testParseErrorGate = do
 
 isParseCode :: Diagnostic -> Bool
 isParseCode value = Text.isPrefixOf "E1" (diagnosticCodeText (diagnosticCode value))
+
+testDeriveReferences :: IO Property
+testDeriveReferences = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive Encode for T: Record {"
+    , "  fn encode(self: &T) -> Str { \"\" }"
+    , "}"
+    , "derive impl Encode for Line"
+    , "type Line = { sku: Str }"
+    , "type Order = { id: Int } derives Encode"
+    ]
+  pure $ counterexample "no resolution errors" (property (all (not . isResolveCode) (snd result)))
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011"
+
+testDeriveUnknown :: IO Property
+testDeriveUnknown = do
+  clause <- resolve
+    [ "module M"
+    , "type Order = { id: Int } derives Nope"
+    ]
+  definition <- resolve
+    [ "module M"
+    , "derive Nope for T: Record {"
+    , "}"
+    ]
+  request <- resolve
+    [ "module M"
+    , "derive impl Nope for Line"
+    , "type Line = { sku: Str }"
+    ]
+  requestTarget <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive impl Encode for Missing"
+    ]
+  pure $ conjoin
+    [ counterexample "clause trait unknown" (codes clause === ["E2011"])
+    , counterexample "definition trait unknown" (codes definition === ["E2011"])
+    , counterexample "request trait unknown, target known" (codes request === ["E2011"])
+    , counterexample "request target unknown" (codes requestTarget === ["E2011"])
+    ]
+
+testLoopBinders :: IO Property
+testLoopBinders = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Option[Int]]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[F] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "no resolution errors" (property (all (not . isResolveCode) (snd result)))
+    , counterexample "checker names its missing phase" (property ("E3090" `elem` codes result))
+    ]
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011"
+
+testLoopFreeVariable :: IO Property
+testLoopFreeVariable = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[G] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  pure $ counterexample "unbound G reported" (property ("E2011" `elem` codes result))
+
+testLoopNoLeak :: IO Property
+testLoopNoLeak = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "fn run(items: Array[Int]) -> Int {"
+    , "  var total = 0"
+    , "  comptime for field: Option[F] in items where F: Encode {"
+    , "    total = total + 1"
+    , "  }"
+    , "  F"
+    , "}"
+    ]
+  pure $ counterexample "F is not a value outside" (property ("E2010" `elem` codes result))
+
+testDeriveNotCallable :: IO Property
+testDeriveNotCallable = do
+  result <- resolve
+    [ "module M"
+    , "trait Encode { fn encode(self: &Self) -> Str }"
+    , "derive Encode for T: Record {"
+    , "  fn encode(self: &T) -> Str { \"\" }"
+    , "}"
+    , "fn run() -> Str { encode(\"x\") }"
+    ]
+  pure $ counterexample "member not in scope" (property ("E2010" `elem` codes result))
+
+testMetaRefused :: IO Property
+testMetaRefused = do
+  result <- resolve
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "fn run() -> Str {"
+    , "  Meta.nameOf[Int]()"
+    , "}"
+    ]
+  pure $ counterexample "E2018 once" (codes result === ["E2018"])
+
+testMetaAllowed :: IO Property
+testMetaAllowed = do
+  result <- resolveOnly
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "trait Tag { fn tag(self: &Self) -> Str }"
+    , "derive Tag for T: Record {"
+    , "  fn tag(self: &T) -> Str {"
+    , "    Meta.nameOf[T]()"
+    , "  }"
+    , "}"
+    ]
+  pure $ counterexample ("codes: " <> show (codes result)) (property (all (not . isResolveCode) (snd result)))
+ where
+  isResolveCode value =
+    let code = diagnosticCodeText (diagnosticCode value)
+     in code == "E2010" || code == "E2011" || code == "E2018"
+
+testMetaAlias :: IO Property
+testMetaAlias = do
+  aliased <- resolve
+    [ "module M"
+    , "import Std.Meta as M"
+    , "fn run() -> Str {"
+    , "  M.nameOf[Int]()"
+    , "}"
+    ]
+  other <- resolve
+    [ "module M"
+    , "import Std.Text as Meta"
+    , "fn run(value: Str) -> Int {"
+    , "  Meta.length(value)"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "aliased reflection refused" (codes aliased === ["E2018"])
+    , counterexample "other modules untouched" (property (all (/= "E2018") (codes other)))
+    ]
+
+testMetaTypePosition :: IO Property
+testMetaTypePosition = do
+  result <- resolve
+    [ "module M"
+    , "import Std.Meta as Meta"
+    , "fn run(value: Meta.Field[Int, Int]) -> Int {"
+    , "  0"
+    , "}"
+    ]
+  pure $ counterexample "E2018 in types" (codes result === ["E2018"])
+
+testMetaUnknown :: IO Property
+testMetaUnknown = do
+  result <- resolve
+    [ "module M"
+    , "fn run() -> Str {"
+    , "  Meta.nameOf[Int]()"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "unknown qualifier reported" (property ("E2010" `elem` codes result))
+    , counterexample "no refusal without import" (property (all (/= "E2018") (codes result)))
+    ]
+
+resolveOnly :: [Text] -> IO (Resolution, [Diagnostic])
+resolveOnly lines' = do
+  source <- newSource (SourceName "resolve.pudu") (Text.unlines lines')
+  let frontend = runFrontend source
+  pure $ case frontendModule frontend of
+    Nothing -> (emptyResolution, frontendDiagnostics frontend)
+    Just parsed -> resolveModule parsed
 
 resolve :: [Text] -> IO (Resolution, [Diagnostic])
 resolve inputLines = do

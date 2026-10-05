@@ -19,6 +19,8 @@ aliases: [Pudu CLI]
 
 Provide the `pudu` executable: start `puduci`, check files, and report version and usage.
 
+`pudu expand <file>` prints the implementations the file's derive requests generate, or its diagnostics.
+
 ## Interface
 
 ### Commands
@@ -43,6 +45,13 @@ pudu help            print usage
 ```
 
 ### Governance
+
+- Runtime capabilities and GC workers have independent budgets. The executable
+  retains its existing all-core capability selection for servers while
+  [[Pudu Cabal Manifest]] bounds default parallel collection to two workers.
+  Explicit collection RTS flags remain available. The runtime-worker comment
+  must not claim that using every core makes compilation universally faster;
+  measured allocation-heavy serial work demonstrates collector overhead.
 
 - `check`, `run`, `explain`, and `test` compile through the [[Compiler Cache]]: unchanged modules'
   products from earlier runs are reused. `PUDU_CACHE=off` compiles everything from source.
@@ -144,6 +153,10 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 
 ## Grill Log
 
+- **Q:** Reduce server runtime capabilities to accelerate serial loops? **A:**
+  Keep worker parallelism and limit the separate collection budget. Validate
+  concurrent request behavior and ordinary CLI gates after linking the default.
+
 - **Q:** Should `pudu search` belong to the package commands alone? **A:** No. _Rationale:_ the
   declaration search `search <query> <file>...` shipped first and is documented; existing paths
   after the query are an unambiguous signal, and package words are not paths. _Rejected:_ a
@@ -176,6 +189,7 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
   graph, and tests contain Pudu only. Haskell remains an implementation language of the current
   bootstrap compiler until the separately governed self-hosting milestone; it is not part of an
   initialized project's source or build workflow.
+- **Q:** Put the expansion logic in the executable? **A:** No; [[Derive Expansion Output]] owns it and the executable dispatches.
 
 ## Referenced by
 
