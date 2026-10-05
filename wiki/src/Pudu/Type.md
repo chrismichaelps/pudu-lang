@@ -44,6 +44,9 @@ renderType :: Type -> Text
   and re-deriving it from written syntax would let a tool's answers drift from the compiler's.
 
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
+- `deriveDefinitionTypes` answers the types derive templates' own expressions were checked with,
+  and `overlayTypes` adds them to a module's info where it has none: the checked info holds no
+  authored entry for a template, whose generated copies carry generated spans.
 - `ModuleTypes` carries `moduleMethods`: the methods this module's declarations provide, by owner,
   with their schemes and name spans (see [[Type Env]]).
 - Its `moduleTypeInfo` field is intentionally lazy. Checking diagnostics and

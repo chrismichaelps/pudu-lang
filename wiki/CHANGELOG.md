@@ -27,6 +27,21 @@ tags: [changelog]
 - `Json` implements `Encode` and `Decode` ([[Std Json]]); `Json.encode`/`Json.decode`
   stay module functions because a module qualifier's export precedes a same-spelled
   type's method ([[Type Check Call]]). Std.Json's derive callbacks no longer shadow `field`.
+- Fixed: a static call through a type parameter bounded by an imported trait
+  (`T.decode(json)` with `T: Json.Decode`) ran only when the caller wrote the type
+  argument; inferred, it failed with `undefined name T`. Installed interface names now
+  carry which imported traits have a static member ([[Type Env]]).
+- The editor answers from the authored text in derive syntax ([[Lsp Analysis]]):
+  `derives` entries and `derive … for` headers hover and define their trait, a template's
+  member is described as the derive's, and template metadata (`field`, `variant`) hovers
+  and completes with the types definition checking gave it ([[Type Check]]).
+- Fixed: derive-heavy modules refused or slowed quadratically. Generated-head coherence
+  compared every pair of heads and exhausted its budget at 100 types with six derives
+  (E3093); it now compares heads by trait and target constructor
+  ([[Derive Graph Coherence]]). `isMethodKey` scanned every declared method on each call
+  on a built-in type; it reads a key set ([[Type Env]]). 400 types with 2,400 requests
+  check in 1.52 s at -O2, doubling from 0.76 s at 200 types and 0.38 s at 100.
+- Fixed: the quote character rendered as `'''`; it renders `'\''` ([[Eval Render]]).
 - Diagnostics: an empty `derives` is reported at `derives`, not at the next line's
   declaration ([[Parser Derive Declaration]]); build and collect refusals each name their own
   callback kind and the answer found ([[Type Check Reflection]]).

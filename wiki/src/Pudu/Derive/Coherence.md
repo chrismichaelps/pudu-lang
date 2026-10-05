@@ -13,8 +13,10 @@ aliases: [Derive Graph Coherence]
 ## Purpose and interface
 
 `requestOwnership` checks each request's canonical trait and target owners against
-its original module. `generatedCoherence` compares generated heads against every
-ordinary head and earlier generated head in the loaded graph. Return per-module
+its original module. `generatedCoherence` compares each generated head against
+the ordinary heads and earlier generated heads it could overlap: those naming the
+same trait and target constructors, and every head whose trait or target is open
+(a parameter or other non-nominal type). Return per-module
 diagnostics with source anchors; no failing head becomes evidence.
 
 ## Algorithm and invariants
@@ -24,7 +26,10 @@ canonical and carry their request binders. [[Trait Evidence Matching]] freshens
 both parameter sets independently and tests complete target/trait overlap using
 bounded isolated evidence. Conditional bounds do not make dispatch overlap safe.
 Canonical aliases, alpha-renamed binders and concrete specializations cannot evade
-overlap. Charge graph pair checks against the compile-time work limit.
+overlap. Heads are bucketed by (trait, target constructor); two heads naming
+different constructors in either position can never match, so the pairs compared
+grow with the heads per bucket, not with the program. Charge the remaining pair
+checks against the compile-time work limit.
 
 ## Diagnostics and edges
 
@@ -47,6 +52,12 @@ filesystem reads, coinductive proof, caller substitutions or first-wins dispatch
 - **Q:** Check only identical syntax? **A:** Test typed overlap with the shared
   evidence matcher. _Rejected:_ trait basename keys and parameter-spelling keys.
 - **Q:** Guess disjointness when matching exhausts work? **A:** Refuse publication.
+- **Q:** Compare every generated head with every earlier head? **A:** No.
+  _Rationale:_ 100 types with six derives each exhausted the budget comparing
+  heads that could not overlap, refusing a valid program. Constructor buckets are
+  exact — distinct constructors never unify — and open heads still meet every
+  compatible bucket. _Rejected:_ raising the budget, which keeps the quadratic
+  cost; skipping coherence for derived heads.
 
 ## Linkage and references
 

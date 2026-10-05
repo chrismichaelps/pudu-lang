@@ -65,6 +65,7 @@ Direct structural recursion over the value shape. No caching, no mutation, no re
 - A function, task, foreign handle, or partially applied built-in method prints as an opaque tag naming what it is,
   because none of them has a written form to print.
 - An empty map prints as `{}` and an empty set as `#{}`, which is what distinguishes them.
+- The quote character prints as `'\''`, the way its literal is written; `'''` is no literal.
 
 ## Depth
 

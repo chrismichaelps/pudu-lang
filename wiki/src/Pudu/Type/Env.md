@@ -79,6 +79,14 @@ The exported signatures are the module header's export list.
   by every module, and carrying the variable counter keeps installation variables distinct from the
   module's own. `evalChecker` runs work whose only product is its value, such as that
   installation, discarding what it recorded.
+- `isMethodKey` answers from `stateDeclaredMethodKeys`, the declared methods' qualified keys kept
+  beside the list: it is asked on every call on a built-in type, and scanning thousands of
+  generated methods there made derive-heavy modules quadratic.
+- The snapshot carries the imported traits with a member that takes no `self`
+  (`installedStatic`). A reference whose bounds name such a trait records the types it chose, so
+  `T.decode(json)` in a function whose `T` is inferred at its call still reaches the chosen owner;
+  without the set, only a trait the module itself declared was known to be static, and an imported
+  one ran only when the caller wrote the type argument.
 
 - **`qualifiesSomething` finds a qualifier with one ordered lookup.** A frame's keys are sorted, so
   every name under `Q.` starts at the first key not below it; listing every key of every frame per

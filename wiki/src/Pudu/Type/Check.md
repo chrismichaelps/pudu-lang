@@ -167,6 +167,11 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
+  _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
+  copies carry generated spans and request-specific types. `checkDeriveDefinitionTypes` runs the
+  same scoped check and answers its types. _Rejected:_ typing templates from one arbitrary request.
+
 - **Q:** Let module inference retain an unresolved Set element? **A:** No. _Rationale:_ module
   bindings feed tooling and imported interfaces; exporting an unconstrained variable would make
   their type depend on later consumers. _Rejected:_ generalizing the empty Set at module scope.

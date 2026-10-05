@@ -696,6 +696,22 @@ module; `Json` implementing `Encode`/`Decode`. Remaining from the earlier list:
 the PR's size, which is the integrated feature, and GHC 9.14.1, which CI builds
 on push since it is not installed locally.
 
-Exact next action: Language Architect review of the semantic contracts in
-[[Derive Design]] (static selection, `collect`, the module-qualifier rule) and
-Forensic Guardian wiki-parity review on the pull request into `dev`.
+## Edge-case sweep (2026-10-05)
+
+The user asked for the whole feature to merge into `dev` unsplit once it is complete
+and edge cases are covered. Same solo implementer, extended to Type.Env installed
+static traits and method keys, Derive.Coherence buckets, Eval.Render char quotes,
+Compiler schemes, Doc.buildIndexFrom, Type deriveDefinitionTypes/overlayTypes,
+Type.Check definition types, the Lsp.Analysis authored view, Lsp.DeriveToolingSpec,
+and the InferredSelection/ShowChars fixtures.
+
+Swept: empty, unit-only, generic, recursive, mutually recursive and deeply nested
+shapes; attribute renames and defaults; generated-name collisions; alias, unknown,
+unimported, clashing and orphan requests; cross-module private helpers and cache
+invalidation; scale to 2,400 requests; editor hover, definition, completion and
+diagnostics in derive syntax. Four defects found and fixed with regressions:
+inferred static selection through imported traits, quadratic coherence and method
+lookup, the `'''` char rendering, and derive syntax invisible to editor features.
+
+Exact next action: full gates from a clean build, then merge the pull request into
+`dev` once CI is green.

@@ -24,6 +24,10 @@ reader documented about it, and where to find it.
 
 ### Signatures
 
+`buildIndexFrom` is `buildIndex` from settled schemes alone, for a tree that declares the same
+names as the checked one: the editor indexes the authored text, whose `derive` declarations
+elaboration removed before checking.
+
 ```haskell
 data DocKind = DocFunction | DocTraitMethod !Text | DocMethod !Text | DocConstant | DocType | DocTrait | DocMacro | DocForeign !Text
 data DocEntry = DocEntry { docName, docModule :: !Text, docKind :: !DocKind

@@ -31,7 +31,7 @@ selected by its owner, not its first argument. `BuildEscape` and
 `UnmetStdField`: definition and field diagnostics, each callback refusal naming
 its own kind and the answer type it found. `StdJsonValue`: a record holding
 `Json`, `Option[Json]` and `Array[Json]` round-trips, an absent JSON field reads
-`null`, and `Json.encode` stays the module's function. `SumMismatch`: a payload
+`null`, and `Json.encode` stays the module's function. `InferredSelection`: `T.decode` through an imported trait with `T` inferred at the call, directly and from another generic function. `ShowChars`: a derived `Show` prints `'\''`, `'\"'` and `'\n'` the way their literals are written. A generated module of fifty records and fifty sums, each deriving six traits, checks with no diagnostics: coherence must not exhaust its budget on heads that cannot overlap. `SumMismatch`: a payload
 read from another variant panics with `expected Shape.Circle` in both
 evaluators. `Expand`: the snapshot in `Expand.expected`. `ExpandLocal`: the
 printed expansion of same-module derives, written in place of the derive

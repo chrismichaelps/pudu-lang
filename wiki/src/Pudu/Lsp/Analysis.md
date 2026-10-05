@@ -53,6 +53,14 @@ pathOf             :: Text -> Text
   findings name and the import that reaches each module file, gathered while the program's sources
   are at hand so publishing stays pure.
 - Declared methods carry the span of their name, so definition can jump to them.
+- **A cursor is on the authored text.** Elaboration removes `derive` declarations and `derives`
+  clauses before checking, so the compile's own tree, resolution, and index know nothing of them.
+  A document whose tokens use `derive`/`derives` is parsed and macro-expanded as written, then
+  resolved the way the compile resolves (strict exports when the compile was strict) and indexed
+  with the compile's settled schemes; its templates' expression types come from derive-definition
+  checking and are overlaid where the checked info has none. Tree, resolution, index and types then
+  answer hover, definition, references, rename and completion inside derive syntax. A document
+  without derive syntax reuses the compile's products.
 - A `file:` URI is percent-decoded as UTF-8; any other scheme is not a path.
 
 ### Linkage
