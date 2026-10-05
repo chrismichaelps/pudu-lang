@@ -443,7 +443,7 @@ testPureCallBoundary = do
           (Located loopSpan (WhileExpression _ condition body))}))) <- functionBody entry
       , Located _ Block{blockStatements = [Located _ (ExpressionStatement
           (Located _ (BinaryExpression _ "=" (Located callSpan (CallExpression _ _)))))]} <- body -> do
-          let closure = Closure "bump" function Nothing (Just (Captured [] 0)) Nothing
+          let closure = Closure "bump" function Nothing (Just (Captured [] 0)) [] Nothing
               modules = Map.singleton "bump" (FunctionValue closure)
               atDepth depth (Evaluator action) = Evaluator $ \env -> action env
                 { envDepth = depth, envFrames = [MapFrame modules], envModuleDepth = 1 }

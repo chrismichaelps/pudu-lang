@@ -47,7 +47,10 @@ pruneProducts :: ProductCache -> IO ()
   is keyed by the source text and the graph key: every module's name and interface key.
 - **Interface keys are position-free.** They cover a module's imports, body-free exported
   declarations, private type shells, exported constants' annotations, default availability, and
-  every exported name, written against a source no module is. Editing a body or moving code leaves
+  every exported name, written against a source no module is. They also include full derive and
+  macro definitions, compile-time function/member bodies and constant initializers (including
+  private ones), because consumers can observe these through expansion or constant folding.
+  Editing an ordinary runtime body or moving code leaves
   other modules' checked products reusable; any change another module could observe re-keys them.
 - **Only clean products are stored.** A parse or check with any diagnostic is never stored, so every
   diagnostic is produced fresh by the compiler reporting it.
@@ -120,3 +123,20 @@ performs no provenance traversal, since it stores no product.
   refuse unsupported syntax before writing. _Rationale:_ cache reuse must not
   turn generated locations into a latent host fault. _Rejected:_ losing origins,
   byte-pattern scanning or eager decoding on every warm read.
+
+## Compile-time dependency content
+
+The position-free fingerprint includes each derive definition's full body and
+its local compile-time dependency content. All module-scope constant initializers,
+macro definitions and marked compile-time function/member bodies participate,
+so transitive imported compile-time dependencies also change the graph key.
+Ordinary runtime helper bodies remain excluded from interface fingerprints.
+[[Compile-Time Dependency Closure]] makes them source-key inputs when reachable
+from expansion or folding roots, since ordinary pure calls can fold too.
+
+Resolved Grill Log: a body-free trait interface cannot fingerprint generated
+code or a frozen consumer constant. Include observable compile-time content using
+the existing syntax codec and detached positions; do not hash every runtime body,
+discard private compile-time dependencies, lose provenance or serialize diagnostics.
+The conservative closure may safely miss after relocation; only interface keys
+themselves promise position independence.

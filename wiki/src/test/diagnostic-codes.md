@@ -40,6 +40,10 @@ operation-specific wording does not change that identity.
 - **Q:** Give range extent overflow a new code? **A:** No. _Rationale:_ `E7005` already means a
   computed integer result does not fit its declared kind, whether the computation is an operator,
   `Range.length`, or `Range.sum`. _Rejected:_ splitting one recovery category by call syntax.
+- **Q:** Give derive ownership, overlap, contract and budget failures codes of their own?
+  **A:** No. _Rationale:_ E3014 and E3015 mean ownership and overlap for authored impls and
+  generated heads alike; E3091 is a derive contract violation and E3093 a derive instantiation
+  exceeding its bounds wherever found. _Rejected:_ splitting one meaning by which phase found it.
 
 ## Referenced by
 

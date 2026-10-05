@@ -21,6 +21,8 @@ Resolve what a call's callee refers to — a method on a value, a method named b
 method named by the trait that declares it — and give the call the type of the thing it will
 actually run.
 
+`traitQualifiedCall` dispatches on the first argument only when the qualifier is a trait and the member takes `self`. `Point.read(text)` names its owner; it is never answered by the impl for `text`'s type.
+
 ## Interface
 
 ```haskell
@@ -77,6 +79,10 @@ checking.
 - No importing [[Type Check]]; the capability is the path back.
 - No checking a receiver twice.
 - No resolving a trait-qualified call from the trait's declaration when an implementation exists.
+
+## Grill Log
+
+- **Q:** Keep receiver dispatch for type qualifiers? **A:** No; it typed `P.read("x")` with `Str`'s impl whenever one existed.
 
 ## Referenced by
 

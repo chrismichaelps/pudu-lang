@@ -68,3 +68,6 @@ updates or acceptance of failed compilation as successful execution.
 ## Referenced by
 
 [[Eval Test Coordinator]] · [[src/Pudu/Eval/_MOC]] · [[src/_MOC]]
+
+The closure fixture constructs `Closure` with an empty witness list, the
+field static selection added; behavior and assertions are unchanged.

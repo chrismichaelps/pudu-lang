@@ -51,6 +51,8 @@ Own checking patterns against the type they match for [[Type Check]].
 - **Requires:** [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
+`canonicalVariant` types a generated `Module.Type.Variant` constructor from the owner's declaration.
+
 ## Algorithm
 
 Dispatch on the operator, the receiver's type, or the pattern's shape, unifying against what the construct requires.
@@ -84,6 +86,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - **Q:** Why refuse a positional pattern rather than make it work? **A:** Because making it work needs the field order where the match runs, and the declaration is the only place that has it. _Rationale:_ admitting both spellings without one representation is what let a type-correct program find no arm; refusing one spelling removes the divergence at its source instead of reconciling it downstream. _Rejected:_ carrying the field order into matching; normalising the value at construction.
 - **Q:** Why not inline these into the walk? **A:** The walk would exceed the reviewable size, and these rules are the part a reader checks against the grammar. _Rationale:_ they are a table, and a table is easier to audit alone. _Rejected:_ inlining; a generic operator-table abstraction.
 - **Q:** Is checking only a range's lower endpoint sufficient? **A:** No; form and unify both endpoints. _Rationale:_ otherwise an out-of-range upper literal reaches exhaustiveness and evaluation without the numeric contract being enforced. _Rejected:_ trusting the parser; checking only the endpoint used to infer subject type.
+- **Q:** Share the pattern lookup? **A:** Yes; `variantForPath` answers both.
 
 ## Referenced by
 

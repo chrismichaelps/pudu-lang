@@ -19,6 +19,8 @@ aliases: [Lsp Documents]
 
 What the server knows about each open document: one compile's answers, kept by the URI the editor named them with.
 
+`analysisTraits` holds the program's trait shapes.
+
 ## Interface
 
 ```haskell
@@ -64,6 +66,10 @@ uriOf            :: Json -> Maybe Text
 
 - **Requires:** [[Compiler Pipeline]], [[Doc Index]], [[Source Text]], [[Lsp Context]].
 - **Consumed by:** [[Lsp Server]].
+
+## Grill Log
+
+- **Q:** Rebuild trait shapes per request? **A:** No; once per analysis, like sums and records.
 
 ## Referenced by
 

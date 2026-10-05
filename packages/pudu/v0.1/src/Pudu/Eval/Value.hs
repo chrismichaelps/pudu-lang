@@ -161,6 +161,11 @@ data Value
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
   | ForeignHandleValue !Text !Int64 !ForeignClaim
+  {-| The type a call chose for a parameter bounded by a trait with a static
+      member: the owner its methods are installed under and the owner's own
+      arguments. Bound under the parameter's name, so `A.decode(json)` finds
+      the selected owner's method without any value to dispatch on. -}
+  | TypeWitnessValue !Text ![Value]
   deriving stock (Show)
 
 {-| Both map representations expose the same persistent ordered contents. -}
@@ -212,7 +217,7 @@ ropeOfValue value = case value of
   RopeText rope -> Just rope
   _ -> Nothing
 
-{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue #-}
+{-# COMPLETE IntValue, FloatValue, DecimalValue, StrValue, BytesValue, BucketsValue, RangeValue, CharValue, BoolValue, NullValue, UnitValue, TupleValue, ArrayValue, MapValue, SetValue, RecordValue, VariantValue, FunctionValue, TaskValue, BuiltinValue, ArrayMethodValue, StringMethodValue, CharMethodValue, MapMethodValue, SetMethodValue, RangeMethodValue, BytesMethodValue, BucketsMethodValue, TextMethodValue, ForeignValue, ForeignHandleValue, TypeWitnessValue #-}
 
 {-| Aggregate equality follows numeric Decimal equality without changing the
     retained scale or the identity of closures and foreign handle claims. -}
@@ -252,6 +257,8 @@ instance Eq Value where
       closureA == closureB && bindingsA == bindingsB && spanA == spanB
     (ForeignHandleValue nameA addressA claimA, ForeignHandleValue nameB addressB claimB) ->
       nameA == nameB && addressA == addressB && claimA == claimB
+    (TypeWitnessValue ownerA argumentsA, TypeWitnessValue ownerB argumentsB) ->
+      ownerA == ownerB && argumentsA == argumentsB
     _ -> False
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
@@ -332,6 +339,8 @@ data Closure = Closure
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe Captured)
+  {-| Type witnesses bound in the body's frame beside its parameters. -}
+  , closureWitnesses :: ![(Text, Value)]
   {-| Proven after immutable capture; forced once by the first invocation. -}
   , closureMultiMap :: ~(Maybe (Span, Builtin))
   }
@@ -494,3 +503,4 @@ shapeRank value = case value of
   RangeValue{} -> 27
   RangeMethodValue _ _ -> 28
   TextMethodValue _ -> 29
+  TypeWitnessValue _ _ -> 30

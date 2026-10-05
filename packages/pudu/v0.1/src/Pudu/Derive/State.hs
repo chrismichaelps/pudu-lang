@@ -1,7 +1,8 @@
 {-| @Derive.State — bounded request-owned syntax identity and field obligations. -}
 module Pudu.Derive.State
   ( ExpansionFailure (..), FieldObligation (..), Residual
-  , generated, iteration, refuse, requireFields, runResidual, withinDepth
+  , exitsTaken, generated, iteration, noteExit, refuse, requireFields, runResidual
+  , withinDepth
   ) where
 
 import Data.Text (Text)
@@ -15,6 +16,8 @@ data ExpansionFailure = ExpansionFailure !Span !Text
 
 data FieldObligation = FieldObligation
   { obligationField :: !Span
+  {-| How the diagnostic names the field: its owner, any variant, and itself. -}
+  , obligationLabel :: !Text
   , obligationType :: !(Located TypeSyntax)
   , obligationBounds :: ![Located TypeSyntax]
   , obligationRequest :: !Span
@@ -26,6 +29,7 @@ data ResidualState = ResidualState
   , nextNode :: !Int
   , iterations :: !Int
   , obligationsRev :: ![FieldObligation]
+  , exits :: !Int
   }
 
 newtype Residual a = Residual
@@ -51,7 +55,7 @@ instance Monad Residual where
 
 runResidual :: Span -> Residual a -> Either ExpansionFailure (a, [FieldObligation])
 runResidual request (Residual action) = do
-  (value, final) <- action (ResidualState request 0 0 [])
+  (value, final) <- action (ResidualState request 0 0 [] 0)
   pure (value, reverse (obligationsRev final))
 
 generated :: Span -> a -> Residual (Located a)
@@ -80,7 +84,15 @@ withinDepth depth at
   | depth >= callDepthLimit = refuse at "derive expansion exhausted its compile-time depth budget"
   | otherwise = pure ()
 
-requireFields :: Span -> Located TypeSyntax -> [Located TypeSyntax] -> Residual ()
-requireFields at written bounds = Residual $ \state ->
-  let obligation = FieldObligation at written bounds (requestAnchor state)
+requireFields :: Span -> Text -> Located TypeSyntax -> [Located TypeSyntax] -> Residual ()
+requireFields at label written bounds = Residual $ \state ->
+  let obligation = FieldObligation at label written bounds (requestAnchor state)
    in Right ((), state{obligationsRev = obligation : obligationsRev state})
+
+{-| Counts lowered callback exits, so a callback body is wrapped in its exit
+    loop only when it actually left early. -}
+noteExit :: Residual ()
+noteExit = Residual $ \state -> Right ((), state{exits = exits state + 1})
+
+exitsTaken :: Residual Int
+exitsTaken = Residual $ \state -> Right (exits state, state)

@@ -204,14 +204,16 @@ testDeriveFixtures = do
   unknown <- Program.codes "test-fixtures/derive/UnknownNames.pudu"
   sums <- Program.codes "test-fixtures/derive/SumShapes.pudu"
   sumsResult <- Program.runEntry "test-fixtures/derive/SumShapes.pudu"
+  scalar <- Program.codes "test-fixtures/derive/ScalarAlias.pudu"
   pure $ conjoin
     [ counterexample "valid program checks clean" (main === [])
-    , counterexample "valid program runs" (mainResult === Just "0")
+    , counterexample "valid program runs" (mainResult === Just "\"tagrrtagrrsum\"")
     , counterexample "body mistake once" (mistake === ["E3001"])
     , counterexample "loop mistake once" (loopMistake === ["E3001"])
     , counterexample "ordinary loop refused" (ordinary === ["E3090"])
     , counterexample "each clause mistake once" (badClauses === ["E1064", "E1066", "E1065", "E1067", "E1068"])
     , counterexample "unknown names resolve nowhere" (unknown === ["E2011", "E2011", "E2011"])
     , counterexample "sums check clean" (sums === [])
-    , counterexample "sums run" (sumsResult === Just "0")
+    , counterexample "scalar alias refused" (scalar === ["E3091"])
+    , counterexample "sums run" (sumsResult === Just "\"Shape:sumOther:sum\"")
     ]

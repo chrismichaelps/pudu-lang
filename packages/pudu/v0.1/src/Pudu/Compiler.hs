@@ -10,6 +10,7 @@ module Pudu.Compiler
   , runCompile
   , runCompileWith
   , runFrontend
+  , rejectFrontend
   ) where
 
 import Pudu.Compiler.Literals (resolveLiterals)
@@ -88,6 +89,22 @@ data CompileContext = CompileContext
 emptyCompileContext :: CompileContext
 emptyCompileContext = CompileContext emptyExportIndex emptyInterfaceGraph False
 
+{-| Preserve tooling syntax while the graph's earliest failed phase gates execution. -}
+rejectFrontend :: FrontendResult -> [Diagnostic] -> CompileResult
+rejectFrontend FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} findings =
+  CompileResult
+    { compileTokens = frontendTokens
+    , compileModule = Nothing
+    , compileSyntax = frontendModule
+    , compileResolution = Nothing
+    , compileTypes = Nothing
+    , compileIntegerKinds = Map.empty
+    , compileDocs = Nothing
+    , compileDiagnostics = sortDiagnostics (frontendDiagnostics <> findings)
+    , compileMethods = []
+    , compileFolded = Map.empty
+    }
+
 {-| Run lexing, parsing, name resolution, and type checking in fixed order.
 
     Each phase runs only on what the previous one admitted, so a defect is
@@ -155,7 +172,7 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) parsed)
+                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) (maybe Map.empty moduleSelections typing) parsed)
                     , compileSyntax = Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types

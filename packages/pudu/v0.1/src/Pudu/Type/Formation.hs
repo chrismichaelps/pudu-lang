@@ -42,7 +42,7 @@ import Pudu.Type.Env
   , emptyDeclared
   , freshVariable
   )
-import Pudu.Type.Value (NominalId (..), Type (..), nominalKey, restrictedBy)
+import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, nominalKey, restrictedBy)
 import Pudu.Type.Formation.Order (formationOrder)
 import Pudu.Type.Formation.Shell (addShell, locallyDeclared, paramEntries)
 import Pudu.Type.Formation.Builtin
@@ -105,8 +105,7 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
         "declare the trait, import it, or check the spelling"
       pure ErrorType
   NamedType path arguments -> do
-    let identity = Map.findWithDefault (NominalId Nothing (moduleNameText path))
-          (moduleNameText path) (declaredNames declared)
+    let identity = namedIdentity declared path
         argumentKinds = Map.findWithDefault [] identity (declaredKinds declared)
         formArgument (kind, written@(Located _ argument)) = case argument of
           NamedType parameter []
@@ -274,7 +273,7 @@ formNamed declared rigid path arguments
             expandAlias (zip parameters arguments) aliased
       _ -> NominalType identity arguments
  where
-  identity = Map.findWithDefault fallback pathText (declaredNames declared)
+  identity = namedIdentity declared path
   {-| Alias facts belong to declarations, not spellings. A graph can carry a
       callback alias called Listener beside Std.Net's record of that name;
       only the identity this scope resolved may supply an expansion. -}
@@ -282,7 +281,17 @@ formNamed declared rigid path arguments
   pathText = moduleNameText path
   name = lastSegment path
   unqualified = pathText == name
-  fallback = NominalId Nothing pathText
+
+{-| The declaration a written path names. A qualified path no scope binds is
+    the canonical `Module.Type` spelling generated code uses for a type its
+    module never imported, so it names that module's declaration. -}
+namedIdentity :: DeclaredTypes -> ModuleName -> NominalId
+namedIdentity declared path@(ModuleName segments) =
+  Map.findWithDefault fallback (moduleNameText path) (declaredNames declared)
+ where
+  fallback = case NonEmpty.nonEmpty (NonEmpty.init segments) of
+    Just owner -> canonicalNominal (ModuleName owner) (NonEmpty.last segments)
+    Nothing -> NominalId Nothing (moduleNameText path)
 
 {-| Replace an alias's parameters with the arguments it was written with.
 

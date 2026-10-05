@@ -314,7 +314,7 @@ evaluateHere (Located spanValue expression) = case expression of
         whole stack kept every value that happened to be in scope alive for as
         long as the literal was. -}
     captured <- capturedFrames (reachableNames value)
-    pure (FunctionValue (Closure lambdaName value Nothing (Just captured) Nothing))
+    pure (FunctionValue (Closure lambdaName value Nothing (Just captured) [] Nothing))
   ScopeExpression body -> evaluateScope callNeeds spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields

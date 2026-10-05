@@ -143,6 +143,17 @@ not cause that, since cabal decides by content hash, and deleting an object file
 does not either, since cabal trusts its own record over the file system. A
 directory with no record compiles everything. The first run takes minutes.
 
+## Derived against hand-written
+
+```bash
+bench/derive.sh "$(cabal list-bin exe:pudu --enable-optimization=2)"
+```
+
+Runs a derived `Json.Encode` and the hand-written encoder of the same orders,
+five times per evaluator, and reports the fastest run of each. Both print the
+total encoded length and the script refuses to report when they differ, so a
+faster derive cannot be a different one.
+
 ## What this cannot show
 
 A Pudu program has no machine code. These read the *compiler*, which is where

@@ -18,6 +18,8 @@ aliases: [Lsp Analysis]
 Compile one open document as the program it is — under the module source root its own path and
 module name give it — and gather everything the editor features read from that compile.
 
+Each analysis also gathers `programTraits`.
+
 ## Interface
 
 ```haskell
@@ -67,6 +69,7 @@ pathOf             :: Text -> Text
   programs. _Rationale:_ the file and its declared module are the only facts that say where its
   program's modules are, and they are what the command line uses. _Rejected:_ the workspace root as
   source root, which made imports disappear whenever the folder was not exactly the source root.
+- **Q:** Gather traits lazily? **A:** The map is built from interfaces already prepared for the analysis.
 
 ## Referenced by
 

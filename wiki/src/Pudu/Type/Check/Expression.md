@@ -24,6 +24,8 @@ an abstract assumption merely because no concrete request exists yet.
 
 Decide what an expression's type is.
 
+In derive checking, a call whose callee is a field callback is checked by `checkBuildCall`. A generated multi-segment name naming a canonical variant is typed as that variant's constructor even when the defining module does not import its owner.
+
 ## Interface
 
 ```haskell
@@ -114,6 +116,7 @@ through the record.
   **A:** To satisfy file length contracts (< 500 lines) and isolate sub-expression scope and branch checking
   from expression AST dispatch. _Rationale:_ arms, closures, and loops represent distinct control-flow boundaries
   that can be checked via parameterised runners without cyclic dependencies.
+- **Q:** Require the defining module to import every target? **A:** No; generated constructions name owners canonically.
 
 ## Referenced by
 

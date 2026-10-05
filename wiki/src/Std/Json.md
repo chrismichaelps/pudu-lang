@@ -10,6 +10,8 @@ aliases: [Std Json]
 # Std Json
 ## Purpose
 Decode, encode, inspect, and immutably transform JSON values with positioned parse errors.
+`Encode`/`Decode` traits, `DecodeError{path, expected, found}` with `DecodeStep` and `explainDecode`. Impls for Int, Str, Bool, Float64, Decimal, `Array[A]` and `Option[A]`. `derive Encode` writes records as objects and sums as one-key objects (list, object or empty list payloads), honouring `@json` and `@skip`. `derive Decode` ignores unknown keys, refuses a consumed key written twice, applies `@default(json)` to a missing field and otherwise reads null, and locates every failure by path.
+
 ## Interface
 Exports `Json`, `JsonError`, compact/pretty encoding, field/index/path lookup, typed projections, constructors, key updates, and error explanation.
 `foldLines(file, seed, step)` folds a JSON Lines file one value to a line, skipping blank lines, and
@@ -112,6 +114,8 @@ digit. Anything else is `Unexpected` at the first position that breaks the gramm
 - **Q:** Take a number as the longest run of number characters and let the value decide? **A:** No.
   _Rationale:_ `01`, `1.`, and `1e` then decode as numbers from text that is not JSON. _Rejected:_
   lenient number runs.
+- **Q:** Implement Encode and Decode for `Json` itself? **A:** No; the type shares the module's name, so `Json.encode`/`Json.decode` would select the impl instead of the module functions.
+- **Q:** How is a default written? **A:** As JSON text; text that is not JSON is the string itself, so `@default("guest")` and `@default(0)` both work.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Json]]

@@ -24,6 +24,8 @@ not establish evidence whose trait argument count or kind is invalid.
 
 Check every declaration, statement, and expression in a module against the types its declarations promise, inferring what the language allows to be left unwritten.
 
+`checkModuleDetailed` also answers the module's static selections.
+
 ## Interface
 
 ### Signatures
@@ -132,6 +134,13 @@ checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagno
 
 ## Algorithm
 
+`checkDeriveDefinitionsWith` additionally receives resolved name spans of captured
+module declarations needing ordinary inference. Check those bodies against the
+shared signature frame before any generic derive body, then check each template
+once. Its existing wrapper supplies an empty set. Whole-module checking keeps its
+existing declaration order. Resolved Grill Log: preserve private inference without
+checking unrelated ordinary callers before generated interfaces exist.
+
 Validate each derive's canonical trait/member contract with [[Type Check Derive]]
 after signatures are installed. Generic bodies still check once, independently
 of requests; contract validation does not instantiate or evaluate them.
@@ -170,6 +179,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 - **Q:** Should imported implementations be appended to the local declarations? **A:** No; install their interface schemes and relationships separately. _Rationale:_ concatenation would make the consumer appear to own dependency impls and re-run `E3014`/`E3015`. _Rejected:_ a synthetic combined module.
 - **Q:** Infer an omitted method annotation again in each consumer? **A:** No; require a complete interface signature with `E3010`. _Rationale:_ a body-free cycle has no stable evidence from which to reconstruct inference, so fresh consumer variables would change the public contract by context. _Rejected:_ contextual reconstruction; carrying dependency bodies into the consumer checker.
 - **Q:** Default integer literals before checking their context? **A:** No; validate solved constraints after annotations, arguments, operators, and branches unify, but leave an unresolved branch/result constraint for its enclosing context. Force a default only when a rule needs a concrete shape or at the body boundary. _Rationale:_ eager global defaulting recreates the issue where every width except `Int` is unusable, while creation-range settlement lets non-task `.await` name `Int` without stealing the contextual type of an `if` or `match` result. _Rejected:_ eager defaulting; defaulting every literal at a nested expression boundary; implicit narrowing from `Int`.
+- **Q:** Produce selections per declaration? **A:** No; once per module, zonked with its final substitution.
 
 ## Variants
 
@@ -188,6 +198,23 @@ The module is checked with the set of spans that use a `var` binding, from resol
 Checker entry points consume `Set Span` writable references and publish
 `[(Span, Type)]` expression facts. Full snapshot and generated identities survive
 all product boundaries; [[Type Boundary]] creates the authored editor index.
+
+## Definition checking boundary
+
+`checkDeriveDefinitions :: ImportTypes -> Set Span -> Module -> [Diagnostic]`
+installs the same declarations and signature environment as ordinary checking,
+validates canonical derive contracts and checks only their generic bodies.
+Ordinary declaration bodies and coherence wait for the generated graph. The
+graph phase consumes this result once per defining module and removes admitted
+template declarations from the executable module before ordinary checking.
+The existing full-module APIs retain their isolated-source behavior.
+
+Resolved Grill Log: separate definition admission from request instantiation;
+reuse one signature preparation path and the existing generic member checker.
+Do not validate templates against individual requested field types, check
+ordinary callers before generated heads exist, or recheck template bodies in
+the final graph walk. Invalid definition modules retain their diagnostics and
+publish no validated template product.
 Resolved Grill Log: offset-only signatures would undo generated identity.
 
 ## Complete trait evidence

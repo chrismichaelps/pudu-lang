@@ -1,0 +1,21 @@
+module BuildEscape
+
+import Std.Meta
+
+trait Make { fn make() -> Result[Self, Str] }
+
+derive Make for T: Record {
+  fn make() -> Result[T, Str] {
+    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, F] { Err(field.name) })
+  }
+}
+
+trait Names { fn names() -> Array[Str] }
+
+derive Names for T: Record {
+  fn names() -> Array[Str] {
+    Meta.collect[T](fn(field: Meta.Field[T, F]) -> Str { field.name })
+  }
+}
+
+export fn main() -> Int { 0 }

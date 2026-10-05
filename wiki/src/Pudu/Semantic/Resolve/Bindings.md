@@ -31,6 +31,11 @@ unchanged.
 
 ## Algorithm
 
+Constructor patterns use [[Resolve Canonical]]'s scoped generated path boundary,
+matching expressions and type syntax. Authored patterns retain lexical head
+resolution. Resolved Grill Log: a generated target constructor cannot require
+the strategy author to import each future consumer's type.
+
 Walk tuple/sequence/constructor/record/alternative patterns in source order, resolve constructor heads through value/type qualification, and introduce value names in the current lexical frame. Discard and literal patterns bind nothing.
 
 ## Negative Logic

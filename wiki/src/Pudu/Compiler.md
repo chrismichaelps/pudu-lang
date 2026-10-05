@@ -21,6 +21,8 @@ aliases: [Compiler Pipeline]
 
 Provide the public phase orchestration entry point. In the first slice it lexes and parses [[Source Text]], combines ordered [[Diagnostic]] values, and withholds syntax when blocking errors exist. It will deepen as semantic/runtime/backend products are added.
 
+The executable module is rewritten with both integer kinds and static selections.
+
 ## Interface
 
 ### Signatures
@@ -136,12 +138,20 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
   error must not cost the editor its syntax. _Rejected:_ relaxing `compileModule` admission, which
   would let a rejected module reach linking.
 - **Q:** Should program compilation re-run the frontend after graph discovery? **A:** No; pass the saved `FrontendResult` into `compileFrontendWith`. _Rationale:_ a module is parsed once per program compile and phase provenance stays stable. _Rejected:_ calling `runCompile` again for every loaded source.
+- **Q:** Apply selections to the tooling syntax too? **A:** No; tooling reads what was written.
 
 ## Variants
 
 - Split tooling analysis and build pipelines once type checking exists, sharing explicit phase products rather than boolean flags.
 
 ## Referenced by
+
+`rejectFrontend` retains parsed syntax/tokens and phase diagnostics while
+withholding executable/resolution/type/fold products after graph elaboration
+fails. [[Compiler Program]] uses it for the whole failed graph so a template
+author error cannot become one missing-method error per caller. Resolved Grill
+Log: preserve authored tooling syntax and report only the earliest failed phase;
+never cache rejected generated evidence or run constants after phase refusal.
 
 [[src/Pudu/_MOC]] · [[architecture/LANGUAGE]] · [[architecture/OVERVIEW]] · [[Tooling]]
 

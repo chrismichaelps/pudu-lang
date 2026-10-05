@@ -1,9 +1,11 @@
 {-| @Type.Proof.Match — isolated evidence inference for conditional implementations. -}
 module Pudu.Type.Proof.Match
   ( Evidence, MatchResult (..), beginEvidence, abstractGoal, matchRule, matchBound, remainingEvidence
-  , resolveEvidence, resumeEvidence, stepEvidence ) where
+  , resolveEvidence, resumeEvidence, stepEvidence, assumeBound, evidenceRequirements, overlapRules ) where
 
 import Control.Monad (foldM, unless)
+import Data.List (nub)
+import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Pudu.Comptime.Limits (callDepthLimit)
@@ -17,6 +19,7 @@ data Evidence = Evidence
   , evidenceFuel :: !Int
   , evidenceVariables :: !(Map TypeVar Int)
   , evidenceBindings :: !(Map TypeVar Type)
+  , evidenceAssumptions :: !(Map Text [Type])
   }
 
 data MatchResult a = Matched a !Evidence | Mismatched !Evidence | MatchLimit !Evidence
@@ -40,7 +43,18 @@ instance Monad Matching where
     MatchLimit after -> MatchLimit after
 
 beginEvidence :: Int -> Evidence
-beginEvidence fuel = Evidence 1 fuel Map.empty Map.empty
+beginEvidence fuel = Evidence 1 fuel Map.empty Map.empty Map.empty
+
+assumeBound :: Evidence -> Text -> Type -> MatchResult ()
+assumeBound evidence name bound = case stepEvidence evidence of
+  Matched () after -> Matched () after
+    { evidenceAssumptions = Map.insertWith (<>) name [bound] (evidenceAssumptions after) }
+  other -> other
+
+evidenceRequirements :: Evidence -> [(Text, [Type])]
+evidenceRequirements evidence =
+  [(name, nub (map (resolveEvidence evidence) bounds))
+  | (name, bounds) <- Map.toAscList (evidenceAssumptions evidence)]
 
 remainingEvidence :: Evidence -> Int
 remainingEvidence = evidenceFuel
@@ -94,6 +108,24 @@ matchRule depth evidence target trait rule =
 matchBound :: Int -> Evidence -> Type -> Type -> MatchResult ()
 matchBound depth evidence given wanted =
   let Matching action = unifyAt depth given wanted in action evidence
+
+{-| Both heads share one isolated matching store, with independently fresh binders. -}
+overlapRules :: Evidence -> ImplementationRule -> ImplementationRule -> MatchResult ()
+overlapRules evidence left right =
+  let instantiate rule = do
+        replacements <- mapM (\(name, arity) -> (name,) <$> fresh arity)
+          (implementationParameters rule)
+        let replace = substituteRigid replacements
+        pure (replace (implementationTarget rule), replace (implementationTrait rule))
+      Matching action = do
+        (target, trait) <- instantiate left
+        (other, wanted) <- instantiate right
+        case (target, other) of
+          (NominalType owner args, NominalType found values)
+            | owner == found && (null args || null values) -> step
+          _ -> unifyAt 0 target other
+        unifyAt 0 trait wanted
+   in action evidence
 
 abstractGoal :: Evidence -> [(TypeVar, Int)] -> Type -> Type -> MatchResult (Type, Type, [(TypeVar, Type)])
 abstractGoal evidence variables target wanted =

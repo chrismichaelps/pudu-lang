@@ -22,7 +22,7 @@ module Pudu.Type.Check.Rule
   , unaryType
   ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -42,6 +42,8 @@ import Pudu.Type.Check.Method (methodScheme)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , isStaticTrait
+  , recordSelection
   , useCapability
   , insideUnsafe
   , useUnsafeRegion
@@ -363,6 +365,7 @@ instantiate spanValue scheme
   | otherwise = do
       replacements <- mapM (\(name, _) -> (,) name <$> freshVariable) (schemeParams scheme)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      recordStaticSelection spanValue scheme replacements
       pure (substitute replacements (schemeType scheme))
 
 {-| Instantiate a scheme with the types the caller wrote.
@@ -394,6 +397,7 @@ instantiateWith spanValue scheme arguments
       inferred <- mapM (const freshVariable) (drop (length arguments) (schemeParams scheme))
       let replacements = zip (map fst (schemeParams scheme)) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      recordStaticSelection spanValue scheme replacements
       pure (substitute replacements (schemeType scheme))
 
 obligationsFor :: Span -> [(Text, Type)] -> (Text, [Type]) -> Checker ()
@@ -1073,3 +1077,17 @@ elementType spanValue position targetType = do
       report "E3006" spanValue ("a " <> renderType resolved <> " cannot be indexed")
         (Just "index a string, an array, or a tuple")
       pure ErrorType
+
+{-| A parameter bounded by a trait with a static member may be called through
+    (`A.decode(json)`), which reads no value to dispatch on. The types this
+    reference chose for every parameter are kept, in the scheme's order, so the
+    call can carry them. `Self` is a trait member's own receiver type and is
+    settled by the owner the call names. -}
+recordStaticSelection :: Span -> Scheme -> [(Text, Type)] -> Checker ()
+recordStaticSelection spanValue scheme replacements = do
+  static <- or <$> sequence
+    [ isStaticTrait owner
+    | (subject, bounds) <- schemeBounds scheme, subject /= "Self"
+    , NominalType owner _ <- bounds ]
+  when (static && all ((/= "Self") . fst) (schemeParams scheme)) $
+    recordSelection spanValue (map snd replacements)

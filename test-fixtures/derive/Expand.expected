@@ -1,0 +1,157 @@
+// derive Std.Order.Eq for Expand.Line, generated in Std.Order
+impl Std.Order.Eq for Expand.Line {
+  fn equals(self: &Expand.Line, other: &Expand.Line) -> Bool {
+    if (!self.sku.equals(&other.sku)) {
+      return false
+    }
+    if (!self.quantity.equals(&other.quantity)) {
+      return false
+    }
+    if (!self.note.equals(&other.note)) {
+      return false
+    }
+    true
+  }
+}
+
+// derive Std.Order.Eq for Expand.Shape, generated in Std.Order
+impl Std.Order.Eq for Expand.Shape {
+  fn equals(self: &Expand.Shape, other: &Expand.Shape) -> Bool {
+    if (if let Expand.Shape.Dot = self {
+        true
+      } else { false }) {
+      if (!(if let Expand.Shape.Dot = other {
+            true
+          } else { false })) {
+        return false
+      }
+      return true
+    }
+    if (if let Expand.Shape.Circle(_) = self {
+        true
+      } else { false }) {
+      if (!(if let Expand.Shape.Circle(_) = other {
+            true
+          } else { false })) {
+        return false
+      }
+      if (!({
+            let Expand.Shape.Circle(__derive_payload) = self
+            __derive_payload
+          }).equals(&({
+              let Expand.Shape.Circle(__derive_payload) = other
+              __derive_payload
+            }))) {
+        return false
+      }
+      return true
+    }
+    false
+  }
+}
+
+// derive Std.Json.Encode for Expand.Line, generated in Std.Json
+impl Std.Json.Encode for Expand.Line {
+  fn encode(self: &Expand.Line) -> Json {
+    Object([("sku", self.sku.encode()), ("qty", self.quantity.encode())])
+  }
+}
+
+// derive Std.Json.Decode for Expand.Line, generated in Std.Json
+impl Std.Json.Decode for Expand.Line {
+  fn decode(json: &Json) -> Result[Expand.Line, DecodeError] {
+    let entries = objectEntries(json) ?
+    @__derive_build_2 loop {
+      let __derive_field_0 = match ({
+          let key = "sku"
+          let fallback = {
+            Null
+          }
+          match (match consumed(&entries, key) {
+              case Ok(__derive_ok) => __derive_ok
+              case Err(__derive_err) => {
+                break @__derive_build_2 Err(__derive_err)
+              }
+            }) {
+            case Some(found) => within(Key(key), Str.decode(&found))
+            case None => absent(key, Str.decode(&fallback))
+          }
+        }) {
+        case Ok(__derive_ok) => __derive_ok
+        case Err(__derive_err) => {
+          break @__derive_build_2 Err(__derive_err)
+        }
+      }
+      let __derive_field_1 = match ({
+          let key = "qty"
+          let fallback = {
+            Null
+          }
+          match (match consumed(&entries, key) {
+              case Ok(__derive_ok) => __derive_ok
+              case Err(__derive_err) => {
+                break @__derive_build_2 Err(__derive_err)
+              }
+            }) {
+            case Some(found) => within(Key(key), Int.decode(&found))
+            case None => absent(key, Int.decode(&fallback))
+          }
+        }) {
+        case Ok(__derive_ok) => __derive_ok
+        case Err(__derive_err) => {
+          break @__derive_build_2 Err(__derive_err)
+        }
+      }
+      let __derive_field_2 = match (@__derive_value_2 loop {
+          break @__derive_value_2 {
+            let key = "note"
+            let fallback = {
+              Null
+            }
+            break @__derive_value_2 within(Key(key), Option.decode(&fallback))
+            match (match consumed(&entries, key) {
+                case Ok(__derive_ok) => __derive_ok
+                case Err(__derive_err) => {
+                  break @__derive_build_2 Err(__derive_err)
+                }
+              }) {
+              case Some(found) => within(Key(key), Option.decode(&found))
+              case None => absent(key, Option.decode(&fallback))
+            }
+          }
+        }) {
+        case Ok(__derive_ok) => __derive_ok
+        case Err(__derive_err) => {
+          break @__derive_build_2 Err(__derive_err)
+        }
+      }
+      break @__derive_build_2 Ok(Expand.Line{sku: __derive_field_0, quantity: __derive_field_1, note: __derive_field_2})
+    }
+  }
+}
+
+// derive Std.Json.Encode for Expand.Shape, generated in Std.Json
+impl Std.Json.Encode for Expand.Shape {
+  fn encode(self: &Expand.Shape) -> Json {
+    if (if let Expand.Shape.Dot = self {
+        true
+      } else { false }) {
+      let payload = {
+        List([])
+      }
+      return Object([("Dot", payload)])
+    }
+    if (if let Expand.Shape.Circle(_) = self {
+        true
+      } else { false }) {
+      let payload = {
+        List([({
+                let Expand.Shape.Circle(__derive_payload) = self
+                __derive_payload
+              }).encode()])
+      }
+      return Object([("Circle", payload)])
+    }
+    Null
+  }
+}

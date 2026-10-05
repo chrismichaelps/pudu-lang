@@ -57,6 +57,9 @@ module Pudu.Type.Env
   , recordUnwrittenParameter
   , takeUnwrittenParameters
   , recordExpression
+  , recordSelection
+  , noteStaticTrait
+  , isStaticTrait
   , report
   , reportedAt
   , negateIntegerLiteral
@@ -241,6 +244,13 @@ data CheckerState = CheckerState
   {-| The methods this module's own declarations provide — its impls, the
       trait defaults those inherit, and its traits' members — by owner. -}
   , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
+  {-| Traits declaring a member that takes no `self`. A parameter bounded by
+      one of them may be called through statically, which needs its chosen
+      type at run time. -}
+  , stateStaticTraits :: !(Set NominalId)
+  {-| Instantiations of parameters bounded by a static trait, by the span of
+      the reference that instantiated them, in the scheme's parameter order. -}
+  , stateSelectionsRev :: ![(Span, [Type])]
   }
 
 type SpanKey = Span
@@ -269,6 +279,8 @@ data CheckerProducts = CheckerProducts
       suffixless literal as a platform integer, so the width a declaration
       promised was never enforced on it. -}
   , producedIntegerKinds :: ![(Span, Text)]
+  {-| Every recorded static selection with inference settled. -}
+  , producedSelections :: ![(Span, [Type])]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -308,12 +320,14 @@ runChecker (Checker action) = case action initialState of
     , stateDiagnosticsRev = diagnostics
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
+    , stateSelectionsRev = selections
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
       , producedDiagnostics = sortDiagnostics (reverse diagnostics)
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
+      , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -358,6 +372,8 @@ initialState =
     , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
     , stateDeclaredMethodsRev = []
+    , stateStaticTraits = Set.empty
+    , stateSelectionsRev = []
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -474,6 +490,17 @@ negateIntegerLiteral typeValue = case typeValue of
 {-| The whole span is the key, not its offsets. Two files hold a literal at the
     same offsets all the time, and the evaluator reads one table for a program
     and every module it depends on. -}
+noteStaticTrait :: NominalId -> Checker ()
+noteStaticTrait owner =
+  Checker $ \state -> ((), state{stateStaticTraits = Set.insert owner (stateStaticTraits state)})
+
+isStaticTrait :: NominalId -> Checker Bool
+isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits state), state)
+
+recordSelection :: Span -> [Type] -> Checker ()
+recordSelection spanValue chosen =
+  Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =
   Checker $ \state ->
@@ -861,19 +888,21 @@ withLocalObligations (Checker action) = Checker $ \state ->
     from the parameter list and the `where` clause are merged with `(<>`) so a
     parameter that carries bounds in both places keeps all of them rather than
     the last entry overwriting the first. -}
-withRigidBounds :: [(Text, [Type])] -> Checker a -> Checker ()
+withRigidBounds :: [(Text, [Type])] -> Checker a -> Checker a
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.fromListWith (<>) bounds)
-  _ <- action
+  result <- action
   setRigidBounds previous
+  pure result
 
-withAdditionalRigidBounds :: [(Text, [Type])] -> Checker a -> Checker ()
+withAdditionalRigidBounds :: [(Text, [Type])] -> Checker a -> Checker a
 withAdditionalRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.unionWith (<>) previous (Map.fromListWith (<>) bounds))
-  _ <- action
+  result <- action
   setRigidBounds previous
+  pure result
 
 currentRigidBounds :: Checker (Map Text [Type])
 currentRigidBounds = Checker $ \state -> (stateRigidBounds state, state)

@@ -19,6 +19,8 @@ aliases: [Type Check Method]
 
 Give an implementation's functions the types they have as methods of their target, let an implementation inherit the trait defaults it does not override, bind trait members under the trait's own name so a bounded parameter can find them, register and discharge the trait obligations a call raises, and resolve a method on a nominal type or a bounded rigid parameter.
 
+Declaring a trait member whose first parameter is not `self` marks the trait static.
+
 ## Interface
 
 ### Signatures
@@ -109,6 +111,7 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 - **Q:** Field or method when both spell the same name? **A:** The method, in callee position only. _Rationale:_ `value.name()` reads as a call, and a field holding a function can still be called by parenthesizing it. _Rejected:_ field always wins, which makes a method unreachable; method always wins, which hides a field.
 - **Q:** What should `methodScheme` return when bounds are ambiguous? **A:** `Just (monotype ErrorType)`, not `Nothing`. _Rationale:_ `checkCallee` falls through to `checkExpression` on `Nothing`, which re-enters `rigidMethod` and reports `E3013` a second time. Returning an error scheme keeps the call site typed as an error and stops the duplicate. _Rejected:_ returning `Nothing`, which duplicated the diagnostic; suppressing `E3013` in `rigidMethod`, which would lose the diagnostic for non-call member access.
 - **Q:** Can imported methods reuse `Owner.Method` basename keys? **A:** No; keys carry canonical owner identity and member spelling. _Rationale:_ `A.User.show` and `B.User.show` must never collide. _Rejected:_ last-segment owner keys; import-local aliases in method keys.
+- **Q:** Infer staticness from uses? **A:** No; from the declaration, so imported traits agree.
 
 ## Referenced by
 

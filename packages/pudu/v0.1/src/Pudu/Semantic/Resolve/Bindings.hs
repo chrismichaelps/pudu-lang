@@ -1,14 +1,12 @@
 {-| @Semantic.Resolve.Bindings — introduces pattern names in the active frame -}
 module Pudu.Semantic.Resolve.Bindings (bindPattern, bindPatternWith) where
 
-import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( ArrayRest (..), FieldPattern (..), Pattern (..), Visibility (Private) )
-import Pudu.Semantic.Resolve.Context (Resolver, declareNamed, resolveValueName)
+import Pudu.Semantic.Resolve.Context (Resolver, declareNamed)
 import Pudu.Semantic.Symbol (Namespace (ValueSpace), SymbolOrigin (PatternOrigin))
-import Pudu.Source (Span)
+import Pudu.Semantic.Resolve.Canonical (resolveConstructorPath)
 
 {-| Pattern bindings enter the arm's own frame; a constructor path is resolved
     in the type namespace, and its payload patterns bind in turn. -}
@@ -34,10 +32,10 @@ bindPatternWith mutable (Located patternSpan value) = case value of
       _ -> pure ()
     mapM_ recurse suffix
   ConstructorPattern path arguments -> do
-    resolveConstructor patternSpan path
+    resolveConstructorPath patternSpan path
     mapM_ recurse arguments
   RecordPattern path fields _ -> do
-    mapM_ (resolveConstructor patternSpan) path
+    mapM_ (resolveConstructorPath patternSpan) path
     mapM_ (bindFieldPatternWith mutable) fields
   AlternativePattern alternatives -> mapM_ recurse alternatives
   InvalidPattern -> pure ()
@@ -50,5 +48,3 @@ bindFieldPatternWith mutable (Located _ field) = case fieldPatternValue field of
   Nothing ->
     declareNamed ValueSpace PatternOrigin Private mutable (fieldPatternName field)
 
-resolveConstructor :: Span -> ModuleName -> Resolver ()
-resolveConstructor at (ModuleName (first :| _)) = resolveValueName at first

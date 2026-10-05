@@ -19,6 +19,8 @@ aliases: [Evaluator]
 
 Execute a parsed and resolved module by walking its tree, so a program can be run and an interactive session can print values before a backend exists.
 
+Function literals start with no witnesses of their own; they see their creator's through the captured frame.
+
 ## Interface
 
 ### Signatures
@@ -163,6 +165,7 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 - **Q:** Leave foreign handles alive when evaluation returns or aborts? **A:** No. _Rationale:_ an
   owned result promises deterministic cleanup across every exit path. _Rejected:_ relying on process
   exit or requiring every branch to remember an explicit destructor call.
+- **Q:** Copy witnesses into literals? **A:** No; capture already carries them.
 
 ## Variants
 

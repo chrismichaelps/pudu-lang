@@ -21,6 +21,8 @@ aliases: [Source]
 
 Represent immutable [[Source Text]] identity and half-open spans while centralizing offset validation and user-facing line/column lookup.
 
+`authoredSpan` drops a span's generated identity, keeping its authored offsets.
+
 ## Interface
 
 ### Signatures
@@ -146,6 +148,7 @@ DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions
 - **Q:** Materialize a `[Char]` to compute positions? **A:** No; fold `Text` strictly with CRLF state. _Rationale:_ position rendering should allocate no source-sized list. _Rejected:_ `Text.unpack` traversal.
 - **Q:** Is display name or source content sufficient identity? **A:** No; `newSource` mints an opaque runtime `Unique` at ingestion and spans copy that compact identity. _Rationale:_ editors reuse names, content equality is O(source), hashes can collide, and caller-supplied numeric IDs are forgeable. _Rejected:_ comparing only `SourceName`; content-backed equality; unchecked IDs; global unsafe counters.
 - **Q:** Does IO identity pollute compiler phases? **A:** No; only source ingestion mints identity. _Rationale:_ loading/inserting a source is already a boundary operation, while every consumer receives an immutable value and remains pure. _Rejected:_ source-sized equality in hot paths to preserve a superficially pure constructor.
+- **Q:** Rebuild the authored span from its origin? **A:** No; a generated span's offsets already are its authored anchor's.
 
 ## Variants
 

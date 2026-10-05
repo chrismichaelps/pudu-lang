@@ -54,6 +54,12 @@ bootstrap is not the check latency being measured.
   _Rationale:_ the development project disables optimization. _Rejected:_ a
   command silently choosing a different configuration than the shipped build.
 
+## Derived against hand-written
+
+`bench/derive.sh <pudu>` compares a derived `Json.Encode` with the hand-written
+encoder writing the same objects, refusing to report when their outputs
+differ. See [[Derive Benchmark]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Compiler Benchmark]] · [[Performance Constitution]]

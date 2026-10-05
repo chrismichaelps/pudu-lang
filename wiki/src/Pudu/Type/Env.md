@@ -19,6 +19,8 @@ aliases: [Type Env]
 
 Own checker state, name frames, declared shapes, trait obligations, deferred integer-literal constraints, rigid bounds, and diagnostics for [[Type Check]].
 
+`withAdditionalRigidBounds` answers its action's value. `noteStaticTrait`/`isStaticTrait` track traits declaring a member without `self`; `recordSelection` keeps, by reference span, the types an instantiation chose, produced zonked as `producedSelections`.
+
 ## Interface
 
 The exported signatures are the module header's export list.
@@ -129,6 +131,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 - **Q:** Model an integer literal as `Int` immediately? **A:** No; retain a deferred literal constraint. _Rationale:_ annotations and call parameters must select narrower or wider integer types before fit checking, while a context-free literal still defaults predictably. _Rejected:_ hard-coded `Int`; caller-wide numeric promotion; a special nominal literal type that cannot record its later solution.
 - **Q:** What does a method call on an unsettled integer literal look up? **A:** `settleIntegerLiteral` settles it to `Int` first, and the member is looked up there. _Rationale:_ a member of an open variable was answered with a fresh variable, so `let n = 3` then `n.bogus()` checked and `42.toText()` had no type; `Int` is what finalization would choose for a literal nothing else constrained, so only programs naming a member that does not exist change. The pending constraint is found through its resolved variable, because `let n = 3` has already unified the binding with the literal. _Rejected:_ checking the member against every integer type; leaving the variable open and trusting the name (#366).
 - **Q:** May a nested construct finalize every pending literal? **A:** No; it records the next type-variable identity and selects only constraints in the required creation range. Even within that range, branch/result validation retains unsolved constraints for an enclosing context. _Rationale:_ an annotated `if` or `match`, and an expression used beside another literal, must not default before its outer context is applied. _Rejected:_ global finalization at each diagnostic boundary; count-based stack slicing that nested settlement can invalidate; carrying unresolved shape diagnostics to module end.
+- **Q:** Record every generic instantiation? **A:** No; only those with a parameter bounded by a static trait, so ordinary generic calls pay nothing.
 
 ## Referenced by
 
@@ -150,6 +153,12 @@ membership, preserving one diagnostic per authored error.
   artificial offsets or cross-instantiation state leakage.
 
 ## Complete trait evidence
+
+`withRigidBounds` preserves and returns its action's result while restoring the
+previous bounds. Existing unit-valued body checks keep their behavior; generated
+requirement proof can return its closed evidence without mutating the caller.
+Resolved Grill Log: scope combinators restore state and preserve results rather
+than discarding typed products or requiring a second proof outside their bounds.
 
 Scoped rigid bounds and queued call obligations retain complete trait applications. Dynamic widening retains its separate obligation reason. Proof search may infer implementation-local evidence only, without binding caller variables.
 

@@ -5,7 +5,7 @@ import Control.Applicative ((<|>))
 import Data.Char (isAlphaNum)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.List (sortOn)
-import Data.Maybe (isJust, listToMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeSyntax (..)
   )
 import Pudu.Lsp.Context (CompletionContext (..), ImportSite (..), TypeParameter, contextAt, contextParameters)
+import Pudu.Lsp.ImplMembers (canonicalKeys, implMemberCompletions)
 import Pudu.Lsp.ImportCompletion (importCompletions, importQualifiers, moduleMembers)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
@@ -56,23 +57,26 @@ completionAt documents parameters = case located documents parameters of
     After a dot the answer is members or nothing: a keyword is never what
     follows `value.`. -}
 completionFrom :: [Text] -> Analysis -> Analysis -> Int -> Int -> Json
-completionFrom catalog written known agrees offset = JsonArray $ inOrder $ case context of
-  PatternContext subject arms arm -> case analysisModule written of
-    Just parsed -> patternCompletions known parsed subject arms arm offset
-    Nothing -> []
-  ImportContext site -> importCompletions catalog written known offset site
-  RecordFieldContext path named -> case analysisModule written of
-    Just parsed -> recordFieldCompletions known parsed path named
-    Nothing -> []
-  SuppressedContext -> []
-  _ -> case memberSiteAt (analysisTokens written) offset of
-    Just site -> case moduleMembers written known site of
-      members@(_ : _) -> members
-      [] -> memberCompletions known site
-    Nothing -> case (context, analysisModule written) of
-      (TypeContext parameters, Just parsed) -> typeCompletions known parsed (map fst parameters)
-      _ -> scopeCompletions written known agrees (wordStart written offset)
+completionFrom catalog written known agrees offset =
+  -- An implementation's body holds only members, so its unwritten ones come first.
+  JsonArray (inOrder (fromMaybe byContext (implMemberCompletions written known offset)))
  where
+  byContext = case context of
+    PatternContext subject arms arm -> case analysisModule written of
+      Just parsed -> patternCompletions known parsed subject arms arm offset
+      Nothing -> []
+    ImportContext site -> importCompletions catalog written known offset site
+    RecordFieldContext path named -> case analysisModule written of
+      Just parsed -> recordFieldCompletions known parsed path named
+      Nothing -> []
+    SuppressedContext -> []
+    _ -> case memberSiteAt (analysisTokens written) offset of
+      Just site -> case moduleMembers written known site of
+        members@(_ : _) -> members
+        [] -> memberCompletions known site
+      Nothing -> case (context, analysisModule written) of
+        (TypeContext parameters, Just parsed) -> typeCompletions known parsed (map fst parameters)
+        _ -> scopeCompletions written known agrees (wordStart written offset)
   context = syntaxContext written offset
 
 {-| Candidates keep the order they were found in — nearest binding first, a
@@ -120,19 +124,7 @@ recordFieldCompletions known parsed path named =
       ]
     [] -> []
  where
-  own = moduleNameText (locatedValue (moduleName parsed))
-  imports = map locatedValue (moduleImports parsed)
-  recordKeys = case NonEmpty.toList (moduleNameSegments path) of
-    [name] ->
-      (own <> "." <> name)
-        : [moduleNameText (locatedValue (importModule entry)) <> "." <> name | entry <- imports, name `elem` map locatedValue (importItems entry)]
-    segments ->
-      let qualifier = Text.intercalate "." (init segments)
-       in [ moduleNameText (locatedValue (importModule entry)) <> "." <> last segments
-          | entry <- imports
-          , null (importItems entry)
-          , maybe (moduleQualifier (locatedValue (importModule entry))) locatedValue (importAlias entry) == qualifier
-          ]
+  recordKeys = canonicalKeys parsed path
 
 {-| What may be written where a type is: the type parameters in scope, innermost
     first, the types this module declares and imports, the modules whose types
@@ -387,13 +379,14 @@ preludeItems =
 
 {-| Every keyword a program can write. `task` and `spawn` are lexed as keywords
     only so the parser can refuse them with a way forward; offering them would
-    suggest code that never checks. -}
+    suggest code that never checks. `derive` and `derives` are contextual words
+    rather than keywords, offered because a declaration is where they begin. -}
 keywords :: [Text]
 keywords =
   [ "module", "import", "as", "export", "fn", "let", "var", "const", "mut", "if", "else", "match", "case", "for"
   , "in", "while", "loop", "break", "continue", "return", "type", "enum"
   , "struct", "trait", "impl", "where", "unsafe", "foreign", "dynamic"
-  , "async", "await", "with", "scope", "comptime", "macro"
+  , "async", "await", "with", "scope", "comptime", "macro", "derive", "derives"
   , "true", "false", "null"
   ]
 

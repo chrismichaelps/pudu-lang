@@ -16,6 +16,8 @@ aliases: [Repository Test Runner]
 Runs every registered QuickCheck property family with a visible label and fails the process if any
 family fails. Output is line-buffered so a stalled property remains identifiable in captured logs.
 
+Registers [[Derive Library Spec]].
+
 ## Governance and algorithm
 
 Each spec exports named properties. The runner executes 200 cases per property, gathers every result
@@ -35,6 +37,7 @@ analysis, while [[Pudu CLI Lint Spec]] proves filesystem, configuration, JSON, a
 
 Resolved Grill Log: explicit dual registration and aggregate exit status make every property family
 observable to CI.
+- **Q:** Run the library fixtures separately? **A:** No; with every other derive family.
 
 ## Referenced by
 
@@ -58,3 +61,22 @@ Resolved Grill Log: full conditional capability evidence runs in the complete su
 The runner explicitly executes [[Type Literal Frontier Spec]] and includes its
 outcomes in the aggregate exit status. Resolved Grill Log: an unregistered
 performance regression property does not count as validation.
+
+Register [[Derive Catalogue Spec]] beside the residual kernel families and include
+its results in aggregate exit status. Resolved Grill Log: canonical inventory
+tests execute without being mistaken for loaded-program generation evidence.
+
+Register [[Derive Requirement Spec]] alongside canonical catalogue families;
+aggregate every result. Resolved Grill Log: isolated inference regressions are
+visible independently of successful concrete generated methods.
+
+Register [[Derive Target Spec]] and aggregate its preparation, round-trip and
+refusal outcomes. Resolved Grill Log: concrete aliases do not escape validation.
+
+Register [[Derive Cache Spec]] and aggregate every outcome. Resolved Grill Log:
+cache-key tests accompany actual warm consumer execution after helper edits.
+
+Register [[Derive Graph Spec]] independently of kernel transformations and include
+its real loaded-program successes/refusals in aggregate exit status.
+
+Registers [[Lsp Impl Members Spec]] with the language-server properties.

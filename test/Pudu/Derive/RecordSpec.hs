@@ -8,10 +8,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler
-  ( CompileResult (..), FrontendResult (..), compileFrontendWithDependencies )
+  ( CompileResult (..), FrontendResult (..), compileFrontendWithDependencies, runFrontend )
 import Pudu.Compiler.Program
-  ( ProgramResult (..), compileProgram, programDependencies, programIntegerKinds
-  , rootCompileResult )
+  ( ProgramResult (..), compileProgram, programDependencies, programIntegerKinds )
 import Pudu.Comptime.Limits (callDepthLimit, expansionNodeLimit, iterationLimit)
 import Pudu.Derive.Record (instantiateRecord)
 import Pudu.Derive.Reflection (reflectionReferences)
@@ -140,11 +139,9 @@ runCase (label, contents, expected) = runCaseOutcome label contents (Just expect
 runCaseOutcome :: String -> Text -> (Maybe Text, [Text]) -> IO Property
 runCaseOutcome label contents expected = withSystemTempDirectory "pudu-derive-record" $ \directory -> do
   let path = directory </> "Probe.pudu"
-  TextIO.writeFile path contents
-  original <- compileProgram path
-  case rootCompileResult original of
-    Just checked | not (hasErrors (programDiagnostics original))
-      , Just parsed <- compileSyntax checked, Just resolution <- compileResolution checked -> do
+  (original, checked) <- kernelFixture path contents
+  case (compileSyntax checked, compileResolution checked) of
+    (Just parsed, Just resolution) | not (hasErrors (programDiagnostics original <> compileDiagnostics checked)) -> do
       let templates = [Located at value | Located at (DeriveDeclaration value) <- moduleDeclarations parsed]
           targets = [value | Located _ (TypeDeclaration value) <- moduleDeclarations parsed]
           heads = [Located at value | Located at (ImplDeclaration value) <- moduleDeclarations parsed
@@ -226,11 +223,9 @@ refusalCase (label, target, body, expected) = withSystemTempDirectory "pudu-deri
         , "impl Label for Sample { fn label(self: &Self) -> Str = \"stub\" }"
         , "fn main() -> Int = 0"
         ]
-  TextIO.writeFile path source
-  program <- compileProgram path
-  pure $ case rootCompileResult program of
-    Just checked | not (hasErrors (programDiagnostics program))
-      , Just parsed <- compileSyntax checked, Just resolved <- compileResolution checked ->
+  (program, checked) <- kernelFixture path source
+  pure $ case (compileSyntax checked, compileResolution checked) of
+    (Just parsed, Just resolved) | not (hasErrors (programDiagnostics program <> compileDiagnostics checked)) ->
         case ([Located at template | Located at (DeriveDeclaration template) <- moduleDeclarations parsed],
               [value | Located _ (TypeDeclaration value) <- moduleDeclarations parsed],
               [Located at head' | Located at (ImplDeclaration head') <- moduleDeclarations parsed]) of
@@ -242,7 +237,16 @@ refusalCase (label, target, body, expected) = withSystemTempDirectory "pudu-deri
                   property (case spanOrigin where' of Just (_, actual, _) -> actual == request; _ -> False)]
               Right _ -> counterexample (label <> ": unsupported expansion was published") False
           _ -> counterexample (label <> ": refusal fixture changed") False
-    _ -> counterexample (label <> ": generic definition failed: " <> show (map diagnosticMessage (programDiagnostics program))) False
+    _ -> counterexample (label <> ": generic definition failed: " <> show (map diagnosticMessage (programDiagnostics program <> compileDiagnostics checked))) False
+
+kernelFixture :: FilePath -> Text -> IO (ProgramResult, CompileResult)
+kernelFixture path contents = do
+  TextIO.writeFile path "module Probe\nimport Std.Meta\nfn main() -> () = ()\n"
+  dependencies <- compileProgram path
+  source <- newSource (SourceName (Text.pack path)) contents
+  checked <- compileFrontendWithDependencies Map.empty (programIntegerKinds dependencies)
+    (programDependencies dependencies) (programContext dependencies) (runFrontend source)
+  pure (dependencies, checked)
 
 inMode :: String -> IO a -> IO a
 inMode mode action = do

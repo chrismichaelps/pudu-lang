@@ -96,6 +96,8 @@ immediate calls do: self unifies before it is removed, and default arity survive
 - **Requires:** [[Float Literal]], [[Integer Literal]], [[Semantic Prelude]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
+`instantiate` and `instantiateWith` record a static selection when a non-`Self` parameter is bounded by a static trait: every parameter's chosen type, in the scheme's order.
+
 ## Algorithm
 
 Scheme instantiation and rigid member substitution use [[Type Substitution]],
@@ -158,6 +160,8 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - **Q:** Suggest the bare name whenever the environment holds it? **A:** No. _Rationale:_ the
   checker's environment holds other modules' declarations by bare name, so `ByteSeq.sha256Hex`
   suggested a name the resolver then refused (#415). Only a prelude value is suggested.
+- **Q:** Record a trait member's `Self`? **A:** No; the owner the call names settles it.
+
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]

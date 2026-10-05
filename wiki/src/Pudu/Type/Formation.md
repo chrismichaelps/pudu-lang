@@ -27,6 +27,8 @@ relaxing the ordinary E3038 check on a value-position bare constructor parameter
 
 Own type syntax to formed type, and what declarations contribute for [[Type Check]].
 
+`namedIdentity` resolves a written path; a qualified path no scope binds is the canonical `Module.Type` spelling generated code uses, and names that module's declaration.
+
 ## Interface
 
 The exported signatures are the module header's export list.
@@ -132,6 +134,7 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 - **Q:** Why keep the names at all, when the payload is positional either way? **A:** Because a construction and a pattern say which element they mean by naming it. _Rationale:_ the payload is what the type system needs and the names are what the reader needs; dropping them made `Circle{radius: 2}` compile to a positional constructor and then fail far from the declaration. _Rejected:_ discarding the names as the first version did.
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
 - **Q:** Where are import aliases interpreted? **A:** [[Type Interface]] produces canonical path bindings; formation only consumes them. _Rationale:_ import policy stays out of recursive type construction. _Rejected:_ inspecting `Import` syntax inside every `formType` call.
+- **Q:** Keep the module-less fallback identity? **A:** No; it filed generated impl heads under an owner no type had, so proofs never found them.
 
 ## Referenced by
 

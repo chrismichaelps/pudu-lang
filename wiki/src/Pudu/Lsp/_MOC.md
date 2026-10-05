@@ -23,6 +23,7 @@ tags: [moc, tooling, lsp]
 - [[Lsp Workspace Symbols]] — symbol search across all indexed open documents.
 - [[Lsp Code Action]] — context-sensitive quick fixes and formatting actions.
 - [[Lsp Completion]] — member method, symbol, keyword, and primitive type completions.
+- [[Lsp Impl Members]] — an implementation's unwritten trait members, as completions and a quick fix.
 - [[Lsp Context]] — syntax- and token-directed completion positions.
 - [[Lsp Receiver]] — the member access being completed and its whole receiver's type.
 - [[Lsp Shapes]] — declared sum and record shapes by canonical identity, with generic substitution.

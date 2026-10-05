@@ -20,7 +20,9 @@ import Pudu.Frontend.Syntax.Tree
   , Expression (..)
   , Parameter
   )
-import Pudu.Source (Span)
+import Data.List.NonEmpty (NonEmpty (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Source (Span, spanOrigin)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -40,8 +42,9 @@ import Pudu.Type.Env
   , withAdditionalRigidBounds
   , withLocalObligations
   )
-import Pudu.Type.Check.Pattern (bindPattern)
-import Pudu.Type.Check.Reflection (reflectedParameters, checkSequenceElement)
+import Pudu.Type.Check.Pattern (bindPattern, canonicalVariant)
+import Pudu.Type.Check.Reflection
+  ( checkBuildCall, checkSequenceElement, fieldCallee, reflectedParameters )
 import Pudu.Type.Check.Bound (checkBounds)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
@@ -133,6 +136,10 @@ inferExpression
   :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> Checker Type
 inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
+  NameExpression names@(_ :| (_ : _))
+    | Just _ <- spanOrigin spanValue -> do
+        generated <- canonicalVariant declared (ModuleName names)
+        maybe (nameType spanValue names) pure generated
   NameExpression names -> do
     found <- nameType spanValue names
     checkExclusiveCapture spanValue names found
@@ -156,9 +163,15 @@ inferExpression around declared rigid spanValue expression = case expression of
         callType spanValue calleeType argumentTypes
       Nothing -> do
         (calleeType, receiver) <- checkCalleeLending (expressionChecker around) declared rigid callee
-        argumentTypes <- mapM (checkExpression around declared rigid) arguments
-        checkLending calleeType receiver arguments argumentTypes
-        callType spanValue calleeType argumentTypes
+        checking <- inDeriveChecking
+        building <- if checking then fieldCallee <$> zonk calleeType else pure Nothing
+        case (building, arguments) of
+          (Just shape, [callback]) ->
+            checkBuildCall (checkExpression around) declared rigid spanValue shape callback
+          _ -> do
+            argumentTypes <- mapM (checkExpression around declared rigid) arguments
+            checkLending calleeType receiver arguments argumentTypes
+            callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
     {-| A variant that named its payload is refused here rather than inside
         qualified member typing, which a call reaches twice — once for the

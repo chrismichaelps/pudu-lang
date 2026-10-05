@@ -28,6 +28,13 @@ nowhere and runs never, so the suite reports success without it.
 ## Invariants and negative logic
 
 [[Type Check Derive]] and [[Type Substitution]] are explicit production modules.
+[[Derive Catalogue]] is an explicit production module for the graph-local
+canonical candidate/request inventory; registration adds no dependency.
+Register [[Validated Derive Definitions]] as the abstract definition admission
+boundary, reusing semantic resolution and the existing checker.
+Register [[Derive Target Application]] for direct bounded type reconstruction.
+Register [[Compile-Time Dependency Closure]] as the pure graph cache-dependency
+inventory, with no new dependency.
 The former validates signatures; the latter is a pure utility shared by ordinary
 checking. Resolved Grill Log: register each module without adding dependencies.
 
@@ -87,6 +94,15 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   consumed by the thin CLI and its tests.
 
 ## Referenced by
+
+The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
+boundary; it introduces no surface-language dependency.
+[[Derive Graph Coherence]] shares the isolated trait evidence matcher for request
+ownership and typed overlap admission.
+[[Derive Graph]] publishes admitted conditional evidence before ordinary compiler
+interfaces and body checking.
+[[Derive Capture Inference]] admits ordinary unwritten private contracts once
+through resolved transitive dependencies before generic template checking.
 
 [[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]] ·
 [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]]
@@ -265,3 +281,11 @@ retains ownership and uses its existing monotone fresh-variable invariant.
 Register [[Runtime Series Map]] without dependencies or flags. Resolved Grill Log:
 internal persistent numeric compression belongs to a pure storage module; ordinary
 compiler/evaluator modes and public library interfaces remain unchanged.
+
+Register [[Derive Field Callbacks]], [[Derive Residual Context]], [[Derive
+Expansion Output]], [[Syntax Printer]] and [[Statement Inlining]] without new
+dependencies. Resolved Grill Log: callback unrolling and the shared context
+split the residualizer below 500 lines; printing and inlining are pure syntax
+passes the CLI and the residualizer share.
+
+Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.

@@ -1,0 +1,12 @@
+module UnmetStdField
+
+import Std.Json {Encode}
+import Std.Order {Eq}
+
+type Opaque = { n: Int }
+
+type Wrapper = Holder(Opaque) | Named{inner: Opaque} derives Eq
+
+type Record = { held: Opaque } derives Encode
+
+export fn main() -> Int { 0 }

@@ -76,3 +76,23 @@ local optimized build. This measures capability proof, not generated JSON execut
 
 [[Type Implementation Rules]] · [[Trait Evidence Matching]] · [[Type Check Method]] ·
 [[Type Unify]] · [[src/Pudu/Type/_MOC]] · [[Derive Design]]
+
+## Generated implementation requirements
+
+`deriveRequirements` runs the same bounded evidence search with an explicit set
+of target type parameters eligible to become conditional implementation bounds.
+When an otherwise unproved bare rigid subject is eligible, retain the complete
+closed trait application as an inferred premise in isolated evidence. Existing
+scoped bounds win first. Concrete missing capabilities, error types, applications
+of higher-kind subjects and unsettled evidence variables remain refusals. Ordinary
+proof and call inference never enable this policy.
+
+Successful search returns deduplicated requirements after evidence substitution;
+failed candidates roll back their inferred premises along with their bindings.
+The graph phase converts these premises to ordinary impl constraints and checks
+every field obligation again against the resulting graph before publication.
+
+Resolved Grill Log: infer conditions through ordinary implementation rules rather
+than granting a capability to every parameter appearing in a field type. Reuse
+one solver and its fuel/cycle rules; do not infer arbitrary composite subjects,
+leak tentative premises or change ordinary capability admission.

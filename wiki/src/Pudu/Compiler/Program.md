@@ -107,6 +107,15 @@ compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO Progra
 
 ## Algorithm
 
+Loaded graphs pass through [[Derive Graph]] before final interfaces are prepared.
+Use elaborated modules for body checking, folding and executable products; use
+original loaded sources for content/cache keys. If elaboration has errors,
+`rejectFrontend` retains each original syntax product and its own findings while
+withholding all executable products, without resolving/checking callers again.
+Generated methods reside with their lexical definitions, while their request
+ownership was validated before publication. Resolved Grill Log: this ordering
+admits generated conditional heads before callers and prevents diagnostic cascades.
+
 Parse the root, derive its source root, construct one [[Compiler Library]] resolution context, then
 chase each import name to its canonical `.pudu` path while memoizing loaded frontends and failed
 lookups. Build graph nodes from parsed import lists, classify and order them with `stronglyConnComp`,
@@ -159,6 +168,19 @@ DEPTH 0.78 (DEEP). One IO entry point hides source-root derivation, canonical pa
   span that requested it. _Rejected:_ storing the first diagnostic; probing again to recreate it.
 
 ## Variants
+
+## Compile-time cache dependencies
+
+Before graph fingerprinting, [[Compile-Time Dependency Closure]] inventories
+constant and derive roots and their transitive loaded imports. Modules in this
+closure contribute full source fingerprints, including private/ordinary helper
+bodies; other modules contribute their existing position-free interface keys.
+This deliberately permits additional safe misses after source relocation in a
+compile-time dependency. It changes neither discovery nor body-checking order.
+
+Resolved Grill Log: frozen constants and generated code observe pure ordinary
+calls too. Do not reuse a consumer solely because a helper's public signature
+stayed unchanged; no timestamps, direct-callee guess or global state.
 
 - A project manifest later supplies the source root and additional package roots without changing graph or interface semantics.
 - Incremental builds may cache frontend/interface fingerprints behind the same deterministic result.

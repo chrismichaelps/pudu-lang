@@ -7,6 +7,7 @@ module Pudu.Source
   , Span
   , mergeSpans
   , advanceOffset
+  , authoredSpan
   , emptySpan
   , generatedSpan
   , newSource
@@ -86,6 +87,11 @@ data Span = Span
   , spanEnd :: !Offset
   , spanOriginValue :: !(Maybe SpanOrigin)
   }
+
+{-| The authored text a span covers, without any generated identity. A
+    generated span's offsets are already its authored anchor's. -}
+authoredSpan :: Span -> Span
+authoredSpan value = value{spanOriginValue = Nothing}
 
 {-| Generated identity holds authored anchors, never a recursive span chain. -}
 data SpanOrigin = SpanOrigin

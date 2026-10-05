@@ -12,6 +12,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Pudu.Type.Check.Place (checkExclusiveReceiver, exclusiveInput)
 import Pudu.Type.Check.Receiver (bindReceiver)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -41,6 +42,7 @@ import Pudu.Type.Check.Method
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
   ( NominalId (..)
+  , Scheme (..)
   , nominalKey
   , Type (..)
   )
@@ -164,35 +166,47 @@ traitQualifiedCall
   -> Checker (Maybe (Type, [Type]))
 traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
   (MemberExpression target member, receiver : rest)
-    | Just traitIdentity <- namedType (locatedValue target) -> do
-        receiverType <- runCheck checker declared rigid receiver
-        resolved <- throughBorrow =<< zonk receiverType
-        case targetName resolved of
-          Nothing -> do
-            found <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
-            case found of
-              Nothing -> pure Nothing
-              Just scheme -> do
-                instantiated <- instantiate calleeSpan scheme
-                recordExpression calleeSpan instantiated
-                restTypes <- mapM (runCheck checker declared rigid) rest
-                pure (Just (instantiated, receiverType : restTypes))
-          Just owner -> do
-            found <- lookupName (nominalKey owner <> "." <> locatedValue member)
-            case found of
-              Nothing -> pure Nothing
-              Just scheme
-                | nominalKey owner == nominalKey traitIdentity -> pure Nothing
-                | otherwise -> do
-                    instantiated <- instantiate calleeSpan scheme
-                    recordExpression calleeSpan instantiated
-                    restTypes <- mapM (runCheck checker declared rigid) rest
-                    pure (Just (instantiated, receiverType : restTypes))
+    | Just traitIdentity <- namedType (locatedValue target)
+    , Set.member traitIdentity (declaredTraitNames declared) -> do
+      declaredMember <- lookupName (nominalKey traitIdentity <> "." <> locatedValue member)
+      -- Only a member taking `self` has a receiver to dispatch on; a static
+      -- member's first argument is ordinary data, so its owner is inferred.
+      if not (maybe False (takesSelf . schemeType) declaredMember) then pure Nothing else do
+          receiverType <- runCheck checker declared rigid receiver
+          resolved <- throughBorrow =<< zonk receiverType
+          case targetName resolved of
+            Nothing -> do
+              found <- traitMethodScheme calleeSpan resolved traitIdentity (locatedValue member)
+              case found of
+                Nothing -> pure Nothing
+                Just scheme -> do
+                  instantiated <- instantiate calleeSpan scheme
+                  recordExpression calleeSpan instantiated
+                  restTypes <- mapM (runCheck checker declared rigid) rest
+                  pure (Just (instantiated, receiverType : restTypes))
+            Just owner -> do
+              found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+              case found of
+                Nothing -> pure Nothing
+                Just scheme
+                  | nominalKey owner == nominalKey traitIdentity -> pure Nothing
+                  | otherwise -> do
+                      instantiated <- instantiate calleeSpan scheme
+                      recordExpression calleeSpan instantiated
+                      restTypes <- mapM (runCheck checker declared rigid) rest
+                      pure (Just (instantiated, receiverType : restTypes))
   _ -> pure Nothing
  where
   namedType expression = case expression of
     NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
     _ -> Nothing
+  takesSelf held = case held of
+    FunctionTypeValue _ (first : _) _ -> isSelf first
+    _ -> False
+  isSelf held = case held of
+    RigidType "Self" -> True
+    ReferenceTypeValue _ inner -> isSelf inner
+    _ -> False
 
 {-| The type a borrow refers to, following as many references as were written.
 

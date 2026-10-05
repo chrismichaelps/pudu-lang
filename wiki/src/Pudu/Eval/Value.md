@@ -21,6 +21,8 @@ Own runtime values, including retained floating precision, foreign bindings and 
 builtin functions, and the total order the keyed collections are held in. How a value prints
 belongs to [[Eval Render]].
 
+`TypeWitnessValue owner arguments` is the type a call selected for a parameter. `Closure` carries `closureWitnesses`, bound in the body's frame beside its parameters.
+
 ## Interface
 
 The exported signatures are the module header's export list; evaluator runtime modules consume this
@@ -115,6 +117,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
   stack. _Rationale:_ frames and the boundary that classifies them form one captured environment.
   _Rejected:_ replacing only `envFrames` in `withCaptured`.
 - **Q:** Does moving the order in push this file past the size target? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table then moved to [[Eval Builtin Definition]]. Foreign handles then took it to 548, and the built-in method vocabulary moved to [[Eval Method]], leaving 328. Each extraction followed the same seam — a closed tag set and its name table, depending on no runtime value — and each is re-exported here, so no call site learned that anything moved. _Rationale:_ size accounting must describe the current source honestly, and a limit is worth keeping only if the split follows the code rather than the line count. _Rejected:_ claiming an old measurement is current; splitting the file arbitrarily to fit.
+- **Q:** Represent a witness as a record or text? **A:** No; a distinct value cannot be confused with program data.
 
 ## Foreign handle generations
 

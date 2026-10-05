@@ -6,11 +6,12 @@ import qualified Data.Text as Text
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Lsp.Feature (rangeOfOffsets)
+import Pudu.Lsp.ImplMembers (implementMembersActions)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (Range, rangeJson)
 
 codeActionsAt :: Text -> Analysis -> Range -> Json -> Json
-codeActionsAt uri value _ _ =
+codeActionsAt uri value range _ =
   let content = analysisText value
       result = formatText' (formatSource (analysisSource value))
       actions =
@@ -38,4 +39,4 @@ codeActionsAt uri value _ _ =
             ]
         | result /= content
         ]
-   in JsonArray actions
+   in JsonArray (implementMembersActions uri value range <> actions)

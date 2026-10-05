@@ -51,10 +51,17 @@ test-suite pudu-test
     Pudu.DiagnosticSpec
     Pudu.GeneratedIdentitySpec
     Pudu.Derive.RecordSpec
+    Pudu.Derive.CatalogueSpec
+    Pudu.Derive.RequirementsSpec
+    Pudu.Derive.TargetSpec
+    Pudu.Derive.CacheSpec
+    Pudu.Derive.GraphSpec
+    Pudu.Derive.LibrarySpec
     Pudu.Type.ImplementationSpec
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec
+    Pudu.Lsp.ImplMembersSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Lsp.SchedulerSpec

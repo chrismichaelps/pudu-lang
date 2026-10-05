@@ -2,12 +2,15 @@
 module Pudu.Type.Check
   ( checkModule
   , checkModuleDetailed
+  , checkDeriveDefinitions
+  , checkDeriveDefinitionsWith
   , checkModuleWith
   ) where
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -122,7 +125,7 @@ checkModule = checkModuleWith emptyImportTypes
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -135,18 +138,32 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [Diagnostic])
+  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme)], [(Span, [Type])], [Diagnostic])
 checkModuleDetailed imported writable moduleValue =
-  let products = runChecker (setWritableNames writable >> checkUnit imported moduleValue)
+  let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
       , producedSchemes products
       , producedIntegerKinds products
       , producedMethods products
+      , producedSelections products
       , producedDiagnostics products
       )
 
-checkUnit :: ImportTypes -> Module -> Checker ()
-checkUnit imported moduleValue = do
+data CheckingScope = WholeModule | DeriveDefinitions !(Set Span)
+  deriving stock (Eq)
+
+{-| Admit templates in their defining environment before requests supply any
+    concrete fields. Ordinary bodies wait for the generated interface graph. -}
+checkDeriveDefinitions :: ImportTypes -> Set Span -> Module -> [Diagnostic]
+checkDeriveDefinitions = checkDeriveDefinitionsWith Set.empty
+
+checkDeriveDefinitionsWith :: Set Span -> ImportTypes -> Set Span -> Module -> [Diagnostic]
+checkDeriveDefinitionsWith inferred imported writable moduleValue =
+  producedDiagnostics (runChecker
+    (setWritableNames writable >> checkUnit (DeriveDefinitions inferred) imported moduleValue))
+
+checkUnit :: CheckingScope -> ImportTypes -> Module -> Checker ()
+checkUnit scope imported moduleValue = do
   dependencyDeclared <- collectImportedDeclared imported
   declared <- collectDeclaredFrom dependencyDeclared
     (locatedValue (moduleName moduleValue))
@@ -159,7 +176,7 @@ checkUnit imported moduleValue = do
   let traits = traitTable declared (moduleDeclarations moduleValue)
   let layouts = recordLayouts (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
-  checkCoherence (moduleDeclarations moduleValue)
+  when (scope == WholeModule) (checkCoherence (moduleDeclarations moduleValue))
   checkDeriveContracts declared imported moduleValue
   {-| A function literal's unwritten parameter types are settled once the
       declaration holding it is, so they are judged declaration by declaration. -}
@@ -167,9 +184,18 @@ checkUnit imported moduleValue = do
     (\declaration -> do
       admitted <- checkDeclarationBounds declared declaration
       when admitted (checkDeclaration declared layouts declaration >> requireWrittenExclusive))
-    (moduleDeclarations moduleValue)
+    (selectedDeclarations (moduleDeclarations moduleValue))
   finalizeIntegerLiterals
   dischargeObligations
+ where
+  selectedDeclarations values = case scope of
+    WholeModule -> values
+    DeriveDefinitions inferred -> filter (inferenceNeeded inferred) values <>
+      [value | value@(Located _ (DeriveDeclaration _)) <- values]
+  inferenceNeeded inferred (Located _ declaration) = case declaration of
+    FunctionDeclaration value -> Set.member (locatedSpan (functionName value)) inferred
+    BindingDeclaration _ _ name _ _ -> Set.member (locatedSpan name) inferred
+    _ -> False
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature

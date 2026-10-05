@@ -20,6 +20,8 @@ An enclosing type parameter cannot stand for every independently chosen field ty
 nested field loops use a distinct fresh name. Built-in and declared types never bind
 implicitly, including when a where clause repeats their spelling.
 
+`fieldCallee` recognizes a callee whose one parameter is a field-indexed callback: `Building owner result` for `build` and `Collecting owner element` for `collect`. `checkBuildCall` checks the literal once with its field type and `where` subjects rigid and bounds installed: a build callback answers F or `Result[F, E]` (giving T or `Result[T, E]`), a collect callback answers `Option[E]` (giving `Array[E]`); F may not escape into E.
+
 ## Algorithm
 
 Canonical nominal identities determine metadata, including aliased and selected
@@ -39,6 +41,8 @@ type as Std.Meta, or treat Fields as a homogeneous Array. No IO or recursive che
   unresolved names. Existing type parameters are reused lexically.
 - **Q:** Share Array inference for reflected fields? **A:** No. Require an abstract
   field parameter and the same owner; each real field substitutes independently.
+- **Q:** Express build's `F or Result[F, E]` in the Meta signature? **A:** It cannot be; the rule is here, recognized by the callee's type rather than its spelling.
+- **Q:** Accept a callback that is not a literal? **A:** No (E3001); unrolling needs its body.
 
 ## Linkage
 

@@ -13,10 +13,16 @@
       "include": "#numbers"
     },
     {
+      "include": "#derives"
+    },
+    {
       "include": "#declarations"
     },
     {
       "include": "#foreign"
+    },
+    {
+      "include": "#labels"
     },
     {
       "include": "#keywords"
@@ -29,9 +35,6 @@
     },
     {
       "include": "#types"
-    },
-    {
-      "include": "#labels"
     }
   ],
   "repository": {
@@ -133,7 +136,22 @@
     "labels": {
       "patterns": [
         {
+          "match": "\\b(break|continue)\\s+(@[a-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "entity.name.label.pudu"
+            }
+          }
+        },
+        {
           "name": "entity.name.label.pudu",
+          "match": "@[a-z_][A-Za-z0-9_]*(?=\\s*(?:loop|while|for)\\b)"
+        },
+        {
+          "name": "entity.name.function.decorator.pudu",
           "match": "@[a-z_][A-Za-z0-9_]*"
         }
       ]
@@ -274,6 +292,46 @@
         },
         {
           "include": "$self"
+        }
+      ]
+    },
+    "derives": {
+      "patterns": [
+        {
+          "match": "^\\s*(?:(export)\\s+)?(derive)\\s+(impl)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "keyword.control.derive.pudu"
+            },
+            "3": {
+              "name": "keyword.control.pudu"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(?:(export)\\s+)?(derive)\\s+([A-Z][A-Za-z0-9_.]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "keyword.control.derive.pudu"
+            },
+            "3": {
+              "name": "entity.name.type.pudu"
+            }
+          }
+        },
+        {
+          "match": "\\b(derives)\\b(?=\\s+[A-Z])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.derive.pudu"
+            }
+          }
         }
       ]
     }

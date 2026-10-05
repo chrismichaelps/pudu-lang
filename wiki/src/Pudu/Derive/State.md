@@ -19,6 +19,8 @@ iteration count and field obligations. `runResidual`, `generated`, `iteration`,
 ordinary syntax and structured errors/obligations; this module performs no checking,
 resolution, filesystem access or evaluation.
 
+`FieldObligation` carries `obligationLabel`, the owner-qualified field name diagnostics show. `noteExit` and `exitsTaken` count lowered callback exits, so a callback body is wrapped in its exit loop only when it left early.
+
 ## Algorithm and limits
 
 Every generated node consumes one work unit and receives a deterministic ordinal
@@ -39,6 +41,7 @@ mutable state.
 - **Q:** Budget only the outer loop? **A:** No; count all generated nodes and all
   nested iterations. _Rationale:_ nested unrolling can multiply output. _Rejected:_
   per-loop counters reset at recursion or unbounded syntax traversal.
+- **Q:** Wrap every callback body in an exit loop? **A:** No; only bodies whose lowering took an exit, counted here.
 
 ## Referenced by
 

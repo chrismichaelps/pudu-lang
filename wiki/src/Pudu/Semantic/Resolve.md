@@ -19,6 +19,8 @@ aliases: [Name Resolution]
 
 Resolve every name in a parsed module to a symbol, or diagnose it, producing the symbol table and reference map that typing and ownership consume.
 
+Inside a derive definition, a function literal binds a Meta `Field[T, F]` parameter's F and its `where` subjects rigidly before walking, as a compile-time loop does; this is what a build or collect callback needs. Other literals resolve unchanged.
+
 ## Interface
 
 ### Signatures
@@ -122,6 +124,7 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 - **Q:** Does resolution interpret duplicate Set members? **A:** No. _Rationale:_ equality and
   ordering require values and types; resolution only walks every expression the writer supplied.
   _Rejected:_ syntactic duplicate detection.
+- **Q:** Bind callback type variables only when the callee is `Meta.build`? **A:** No; resolution has no types. A genuine Meta field annotation is the signal, and ordinary literals have none.
 
 ## Variants
 
@@ -145,6 +148,16 @@ member syntax; selected and first-class imports cannot bypass it. Preserve
 unknown-name diagnostics and ordinary lexical shadowing.
 
 ## Generic bound scope
+
+Generated implementations remain in the definition module's ordinary lexical
+frame. Their fully qualified target/type/static-constructor paths have already
+been formed by graph elaboration; [[Resolve Canonical]] recognizes those only
+within the scoped generated-Impl boundary. Bind generic parameters, Self, value
+parameters and locals normally so writable references and lexical shadowing stay
+authoritative. No imports or exported bindings are synthesized.
+Resolved Grill Log: reuse the module's lexical frame rather than transplanting
+unqualified bodies to the request module. Authored implementations, including
+macro-generated expressions within them, never enable this boundary.
 
 Bind all generic parameter declarations before resolving any parameter bound.
 Self-referential and forward parameter applications therefore resolve within the

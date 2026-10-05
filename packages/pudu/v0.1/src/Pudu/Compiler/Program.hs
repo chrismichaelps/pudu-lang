@@ -31,6 +31,7 @@ import Pudu.Compiler
   , compileFrontendWith
   , compileFrontendWithDependencies
   , runFrontend
+  , rejectFrontend
   )
 import Pudu.Compiler.Cache
   ( ProductCache
@@ -38,7 +39,9 @@ import Pudu.Compiler.Cache
   , graphFingerprint
   , interfaceKey
   , pruneProducts
+  , sourceFingerprint
   )
+import Pudu.Compiler.ComptimeDependencies (compiletimeDependencies)
 import Pudu.Compiler.Product (ProductUse (..), checkedFor, frontendFor, publishProduct)
 import Pudu.Compiler.Constants (foldingInputs)
 import Pudu.Compiler.Library
@@ -50,6 +53,7 @@ import Pudu.Compiler.Library
   , resolutionTriedRoots
   )
 import Pudu.Doc (DocIndex)
+import Pudu.Derive.Graph (elaborateGraph)
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -57,6 +61,7 @@ import Pudu.Diagnostic
   , diagnostic
   , mkDiagnosticCode
   , sortDiagnostics
+  , hasErrors
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -287,12 +292,13 @@ discover products cache overlay resolution frontends sources failed diagnostics 
 
 finish :: ProductUse -> ProductCache -> ModuleName -> Discovery -> IO ProgramResult
 finish products cache rootName Discovery{discoveredFrontends, discoveredSources, discoveredDiagnostics} = do
-  let validModules = Map.mapMaybe frontendModule discoveredFrontends
+  let originalModules = Map.mapMaybe frontendModule discoveredFrontends
+      (validModules, deriveErrors) = elaborateGraph originalModules
       interfaces = prepareInterfaces (Map.map interfaceSkeleton validModules)
       context = CompileContext (exportIndex validModules) interfaces True
       order = dependencyOrder validModules
       pending =
-        [ (name, frontend)
+        [ (name, frontend{frontendModule = Map.lookup name validModules})
         | name <- order
         , Just frontend <- [Map.lookup name discoveredFrontends]
         ]
@@ -305,8 +311,10 @@ finish products cache rootName Discovery{discoveredFrontends, discoveredSources,
   length preliminary `seq` pure ()
   {-| Modules compile in dependency order, one at a time, because compiling a
       module folds its constants and folding runs the evaluator. -}
+  let compiletimeInputs = compiletimeDependencies originalModules
   keys <- mapM
-    (\(name, source) -> (,) (moduleNameText name) <$> interfaceKey cache source)
+    (\(name, source) -> (,) (moduleNameText name) <$> if Set.member name compiletimeInputs
+      then pure (sourceFingerprint source) else interfaceKey cache source)
     (Map.toList discoveredSources)
   let graph = graphFingerprint keys
       compileOne compiled (name, frontend) = do
@@ -316,7 +324,10 @@ finish products cache rootName Discovery{discoveredFrontends, discoveredSources,
           Nothing -> publishProduct products <$> compile
           Just source -> checkedFor products cache graph source frontend compile
         pure (Map.insert name result compiled)
-  compiled <- foldM compileOne Map.empty pending
+  compiled <- if any hasErrors (Map.elems deriveErrors)
+    then pure (Map.mapWithKey (\name frontend -> publishProduct products
+      (rejectFrontend frontend (Map.findWithDefault [] name deriveErrors))) discoveredFrontends)
+    else foldM compileOne Map.empty pending
   pruneProducts cache
   let diagnostics = sortDiagnostics
         (preliminary <> concatMap compileDiagnostics (Map.elems compiled))

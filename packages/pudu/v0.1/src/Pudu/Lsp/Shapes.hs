@@ -2,9 +2,11 @@
 module Pudu.Lsp.Shapes
   ( RecordShape (..)
   , SumShape (..)
+  , TraitShape (..)
   , VariantShape (..)
   , programRecords
   , programSums
+  , programTraits
   , recordShapes
   , renderTypeSyntax
   , sumShapes
@@ -22,7 +24,9 @@ import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameSegments, moduleNameText
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , FieldDeclaration (..)
+  , Function (..)
   , Module (..)
+  , Trait (..)
   , TypeDeclarationValue (..)
   , TypeDefinition (..)
   , TypeParam (..)
@@ -31,9 +35,10 @@ import Pudu.Frontend.Syntax.Tree
   , VariantPayload (..)
   )
 import Pudu.Type (Type, renderType)
-import Pudu.Type.Interface (interfaceDeclarations)
+import qualified Data.Set as Set
+import Pudu.Type.Interface (interfaceDeclarations, interfaceDefaults)
 import Pudu.Type.Interface.Graph (graphInterfaces)
-import Pudu.Type.Value (capabilityName)
+import Pudu.Type.Value (capabilityName, canonicalNominal)
 
 data VariantShape
   = UnitVariant
@@ -57,6 +62,38 @@ data RecordShape = RecordShape
   , recordFields :: ![(Text, Bool, Located TypeSyntax)]
   }
   deriving stock (Eq, Show)
+
+{-| A trait's members as declared, each beside whether it has a default an
+    implementation inherits. -}
+data TraitShape = TraitShape
+  { traitShapeModule :: !ModuleName
+  , traitShapeParams :: ![Text]
+  , traitShapeMembers :: ![(Function, Bool)]
+  }
+  deriving stock (Eq, Show)
+
+{-| Every trait the program can see, by canonical name. A document's own trait
+    knows its defaults by their bodies; an interface's lost its bodies and
+    names its defaults instead. -}
+programTraits :: ProgramResult -> Map Text TraitShape
+programTraits program =
+  Map.fromList
+    ( [ (moduleNameText owner <> "." <> name, shape (\member -> Set.member (canonicalNominal owner name, member) (interfaceDefaults interface)) owner trait)
+      | (owner, interface) <- Map.toList (graphInterfaces (contextTypes (programContext program)))
+      , Located _ (TraitDeclaration trait) <- interfaceDeclarations interface
+      , let name = locatedValue (traitName trait)
+      ]
+        <> [ (moduleNameText owner <> "." <> locatedValue (traitName trait), shape (const False) owner trait)
+           | Just parsed <- [rootCompileResult program >>= compileSyntax]
+           , let owner = locatedValue (moduleName parsed)
+           , Located _ (TraitDeclaration trait) <- moduleDeclarations parsed
+           ]
+    )
+ where
+  shape defaulted owner trait = TraitShape owner
+    (map (locatedValue . typeParamName . locatedValue) (traitTypeParams trait))
+    [ (member, functionBody member /= Nothing || defaulted (locatedValue (functionName member)))
+    | Located _ member <- traitMembers trait ]
 
 {-| The sums a module's declarations define, by the name the type is declared
     under. -}

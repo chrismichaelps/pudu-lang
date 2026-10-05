@@ -1,5 +1,6 @@
 {-| @Derive.Record — residualizes generically checked record templates. -}
-module Pudu.Derive.Record (instantiateRecord) where
+module Pudu.Derive.Record
+  ( instantiateRecord, instantiateRecordIn, instantiateAggregateIn ) where
 
 import Control.Monad (foldM)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -7,28 +8,33 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Derive.Build
+  ( Gather (..), Walkers (..), answerNone, exitWith, propagateTo, unrollCallback )
+import Pudu.Derive.Context
+  ( Context (..), Exits (..), Propagation (..)
+  , attributes, descriptor, fieldLabel, foldBinary, reflectedName, shadow, typeArguments
+  , variantDescriptor, variantLabel, writtenLiteral
+  )
 import Pudu.Derive.Reflection (ReflectionBinding (..))
 import Pudu.Derive.State
-  ( ExpansionFailure, FieldObligation, Residual, generated, iteration, refuse
-  , requireFields, runResidual, withinDepth )
+  ( ExpansionFailure, FieldObligation, Residual, generated, iteration
+  , noteExit, refuse, requireFields, runResidual, withinDepth )
+import Pudu.Derive.Sum
+  ( SelectedVariant (..), matchesVariant, readField, variantFields )
+import Pudu.Derive.Syntax
+  ( instantiatePattern, isStaticValue, patternNames, retag, sameTypeShape )
+import Pudu.Frontend.Syntax.Inline (inlineStatements)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments)
 import Pudu.Frontend.Syntax.Tree
-  ( ArrayRest (..), Attribute (..), Block (..), Capability, ComptimeFor (..), Constraint (..)
+  ( Attribute (..), Block (..), ComptimeFor (..), Constraint (..)
   , Declaration (..), Derive (..), DeriveShape (..), Expression (..)
-  , FieldDeclaration (..), FieldInit (..), FieldPattern (..), Function (..)
+  , FieldDeclaration (..), FieldInit (..), Function (..)
   , FunctionBody (..), Impl (..), Literal (..), MatchArm (..), Parameter (..)
-  , Pattern (..), Statement (..), TypeDeclarationValue (..), TypeDefinition (..)
-  , TypeParam (..), TypeSyntax (..) )
+  , Statement (..), TypeDeclarationValue (..), TypeDefinition (..)
+  , TypeParam (..), TypeSyntax (..), Variant (..), VariantPayload (..) )
 import Pudu.Source (Span)
-
-data Context = Context
-  { reflectedCalls :: !(Map Span ReflectionBinding)
-  , targetSyntax :: !(Located TypeSyntax)
-  , targetFields :: ![Located FieldDeclaration]
-  , substitutions :: !(Map Text (Located TypeSyntax))
-  , descriptors :: !(Map Text (Located FieldDeclaration))
-  }
 
 {-| The caller validates the template once and proves the returned obligations
     before publishing this ordinary implementation in graph interfaces. -}
@@ -36,15 +42,31 @@ instantiateRecord
   :: Map Span ReflectionBinding -> Span -> Located Derive -> TypeDeclarationValue
   -> Located TypeSyntax -> Located TypeSyntax
   -> Either ExpansionFailure (Impl, [FieldObligation])
-instantiateRecord reflected request (Located at template) target trait writtenTarget =
-  runResidual request $ case (locatedValue (deriveShape template), locatedValue (typeDefinition target)) of
-    (RecordShape, RecordDefinition fields) -> do
-      let context = Context reflected writtenTarget fields
-            (Map.singleton (locatedValue (deriveParameter template)) writtenTarget) Map.empty
-      methods <- mapM (locatedFunction 0 context) (deriveFunctions template)
-      parameters <- mapM (typeParameter 0 context) (typeTypeParams target)
-      pure (Impl parameters trait writtenTarget [] methods)
-    _ -> refuse at "a record derive requires a record target"
+instantiateRecord reflected request template target trait writtenTarget =
+  runResidual request (instantiateRecordIn reflected template target trait writtenTarget)
+
+instantiateRecordIn
+  :: Map Span ReflectionBinding -> Located Derive -> TypeDeclarationValue
+  -> Located TypeSyntax -> Located TypeSyntax -> Residual Impl
+instantiateRecordIn reflected template target trait writtenTarget =
+  case (locatedValue (deriveShape (locatedValue template)), locatedValue (typeDefinition target)) of
+    (RecordShape, RecordDefinition _) -> instantiateAggregateIn reflected template target trait writtenTarget
+    _ -> refuse (locatedSpan template) "a record derive requires a record target"
+
+instantiateAggregateIn
+  :: Map Span ReflectionBinding -> Located Derive -> TypeDeclarationValue
+  -> Located TypeSyntax -> Located TypeSyntax -> Residual Impl
+instantiateAggregateIn reflected (Located at template) target trait writtenTarget = do
+  (shape, fields, variants) <- case (locatedValue (deriveShape template), locatedValue (typeDefinition target)) of
+    (RecordShape, RecordDefinition selected) -> pure (RecordShape, selected, [])
+    (SumShape, SumDefinition selected) ->
+      pure (SumShape, [], zipWith SelectedVariant [0..] selected)
+    _ -> refuse at "the derive shape does not match its aggregate target"
+  let context = Context reflected writtenTarget fields shape variants Map.empty Map.empty Map.empty
+        (Map.singleton (locatedValue (deriveParameter template)) writtenTarget) Map.empty Nothing
+  methods <- mapM (locatedFunction 0 context) (deriveFunctions template)
+  parameters <- mapM (typeParameter 0 context{substitutions = Map.empty}) (typeTypeParams target)
+  pure (Impl parameters trait writtenTarget [] methods)
 
 locatedFunction :: Int -> Context -> Located Function -> Residual (Located Function)
 locatedFunction depth context (Located at value) =
@@ -54,7 +76,7 @@ function :: Int -> Context -> Function -> Residual Function
 function depth context value = do
   withinDepth depth (locatedSpan (functionName value))
   let active = shadow (map (locatedValue . parameterName . locatedValue) (functionParameters value))
-        context{substitutions = foldr Map.delete (substitutions context)
+        context{exits = Nothing, substitutions = foldr Map.delete (substitutions context)
           (map (locatedValue . typeParamName . locatedValue) (functionTypeParams value))}
   name <- retag (functionName value)
   params <- mapM (parameter depth active) (functionParameters value)
@@ -91,7 +113,7 @@ syntax depth context (Located at written) = do
   case written of
     NamedType (ModuleName (name :| [])) []
       | Just replacement <- Map.lookup name (substitutions context) ->
-          syntax (depth + 1) context{substitutions = Map.delete name (substitutions context)}
+          syntax (depth + 1) context{substitutions = Map.empty}
             (Located at (locatedValue replacement))
     NamedType path arguments -> mapM recurse arguments >>= generated at . NamedType path
     DynamicType path -> generated at (DynamicType path)
@@ -116,7 +138,7 @@ block depth context (Located at value) = do
   withinDepth depth at
   (reversed, final) <- foldM step ([], context) (blockStatements value)
   result <- mapM (expression (depth + 1) final) (blockResult value)
-  generated at (Block (reverse reversed) result)
+  generated at (Block (inlineStatements (reverse reversed)) result)
  where
   step (previous, active) held = do
     (next, after) <- statement (depth + 1) active held
@@ -138,7 +160,14 @@ statement depth context (Located at value) = do
       pure (DeclarationStatement declaration, shadow [locatedValue (functionName held)] context)
     DeclarationStatement _ -> refuse at "this local declaration cannot occur in a derive"
     ExpressionStatement held -> ordinary . ExpressionStatement <$> expression (depth + 1) context held
-    ReturnStatement held -> ordinary . ReturnStatement <$> mapM (expression (depth + 1) context) held
+    ReturnStatement held -> do
+      held' <- mapM (expression (depth + 1) context) held
+      case (exits context, held') of
+        (Just exit, Just answer) -> do
+          noteExit
+          leave <- exitWith at (valueExit exit) answer
+          pure (locatedValue leave, context)
+        _ -> pure (ordinary (ReturnStatement held'))
     BreakStatement label held -> do
       label' <- mapM retag label
       ordinary . BreakStatement label' <$> mapM (expression (depth + 1) context) held
@@ -146,12 +175,12 @@ statement depth context (Located at value) = do
     LetElseStatement pat held fallback -> do
       held' <- expression (depth + 1) context held
       fallback' <- block (depth + 1) context fallback
-      pat' <- pattern' depth pat
+      pat' <- instantiatePattern depth pat
       pure (LetElseStatement pat' held' fallback', shadow (patternNames pat) context)
     LetPatternStatement kind pat written held -> do
       held' <- expression (depth + 1) context held
       written' <- mapM (syntax depth context) written
-      pat' <- pattern' depth pat
+      pat' <- instantiatePattern depth pat
       pure (LetPatternStatement kind pat' written' held', shadow (patternNames pat) context)
     InvalidStatement -> refuse at "an invalid statement cannot be instantiated"
   located <- generated at next
@@ -164,7 +193,9 @@ expression depth context original@(Located at value) = do
   withinDepth depth at
   case value of
     LiteralExpression held -> out (LiteralExpression held)
-    NameExpression (name :| []) | Map.member name (descriptors context) ->
+    NameExpression (name :| []) | Just held <- Map.lookup name (knownValues context) ->
+      expression (depth + 1) context{knownValues = Map.empty} held
+    NameExpression (name :| []) | Map.member name (descriptors context) || Map.member name (variantDescriptors context) ->
       refuse at "a field descriptor cannot escape into generated runtime code"
     NameExpression _ | Map.member at (reflectedCalls context) ->
       refuse at "metadata cannot escape into generated runtime code"
@@ -190,19 +221,48 @@ expression depth context original@(Located at value) = do
             NamedType path _ -> literal (StringValue (NonEmpty.last (moduleNameSegments path)))
             _ -> refuse at "nameOf requires a declared nominal type"
         _ -> refuse at "nameOf requires one type and no value arguments"
+      Just gathering | gathering `elem` ["build", "collect"] -> case arguments of
+        [callback] -> do
+          matchingTarget depth context at callee RecordShape
+          unrollCallback walkers (gatherOf gathering) depth context at callback Nothing (targetFields context)
+        _ -> refuse at "a field callback call takes one callback"
       Just _ -> refuse at "this metadata call must be consumed by a compile-time construct"
       Nothing -> case locatedValue callee of
         MemberExpression receiver member | Just field <- descriptor context receiver ->
           fieldCall field (locatedValue member) arguments
+        MemberExpression receiver member | Just selected <- variantDescriptor context receiver ->
+          variantCall selected (locatedValue member) arguments
         _ -> CallExpression <$> recurse callee <*> mapM recurse arguments >>= out
     MemberExpression receiver member | Just field <- descriptor context receiver ->
       case locatedValue member of
         "name" -> literal (StringValue (locatedValue (fieldName (locatedValue field))))
         _ -> refuse at "a metadata accessor cannot escape as a runtime method value"
+    MemberExpression receiver member | Just selected <- variantDescriptor context receiver ->
+      case locatedValue member of
+        "name" -> literal (StringValue (locatedValue (variantName (locatedValue (selectedSyntax selected)))))
+        "index" -> literal (IntegerValue (Text.pack (show (selectedIndex selected))))
+        "positional" -> literal (BoolValue (case variantPayload (locatedValue (selectedSyntax selected)) of
+          RecordPayload _ -> False
+          _ -> True))
+        _ -> refuse at "a variant accessor cannot escape into generated runtime code"
+    MemberExpression (Located _ (NameExpression (name :| []))) member
+      | Just written <- Map.lookup name (substitutions context) -> do
+          resolved <- syntax depth context{substitutions = Map.empty} written
+          case locatedValue resolved of
+            NamedType path _ -> do
+              owner <- generated at (NameExpression (moduleNameSegments path))
+              selected <- retag member
+              out (MemberExpression owner selected)
+            _ -> refuse at "a static trait call needs a nominal type"
     MemberExpression receiver member -> MemberExpression <$> recurse receiver <*> retag member >>= out
     IndexExpression target index -> IndexExpression <$> recurse target <*> recurse index >>= out
     RangeExpression from inclusive to -> RangeExpression <$> mapM recurse from <*> pure inclusive <*> mapM recurse to >>= out
-    TryExpression held -> recurse held >>= out . TryExpression
+    TryExpression held -> do
+      held' <- recurse held
+      case propagation <$> exits context of
+        Just (FailBuild label) -> propagateTo at label held'
+        Just AnswerNone | Just exit <- exits context -> noteExit >> answerNone at (valueExit exit) held'
+        _ -> out (TryExpression held')
     AwaitExpression held -> recurse held >>= out . AwaitExpression
     TupleExpression members -> mapM recurse members >>= out . TupleExpression
     ArrayExpression members -> mapM recurse members >>= out . ArrayExpression
@@ -227,20 +287,20 @@ expression depth context original@(Located at value) = do
     IfLetExpression pat subject success failure -> do
       subject' <- recurse subject
       success' <- block (depth + 1) (shadow (patternNames pat) context) success
-      pat' <- pattern' depth pat
+      pat' <- instantiatePattern depth pat
       IfLetExpression pat' subject' success' <$> mapM recurse failure >>= out
     MatchExpression subject arms -> MatchExpression <$> recurse subject <*> mapM arm arms >>= out
     WhileExpression label condition body -> WhileExpression <$> mapM retag label <*> recurse condition <*> recurseBlock body >>= out
     WhileLetExpression label pat subject body -> do
       label' <- mapM retag label
-      pat' <- pattern' depth pat
+      pat' <- instantiatePattern depth pat
       subject' <- recurse subject
       body' <- block (depth + 1) (shadow (patternNames pat) context) body
       out (WhileLetExpression label' pat' subject' body')
     LoopExpression label body -> LoopExpression <$> mapM retag label <*> recurseBlock body >>= out
     ForExpression label pat subject body -> do
       label' <- mapM retag label
-      pat' <- pattern' depth pat
+      pat' <- instantiatePattern depth pat
       subject' <- recurse subject
       body' <- block (depth + 1) (shadow (patternNames pat) context) body
       out (ForExpression label' pat' subject' body')
@@ -258,40 +318,54 @@ expression depth context original@(Located at value) = do
     generated fieldAt (FieldInit name held)
   arm (Located armAt held) = do
     let active = shadow (patternNames (armPattern held)) context
-    pat <- pattern' depth (armPattern held)
+    pat <- instantiatePattern depth (armPattern held)
     guard' <- mapM (expression (depth + 1) active) (armGuard held)
     body <- expression (depth + 1) active (armBody held)
     generated armAt (MatchArm pat guard' body)
   fieldCall field member arguments = case (member, arguments) of
     ("get", [target]) -> do
       held <- recurse target
-      name <- generated at (locatedValue (fieldName (locatedValue field)))
-      out (MemberExpression held name)
+      case Map.lookup (locatedSpan field) (fieldVariants context) of
+        Just selected -> readField at (targetSyntax context) selected field held
+        Nothing -> do
+          name <- generated at (locatedValue (fieldName (locatedValue field)))
+          out (MemberExpression held name)
     ("set", [target, replacement]) -> do
+      if Map.member (locatedSpan field) (fieldVariants context)
+        then refuse at "sum payload writes require the aggregate builder" else pure ()
       held <- recurse target
       replaced <- recurse replacement
       name <- generated at (locatedValue (fieldName (locatedValue field)))
       projection <- out (MemberExpression held name)
       out (BinaryExpression projection "=" replaced)
+    _ -> attributeCall (fieldAttributes (locatedValue field)) member arguments
+  variantCall selected member arguments = case (member, arguments) of
+    ("matches", [target]) -> recurse target >>= matchesVariant at (targetSyntax context) selected
+    (gathering, [callback]) | gathering `elem` ["build", "collect"] ->
+      unrollCallback walkers (gatherOf gathering) depth context at callback (Just selected) (variantFields selected)
+    _ -> attributeCall (variantAttributes (locatedValue (selectedSyntax selected))) member arguments
+  attributeCall values member arguments = case (member, arguments) of
     ("has", [name]) -> do
       key <- stringArgument name
-      literal (BoolValue (not (null (attributes field key))))
+      literal (BoolValue (not (null (attributes values key))))
     ("attributeOr", [name, fallback]) -> do
       key <- stringArgument name
-      case attributes field key of
+      case attributes values key of
         [] -> recurse fallback
         [Located _ attribute] -> case attributeArguments attribute of
           [Located _ held] -> do
             fallback' <- recurse fallback
-            result <- literal held
+            result <- literal $ case locatedValue fallback' of
+              LiteralExpression (StringValue _) -> writtenLiteral held
+              _ -> held
             case locatedValue fallback' of
               LiteralExpression _ -> pure result
               _ -> do
                 evaluated <- generated at (ExpressionStatement fallback')
                 preserved <- generated at (Block [evaluated] (Just result))
                 out (BlockExpression preserved)
-          _ -> refuse (locatedSpan field) "attributeOr requires exactly one attribute literal"
-        _ -> refuse (locatedSpan field) "attributeOr requires an unambiguous attribute"
+          _ -> refuse at "attributeOr requires exactly one attribute literal"
+        _ -> refuse at "attributeOr requires an unambiguous attribute"
     _ -> refuse at "invalid compile-time field accessor"
   stringArgument held = do
     result <- recurse held
@@ -302,19 +376,40 @@ expression depth context original@(Located at value) = do
 unroll :: Int -> Context -> Span -> ComptimeFor -> Residual (Located Expression)
 unroll depth context at loop = case locatedValue (comptimeForSource loop) of
   CallExpression callee [] | reflectedName context callee == Just "fields" -> do
-    case typeArguments callee of
-      [written] -> do
-        resolved <- syntax depth context written
-        target <- syntax depth context (targetSyntax context)
-        if typeShape (locatedValue resolved) == typeShape (locatedValue target)
-          then pure () else refuse at "this record kernel requires fields of its target"
-      _ -> refuse at "fields requires the target type"
-    chunks <- mapM one (targetFields context)
-    held <- generated at (Block chunks Nothing)
-    generated at (BlockExpression held)
-  _ -> refuse at "the compile-time field sequence must be known at instantiation"
+    matchingTarget depth context at callee RecordShape
+    emit =<< mapM (one Nothing) (targetFields context)
+  CallExpression callee [] | reflectedName context callee == Just "variants" -> do
+    matchingTarget depth context at callee SumShape
+    emit =<< mapM oneVariant (targetVariants context)
+  CallExpression (Located _ (MemberExpression receiver member)) []
+    | locatedValue member == "fields", Just selected <- variantDescriptor context receiver ->
+      emit =<< mapM (one (Just selected)) (variantFields selected)
+  _ -> do
+    source <- expression (depth + 1) context (comptimeForSource loop)
+    case locatedValue source of
+      ArrayExpression members | all isStaticValue members -> emit =<< mapM oneValue members
+      _ -> refuse at "the compile-time sequence must be known at instantiation"
  where
-  one field = do
+  emit chunks = generated at (Block chunks Nothing) >>= generated at . BlockExpression
+  oneVariant selected = do
+    iteration at
+    let element = locatedValue (comptimeForElement loop)
+        active = (shadow [element] context)
+          {variantDescriptors = Map.insert element selected (variantDescriptors context)}
+    mapM_ (requireConstraint depth (locatedSpan (selectedSyntax selected), variantLabel context selected) active)
+      (comptimeForConstraints loop)
+    held <- block (depth + 1) active (comptimeForBody loop)
+    value <- generated at (BlockExpression held)
+    generated at (ExpressionStatement value)
+  oneValue value = do
+    iteration at
+    let element = locatedValue (comptimeForElement loop)
+        active = (shadow [element] context){knownValues = Map.insert element value (knownValues context)}
+    mapM_ (requireConstraint depth (locatedSpan value, "a compile-time element") active) (comptimeForConstraints loop)
+    held <- block (depth + 1) active (comptimeForBody loop)
+    result <- generated at (BlockExpression held)
+    generated at (ExpressionStatement result)
+  one origin field = do
     iteration at
     let element = locatedValue (comptimeForElement loop)
         selected = locatedValue field
@@ -322,119 +417,36 @@ unroll depth context at loop = case locatedValue (comptimeForSource loop) of
           NamedType _ [_, Located _ (NamedType (ModuleName (fieldTypeName :| [])) [])] ->
             Map.insert fieldTypeName (fieldType selected) (substitutions context)
           _ -> substitutions context
-        active = context{substitutions = freshTypes,
-          descriptors = Map.insert element field (descriptors context)}
-    mapM_ (requireConstraint field active) (comptimeForConstraints loop)
+        active = (shadow [element] context){substitutions = freshTypes,
+          descriptors = Map.insert element field (descriptors context),
+          fieldVariants = maybe (fieldVariants context)
+            (\variant -> Map.insert (locatedSpan field) variant (fieldVariants context)) origin}
+    mapM_ (requireConstraint depth (locatedSpan field, fieldLabel context origin field) active)
+      (comptimeForConstraints loop)
     held <- block (depth + 1) active (comptimeForBody loop)
     value <- generated at (BlockExpression held)
     generated at (ExpressionStatement value)
-  requireConstraint field active (Located constraintAt required) =
-    case Map.lookup (locatedValue (constraintSubject required)) (substitutions active) of
-      Nothing -> refuse constraintAt "a loop constraint has no selected concrete type"
-      Just written -> do
-        bounds <- mapM (syntax depth active) (constraintBounds required)
-        if null bounds then pure () else requireFields (locatedSpan field) written bounds
 
-descriptor :: Context -> Located Expression -> Maybe (Located FieldDeclaration)
-descriptor context (Located _ value) = case value of
-  NameExpression (name :| []) -> Map.lookup name (descriptors context)
-  UnaryExpression "&" held -> descriptor context held
-  _ -> Nothing
+requireConstraint :: Int -> (Span, Text) -> Context -> Located Constraint -> Residual ()
+requireConstraint depth (fieldAt, label) active (Located constraintAt required) =
+  case Map.lookup (locatedValue (constraintSubject required)) (substitutions active) of
+    Nothing -> refuse constraintAt "a compile-time constraint has no selected concrete type"
+    Just written -> do
+      bounds <- mapM (syntax depth active) (constraintBounds required)
+      if null bounds then pure () else requireFields fieldAt label written bounds
 
-reflectedName :: Context -> Located Expression -> Maybe Text
-reflectedName context held = case locatedValue held of
-  TypeApplication target _ -> reflectedName context target
-  MemberExpression target name
-    | Map.lookup (locatedSpan target) (reflectedCalls context) == Just MetadataModule ->
-        Just (locatedValue name)
-  _ -> case Map.lookup (locatedSpan held) (reflectedCalls context) of
-    Just (MetadataFunction name) -> Just name
-    _ -> Nothing
+matchingTarget :: Int -> Context -> Span -> Located Expression -> DeriveShape -> Residual ()
+matchingTarget depth context at callee shape = case typeArguments callee of
+  [written] -> do
+    resolved <- syntax depth context written
+    target <- syntax depth context{substitutions = Map.empty} (targetSyntax context)
+    if targetShape context == shape && sameTypeShape (locatedValue resolved) (locatedValue target)
+      then pure () else refuse at "metadata requires the matching aggregate target"
+  _ -> refuse at "metadata requires one target type"
 
-typeArguments :: Located Expression -> [Located TypeSyntax]
-typeArguments (Located _ (TypeApplication _ arguments)) = arguments
-typeArguments _ = []
+walkers :: Walkers Context
+walkers = Walkers block expression syntax requireConstraint
 
-attributes :: Located FieldDeclaration -> Text -> [Located Attribute]
-attributes field key = filter ((== key) . locatedValue . attributeName . locatedValue)
-  (fieldAttributes (locatedValue field))
+gatherOf :: Text -> Gather
+gatherOf name = if name == "collect" then Collect else Construct
 
-shadow :: [Text] -> Context -> Context
-shadow names context = context{descriptors = foldr Map.delete (descriptors context) names}
-
-retag :: Located a -> Residual (Located a)
-retag (Located at value) = generated at value
-
-foldBinary :: Located Expression -> Text -> Located Expression -> Expression
-foldBinary left operator right = case (locatedValue left, operator, locatedValue right) of
-  (LiteralExpression (BoolValue a), "&&", LiteralExpression (BoolValue b)) -> known (BoolValue (a && b))
-  (LiteralExpression (BoolValue a), "||", LiteralExpression (BoolValue b)) -> known (BoolValue (a || b))
-  (LiteralExpression (BoolValue a), "==", LiteralExpression (BoolValue b)) -> known (BoolValue (a == b))
-  (LiteralExpression (BoolValue a), "!=", LiteralExpression (BoolValue b)) -> known (BoolValue (a /= b))
-  (LiteralExpression (StringValue a), "==", LiteralExpression (StringValue b)) -> known (BoolValue (a == b))
-  (LiteralExpression (StringValue a), "!=", LiteralExpression (StringValue b)) -> known (BoolValue (a /= b))
-  (LiteralExpression (StringValue a), "+", LiteralExpression (StringValue b)) -> known (StringValue (a <> b))
-  _ -> BinaryExpression left operator right
- where
-  known = LiteralExpression
-
-data TypeShape
-  = NamedShape !ModuleName ![TypeShape]
-  | DynamicShape !ModuleName
-  | BorrowedShape !Bool !TypeShape
-  | TupleShape ![TypeShape]
-  | FunctionShape !Bool ![TypeShape] !TypeShape
-  | UnsafeShape ![Capability] !TypeShape
-  | UnitShape
-  | InvalidShape
-  deriving stock (Eq)
-
--- Compare nominal spellings and full structure, never authored locations.
-typeShape :: TypeSyntax -> TypeShape
-typeShape written = case written of
-  NamedType path arguments -> NamedShape path (map recurse arguments)
-  DynamicType path -> DynamicShape path
-  ReferenceType mutable target -> BorrowedShape mutable (recurse target)
-  TupleType members -> TupleShape (map recurse members)
-  FunctionType async inputs result -> FunctionShape async (map recurse inputs) (recurse result)
-  UnsafeType capabilities target -> UnsafeShape (map locatedValue capabilities) (recurse target)
-  UnitType -> UnitShape
-  InvalidType -> InvalidShape
- where
-  recurse = typeShape . locatedValue
-
-patternNames :: Located Pattern -> [Text]
-patternNames (Located _ value) = case value of
-  BindingPattern name -> [locatedValue name]
-  TuplePattern members -> concatMap patternNames members
-  ArrayPattern prefix rest suffix -> concatMap patternNames (prefix <> suffix) <> case rest of
-    Just (BoundRest name) -> [locatedValue name]
-    _ -> []
-  ConstructorPattern _ members -> concatMap patternNames members
-  RecordPattern _ fields _ -> concatMap names fields
-  AlternativePattern alternatives -> concatMap patternNames alternatives
-  _ -> []
- where
-  names (Located _ field) = maybe [locatedValue (fieldPatternName field)] patternNames (fieldPatternValue field)
-
-pattern' :: Int -> Located Pattern -> Residual (Located Pattern)
-pattern' depth (Located at value) = do
-  withinDepth depth at
-  rewritten <- case value of
-    BindingPattern name -> BindingPattern <$> retag name
-    TuplePattern members -> TuplePattern <$> mapM recurse members
-    ArrayPattern prefix rest suffix -> ArrayPattern <$> mapM recurse prefix <*> mapM arrayRest rest <*> mapM recurse suffix
-    ConstructorPattern path members -> ConstructorPattern path <$> mapM recurse members
-    RecordPattern path fields rest -> RecordPattern path <$> mapM fieldPattern fields <*> pure rest
-    AlternativePattern alternatives -> AlternativePattern <$> mapM recurse alternatives
-    other -> pure other
-  generated at rewritten
- where
-  recurse = pattern' (depth + 1)
-  arrayRest rest = case rest of
-    BoundRest name -> BoundRest <$> retag name
-    IgnoredRest held -> IgnoredRest . locatedSpan <$> generated held ()
-  fieldPattern (Located fieldAt field) = do
-    name <- retag (fieldPatternName field)
-    held <- mapM recurse (fieldPatternValue field)
-    generated fieldAt (FieldPattern name held)

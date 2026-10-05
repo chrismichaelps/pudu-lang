@@ -36,7 +36,8 @@ import qualified Data.Set as Set
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Frontend.Syntax.Stored ()
 import Pudu.Frontend.Syntax.Provenance (cacheableModule, cacheableSpan)
-import Pudu.Frontend.Syntax.Tree (Module)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree (Declaration (..), Function (..), Impl (..), Module (..), Trait (..))
 import Pudu.Semantic.Interface (moduleExportKeys, moduleExports)
 import Pudu.Type.Interface
   ( interfaceBindings
@@ -235,10 +236,10 @@ interfaceKey cache source = case cacheKeys cache of
 {-| What another module can observe of this one, as a key: its imports, its
     body-free exported declarations and private type shells, the constants it
     exports and their annotations, which trait members have defaults, and every
-    name it exports.
+    name it exports, together with observable compile-time code and initializers.
 
     Positions are left out — every span is written against a source no module
-    has — so moving a declaration, or editing any function's body, leaves the
+    has — so moving a declaration, or editing an ordinary runtime body, leaves the
     key where it was, and the checked products of every other module stay
     reusable. A change another module could see changes the key. -}
 interfaceFingerprint :: ProductCache -> Module -> Maybe ByteString
@@ -250,8 +251,10 @@ interfaceFingerprint cache parsed = against <$> cacheDetached cache
           ( ( interfaceImports skeleton
             , interfaceDeclarations skeleton
             )
-          , ( interfacePrivateDeclarations skeleton
-            , interfaceBindings skeleton
+          , ( ( interfacePrivateDeclarations skeleton
+              , interfaceBindings skeleton
+              )
+            , compiletimeDeclarations parsed
             )
           )
         described = Encoding.encodeUtf8 $ Text.pack $ show
@@ -259,6 +262,24 @@ interfaceFingerprint cache parsed = against <$> cacheDetached cache
           , moduleExportKeys (moduleExports parsed)
           )
      in ByteArray.convert (hash (encoded <> "\0" <> described) :: Digest Blake2b_256)
+
+{-| Consumers can embed these results in generated syntax or frozen constants.
+    Their ordinary runtime counterparts retain body-free interface keys. -}
+compiletimeDeclarations :: Module -> [Located Declaration]
+compiletimeDeclarations = foldr keep [] . moduleDeclarations
+ where
+  keep located@(Located at declaration) rest = case declaration of
+    DeriveDeclaration _ -> located : rest
+    MacroDeclaration _ -> located : rest
+    BindingDeclaration {} -> located : rest
+    FunctionDeclaration value | functionComptime value -> located : rest
+    ImplDeclaration value
+      | let members = filter (functionComptime . locatedValue) (implFunctions value)
+      , not (null members) -> Located at (ImplDeclaration value{implFunctions = members}) : rest
+    TraitDeclaration value
+      | let members = filter (functionComptime . locatedValue) (traitMembers value)
+      , not (null members) -> Located at (TraitDeclaration value{traitMembers = members}) : rest
+    _ -> rest
 
 lookupChecked :: ProductCache -> ByteString -> Source -> IO (Maybe CheckedProduct)
 lookupChecked cache graph source =

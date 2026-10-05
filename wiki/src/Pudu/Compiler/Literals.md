@@ -44,3 +44,7 @@ See [[Compiler Pipeline]] · [[architecture/PERFORMANCE]] · [[Eval Match]].
 - **Q:** Does this change what a program means? **A:** No. The kind is chosen by the same rule the
   evaluator used: checker's kind, then suffix, then `Int`. The equivalence is covered by the program
   suites, which run every literal form through the rewritten module.
+
+
+`resolveLiterals` takes the static selections too: a recorded reference becomes an explicit type application of every chosen type, in declaration order, and an explicit application's written prefix is replaced by the full list. Types are written with their canonical keys; a rigid parameter keeps its one-segment name.
+- **Q:** Add a runtime channel for selections? **A:** No; the existing post-check rewrite makes them ordinary syntax, cached and evaluated like any other.

@@ -32,6 +32,11 @@ function-arity equality cannot hide lost metadata.
 
 ## Negative logic
 
+Loaded positive fixtures invoke the generated methods and assert their exact
+record/Sum outputs. A scalar alias is a separate E3091 negative fixture; an
+aggregate alias reflects its underlying declared name. Literal compile-time
+array loops perform observable work so a missing unroll cannot pass.
+
 Do not infer derive instantiation from a fixture that merely declares an unused
 derive. Those fixtures prove definition checking only until generated impls exist.
 Do not accept evaluator agreement without the expected output or ignore codes.

@@ -49,6 +49,9 @@ Separating this package makes the compiler's source distribution self-contained:
 
 ## Referenced by
 
+[[Derive Graph Spec]] is explicitly registered for real program elaboration,
+lexical capture, conditional rules and diagnostic/output checks in both modes.
+
 [[Pudu Cabal Manifest]] · [[Pudu Cabal Project]] · [[Release Readiness and Native UI Canvas]]
 
 Reflection Resolution Spec is registered beside ordinary resolution properties,
@@ -78,3 +81,21 @@ benchmark; no host-specific timing gate.
 Register [[Runtime Series Map Tests]]. Resolved Grill Log: storage snapshot,
 representative and signed-boundary laws execute through the actual coordinator
 without a new test dependency.
+
+Register [[Derive Catalogue Spec]] explicitly with no new dependency. Resolved
+Grill Log: canonical inventory and refusal evidence run in the complete suite.
+
+Register [[Derive Requirement Spec]] explicitly. Resolved Grill Log: shared
+solver inference, rollback and bounded refusals execute in the complete suite.
+
+Register [[Derive Target Spec]]. Resolved Grill Log: canonical payload preparation
+and structural type reconstruction run without implying executable graph delivery.
+
+Register [[Derive Cache Spec]]. Resolved Grill Log: actual warm frozen consumers,
+compile-time content keys and transitive/cyclic import closure execute in the suite.
+
+Register [[Derive Library Spec]]. Resolved Grill Log: every shipped derive,
+field callbacks, static selection and the expansion snapshot run in both
+evaluators within the complete suite.
+
+Register [[Lsp Impl Members Spec]]. Resolved Grill Log: implementation member completion and its quick fix run through the server's request path in the complete suite.

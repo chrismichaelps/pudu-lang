@@ -1,0 +1,33 @@
+module StaticSelection
+import Std.Meta
+
+trait Parse { fn parse(text: Str) -> Result[Self, Str] }
+impl Parse for Int { fn parse(text: Str) -> Result[Self, Str] = Ok(text.length()) }
+impl Parse for Str { fn parse(text: Str) -> Result[Self, Str] = Ok(text) }
+impl [A: Parse] Parse for Array[A] {
+  fn parse(text: Str) -> Result[Self, Str] {
+    let first = A.parse(text) ?
+    let second = A.parse(text + "!") ?
+    Ok([first, second])
+  }
+}
+
+derive Parse for T: Record {
+  fn parse(text: Str) -> Result[T, Str] =
+  Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, Str] where F: Parse { F.parse(text + field.name) })
+}
+
+type Pair[A] = { left: A, right: A } derives Parse
+type Outer = { items: Array[Int], pair: Pair[Str] } derives Parse
+
+fn twice[A: Parse](text: Str) -> Result[(A, A), Str] = Ok((A.parse(text) ?, A.parse(text) ?))
+
+export fn main() -> Str {
+  let n: Result[(Int, Int), Str] = twice("ab")
+  let p: Result[Pair[Int], Str] = Pair.parse("x")
+  let o = Outer.parse("q")
+  let a = match n { case Ok((x, y)) => (x + y).toText() case Err(e) => e }
+  let b = match p { case Ok(v) => v.left.toText() + "/" + v.right.toText() case Err(e) => e }
+  let c = match o { case Ok(v) => v.items[0].toText() + v.items[1].toText() + v.pair.left + v.pair.right case Err(e) => e }
+  a + ";" + b + ";" + c
+}

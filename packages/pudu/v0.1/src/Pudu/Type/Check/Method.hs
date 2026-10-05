@@ -40,7 +40,8 @@ import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
-  ( Checker
+  ( noteStaticTrait
+  , Checker
   , DeclaredTypes (..)
   , bindImportedMethod
   , bindName
@@ -127,6 +128,9 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
           (FunctionTypeValue (functionAsync method) inputs result)
   bindName (methodKey owner (locatedValue (functionName method))) scheme
   recordDeclaredMethod owner (locatedValue (functionName method)) scheme
+  case functionParameters method of
+    Located _ first : _ | locatedValue (Tree.parameterName first) == "self" -> pure ()
+    _ -> noteStaticTrait owner
 
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that

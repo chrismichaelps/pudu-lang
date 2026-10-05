@@ -10,6 +10,8 @@ aliases: [Std Order]
 # Std Order
 ## Purpose
 Name equality, ordering, and hashing contracts used by generic algorithms and keyed collections.
+`Array[A]` and `Option[A]` implement Eq, Hash and Ord through their elements. `derive Eq`, `derive Hash` and `derive Ord` are ordinary derives for records and sums: equality field by field, hashes mixed in declaration order with a sum's variant index, and lexicographic order asking each field both ways, so Ord does not need Eq.
+
 ## Interface
 Exports `Ordering`, scalar comparisons, ordering combinators, `Eq`, `Ord`, `Hash`, their generic
 helpers, and implementations for compiler-wired scalar/byte types.
@@ -28,5 +30,7 @@ contract text in generated documentation unless a concrete implementation suppli
 
 Resolved Grill Log: `Ord.before` owns the strict-order explanation; implementation-specific text
 remains an explicit override.
+- **Q:** Combine hashes with arithmetic? **A:** No; integer arithmetic traps on overflow, so hashes combine with `^` and `mixHash`.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std HashMap]] · [[ADR-0015-hash-contract-and-hash-map]]

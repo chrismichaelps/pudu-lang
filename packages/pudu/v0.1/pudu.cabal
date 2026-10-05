@@ -89,6 +89,7 @@ library
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache
+    Pudu.Compiler.ComptimeDependencies
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest
@@ -201,6 +202,8 @@ library
     Pudu.Frontend.Syntax.Located
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Stored
+    Pudu.Frontend.Syntax.Inline
+    Pudu.Frontend.Syntax.Print
     Pudu.Frontend.Syntax.Provenance
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
@@ -226,6 +229,7 @@ library
     Pudu.Lsp.Completion
     Pudu.Lsp.Context
     Pudu.Lsp.PatternCompletion
+    Pudu.Lsp.ImplMembers
     Pudu.Lsp.ImportCompletion
     Pudu.Lsp.ModuleCatalog
     Pudu.Lsp.Shapes
@@ -299,6 +303,7 @@ library
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Resolve.Canonical
     Pudu.Semantic.Resolve.Reflection
     Pudu.Semantic.Resolve.Bindings
     Pudu.Semantic.Scope
@@ -307,8 +312,19 @@ library
     Pudu.Source
     Pudu.Comptime.Limits
     Pudu.Derive.State
+    Pudu.Derive.Syntax
+    Pudu.Derive.Sum
     Pudu.Derive.Reflection
+    Pudu.Derive.Build
+    Pudu.Derive.Context
     Pudu.Derive.Record
+    Pudu.Derive.Catalogue
+    Pudu.Derive.Definition
+    Pudu.Derive.Target
+    Pudu.Derive.Coherence
+    Pudu.Derive.Graph
+    Pudu.Derive.Expand
+    Pudu.Derive.Inference
     Pudu.Runtime.Word
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel

@@ -1,15 +1,19 @@
 {-| @Type.Proof — proves concrete conditional capabilities without body checking. -}
-module Pudu.Type.Proof (TraitProof (..), implementsTrait, proveBound, inferBound) where
+module Pudu.Type.Proof
+  ( TraitProof (..), implementsTrait, proveBound, inferBound, deriveRequirements ) where
 
 import Pudu.Comptime.Limits (callDepthLimit, iterationLimit)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import qualified Data.Set as Set
+import Data.Text (Text)
 import Pudu.Type.Env
   ( Checker, lookupImplementations, resolveVariable, rigidBoundsOf )
 import Pudu.Type.Implementation (matchImplementation)
 import Pudu.Type.Proof.Match
   ( Evidence, MatchResult (..), beginEvidence, abstractGoal, matchBound, matchRule
-  , remainingEvidence, resolveEvidence, resumeEvidence, stepEvidence )
+  , remainingEvidence, resolveEvidence, resumeEvidence, stepEvidence
+  , assumeBound, evidenceRequirements )
 import Pudu.Type.Marker (isMarkerTrait, satisfiesMarker)
 import Pudu.Type.Value (NominalId, Type (..), TypeVar)
 
@@ -19,6 +23,8 @@ data TraitProof = Proven | Unproved | ProofLimit | ProofAmbiguous
 
 data Demand = Identity !NominalId | Application !Type
   deriving stock (Eq, Show)
+
+data ProofPolicy = ExistingEvidence | Deriving !(Set.Set Text)
 
 implementsTrait :: Type -> NominalId -> Checker Bool
 implementsTrait target trait = (== Proven) <$> prove target (Identity trait)
@@ -37,7 +43,7 @@ inferBound target bound = do
       let holes = Map.toList (Map.unionWith max (variablesOf demand) (variablesOf value))
        in if null holes
             then do
-              (answer, _) <- decide 0 Map.empty (beginEvidence fuel) value (Application demand)
+              (answer, _) <- decide ExistingEvidence 0 Map.empty (beginEvidence fuel) value (Application demand)
                 (\evidence -> pure (Proven, evidence))
               pure (answer, [])
             else infer value demand fuel holes
@@ -55,7 +61,7 @@ inferBound target bound = do
             (not (Map.member variable required) && selected evidence local == local)
               || Map.null (variablesOf (selected evidence local))) mapping
           finish evidence = pure (if complete evidence then Proven else Unproved, evidence)
-          search evidence = decide 0 Map.empty evidence subject (Application wanted)
+          search evidence = decide ExistingEvidence 0 Map.empty evidence subject (Application wanted)
       (answer, found) <- search initial finish
       if answer /= Proven then pure (answer, []) else do
         let chosen = proposal found
@@ -93,16 +99,29 @@ prove target demand = do
         (trait, remaining) <- normalize 0 after written
         maybe (pure ProofLimit) (\bound -> begin value (Application bound) remaining) trait
  where
-  begin value bound fuel = fst <$> decide 0 Map.empty (beginEvidence fuel) value bound
+  begin value bound fuel = fst <$> decide ExistingEvidence 0 Map.empty (beginEvidence fuel) value bound
     (\evidence -> pure (Proven, evidence))
+
+{-| Lift only authorized bare target parameters into conditional premises;
+    ordinary capability queries retain the existing evidence-only policy. -}
+deriveRequirements :: [Text] -> Type -> Type -> Checker (TraitProof, [(Text, [Type])])
+deriveRequirements parameters target bound = do
+  (subject, after) <- normalize 0 iterationLimit target
+  (required, fuel) <- normalize 0 after bound
+  case (subject, required) of
+    (Just value, Just wanted) -> do
+      (answer, evidence) <- decide (Deriving (Set.fromList parameters)) 0 Map.empty
+        (beginEvidence fuel) value (Application wanted) (\held -> pure (Proven, held))
+      pure (answer, if answer == Proven then evidenceRequirements evidence else [])
+    _ -> pure (ProofLimit, [])
 
 type Trail = Map (Int, NominalId, NominalId) [(Type, Demand)]
 type Continuation = Evidence -> Checker (TraitProof, Evidence)
 
 {-| Each successful premise invokes the rest of the proof before choosing its
     candidate. Later failure therefore revisits earlier evidence alternatives. -}
-decide :: Int -> Trail -> Evidence -> Type -> Demand -> Continuation -> Checker (TraitProof, Evidence)
-decide depth visiting initial written wanted continue
+decide :: ProofPolicy -> Int -> Trail -> Evidence -> Type -> Demand -> Continuation -> Checker (TraitProof, Evidence)
+decide policy depth visiting initial written wanted continue
   | depth >= callDepthLimit = pure (ProofLimit, initial)
   | otherwise = case stepEvidence initial of
       MatchLimit after -> pure (ProofLimit, after)
@@ -134,7 +153,14 @@ decide depth visiting initial written wanted continue
     bounds <- rigidBoundsOf name
     scoped evidence bounds
    where
-    scoped available [] = pure (Unproved, available)
+    scoped available [] = case (policy, resolveEvidence available written, resolveDemand available wanted) of
+      (Deriving parameters, RigidType subject, Application required@(NominalType _ _))
+        | Set.member subject parameters, Map.null (variablesOf required) ->
+          case assumeBound available subject required of
+            Matched () after -> continue after
+            MatchLimit after -> pure (ProofLimit, after)
+            Mismatched after -> pure (Unproved, after)
+      _ -> pure (Unproved, available)
     scoped initialBounds (bound : rest) = case stepEvidence initialBounds of
       MatchLimit after -> pure (ProofLimit, after)
       Mismatched after -> pure (Unproved, after)
@@ -164,7 +190,7 @@ decide depth visiting initial written wanted continue
               MatchLimit after -> pure (ProofLimit, after)
               Mismatched after -> candidates active target demand trait (resumeEvidence available after) rest
               Matched requirements after -> do
-                (answer, final) <- conditions (depth + 1) active after requirements continue
+                (answer, final) <- conditions policy (depth + 1) active after requirements continue
                 if answer == Unproved
                   then candidates active target demand trait (resumeEvidence available final) rest
                   else pure (answer, final)
@@ -174,13 +200,13 @@ decide depth visiting initial written wanted continue
         if admitted then continue evidence else pure (Unproved, evidence)
     | otherwise = pure (Unproved, evidence)
 
-conditions :: Int -> Trail -> Evidence -> [(Type, Type)] -> Continuation -> Checker (TraitProof, Evidence)
-conditions depth visiting evidence requirements continue = case requirements of
+conditions :: ProofPolicy -> Int -> Trail -> Evidence -> [(Type, Type)] -> Continuation -> Checker (TraitProof, Evidence)
+conditions policy depth visiting evidence requirements continue = case requirements of
   [] -> continue evidence
   _ -> case select [] requirements of
     Nothing -> pure (Unproved, evidence)
-    Just ((subject, bound), rest) -> decide depth visiting evidence subject (Application bound)
-      (\after -> conditions depth visiting after rest continue)
+    Just ((subject, bound), rest) -> decide policy depth visiting evidence subject (Application bound)
+      (\after -> conditions policy depth visiting after rest continue)
  where
   select _ [] = Nothing
   select skipped (requirement@(subject, _) : rest) = case resolveEvidence evidence subject of

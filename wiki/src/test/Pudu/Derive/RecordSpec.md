@@ -17,7 +17,11 @@ aliases: [Derive Record Kernel Spec]
 programs using the actual Std.Meta facade. Arbitrary user traits check their derive
 definitions before instantiation. Replace explicit oracle stub impls with generated
 impls, then check and execute the transformed AST in tree and compiled modes.
-The graph driver is not implemented by this test adapter and remains a separate gate.
+The adapter loads an ordinary dependency seed containing the actual Std.Meta,
+then checks its complete template/oracle source through the per-module compiler
+boundary. Its stub impls remain exclusive kernel-test inputs. Actual graph
+elaboration rejects such overlapping requests and is tested independently by
+[[Derive Graph Spec]]; the kernel adapter never disables a production graph gate.
 
 ## Evidence and algorithm
 

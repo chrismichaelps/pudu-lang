@@ -27,7 +27,7 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Frontend.Token (Token)
-import Pudu.Lsp.Shapes (RecordShape, SumShape)
+import Pudu.Lsp.Shapes (RecordShape, SumShape, TraitShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
 import Pudu.Semantic.Interface (ExportIndex)
@@ -69,6 +69,8 @@ data Analysis = Analysis
   , analysisSums :: !(Map Text SumShape)
   {-| Every record type the program can see, keyed the same way. -}
   , analysisRecords :: !(Map Text RecordShape)
+  {-| Every trait the program can see, keyed the same way, with its members. -}
+  , analysisTraits :: !(Map Text TraitShape)
   {-| Every method the program's modules declare, by the canonical key of the
       type or trait that owns it, with the scheme the checker gave it. -}
   , analysisMethods :: !(Map Text [(Text, Scheme)])

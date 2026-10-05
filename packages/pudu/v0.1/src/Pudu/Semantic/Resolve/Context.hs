@@ -21,6 +21,8 @@ module Pudu.Semantic.Resolve.Context
   , declareReflectedTypeParameter
   , inDeriveDefinition
   , withDeriveDefinition
+  , withCanonicalTypes
+  , canonicalTypesInScope
   , runResolver
   ) where
 
@@ -84,6 +86,7 @@ data ResolveState = ResolveState
       reflection is refused everywhere else, because only derivation unrolls
       the code that names it. -}
   , stateInDerive :: !Bool
+  , stateCanonicalTypes :: !Bool
   }
 
 {-| @Semantic.Resolve.Products — everything one resolution run produced -}
@@ -142,19 +145,11 @@ initialState =
     , stateVisibleAfter = Nothing
     , stateReflectionImports = Set.empty
     , stateInDerive = False
+    , stateCanonicalTypes = False
     }
 
-{-| Run an action inside one more enclosing loop.
-
-    Labels live on their own stack rather than in the ordinary scope, because
-    they are not names: nothing evaluates a label, nothing shadows a value with
-    one, and a label is legal only in the two statements that can name it. The
-    stack runs innermost first, which is the order `break` searches.
-
-    A label repeating one already enclosing it is a warning rather than an
-    error. The program still means something definite — the inner label wins,
-    since it is nearer — but the outer loop has become unreachable by name, and
-    that is almost always a mistake in the making rather than a plan. -}
+{-| Labels have an independent stack; duplicate labels warn but select the
+    innermost enclosing loop. -}
 insideLoop :: Maybe (Located Text) -> Resolver a -> Resolver a
 insideLoop label action = do
   enclosing <- readLoops
@@ -189,12 +184,7 @@ resolveLoopTarget keyword spanValue label = do
           emit "E2017" Error labelSpan ("no enclosing loop is labelled @" <> name)
             (Just "label the loop you meant, or drop the label to leave the nearest one")
 
-{-| Run an action with no enclosing loop, whatever surrounds it.
-
-    A function body is not inside the loop that happens to contain its
-    definition. A closure written in a loop and called long after it has
-    finished cannot leave a loop that is no longer running, so `break` inside
-    one is out of every loop even when the text around it is not. -}
+{-| A closure cannot transfer control into the loop enclosing its definition. -}
 outsideLoops :: Resolver a -> Resolver a
 outsideLoops action = do
   enclosing <- readLoops
@@ -250,6 +240,14 @@ withDeriveDefinition inside action = do
   result <- action
   modifyDerive (const previous)
   pure result
+
+canonicalTypesInScope :: Resolver Bool
+canonicalTypesInScope = Resolver $ \state -> (stateCanonicalTypes state, state)
+
+withCanonicalTypes :: Bool -> Resolver a -> Resolver a
+withCanonicalTypes formed (Resolver action) = Resolver $ \state ->
+  let (result, next) = action state{stateCanonicalTypes = formed}
+   in (result, next{stateCanonicalTypes = stateCanonicalTypes state})
 
 {-| Check the symbol actually selected, once, for every expression/type path.
     Syntactic member checks miss selected imports and first-class values. -}

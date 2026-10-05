@@ -7,6 +7,10 @@ tags: [moc, module]
 
 - [[Derive Record Residualizer]] · [[Derive Residual State]] · [[Derive Reflection Facts]] · [[Compile Time Limits]] — bounded shape residualization.
 
+- [[Derive Field Callbacks]] · [[Derive Residual Context]] · [[Derive Expansion Output]] — build/collect unrolling, shared residual state and `pudu expand`.
+
+- [[Derive Catalogue]] · [[Validated Derive Definitions]] · [[Derive Target Application]] — canonical requests, generic admission and actual target arguments.
+
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu CLI Init]] — additive, staged, typed creation of canonical projects.
 - [[Pudu CLI Lint]] — project discovery, suppression, output, atomic safe fixes, and lint status.
@@ -39,5 +43,8 @@ tags: [moc, module]
 - [[src/Pudu/Frontend/_MOC|Frontend modules]] — lossless lexing, recovery-capable untyped syntax, and the complete first parser slice.
 
 ## Referenced by
+
+- [[Derive Graph]] — checked graph elaboration before ordinary interfaces.
+- [[Derive Graph Coherence]] — canonical request ownership and typed head overlap.
 
 [[src/_MOC]] · [[Frontend]]

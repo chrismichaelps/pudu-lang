@@ -13,7 +13,7 @@ derive Tag for T: Record {
   fn tag(self: &T) -> Str {
     var out = "tag"
     comptime for x: Int in [1, 2] {
-      out = out
+      out = out + "r"
     }
     out
   }
@@ -23,4 +23,13 @@ derive impl Tag for Line
 
 type Line = { sku: Str }
 
-export fn main() -> Int { 0 }
+derive Tag for T: Sum {
+  fn tag(self: &T) -> Str { "sum" }
+}
+
+export fn main() -> Str {
+  let order = Order{cache: None, id: 1}
+  let line = Line{sku: "x"}
+  let shape = Shape.Circle{radius: 2}
+  order.tag() + line.tag() + shape.tag()
+}

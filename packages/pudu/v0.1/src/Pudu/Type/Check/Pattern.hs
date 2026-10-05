@@ -1,6 +1,7 @@
 {-| @Type.Check.Pattern.Module — checks patterns against the type they match -}
 module Pudu.Type.Check.Pattern
   ( bindPattern
+  , canonicalVariant
   , freshFor
   , recordFieldsFor
   , substituteRigid
@@ -260,3 +261,18 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
   case fieldPatternValue field of
     Just nested -> bindPattern declared rigid nested fieldType
     Nothing -> bindName name (monotype fieldType)
+
+{-| A generated construction names a variant through its canonical owner,
+    `Module.Type.Variant`, which its defining module need not import. Typed
+    exactly as the constructor bound in the owner's module: the owner applied
+    to fresh parameters, behind a function of the payload when it has one. -}
+canonicalVariant :: DeclaredTypes -> ModuleName -> Checker (Maybe Type)
+canonicalVariant declared path = do
+  variant <- variantForPath declared path (NonEmpty.last (moduleNameSegments path))
+  case variant of
+    Nothing -> pure Nothing
+    Just (owner, ownerParams, declaredPayload) -> do
+      replacements <- freshFor ownerParams
+      let ownerType = NominalType owner (map snd replacements)
+          payload = map (substituteRigid replacements) declaredPayload
+      pure (Just (if null payload then ownerType else FunctionTypeValue False payload ownerType))

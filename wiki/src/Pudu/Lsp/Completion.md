@@ -21,6 +21,8 @@ the fields or methods of the value. Ordinary value positions retain bindings in 
 imports, the everyday prelude, keywords, and built-in types. `completionRepaired` answers from a
 [[Lsp Repair|repaired copy]] when the written text has no types.
 
+Inside an implementation's body, outside every member body, completion answers [[Lsp Impl Members]] first: the trait's unwritten members. Keyword completion also offers the contextual `derive` and `derives`.
+
 ## Interface
 
 ```haskell
@@ -121,6 +123,8 @@ source root; the catalog is run only when the cursor is at an import site.
   preserve their nominal owner. _Rationale:_ the type checker already resolved the exact subject;
   using that identity prevents unrelated variants from leaking into the list. _Rejected:_ searching
   every documented name for constructor-shaped entries.
+- **Q:** Let the syntax context decide impl bodies? **A:** No; a body at member level holds only members, and the context classifier reads `Type {` as a record or type position.
+- **Q:** Offer `derive`/`derives` though they are not keywords? **A:** Yes; a declaration is where they begin.
 
 ## Referenced by
 

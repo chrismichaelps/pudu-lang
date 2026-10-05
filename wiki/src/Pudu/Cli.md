@@ -19,6 +19,8 @@ aliases: [Pudu CLI]
 
 Provide the `pudu` executable: start `puduci`, check files, and report version and usage.
 
+`pudu expand <file>` prints the implementations the file's derive requests generate, or its diagnostics.
+
 ## Interface
 
 ### Commands
@@ -187,6 +189,7 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
   graph, and tests contain Pudu only. Haskell remains an implementation language of the current
   bootstrap compiler until the separately governed self-hosting milestone; it is not part of an
   initialized project's source or build workflow.
+- **Q:** Put the expansion logic in the executable? **A:** No; [[Derive Expansion Output]] owns it and the executable dispatches.
 
 ## Referenced by
 

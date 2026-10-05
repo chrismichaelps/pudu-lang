@@ -69,6 +69,7 @@ import Pudu.Eval.Program (evaluateProgramEntryFolded, evaluateProgramTalliedFold
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value (Value (..))
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
+import Pudu.Derive.Expand (expansionText)
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Server (runServer)
 import Pudu.Doc.Json (encodeIndex, escapeJson)
@@ -419,6 +420,7 @@ runCommand = do
     [] -> startRepl style Nothing
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
+    ["expand", path] -> expandProgram style path
     ("lint" : rest) -> runLint style rest
     ("run" : "--watch" : rest) -> case watchOptions [] rest of
       Right (also, path, carried) -> watchProgram style also path carried
@@ -516,6 +518,18 @@ checkPaths style paths
   | otherwise = do
       results <- mapM (checkOne style) paths
       if or results then exitFailure else exitSuccess
+
+{-| Print the implementations the file's derive requests generate, or its
+    diagnostics when it does not compile. -}
+expandProgram :: RenderStyle -> FilePath -> IO ()
+expandProgram style path = do
+  program <- compileReusing path
+  let diagnostics = programDiagnostics program
+  if hasErrors diagnostics
+    then do
+      TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+      exitFailure
+    else expansionText program >>= TextIO.putStr
 
 checkOne :: RenderStyle -> FilePath -> IO Bool
 checkOne style path = do
@@ -1171,6 +1185,7 @@ usage =
     , "  pudu                 start the puduci interactive session"
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
+    , "  pudu expand <file>   print the implementations its derives generate"
     , "  pudu lint [--json] [--fix] [--allow CODE] <path>..."
     , "                       analyze Pudu files or directories"
     , "  pudu run <file>      compile a program and run its main function"

@@ -6,6 +6,9 @@ aliases: [Program Compiler Module Map]
 
 # Program Compiler Module Map
 
+- [[Compile-Time Dependency Closure]] — transitive source inputs of expansion
+  and folding, including ordinary pure helper bodies.
+
 - [[Program Reflection Spec]] — loaded Meta accessor and heterogeneous-sequence checks.
 
 - [[Compiler Product Publication]] — cache admission and analysis/execution product lifetime.

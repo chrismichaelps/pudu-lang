@@ -18,6 +18,10 @@ and returns F; set accepts &mut T and F. Attribute reads preserve the fallback's
 type. A variant matches &T and exposes its payload fields and constructor.
 nameOf, fields, variants and build retain the authored Meta API.
 
+Variant also exposes its zero-based declaration index as Int. Variant attributes
+use the same has/attributeOr contracts as fields. Positional payload fields are
+named by decimal positions; unit variants have an empty field sequence.
+
 Fields[T] and Variants[T] are opaque compile-time sequences. Fields does not
 carry a homogeneous element parameter: each iteration introduces its own rigid
 F. Only compile-time iteration consumes these sequences; ordinary Array operations
@@ -25,6 +29,8 @@ cannot access them. This facade is declaration groundwork: panic bodies have no
 runtime implementation. The complete integration must eliminate every descriptor
 and accessor before evaluation, implement rank-polymorphic build callbacks and
 Result construction, and refuse any surviving reflection.
+
+`collect[T](each)` and `variant.collect(each)` answer an array of what `each` answers per field, leaving out `None`. `Variant` also answers `positional`, true for positional and unit payloads.
 
 ## Algorithm and boundaries
 
@@ -43,6 +49,7 @@ and selected imports, outside derive definitions.
   set additionally preserves exclusive borrowing and the held field type.
 - **Q:** Are panic bodies evidence of runtime derivation? **A:** No. They supply
   signatures only; residualization and Result builders remain integration gates.
+- **Q:** Add collect to a fixed reflection table? **A:** Yes; JSON encoding needs an array literal to match a hand-written encoder, and a push chain cannot be rewritten soundly.
 
 ## Linkage
 

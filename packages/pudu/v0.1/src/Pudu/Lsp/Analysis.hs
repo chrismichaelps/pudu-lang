@@ -29,7 +29,7 @@ import Pudu.Compiler.Program
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.Context (declaredModule)
 import Pudu.Lsp.Documents (Analysis (..))
-import Pudu.Lsp.Shapes (programRecords, programSums)
+import Pudu.Lsp.Shapes (programRecords, programSums, programTraits)
 import Pudu.Source (SourceName (..), newSource, sourceName)
 import Pudu.Type.Value (Scheme, nominalKey)
 import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
@@ -72,6 +72,7 @@ analyseOver overlay root uri content = do
       , analysisModule = maybe (snd recovered) compileSyntax (rootCompileResult program)
       , analysisSums = programSums program
       , analysisRecords = programRecords program
+      , analysisTraits = programTraits program
       , analysisMethods = programMethods program
       , analysisExports = contextExports (programContext program)
       , analysisDependencies =

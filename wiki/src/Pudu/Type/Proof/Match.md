@@ -36,6 +36,14 @@ Every allocation and structural match consumes work; exhaustion returns MatchLim
 
 ## Negative logic and edge cases
 
+`overlapRules` freshens both implementation binders independently in one isolated
+Evidence and matches target and complete trait heads with the same structural
+matcher. Bounds never justify overlapping dispatch heads. Preserve constructor
+wide bare nominal target contracts; retain exact function default arity, unsafe
+capabilities and canonical trait arguments. Exhaustion yields MatchLimit rather
+than guessing disjointness. Resolved Grill Log: use exact evidence matching, not
+ordinary assignment unification where Never and default arity have join rules.
+
 No caller unification, global counter, rigid-name capture, body checking or IO.
 Ordinary proof holds caller variables fixed. Only explicit call inference copies
 holes; canonical type owners remain fixed. No private variable escapes into compiler
@@ -56,3 +64,16 @@ products or runtime selection. The proof boundary checks complete proposals.
 ## Referenced by
 
 [[Type Trait Proof]] · [[Type Implementation Rules]] · [[src/Pudu/Type/_MOC]]
+
+## Conditional premise evidence
+
+`assumeBound` records one full trait application for a named rigid subject in
+private evidence, charging search work. `evidenceRequirements` projects the
+successful evidence's deduplicated applications after local substitution.
+`resumeEvidence` rolls these premises back with bindings while retaining consumed
+fuel and the fresh-variable frontier. The shared proof policy is the sole caller
+authorized to introduce assumptions; ordinary proof never calls this operation.
+
+Resolved Grill Log: keep tentative inferred requirements inside the same rollback
+boundary as matching. Do not retain requirements from failed candidates, refund
+work or modify caller checker bounds.

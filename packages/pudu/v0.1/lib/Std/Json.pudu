@@ -2,6 +2,7 @@ module Std.Json
 
 import Std.Io as Io
 import Std.Io {IoError}
+import Std.Meta
 import Std.Option as Option
 /// Aliased away from `Text` because this module declares a variant of that
 /// name, and a qualifier and a constructor cannot share one.
@@ -648,4 +649,324 @@ fn readObject(open: &Cursor, depth: Int) -> Result[(Json, Cursor), JsonError] {
     cursor = skipSpace(advanced(&cursor, 1))
   }
   Err(Unterminated("object"))
+}
+
+/// One step from a decoded value's root toward the part that did not decode.
+export type DecodeStep = Key(Str) | Index(Int)
+
+/// Why JSON did not decode into a type: where, what was expected there, and
+/// what was found instead. Kept apart from `JsonError`, which is about text
+/// that is not JSON at all; this is about JSON that is not the type.
+///
+/// ## Examples
+///
+/// ```
+/// match Json.Decode.decode(&value) {
+///   case Ok(order) => use(order)
+///   case Err(problem) => report(Json.explainDecode(&problem))
+/// }
+/// ```
+export type DecodeError = { path: Array[DecodeStep], expected: Str, found: Str }
+
+/// The problem as text for a person: the path, then what was wanted there.
+///
+/// ## Examples
+///
+/// ```
+/// Json.explainDecode(&problem)  // "at lines[2].price: expected a number, found text"
+/// ```
+export fn explainDecode(problem: &DecodeError) -> Str {
+  var place = ""
+  for step in problem.path {
+    place = place + match step {
+      case Key(key) => if place == "" { key } else { "." + key }
+      case Index(index) => "[" + show(index) + "]"
+    }
+  }
+  let prefix = if place == "" { "" } else { "at " + place + ": " }
+  prefix + "expected " + problem.expected + ", found " + problem.found
+}
+
+/// A type that writes itself as JSON.
+///
+/// ## Examples
+///
+/// ```
+/// type Point = { x: Int, y: Int } derives Json.Encode
+/// Json.encode(&Point{x: 1, y: 2}.encode())  // "{\"x\":1,\"y\":2}"
+/// ```
+export trait Encode {
+  /// The value as JSON.
+  fn encode(self: &Self) -> Json
+}
+
+/// A type that reads itself from JSON.
+///
+/// ## Examples
+///
+/// ```
+/// let point: Result[Point, Json.DecodeError] = Point.decode(&value)
+/// ```
+export trait Decode {
+  /// The value the JSON describes, or why it describes none.
+  fn decode(json: &Json) -> Result[Self, DecodeError]
+}
+
+/// `Json` itself has no implementation: its type shares the module's name, so
+/// one would take `Json.encode` and `Json.decode` from the module's functions.
+impl Encode for Int { fn encode(self: &Self) -> Json { Number(*self) } }
+impl Encode for Str { fn encode(self: &Self) -> Json { Text(*self) } }
+impl Encode for Bool { fn encode(self: &Self) -> Json { Boolean(*self) } }
+impl Encode for Float64 { fn encode(self: &Self) -> Json { Fractional(show(*self)) } }
+impl Encode for Decimal { fn encode(self: &Self) -> Json { Fractional(show(*self)) } }
+
+impl [A: Encode] Encode for Array[A] {
+  fn encode(self: &Self) -> Json {
+    var members: Array[Json] = []
+    for item in *self { members = members.push(item.encode()) }
+    List(members)
+  }
+}
+
+/// An absent value is `null`; a present one is its own JSON.
+impl [A: Encode] Encode for Option[A] {
+  fn encode(self: &Self) -> Json {
+    match *self {
+      case Some(held) => held.encode()
+      case None => Null
+    }
+  }
+}
+
+impl Decode for Int {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case Number(number) => Ok(number)
+      case _ => mismatch("an integer", json)
+    }
+  }
+}
+
+impl Decode for Str {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case Text(text) => Ok(text)
+      case _ => mismatch("text", json)
+    }
+  }
+}
+
+impl Decode for Bool {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case Boolean(flag) => Ok(flag)
+      case _ => mismatch("a boolean", json)
+    }
+  }
+}
+
+impl Decode for Decimal {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case Number(number) => Ok(decimalFromInt(number))
+      case Fractional(text) => match decimalOf(text) {
+        case Some(number) => Ok(number)
+        case None => mismatch("a number", json)
+      }
+      case _ => mismatch("a number", json)
+    }
+  }
+}
+
+impl Decode for Float64 {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    Ok(decimalToFloat(Decimal.decode(json) ?))
+  }
+}
+
+impl [A: Decode] Decode for Array[A] {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case List(members) => {
+        var decoded: Array[A] = []
+        var index = 0
+        for member in members {
+          decoded = decoded.push(within(Index(index), A.decode(&member)) ?)
+          index = index + 1
+        }
+        Ok(decoded)
+      }
+      case _ => mismatch("a list", json)
+    }
+  }
+}
+
+/// `null` is the absent value; anything else must decode as the content.
+impl [A: Decode] Decode for Option[A] {
+  fn decode(json: &Json) -> Result[Self, DecodeError] {
+    match json {
+      case Null => Ok(None)
+      case _ => Ok(Some(A.decode(json) ?))
+    }
+  }
+}
+
+/// A record writes an object holding each field under its wire name:
+/// `@json("name")` renames one, and `@skip` leaves one out.
+export derive Encode for T: Record {
+  fn encode(self: &T) -> Json {
+    Object(Meta.collect[T](fn(field: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
+          if field.has("skip") { None } else { Some((field.attributeOr("json", field.name), field.get(self).encode())) }
+        }))
+  }
+}
+
+/// A sum writes an object with one key, the variant's wire name. Its value is
+/// a list for a positional payload, an object for a named one, and an empty
+/// list for a unit variant.
+export derive Encode for T: Sum {
+  fn encode(self: &T) -> Json {
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        let payload = if variant.positional {
+          List(variant.collect(fn(field: Meta.Field[T, F]) -> Option[Json] where F: Encode {
+                Some(field.get(self).encode())
+              }))
+        } else {
+          Object(variant.collect(fn(field: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
+                if field.has("skip") { None } else { Some((field.attributeOr("json", field.name), field.get(self).encode())) }
+              }))
+        }
+        return Object([(variant.attributeOr("json", variant.name), payload)])
+      }
+    }
+    Null
+  }
+}
+
+/// A record reads an object. Unknown keys are ignored and a key consumed twice
+/// is refused. A missing field takes its `@default(json)` when it has one and
+/// otherwise reads `null`, so an `Option` becomes `None` while a required value
+/// refuses absence. A `@skip` field never reads the object.
+export derive Decode for T: Record {
+  fn decode(json: &Json) -> Result[T, DecodeError] {
+    let entries = objectEntries(json) ?
+    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
+        let key = field.attributeOr("json", field.name)
+        let fallback = if field.has("default") { defaulted(field.attributeOr("default", "null")) } else { Null }
+        if field.has("skip") { return within(Key(key), F.decode(&fallback)) }
+        match consumed(&entries, key) ? {
+          case Some(found) => within(Key(key), F.decode(&found))
+          case None => absent(key, F.decode(&fallback))
+        }
+      })
+  }
+}
+
+/// A sum reads the one-key object its encoding writes, selecting the variant
+/// by wire name and reading its payload by position or by name.
+export derive Decode for T: Sum {
+  fn decode(json: &Json) -> Result[T, DecodeError] {
+    let (tag, payload) = soleEntry(json) ?
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if tag == variant.attributeOr("json", variant.name) {
+        return within(Key(tag), variant.build(fn(field: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
+              let (step, found) = payloadMember(&payload, field.attributeOr("json", field.name)) ?
+              match found {
+                case Some(held) => within(step, F.decode(&held))
+                case None => absent(field.name, F.decode(&Null))
+              }
+            }))
+      }
+    }
+    Err(DecodeError{path: [], expected: "a variant name", found: "\"" + tag + "\""})
+  }
+}
+
+/// What a value is, in the words a decoding error uses.
+fn kindOf(value: &Json) -> Str {
+  match value {
+    case Null => "null"
+    case Boolean(_) => "a boolean"
+    case Number(_) => "a number"
+    case Fractional(_) => "a number"
+    case Text(_) => "text"
+    case List(_) => "a list"
+    case Object(_) => "an object"
+  }
+}
+
+fn mismatch[T](expected: Str, found: &Json) -> Result[T, DecodeError] {
+  Err(DecodeError{path: [], expected: expected, found: kindOf(found)})
+}
+
+/// A failure inside one step, located beneath it.
+fn within[T](step: DecodeStep, outcome: Result[T, DecodeError]) -> Result[T, DecodeError] {
+  match outcome {
+    case Ok(held) => Ok(held)
+    case Err(problem) => Err(DecodeError{path: [step].concat(problem.path), expected: problem.expected, found: problem.found})
+  }
+}
+
+/// A missing key's failure names the key and says nothing was there.
+fn absent[T](key: Str, outcome: Result[T, DecodeError]) -> Result[T, DecodeError] {
+  match outcome {
+    case Ok(held) => Ok(held)
+    case Err(problem) => Err(DecodeError{path: [Key(key)], expected: problem.expected, found: "nothing"})
+  }
+}
+
+fn objectEntries(json: &Json) -> Result[Array[(Str, Json)], DecodeError] {
+  match json {
+    case Object(entries) => Ok(entries)
+    case _ => mismatch("an object", json)
+  }
+}
+
+/// The value under a key, refusing a key written twice.
+fn consumed(entries: &Array[(Str, Json)], key: Str) -> Result[Option[Json], DecodeError] {
+  var found: Option[Json] = None
+  var seen = false
+  for entry in *entries {
+    if entry[0] == key {
+      if seen {
+        return Err(DecodeError{path: [Key(key)], expected: "one value", found: "a repeated key"})
+      }
+      seen = true
+      found = Some(entry[1])
+    }
+  }
+  Ok(found)
+}
+
+/// A default written as JSON text, or as plain text when it is not JSON.
+fn defaulted(text: Str) -> Json {
+  match decode(text) {
+    case Ok(value) => value
+    case Err(_) => Text(text)
+  }
+}
+
+fn soleEntry(json: &Json) -> Result[(Str, Json), DecodeError] {
+  match json {
+    case Object(entries) => if entries.length() == 1 { Ok(entries[0]) } else {
+      Err(DecodeError{path: [], expected: "an object with one key", found: "an object with " + show(entries.length())})
+    }
+    case _ => mismatch("an object with one key", json)
+  }
+}
+
+/// A payload member by position in a list, or by name in an object.
+fn payloadMember(payload: &Json, name: Str) -> Result[(DecodeStep, Option[Json]), DecodeError] {
+  match payload {
+    case List(members) => match decimalOf(name) {
+      case Some(position) => match decimalToInt(position) {
+        case Some(index) => Ok((Index(index), if index < members.length() { Some(members[index]) } else { None }))
+        case None => mismatch("an object", payload)
+      }
+      case None => mismatch("an object", payload)
+    }
+    case Object(entries) => Ok((Key(name), consumed(&entries, name) ?))
+    case _ => mismatch("a list or an object", payload)
+  }
 }

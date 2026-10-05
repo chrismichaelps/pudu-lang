@@ -19,6 +19,8 @@ aliases: [Eval Call]
 
 Call something, reach a name through a path, and join the tasks a scope owns.
 
+A type-applied callee binds the types it carries, as witnesses, to the callee's type parameters; a method called on a receiver keeps them through `callMemberSelecting`. Witnesses enter the callee's frame before its parameters.
+
 ## Interface
 
 ```haskell
@@ -101,6 +103,8 @@ constructor.
 - **Q:** Run a body through the tree walker on every call? **A:** Not when the run compiles bodies.
   _Rationale:_ `closureOutcome` takes the body's compiled code from [[Eval Compile Cache]], compiling
   it through `callCompile` on the first call; a run without a cache keeps the tree walker.
+- **Q:** Keep witnesses in a dynamic stack? **A:** No; in the frame, so a function literal created inside sees the right ones.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]

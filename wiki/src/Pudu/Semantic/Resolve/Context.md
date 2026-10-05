@@ -119,6 +119,18 @@ DEPTH 0.72 (DEEP). It hides the monad threading, the four accumulators, the dupl
 
 ## Referenced by
 
+## Canonical generated syntax scope
+
+`withCanonicalTypes` scopes an internal flag read by `canonicalTypesInScope`.
+Only the ordinary Impl walk enables it, and only for an Impl carrying generated
+provenance from graph elaboration. [[Resolve Canonical]] uses it to recognize
+already formed generated qualified paths; ordinary names still resolve normally.
+The flag is restored after each implementation, including nested scopes.
+Resolved Grill Log: generated targets cannot require new lexical imports, while
+authored code must retain import privacy. Reject global qualifier installation
+and admitting authored paths based on spelling alone. Concise comments retain
+the existing resolver invariants while keeping this state owner below 500 lines.
+
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[Scope Model]] · [[Symbol Model]] · [[Semantics]]
 
 ## Reflection and rigid-scope hardening
