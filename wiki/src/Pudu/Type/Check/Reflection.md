@@ -43,6 +43,10 @@ type as Std.Meta, or treat Fields as a homogeneous Array. No IO or recursive che
   field parameter and the same owner; each real field substitutes independently.
 - **Q:** Express build's `F or Result[F, E]` in the Meta signature? **A:** It cannot be; the rule is here, recognized by the callee's type rather than its spelling.
 - **Q:** Accept a callback that is not a literal? **A:** No (E3001); unrolling needs its body.
+- **Q:** Share one refusal wording and help between build and collect? **A:** No. _Rationale:_ a
+  collect callback was told about build's answer shape. Each refusal names its own callback kind
+  and the answer type it found, and the help writes that kind's literal. _Rejected:_ a generic
+  "build callback" message for both.
 
 ## Linkage
 

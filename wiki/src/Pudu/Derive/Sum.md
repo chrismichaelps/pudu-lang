@@ -16,7 +16,8 @@ aliases: [Derive Sum Residualizer]
 `variantFields` exposes named payloads and positional fields named by zero-based
 decimal positions; unit variants expose none. `variantPattern` creates an ordinary
 qualified pattern. `matchesVariant` lowers a test to ordinary if-let. `readField`
-lowers a selected field read to an ordinary destructuring block.
+lowers a selected field read to a block holding an ordinary `let … else` whose
+fallback panics with `expected Owner.Variant`.
 
 ## Invariants and edges
 
@@ -26,7 +27,9 @@ Pattern binders live in their own generated block and the subject is evaluated
 before they enter scope; user expressions cannot be captured by those binders.
 Every syntax node uses the existing request-owned bounded Residual state.
 Reading a selected variant field requires a value of that variant; a mismatch
-uses the ordinary E7013 destructuring failure, never a Meta runtime placeholder.
+panics (E7007) naming the variant expected, through ordinary authored syntax,
+never a Meta runtime placeholder. The generated text is therefore what a person
+could write, and `pudu expand` prints it as such.
 Builders and Sum writes are separate integration work until explicitly admitted.
 
 ## Grill Log
@@ -34,6 +37,11 @@ Builders and Sum writes are separate integration work until explicitly admitted.
 - **Q:** Use a runtime descriptor or a Meta panic to project a payload? **A:**
   Generate an ordinary destructuring binding with its existing mismatch outcome.
   _Rejected:_ runtime metadata, silent defaults or a fabricated field type.
+- **Q:** Keep the refutable destructuring `let`, failing with E7013? **A:** No.
+  _Rationale:_ authored code cannot spell a refutable `let` without `else`
+  (E1059), so printed expansions did not check. `let … else { panic(...) }` is
+  the authored form, tests the same pattern once, and names the variant in its
+  failure. _Rejected:_ printing a different form from the one that runs.
 - **Q:** Derive a variant's owner from its basename? **A:** Append the variant
   segment to the already canonical target path. _Rejected:_ caller imports
   selecting the constructor or a competing same-basename sum.

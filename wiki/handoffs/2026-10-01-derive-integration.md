@@ -677,6 +677,25 @@ Documents/Analysis, Lsp.ImplMembersSpec and the VS Code extension's grammar,
 README and version: implementation member completion, its quick fix, and
 derive/attribute highlighting.
 
+## Limits continuation (2026-10-05)
+
+The user held the merge until the PR's stated limits were closed. Architect →
+Tooling/Semantic Implementer, solo: owns Lsp.Diagnostics and Lsp.MethodOwner
+(new), Lsp.Definition/Server/Documents/Analysis/Completion/Protocol/Repair, the
+method-span record across Type.Env/Check.Method/Type/Compiler/Check, the module
+qualifier rule in Check.Call, Check.Reflection refusals, Parser.Declaration.Derive
+E1065 placement, Syntax.Print home-relative names, Derive.Sum `let … else` payload
+reads, Derive.Expand, Std.Json's `Json` impls, Lsp.DiagnosticsSpec,
+Lsp.MethodDefinitionSpec, Derive.LibrarySpec and the derive fixtures. No other
+agents participate.
+
+Closed: editor diagnostics placed by file (imported errors at the import, help on
+its own line, notes as related locations); go to definition on method calls,
+derived ones opening the derive; `pudu expand` text that checks in its defining
+module; `Json` implementing `Encode`/`Decode`. Remaining from the earlier list:
+the PR's size, which is the integrated feature, and GHC 9.14.1, which CI builds
+on push since it is not installed locally.
+
 Exact next action: Language Architect review of the semantic contracts in
-[[Derive Design]] (static selection and `collect`) and Forensic Guardian
-wiki-parity review on the pull request into `dev`.
+[[Derive Design]] (static selection, `collect`, the module-qualifier rule) and
+Forensic Guardian wiki-parity review on the pull request into `dev`.

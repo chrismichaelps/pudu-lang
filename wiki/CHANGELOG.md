@@ -5,6 +5,32 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-05 — Derive tooling limits closed (#431)
+
+- Editors publish each finding where the reader can act on it ([[Lsp Diagnostics]]): a
+  finding's offsets are read only against the file its span names. This document's
+  findings keep their range; an imported module's error appears at the import that
+  reaches it as `Module: message`, with its own location related; another module's
+  warning is not published on the importer. Help is its own `help:` line and every
+  note is a related location, so `derive requested here` is clickable. Repairs mark
+  only this document's declarations broken ([[Lsp Repair]]).
+- Go to definition answers method calls ([[Lsp Definition]]): the checker records each
+  declared method's name span ([[Type Env]], [[Type Check Method]]), and the owners
+  completion already used ([[Lsp Method Owner]]) select the declaration — an impl
+  method, a static method, a trait member through a type parameter or an inherited
+  default, and for a derived method the derive that wrote it, library derives included.
+- `pudu expand` text checks where it stands: [[Syntax Printer]] writes the home
+  module's own names bare, and [[Derive Sum Residualizer]] lowers payload reads to
+  `let … else { panic("expected Owner.Variant") }`, replacing the refutable `let`
+  only generated code could hold. Same-module expansions written in place of their
+  derives run identically in both evaluators.
+- `Json` implements `Encode` and `Decode` ([[Std Json]]); `Json.encode`/`Json.decode`
+  stay module functions because a module qualifier's export precedes a same-spelled
+  type's method ([[Type Check Call]]). Std.Json's derive callbacks no longer shadow `field`.
+- Diagnostics: an empty `derives` is reported at `derives`, not at the next line's
+  declaration ([[Parser Derive Declaration]]); build and collect refusals each name their own
+  callback kind and the answer found ([[Type Check Reflection]]).
+
 ## 2026-10-05 — Typed derives and compile-time shape reflection (#431)
 
 - Ordinary, user-writable derives reach delivery: [[Derive Graph]] elaborates
@@ -23,7 +49,7 @@ tags: [changelog]
   dispatches through, nested containers included. Other calls are unchanged.
 - Fixed: a static member named through its type (`Point.read(text)`) was typed
   by the impl for its first argument's type whenever one existed
-  ([[Check Call]]). Generated impl heads naming another module's type are filed
+  ([[Type Check Call]]). Generated impl heads naming another module's type are filed
   under the canonical owner ([[Type Formation]]), so trait proofs, recursive
   fields and cross-module derives see them; field proofs form canonical types
   with the graph's names. E3092 now reads `Owner.field: Type does not implement

@@ -41,7 +41,7 @@ data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
   , compileSyntax :: !(Maybe Module)   -- tooling tree; never linked or evaluated
-  , compileMethods :: ![(NominalId, Text, Scheme)]  -- this module's declared methods, by owner
+  , compileMethods :: ![(NominalId, Text, Scheme, Span)]  -- this module's declared methods, by owner, with name spans
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
   , compileDiagnostics :: ![Diagnostic]

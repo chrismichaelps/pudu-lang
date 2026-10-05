@@ -29,7 +29,9 @@ The exported signatures are the module header's export list.
 
 - `recordDeclaredMethod` collects the methods this module's own declarations provide — each impl
   method, each trait default an impl inherits, and each member of a trait the module declares —
-  beside the owner the checker binds them under. `runChecker` publishes them as `producedMethods`.
+  beside the owner the checker binds them under, with the span of the method's name — for a
+  generated method, its anchor in the derive that wrote it. `runChecker` publishes them as
+  `producedMethods`, so a tool can answer where a call's method is declared.
   Interface methods are installed from the graph and are not recorded here: each module reports its
   own, and a program's methods are the union of its modules'.
 

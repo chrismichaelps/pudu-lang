@@ -57,6 +57,8 @@ mostComplete     :: (Text -> IO Analysis) -> (Analysis -> Bool) -> Analysis -> I
 ## Negative Logic (Prohibited Paths)
 
 - Do not store a repaired analysis or publish its diagnostics.
+- Do not compare another module's diagnostic offsets with this document's declarations; only
+  `ownDiagnostics` ([[Lsp Diagnostics]]) mark a declaration broken.
 - Do not read an offset from a candidate beyond where it agrees with the written text.
 - Do not accept a candidate because it type-checked when the requested fact is still unknown.
 

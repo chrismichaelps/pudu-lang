@@ -114,7 +114,8 @@ digit. Anything else is `Unexpected` at the first position that breaks the gramm
 - **Q:** Take a number as the longest run of number characters and let the value decide? **A:** No.
   _Rationale:_ `01`, `1.`, and `1e` then decode as numbers from text that is not JSON. _Rejected:_
   lenient number runs.
-- **Q:** Implement Encode and Decode for `Json` itself? **A:** No; the type shares the module's name, so `Json.encode`/`Json.decode` would select the impl instead of the module functions.
+- **Q:** Implement Encode and Decode for `Json` itself? **A:** Yes. A JSON value encodes as itself and any JSON, `null` included, decodes as itself, so a derived record may hold a `Json` field, an `Option[Json]`, or an `Array[Json]`. `Json.encode` and `Json.decode` stay the module's functions: a module qualifier that exports a name selects that export before a same-spelled type's method ([[Type Check Call]]). _Rejected:_ leaving `Json` without impls, which refused every derive over a JSON-valued field.
+- **Q:** Name derive callback parameters `field`? **A:** No; the module exports `field`, and a parameter of that name shadows it (`W2001`). They are `member`.
 - **Q:** How is a default written? **A:** As JSON text; text that is not JSON is the string itself, so `@default("guest")` and `@default(0)` both work.
 
 ## Referenced by

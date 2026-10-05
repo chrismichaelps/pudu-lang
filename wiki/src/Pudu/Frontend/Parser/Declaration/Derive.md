@@ -75,12 +75,20 @@ costs linear time and reports one `E1099` rather than a diagnostic per token.
 ## Edge Cases
 
 - `derives` with no entries reports `E1065` without consuming, so the
-  surrounding recovery owns the position that follows.
+  surrounding recovery owns the position that follows. It is reported at the
+  `derives` keyword when the next token starts a line or the file ends, since
+  the next declaration is not the mistake; otherwise at the token that cannot
+  be a trait name.
 - A trailing comma ends the entry list silently; the closer belongs to the
   enclosing construct.
 - An empty derive body parses with no members rather than a diagnostic.
 
 ## Grill Log
+
+- **Q:** Report an empty `derives` at whatever token follows? **A:** Only on the
+  same line. _Rationale:_ at a line's end the follower is the next declaration,
+  and an editor underlined `type C` for a mistake on the line above.
+  _Rejected:_ always anchoring at the follower.
 
 - **Q:** Compare located syntax directly for duplicate derives? **A:** Use a
   structural key that retains paths, arguments, reference mutability, function

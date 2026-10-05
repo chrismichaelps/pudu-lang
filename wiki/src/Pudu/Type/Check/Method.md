@@ -42,7 +42,8 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 - Every method a module's own impl declares, inherited defaults included, and every member its own
   traits declare is recorded with `recordDeclaredMethod` under the same owner and scheme it is bound
-  with, so tooling offers exactly what `methodScheme` would find. An imported impl's methods are
+  with, and the name's span, so tooling offers exactly what `methodScheme` would find and can say
+  where it was written. An imported impl's methods are
   bound with `bindImportedMethod` and recorded by the module that declared them.
 
 - A trait's own type parameters are rigid inside its members, exactly as a function's are inside its body. Without that they were formed as nominal types named after the parameter, so `trait Holds[T]` gave `get` a result of some type literally called `T` that nothing could be, and every use reported `expected Int, found T`.

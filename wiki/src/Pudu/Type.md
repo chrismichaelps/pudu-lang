@@ -45,7 +45,7 @@ renderType :: Type -> Text
 
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
 - `ModuleTypes` carries `moduleMethods`: the methods this module's declarations provide, by owner,
-  with their schemes (see [[Type Env]]).
+  with their schemes and name spans (see [[Type Env]]).
 - Its `moduleTypeInfo` field is intentionally lazy. Checking diagnostics and
   integer kinds must not construct the expression lookup map that only tooling
   reads. The completed checker facts and substitution remain the sole source;

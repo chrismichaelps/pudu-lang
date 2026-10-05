@@ -16,14 +16,14 @@ aliases: [Lsp Definition]
 ## Purpose
 
 Map the name under an editor cursor to the declaration it names, in this document or in the module
-that exports it.
+that exports it, and a method call to where its owner declares the method.
 
 ## Interface
 
 ```haskell
 definitionAt     :: Text -> Analysis -> Int -> Json
 definitionAcross :: (FilePath -> IO (Maybe Text)) -> Text -> Analysis -> Int -> IO Json
-fileUri          :: FilePath -> Text
+fileUri          :: FilePath -> Text   -- re-exported from Lsp Protocol
 ```
 
 ## Governance
@@ -37,6 +37,13 @@ fileUri          :: FilePath -> Text
   brought it in, which only repeats it.
 - The cursor on an import's path opens the module's file: one of the files the program read, found
   by the path the module name spells beneath its source root.
+- A name after a dot is a method call when the program declares a method of that name under one of
+  the receiver's owners ([[Lsp Method Owner]]): a typed value's type, a written type for a static
+  call (`Square.unit()`), or a type parameter's bounds (`A.unit()`, `shape.area()`). Its definition
+  is the method name's span the checker recorded. A derived method's span is its anchor in the
+  derive that wrote it, so a derived call opens the derive — in the library for a library derive.
+- Where the owner declares nothing of that name, the call may reach an inherited trait default, and
+  each trait member of that name answers; several answers are an array, as the protocol allows.
 - A file URI percent-encodes every byte outside the unreserved set and `/`.
 - Missing words and declarations answer null; no location is guessed.
 
@@ -58,6 +65,12 @@ declaration or reference at the cursor and answer its span in this document.
   text search fallback.
 - **Q:** Pick the first declaration sharing the cursor word? **A:** No. _Rationale:_ lexical
   shadowing gives equal text different identities. _Rejected:_ text-only definition lookup.
+- **Q:** Resolve a method call by the cursor word across all impls? **A:** No. _Rationale:_ two
+  types' methods of one name are different declarations; the owner the checker files a call under
+  decides. _Rejected:_ name-only lookup.
+- **Q:** Jump to the `derives` entry for a derived method? **A:** No. _Rationale:_ the method's body
+  is in the derive; the request is one hover away and appears in related notes.
+  _Rejected:_ the request site.
 - **Q:** Keep definition pure, as it was? **A:** Only within the document. _Rationale:_ a position in
   another file needs that file's text, and the analysis keeps offsets, not its dependencies' texts;
   reading the one file asked for costs less than holding every dependency's text for every

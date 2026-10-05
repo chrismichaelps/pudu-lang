@@ -75,7 +75,7 @@ Every `Meta` function is compile-time only; naming one from code that runs is re
 `variant.index` is its zero-based declaration position. Variant attributes use
 the same `has` and `attributeOr` operations as fields. A positional payload's
 fields have decimal position names. Reading a selected variant's field requires
-that variant; the lowered ordinary destructuring reports E7013 on a mismatch.
+that variant; the lowered `let … else` panics with `expected Owner.Variant` on a mismatch.
 
 `build` is how a derive makes a value rather than reads one, as `Json.Decode` and `Db.Row` must.
 `each` is a compile-time function taking a `Field[T, F]` and answering an `F`, or a
@@ -186,8 +186,11 @@ A call binds them as type witnesses in the callee's frame, so `A.decode(json)` r
 the selected owner, and a witness carries the owner's own arguments for nested
 containers. Calls whose bounds name no such trait are unchanged.
 
-`Json` itself implements neither JSON trait: the type shares the module's name, so an
-impl would capture `Json.encode` and `Json.decode` from the module's functions. A
+`Json` implements both JSON traits: a value encodes as itself and any JSON, `null`
+included, decodes as itself, so a derived type may hold `Json`, `Option[Json]`, or
+`Array[Json]` fields. `Json.encode` and `Json.decode` stay the module's functions,
+because a module qualifier that exports a name selects that export before a type of
+the qualifier's spelling is consulted ([[Type Check Call]]). A
 `@default` argument is JSON text; text that is not JSON stands for itself, and a
 non-text literal reads as its written form when its reader expects text.
 
@@ -200,8 +203,15 @@ non-text literal reads as its written form when its reader expects text.
 - Every generated node carries the derive body's span and the `derives` site, so errors, editor
   hover, and the debugger point at text a person wrote.
 - `pudu expand <file>` prints the generated impls requested by that file, as checked
-  syntax with blocks that bind nothing spliced; a sum payload read keeps the
-  destructuring that reports E7013, so the text is for reading.
+  syntax with blocks that bind nothing spliced, written as code inside the module the
+  derive is defined in: that module's own names are bare, and a sum payload read is the
+  `let … else` the generated code runs. For a derive defined in the requesting module
+  the text, written in place of the derives, checks and runs the same; a library
+  derive's text reads as code inside the library, whose private helpers it calls.
+- Editors receive the same findings as `pudu check`, placed in the open file: a finding
+  in another module the file imports appears at that import, help is its own line, and
+  the `derives` request and derive definition are related locations. Go to definition
+  on a derived method's call opens the method in the derive that wrote it.
 
 ## What Std ships
 

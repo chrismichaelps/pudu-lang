@@ -49,12 +49,16 @@ pathOf             :: Text -> Text
   program's sum and record shapes, declared methods, and export index once per analysis.
 - `analyseOver` compiles with the other open documents' text in place of the disk, and records
   every module file the program read — transitive imports included — as `analysisDependencies`.
+- Each analysis keeps `analysisElsewhere` ([[Lsp Diagnostics]]): the text of the other files its
+  findings name and the import that reaches each module file, gathered while the program's sources
+  are at hand so publishing stays pure.
+- Declared methods carry the span of their name, so definition can jump to them.
 - A `file:` URI is percent-decoded as UTF-8; any other scheme is not a path.
 
 ### Linkage
 
 - **Requires:** [[Compiler Program]], [[Compiler Pipeline]], [[Lexer]], [[Lsp Context]],
-  [[Lsp Documents]], [[Lsp Shapes]].
+  [[Lsp Documents]], [[Lsp Shapes]], [[Lsp Diagnostics]].
 - **Consumed by:** [[Lsp Server]].
 
 ## Negative Logic (Prohibited Paths)

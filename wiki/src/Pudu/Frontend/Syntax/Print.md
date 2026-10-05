@@ -12,8 +12,9 @@ aliases: [Syntax Printer]
 
 ## Purpose and interface
 
-`printImpl` renders an implementation declaration as Pudu source. It covers
-every declaration member, statement, expression, pattern and type form an
+`printImpl :: ModuleName -> Impl -> Text` renders an implementation declaration
+as Pudu source written inside the given home module. It covers every
+declaration member, statement, expression, pattern and type form an
 implementation can hold.
 
 ## Invariants
@@ -24,12 +25,20 @@ quotes, backslashes, control characters and interpolation braces. A type
 application sharing its callee's span is a selection checking applied, not
 written syntax, and prints as the callee alone. Statement blocks that bind
 nothing are spliced through [[Statement Inlining]]. Layout is the formatter's.
+A type, pattern, record or name path the home module declares prints bare, the
+way that module's own code spells it; every other path keeps its canonical
+qualification.
 
 ## Grill Log
 
 - **Q:** Track precedence to omit parentheses? **A:** No; redundant
   parentheses never change meaning and the printer stays total.
 - **Q:** Print checker selections? **A:** No; nobody wrote them.
+- **Q:** Print every path canonically? **A:** No. _Rationale:_ a module cannot
+  name itself as a qualifier, so `Local.Point` inside `Local` does not resolve;
+  the home module's own names print bare and the text checks where it stands.
+  _Rejected:_ canonical-only paths; relativizing against the requesting
+  module, whose imports the printer does not know.
 
 ## References
 

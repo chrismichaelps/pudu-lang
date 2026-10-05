@@ -48,6 +48,9 @@ throughBorrow      :: Type -> Checker Type
   reads as a call and a field would have to be parenthesised to be called anyway.
 - A borrow is followed as far as it goes before the receiver's type is read. `&&T` is writable, and
   stopping after one would report a mismatch against a type the reader never intended.
+- `Q.member` where `Q` is a module qualifier that exports `member` is that export, even when a type
+  of `Q`'s spelling is also declared: `Json.encode` is the module's function whether or not the
+  `Json` type implements `Encode`. Only when the module exports no such value is `Q` read as a type.
 - Ambiguity between two traits providing one member is reported at the call rather than at the
   declaration: declaring both is legal, and only an unqualified call has to choose.
 - An instantiated method unifies self with its actual receiver through
@@ -83,6 +86,10 @@ checking.
 ## Grill Log
 
 - **Q:** Keep receiver dispatch for type qualifiers? **A:** No; it typed `P.read("x")` with `Str`'s impl whenever one existed.
+- **Q:** Let a type's static method take `Q.member` from a module qualifier of the same spelling?
+  **A:** No. _Rationale:_ a whole-module import's qualifier is how its values are written, and a
+  type sharing the module's last segment (`Std.Json.Json`) is ordinary. _Rejected:_ forbidding impls
+  on such types; requiring the module to be imported under another alias.
 
 ## Referenced by
 
