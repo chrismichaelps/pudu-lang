@@ -30,6 +30,7 @@ import Pudu.Diagnostic (Severity (Error), diagnosticSeverity, diagnosticSpan)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Frontend.Token (SymbolKind (..), Token (..), TokenKind (..))
+import Pudu.Lsp.Diagnostics (ownDiagnostics)
 import Pudu.Lsp.Documents (Analysis (..))
 import Pudu.Source (spanEnd, spanStart, unOffset)
 
@@ -94,7 +95,7 @@ elsewhereBlanked written offset = case analysisModule written of
     [] -> Nothing
     blanked -> Just (foldl blank (analysisText written) [range (locatedSpan declaration) | declaration <- blanked])
  where
-  errors = [unOffset (spanStart (diagnosticSpan d)) | d <- analysisDiagnostics written, diagnosticSeverity d == Error]
+  errors = [unOffset (spanStart (diagnosticSpan d)) | d <- ownDiagnostics (analysisSource written) (analysisDiagnostics written), diagnosticSeverity d == Error]
   range spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
   broken (Located spanValue _) =
     let (from, to) = range spanValue

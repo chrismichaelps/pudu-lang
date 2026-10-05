@@ -71,7 +71,7 @@ data CompileResult = CompileResult
   {-| The methods this module's declarations provide, by owner, as the checker
       declared them. Only this module's own: a program's are the union of its
       modules'. -}
-  , compileMethods :: ![(NominalId, Text, Scheme)]
+  , compileMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The constants folding computed that are plain data, which linking binds
       instead of evaluating their initializers again. -}
   , compileFolded :: ~(Map Text Frozen)

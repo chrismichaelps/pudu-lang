@@ -5,6 +5,7 @@
     and what the server holds cannot disagree part-way through answering. -}
 module Pudu.Lsp.Documents
   ( Analysis (..)
+  , DeclaredMethod
   , Documents (..)
   , allDocuments
   , analysisOf
@@ -27,9 +28,10 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Frontend.Token (Token)
+import Pudu.Lsp.Diagnostics (Elsewhere)
 import Pudu.Lsp.Shapes (RecordShape, SumShape, TraitShape)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
-import Pudu.Source (Source)
+import Pudu.Source (Source, Span)
 import Pudu.Semantic.Interface (ExportIndex)
 import Pudu.Semantic.Resolve (Resolution)
 import Pudu.Type (TypeInfo)
@@ -38,7 +40,12 @@ import Pudu.Type.Value (Scheme)
 data Analysis = Analysis
   { analysisText :: !Text
   , analysisSource :: !Source
+  {-| Every module's findings, as the compile reported them. Only those
+      `ownDiagnostics` keeps are located in this document's text. -}
   , analysisDiagnostics :: ![Diagnostic]
+  {-| The other files those findings name, so each is published where the
+      reader can act on it. -}
+  , analysisElsewhere :: !Elsewhere
   {-| The documented names of this file alone.
 
       A `DocEntry` carries a span, and a span is an offset into the file it was
@@ -72,8 +79,9 @@ data Analysis = Analysis
   {-| Every trait the program can see, keyed the same way, with its members. -}
   , analysisTraits :: !(Map Text TraitShape)
   {-| Every method the program's modules declare, by the canonical key of the
-      type or trait that owns it, with the scheme the checker gave it. -}
-  , analysisMethods :: !(Map Text [(Text, Scheme)])
+      type or trait that owns it, with the scheme the checker gave it and the
+      span of its name. -}
+  , analysisMethods :: !(Map Text [DeclaredMethod])
   {-| What each module of the program exports, as imports see it. -}
   , analysisExports :: !ExportIndex
   {-| Every module file the program read besides this document, transitive
@@ -81,6 +89,9 @@ data Analysis = Analysis
       checked against to know whether this analysis is stale. -}
   , analysisDependencies :: !(Set FilePath)
   }
+
+{-| A method's name, its scheme, and where its name is written. -}
+type DeclaredMethod = (Text, Scheme, Span)
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.
 

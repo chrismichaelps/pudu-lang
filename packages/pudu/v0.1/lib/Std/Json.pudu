@@ -712,8 +712,8 @@ export trait Decode {
   fn decode(json: &Json) -> Result[Self, DecodeError]
 }
 
-/// `Json` itself has no implementation: its type shares the module's name, so
-/// one would take `Json.encode` and `Json.decode` from the module's functions.
+/// A JSON value is its own JSON.
+impl Encode for Json { fn encode(self: &Self) -> Json { *self } }
 impl Encode for Int { fn encode(self: &Self) -> Json { Number(*self) } }
 impl Encode for Str { fn encode(self: &Self) -> Json { Text(*self) } }
 impl Encode for Bool { fn encode(self: &Self) -> Json { Boolean(*self) } }
@@ -736,6 +736,11 @@ impl [A: Encode] Encode for Option[A] {
       case None => Null
     }
   }
+}
+
+/// Any JSON reads as itself, `null` included.
+impl Decode for Json {
+  fn decode(json: &Json) -> Result[Json, DecodeError] { Ok(*json) }
 }
 
 impl Decode for Int {
@@ -815,8 +820,8 @@ impl [A: Decode] Decode for Option[A] {
 /// `@json("name")` renames one, and `@skip` leaves one out.
 export derive Encode for T: Record {
   fn encode(self: &T) -> Json {
-    Object(Meta.collect[T](fn(field: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
-          if field.has("skip") { None } else { Some((field.attributeOr("json", field.name), field.get(self).encode())) }
+    Object(Meta.collect[T](fn(member: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
+          if member.has("skip") { None } else { Some((member.attributeOr("json", member.name), member.get(self).encode())) }
         }))
   }
 }
@@ -829,12 +834,12 @@ export derive Encode for T: Sum {
     comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
       if variant.matches(self) {
         let payload = if variant.positional {
-          List(variant.collect(fn(field: Meta.Field[T, F]) -> Option[Json] where F: Encode {
-                Some(field.get(self).encode())
+          List(variant.collect(fn(member: Meta.Field[T, F]) -> Option[Json] where F: Encode {
+                Some(member.get(self).encode())
               }))
         } else {
-          Object(variant.collect(fn(field: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
-                if field.has("skip") { None } else { Some((field.attributeOr("json", field.name), field.get(self).encode())) }
+          Object(variant.collect(fn(member: Meta.Field[T, F]) -> Option[(Str, Json)] where F: Encode {
+                if member.has("skip") { None } else { Some((member.attributeOr("json", member.name), member.get(self).encode())) }
               }))
         }
         return Object([(variant.attributeOr("json", variant.name), payload)])
@@ -851,10 +856,10 @@ export derive Encode for T: Sum {
 export derive Decode for T: Record {
   fn decode(json: &Json) -> Result[T, DecodeError] {
     let entries = objectEntries(json) ?
-    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
-        let key = field.attributeOr("json", field.name)
-        let fallback = if field.has("default") { defaulted(field.attributeOr("default", "null")) } else { Null }
-        if field.has("skip") { return within(Key(key), F.decode(&fallback)) }
+    Meta.build[T](fn(member: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
+        let key = member.attributeOr("json", member.name)
+        let fallback = if member.has("default") { defaulted(member.attributeOr("default", "null")) } else { Null }
+        if member.has("skip") { return within(Key(key), F.decode(&fallback)) }
         match consumed(&entries, key) ? {
           case Some(found) => within(Key(key), F.decode(&found))
           case None => absent(key, F.decode(&fallback))
@@ -870,11 +875,11 @@ export derive Decode for T: Sum {
     let (tag, payload) = soleEntry(json) ?
     comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
       if tag == variant.attributeOr("json", variant.name) {
-        return within(Key(tag), variant.build(fn(field: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
-              let (step, found) = payloadMember(&payload, field.attributeOr("json", field.name)) ?
+        return within(Key(tag), variant.build(fn(member: Meta.Field[T, F]) -> Result[F, DecodeError] where F: Decode {
+              let (step, found) = payloadMember(&payload, member.attributeOr("json", member.name)) ?
               match found {
                 case Some(held) => within(step, F.decode(&held))
-                case None => absent(field.name, F.decode(&Null))
+                case None => absent(member.name, F.decode(&Null))
               }
             }))
       }

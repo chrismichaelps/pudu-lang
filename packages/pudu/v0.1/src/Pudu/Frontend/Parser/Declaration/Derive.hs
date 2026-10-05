@@ -33,6 +33,7 @@ import Pudu.Frontend.Parser.State
   , matchSymbol
   , peekKind
   , peekStartsLine
+  , peekStartsLine
   , peekToken
   )
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
@@ -198,29 +199,33 @@ parseDerivesClause = do
   if not matched
     then pure Nothing
     else do
-      entries <- parseDerivesList Set.empty []
+      entries <- parseDerivesList keyword Set.empty []
       let endSpan = case reverse entries of
             [] -> tokenSpan keyword
             final : _ -> locatedSpan final
       pure (Just (mergedOrLeft (tokenSpan keyword) endSpan, entries))
 
-parseDerivesList :: Set DeriveKey -> [Located TypeSyntax] -> Parser [Located TypeSyntax]
-parseDerivesList seen reversed = do
+parseDerivesList :: Token -> Set DeriveKey -> [Located TypeSyntax] -> Parser [Located TypeSyntax]
+parseDerivesList keyword seen reversed = do
   kind <- peekKind
   exhausted <- budgetExhausted
   before <- peekToken
+  -- A clause left empty at the end of its line is reported at `derives`;
+  -- the next line's declaration is not the mistake.
+  detached <- peekStartsLine
+  let missingEntry = missingEntryAt (if detached || kind == EndOfFile then keyword else before)
   if exhausted
     then pure (reverse reversed)
     else if kind == EndOfFile
       then do
         case reversed of
-          [] -> missingEntry before
+          [] -> missingEntry
           _ -> pure ()
         pure (reverse reversed)
       else if not (isTraitStart kind)
         then
           if null reversed
-            then missingEntry before >> pure []
+            then missingEntry >> pure []
             else pure (reverse reversed)
         else do
           entry <- parseTypeSyntax
@@ -237,11 +242,11 @@ parseDerivesList seen reversed = do
               comma <- matchSymbol ","
               case comma of
                 Nothing -> pure (reverse collected)
-                Just _ -> parseDerivesList (Set.insert key seen) collected
+                Just _ -> parseDerivesList keyword (Set.insert key seen) collected
 
-missingEntry :: Token -> Parser ()
-missingEntry before =
-  emitParseError "E1065" (tokenSpan before) "expected a trait name in the derives clause"
+missingEntryAt :: Token -> Parser ()
+missingEntryAt anchor =
+  emitParseError "E1065" (tokenSpan anchor) "expected a trait name in the derives clause"
     (Just "name one trait per entry, separated by commas")
 
 data DeriveKey

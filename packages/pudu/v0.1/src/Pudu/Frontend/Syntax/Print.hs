@@ -9,72 +9,78 @@ module Pudu.Frontend.Syntax.Print
   ( printImpl
   ) where
 
+import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Inline (inlineStatements)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
 
-printImpl :: Impl -> Text
-printImpl value =
-  "impl" <> typeParameters (implTypeParams value) <> " " <> typeText (implTrait value)
-    <> " for " <> typeText (implTarget value) <> constraints (implConstraints value) <> " {\n"
-    <> Text.concat [indent 1 (function (locatedValue method)) <> "\n" | method <- implFunctions value]
+{-| The module the printed text stands in. A name it declares is written
+    bare, as that module's own code writes it; every other name keeps its
+    qualification. -}
+type Home = ModuleName
+
+printImpl :: Home -> Impl -> Text
+printImpl home value =
+  "impl" <> typeParameters home (implTypeParams value) <> " " <> typeText home (implTrait value)
+    <> " for " <> typeText home (implTarget value) <> constraints home (implConstraints value) <> " {\n"
+    <> Text.concat [indent 1 (function home (locatedValue method)) <> "\n" | method <- implFunctions value]
     <> "}\n"
 
-function :: Function -> Text
-function value =
+function :: Home -> Function -> Text
+function home value =
   (if functionAsync value then "async " else "")
-    <> "fn " <> locatedValue (functionName value) <> typeParameters (functionTypeParams value)
-    <> signature value <> body (functionBody value)
+    <> "fn " <> locatedValue (functionName value) <> typeParameters home (functionTypeParams value)
+    <> signature home value <> body (functionBody value)
  where
   body Nothing = ""
-  body (Just (Located _ (BlockBody held))) = " " <> block 0 (locatedValue held)
-  body (Just (Located _ (ExpressionBody held))) = " = " <> expression 0 held
+  body (Just (Located _ (BlockBody held))) = " " <> block home 0 (locatedValue held)
+  body (Just (Located _ (ExpressionBody held))) = " = " <> expression home 0 held
 
-signature :: Function -> Text
-signature value =
+signature :: Home -> Function -> Text
+signature home value =
   "(" <> commaSeparated (map (parameter . locatedValue) (functionParameters value)) <> ")"
-    <> maybe "" ((" -> " <>) . typeText) (functionReturn value)
-    <> constraints (functionConstraints value)
+    <> maybe "" ((" -> " <>) . typeText home) (functionReturn value)
+    <> constraints home (functionConstraints value)
  where
   parameter held =
     locatedValue (parameterName held)
-      <> maybe "" ((": " <>) . typeText) (parameterType held)
-      <> maybe "" ((" = " <>) . expression 0) (parameterDefault held)
+      <> maybe "" ((": " <>) . typeText home) (parameterType held)
+      <> maybe "" ((" = " <>) . expression home 0) (parameterDefault held)
 
-typeParameters :: [Located TypeParam] -> Text
-typeParameters [] = ""
-typeParameters parameters = "[" <> commaSeparated (map (one . locatedValue) parameters) <> "]"
+typeParameters :: Home -> [Located TypeParam] -> Text
+typeParameters _ [] = ""
+typeParameters home parameters = "[" <> commaSeparated (map (one . locatedValue) parameters) <> "]"
  where
   one held =
     locatedValue (typeParamName held)
       <> (if typeParamArity held > 0
             then "[" <> commaSeparated (replicate (typeParamArity held) "_") <> "]" else "")
-      <> bounds (typeParamBounds held)
+      <> bounds home (typeParamBounds held)
 
-constraints :: [Located Constraint] -> Text
-constraints [] = ""
-constraints written = " where " <> commaSeparated (map (one . locatedValue) written)
+constraints :: Home -> [Located Constraint] -> Text
+constraints _ [] = ""
+constraints home written = " where " <> commaSeparated (map (one . locatedValue) written)
  where
-  one held = locatedValue (constraintSubject held) <> bounds (constraintBounds held)
+  one held = locatedValue (constraintSubject held) <> bounds home (constraintBounds held)
 
-bounds :: [Located TypeSyntax] -> Text
-bounds [] = ""
-bounds written = ": " <> Text.intercalate " + " (map typeText written)
+bounds :: Home -> [Located TypeSyntax] -> Text
+bounds _ [] = ""
+bounds home written = ": " <> Text.intercalate " + " (map (typeText home) written)
 
-typeText :: Located TypeSyntax -> Text
-typeText (Located _ written) = case written of
-  NamedType path [] -> moduleNameText path
-  NamedType path arguments -> moduleNameText path <> "[" <> commaSeparated (map typeText arguments) <> "]"
-  DynamicType path -> "dynamic " <> moduleNameText path
-  ReferenceType mutable target -> (if mutable then "&mut " else "&") <> typeText target
-  TupleType members -> "(" <> commaSeparated (map typeText members) <> ")"
+typeText :: Home -> Located TypeSyntax -> Text
+typeText home (Located _ written) = case written of
+  NamedType path [] -> pathText home path
+  NamedType path arguments -> pathText home path <> "[" <> commaSeparated (map (typeText home) arguments) <> "]"
+  DynamicType path -> "dynamic " <> pathText home path
+  ReferenceType mutable target -> (if mutable then "&mut " else "&") <> typeText home target
+  TupleType members -> "(" <> commaSeparated (map (typeText home) members) <> ")"
   FunctionType async inputs result ->
-    (if async then "async " else "") <> "fn(" <> commaSeparated (map typeText inputs) <> ") -> " <> typeText result
-  UnsafeType capabilities target -> "unsafe(" <> capabilityList capabilities <> ") " <> typeText target
+    (if async then "async " else "") <> "fn(" <> commaSeparated (map (typeText home) inputs) <> ") -> " <> typeText home result
+  UnsafeType capabilities target -> "unsafe(" <> capabilityList capabilities <> ") " <> typeText home target
   UnitType -> "()"
   InvalidType -> "_"
 
@@ -87,31 +93,31 @@ capabilityList = commaSeparated . map (capability . locatedValue)
     UncheckedCapability -> "unchecked"
     NullCapability -> "null"
 
-block :: Int -> Block -> Text
-block depth value = case (inlineStatements (blockStatements value), blockResult value) of
+block :: Home -> Int -> Block -> Text
+block home depth value = case (inlineStatements (blockStatements value), blockResult value) of
   ([], Nothing) -> "{}"
   (statements, result) ->
     "{\n"
-      <> Text.concat [indent (depth + 1) (statement (depth + 1) (locatedValue held)) <> "\n" | held <- statements]
-      <> maybe "" (\held -> indent (depth + 1) (expression (depth + 1) held) <> "\n") result
+      <> Text.concat [indent (depth + 1) (statement home (depth + 1) (locatedValue held)) <> "\n" | held <- statements]
+      <> maybe "" (\held -> indent (depth + 1) (expression home (depth + 1) held) <> "\n") result
       <> indent depth "}"
 
-statement :: Int -> Statement -> Text
-statement depth value = case value of
+statement :: Home -> Int -> Statement -> Text
+statement home depth value = case value of
   DeclarationStatement (Located _ declaration) -> case declaration of
     BindingDeclaration _ kind name written initial ->
-      binding kind <> " " <> locatedValue name <> maybe "" ((": " <>) . typeText) written
-        <> " = " <> expression depth initial
-    FunctionDeclaration held -> function held
+      binding kind <> " " <> locatedValue name <> maybe "" ((": " <>) . typeText home) written
+        <> " = " <> expression home depth initial
+    FunctionDeclaration held -> function home held
     _ -> "/* declaration */"
-  ExpressionStatement held -> expression depth held
-  ReturnStatement held -> "return" <> maybe "" ((" " <>) . expression depth) held
-  BreakStatement label held -> "break" <> maybe "" ((" @" <>) . locatedValue) label <> maybe "" ((" " <>) . expression depth) held
+  ExpressionStatement held -> expression home depth held
+  ReturnStatement held -> "return" <> maybe "" ((" " <>) . expression home depth) held
+  BreakStatement label held -> "break" <> maybe "" ((" @" <>) . locatedValue) label <> maybe "" ((" " <>) . expression home depth) held
   ContinueStatement label -> "continue" <> maybe "" ((" @" <>) . locatedValue) label
   LetElseStatement pat held fallback ->
-    "let " <> pattern pat <> " = " <> expression depth held <> " else " <> block depth (locatedValue fallback)
+    "let " <> pattern home pat <> " = " <> expression home depth held <> " else " <> block home depth (locatedValue fallback)
   LetPatternStatement kind pat written held ->
-    binding kind <> " " <> pattern pat <> maybe "" ((": " <>) . typeText) written <> " = " <> expression depth held
+    binding kind <> " " <> pattern home pat <> maybe "" ((": " <>) . typeText home) written <> " = " <> expression home depth held
   InvalidStatement -> "/* invalid */"
  where
   binding kind = case kind of
@@ -119,10 +125,10 @@ statement depth value = case value of
     Mutable -> "var"
     CompileTime -> "const"
 
-expression :: Int -> Located Expression -> Text
-expression depth (Located at value) = case value of
+expression :: Home -> Int -> Located Expression -> Text
+expression home depth (Located at value) = case value of
   LiteralExpression held -> literal held
-  NameExpression path -> Text.intercalate "." (NonEmpty.toList path)
+  NameExpression path -> pathText home (ModuleName path)
   UnaryExpression operator held -> operator <> (if operator == "&mut" then " " else "") <> operand held
   BinaryExpression left operator right -> operand left <> " " <> operator <> " " <> operand right
   CallExpression callee arguments -> operand callee <> "(" <> commaSeparated (map recurse arguments) <> ")"
@@ -140,18 +146,18 @@ expression depth (Located at value) = case value of
   UnsafeExpression capabilities held -> "unsafe(" <> capabilityList capabilities <> ") " <> nested held
   MacroCall name arguments -> locatedValue name <> "!(" <> commaSeparated (map recurse arguments) <> ")"
   ScopeExpression held -> "async with scope " <> nested held
-  LambdaExpression held -> "fn" <> signature held <> lambdaBody (functionBody held)
+  LambdaExpression held -> "fn" <> signature home held <> lambdaBody (functionBody held)
   -- A selection checking applied shares its callee's span; nobody wrote it.
   TypeApplication held _ | locatedSpan held == at -> recurse held
-  TypeApplication held arguments -> operand held <> "[" <> commaSeparated (map typeText arguments) <> "]"
-  RecordExpression path fields -> moduleNameText path <> "{" <> commaSeparated (map field fields) <> "}"
+  TypeApplication held arguments -> operand held <> "[" <> commaSeparated (map (typeText home) arguments) <> "]"
+  RecordExpression path fields -> pathText home path <> "{" <> commaSeparated (map field fields) <> "}"
   RecordUpdateExpression path base fields ->
-    moduleNameText path <> "{.." <> recurse base <> Text.concat (map ((", " <>) . field) fields) <> "}"
+    pathText home path <> "{.." <> recurse base <> Text.concat (map ((", " <>) . field) fields) <> "}"
   BlockExpression held -> nested held
   IfExpression condition success failure ->
     "if " <> operand condition <> " " <> nested success <> maybe "" ((" else " <>) . alternative) failure
   IfLetExpression pat subject success failure ->
-    "if let " <> pattern pat <> " = " <> operand subject <> " " <> nested success
+    "if let " <> pattern home pat <> " = " <> operand subject <> " " <> nested success
       <> maybe "" ((" else " <>) . alternative) failure
   MatchExpression subject arms ->
     "match " <> operand subject <> " {\n"
@@ -159,21 +165,21 @@ expression depth (Located at value) = case value of
       <> indent depth "}"
   WhileExpression label condition body -> labelled label <> "while " <> recurse condition <> " " <> nested body
   WhileLetExpression label pat subject body ->
-    labelled label <> "while let " <> pattern pat <> " = " <> recurse subject <> " " <> nested body
+    labelled label <> "while let " <> pattern home pat <> " = " <> recurse subject <> " " <> nested body
   LoopExpression label body -> labelled label <> "loop " <> nested body
   ForExpression label pat subject body ->
-    labelled label <> "for " <> pattern pat <> " in " <> recurse subject <> " " <> nested body
+    labelled label <> "for " <> pattern home pat <> " in " <> recurse subject <> " " <> nested body
   ComptimeForExpression loop ->
-    "comptime for " <> locatedValue (comptimeForElement loop) <> ": " <> typeText (comptimeForType loop)
-      <> " in " <> recurse (comptimeForSource loop) <> constraints (comptimeForConstraints loop)
+    "comptime for " <> locatedValue (comptimeForElement loop) <> ": " <> typeText home (comptimeForType loop)
+      <> " in " <> recurse (comptimeForSource loop) <> constraints home (comptimeForConstraints loop)
       <> " " <> nested (comptimeForBody loop)
   InvalidExpression -> "/* invalid */"
  where
-  recurse = expression depth
+  recurse = expression home depth
   operand held
     | atomic (locatedValue held) = recurse held
     | otherwise = "(" <> recurse held <> ")"
-  nested (Located _ held) = block depth held
+  nested (Located _ held) = block home depth held
   alternative held@(Located _ inner) = case inner of
     IfExpression {} -> recurse held
     IfLetExpression {} -> recurse held
@@ -182,8 +188,8 @@ expression depth (Located at value) = case value of
   labelled = maybe "" (\name -> "@" <> locatedValue name <> " ")
   field (Located _ held) = locatedValue (fieldInitName held) <> maybe "" ((": " <>) . recurse) (fieldInitValue held)
   arm held =
-    "case " <> pattern (armPattern held) <> maybe "" ((" if " <>) . expression (depth + 1)) (armGuard held)
-      <> " => " <> expression (depth + 1) (armBody held)
+    "case " <> pattern home (armPattern held) <> maybe "" ((" if " <>) . expression home (depth + 1)) (armGuard held)
+      <> " => " <> expression home (depth + 1) (armBody held)
   lambdaBody Nothing = ""
   lambdaBody (Just (Located _ (BlockBody held))) = " " <> nested held
   lambdaBody (Just (Located _ (ExpressionBody held))) = " = " <> recurse held
@@ -207,28 +213,28 @@ atomic value = case value of
   RecordUpdateExpression {} -> True
   _ -> False
 
-pattern :: Located Pattern -> Text
-pattern (Located _ value) = case value of
+pattern :: Home -> Located Pattern -> Text
+pattern home (Located _ value) = case value of
   WildcardPattern -> "_"
   BindingPattern name -> locatedValue name
   LiteralPattern held -> literal held
   RangePattern from inclusive to -> literal from <> (if inclusive then "..=" else "..") <> literal to
-  TuplePattern members -> "(" <> commaSeparated (map pattern members) <> ")"
+  TuplePattern members -> "(" <> commaSeparated (map (pattern home) members) <> ")"
   ArrayPattern prefix rest suffix ->
-    "[" <> commaSeparated (map pattern prefix <> maybe [] (pure . restText) rest <> map pattern suffix) <> "]"
-  ConstructorPattern path [] -> moduleNameText path
-  ConstructorPattern path members -> moduleNameText path <> "(" <> commaSeparated (map pattern members) <> ")"
+    "[" <> commaSeparated (map (pattern home) prefix <> maybe [] (pure . restText) rest <> map (pattern home) suffix) <> "]"
+  ConstructorPattern path [] -> pathText home path
+  ConstructorPattern path members -> pathText home path <> "(" <> commaSeparated (map (pattern home) members) <> ")"
   RecordPattern path fields rest ->
-    maybe "" moduleNameText path <> "{"
+    maybe "" (pathText home) path <> "{"
       <> commaSeparated (map fieldPattern fields <> (if rest then [".."] else [])) <> "}"
-  AlternativePattern alternatives -> Text.intercalate " | " (map pattern alternatives)
+  AlternativePattern alternatives -> Text.intercalate " | " (map (pattern home) alternatives)
   InvalidPattern -> "_"
  where
   restText rest = case rest of
     IgnoredRest _ -> ".."
     BoundRest name -> ".." <> locatedValue name
   fieldPattern (Located _ held) =
-    locatedValue (fieldPatternName held) <> maybe "" ((": " <>) . pattern) (fieldPatternValue held)
+    locatedValue (fieldPatternName held) <> maybe "" ((": " <>) . pattern home) (fieldPatternValue held)
 
 literal :: Literal -> Text
 literal value = case value of
@@ -259,3 +265,8 @@ commaSeparated = Text.intercalate ", "
 
 indent :: Int -> Text -> Text
 indent depth = (Text.replicate (2 * depth) " " <>)
+
+pathText :: Home -> ModuleName -> Text
+pathText home path = case List.stripPrefix (NonEmpty.toList (moduleNameSegments home)) (NonEmpty.toList (moduleNameSegments path)) of
+  Just rest@(_ : _) -> Text.intercalate "." rest
+  _ -> moduleNameText path

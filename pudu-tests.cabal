@@ -61,7 +61,9 @@ test-suite pudu-test
     Pudu.FormatSpec
     Pudu.Lsp.JsonSpec
     Pudu.Lsp.ServerSpec
+    Pudu.Lsp.DiagnosticsSpec
     Pudu.Lsp.ImplMembersSpec
+    Pudu.Lsp.MethodDefinitionSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Lsp.SchedulerSpec

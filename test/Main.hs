@@ -20,7 +20,9 @@ import Pudu.FormatSpec (formatProperties)
 import Pudu.Lsp.JsonSpec (jsonProperties)
 import Pudu.Lsp.SchedulerSpec (schedulerProperties)
 import Pudu.Lsp.ServerSpec (serverProperties)
+import Pudu.Lsp.DiagnosticsSpec (diagnosticsProperties)
 import Pudu.Lsp.ImplMembersSpec (implMemberProperties)
+import Pudu.Lsp.MethodDefinitionSpec (methodDefinitionProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
@@ -103,7 +105,7 @@ main = do
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
   formatOutcomes <- traverse (uncurry check) formatProperties
   jsonOutcomes <- traverse (uncurry check) jsonProperties
-  lspOutcomes <- traverse (uncurry check) (serverProperties <> implMemberProperties)
+  lspOutcomes <- traverse (uncurry check) (serverProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties)
   schedulerOutcomes <- traverse (uncurry check) schedulerProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) programProperties

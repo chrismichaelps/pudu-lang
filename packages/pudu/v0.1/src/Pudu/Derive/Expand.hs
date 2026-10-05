@@ -24,7 +24,7 @@ expansionText program = case programRoot program >>= (`Map.lookup` programNamedS
     let anchor = emptySpan root
         generated =
           [ "// derive " <> written (implTrait impl) <> " for " <> written (implTarget impl)
-              <> ", generated in " <> moduleNameText owner <> "\n" <> printImpl impl
+              <> ", generated in " <> moduleNameText owner <> "\n" <> printImpl owner impl
           | owner <- programOrder program
           , Just compiled <- [Map.lookup owner (programModules program)]
           , Just unit <- [compileSyntax compiled]

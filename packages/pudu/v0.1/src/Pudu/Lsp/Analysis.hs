@@ -28,10 +28,11 @@ import Pudu.Compiler.Program
   )
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Lsp.Context (declaredModule)
-import Pudu.Lsp.Documents (Analysis (..))
+import Pudu.Lsp.Diagnostics (elsewhereFor)
+import Pudu.Lsp.Documents (Analysis (..), DeclaredMethod)
 import Pudu.Lsp.Shapes (programRecords, programSums, programTraits)
 import Pudu.Source (SourceName (..), newSource, sourceName)
-import Pudu.Type.Value (Scheme, nominalKey)
+import Pudu.Type.Value (nominalKey)
 import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
 import System.FilePath (addTrailingPathSeparator, normalise, takeDirectory, (</>))
 
@@ -59,17 +60,20 @@ analyseOver overlay root uri content = do
   -- Only a document whose root did not parse needs the recovered tree, and
   -- only then is it built.
   let recovered = recoveredSyntax source
+      written = maybe (snd recovered) compileSyntax (rootCompileResult program)
+  elsewhere <- elsewhereFor source written program
   pure
     Analysis
       { analysisText = content
       , analysisSource = source
       , analysisDiagnostics = programDiagnostics program
+      , analysisElsewhere = elsewhere
       , analysisFileIndex = fromMaybe mempty (rootCompileResult program >>= compileDocs)
       , analysisProgramIndex = programDocs program
       , analysisResolution = rootCompileResult program >>= compileResolution
       , analysisTypes = rootCompileResult program >>= compileTypes
       , analysisTokens = maybe (fst recovered) compileTokens (rootCompileResult program)
-      , analysisModule = maybe (snd recovered) compileSyntax (rootCompileResult program)
+      , analysisModule = written
       , analysisSums = programSums program
       , analysisRecords = programRecords program
       , analysisTraits = programTraits program
@@ -86,12 +90,12 @@ analyseOver overlay root uri content = do
 {-| The methods every module of the program declared, by the canonical key of
     their owner. Each module's check publishes only its own, so the program's
     are the union, gathered once per analysis. -}
-programMethods :: ProgramResult -> Map Text [(Text, Scheme)]
+programMethods :: ProgramResult -> Map Text [DeclaredMethod]
 programMethods program =
   Map.fromListWith (flip (<>))
-    [ (nominalKey owner, [(name, scheme)])
+    [ (nominalKey owner, [(name, scheme, at)])
     | compiled <- Map.elems (programModules program)
-    , (owner, name, scheme) <- compileMethods compiled
+    , (owner, name, scheme, at) <- compileMethods compiled
     ]
 
 {-| The module source root a document's imports are resolved from.

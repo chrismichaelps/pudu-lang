@@ -2,17 +2,20 @@
 module Pudu.Derive.LibrarySpec (deriveLibraryProperties) where
 
 import Control.Exception (finally)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
-  ( ProgramResult (..), compileProgram, programDependencies, programIntegerKinds, rootCompileResult )
+  ( ProgramResult (..), compileProgram, compileProgramSourceOver, programDependencies, programIntegerKinds
+  , rootCompileResult )
 import Pudu.Derive.Expand (expansionText)
 import Pudu.Diagnostic (diagnosticCodeText, diagnosticCode, diagnosticMessage, hasErrors)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Render (renderValue)
+import Pudu.Source (SourceName (..), newSource)
 import System.Environment (lookupEnv, setEnv, unsetEnv)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -31,16 +34,20 @@ deriveLibraryProperties =
       "\"4;5/6;67qpairleftqpairright\"")
   , ("a static member answers its own owner rather than its first argument's", runs "StaticMember" "\"3abc\"")
   , ("field callbacks answer only what their construction can hold", refuses "BuildEscape"
-      [ ("E3001", "a build callback answers its field type F or Result[F, E]")
+      [ ("E3001", "a build callback answers its field type F, or Result[F, E] for an E that is not F, not Result[F, F]")
       , ("E3001", "expected F, found Str")
-      , ("E3001", "a collect callback answers Option[E] for an E that is not its field type")
+      , ("E3001", "a collect callback answers Option[E] for an E that is not its field type F, not Str")
       ])
   , ("an unmet field bound names the field and the requiring derive", refuses "UnmetStdField"
       [ ("E3092", "Wrapper.Holder.0: Opaque does not implement Eq, which derive Eq requires of every field")
       , ("E3092", "Wrapper.Named.inner: Opaque does not implement Eq, which derive Eq requires of every field")
       , ("E3092", "Record.held: Opaque does not implement Encode, which derive Encode requires of every field")
       ])
+  , ("a JSON value is its own JSON, and Json.encode stays the module's function", runs "StdJsonValue"
+      "\"{\\\"id\\\":1,\\\"payload\\\":{\\\"k\\\":\\\"v\\\"},\\\"extra\\\":null,\\\"tags\\\":[2,null]} = null\"")
+  , ("a payload read from another variant panics naming the variant", panics "SumMismatch" "expected Shape.Circle")
   , ("expansion prints exactly the implementations a module requested", expands)
+  , ("a same-module expansion written in place of its derives runs the same", expandsInPlace)
   ]
 
 jsonExpected :: Text
@@ -85,6 +92,46 @@ expands = do
   printed <- expansionText program
   expected <- TextIO.readFile "test-fixtures/derive/Expand.expected"
   pure $ counterexample (Text.unpack printed) (printed === expected)
+
+{-| Both evaluators stop with this message. -}
+panics :: String -> Text -> IO Property
+panics name expected = do
+  program <- compileProgram (fixture name)
+  answers <- case rootCompileResult program >>= compileModule of
+    Just unit | not (hasErrors (programDiagnostics program)) -> mapM (\mode -> inMode mode $ do
+      outcome <- evaluateProgramEntry (programIntegerKinds program) (programDependencies program) "main" unit
+      pure (map diagnosticMessage (outcomeDiagnostics outcome))) ["tree", "compiled"]
+    _ -> pure [map diagnosticMessage (programDiagnostics program)]
+  pure $ counterexample (name <> ": " <> show answers) (answers === [[expected], [expected]])
+
+{-| The derive definitions and requests of `ExpandLocal` removed and its
+    printed expansion appended: the text checks, and both evaluators answer
+    what the derived program answers. -}
+expandsInPlace :: IO Property
+expandsInPlace = do
+  let path = fixture "ExpandLocal"
+  original <- TextIO.readFile path
+  printed <- expansionText =<< compileProgram path
+  let written = Text.unlines (withoutDerives (Text.lines original)) <> "\n" <> printed
+  source <- newSource (SourceName (Text.pack path)) written
+  program <- compileProgramSourceOver Map.empty "test-fixtures/derive" source
+  expected <- runs "ExpandLocal" "\"Point x=1 y=2; Dot; Circle 3; Rect 4 5\""
+  answers <- case rootCompileResult program >>= compileModule of
+    Just unit | not (hasErrors (programDiagnostics program)) -> mapM (\mode -> inMode mode $ do
+      outcome <- evaluateProgramEntry (programIntegerKinds program) (programDependencies program) "main" unit
+      pure (renderValue <$> outcomeValue outcome)) ["tree", "compiled"]
+    _ -> pure [Nothing]
+  pure $ conjoin
+    [ expected
+    , counterexample (Text.unpack written <> show (map diagnosticMessage (programDiagnostics program)))
+        (answers === replicate 2 (Just "\"Point x=1 y=2; Dot; Circle 3; Rect 4 5\""))
+    ]
+ where
+  withoutDerives lines' = case lines' of
+    [] -> []
+    line : rest
+      | "derive " `Text.isPrefixOf` line -> withoutDerives (drop 1 (dropWhile (/= "}") rest))
+      | otherwise -> Text.replace " derives Describe" "" line : withoutDerives rest
 
 inMode :: String -> IO a -> IO a
 inMode mode action = do

@@ -127,7 +127,7 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
         polytype rigid (bounds <> declareBoundsWith declared traitParams method)
           (FunctionTypeValue (functionAsync method) inputs result)
   bindName (methodKey owner (locatedValue (functionName method))) scheme
-  recordDeclaredMethod owner (locatedValue (functionName method)) scheme
+  recordDeclaredMethod owner (functionName method) scheme
   case functionParameters method of
     Located _ first : _ | locatedValue (Tree.parameterName first) == "self" -> pure ()
     _ -> noteStaticTrait owner
@@ -219,7 +219,7 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
         then bindImportedMethod key scheme
         else do
           bindName key scheme
-          recordDeclaredMethod owner (locatedValue (functionName method)) scheme
+          recordDeclaredMethod owner (functionName method) scheme
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}

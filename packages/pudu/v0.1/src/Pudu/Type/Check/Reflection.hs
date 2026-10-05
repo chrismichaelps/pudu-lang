@@ -17,7 +17,7 @@ import Pudu.Type.Env
   ( Checker, DeclaredTypes (..), report, withAdditionalRigidBounds, withLocalObligations )
 import Pudu.Type.Formation (formBoundFor)
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Value (NominalId, Type (..), canonicalNominal)
+import Pudu.Type.Value (NominalId, Type (..), canonicalNominal, renderType)
 
 reflectedParameters :: DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> [(Text, Int)]
 reflectedParameters declared rigid (Located _ syntax) = case syntax of
@@ -117,7 +117,9 @@ checkBuildCall check declared rigid at shape callback = case locatedValue callba
                         | answered == name, not (mentions name failure) ->
                             pure (NominalType "Result" [result, failure])
                       ErrorType -> pure ErrorType
-                      _ -> refuse "a build callback answers its field type F or Result[F, E]"
+                      _ -> refuse
+                        ("a build callback answers its field type F, or Result[F, E] for an E that is not F, not "
+                          <> renderType answer)
                   Collecting owner element -> do
                     _ <- unify at owner held
                     case answer of
@@ -125,13 +127,18 @@ checkBuildCall check declared rigid at shape callback = case locatedValue callba
                         _ <- unify at element answered
                         pure (NominalType "Array" [answered])
                       ErrorType -> pure ErrorType
-                      _ -> refuse "a collect callback answers Option[E] for an E that is not its field type"
+                      _ -> refuse
+                        ("a collect callback answers Option[E] for an E that is not its field type F, not "
+                          <> renderType answer)
             ErrorType -> pure ErrorType
-            _ -> refuse "a build callback takes one Field[T, F] with an abstract field type F"
-  _ -> refuse "a build callback is a function literal taking one Field[T, F] and declaring its answer"
+            _ -> refuse ("a " <> callbackName <> " callback takes one Field[T, F] with an abstract field type F")
+  _ -> refuse ("a " <> callbackName <> " callback is a function literal taking one Field[T, F] and declaring its answer")
  where
+  (callbackName, example) = case shape of
+    Building {} -> ("build", "write fn(field: Meta.Field[T, F]) -> F where F: Bound { ... }, or answer Result[F, E] to stop at the first Err")
+    Collecting {} -> ("collect", "write fn(field: Meta.Field[T, F]) -> Option[E] where F: Bound { ... }; None leaves the field out")
   refuse message = do
-    report "E3001" at message (Just "write fn(field: Meta.Field[T, F]) -> F where F: Bound { ... }")
+    report "E3001" at message (Just example)
     pure ErrorType
 
 mentions :: Text -> Type -> Bool

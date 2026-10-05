@@ -64,7 +64,7 @@ data ModuleTypes = ModuleTypes
   , moduleIntegerKinds :: !(Map.Map Span Text)
   {-| The methods this module's declarations provide, by owner: its impls'
       methods and the trait defaults they inherit, and its traits' members. -}
-  , moduleMethods :: ![(NominalId, Text, Scheme)]
+  , moduleMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])

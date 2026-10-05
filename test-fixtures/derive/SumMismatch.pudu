@@ -1,0 +1,21 @@
+module SumMismatch
+
+import Std.Meta
+import Std.Show {Show}
+
+trait Peek { fn peek(self: &Self) -> Str }
+
+derive Peek for T: Sum {
+  fn peek(self: &T) -> Str {
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      comptime for field: Meta.Field[T, F] in variant.fields() where F: Show {
+        return field.get(self).show()
+      }
+    }
+    ""
+  }
+}
+
+type Shape = Dot | Circle(Int) derives Peek
+
+export fn main() -> Str { Circle(2).peek() + Dot.peek() }

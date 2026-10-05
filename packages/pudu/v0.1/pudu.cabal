@@ -216,6 +216,8 @@ library
     Pudu.Lsp.Json
     Pudu.Lsp.Documents
     Pudu.Lsp.Definition
+    Pudu.Lsp.Diagnostics
+    Pudu.Lsp.MethodOwner
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
     Pudu.Lsp.References

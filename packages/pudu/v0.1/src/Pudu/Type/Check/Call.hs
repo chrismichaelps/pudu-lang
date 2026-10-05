@@ -123,25 +123,36 @@ qualifiedByName declared spanValue target member = case target of
   NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
     Nothing -> pure Nothing
     Just identity -> do
-      let key = nominalKey identity <> "." <> member
-      providers <- ambiguousProviders key
-      case providers of
-        _ : _ -> do
-          report "E3013" spanValue
-            (member <> " is ambiguous for " <> nominalName identity)
-            ( Just
-                ( "name the trait instead: "
-                    <> Text.intercalate " or "
-                      [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-                )
-            )
-          pure (Just ErrorType)
-        [] -> do
-          found <- lookupName key
-          case found of
-            Nothing -> pure Nothing
-            Just scheme -> Just <$> instantiate spanValue scheme
+      -- A module qualifier that exports `member` names that value, even where
+      -- the module also has a type of the qualifier's spelling: `Json.encode`
+      -- is the module's function, not the `Json` type's method.
+      exported <- if Set.member first (declaredQualifiers declared)
+        then lookupName (first <> "." <> member)
+        else pure Nothing
+      case exported of
+        Just _ -> pure Nothing
+        Nothing -> byType identity
   _ -> pure Nothing
+ where
+  byType identity = do
+    let key = nominalKey identity <> "." <> member
+    providers <- ambiguousProviders key
+    case providers of
+      _ : _ -> do
+        report "E3013" spanValue
+          (member <> " is ambiguous for " <> nominalName identity)
+          ( Just
+              ( "name the trait instead: "
+                  <> Text.intercalate " or "
+                    [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
+              )
+          )
+        pure (Just ErrorType)
+      [] -> do
+        found <- lookupName key
+        case found of
+          Nothing -> pure Nothing
+          Just scheme -> Just <$> instantiate spanValue scheme
 
 {-| Resolve a trait-qualified call against the type its receiver actually has.
 

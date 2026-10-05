@@ -1,0 +1,40 @@
+module ExpandLocal
+
+import Std.Meta
+import Std.Show {Show}
+
+trait Describe { fn describe(self: &Self) -> Str }
+
+derive Describe for T: Record {
+  fn describe(self: &T) -> Str {
+    var out = Meta.nameOf[T]()
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Show {
+      out = out + " " + field.name + "=" + field.get(self).show()
+    }
+    out
+  }
+}
+
+derive Describe for T: Sum {
+  fn describe(self: &T) -> Str {
+    comptime for variant: Meta.Variant[T] in Meta.variants[T]() {
+      if variant.matches(self) {
+        var out = variant.name
+        comptime for field: Meta.Field[T, F] in variant.fields() where F: Show {
+          out = out + " " + field.get(self).show()
+        }
+        return out
+      }
+    }
+    ""
+  }
+}
+
+type Point = { x: Int, y: Int } derives Describe
+
+type Shape = Dot | Circle(Int) | Rect{w: Int, h: Int} derives Describe
+
+export fn main() -> Str {
+  Point{x: 1, y: 2}.describe() + "; " + Dot.describe() + "; " + Circle(3).describe() + "; "
+    + Rect{w: 4, h: 5}.describe()
+}

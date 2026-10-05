@@ -109,6 +109,7 @@ import Pudu.Diagnostic
   , sortDiagnostics
   , withHelp
   )
+import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral (fitsIntegerType)
@@ -243,7 +244,7 @@ data CheckerState = CheckerState
   , stateDiagnosticsRev :: ![Diagnostic]
   {-| The methods this module's own declarations provide — its impls, the
       trait defaults those inherit, and its traits' members — by owner. -}
-  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme)]
+  , stateDeclaredMethodsRev :: ![(NominalId, Text, Scheme, Span)]
   {-| Traits declaring a member that takes no `self`. A parameter bounded by
       one of them may be called through statically, which needs its chosen
       type at run time. -}
@@ -269,7 +270,7 @@ data CheckerProducts = CheckerProducts
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
   {-| What `recordDeclaredMethod` collected, in declaration order. -}
-  , producedMethods :: ![(NominalId, Text, Scheme)]
+  , producedMethods :: ![(NominalId, Text, Scheme, Span)]
   {-| The type inference settled on for each integer literal.
 
       A literal written without a suffix is not a platform `Int` merely because
@@ -418,9 +419,11 @@ installedNames =
 {-| Record a method this module's declarations provide for `owner`, so tooling
     can offer what a value of that type — or a parameter bounded by that trait —
     can be called with, from the same facts a call is checked against. -}
-recordDeclaredMethod :: NominalId -> Text -> Scheme -> Checker ()
-recordDeclaredMethod owner name scheme =
-  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme) : stateDeclaredMethodsRev state})
+{-| A method a declaration of this module provides, with the span of its
+    name: for a generated method, its anchor in the derive that wrote it. -}
+recordDeclaredMethod :: NominalId -> Located Text -> Scheme -> Checker ()
+recordDeclaredMethod owner (Located at name) scheme =
+  Checker $ \state -> ((), state{stateDeclaredMethodsRev = (owner, name, scheme, at) : stateDeclaredMethodsRev state})
 
 installNames :: InstalledNames -> Checker ()
 installNames installed =
@@ -676,7 +679,7 @@ isMethodKey :: Text -> Checker Bool
 isMethodKey key =
   Checker $ \state ->
     ( Set.member key (stateImportedMethods state)
-        || any (\(owner, name, _) -> nominalKey owner <> "." <> name == key) (stateDeclaredMethodsRev state)
+        || any (\(owner, name, _, _) -> nominalKey owner <> "." <> name == key) (stateDeclaredMethodsRev state)
     , state
     )
 

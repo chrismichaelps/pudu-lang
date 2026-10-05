@@ -1,5 +1,5 @@
 // derive Std.Order.Eq for Expand.Line, generated in Std.Order
-impl Std.Order.Eq for Expand.Line {
+impl Eq for Expand.Line {
   fn equals(self: &Expand.Line, other: &Expand.Line) -> Bool {
     if (!self.sku.equals(&other.sku)) {
       return false
@@ -15,7 +15,7 @@ impl Std.Order.Eq for Expand.Line {
 }
 
 // derive Std.Order.Eq for Expand.Shape, generated in Std.Order
-impl Std.Order.Eq for Expand.Shape {
+impl Eq for Expand.Shape {
   fn equals(self: &Expand.Shape, other: &Expand.Shape) -> Bool {
     if (if let Expand.Shape.Dot = self {
         true
@@ -36,10 +36,14 @@ impl Std.Order.Eq for Expand.Shape {
         return false
       }
       if (!({
-            let Expand.Shape.Circle(__derive_payload) = self
+            let Expand.Shape.Circle(__derive_payload) = self else {
+              panic("expected Shape.Circle")
+            }
             __derive_payload
           }).equals(&({
-              let Expand.Shape.Circle(__derive_payload) = other
+              let Expand.Shape.Circle(__derive_payload) = other else {
+                panic("expected Shape.Circle")
+              }
               __derive_payload
             }))) {
         return false
@@ -51,14 +55,14 @@ impl Std.Order.Eq for Expand.Shape {
 }
 
 // derive Std.Json.Encode for Expand.Line, generated in Std.Json
-impl Std.Json.Encode for Expand.Line {
+impl Encode for Expand.Line {
   fn encode(self: &Expand.Line) -> Json {
     Object([("sku", self.sku.encode()), ("qty", self.quantity.encode())])
   }
 }
 
 // derive Std.Json.Decode for Expand.Line, generated in Std.Json
-impl Std.Json.Decode for Expand.Line {
+impl Decode for Expand.Line {
   fn decode(json: &Json) -> Result[Expand.Line, DecodeError] {
     let entries = objectEntries(json) ?
     @__derive_build_2 loop {
@@ -131,7 +135,7 @@ impl Std.Json.Decode for Expand.Line {
 }
 
 // derive Std.Json.Encode for Expand.Shape, generated in Std.Json
-impl Std.Json.Encode for Expand.Shape {
+impl Encode for Expand.Shape {
   fn encode(self: &Expand.Shape) -> Json {
     if (if let Expand.Shape.Dot = self {
         true
@@ -146,7 +150,9 @@ impl Std.Json.Encode for Expand.Shape {
       } else { false }) {
       let payload = {
         List([({
-                let Expand.Shape.Circle(__derive_payload) = self
+                let Expand.Shape.Circle(__derive_payload) = self else {
+                  panic("expected Shape.Circle")
+                }
                 __derive_payload
               }).encode()])
       }

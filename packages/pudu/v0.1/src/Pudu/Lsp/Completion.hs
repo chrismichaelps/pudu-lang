@@ -3,7 +3,6 @@ module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 
 import Control.Applicative ((<|>))
 import Data.Char (isAlphaNum)
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.List (sortOn)
 import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import qualified Data.Map.Strict as Map
@@ -13,13 +12,12 @@ import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameSegments, moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Expression
   , Import (..)
   , MatchArm
   , Module (..)
-  , TypeSyntax (..)
   )
 import Pudu.Lsp.Context (CompletionContext (..), ImportSite (..), TypeParameter, contextAt, contextParameters)
 import Pudu.Lsp.ImplMembers (canonicalKeys, implMemberCompletions)
@@ -27,6 +25,7 @@ import Pudu.Lsp.ImportCompletion (importCompletions, importQualifiers, moduleMem
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
 import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
+import Pudu.Lsp.MethodOwner (declaredOn, receiverOwners)
 import Pudu.Lsp.PatternCompletion (PatternCandidate (..), patternCandidates)
 import Pudu.Lsp.Protocol (positionOf)
 import Pudu.Lsp.Receiver (MemberSite (..), memberSiteAt, receiverType)
@@ -407,42 +406,17 @@ memberCompletions value site@(MemberSite _ (_, receiverEnd')) = case analysisTyp
     name; a method two traits provide is offered once. -}
 methodCompletions :: Analysis -> [TypeParameter] -> Type -> [Json]
 methodCompletions value parameters receiver =
-  [methodItem name (maybe "method" (renderType . schemeType) scheme) | (name, scheme) <- sortOn fst (methodsOf receiver)]
+  [methodItem name (maybe "method" (renderType . schemeType) scheme) | (name, scheme) <- sortOn fst methods]
  where
-  methodsOf typeValue = case throughReferenceType typeValue of
-    NominalType owner _ ->
-      declaredOn (nominalKey owner)
-        <> [ (name, Nothing)
-           | nominalModule owner == Nothing
-           , name <- builtinMethodNamesFor (nominalName owner)
-           , name `notElem` map fst (declaredOn (nominalKey owner))
-           ]
-    DynamicTypeValue trait -> declaredOn (nominalKey trait)
-    AppliedType head' _ -> methodsOf head'
-    RigidType name -> concat [declaredOn key | bound <- boundsOf name, key <- traitKeys bound]
-    _ -> []
-  declaredOn key = [(name, Just scheme) | (name, scheme) <- Map.findWithDefault [] key (analysisMethods value)]
-  boundsOf name = concat [bounds | (parameter, bounds) <- parameters, parameter == name]
-  traitKeys (Located _ bound) = case bound of
-    NamedType path _ -> filter (`Map.member` analysisMethods value) (ownersOf path)
-    _ -> []
-  -- The canonical keys a written trait name may stand for in this module: a
-  -- qualifier names the module it was imported as; a bare name is this
-  -- module's own, or one a selective import brought in.
-  ownersOf path = case NonEmpty.toList (moduleNameSegments path) of
-    [name] -> [own <> "." <> name | Just own <- [rootName]] <> [imported <> "." <> name | imported <- selecting name]
-    segments -> [qualified (init segments) <> "." <> last segments]
-  rootName = moduleNameText . locatedValue . moduleName <$> analysisModule value
-  imports = maybe [] (map locatedValue . moduleImports) (analysisModule value)
-  selecting name =
-    [moduleNameText (locatedValue (importModule entry)) | entry <- imports, name `elem` map locatedValue (importItems entry)]
-  qualified segments =
-    let written = Text.intercalate "." segments
-     in case [moduleNameText (locatedValue (importModule entry)) | entry <- imports, Just alias <- [importAlias entry], locatedValue alias == written] of
-          target : _ -> target
-          [] -> case [moduleNameText (locatedValue (importModule entry)) | entry <- imports, null (importItems entry), importAlias entry == Nothing, moduleQualifier (locatedValue (importModule entry)) == written] of
-            target : _ -> target
-            [] -> written
+  declared = concatMap (declaredOn value) (receiverOwners value parameters receiver)
+  methods =
+    [(name, Just scheme) | (name, scheme, _) <- declared]
+      <> [ (name, Nothing)
+         | NominalType owner _ <- [throughReferenceType receiver]
+         , nominalModule owner == Nothing
+         , name <- builtinMethodNamesFor (nominalName owner)
+         , name `notElem` [declaredName | (declaredName, _, _) <- declared]
+         ]
 
 {-| The fields of the receiver's record type, found by the type's canonical
     identity — its declaring module and name — so a record another module

@@ -8,7 +8,7 @@ import Pudu.Derive.State (Residual, generated, refuse)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments)
 import Pudu.Frontend.Syntax.Tree
-  ( BindingKind (Immutable), Block (..), Expression (..), FieldDeclaration (..)
+  ( Block (..), Expression (..), FieldDeclaration (..)
   , FieldPattern (..), Literal (..), Pattern (..), Statement (..), TypeSyntax (..)
   , Variant (..), VariantPayload (..) )
 import Pudu.Source (Span)
@@ -64,12 +64,24 @@ matchesVariant at target selected subject = do
   body <- generated at (Block [] (Just yes))
   generated at (IfLetExpression pat subject body (Just no))
 
+{-| A selected variant's field, read the way a person writes it: a `let … else`
+    that takes the payload apart and panics, naming the variant, when the
+    value is another one. -}
 readField
   :: Span -> Located TypeSyntax -> SelectedVariant -> Located FieldDeclaration
   -> Located Expression -> Residual (Located Expression)
 readField at target selected field subject = do
   pat <- variantPattern at target selected (Just field)
-  binding <- generated at (LetPatternStatement Immutable pat Nothing subject)
+  callee <- generated at (NameExpression (NonEmpty.singleton "panic"))
+  message <- generated at (LiteralExpression (StringValue mismatch))
+  refusal <- generated at (CallExpression callee [message])
+  fallback <- generated at (Block [] (Just refusal))
+  binding <- generated at (LetElseStatement pat subject fallback)
   result <- generated at (NameExpression (NonEmpty.singleton "__derive_payload"))
   body <- generated at (Block [binding] (Just result))
   generated at (BlockExpression body)
+ where
+  mismatch = "expected " <> owner <> locatedValue (variantName (locatedValue (selectedSyntax selected)))
+  owner = case locatedValue target of
+    NamedType path _ -> NonEmpty.last (moduleNameSegments path) <> "."
+    _ -> ""

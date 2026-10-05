@@ -1,0 +1,31 @@
+module StdJsonValue
+
+import Std.Json
+
+type Event = { id: Int, payload: Json.Json, extra: Option[Json.Json], tags: Array[Json.Json] }
+derives Json.Encode, Json.Decode
+
+export fn main() -> Str {
+  let event = Event {
+    id: 1,
+    payload: Json.object(&[("k", Json.Text("v"))]),
+    extra: None,
+    tags: [Json.Number(2), Json.Null],
+  }
+  let written = Json.encode(&event.encode())
+  let back = match Json.decode(written) {
+    case Ok(value) => match Event.decode(&value) {
+      case Ok(read) => Json.encode(&read.encode())
+      case Err(problem) => Json.explainDecode(&problem)
+    }
+    case Err(problem) => Json.explain(&problem)
+  }
+  let absent = match Json.decode("\{\"id\":2,\"tags\":[]\}") {
+    case Ok(value) => match Event.decode(&value) {
+      case Ok(read) => Json.encode(&read.payload)
+      case Err(problem) => Json.explainDecode(&problem)
+    }
+    case Err(problem) => Json.explain(&problem)
+  }
+  written + " " + (if back == written { "=" } else { back }) + " " + absent
+}
