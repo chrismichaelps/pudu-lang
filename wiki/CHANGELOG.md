@@ -5,6 +5,28 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Add measured dependency-layer treemaps (#435)
+
+- [[Dependency Layer Report]] emits offline HTML and JSON for Haskell source
+  import layers and strongly connected components. [[Dependency Layer Model]]
+  joins exclusive .prof CPU/allocation or ticky allocation/entry rows; inherited
+  costs and allocations of closures are excluded from allocations by closures.
+- [[Dependency Layer View]] supplies layer/search/metric controls, ordered tables,
+  source/cost-centre details and imports/importers navigation. Unknown measures,
+  unmatched owners, hashes, conservative CPP edges and instrumentation limitations
+  remain explicit. No remote asset, private input or implicit build is used.
+- All nine [[Dependency Layer Tests]] pass, including 6000-module chains, cycles,
+  individual-cost oracles, malformed profiles, unsafe numeric input, HTML escape
+  boundaries and input-overwrite refusals. Actual browser smoke verifies search,
+  module selection, dependency navigation, layer and metric controls.
+- A fresh GHC 9.10.3 optimized ticky build runs all seven unchanged tree workloads
+  successfully. The current source graph has 263 modules, 32 layers and no source
+  import SCC cycles. Loop attributes 3.24 GB to [[Eval Loop Kernel]]; Calls
+  attributes 1.27 GB to [[Eval]], 1.10 GB to [[Eval Call]] and 0.55 GB to
+  [[Eval Env]]. MultiMap splits measured cost between the loop layer (1.31 GB)
+  and [[Eval MultiMap]] (1.00 GB). These instrumented cumulative allocations
+  identify investigation layers; they are not wall times or retained memory.
+
 ## 2026-10-04 — Admit indexed loops and compact numeric occurrences (#435)
 
 - [[Eval Loop Kernel]] admits complete pure receiver/index regions in loops and

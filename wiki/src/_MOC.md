@@ -15,6 +15,8 @@ tags: [moc, module]
 
 - [[Compiler Benchmark]] · [[Benchmark Guide]] — reproducible cold/warm compiler latency.
 
+- [[Dependency Layer Report]] · [[Dependency Layer Model]] · [[Dependency Layer View]] · [[Dependency Layer Tests]] — offline source layers, import cycles and exclusive measured resource attribution.
+
 - [[src/test-fixtures/stdlib/UsesMultiMapPersistent]] · [[src/test-fixtures/stdlib/RejectsMultiMapOverflow]] · [[src/test-fixtures/stdlib/RejectsMultiMapUnordered]] — MultiMap snapshots, duplicates, ordering, folding, and refusal regressions.
 
 - [[Uses Yaml Block]] — full scalar trees, sibling retention, physical content and typed indentation refusal.

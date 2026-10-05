@@ -19,6 +19,12 @@ with the same Cabal flags as its build.
 
 ## Algorithm and dependencies
 
+[[Dependency Layer Report]] joins source-import SCCs and dependency layers to
+exclusive GHC CPU/allocation or ticky allocation/entry costs. It emits an offline
+treemap and companion JSON with provenance, source navigation, coupling and cycle
+summaries. Structural-only mode measures no resource cost; unknown attribution,
+instrumentation overhead and imports across CPP branches remain explicit.
+
 The whole-compiler guide points to [[Compiler Benchmark]], whose JSON includes
 cache policy, raw milliseconds, CPU, allocations, residency and binary/host
 identity. Existing graph/scaling tools establish workload growth; request.mjs
@@ -36,6 +42,10 @@ and their failure contracts. The first profiling/IR build takes minutes; that
 bootstrap is not the check latency being measured.
 
 ## Grill Log
+
+- **Q:** Treat an import graph as proof of a performance defect? **A:** No;
+  measured exclusive costs select investigation paths; coupling and SCCs supply
+  context. Instrumented timings are not ordinary-binary acceptance measurements.
 
 - **Q:** Inspect assembly before workload measurement? **A:** No. _Rationale:_
   the measured growth or allocation names the layer worth investigating.

@@ -77,6 +77,45 @@ bench/profile.sh check some/file.pudu
 
 A cost-centre report. Names the module and function to look at next.
 
+## 2a. Follow costs through dependency layers
+
+```bash
+node bench/layers.mjs --profile pudu.prof --out /tmp/pudu-layers.html --label "check workload"
+node --test bench/layers.test.mjs
+```
+
+The offline report groups source imports into dependency layers, from foundations
+at layer zero to their callers. Treemap area selects exclusive allocated bytes,
+sampled CPU, closure entries, module count or coupling. Select a module to see
+its hottest cost centres, source path, imports and importers. Search and layer
+controls narrow the graph; the table retains zero and unmeasured costs. Actual
+source-import cycles, including SOURCE edges, are listed separately.
+
+Use a fresh profile from the workload being investigated. `.prof` uses individual
+costs from the call tree; `.ticky` uses allocation by each closure and entry
+counts. The companion JSON records source and profile hashes, but these do not
+prove that the supplied profile matches the source build. Modules outside the
+selected root and unattributed costs remain visible. Without `--profile`, the
+report is structural only. It never reads private project inputs or builds a binary.
+
+For a separate low-level allocation build:
+
+```bash
+cabal build exe:pudu --builddir=/tmp/pudu-ticky --enable-optimization=2 --ghc-options=-ticky
+P=$(cabal list-bin exe:pudu --builddir=/tmp/pudu-ticky --enable-optimization=2 --ghc-options=-ticky)
+PUDU_EVAL=tree PUDU_CACHE=off PUDU_LIB=$PWD/packages/pudu/v0.1/lib "$P" run bench/eval/MultiMap.pudu +RTS -r/tmp/multimap.ticky -RTS
+node bench/layers.mjs --profile /tmp/multimap.ticky --out /tmp/multimap-layers.html --label "MultiMap tree"
+```
+
+Ticky runs use an instrumented debug runtime: use their allocation attribution
+to locate work, then time the ordinary optimized executable for acceptance.
+Cumulative allocation is different from RSS or retained heap. Import edges are
+investigation context and do not establish a bug or its causal call path.
+CPP imports are conservative across branches; generated/preprocessed modules
+outside the selected source root are not resolved. See the
+[GHC profiling guide](https://downloads.haskell.org/ghc/9.10.3/docs/users_guide/profiling.html)
+for the individual/inherited and ticky counter definitions.
+
 ## 3. What the optimiser made of that function
 
 ```bash

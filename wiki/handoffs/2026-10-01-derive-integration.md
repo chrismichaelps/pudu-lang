@@ -461,3 +461,28 @@ Exact next action after checkpoint publication: implement and validate that
 local report against a fresh instrumented workload, then commit and push it.
 Canonical typed Derive graph publication and all seven standard derives remain
 active and incomplete after this bounded tooling task.
+
+Checkpoint 828a9cdf is committed and pushed. The dependency-layer report is
+implemented with complete mirrors; all nine pure/CLI test families pass. A
+fresh optimized instrumented build runs the seven unchanged tree workloads.
+Offline reports are in /tmp/pudu-backend-layers with companion JSON, source and
+profile hashes. Browser smoke verifies search, module selection, navigation,
+layer selection and structural/allocated-area controls. Current graph: 263
+modules, 32 dependency layers, zero source import SCC cycles. .prof parsing is
+verified by individual/inherited independent fixtures; this capture uses ticky
+and has no sampled CPU data or measured per-module RSS. No compiler behavior
+changes occur in the report commit; the preceding fresh compiler gates remain
+applicable. Exact next action: publish and push the report checkpoint.
+
+The latest user steering applies the performance target to the whole backend,
+not only MultiMap. Whole-command 0.1–1.1 ms is below the measured startup floor
+(~28 ms); native equivalence is unproven. Do not label milliseconds merely by
+changing units or claim machine code removes storage costs. Fresh profiles show
+Loop's kernel allocates 3.24 GB, Calls spends 1.27 GB in Eval, 1.10 GB in Call
+and 0.55 GB in Env; MultiMap splits 1.31 GB loop/1.00 GB persistent updates.
+Use this graph to choose shared dispatch/storage cuts and compare all seven
+unchanged workloads and compiler latency. After report publication, investigate
+an unboxed success/refusal channel in the existing complete-region kernel;
+prove semantics and measure before accepting it. No new language backend,
+benchmark reduction, implicit mutation or runtime-mode override is authorized
+by that experiment. Full typed Derive graph publication remains unfinished.
