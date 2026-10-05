@@ -312,6 +312,7 @@ library
     Pudu.Runtime.Word
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel
+    Pudu.Eval.Loop.Step
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
     Pudu.Runtime.Buffer

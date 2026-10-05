@@ -79,6 +79,14 @@ Consumed only by [[Eval Loop]].
 
 ## Static dispatch allocation
 
+[[Eval Loop Step]] replaces boxed Yield/Stop outcomes inside the complete region
+with a strict unboxed success/refusal channel. Keep the existing whole-region
+admission, operator delegation, spans, call tally, scratch ordering/cleanup and
+final lexical commit. Only the outer region converts to an ordinary IO result.
+Resolved Grill Log: measured loop dispatch allocates gigabytes across scalar and
+collection workloads. Test the representation independently of new syntax or
+call admission and accept it only with unchanged-workload allocation evidence.
+
 Resolved Grill Log: indexing is a pure shared primitive, so its mere presence must
 not reject an otherwise proven whole region. Include receiver/index reads in the
 layout. Retain receiver-before-index writes, short-circuiting, the exact error

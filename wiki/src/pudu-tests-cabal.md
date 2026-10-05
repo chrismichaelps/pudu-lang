@@ -8,6 +8,10 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register [[Eval Loop Step Tests]] explicitly. Resolved Grill Log: the internal
+channel's typed refusal/transfer and cleanup semantics execute in the full suite
+without adding dependencies or relying only on successful kernel values.
+
 ## Purpose and interface
 
 Declare the repository-only `pudu-tests` package and its `pudu-test` exit-code suite. The package is

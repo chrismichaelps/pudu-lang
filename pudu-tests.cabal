@@ -105,6 +105,7 @@ test-suite pudu-test
     Pudu.Eval.Common
     Pudu.Eval.ArithmeticSpec
     Pudu.Eval.BindingFlowSpec
+    Pudu.Eval.LoopStepSpec
     Pudu.Eval.DataSpec
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec

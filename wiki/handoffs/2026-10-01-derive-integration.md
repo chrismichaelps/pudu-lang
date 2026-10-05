@@ -486,3 +486,57 @@ an unboxed success/refusal channel in the existing complete-region kernel;
 prove semantics and measure before accepting it. No new language backend,
 benchmark reduction, implicit mutation or runtime-mode override is authorized
 by that experiment. Full typed Derive graph publication remains unfinished.
+
+Checkpoint 611206aa is committed and pushed. Architect → Runtime Engineer now
+owns Eval.Loop.Step, Eval.Loop.Kernel, pudu.cabal and their complete mirrors for
+the resolved unboxed outcome experiment. Reuse the actual-admission, ordering,
+overflow, scratch and constant-limit oracles in BindingFlowSpec; do not broaden
+syntax or skip shared operators. Compare all seven unchanged workloads to
+828a9cdf, including cumulative allocation and exact output, before accepting.
+Runtime Engineer additionally owns LoopStepSpec, EvalSpec, pudu-tests.cabal and
+their mirrors for direct success/refusal/transfer ordering and cleanup evidence.
+
+The unboxed region channel passes direct success/refusal/transfer cleanup and
+all existing loop admission/ordering/overflow/depth oracles in both modes.
+Every fresh repository gate passes; the additional full tree run passes all
+549 property families. Three alternating unchanged-workload medians are
+Loop 659/650 → 545/534 ms, Records 412/411 → 334/336 ms and MultiMap
+879/891 → 836/827 ms (tree/compiled). Their cumulative allocations fall
+32%, 34% and 17% respectively. Arrays and Iterate allocate less in both modes;
+Calls and Maps retain their existing paths and allocation. The apparent Arrays
+timing regression does not reproduce, and is not hidden or called a timing win.
+MultiMap RSS rises slightly to ~260 MB despite lower cumulative allocation.
+A new binary's first Loop observation is 5.97 s; later observations are
+545–572 ms. Keep sample distributions separate from medians and script minima.
+Full native speed, memory parity and typed Derive graph delivery are incomplete.
+Exact next action: finish the ordinary script/whole-compiler harness, publish
+this validated runtime checkpoint and push immediately. Then resolve and test
+persistent arithmetic-series compression of numeric index payloads before
+altering storage; generic/random values and snapshots must retain ordinary
+ordered-map behavior. Continue measuring the whole backend, not only MultiMap.
+
+The requested script completes with tree/compiled ms: Arrays 770/570,
+Calls 440/270, Iterate 450/320, Loop 570/570, Maps 750/560,
+MultiMap 800/800 and Records 350/360; all seven stdout/stderr pairs match.
+The complete compiler harness passes. Its first all-214-Std cold median is
+1100 ms, warm 87 ms. A same-input before/after follow-up gives 976 → 981 ms
+cold and 100 → 87 ms warm; this resolves a suspected cold-library regression
+without hiding the initial slower result. Startup is 25 → 27 ms; 4000-unit
+syntax/evidence workloads are 63–187 ms. No compiler latency speedup is claimed.
+The local toolchain remains GHC 9.10.3, with locked 9.14.1 unverified locally.
+Refresh the report's actual profiles after this cut, then publish and push the
+validated checkpoint. Keep before/after reports labeled separately.
+
+Fresh post-change ticky runs finish all seven workloads and match the preceding
+instrumented stdout exactly. Reports under /tmp/pudu-backend-layers/*-step-tree.html
+map 264 modules over 32 layers with zero source-import cycles. Kernel-attributed
+allocation changes 3.24 → 2.16 GB in Loop, 1.50 → 0.84 GB in Records and
+1.31 → 0.74 GB in MultiMap, matching the normal-binary allocation cut. Calls,
+Maps and their remaining dispatch layers remain visible rather than omitted.
+Browser smoke also opens the fresh MultiMap report and verifies its filtered
+module view. All required implementation checks are complete for this bounded
+checkpoint. Publish and push it, retaining the full Derive and native-performance
+work as active. Exact next action: resolve a complete Runtime.SeriesMap mirror
+and storage property oracles, then integrate persistent constant-payload numeric
+series behind the existing lazy ordered-map view; preserve arbitrary input,
+kind representatives, duplicate counts, diagnostics and every old snapshot.

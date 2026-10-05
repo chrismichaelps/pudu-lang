@@ -23,6 +23,8 @@ adding a helper to an unused secondary property list is insufficient registratio
 Register `testPureCalls` for closed-body calls and their fallback boundary.
 Register `testNumericOccurrences` for persistent numeric-index storage and exact
 scalar-index refusal at the shared primitive boundary.
+Register `testLoopSteps` for ordered success, structured refusal/transfer and
+scratch cleanup through the unboxed region channel.
 Explicitly register `testSlotScopes` from [[Eval Function Closure Tests]] so
 binding-order, scope and capture admission regressions execute in the full suite.
 

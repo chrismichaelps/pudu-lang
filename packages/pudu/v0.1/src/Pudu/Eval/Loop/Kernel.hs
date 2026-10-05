@@ -13,6 +13,7 @@ import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, callLimit, descend, expectBool, integerKindAt
   , lookupLocal, lookupModule, lookupName, tally, updateExisting )
 import Pudu.Eval.Frame (frameLookup)
+import Pudu.Eval.Loop.Step (Step, finallyStep, liftStep, runStep, stopStep)
 import Pudu.Eval.Match (integerLiteralValue, literalValue)
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains, multiMapWrapper)
 import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
@@ -27,11 +28,10 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Source (Span)
 
 type Slots = IOArray Int Value
-type Code = Slots -> Env -> IO (Result Value)
-data Result a = Yield !a | Stop !(Eval Value)
+type Code = Slots -> Env -> Step Value
 data Plan = Plan !Code !(Set Text) !(Set Text) !(Set Text) !Int
 data Region = LoopRegion | ClosedRegion deriving stock (Eq)
-type Invocation = Span -> Slots -> Env -> [Value] -> IO (Result Value)
+type Invocation = Span -> Slots -> Env -> [Value] -> Step Value
 
 {-| Eligibility is all-or-nothing; planning reads bindings but executes no source. -}
 pureLoop :: Span -> Located Expression -> Located Block -> Evaluator (Maybe (Evaluator Value))
@@ -66,10 +66,10 @@ execute :: Span -> [Text] -> [Value] -> Set Text -> Int -> Code -> Code -> Evalu
 execute spanValue names initial written scratch test body = Evaluator $ \env -> do
   slots <- newIOArray (0, length names + scratch - 1) UnitValue
   mapM_ (uncurry (unsafeWriteIOArray slots)) (zip [0 ..] initial)
-  outcome <- loop slots env (0 :: Int)
+  outcome <- runStep (loop slots env (0 :: Int))
   case outcome of
-    Stop stopped -> pure stopped
-    Yield _ -> do
+    Left stopped -> pure stopped
+    Right _ -> do
       finals <- mapM (\(position, name) -> do
         value <- unsafeReadIOArray slots position
         pure (name, value)) [(position, name) | (position, name) <- zip [0 ..] names, name `Set.member` written]
@@ -83,37 +83,33 @@ execute spanValue names initial written scratch test body = Evaluator $ \env -> 
     | otherwise = bindResult (test slots env) $ \value ->
         bindResult (boolean env spanValue value) $ \truth -> case truth of
           True -> bindResult (body slots env) (\_ -> loop slots env (iterations + 1))
-          _ -> pure (Yield UnitValue)
+          _ -> pure UnitValue
 
 {-| Primitive actions are pure apart from the runtime's own call tally. -}
 {-# INLINE action #-}
-action :: Env -> Evaluator Value -> IO (Result Value)
+action :: Env -> Evaluator Value -> Step Value
 action env (Evaluator run) = do
-  outcome <- run env
-  pure $ case outcome of
-    Done value _ -> Yield value
-    other -> Stop other
+  outcome <- liftStep (run env)
+  case outcome of
+    Done value _ -> pure value
+    other -> stopStep other
 
 {-# INLINE bindResult #-}
-bindResult :: IO (Result a) -> (a -> IO (Result b)) -> IO (Result b)
-bindResult left next = do
-  outcome <- left
-  case outcome of
-    Yield value -> next value
-    Stop stopped -> pure (Stop stopped)
+bindResult :: Step a -> (a -> Step b) -> Step b
+bindResult = (>>=)
 
 planExpression :: Region -> Map.Map Text Int -> Located Expression -> Evaluator (Maybe Plan)
 planExpression region layout (Located spanValue expression) = case expression of
   NameExpression (name :| []) -> pure $ do
     position <- Map.lookup name layout
-    pure (Plan (\slots _ -> Yield <$> unsafeReadIOArray slots position) (Set.singleton name) Set.empty Set.empty 0)
+    pure (Plan (\slots _ -> liftStep (unsafeReadIOArray slots position)) (Set.singleton name) Set.empty Set.empty 0)
   LiteralExpression literal -> do
     value <- case literal of
       IntegerValue _ -> do
         selected <- integerKindAt spanValue
         pure (integerLiteralValue selected literal)
       _ -> pure (literalValue literal)
-    pure (Just (Plan (\_ _ -> pure (Yield value)) Set.empty Set.empty Set.empty 0))
+    pure (Just (Plan (\_ _ -> pure value) Set.empty Set.empty Set.empty 0))
   UnaryExpression operator operand | operator `elem` ["&", "*", "-", "!", "~"] -> do
     planned <- planExpression region layout operand
     pure $ do
@@ -128,8 +124,8 @@ planExpression region layout (Located spanValue expression) = case expression of
       position <- Map.lookup name layout
       Plan inner names written callees scratch <- planned
       let code slots env = bindResult (inner slots env) $ \value -> do
-            unsafeWriteIOArray slots position value
-            pure (Yield UnitValue)
+            liftStep (unsafeWriteIOArray slots position value)
+            pure UnitValue
       pure (Plan code (Set.insert name names) (Set.insert name written) callees scratch)
   BinaryExpression left operator right | operator `elem` ["+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "&&", "||"] -> do
     lhs <- planExpression region layout left
@@ -142,8 +138,8 @@ planExpression region layout (Located spanValue expression) = case expression of
             if operator == "&&" || operator == "||"
               then bindResult (boolean env spanValue x) $ \truth ->
                 if truth == (operator == "||")
-                  then pure (Yield (BoolValue truth))
-                  else bindResult (rightCode slots env) (\y -> fmap (mapResult BoolValue) (boolean env spanValue y))
+                  then pure (BoolValue truth)
+                  else bindResult (rightCode slots env) (\y -> fmap BoolValue (boolean env spanValue y))
               else bindResult (rightCode slots env) (action env . apply x)
       pure (joined code [a, b])
   CallExpression callee arguments | region == LoopRegion -> do
@@ -178,14 +174,14 @@ planExpression region layout (Located spanValue expression) = case expression of
       let owner = foldl (\_ name -> name) first rest
           labels = map fst named
           build = withArguments (map snd named)
-            (\_ _ values -> pure (Yield (RecordValue owner (zip labels values))))
+            (\_ _ values -> pure (RecordValue owner (zip labels values)))
       pure (joined build (map snd named))
   BlockExpression block -> planBlock region layout block
   IfExpression condition thenBlock elseBranch -> do
     test <- planExpression region layout condition
     taken <- planBlock region layout thenBlock
     alternative <- case elseBranch of
-      Nothing -> pure (Just (Plan (\_ _ -> pure (Yield UnitValue)) Set.empty Set.empty Set.empty 0))
+      Nothing -> pure (Just (Plan (\_ _ -> pure UnitValue) Set.empty Set.empty Set.empty 0))
       Just branch -> planExpression region layout branch
     pure $ do
       a@(Plan testCode _ _ _ _) <- test
@@ -212,7 +208,7 @@ planBlock region layout (Located _ block) = do
     trailing <- sequence final
     let plans = leading <> maybe [] (: []) trailing
         finish = case trailing of
-          Nothing -> \_ _ -> pure (Yield UnitValue)
+          Nothing -> \_ _ -> pure UnitValue
           Just (Plan finalCode _ _ _ _) -> finalCode
         code = foldr before finish leading
         before (Plan first _ _ _ _) rest slots env = bindResult (first slots env) (\_ -> rest slots env)
@@ -228,14 +224,14 @@ joined code plans = Plan code
   (Set.unions [callees | Plan _ _ _ callees _ <- plans])
   (foldl max 0 [scratch | Plan _ _ _ _ scratch <- plans])
 
-argumentsCode :: [Plan] -> Slots -> Env -> IO (Result [Value])
-argumentsCode plans = foldr prepend (\_ _ -> pure (Yield [])) plans
+argumentsCode :: [Plan] -> Slots -> Env -> Step [Value]
+argumentsCode plans = foldr prepend (\_ _ -> pure []) plans
  where
   prepend (Plan code _ _ _ _) rest slots env = bindResult (code slots env) $ \value ->
-    fmap (mapResult (value :)) (rest slots env)
+    fmap (value :) (rest slots env)
 
 {-| Prepare common arities without materializing intermediate argument results. -}
-withArguments :: [Plan] -> (Slots -> Env -> [Value] -> IO (Result Value)) -> Code
+withArguments :: [Plan] -> (Slots -> Env -> [Value] -> Step Value) -> Code
 withArguments plans invoke = case plans of
   [] -> \slots env -> invoke slots env []
   [Plan first _ _ _ _] -> \slots env ->
@@ -284,10 +280,9 @@ closedCallee offset (Located _ (NameExpression (name :| []))) arity = do
                     if envDepth env > callLimit
                       then descend (Just spanValue) >> pure UnitValue
                       else pure UnitValue)) $ \_ -> do
-                        install slots offset values
-                        result <- code slots env
-                        mapM_ (\position -> unsafeWriteIOArray slots position UnitValue) positions
-                        pure result
+                        liftStep (install slots offset values)
+                        finallyStep (code slots env)
+                          (mapM_ (\position -> unsafeWriteIOArray slots position UnitValue) positions)
             pure (name, invoke, arity)
      where
       function = closureFunction closure
@@ -302,15 +297,10 @@ closedCallee offset (Located _ (NameExpression (name :| []))) arity = do
     install slots (position + 1) rest
 closedCallee _ _ _ = pure Nothing
 
-{-# INLINE mapResult #-}
-mapResult :: (a -> b) -> Result a -> Result b
-mapResult transform (Yield value) = Yield (transform value)
-mapResult _ (Stop stopped) = Stop stopped
-
 {-# INLINE boolean #-}
-boolean :: Env -> Span -> Value -> IO (Result Bool)
-boolean _ _ (BoolValue flag) = pure (Yield flag)
-boolean env spanValue value = fmap (mapResult (== BoolValue True))
+boolean :: Env -> Span -> Value -> Step Bool
+boolean _ _ (BoolValue flag) = pure flag
+boolean env spanValue value = fmap (== BoolValue True)
   (action env (BoolValue <$> expectBool spanValue value))
 
 scalar :: Span -> Text -> Value -> Value -> Evaluator Value

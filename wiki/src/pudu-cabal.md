@@ -218,6 +218,9 @@ Register Eval.Loop.Kernel for bounded pure scalar/MultiMap loop regions and
 Eval.Foreign.Binding for unchanged foreign metadata extracted from Eval.Value.
 Resolved Grill Log: both are runtime implementation modules; no dependency or
 public Pudu package interface changes.
+Register [[Eval Loop Step]] for the kernel's internal unboxed success/refusal
+channel. Resolved Grill Log: use only base primitives and existing Eval types,
+with no new dependency, production flag, evaluator mode or native toolchain.
 Resolved Grill Log: relocate the former MultiMap kernel to its general loop
 ownership without adding dependencies or broadening admissible calls.
 

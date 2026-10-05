@@ -5,6 +5,41 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-04 — Remove boxed loop-region outcomes (#435)
+
+- [[Eval Loop Step]] carries strict success/refusal alternatives through an
+  unboxed state-token channel. [[Eval Loop Kernel]] converts once at the region
+  boundary, preserving complete admission, shared operators, lexical commit,
+  call depth/tally, short-circuit order and closed-call scratch cleanup.
+  No new syntax, callee admission, evaluator mode or native backend is introduced.
+- [[Eval Loop Step Tests]], registered by [[Eval Test Coordinator]] and
+  [[Pudu Test Cabal Manifest]], verify ordered success, skipped work after
+  exact ordinary refusal, return transfer, cleanup and escaped immutable values.
+  Existing loop families pass in both modes. Every fresh repository gate passes;
+  all 549 property families pass in an additional complete tree run.
+- The original five-run script reports tree/compiled ms: Arrays 770/570,
+  Calls 440/270, Iterate 450/320, Loop 570/570, Maps 750/560,
+  MultiMap 800/800 and Records 350/360. All seven stdout/stderr pairs match.
+  These are script minima; they do not establish a host-independent bound.
+- The complete compiler harness passes its diagnostic/output checks. The first
+  all-214-Std cold median is 1100 ms (87 ms warm); a follow-up before/after
+  comparison gives 976 → 981 ms cold and 100 → 87 ms warm. Startup is
+  25 → 27 ms, with 4000-unit syntax/evidence cases at 63–187 ms after the
+  change. Native resource parity and sub-millisecond whole-command latency remain
+  unproven; GHC 9.10.3 is local and the locked 9.14.1 matrix is unverified here.
+- Three alternating before/after samples of unchanged workloads give cold
+  tree/compiled medians: Loop 659/650 → 545/534 ms, Records
+  412/411 → 334/336 ms and MultiMap 879/891 → 836/827 ms.
+  Loop allocation falls 3.41 → 2.33 GB (32%), Records 1.92 → 1.27 GB
+  (34%) and MultiMap 3.26 → 2.69 GB (17%). All outputs match.
+- Arrays allocation falls 3.49 → 3.31 GB tree and 2.25 → 2.07 GB
+  compiled; Iterate falls 1.92 → 1.84 and 1.13 → 1.06 GB. An apparent
+  Arrays timing regression (789 → 892 ms tree) does not repeat in an
+  additional pair (920 → 790 ms); no timing claim is made for it. Calls
+  and Maps allocation is unchanged. MultiMap RSS slightly rises 256 → 260 MB;
+  Loop/Records RSS stays about 76 MB. Lower allocation is not a retained-memory
+  or native-speed guarantee. Whole-command sub-millisecond execution remains unmet.
+
 ## 2026-10-04 — Add measured dependency-layer treemaps (#435)
 
 - [[Dependency Layer Report]] emits offline HTML and JSON for Haskell source

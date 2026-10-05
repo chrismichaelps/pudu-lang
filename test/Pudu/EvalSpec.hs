@@ -40,6 +40,7 @@ import Pudu.Eval.SystemSpec
   , testScopes
   , testUnsafeRegions
   )
+import Pudu.Eval.LoopStepSpec (testLoopSteps)
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
@@ -51,6 +52,7 @@ evalProperties =
   , ("conditionals and pattern matching select branches", testBranching)
   , ("loops iterate and jumps leave them", testLoops)
   , ("pure loop calls preserve parameters limits and fallback", testPureCalls)
+  , ("loop step results preserve ordering refusals and cleanup", testLoopSteps)
   , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
