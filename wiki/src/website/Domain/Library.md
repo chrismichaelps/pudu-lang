@@ -20,7 +20,8 @@ under Other and the website suite requires to be empty, so a module added to the
 place is caught. `Std.Human` sits with text, `Std.Stats` with numbers, `Std.Term` and `Std.Cron`
 with the machine and time, `Std.Dotenv` with data formats, `Std.Checksum`, `Std.Base32`, and `Std.Pem` with the byte-level
 encodings and hashes,
-and `Std.Site` and `Std.Ip` with the web.
+and `Std.Site` and `Std.Ip` with the web. `Std.Meta` sits with core values beside `Std.Order` and
+`Std.Show`, whose traits its derives implement.
 
 Values hold names and sentences only; no HTML.
 

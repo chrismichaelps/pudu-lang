@@ -1,0 +1,49 @@
+// Derives
+// Equality, ordering, display, and JSON written once with derives, and a derive of your own over the fields.
+module Main
+
+import Std.Io as Io
+import Std.Json
+import Std.Meta
+import Std.Order {Eq, Ord}
+import Std.Show {Show}
+
+trait Columns {
+  fn columns(self: &Self) -> Str
+}
+
+derive Columns for T: Record {
+  fn columns(self: &T) -> Str {
+    var text = ""
+    comptime for field: Meta.Field[T, F] in Meta.fields[T]() where F: Show {
+      text = text + field.attributeOr("label", field.name) + ": " + field.get(self).show() + "\n"
+    }
+    text
+  }
+}
+
+type Book = { title: Str, @label("pages") @json("page_count") length: Int } derives Eq, Ord, Show, Columns, Json.Encode, Json.Decode
+
+type Shelf = Empty | Holding(Array[Book]) derives Eq, Show, Json.Encode
+
+fn main() -> Int {
+  let dune = Book{title: "Dune", length: 412}
+  let emma = Book{title: "Emma", length: 474}
+  let shelf = Holding([dune, emma])
+  let _shown = Io.writeLine(shelf.show())
+  let _sorted = Io.writeLine("Dune before Emma: " + show(dune.before(&emma)))
+  let _columns = Io.writeLine(dune.columns())
+  let text = Json.encode(&shelf.encode())
+  let _json = Io.writeLine(text)
+  let read: Result[Book, Json.DecodeError] = match Json.decode("\{\"title\": \"Emma\", \"page_count\": 474\}") {
+    case Ok(json) => Book.decode(&json)
+    case Err(_) => Err(Json.DecodeError{path: [], expected: "JSON", found: "text"})
+  }
+  match read {
+    case Ok(book) => if book.equals(&emma) { 0 } else { 1 }
+    case Err(problem) => {
+      let _failed = Io.writeLine(Json.explainDecode(&problem))
+      1
+    }
+  }
+}

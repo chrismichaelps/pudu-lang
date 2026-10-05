@@ -15,7 +15,7 @@ compact catalogues.
 The shell checks one search landmark, icon-free header navigation, a labelled native mobile disclosure,
 current-page state, and the new code-first home sections.
 Invocation checks include Vercel's outer `Action: Invoke` envelope with its request encoded in `body`.
-Documentation checks load `website/docs` and require every page in order, the index, a page's anchored
+Documentation checks load `website/docs` and require all 26 pages in order, Derives seventeenth, the index, a page's anchored
 sections, code blocks, contents, previous and next links, its sidebar mark, a 404 for an unknown page,
 the `/guide` canonical address, and sitemap coverage. A page must name its author and version, link
 its own Markdown source, label its code by language, and carry the folded narrow-screen page list.

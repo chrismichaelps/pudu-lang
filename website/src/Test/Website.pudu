@@ -470,7 +470,7 @@ export fn main() -> Int {
       Test.that("the platform script is served", Web.render(&site, "/assets/download/main.js").status.code == 200 && Web.render(&site, "/assets/download/tabs.js").body.contains("tablist")),
       Test.that("download page is in the sitemap", sitemap.body.contains(origin + "/download")),
       Test.that("download page is linked from every page", about.body.contains("href=\"/download\"")),
-      Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.2"),
+      Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.3"),
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
       Test.that("every public declaration has documentation", everyEntryHasDocumentation(&catalog.entries)),
       Test.that("ranked search returns a result", hits.length() > 0),
@@ -543,7 +543,7 @@ export fn main() -> Int {
       // The documentation is Markdown read from files and rendered on the
       // server, so a page is only as good as what the renderer made of it: its
       // sections, its code, its neighbours, and what it refused to render.
-      Test.that("documentation loads every page in order", docs.pages.length() == 25 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[5].slug == "numbers" && docs.pages[12].slug == "dependencies" && docs.pages[23].slug == "tooling" && docs.pages[24].slug == "deploying"),
+      Test.that("documentation loads every page in order", docs.pages.length() == 26 && docs.pages[0].slug == "introduction" && docs.pages[1].slug == "getting-started" && docs.pages[5].slug == "numbers" && docs.pages[12].slug == "dependencies" && docs.pages[16].slug == "derives" && docs.pages[24].slug == "tooling" && docs.pages[25].slug == "deploying"),
       Test.that("documentation index lists every page", docsIndex.status.code == 200 && docsIndex.body.contains("href=\"/docs/introduction\"") && docsIndex.body.contains("href=\"/docs/tooling\"")),
       Test.that("a documentation page renders its sections", docsPage.status.code == 200 && docsPage.body.contains("<h2 id=\"the-operator\">")),
       Test.that("a documentation page renders its code", docsPage.body.contains("class=\"code-block\"") && docsPage.body.contains("language-pudu")),
@@ -551,7 +551,7 @@ export fn main() -> Int {
       Test.that("a documentation page links its neighbours", docsPage.body.contains("pager-previous") && docsPage.body.contains("pager-next")),
       Test.that("a documentation page marks itself in the sidebar", docsPage.body.contains("href=\"/docs/errors\" aria-current=\"page\"")),
       Test.that("navigation identifies the documentation", docsPage.body.contains("aria-current=\"page\">Docs")),
-      Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.2</dd>")),
+      Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.3</dd>")),
       Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/10-errors.md")),
       Test.that("a documentation page labels its code by language", docsPage.body.contains("class=\"code-label\"")),
       Test.that("a narrow screen gets the page list folded away", docsPage.body.contains("<details class=\"docs-nav-mobile\">")),

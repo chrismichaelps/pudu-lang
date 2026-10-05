@@ -81,6 +81,11 @@ fn main() -> Int {
 
 Text is escaped on the way out, and reading what was written gives back an equal value.
 
+A record or sum can instead derive both directions: `derives Json.Encode, Json.Decode` writes the
+encoder and decoder a person would, honouring `@json("name")` renames, `@skip`, and
+`@default(json)`, and a decode error names the path to the field that failed, such as
+`at lines[0].qty: expected an integer, found text`. See [Derives](/docs/derives).
+
 ## CSV
 
 `Csv.parseTable` reads CSV whose first row names the columns. A row can then be read by column name:

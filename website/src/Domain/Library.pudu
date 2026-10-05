@@ -10,7 +10,7 @@ export type Section = { id: Str, title: Str, lead: Str, modules: Array[Str] }
 
 export const SECTIONS: Array[Section] = [
   Section{id: "core", title: "Core values", lead: "The types every program uses: optional values, results, characters, comparisons, and the traits behind them.", modules: [
-      "Std.Option", "Std.Result", "Std.Bool", "Std.Char", "Std.Tuple", "Std.Function", "Std.Order", "Std.Show", "Std.Num", "Std.Mappable"
+      "Std.Option", "Std.Result", "Std.Bool", "Std.Char", "Std.Tuple", "Std.Function", "Std.Order", "Std.Show", "Std.Meta", "Std.Num", "Std.Mappable"
     ] },
   Section{id: "text", title: "Text", lead: "Searching, building, parsing, and formatting text.", modules: [
       "Std.Text", "Std.Fmt", "Std.Regex", "Std.Glob", "Std.Diff", "Std.Intern", "Std.Semver", "Std.Uuid", "Std.Validate", "Std.Human"
@@ -57,6 +57,7 @@ export const SUMMARIES: Map[Str, Str] = mapOf([
     ("Std.Function", "Functions as values: composition, identity, and application."),
     ("Std.Order", "Comparisons, orderings, and sort predicates."),
     ("Std.Show", "Rendering values as text."),
+    ("Std.Meta", "Reading a type's fields and variants while compiling, for writing derives."),
     ("Std.Num", "The traits behind arithmetic."),
     ("Std.Mappable", "Containers whose values can be replaced."),
     ("Std.Text", "Searching, splitting, trimming, and reading numbers from text."),
