@@ -68,13 +68,27 @@ Every `Meta` function is compile-time only; naming one from code that runs is re
 | `field.name`, `field.get(&value)`, `field.set(&value, held)` | the field's name and access to it |
 | `field.has(name)`, `field.attributeOr(name, fallback)` | the field's attributes |
 | `Meta.build[T](each)` | a record of `T`, with `each` applied to every field |
+| `Meta.collect[T](each)` | an array of what `each` answers per field, leaving out `None` |
 | `variant.name`, `variant.fields()`, `variant.matches(&value)`, `variant.build(each)` | a variant's name, payload fields, test, and construction |
+| `variant.collect(each)`, `variant.positional` | an array over the payload fields; whether the payload is positional or unit |
+
+`variant.index` is its zero-based declaration position. Variant attributes use
+the same `has` and `attributeOr` operations as fields. A positional payload's
+fields have decimal position names. Reading a selected variant's field requires
+that variant; the lowered ordinary destructuring reports E7013 on a mismatch.
 
 `build` is how a derive makes a value rather than reads one, as `Json.Decode` and `Db.Row` must.
 `each` is a compile-time function taking a `Field[T, F]` and answering an `F`, or a
 `Result[F, E]`; it is unrolled into one record literal, and with `Result` the first `Err` is
 answered. Its bounds are stated like a loop's: `Meta.build[T](fn(field: Meta.Field[T, F]) ->
 Result[F, Error] where F: Decode { ... })`.
+
+`collect` is how a derive makes an array the way a person writes one. `each` answers
+`Option[E]` for every field; an answer that folds to `None` while compiling is left out,
+so `if field.has("skip") { None } else { Some(...) }` costs nothing at run time, and a
+collect whose every answer folds is a plain array literal. Inside a build or collect
+callback, `return` answers that field, and `?` ends a `Result` build with its `Err` or
+answers a collect field's `None`.
 
 Types, fields, and variants carry **attributes**, written `@name` or `@name(literal, ...)`. They are
 inert data that only compile-time code reads. An attribute no derive reads is allowed; a derive may
@@ -115,6 +129,14 @@ are prepared. Derive definitions are checked once in their defining module, with
 an abstract shape parameter and fresh field parameters carrying loop/callback bounds.
 The residualizer folds metadata, unrolls heterogeneous loops, and preserves runtime
 expressions. User derives and Std derives use the same mechanism.
+
+Generated methods are appended to their template's defining module, retaining its
+ordinary lexical imports, private helpers and prelude bindings. The original
+request module supplies the ownership obligation; relocating a generated method
+cannot confer ownership. A canonical graph check rejects generated heads that
+overlap an ordinary or generated head before any is published. Canonical target
+types in generated syntax are already formed, so the resolver does not demand a
+new import for them. Authored code keeps ordinary import and privacy checks.
 
 Generic reflection typing preserves heterogeneous sequences as opaque
 `Std.Meta.Fields[T]` and `Variants[T]`, rather than an Array sharing one inferred
@@ -157,9 +179,17 @@ path separately from textual JsonError positions. `@column` selects the strict
 row reader's column name.
 
 Generic static trait calls inside a build callback must preserve concrete type
-selection after type erasure. The implementation must carry or specialize that
-selection; consulting the result's runtime value cannot select a decoder before
-that value exists. Generated code remains ordinary trait calls with no metadata.
+selection after type erasure. Checking records, at each reference instantiating a
+parameter bounded by a trait with a member that takes no `self`, the types chosen for
+every parameter; the executable module carries them as an explicit type application.
+A call binds them as type witnesses in the callee's frame, so `A.decode(json)` reaches
+the selected owner, and a witness carries the owner's own arguments for nested
+containers. Calls whose bounds name no such trait are unchanged.
+
+`Json` itself implements neither JSON trait: the type shares the module's name, so an
+impl would capture `Json.encode` and `Json.decode` from the module's functions. A
+`@default` argument is JSON text; text that is not JSON stands for itself, and a
+non-text literal reads as its written form when its reader expects text.
 
 ## Diagnostics
 
@@ -169,13 +199,17 @@ that value exists. Generated code remains ordinary trait calls with no metadata.
   requires of every field.
 - Every generated node carries the derive body's span and the `derives` site, so errors, editor
   hover, and the debugger point at text a person wrote.
-- `pudu expand <file>` prints the generated impls.
+- `pudu expand <file>` prints the generated impls requested by that file, as checked
+  syntax with blocks that bind nothing spliced; a sum payload read keeps the
+  destructuring that reports E7013, so the text is for reading.
 
 ## What Std ships
 
 `Eq`, `Hash`, and `Ord` (field order, then variant order), `Show`, `Json.Encode` and `Json.Decode`
 (honouring `@json(name)`, `@skip`, and `@default(value)`), and `Db.Row` (honouring
-`@column(name)`), each an ordinary derive. Hand-written impls in `Std` that these reproduce exactly
+`@column(name)`), each an ordinary derive. `Eq`, `Hash` and `Ord` live in `Std.Order` beside impls for `Array[A]` and
+`Option[A]`; `Show` in `Std.Show`; `Encode` and `Decode` in `Std.Json`; `Row` and its
+per-column `Column` in `Std.Db.Row`. Hand-written impls in `Std` that these reproduce exactly
 are replaced by `derives`, and the existing fixtures confirm the behaviour did not change.
 
 ## Testing
@@ -242,6 +276,20 @@ attributes.
   data read at compile time; a leading `-` parses as negation rather than part of the literal,
   and compound values would need evaluation to stay inert. _Rejected:_ signed numerics and
   compound literals as argument productions.
+
+- **Q:** How does a derive build an array as fast as a hand-written literal? **A:**
+  `collect`, unrolled into the literal when its answers fold. _Rationale:_ a push chain
+  measured 25% slower than the literal, and since an impl may redefine `push` on
+  arrays, rewriting pushes would be unsound. _Rejected:_ a peephole over `push`.
+- **Q:** Carry static selections in a runtime side table? **A:** No; as explicit type
+  applications in the executable module. _Rationale:_ they are cached, linked and
+  evaluated like any other syntax, and calls without static bounds pay nothing.
+  _Rejected:_ monomorphizing generic impls; dynamic witness stacks, which a function
+  literal created inside a generic body would read wrongly.
+- **Q:** Where does the derived code for a field of another module's type live? **A:**
+  In the definition's module, naming the type canonically; formation treats an unbound
+  qualified generated path as that canonical declaration. _Rejected:_ importing every
+  target into every definition module.
 
 ## Referenced by
 

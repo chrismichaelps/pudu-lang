@@ -5,6 +5,47 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-05 — Typed derives and compile-time shape reflection (#431)
+
+- Ordinary, user-writable derives reach delivery: [[Derive Graph]] elaborates
+  canonical requests from checked definitions into ordinary impls before any body
+  is checked, and checking and both evaluators see only generated code.
+  [[Derive Field Callbacks]] unrolls `Meta.build`, `variant.build`, and the new
+  `Meta.collect`/`variant.collect`: a `Result` build stops at the first `Err`,
+  `return` answers a field, `?` ends a build or answers a collect field's `None`,
+  and a collect whose answers fold is a plain array literal. `variant.positional`
+  folds per variant.
+- Static calls through a generic parameter (`A.decode(json)`) now run. Checking
+  records the types a reference chose for parameters bounded by a trait with a
+  member that takes no `self` ([[Type Env]], [[Check Rule]]);
+  [[Compiler Literals]] writes them as explicit type applications; [[Eval Call]]
+  binds them as `TypeWitnessValue`s ([[Eval Value]]) that [[Eval Call Path]]
+  dispatches through, nested containers included. Other calls are unchanged.
+- Fixed: a static member named through its type (`Point.read(text)`) was typed
+  by the impl for its first argument's type whenever one existed
+  ([[Check Call]]). Generated impl heads naming another module's type are filed
+  under the canonical owner ([[Type Formation]]), so trait proofs, recursive
+  fields and cross-module derives see them; field proofs form canonical types
+  with the graph's names. E3092 now reads `Owner.field: Type does not implement
+  Trait, which derive Trait requires of every field` at the authored field with
+  one request note ([[Source]] `authoredSpan`).
+- Std ships `derive Eq`, `Hash` and `Ord` ([[Std Order]], with `Array`/`Option`
+  impls), `Show` ([[Std Show]]), `Json.Encode`/`Json.Decode` with located
+  `DecodeError` paths ([[Std Json]]) and `Db.Row` over a strict `Column` trait
+  ([[Std Db Row]]), each over records, sums, generic and recursive types.
+- Inside `impl Trait for Type { }` the language server offers the trait's
+  unwritten members as method snippets, required ones first and defaults as
+  overrides, and a quick fix writes every required member
+  ([[Lsp Impl Members]]). Completion offers `derive`/`derives`; the VS Code
+  grammar (extension 0.6.0) colours derive words and attributes.
+- `pudu expand <file>` prints the requested implementations
+  ([[Derive Expansion Output]], [[Syntax Printer]], [[Statement Inlining]]).
+- [[Derive Library Spec]] runs every shipped derive, field callbacks, static
+  selection, definition and field refusals and the expansion snapshot in both
+  evaluators. [[Derive Benchmark]]: derived JSON encoding equals the
+  hand-written encoder (0.96/0.78 s against 0.96/0.77 s tree/compiled, fastest
+  of five, identical output).
+
 ## 2026-10-04 — Compress persistent numeric series (#435)
 
 - [[Runtime Series Map]] proves a fully populated constant-payload arithmetic

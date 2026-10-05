@@ -580,3 +580,103 @@ Exact next action: finish the eight fresh dependency-layer reports, identify the
 largest remaining compiler/runtime owner, and resolve its next bounded allocation
 cut in complete mirrors before implementation. Scalar storage and call-frame
 setup are candidates; measured attribution chooses the next cut.
+
+Checkpoint aae43156 is committed and pushed; the fresh runtime reports and
+the compiler report using the actual 214-module harness input are complete.
+The latest instruction stops optimization and makes complete Derive delivery
+the priority. Keep the remaining Derive integration uncommitted until its full
+design and integration gates pass, then commit, push and merge to dev.
+
+Architect → Semantic/Expansion Implementer: solo ownership of the canonical
+derive catalogue, definition-only checking boundary, request generation before
+interface publication, their tests and complete mirrors. Preserve existing
+runtime work and all ordinary trait, import, privacy and coherence rules.
+The record residualizer is still a kernel; passing its manual-transformation
+tests does not demonstrate graph delivery. Exact next action: resolve and
+implement the canonical catalogue and definition validation boundary, then
+exercise real loaded-program requests before adding Sum/builders and all seven
+standard derives. No further performance cuts are authorized in this phase.
+
+Semantic/Expansion Implementer additionally owns the shared Proof/Match inference
+policy and Env's rigid-bound scope return value, with RequirementsSpec and their
+complete mirrors. Infer only authorized bare target parameters; keep ordinary
+proof unchanged and roll inferred premises back with failed matching evidence.
+
+Semantic/Expansion Implementer owns Derive.Target and its mirror for canonical
+target application and bounded typed-syntax reconstruction, including concrete
+external aliases, generic request binders and full strategy applications.
+
+Semantic/Expansion Implementer additionally owns Compiler.Cache's observable
+compile-time content fingerprint and Derive.CacheSpec. Derive bodies are currently
+omitted by body-free interface projection; marked helpers, macros and constants
+must also invalidate dependent generated/frozen products. Runtime body edits
+retain their existing interface-only cache behavior.
+
+Semantic/Expansion Implementer also owns Compiler.ComptimeDependencies and the
+Compiler.Program cache-input closure. Ordinary pure function calls can participate
+in folding; follow all loaded imports from constant and derive roots, using source
+content keys for those inputs. Verify actual warm consumer results after a
+transitive helper edit with unchanged size and modification time.
+
+Architect → Semantic/Expansion Implementer: solo ownership of Derive.Graph,
+Derive.Coherence and their integration tests, Semantic.Resolve.Canonical and its
+scoped Context flag, Resolve's generated-Impl walk, and Coherence's authored-only
+local ownership check. Generated methods retain the defining module's lexical
+environment; validate original request ownership and all overlapping heads before
+publication. Preserve authored import privacy and ordinary evaluator behavior.
+All 22 current focused property families pass 200 tests, including actual warm
+cache invalidation. Exact next action: integrate graph elaboration and prove
+cross-module captures, conditional heads and earliest-phase diagnostics through
+loaded programs; then extend the residualizer to Sum and polymorphic builders.
+
+Semantic/Expansion Implementer owns Derive.Inference and Definition's private
+contract closure, plus Type.Check's selected inference-before-template boundary.
+Private unannotated helpers must infer in their definition environment before
+generic template checking; unrelated ordinary bodies remain deferred. Use resolved
+symbol edges, source containment and a visited worklist rather than textual names.
+
+Semantic/Expansion Implementer owns RecordSpec's kernel-only dependency adapter.
+Its oracle stub heads intentionally overlap a request, so load ordinary Std.Meta
+dependencies first and check the template/oracle source through the existing
+per-module compiler API. Real graph tests keep all production overlap gates.
+
+Semantic/Expansion Implementer owns Derive.Syntax and the aggregate residualizer's
+literal-array unrolling, plus derive fixture mirrors and their actual-output
+expectations. Full tree suite currently has one failing family: legacy positive
+frontend fixtures relied on missing Sum strategies and deriving a scalar alias.
+Upgrade positive fixtures to invoke generated methods; retain scalar aliases as
+explicit negative coverage. Do not claim full Sum/build/library delivery yet.
+
+Semantic/Expansion Implementer owns Derive.Sum, aggregate variant/field descriptor
+contexts, Resolve.Bindings' scoped canonical constructor path, Std.Meta's variant
+index/attribute contracts and their mirrors. Sum reads use the existing ordinary
+destructuring mismatch contract; no Meta runtime fallback is introduced. Builders
+and writes remain unfinished. Literal-array and shape-independent Sum fixtures
+now pass 200 tests; the entire feature remains uncommitted.
+
+## Delivery continuation (2026-10-05)
+
+Architect → Semantic/Expansion/Runtime/Stdlib/Tooling Implementer, solo: owns
+field callbacks (Derive.Build, Derive.Context), callback resolution, the build
+and collect checking rule, static selection across Type.Env/Check.Rule/
+Check.Method/Compiler.Literals/Eval.Value/Eval.Call/Eval.Call.Path/Eval.Install,
+the static-member typing fix in Check.Call, canonical generated owners in
+Type.Formation/Check.Pattern/Eval.Call.Path, the Std derives, `pudu expand`
+(Derive.Expand, Syntax.Print, Syntax.Inline), Derive.LibrarySpec, the derive
+fixtures and bench/derive. No other agents participate.
+
+Delivered: `Meta.build`/`variant.build` with plain and `Result` callbacks,
+`Meta.collect`/`variant.collect`, `variant.positional`, static generic calls,
+`derive Eq/Hash/Ord/Show/Json.Encode/Json.Decode/Db.Row` over records, sums,
+generic and recursive types, located E3092 field diagnostics, `pudu expand`,
+and derived JSON encoding at hand-written speed. Every property family passes
+in both evaluators; fresh gates are recorded in [[CHANGELOG]] and the PR.
+
+The same implementer owns Lsp.ImplMembers, Lsp.Completion/CodeAction/Shapes/
+Documents/Analysis, Lsp.ImplMembersSpec and the VS Code extension's grammar,
+README and version: implementation member completion, its quick fix, and
+derive/attribute highlighting.
+
+Exact next action: Language Architect review of the semantic contracts in
+[[Derive Design]] (static selection and `collect`) and Forensic Guardian
+wiki-parity review on the pull request into `dev`.
