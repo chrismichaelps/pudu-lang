@@ -502,6 +502,7 @@ export fn main() -> Int {
       Test.that("only script modules are served from the documentation folder", outsideScripts.status.code == 404),
       Test.that("home renders", home.status.code == 200),
       Test.that("home opens with the shared banner and API search", home.body.contains("class=\"hero-banner home-hero\"") && home.body.contains("banner-search")),
+      Test.that("home paints its Pudu snippets like the guides", home.body.contains("<code class=\"language-pudu\">") && home.body.contains("<span class=\"tok-keyword\">fn</span>") && home.body.contains("<span class=\"tok-string\">&quot;Hello from Pudu!&quot;</span>")),
       Test.that("the home banner has a roaming pudu behind it", home.body.contains("<div class=\"pudu-host\"><div class=\"pudu-stage\" data-pudu=\"roam\" aria-hidden=\"true\"></div><section class=\"hero-banner home-hero\"")),
       Test.that("the missing page's pudu is shy", missing.body.contains("data-pudu=\"shy\" aria-hidden=\"true\"") && missing.body.contains("/assets/pudu/main.js")),
       Test.that("the donation page's pudu asks, answering the donate link", donation.body.contains("data-pudu=\"ask\" aria-hidden=\"true\" data-pudu-target=\".support-link\"")),
@@ -541,7 +542,7 @@ export fn main() -> Int {
       Test.that("header has no GitHub icon", !home.body.contains("github-icon")),
       Test.that("mobile navigation uses a labelled disclosure", home.body.contains("<details class=\"mobile-nav\"") && home.body.contains("aria-label=\"Navigation menu\"")),
       Test.that("navigation identifies the current API page", modulePage.body.contains("aria-current=\"page\">API")),
-      Test.that("home teaches through a complete program", home.body.contains("Write a complete program") && home.body.contains("module Hello")),
+      Test.that("home teaches through a complete program", home.body.contains("Write a complete program") && home.body.contains("<span class=\"tok-keyword\">module</span> <span class=\"tok-type\">Hello</span>")),
       Test.that("home links the documentation", home.body.contains("href=\"/docs\"")),
       Test.not("home no longer squeezes modules into a side column", home.body.contains("class=\"grid\"")),
 

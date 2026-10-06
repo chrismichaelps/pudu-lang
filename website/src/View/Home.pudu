@@ -12,6 +12,7 @@ import Service.Search as Search
 import View.Dynamic as Dynamic
 import View.Layout as Layout
 import View.Pudu as Pudu
+import View.Syntax as Syntax
 
 /// The script that refreshes each showcase card's release and star count from
 /// the live suggest answers. The snapshot stays the first paint and the
@@ -49,7 +50,7 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
                 H.p().class("summary").says("Search by what a function takes and gives back. Try Result[T, E], &mut T, Array[T] -> T, server, or json.")
               ]),
             H.pre().class("signature shape-code").holding([
-                H.code().says("fn find[T](items: &Array[T], keep: fn(T) -> Bool) -> Option[T]")
+                H.code().class("language-pudu").holding(Syntax.pudu("fn find[T](items: &Array[T], keep: fn(T) -> Bool) -> Option[T]"))
               ])
           ]),
         modules,
@@ -65,7 +66,7 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog, release: &Releases.Relea
                   ])
               ]),
             H.pre().class("signature home-code").holding([
-                H.code().says("module Hello\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  let _written = Io.writeLine(\"Hello from Pudu!\")\n  0\n\}")
+                H.code().class("language-pudu").holding(Syntax.pudu("module Hello\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  let _written = Io.writeLine(\"Hello from Pudu!\")\n  0\n\}"))
               ])
           ]),
         H.section().class("home-section").holding([
