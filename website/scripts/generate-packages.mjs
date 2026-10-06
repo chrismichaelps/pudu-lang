@@ -23,7 +23,9 @@
 // package whose tags and GitHub releases have not changed reuses its files
 // and API catalogue from the previous build. When the remaining rate limit
 // falls to PUDU_GITHUB_RESERVE (default 250), changed packages keep their
-// previous entry until the next build.
+// previous entry until the next build. The reserve is scaled to the observed
+// limit, so a tokenless build (60/hour) can still add new packages instead of
+// deferring them on every build, forever.
 //
 // Usage: node generate-packages.mjs [--api URL] [--out path] [--cache path] [--pudu path]
 import { execFileSync } from "node:child_process";
@@ -51,6 +53,14 @@ const pudu = argument("--pudu", "pudu");
 const cache = openCache(resolve(argument("--cache", `${out}.cache`)));
 const github = githubClient(api, cache.etags);
 const RESERVE = Number(process.env.PUDU_GITHUB_RESERVE ?? 250);
+
+/** The budget kept unspent, scaled to the observed rate limit. A flat 250
+ * assumes an authenticated limit (5,000/hour); without a token the limit is
+ * 60/hour, so the first request already drops `remaining` below a flat
+ * reserve and every new package is deferred on every build, forever. */
+function reserve() {
+  return Math.min(RESERVE, Math.floor(github.limit() / 2));
+}
 const summary = { refreshed: 0, reused: 0, deferred: 0 };
 const here = dirname(new URL(import.meta.url).pathname);
 
@@ -234,7 +244,7 @@ async function writeDiscussions(owner, repo, name) {
 async function reuse(prior, repository, owner, repo) {
   if (!cache.carry(join("files", prior.name, prior.latest), out)) return null;
   cache.carry(join("docs", `${prior.name}.json`), out);
-  if (github.remaining() > RESERVE) await writeDiscussions(owner, repo, prior.name);
+  if (github.remaining() > reserve()) await writeDiscussions(owner, repo, prior.name);
   else cache.carry(join("discussions", `${prior.name}.json`), out);
   let searchEntries = prior.searchEntries ?? [];
   if (searchEntries.length === 0) {
@@ -265,7 +275,7 @@ async function project(repository) {
   const key = releaseKey(tags, listed);
   const prior = cache.previous(name);
   const unchanged = cache.unchanged(name, key);
-  if (prior && (unchanged || github.remaining() <= RESERVE)) {
+  if (prior && (unchanged || github.remaining() <= reserve())) {
     const carried = await reuse(prior, repository, owner, repo);
     if (carried) {
       cache.remember(name, unchanged ? key : "");
@@ -273,7 +283,7 @@ async function project(repository) {
       return carried;
     }
   }
-  if (github.remaining() <= RESERVE) {
+  if (github.remaining() <= reserve()) {
     summary.deferred += 1;
     console.warn(`${name} is left for the next build: ${github.remaining()} GitHub requests remain`);
     return null;

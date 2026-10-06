@@ -18,6 +18,7 @@ function sleep(millis) {
 export function githubClient(api, stored = {}) {
   const counts = { requests: 0, notModified: 0, archives: 0 };
   let remaining = Infinity;
+  let ceiling = Infinity;
 
   function headers(accept) {
     const found = { accept, "user-agent": "pudu-website-package-generator", "x-github-api-version": "2022-11-28" };
@@ -30,6 +31,8 @@ export function githubClient(api, stored = {}) {
     if (header === null || answer.headers.get("x-ratelimit-resource") === "search") return;
     const left = Number(header);
     if (Number.isFinite(left)) remaining = left;
+    const top = Number(answer.headers.get("x-ratelimit-limit"));
+    if (Number.isFinite(top) && top > 0) ceiling = top;
   }
 
   async function send(url, extra = {}, accept = JSON_TYPE) {
@@ -85,5 +88,6 @@ export function githubClient(api, stored = {}) {
     counts,
     stored,
     remaining: () => remaining,
+    limit: () => ceiling,
   };
 }
