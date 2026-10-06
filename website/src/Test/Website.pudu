@@ -265,6 +265,7 @@ export fn main() -> Int {
   let about = Web.render(&site, "/about")
   let overloads = Web.render(&site, "/docs/Std.Bits/fn/width")
   let prose = Web.render(&site, "/docs/Std.List/fn/any")
+  let multiMapCount = Web.render(&site, "/docs/Std.MultiMap/fn/count")
   let download = Web.render(&site, "/download")
   let releases = Web.render(&site, "/releases")
   let conduct = Web.render(&site, "/conduct")
@@ -576,7 +577,8 @@ export fn main() -> Int {
       Test.that("module page renders", modulePage.status.code == 200),
       Test.that("symbol page renders", symbol.status.code == 200),
       Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
-      Test.that("documentation renders examples as a code block", prose.body.contains("<pre class=\"code-block\"><code>List.any(&amp;[1, 2, 3]")),
+      Test.that("documentation renders examples as painted code", prose.body.contains("<pre class=\"code-block\"><code class=\"language-pudu\">") && prose.body.contains("<span class=\"tok-")),
+      Test.that("symbol examples paint Pudu like the guides", multiMapCount.body.contains("<code class=\"language-pudu\">") && multiMapCount.body.contains("<span class=\"tok-keyword\">let</span>")),
       Test.that("documentation renders its own section headings", prose.body.contains("<h2 id=\"examples\">Examples</h2>") && prose.body.contains("<h2 id=\"see-also\">See also</h2><ul><li><code>find</code>")),
       Test.that("documentation renders cross-reference lists", prose.body.contains("<ul><li><code>find</code>")),
       Test.that("a blank doc line starts a new paragraph", prose.body.contains("</p><p>")),
