@@ -1,0 +1,78 @@
+module App.Rules
+
+import App.Messages as Messages
+import PuduLangMediator.Behaviors.Validation as Validation
+import PuduLangMediator.Registration as Registration
+import PuduLangValidator.Rule as Rule
+import PuduLangValidator.Rules.Text as TextRule
+import PuduLangValidator.Validator as Validator
+
+/// The longest search a reader may send, in characters.
+export const MAX_QUERY: Int = 512
+
+/// The longest package filter a reader may send, in characters.
+export const MAX_FILTER: Int = 256
+
+/// The longest module, symbol, document, or page name a reader may send, in characters.
+export const MAX_NAME: Int = 256
+
+/// The longest suggestion question accepted at all, in characters. Within it,
+/// suggestions match the first part of a longer question rather than refuse it,
+/// because the box asks while a reader types or pastes.
+export const MAX_SUGGEST: Int = 2048
+
+/// The rules of a declaration search.
+export fn search() -> Validator.Validator[Messages.SearchQuery] {
+  Validator.add(Validator.create(), Rule.build(TextRule.maximumLength(Rule.ruleFor("q", |asked: Messages.SearchQuery| asked.query), MAX_QUERY)))
+}
+
+/// The rules of a module page.
+export fn reference() -> Validator.Validator[Messages.ModuleQuery] {
+  Validator.add(Validator.create(), Rule.build(TextRule.maximumLength(Rule.ruleFor("module", |asked: Messages.ModuleQuery| asked.name), MAX_NAME)))
+}
+
+/// The rules of a symbol family.
+export fn symbol() -> Validator.Validator[Messages.SymbolQuery] {
+  let moduleName = Rule.build(TextRule.maximumLength(Rule.ruleFor("module", |asked: Messages.SymbolQuery| asked.moduleName), MAX_NAME))
+  let kind = Rule.build(TextRule.maximumLength(Rule.ruleFor("kind", |asked: Messages.SymbolQuery| asked.kind), MAX_NAME))
+  let name = Rule.build(TextRule.maximumLength(Rule.ruleFor("name", |asked: Messages.SymbolQuery| asked.name), MAX_NAME))
+  Validator.add(Validator.add(Validator.add(Validator.create(), moduleName), kind), name)
+}
+
+/// The rules of a page or document named by its slug.
+export fn slug() -> Validator.Validator[Messages.SlugQuery] {
+  Validator.add(Validator.create(), Rule.build(TextRule.maximumLength(Rule.ruleFor("page", |asked: Messages.SlugQuery| asked.slug), MAX_NAME)))
+}
+
+/// The rules of a package search.
+export fn packages() -> Validator.Validator[Messages.PackageQuery] {
+  let query = Rule.build(TextRule.maximumLength(Rule.ruleFor("q", |asked: Messages.PackageQuery| asked.query), MAX_QUERY))
+  let filter = Rule.build(TextRule.maximumLength(Rule.ruleFor("filter", |asked: Messages.PackageQuery| asked.filter), MAX_FILTER))
+  Validator.add(Validator.add(Validator.create(), query), filter)
+}
+
+/// The rules of a suggestion question.
+export fn suggest() -> Validator.Validator[Messages.SuggestQuery] {
+  let query = Rule.build(TextRule.maximumLength(Rule.ruleFor("q", |asked: Messages.SuggestQuery| asked.query), MAX_SUGGEST))
+  let filter = Rule.build(TextRule.maximumLength(Rule.ruleFor("filter", |asked: Messages.SuggestQuery| asked.filter), MAX_SUGGEST))
+  Validator.add(Validator.add(Validator.create(), query), filter)
+}
+
+/// The validation of the kinds both sites answer: search, package search, and suggestions.
+export fn shared(kinds: &Messages.Kinds) -> Array[Registration.Registration] {
+  [
+    Validation.register(&kinds.search, search()),
+    Validation.register(&kinds.packages, packages()),
+    Validation.register(&kinds.suggest, suggest())
+  ]
+}
+
+/// The validation of the documentation kinds only the complete site answers.
+export fn documentation(kinds: &Messages.Kinds) -> Array[Registration.Registration] {
+  [
+    Validation.register(&kinds.reference, reference()),
+    Validation.register(&kinds.symbol, symbol()),
+    Validation.register(&kinds.doc, slug()),
+    Validation.register(&kinds.document, slug())
+  ]
+}

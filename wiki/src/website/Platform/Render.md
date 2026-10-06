@@ -12,3 +12,6 @@ capture, loading the catalogue and the documentation pages first. It remains a d
 
 Resolved Grill Log: keep one-request rendering bounded and reuse `Web.Routes`; do not duplicate route
 or view decisions in command tooling.
+
+Renders through [[website App Static]] with the batch loggers of [[website App Logging]], whose events
+go to standard error so the response envelope on standard output stays intact.

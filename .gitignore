@@ -41,3 +41,6 @@ scripts/__pycache__/
 # Private commercial manuscript and publication artifacts.
 book/
 editors/vscode/*.vsix
+
+# Packages the website installs from pudu.lock; fetched with `pudu install --locked`, never committed.
+website/deps/

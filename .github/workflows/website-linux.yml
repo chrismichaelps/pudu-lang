@@ -28,6 +28,7 @@ jobs:
       - name: Build the Pudu website executable
         run: |
           PUDU="$(cabal list-bin exe:pudu)"
+          (cd website && "$PUDU" install --locked)
           "$PUDU" build website/src/Main.pudu -o website/bin/pudu-site-server-linux-x64
           chmod +x website/bin/pudu-site-server-linux-x64
           file website/bin/pudu-site-server-linux-x64

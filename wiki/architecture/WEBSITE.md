@@ -13,18 +13,49 @@ the same routes and rendering used by the local server, static capture, and Verc
 
 ## Dependency direction
 
-```text
-Main / Render / Prerender                    Function
-           |                                    |
-       Web.Routes                          Web.Dynamic
-       /   |     \                           /      \
-   View  Service.Catalog  Service.Docs  View.Dynamic  Service.Search
-            Service.Releases
-     \        /               /              \          /
-      Seo / Constants   View.Markdown         Domain.Entry
+Dependencies point downward, one layer to the next:
 
-SearchIndex -> Service.Catalog -> generated compact search database
-```
+| Layer | Modules | Depends on |
+| --- | --- | --- |
+| Entry points | `Main`, `Render`, `Prerender`, `Function` | the routers, the application, `Config`, `Site`, `Edge` |
+| Routers | [[website Web Routes]], [[website Web Dynamic]], [[website Web Playground]], [[website Web PackagePages]] | the application, [[website Web Answers]], [[website Web Access]], views |
+| Application | [[website App Static]], [[website App Dynamic]], [[website App Messages]], [[website App Rules]], [[website App Pipeline]], [[website App Playground]], [[website App Logging]] | services, views, `pudu-lang-mediator`, `pudu-lang-log`, `pudu-lang-validator` |
+| Views | `View.*` | domain values, `Seo`, `Constants` |
+| Services | `Service.*` | domain values, generated data |
+| Domain | `Domain.*` | nothing of the site |
+
+`SearchIndex` reads [[website Service Catalog]] to write the generated compact search database.
+Routers never import services directly for a page: every page and playground command is a message.
+
+## Application layer
+
+Every page and playground command is a typed `pudu-lang-mediator` message
+([[website App Messages]]). A router reads the request, builds the message, sends it to the
+application's mediator, and turns the outcome into a response through [[website Web Answers]]. The
+mediator is built once per process — by `Main`, `Render`, and `Prerender` over [[website Site]]
+([[website App Static]]), and by `Function` over [[website Edge]] ([[website App Dynamic]]) — so a
+request pays one lookup and the closures of the layers it passes through.
+
+Each message passes the same layers, outermost first: an alarm that writes an error event for a fault
+(a crash, a missing or mismatched route), the `pudu-lang-mediator` logging recorder, the
+`pudu-lang-validator` rules of [[website App Rules]], the playground's admission behaviors and run
+audit ([[website App Playground]]), then the handler, which calls the same service and view the router
+used to call. Validation bounds what a reader can send — 512 characters of search, 256 of a filter or a
+name — and answers a no-index `400` that names the field without echoing the value; every value the
+site answered before still answers the same way.
+
+Logging is `pudu-lang-log` on standard error ([[website App Logging]]): one access event per request
+([[website Web Access]]), never with its query string, plus the mediator's failures, plus every
+playground run without the reader's address. `PUDU_SITE_LOG_LEVEL` sets the least severe event and
+`PUDU_SITE_LOG_FORMAT` chooses `text`, coloured `console` (the development script's default), or
+`json` (the function's). The renderer and the prerender write warnings and worse unless a level is set.
+
+[[website Config]] reads every setting through `pudu-lang-validator` rules and refuses startup with
+every wrong setting named at once, the site's and the playground's together.
+
+The website is a Pudu project: `website/pudu.toml` names the three packages and `website/pudu.lock`
+pins them. `pudu install --locked`, run in `website/` by the development script, the Vercel build, and
+every workflow that compiles the site, fetches them into the ignored `website/deps/`.
 
 ## Documentation
 
@@ -39,7 +70,7 @@ never loads them.
 Config and Error are leaf policies used from the composition edge. SEO owns canonical metadata,
 structured data, robots policy, and sitemap rendering; views choose page facts but do not spell tags.
 
-Dependencies point downward. Domain code knows no HTTP or HTML. Services know catalogue and query
+Domain code knows no HTTP or HTML. Services know catalogue and query
 values, not requests. Views receive values and return typed `Std.Html` trees. The static router owns
 the complete crawlable documentation graph. The dynamic router owns only search and the no-index
 fallback, so the Lambda closure does not retain static-page machinery. Public package documents are a
@@ -157,6 +188,17 @@ XML sitemap covers the current catalogue while it remains below the protocol's 5
 - **Q:** Name the dynamic function `index.func`? **A:** No. _Rationale:_ that function path shadows
   the static root page before the explicit root rewrite. _Rejected:_ invoking Pudu for a page already
   present in static output.
+
+- **Q:** Route pages through a mediator rather than calling services from the router? **A:** Yes.
+  _Rationale:_ validation, logging, admission, and failure translation apply to every page and command
+  once, and a new route gains them by sending a message. _Rejected:_ the same checks repeated per
+  route; a middleware that cannot see typed messages.
+- **Q:** Reject an oversized query or truncate it? **A:** Reject with a no-index `400`. _Rationale:_
+  a reader sees why nothing matched rather than results for a query they did not send; suggestions
+  keep truncating within a hard limit because the box asks while a reader types. _Rejected:_ silent
+  truncation everywhere.
+- **Q:** Log to standard output? **A:** No. _Rationale:_ the renderer writes its response envelope
+  there. _Rejected:_ a log file the function's read-only file system would refuse.
 
 Resolved Grill Log: one Pudu rendering and search core, Pudu-native runtime edges, generated API
 data, typed HTML, explicit errors, and no reverse dependency from domain or services into transport.

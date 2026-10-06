@@ -1,0 +1,181 @@
+module Test.Application
+
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.Process as Process
+import Std.Test as Test
+import App.Dynamic as DynamicApp
+import App.Logging as Logging
+import App.Messages as Messages
+import App.Pipeline as Pipeline
+import App.Playground as PlaygroundApp
+import App.Rules as Rules
+import App.Static as StaticApp
+import Config as Config
+import Domain.Playground as Play
+import Edge as Edge
+import Error as SiteError
+import PuduLangLog.Configuration as Configuration
+import PuduLangLog as Log
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Sinks.Memory as Memory
+import PuduLangMediator.Mediator as Mediator
+import PuduLangMediator as Messaging
+import Service.LivePackages as LivePackages
+import Service.Packages as Packages
+import Service.Playground as Playground
+import Site as Site
+import Web.Access as Access
+import Web.Answers as Answers
+import Web.Dynamic as DynamicWeb
+import Web.Routes as Web
+
+/// A logger keeping every event in `memory`.
+fn remembering(memory: &Memory.Memory) -> Logger.Logger {
+  Configuration.create().minimumLevel(Log.Verbose).writeTo(Memory.sink(memory)).createLogger()
+}
+
+/// Whether any event written from `template` carries a property with this rendered value.
+fn wrote(memory: &Memory.Memory, template: Str, value: Str) -> Bool {
+  Memory.withTemplate(memory, template).filter(|event: Log.Event| event.properties.filter(|property: Log.Property| show(property.value).contains(value)).length() > 0).length() > 0
+}
+
+/// The levels of the events written from `template`, oldest first.
+fn levels(memory: &Memory.Memory, template: Str) -> Array[Log.Level] {
+  Memory.withTemplate(memory, template).map(|event: Log.Event| event.level)
+}
+
+fn hasHeader(response: &Http.Response, name: Str, value: Str) -> Bool { Http.header(&response.headers, name) == Some(value) }
+
+/// The site as the default settings describe it, or the reason it could not load.
+fn loaded() -> Result[Site.Site, SiteError.SiteError] {
+  let settings = Config.load() ?
+  Site.load(&settings)
+}
+
+/// Runs the suite.
+export fn main() -> Int {
+  let site = match loaded() {
+    case Ok(found) => Site.Site{..found, playground: Playground.using(&Playground.disabled("not in this suite"), &found.playground.examples, &Play.defaultLimits()), gates: Playground.openGates()}
+    case Err(problem) => {
+      let _said = Io.writeErrorLine(SiteError.explain(&problem))
+      return 1
+    }
+  }
+  let requests = Memory.create()
+  let messages = Memory.create()
+  let logs = Logging.Logs{requests: remembering(&requests), messages: remembering(&messages)}
+  let app = match StaticApp.assemble(&site, &logs) {
+    case Ok(built) => built
+    case Err(problem) => {
+      let _said = Io.writeErrorLine(SiteError.explain(&problem))
+      return 1
+    }
+  }
+
+  // Validation: oversized input is refused before any handler runs.
+  let longQuery = "q".repeat(Rules.MAX_QUERY + 1)
+  let atLimit = Web.render(&app, "/search?q=" + "q".repeat(Rules.MAX_QUERY))
+  let overLimit = Web.render(&app, "/search?q=" + longQuery)
+  let longFilter = Web.render(&app, "/packages/search?q=json&filter=" + "f".repeat(Rules.MAX_FILTER + 1))
+  let longModule = Web.render(&app, "/module/" + "M".repeat(Rules.MAX_NAME + 1))
+  let pastedSuggestion = Web.render(&app, "/packages/suggest?q=" + longQuery)
+  let absurdSuggestion = Web.render(&app, "/packages/suggest?q=" + "q".repeat(Rules.MAX_SUGGEST + 1))
+  let direct = Mediator.send(&app.mediator, &app.kinds.search, Messages.SearchQuery{query: longQuery})
+
+  // Answers keep what they were before the application layer.
+  let home = Web.render(&app, "/")
+  let missingDoc = Web.render(&app, "/docs/not-a-page")
+  let unknownFilter = Web.render(&app, "/packages/search?q=json&filter=%40nobody%2Fnothing")
+  let pageZero = Web.render(&app, "/packages/search?q=json&page=0")
+  let listingOne = Web.render(&app, "/packages/page/1")
+
+  // Logging: one access event per request, failures from the mediator.
+  let accessCount = Memory.withTemplate(&requests, Access.ANSWERED).length()
+
+  // The playground's commands audit every run without the reader's address.
+  let ran = Mediator.send(&app.mediator, &app.kinds.run, Messages.RunProgram{source: "module Main", action: Play.Run, reader: "203.0.113.9"})
+  let audited = wrote(&requests, PlaygroundApp.RAN, "unavailable") && !wrote(&requests, PlaygroundApp.RAN, "203.0.113.9")
+
+  // The function's application over the same packages.
+  let edge = Edge.Edge {
+    siteUrl: site.siteUrl,
+    catalog: site.catalog,
+    search: site.search,
+    packages: site.packages,
+    live: LivePackages.offline(),
+    playground: site.playground,
+    gates: Playground.openGates()
+  }
+  let functionApp = DynamicApp.quiet(&edge)
+  let dynamicTooLong = DynamicWeb.render(&functionApp, "/search?q=" + longQuery)
+  let dynamicListingBeyond = DynamicWeb.render(&functionApp, "/packages/page/999")
+  let staticKinds = Mediator.kinds(&app.mediator).length()
+  let dynamicKinds = Mediator.kinds(&functionApp.mediator).length()
+
+  // Translating failures.
+  let asked = Answers.Asked{siteUrl: site.siteUrl, path: "/x", missing: fn(path: Str) -> Http.Response { Http.Response{status: Http.status(404), headers: [], body: "missing " + path, binaryBody: None} }}
+  let notFound: Messaging.Failure[Messages.Problem] = Messaging.Raised(Messages.NotFound)
+  let notListed: Messaging.Failure[Messages.Problem] = Messaging.Raised(Messages.NotYetListed)
+  let unavailable: Messaging.Failure[Messages.Problem] = Messaging.Raised(Messages.Unavailable("down"))
+  let crashed: Messaging.Failure[Messages.Problem] = Messaging.Crashed("boom")
+  let unhandled: Messaging.Failure[Messages.Problem] = Messaging.Unhandled("pages.screen")
+  let crashedAnswer = Answers.failed(&asked, &crashed)
+
+  // Access events: information, warning for a refusal, error for a failure.
+  let graded = Memory.create()
+  let gradedLog = remembering(&graded)
+  let _ok = Access.around(&gradedLog, Web.requestFor("/fine"), fn(_request: Route.Request) -> Http.Response { Http.Response{status: Http.status(200), headers: [], body: "", binaryBody: None} })
+  let _missing = Access.around(&gradedLog, Web.requestFor("/gone"), fn(_request: Route.Request) -> Http.Response { Http.Response{status: Http.status(404), headers: [], body: "", binaryBody: None} })
+  let _refused = Access.around(&gradedLog, Web.requestFor("/bad?secret=1"), fn(_request: Route.Request) -> Http.Response { Http.Response{status: Http.status(400), headers: [], body: "", binaryBody: None} })
+  let _broken = Access.around(&gradedLog, Web.requestFor("/broken"), fn(_request: Route.Request) -> Http.Response { Http.Response{status: Http.status(503), headers: [], body: "", binaryBody: None} })
+
+  // Settings: every wrong one at once, through the renderer's own startup.
+  let compiler = Env.variableOr("PUDU", "pudu")
+  let rendered = Process.run("env", &["PUDU_SITE_PORT=nope", "PUDU_SITE_LOG_LEVEL=loud", "PUDU_PLAYGROUND_RUNNER=sometimes", compiler, "run", "website/src/Render.pudu", "/"])
+  let refusedSettings = match rendered {
+    case Ok(finished) => finished.output
+    case Err(problem) => problem
+  }
+
+  let checks = Test.suite("Application", &[
+      Test.that("a search at the limit is answered", atLimit.status.code == 200),
+      Test.that("a search over the limit is refused as a bad request, unindexed", overLimit.status.code == 400 && hasHeader(&overLimit, "X-Robots-Tag", "noindex") && overLimit.body.contains("q: ")),
+      Test.that("the refusal does not echo what was sent", !overLimit.body.contains(longQuery)),
+      Test.that("an oversized package filter is refused", longFilter.status.code == 400 && longFilter.body.contains("filter: ")),
+      Test.that("an oversized module name is refused", longModule.status.code == 400),
+      Test.that("a pasted suggestion within the hard limit is still answered", pastedSuggestion.status.code == 200),
+      Test.that("an absurd suggestion is refused", absurdSuggestion.status.code == 400),
+      Test.that("a message sent directly is refused the same way", Messaging.violations(&(match direct { case Err(failure) => failure case Ok(_) => Messaging.Refused("") })).length() == 1),
+      Test.that("the home page still answers", home.status.code == 200),
+      Test.that("a missing page is still a 404", missingDoc.status.code == 404),
+      Test.that("an unknown package filter still lists nothing", unknownFilter.status.code == 200 && unknownFilter.body.contains("No matching packages")),
+      Test.that("page zero of a search is still missing", pageZero.status.code == 404),
+      Test.that("listing page one is only the listing's own address", listingOne.status.code == 404),
+      Test.that("every request writes one access event", accessCount == 11),
+      Test.that("an access event names the method, path, and status", wrote(&requests, Access.ANSWERED, "/search") && wrote(&requests, Access.ANSWERED, "400")),
+      Test.that("the mediator reports a refused page", Memory.withTemplate(&messages, Logging.APPLICATION).length() == 0 && Memory.events(&messages).length() > 0),
+      Test.that("a run through a switched-off playground is unavailable", match ran { case Ok(answered) => answered.wait == 0 && !Play.succeeded(&answered.outcome) case Err(_) => false }),
+      Test.that("a run is audited without the reader's address", audited),
+      Test.that("the function refuses an oversized search too", dynamicTooLong.status.code == 400 && hasHeader(&dynamicTooLong, "X-Robots-Tag", "noindex")),
+      Test.that("a listing page not yet published is the short-lived missing page", dynamicListingBeyond.status.code == 404 && hasHeader(&dynamicListingBeyond, "cache-control", DynamicWeb.MISSING_CACHE)),
+      Test.equals("the site answers every kind", &staticKinds, &11),
+      Test.equals("the function answers search, packages, and the playground", &dynamicKinds, &6),
+      Test.equals("freshness follows whether GitHub contributed", &(DynamicApp.freshnessOf(&LivePackages.View{packages: Packages.empty(), live: true}), DynamicApp.freshnessOf(&LivePackages.View{packages: Packages.empty(), live: false})), &(Messages.Live, Messages.Snapshot)),
+      Test.that("a missing page is the router's own", Answers.failed(&asked, &notFound).body == "missing /x" && Answers.failed(&asked, &notListed).status.code == 404),
+      Test.that("an unavailable site is a 503", Answers.failed(&asked, &unavailable).status.code == 503),
+      Test.that("a fault is a 500 that names nothing", crashedAnswer.status.code == 500 && !crashedAnswer.body.contains("boom") && hasHeader(&crashedAnswer, "X-Robots-Tag", "noindex")),
+      Test.that("only faults are faults", Pipeline.isFault(&crashed) && Pipeline.isFault(&unhandled) && !Pipeline.isFault(&notFound) && !Pipeline.isFault(&Messaging.Aggregate([notFound, unavailable])) && Pipeline.isFault(&Messaging.Aggregate([notFound, crashed]))),
+      Test.equals("access events are graded by status", &levels(&graded, Access.ANSWERED), &[Log.Information, Log.Information, Log.Warning, Log.Error]),
+      Test.that("an access event never writes the query string", !wrote(&graded, Access.ANSWERED, "secret")),
+      Test.that("every wrong setting is reported at once", refusedSettings.contains("PUDU_SITE_PORT") && refusedSettings.contains("PUDU_PLAYGROUND_RUNNER")),
+      Test.that("a playground setting is reported with the site's", refusedSettings.contains("invalid website settings"))
+    ])
+  let ran2 = Test.run(&checks)
+  for failure in Test.failuresOf(&ran2) {
+    let _reported = Io.writeErrorLine(failure)
+  }
+  Test.report(&ran2)
+}

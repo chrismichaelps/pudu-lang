@@ -61,3 +61,6 @@ Since #367 its dynamic fixtures carry `LivePackages.offline()`, so they exercise
 Home and catalogue featured agreement is checked from one synthetic snapshot: both render the same
 most-starred order from `Packages.featured`, home cards carry `data-package` hooks with separate
 latest/star spans, and the home page includes the hydration script.
+
+Renders through quiet [[website App Static]] and [[website App Dynamic]] applications, one per site
+variant, so every page passes the mediator's layers as it does in production.

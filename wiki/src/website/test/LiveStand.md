@@ -20,3 +20,6 @@ a test changes its tag exactly as GitHub's would.
 ## Referenced by
 
 [[website live pages suite]] · [[website live packages suite]] · [[website/_MOC]]
+
+`edge` answers the function's quiet [[website App Dynamic]] application over an [[website Edge]], so the
+live pages suite renders through the mediator as the function does.

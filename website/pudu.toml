@@ -1,0 +1,13 @@
+[package]
+name = "@chrismichaelps/pudu-lang-website"
+version = "0.1.0"
+description = "The pudu-lang.org website: documentation, API catalogue, packages, and playground"
+license = "Apache-2.0"
+keywords = []
+language = ">=0.1.3 <0.2.0"
+source = "src"
+
+[dependencies]
+"@chrismichaelps/pudu-lang-mediator" = "^0.1.0"
+"@chrismichaelps/pudu-lang-log" = "^0.1.0"
+"@chrismichaelps/pudu-lang-validator" = "^0.1.1"

@@ -7,8 +7,11 @@ import Std.Io as Io
 import Std.Json as Json
 import Std.Result as Result
 import Std.Test as Test
+import App.Dynamic as DynamicApp
+import App.Static as StaticApp
 import Domain.Entry as Domain
 import Domain.Playground as Play
+import Edge as Edge
 import Function as Function
 import Service.Catalog as Catalog
 import Service.Docs as Docs
@@ -227,11 +230,12 @@ export fn main() -> Int {
     playground: Playground.using(&runsNothing, &examples, &Play.defaultLimits()),
     gates: Playground.openGates()
   }
-  let docsIndex = Web.render(&site, "/docs")
-  let docsPage = Web.render(&site, "/docs/errors")
-  let docsMissing = Web.render(&site, "/docs/not-a-page")
-  let modulesIndex = Web.render(&site, "/modules")
-  let guide = Web.render(&site, "/guide")
+  let app = StaticApp.quiet(&site)
+  let docsIndex = Web.render(&app, "/docs")
+  let docsPage = Web.render(&app, "/docs/errors")
+  let docsMissing = Web.render(&app, "/docs/not-a-page")
+  let modulesIndex = Web.render(&app, "/modules")
+  let guide = Web.render(&app, "/guide")
   let written = Markdown.parse(
       &[
       "# Title",
@@ -248,39 +252,39 @@ export fn main() -> Int {
     ]
   )
   let writtenHtml = H.render(&H.div().holding(written.blocks))
-  let home = Web.render(&site, "/")
+  let home = Web.render(&app, "/")
   let bare = Site.Site{..site, packages: Packages.empty()}
-  let emptyCatalog = Web.render(&bare, "/packages")
-  let emptyPackageSearch = Web.render(&site, "/packages/search?q=not-a-real-package-zz")
-  let bareHome = Web.render(&bare, "/")
-  let search = Web.render(&site, "/search?q=checksum")
-  let hostile = Web.render(&site, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-  let modulePage = Web.render(&site, "/module/Std.Adler32")
-  let symbol = Web.render(&site, "/docs/Std.Adler32/fn/checksum")
-  let missing = Web.render(&site, "/docs/Std.Adler32/fn/notThere")
-  let robots = Web.render(&site, "/robots.txt")
-  let sitemap = Web.render(&site, "/sitemap.xml")
-  let health = Web.render(&site, "/health")
-  let donation = Web.render(&site, "/donate")
-  let about = Web.render(&site, "/about")
-  let overloads = Web.render(&site, "/docs/Std.Bits/fn/width")
-  let prose = Web.render(&site, "/docs/Std.List/fn/any")
-  let multiMapCount = Web.render(&site, "/docs/Std.MultiMap/fn/count")
-  let download = Web.render(&site, "/download")
-  let releases = Web.render(&site, "/releases")
-  let conduct = Web.render(&site, "/conduct")
-  let contributing = Web.render(&site, "/contributing")
-  let security = Web.render(&site, "/security")
-  let community = Web.render(&site, "/community")
-  let privacy = Web.render(&site, "/privacy")
-  let brand = Web.render(&site, "/brand")
-  let packageCatalog = Web.render(&site, "/packages")
+  let emptyCatalog = Web.render(&StaticApp.quiet(&bare), "/packages")
+  let emptyPackageSearch = Web.render(&app, "/packages/search?q=not-a-real-package-zz")
+  let bareHome = Web.render(&StaticApp.quiet(&bare), "/")
+  let search = Web.render(&app, "/search?q=checksum")
+  let hostile = Web.render(&app, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(&app, "/module/Std.Adler32")
+  let symbol = Web.render(&app, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(&app, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(&app, "/robots.txt")
+  let sitemap = Web.render(&app, "/sitemap.xml")
+  let health = Web.render(&app, "/health")
+  let donation = Web.render(&app, "/donate")
+  let about = Web.render(&app, "/about")
+  let overloads = Web.render(&app, "/docs/Std.Bits/fn/width")
+  let prose = Web.render(&app, "/docs/Std.List/fn/any")
+  let multiMapCount = Web.render(&app, "/docs/Std.MultiMap/fn/count")
+  let download = Web.render(&app, "/download")
+  let releases = Web.render(&app, "/releases")
+  let conduct = Web.render(&app, "/conduct")
+  let contributing = Web.render(&app, "/contributing")
+  let security = Web.render(&app, "/security")
+  let community = Web.render(&app, "/community")
+  let privacy = Web.render(&app, "/privacy")
+  let brand = Web.render(&app, "/brand")
+  let packageCatalog = Web.render(&app, "/packages")
   let githubAvatar = Packages.Profile{..packages.handles[0], avatar: "", avatarUrl: "https://avatars.githubusercontent.com/u/123"}
   let githubAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [githubAvatar]}}
-  let githubAvatarCatalog = Web.render(&githubAvatarSite, "/packages")
+  let githubAvatarCatalog = Web.render(&StaticApp.quiet(&githubAvatarSite), "/packages")
   let localAvatar = Packages.Profile{..githubAvatar, avatar: "/packages/avatars/alice.png"}
   let localAvatarSite = Site.Site{..site, packages: Packages.Packages{..packages, handles: [localAvatar]}}
-  let localAvatarCatalog = Web.render(&localAvatarSite, "/packages")
+  let localAvatarCatalog = Web.render(&StaticApp.quiet(&localAvatarSite), "/packages")
   let seedProject = packages.projects[0]
   var manyProjects: Array[Packages.Project] = []
   var projectNumber = 0
@@ -290,8 +294,8 @@ export fn main() -> Int {
     projectNumber = projectNumber + 1
   }
   let manySite = Site.Site{..site, packages: Packages.Packages{..packages, projects: manyProjects}}
-  let manyCatalog = Web.render(&manySite, "/packages")
-  let manyHome = Web.render(&manySite, "/")
+  let manyCatalog = Web.render(&StaticApp.quiet(&manySite), "/packages")
+  let manyHome = Web.render(&StaticApp.quiet(&manySite), "/")
   var longProjects: Array[Packages.Project] = []
   var longNumber = 0
   while longNumber < 25 {
@@ -300,23 +304,23 @@ export fn main() -> Int {
     longNumber = longNumber + 1
   }
   let longSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: longProjects}}
-  let longCatalog = Web.render(&longSite, "/packages")
-  let longCatalogNext = Web.render(&longSite, "/packages/page/2")
-  let longSitemap = Web.render(&longSite, "/sitemap.xml")
-  let longProfile = Web.render(&longSite, "/@alice")
-  let longProfileNext = Web.render(&longSite, "/@alice/page/2")
-  let longSearch = Web.render(&longSite, "/packages/search?q=json")
-  let filteredSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fmissing")
-  let knownFilterSearch = Web.render(&longSite, "/packages/search?q=json&filter=%40alice%2Fjson-0")
-  let filteredDynamicSearch = DynamicWeb.render(&DynamicWeb.Dynamic{packages: longSite.packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, "/packages/search?q=json&filter=%40alice%2Fmissing")
-  let suggestRoute = Web.render(&site, "/packages/suggest?q=json")
-  let suggestDynamic = DynamicWeb.render(&DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, "/packages/suggest?q=&filter=%40alice%2Fjson-kit")
-  let shapeSearch = Web.render(&site, "/packages/search?q=Value+-%3E+Str")
-  let longSearchNext = Web.render(&longSite, "/packages/search?q=json&page=2")
-  let longSearchBeyond = Web.render(&longSite, "/packages/search?q=json&page=999")
-  let longDynamic = DynamicWeb.Dynamic{..DynamicWeb.Dynamic{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, packages: longSite.packages}
-  let longDynamicSearchNext = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=2")
-  let longDynamicSearchBeyond = DynamicWeb.render(&longDynamic, "/packages/search?q=json&page=999")
+  let longCatalog = Web.render(&StaticApp.quiet(&longSite), "/packages")
+  let longCatalogNext = Web.render(&StaticApp.quiet(&longSite), "/packages/page/2")
+  let longSitemap = Web.render(&StaticApp.quiet(&longSite), "/sitemap.xml")
+  let longProfile = Web.render(&StaticApp.quiet(&longSite), "/@alice")
+  let longProfileNext = Web.render(&StaticApp.quiet(&longSite), "/@alice/page/2")
+  let longSearch = Web.render(&StaticApp.quiet(&longSite), "/packages/search?q=json")
+  let filteredSearch = Web.render(&StaticApp.quiet(&longSite), "/packages/search?q=json&filter=%40alice%2Fmissing")
+  let knownFilterSearch = Web.render(&StaticApp.quiet(&longSite), "/packages/search?q=json&filter=%40alice%2Fjson-0")
+  let filteredDynamicSearch = DynamicWeb.render(&DynamicApp.quiet(&Edge.Edge{packages: longSite.packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}), "/packages/search?q=json&filter=%40alice%2Fmissing")
+  let suggestRoute = Web.render(&app, "/packages/suggest?q=json")
+  let suggestDynamic = DynamicWeb.render(&DynamicApp.quiet(&Edge.Edge{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}), "/packages/suggest?q=&filter=%40alice%2Fjson-kit")
+  let shapeSearch = Web.render(&app, "/packages/search?q=Value+-%3E+Str")
+  let longSearchNext = Web.render(&StaticApp.quiet(&longSite), "/packages/search?q=json&page=2")
+  let longSearchBeyond = Web.render(&StaticApp.quiet(&longSite), "/packages/search?q=json&page=999")
+  let longDynamic = Edge.Edge{..Edge.Edge{packages: packages, siteUrl: origin, catalog: catalog, search: Search.index(&catalog.entries), playground: site.playground, gates: Playground.openGates(), live: LivePackages.offline()}, packages: longSite.packages}
+  let longDynamicSearchNext = DynamicWeb.render(&DynamicApp.quiet(&longDynamic), "/packages/search?q=json&page=2")
+  let longDynamicSearchBeyond = DynamicWeb.render(&DynamicApp.quiet(&longDynamic), "/packages/search?q=json&page=999")
   var longTickets: Array[Packages.Discussion] = []
   var longContributions: Array[Packages.Discussion] = []
   var ticketNumber = 0
@@ -329,27 +333,27 @@ export fn main() -> Int {
   let discussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [discussionProject]}}
   let emptyDiscussionProject = Packages.Project{..seedProject, tickets: [], contributions: []}
   let emptyDiscussionSite = Site.Site{..site, packages: Packages.Packages{..packages, projects: [emptyDiscussionProject]}}
-  let emptyTickets = Web.render(&emptyDiscussionSite, "/@alice/json-kit/tickets")
-  let longTicketPage = Web.render(&discussionSite, "/@alice/json-kit/tickets")
-  let longTicketNext = Web.render(&discussionSite, "/@alice/json-kit/tickets/page/2")
-  let longContributionNext = Web.render(&discussionSite, "/@alice/json-kit/contributions/page/2")
-  let discussionSitemap = Web.render(&discussionSite, "/sitemap.xml")
-  let packageSearch = Web.render(&site, "/packages/search?q=json")
-  let packageMissing = Web.render(&site, "/@alice/missing")
-  let packageProfile = Web.render(&site, "/@alice")
-  let packageOverview = Web.render(&site, "/@alice/json-kit")
-  let packageSource = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Parse.pudu")
-  let packageBinary = Web.render(&site, "/@alice/json-kit/source/assets/icon.bin")
-  let packageEncoded = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Extra%20Test.pudu")
-  let packageSourceMissing = Web.render(&site, "/@alice/json-kit/source/src/JsonKit/Missing.pudu")
-  let packageDocs = Web.render(&site, "/@alice/json-kit/docs")
-  let packageReleases = Web.render(&site, "/@alice/json-kit/releases")
-  let packageTickets = Web.render(&site, "/@alice/json-kit/tickets")
-  let packageTicket = Web.render(&site, "/@alice/json-kit/tickets/42")
-  let packageTicketMissing = Web.render(&site, "/@alice/json-kit/tickets/999")
-  let packageContributions = Web.render(&site, "/@alice/json-kit/contributions")
-  let packageContribution = Web.render(&site, "/@alice/json-kit/contributions/56")
-  let packageContributionMissing = Web.render(&site, "/@alice/json-kit/contributions/999")
+  let emptyTickets = Web.render(&StaticApp.quiet(&emptyDiscussionSite), "/@alice/json-kit/tickets")
+  let longTicketPage = Web.render(&StaticApp.quiet(&discussionSite), "/@alice/json-kit/tickets")
+  let longTicketNext = Web.render(&StaticApp.quiet(&discussionSite), "/@alice/json-kit/tickets/page/2")
+  let longContributionNext = Web.render(&StaticApp.quiet(&discussionSite), "/@alice/json-kit/contributions/page/2")
+  let discussionSitemap = Web.render(&StaticApp.quiet(&discussionSite), "/sitemap.xml")
+  let packageSearch = Web.render(&app, "/packages/search?q=json")
+  let packageMissing = Web.render(&app, "/@alice/missing")
+  let packageProfile = Web.render(&app, "/@alice")
+  let packageOverview = Web.render(&app, "/@alice/json-kit")
+  let packageSource = Web.render(&app, "/@alice/json-kit/source/src/JsonKit/Parse.pudu")
+  let packageBinary = Web.render(&app, "/@alice/json-kit/source/assets/icon.bin")
+  let packageEncoded = Web.render(&app, "/@alice/json-kit/source/src/JsonKit/Extra%20Test.pudu")
+  let packageSourceMissing = Web.render(&app, "/@alice/json-kit/source/src/JsonKit/Missing.pudu")
+  let packageDocs = Web.render(&app, "/@alice/json-kit/docs")
+  let packageReleases = Web.render(&app, "/@alice/json-kit/releases")
+  let packageTickets = Web.render(&app, "/@alice/json-kit/tickets")
+  let packageTicket = Web.render(&app, "/@alice/json-kit/tickets/42")
+  let packageTicketMissing = Web.render(&app, "/@alice/json-kit/tickets/999")
+  let packageContributions = Web.render(&app, "/@alice/json-kit/contributions")
+  let packageContribution = Web.render(&app, "/@alice/json-kit/contributions/56")
+  let packageContributionMissing = Web.render(&app, "/@alice/json-kit/contributions/999")
   let hits = Search.find(&catalog.entries, "crc32", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -364,7 +368,7 @@ export fn main() -> Int {
   let typeKinds = Search.find(&catalog.entries, "Listener kind:type", 20)
   let invalidFilter = Search.find(&catalog.entries, "kind:not-a-kind", 20)
   let multiTerm = Search.find(&catalog.entries, "adler checksum", 10)
-  let edge = DynamicWeb.Dynamic {
+  let edge = Edge.Edge {
     packages: packages,
     siteUrl: origin,
     catalog: searchCatalog,
@@ -373,23 +377,23 @@ export fn main() -> Int {
     gates: Playground.openGates(),
     live: LivePackages.offline()
   }
-  let dynamicSearch = DynamicWeb.render(&edge, "/search?q=checksum")
+  let dynamicSearch = DynamicWeb.render(&DynamicApp.quiet(&edge), "/search?q=checksum")
   let leanProjects = packages.projects.map(|project: Packages.Project| Packages.Project{..project, catalog: None})
   let leanPackages = Packages.Packages{..packages, projects: leanProjects}
-  let leanEdge = DynamicWeb.Dynamic{..edge, packages: leanPackages}
-  let dynamicPackageSearch = DynamicWeb.render(&leanEdge, "/packages/search?q=json")
+  let leanEdge = Edge.Edge{..edge, packages: leanPackages}
+  let dynamicPackageSearch = DynamicWeb.render(&DynamicApp.quiet(&leanEdge), "/packages/search?q=json")
   // A site run under `pudu run --watch` follows the files it was made from.
   let watch = LiveReload.Watch{start: "3", changed: ["/work/website/public/site.css"]}
   let following = LiveReload.middleware(&watch)
-  let rendering = fn(request: Route.Request) -> Http.Response { Web.render(&site, request.message.target) }
+  let rendering = fn(request: Route.Request) -> Http.Response { Web.render(&app, request.message.target) }
   let watchedPage = following(requestFor("/docs/errors"), rendering)
   let watchedState = following(requestFor("/__pudu/reload"), rendering)
   let watchedStyle = following(requestFor("/assets/site.css"), rendering)
-  let contentsScript = Web.render(&site, "/assets/docs/contents.js")
-  let outsideScripts = Web.render(&site, "/assets/docs/../site.css")
-  let dynamicMissing = DynamicWeb.render(&edge, "/not-a-page")
-  let dynamicPlayground = DynamicWeb.render(&edge, "/playground/shared?code=module%20Main")
-  let playgroundPage = Web.render(&site, "/playground")
+  let contentsScript = Web.render(&app, "/assets/docs/contents.js")
+  let outsideScripts = Web.render(&app, "/assets/docs/../site.css")
+  let dynamicMissing = DynamicWeb.render(&DynamicApp.quiet(&edge), "/not-a-page")
+  let dynamicPlayground = DynamicWeb.render(&DynamicApp.quiet(&edge), "/playground/shared?code=module%20Main")
+  let playgroundPage = Web.render(&app, "/playground")
   let postedEvent = Json.object(&[
       ("body", Json.Text("\{\"method\":\"POST\",\"path\":\"/api/playground/run\",\"headers\":\{\"Content-Type\":\"application/json\",\"X-Forwarded-For\":\"203.0.113.9\"\},\"encoding\":\"base64\",\"body\":\"eyJzb3VyY2UiOiIifQ==\"\}")),
       ("Action", Json.Text("Invoke"))
@@ -422,7 +426,7 @@ export fn main() -> Int {
       Test.that("catalogue, profile, and search serve bounded pages", longCatalog.body.split("class=\"package-row-link\"").length() == 27 && longCatalog.body.contains("href=\"/packages/page/2\"") && longCatalogNext.status.code == 200 && longCatalogNext.body.split("class=\"package-row-link\"").length() == 6 && longProfile.body.split("class=\"package-row-link\"").length() == 21 && longProfileNext.body.split("class=\"package-row-link\"").length() == 6 && longSearch.body.split("class=\"package-row-link\"").length() == 21 && longSearchNext.body.split("class=\"package-row-link\"").length() == 6 && longDynamicSearchNext.body.split("class=\"package-row-link\"").length() == 6),
       Test.that("search pages continue declaration matches", longSearch.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.split("class=\"package-symbol-row\"").length() == 21 && longSearchNext.body.contains("page=3") && longDynamicSearchNext.body.split("class=\"package-symbol-row\"").length() == 21),
       Test.that("a package filter searches inside one project and keeps the filter", filteredSearch.status.code == 200 && filteredSearch.body.split("class=\"package-symbol-row\"").length() == 1 && filteredSearch.body.split("class=\"package-row-link\"").length() == 1 && filteredSearch.body.contains("name=\"filter\" value=\"@alice/missing\"") && filteredSearch.body.contains("class=\"package-search-active-filter\" href=\"/packages/search?q=json\"") && filteredSearch.body.contains("No matching packages") && knownFilterSearch.body.split("class=\"package-symbol-row\"").length() == 4 && knownFilterSearch.body.split("class=\"package-row-link\"").length() == 1 && knownFilterSearch.body.contains(" in @alice/json-0") && filteredDynamicSearch.status.code == 200 && filteredDynamicSearch.body.split("class=\"package-symbol-row\"").length() == 1),
-      Test.that("search refuses pages beyond its result count", longSearchBeyond.status.code == 404 && longDynamicSearchBeyond.status.code == 404 && Web.render(&longSite, "/packages/page/999").status.code == 404),
+      Test.that("search refuses pages beyond its result count", longSearchBeyond.status.code == 404 && longDynamicSearchBeyond.status.code == 404 && Web.render(&StaticApp.quiet(&longSite), "/packages/page/999").status.code == 404),
       Test.that("ticket and contribution histories serve bounded pages", longTicketPage.body.split("class=\"discussion-row\"").length() == 21 && longTicketPage.body.contains("href=\"/@alice/json-kit/tickets/page/2\"") && longTicketNext.status.code == 200 && longTicketNext.body.split("class=\"discussion-row\"").length() == 6 && longContributionNext.status.code == 200 && longContributionNext.body.split("class=\"discussion-row\"").length() == 6),
       Test.that("numbered list pages are in the static path graph", sitemapHasAll(&longSitemap, origin, &["/packages/page/2", "/@alice/page/2"]) && sitemapHasAll(&discussionSitemap, origin, &["/@alice/json-kit/tickets/page/2", "/@alice/json-kit/contributions/page/2"])),
       Test.that("a missing snapshot file tree fails startup", Result.isErr(&brokenPackages)),
@@ -447,8 +451,8 @@ export fn main() -> Int {
       Test.that("a Pudu source file is highlighted", packageSource.body.contains("class=\"tk-keyword\">module<") && packageSource.body.contains("class=\"tk-keyword\">export<")),
       Test.that("a module's source lists its declarations beside it", packageSource.body.contains("code-outline") && packageSource.body.contains("/@alice/json-kit/docs#JsonKit-Parse-fn-one")),
       Test.that("the source view carries the file tree, filter, and path", packageSource.body.contains("code-filter") && packageSource.body.contains("code-crumbs") && packageSource.body.contains("aria-current=\"page\"")),
-      Test.that("source files map to local Pudu and Markdown icons", packageSource.body.contains("/assets/packages/files/pudu.png") && packageSource.body.contains("/assets/packages/files/markdown.svg") && Web.render(&site, "/assets/packages/files/pudu.png").status.code == 200 && Web.render(&site, "/assets/packages/files/markdown.svg").status.code == 200),
-      Test.that("a Markdown file is shown rendered", Web.render(&site, "/@alice/json-kit/source/README.md").body.contains("code-preview")),
+      Test.that("source files map to local Pudu and Markdown icons", packageSource.body.contains("/assets/packages/files/pudu.png") && packageSource.body.contains("/assets/packages/files/markdown.svg") && Web.render(&app, "/assets/packages/files/pudu.png").status.code == 200 && Web.render(&app, "/assets/packages/files/markdown.svg").status.code == 200),
+      Test.that("a Markdown file is shown rendered", Web.render(&app, "/@alice/json-kit/source/README.md").body.contains("code-preview")),
       Test.that("package pages are in the sitemap", sitemapHasAll(&sitemap, origin, &["/packages", "/@alice", "/@alice/json-kit", "/@alice/json-kit/source", "/@alice/json-kit/docs", "/@alice/json-kit/releases", "/@alice/json-kit/tickets", "/@alice/json-kit/tickets/42", "/@alice/json-kit/contributions", "/@alice/json-kit/contributions/56"])),
       Test.that("release notes carry the published notes, their commands painted", releases.body.contains("Install") && releases.body.contains("<span class=\"tok-function\">pudu</span> version")),
       Test.that("code of conduct answers", conduct.status.code == 200),
@@ -468,7 +472,7 @@ export fn main() -> Int {
       Test.that("each archive's download button is in the hero", downloadButtonsInHero(&download, &release)),
       Test.that("each archive has its own install steps, painted and copyable", downloadStepsPerArchive(&download, &release)),
       Test.that("the download page loads its platform script and the copy script", download.body.contains("/assets/download/main.js") && download.body.contains("/assets/docs/copy.js")),
-      Test.that("the platform script is served", Web.render(&site, "/assets/download/main.js").status.code == 200 && Web.render(&site, "/assets/download/tabs.js").body.contains("tablist")),
+      Test.that("the platform script is served", Web.render(&app, "/assets/download/main.js").status.code == 200 && Web.render(&app, "/assets/download/tabs.js").body.contains("tablist")),
       Test.that("download page is in the sitemap", sitemap.body.contains(origin + "/download")),
       Test.that("download page is linked from every page", about.body.contains("href=\"/download\"")),
       Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.3"),
@@ -525,8 +529,8 @@ export fn main() -> Int {
       Test.that("home has structured data", home.body.contains("application/ld+json")),
       Test.that("home draws the logo at its size, sized before it arrives", home.body.contains("src=\"/assets/pudu-lang-logo.webp\" alt=\"Pudu programming language\" width=\"168\" height=\"56\"")),
       Test.that("home advertises icons at multiples of 48 pixels and the root favicon", home.body.contains("rel=\"icon\" sizes=\"48x48\" href=\"/favicon.ico\"") && home.body.contains("sizes=\"48x48\" href=\"/assets/pudu-lang-icon-48.png\"") && home.body.contains("sizes=\"96x96\" href=\"/assets/pudu-lang-icon-96.png\"") && home.body.contains("sizes=\"192x192\" href=\"/assets/pudu-lang-icon-192.png\"") && !home.body.contains("64x64")),
-      Test.that("every advertised icon is served as an image", Web.render(&site, "/favicon.ico").status.code == 200 && Web.render(&site, "/assets/pudu-lang-icon-48.png").status.code == 200 && Web.render(&site, "/assets/pudu-lang-icon-512.png").status.code == 200 && Web.render(&site, "/assets/pudu-lang-icon-64.png").status.code == 404),
-      Test.that("home links a web manifest naming the large icons", home.body.contains("rel=\"manifest\" href=\"/site.webmanifest\"") && Web.render(&site, "/site.webmanifest").body.contains("pudu-lang-icon-512.png")),
+      Test.that("every advertised icon is served as an image", Web.render(&app, "/favicon.ico").status.code == 200 && Web.render(&app, "/assets/pudu-lang-icon-48.png").status.code == 200 && Web.render(&app, "/assets/pudu-lang-icon-512.png").status.code == 200 && Web.render(&app, "/assets/pudu-lang-icon-64.png").status.code == 404),
+      Test.that("home links a web manifest naming the large icons", home.body.contains("rel=\"manifest\" href=\"/site.webmanifest\"") && Web.render(&app, "/site.webmanifest").body.contains("pudu-lang-icon-512.png")),
       Test.that("home names the site and its organization with a logo", home.body.contains("\"@graph\"") && home.body.contains("\"alternateName\"") && home.body.contains("\"@type\":\"Organization\"") && home.body.contains("/assets/pudu-lang-icon-512.png") && home.body.contains("SearchAction")),
       Test.that("home's title and description name the language", home.body.contains("<title>Pudu: a statically typed programming language") && home.body.contains("content=\"Pudu is a statically typed programming language")),
       Test.that("home preloads the faces its text is set in", home.body.contains("rel=\"preload\" href=\"/fonts/Nunito-Book.woff2\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\"") && home.body.contains("/fonts/Nunito-Bold.woff2")),

@@ -28,4 +28,6 @@ jobs:
       - name: Read the live package index from GitHub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cabal run -v0 pudu -- run website/src/Test/LiveNetwork.pudu
+        run: |
+          (cd website && cabal run -v0 pudu -- install --locked)
+          cabal run -v0 pudu -- run website/src/Test/LiveNetwork.pudu

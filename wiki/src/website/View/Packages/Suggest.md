@@ -45,3 +45,6 @@ See [[website Web Routes]] · [[website Web Dynamic]] · [[src/website/_MOC]].
 
 Resolved Grill Log: the body is bounded by the service limits, names only public snapshot data, and
 is served by both the local router and the dynamic function.
+
+`answer` is the suggestions JSON with the query and filter cut to their matching limit; the
+application's handlers answer it, and `reply` wraps it in a `200` for callers that want a response.

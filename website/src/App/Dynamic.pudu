@@ -1,0 +1,71 @@
+module App.Dynamic
+
+import App.Logging as Logging
+import App.Messages as Messages
+import App.Pipeline as Pipeline
+import App.Playground as PlaygroundApp
+import Edge as Edge
+import Error as SiteError
+import PuduLangMediator.Context as Context
+import PuduLangMediator.Mediator as Mediator
+import PuduLangMediator as Messaging
+import PuduLangMediator.Registration as Registration
+import Service.LivePackages as LivePackages
+import Service.Packages as Packages
+import View.Dynamic as DynamicView
+import View.Packages.Catalog as PackageCatalog
+import View.Packages.Suggest as PackageSuggest
+
+/// The serverless function's application: what it serves with, the mediator
+/// built over it once, the kinds its routes send, and its loggers.
+export type App = { edge: Edge.Edge, mediator: Mediator.Mediator, kinds: Messages.Kinds, logs: Logging.Logs }
+
+/// The application serving `edge`, or why its mediator could not be built.
+export fn assemble(edge: &Edge.Edge, logs: &Logging.Logs) -> Result[App, SiteError.SiteError] {
+  let kinds = Messages.kinds()
+  let registrations = Pipeline.registrations(&kinds, &logs.messages)
+    .concat(PlaygroundApp.registrations(&kinds, &edge.playground, &edge.gates, &logs.requests))
+    .concat(answers(&kinds, edge))
+  match Mediator.build(registrations) {
+    case Ok(mediator) => Ok(App{edge: *edge, mediator: mediator, kinds: kinds, logs: *logs})
+    case Err(invalid) => Err(SiteError.ApplicationInvalid(Mediator.explain(&invalid)))
+  }
+}
+
+/// The application serving `edge` with loggers that write nothing.
+export fn quiet(edge: &Edge.Edge) -> App {
+  match assemble(edge, &Logging.quiet()) {
+    case Ok(app) => app
+    case Err(problem) => panic(SiteError.explain(&problem))
+  }
+}
+
+/// How long a package answer stays true, by whether GitHub contributed to it.
+export fn freshnessOf(view: &LivePackages.View) -> Messages.Freshness {
+  if view.live { Messages.Live } else { Messages.Snapshot }
+}
+
+/// One handler per kind the function answers: search, and every package
+/// query, answered from the snapshot with GitHub laid over it.
+fn answers(kinds: &Messages.Kinds, edge: &Edge.Edge) -> Array[Registration.Registration] {
+  let held = *edge
+  let siteUrl = held.siteUrl
+  [
+    Registration.handler(&kinds.search, |asked: Messages.SearchQuery, _context: Context.Context| Ok(DynamicView.results(siteUrl, &held.search, asked.query))),
+    Registration.handler(&kinds.listing, fn(asked: Messages.ListingQuery, _context: Context.Context) -> Messaging.Outcome[Messages.Shown, Messages.Problem] {
+        let view = LivePackages.current(&held.live, &held.packages)
+        if asked.page > PackageCatalog.pages(view.packages.projects.length()) { return Messaging.raise(Messages.NotYetListed) }
+        Ok(Messages.Shown{page: PackageCatalog.pageNumber(siteUrl, &view.packages, "", asked.page), freshness: freshnessOf(&view)})
+      }),
+    Registration.handler(&kinds.packages, fn(asked: Messages.PackageQuery, _context: Context.Context) -> Messaging.Outcome[Messages.Shown, Messages.Problem] {
+        let view = LivePackages.current(&held.live, &held.packages)
+        if !Packages.present(&view.packages) { return Messaging.raise(Messages.NotFound) }
+        if asked.page < 1 || asked.page > PackageCatalog.resultPagesFiltered(&view.packages, asked.query, asked.filter) { return Messaging.raise(Messages.NotFound) }
+        Ok(Messages.Shown{page: PackageCatalog.pageNumberFiltered(siteUrl, &view.packages, asked.query, asked.page, asked.filter), freshness: freshnessOf(&view)})
+      }),
+    Registration.handler(&kinds.suggest, fn(asked: Messages.SuggestQuery, _context: Context.Context) -> Messaging.Outcome[Messages.Suggested, Messages.Problem] {
+        let view = LivePackages.current(&held.live, &held.packages)
+        Ok(Messages.Suggested{body: PackageSuggest.answer(&view.packages, &held.catalog.entries, asked.query, asked.filter), freshness: freshnessOf(&view)})
+      })
+  ]
+}

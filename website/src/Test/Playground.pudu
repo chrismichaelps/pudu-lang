@@ -10,8 +10,12 @@ import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 import Std.Test as Test
+import App.Logging as Logging
+import App.Messages as Messages
+import App.Playground as PlaygroundApp
 import Domain.Playground as Play
 import PlaygroundRunner as RunnerService
+import PuduLangMediator.Mediator as Mediator
 import Service.Playground.Admission as Admission
 import Service.Playground.Examples as Examples
 import Service.Playground.Language as Language
@@ -94,12 +98,21 @@ fn request(method: Http.Method, target: Str, headers: &Array[(Str, Str)], body: 
   }
 }
 
+/// The playground's routes over a mediator holding only its commands, with
+/// runs admitted by `runs` and questions admitted always.
 fn serving(playground: &Playground.Playground, runs: &Admission.Gate) -> PlaygroundWeb.Serving {
+  let kinds = Messages.kinds()
+  let gates = Playground.Gates{runs: *runs, questions: Admission.open()}
+  let mediator = match Mediator.build(PlaygroundApp.registrations(&kinds, playground, &gates, &Logging.quiet().requests)) {
+    case Ok(built) => built
+    case Err(invalid) => panic(Mediator.explain(&invalid))
+  }
   PlaygroundWeb.Serving {
     siteUrl: ORIGIN,
     playground: *playground,
     reader: Admission.peerReader,
-    gates: Playground.Gates{runs: *runs, questions: Admission.open()},
+    mediator: mediator,
+    kinds: kinds,
     missing: fn(path: Str) -> Http.Response { Http.Response{status: Http.status(404), headers: [], body: "missing " + path, binaryBody: None} }
   }
 }

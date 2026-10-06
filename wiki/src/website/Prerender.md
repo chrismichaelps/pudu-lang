@@ -49,3 +49,6 @@ full snapshot the function does not carry; they remain static until the next bui
 
 Resolved Grill Log: the snapshot stays the data baseline the function reads; a written package page
 would be a stale copy no route sends a reader to, so none is written.
+
+Renders through [[website App Static]], assembled once with the batch loggers of
+[[website App Logging]]: warnings and worse unless `PUDU_SITE_LOG_LEVEL` is set.
