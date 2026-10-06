@@ -21,6 +21,10 @@ fi
 site_url_json="${PUDU_SITE_URL//\\/\\\\}"
 site_url_json="${site_url_json//\"/\\\"}"
 
+# The site is built on the mediator, log, and validator packages its lock names.
+# They are fetched into website/deps exactly as locked; nothing newer is taken.
+(cd "$root/website" && "$compiler" install --locked)
+
 # The playground's runner is named at build time because it is an address or
 # a mode, not a secret. `local` runs programs inside the function, confined: the
 # function carries the compiler, the standard library, and the sandbox, and the
@@ -161,6 +165,7 @@ printf '%s\n' \
   "    \"PUDU_SITE_URL\": \"$site_url_json\"," \
   "    \"PUDU_PLAYGROUND_RUNNER\": \"$runner_json\"," \
   '    "PUDU_PACKAGES_PATH": "website/data/packages",' \
+  '    "PUDU_SITE_LOG_FORMAT": "json",' \
   '    "PUDU_PLAYGROUND_ISOLATION": "confined",' \
   '    "PUDU_PLAYGROUND_COMPILER": "/var/task/pudu",' \
   '    "PUDU_PLAYGROUND_LIBRARY": "/var/task/lib",' \

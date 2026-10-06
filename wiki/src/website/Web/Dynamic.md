@@ -41,3 +41,14 @@ policy; any refusal carries `MISSING_CACHE` (`s-maxage=60`) and `noindex`.
 
 Resolved Grill Log: the index is consulted only after a request is known to be a package page, so
 playground and search requests never wait on GitHub.
+
+## Mediated answers
+
+The function's state moved to [[website Edge]]; `routes`, `render`, and `answer` take the
+[[website App Dynamic]] application. Search, listing, package search, and suggestions are messages; a
+shown answer carries `Live` or `Snapshot` freshness, which `fresh` turns into the same cache policies,
+and `NotYetListed` is the short-lived missing package page. Package pages under `/@` are still
+dispatched here. `answer` writes one [[website Web Access]] event per request.
+
+Resolved Grill Log: `edgeCached` became `fresh`, which reads freshness from the answer rather than
+from a view the router would otherwise have to fetch.

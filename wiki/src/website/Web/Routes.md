@@ -31,3 +31,13 @@ The `/@owner` routes moved to [[website Web PackagePages]], which this router se
 loaded snapshot and an identity `detail` step, so the function renders the same pages.
 
 Resolved Grill Log: one package route list serves both hosts; this module keeps only its own 404 view.
+
+## Mediated pages
+
+`routes`, `render`, and `answer` take the [[website App Static]] application. Every page is a message
+sent to its mediator — a fixed `Screen`, search, module, symbol, documentation page, document,
+listing, package search, and suggestions — and its outcome is answered through [[website Web Answers]];
+assets, the sitemap, robots, health, and avatars are still read here. `answer` writes one
+[[website Web Access]] event per request. `/packages/page/1` stays the listing's own address only.
+
+Resolved Grill Log: the router translates HTTP to messages and outcomes to HTTP and nothing else.

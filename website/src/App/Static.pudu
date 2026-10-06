@@ -1,0 +1,100 @@
+module App.Static
+
+import Std.Html as Html
+import App.Logging as Logging
+import App.Messages as Messages
+import App.Pipeline as Pipeline
+import App.Playground as PlaygroundApp
+import App.Rules as Rules
+import Error as SiteError
+import PuduLangMediator.Context as Context
+import PuduLangMediator.Mediator as Mediator
+import PuduLangMediator as Messaging
+import PuduLangMediator.Registration as Registration
+import Service.Catalog as Catalog
+import Site as Site
+import View.About as About
+import View.Docs as DocsView
+import View.Document as Document
+import View.Documentation as Documentation
+import View.Donation as Donation
+import View.Download as Download
+import View.Home as Home
+import View.Packages.Catalog as PackageCatalog
+import View.Packages.Suggest as PackageSuggest
+import View.Releases as ReleasesView
+
+/// The complete site's application: the site, the mediator built over it once,
+/// the kinds its routes send, and its loggers.
+export type App = { site: Site.Site, mediator: Mediator.Mediator, kinds: Messages.Kinds, logs: Logging.Logs }
+
+/// The application serving `site`, or why its mediator could not be built.
+export fn assemble(site: &Site.Site, logs: &Logging.Logs) -> Result[App, SiteError.SiteError] {
+  let kinds = Messages.kinds()
+  let registrations = Pipeline.registrations(&kinds, &logs.messages)
+    .concat(Rules.documentation(&kinds))
+    .concat(PlaygroundApp.registrations(&kinds, &site.playground, &site.gates, &logs.requests))
+    .concat(pages(&kinds, site))
+  match Mediator.build(registrations) {
+    case Ok(mediator) => Ok(App{site: *site, mediator: mediator, kinds: kinds, logs: *logs})
+    case Err(invalid) => Err(SiteError.ApplicationInvalid(Mediator.explain(&invalid)))
+  }
+}
+
+/// The application serving `site` with loggers that write nothing, for suites
+/// and for programs whose only output is what they render.
+export fn quiet(site: &Site.Site) -> App {
+  match assemble(site, &Logging.quiet()) {
+    case Ok(app) => app
+    case Err(problem) => panic(SiteError.explain(&problem))
+  }
+}
+
+/// One handler per page kind, each answering from the site with the view the
+/// page has always been rendered by.
+fn pages(kinds: &Messages.Kinds, site: &Site.Site) -> Array[Registration.Registration] {
+  let held = *site
+  let siteUrl = held.siteUrl
+  [
+    Registration.handler(&kinds.screen, fn(screen: Messages.Screen, _context: Context.Context) -> Messaging.Outcome[Html.Html, Messages.Problem] {
+        Ok(match screen {
+            case Messages.Home => Home.home(siteUrl, &held.catalog, &held.release, &held.packages)
+            case Messages.Modules => Documentation.modules(siteUrl, &held.catalog)
+            case Messages.DocsIndex => DocsView.index(siteUrl, &held.docs, held.catalog.languageVersion)
+            case Messages.Download => Download.page(siteUrl, &held.release)
+            case Messages.Releases => ReleasesView.page(siteUrl, &held.release)
+            case Messages.About => About.page(siteUrl)
+            case Messages.Donate => Donation.page(siteUrl)
+          })
+      }),
+    Registration.handler(&kinds.search, |asked: Messages.SearchQuery, _context: Context.Context| Ok(Home.results(siteUrl, &held.search, asked.query))),
+    Registration.handler(&kinds.reference, |asked: Messages.ModuleQuery, _context: Context.Context| found(Documentation.modulePage(siteUrl, &held.catalog, asked.name))),
+    Registration.handler(&kinds.symbol, fn(asked: Messages.SymbolQuery, _context: Context.Context) -> Messaging.Outcome[Html.Html, Messages.Problem] {
+        let entries = Catalog.findAll(&held.catalog, asked.moduleName, asked.kind, asked.name)
+        if entries.length() == 0 { Messaging.raise(Messages.NotFound) } else { Ok(Documentation.symbols(siteUrl, &entries)) }
+      }),
+    Registration.handler(&kinds.doc, |asked: Messages.SlugQuery, _context: Context.Context| found(DocsView.page(siteUrl, &held.docs, asked.slug, held.catalog.languageVersion))),
+    Registration.handler(&kinds.document, |asked: Messages.SlugQuery, _context: Context.Context| found(Document.page(siteUrl, &held.documents, asked.slug))),
+    Registration.handler(&kinds.listing, fn(asked: Messages.ListingQuery, _context: Context.Context) -> Messaging.Outcome[Messages.Shown, Messages.Problem] {
+        let beyond = asked.page > 1 && asked.page > PackageCatalog.pages(held.packages.projects.length())
+        if asked.page < 1 || beyond || asked.page > PackageCatalog.resultPages(&held.packages, "") { return Messaging.raise(Messages.NotFound) }
+        Ok(Messages.fixed(PackageCatalog.pageNumber(siteUrl, &held.packages, "", asked.page)))
+      }),
+    Registration.handler(&kinds.packages, fn(asked: Messages.PackageQuery, _context: Context.Context) -> Messaging.Outcome[Messages.Shown, Messages.Problem] {
+        if asked.page < 1 || asked.page > PackageCatalog.resultPagesFiltered(&held.packages, asked.query, asked.filter) { return Messaging.raise(Messages.NotFound) }
+        Ok(Messages.fixed(PackageCatalog.pageNumberFiltered(siteUrl, &held.packages, asked.query, asked.page, asked.filter)))
+      }),
+    Registration.handler(&kinds.suggest, |asked: Messages.SuggestQuery, _context: Context.Context| Ok(Messages.Suggested {
+          body: PackageSuggest.answer(&held.packages, &held.catalog.entries, asked.query, asked.filter),
+          freshness: Messages.Fixed
+        }))
+  ]
+}
+
+/// A page that exists, or `NotFound`.
+fn found(page: Option[Html.Html]) -> Messaging.Outcome[Html.Html, Messages.Problem] {
+  match page {
+    case Some(shown) => Ok(shown)
+    case None => Messaging.raise(Messages.NotFound)
+  }
+}

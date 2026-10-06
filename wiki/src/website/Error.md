@@ -12,3 +12,6 @@ text without exposing catalogue contents or environment values. `DocsUnreadable(
 documentation directory or page that could not be read.
 
 Resolved Grill Log: preserve the failed setting or path name, never its secret value.
+
+`SettingsInvalid` lists every wrong setting; `ApplicationInvalid` says the application's mediator
+could not be built, which is a defect and stops startup.

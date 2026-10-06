@@ -5,6 +5,8 @@ import Std.Http as Http
 import Std.Io as Io
 import Std.Option as Option
 import Std.Site as Build
+import App.Logging as Logging
+import App.Static as StaticApp
 import Config as Config
 import Error as SiteError
 import Seo as Seo
@@ -41,6 +43,12 @@ fn main() -> Int {
   }
   let site = match Site.load(&settings) {
     case Ok(loaded) => loaded
+    case Err(problem) => { return failed(&problem) }
+  }
+  // Every page is a request no reader made, so only warnings and worse are
+  // written unless a level is set.
+  let app = match StaticApp.assemble(&site, &Logging.batch(&settings.log)) {
+    case Ok(assembled) => assembled
     case Err(problem) => { return failed(&problem) }
   }
   // The pages, and the two files that are not pages: a crawler asks for both
@@ -88,7 +96,7 @@ fn main() -> Int {
       Build.ToFunction{pattern: "/search", methods: []}
     ]
   }
-  let report = match Build.build(&layout, &routes, |route: Str| Web.render(&site, route)) {
+  let report = match Build.build(&layout, &routes, |route: Str| Web.render(&app, route)) {
     case Ok(done) => done
     case Err(problem) => {
       let _said = Io.writeErrorLine("prerender: " + Build.explain(&problem))

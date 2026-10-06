@@ -1,0 +1,103 @@
+module App.Messages
+
+import Std.Html as Html
+import Std.Json as Json
+import Domain.Playground as Play
+import PuduLangMediator.Request as Request
+
+/// Why a page or a run was not answered with what was asked for.
+///
+/// `NotFound` is an address with nothing behind it. `NotYetListed` is a package
+/// address that may have something behind it in a minute, which the function
+/// serves with a short cache. `Unavailable` is the site, not the reader.
+export type Problem = NotFound | NotYetListed | Unavailable(Str)
+
+/// How long an answer stays true: `Fixed` until the next deployment, `Live`
+/// when GitHub contributed to it, `Snapshot` when only the build's copy did.
+export type Freshness = Fixed | Live | Snapshot
+
+/// A page and how long it stays true.
+export type Shown = { page: Html.Html, freshness: Freshness }
+
+/// Suggestions and how long they stay true.
+export type Suggested = { body: Json.Json, freshness: Freshness }
+
+/// A page with nothing for the reader to fill in.
+export type Screen = Home | Modules | DocsIndex | Download | Releases | About | Donate
+
+/// A search of the public declarations.
+export type SearchQuery = { query: Str }
+
+/// A module's reference page.
+export type ModuleQuery = { name: Str }
+
+/// Every declaration with one module, kind, and name.
+export type SymbolQuery = { moduleName: Str, kind: Str, name: Str }
+
+/// A documentation page, or a document the repository keeps, by its slug.
+export type SlugQuery = { slug: Str }
+
+/// One page of the package listing.
+export type ListingQuery = { page: Int }
+
+/// One page of a package search, optionally inside one project.
+export type PackageQuery = { query: Str, filter: Str, page: Int }
+
+/// The suggestion box's question.
+export type SuggestQuery = { query: Str, filter: Str }
+
+/// A program a reader asked to run or format.
+export type RunProgram = { source: Str, action: Play.Action, reader: Str }
+
+/// What a run answered, and how long the reader must wait before another.
+export type Ran = { outcome: Play.Outcome, wait: Int }
+
+/// A question a reader's editor asked about a program.
+export type AskQuestion = { source: Str, question: Play.Question, reader: Str }
+
+/// What a question answered, and how long the reader must wait before another.
+export type Asked = { answer: Play.Answer, wait: Int }
+
+/// Every kind of message the site handles, made once.
+export type Kinds = {
+  screen: Request.Kind[Screen, Html.Html, Problem],
+  search: Request.Kind[SearchQuery, Html.Html, Problem],
+  reference: Request.Kind[ModuleQuery, Html.Html, Problem],
+  symbol: Request.Kind[SymbolQuery, Html.Html, Problem],
+  doc: Request.Kind[SlugQuery, Html.Html, Problem],
+  document: Request.Kind[SlugQuery, Html.Html, Problem],
+  listing: Request.Kind[ListingQuery, Shown, Problem],
+  packages: Request.Kind[PackageQuery, Shown, Problem],
+  suggest: Request.Kind[SuggestQuery, Suggested, Problem],
+  run: Request.Kind[RunProgram, Ran, Problem],
+  ask: Request.Kind[AskQuestion, Asked, Problem]
+}
+
+/// The tag every page kind carries.
+export const PAGE: Str = "page"
+
+/// The tag every machine-read answer carries.
+export const API: Str = "api"
+
+/// The tag every playground command carries.
+export const PLAYGROUND: Str = "playground"
+
+/// Every kind, made once for one mediator and the routes that send to it.
+export fn kinds() -> Kinds {
+  Kinds {
+    screen: Request.tagged(&Request.kind("pages.screen"), [PAGE]),
+    search: Request.tagged(&Request.kind("pages.search"), [PAGE]),
+    reference: Request.tagged(&Request.kind("pages.module"), [PAGE]),
+    symbol: Request.tagged(&Request.kind("pages.symbol"), [PAGE]),
+    doc: Request.tagged(&Request.kind("pages.doc"), [PAGE]),
+    document: Request.tagged(&Request.kind("pages.document"), [PAGE]),
+    listing: Request.tagged(&Request.kind("packages.listing"), [PAGE]),
+    packages: Request.tagged(&Request.kind("packages.search"), [PAGE]),
+    suggest: Request.tagged(&Request.kind("packages.suggest"), [API]),
+    run: Request.tagged(&Request.kind("playground.run"), [PLAYGROUND, API]),
+    ask: Request.tagged(&Request.kind("playground.ask"), [PLAYGROUND, API])
+  }
+}
+
+/// A page that stays true until the next deployment.
+export fn fixed(page: Html.Html) -> Shown { Shown{page: page, freshness: Fixed} }

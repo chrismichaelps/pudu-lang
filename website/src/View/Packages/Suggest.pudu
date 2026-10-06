@@ -94,7 +94,13 @@ export fn json(packages: &Packages.Packages, entries: &Array[Domain.Entry], quer
     ])
 }
 
-/// The suggestion response both routers serve.
+/// The suggestions both routers answer, with a longer query or filter cut to
+/// the limit it is matched within.
+export fn answer(packages: &Packages.Packages, entries: &Array[Domain.Entry], query: Str, filter: Str) -> Json.Json {
+  json(packages, entries, query.take(QUERY_LIMIT), filter.take(QUERY_LIMIT))
+}
+
+/// The suggestion response, as a `200` carrying `answer`.
 export fn reply(packages: &Packages.Packages, entries: &Array[Domain.Entry], query: Str, filter: Str) -> Http.Response {
-  Reply.jsonValue(200, json(packages, entries, query.take(QUERY_LIMIT), filter.take(QUERY_LIMIT)))
+  Reply.jsonValue(200, answer(packages, entries, query, filter))
 }

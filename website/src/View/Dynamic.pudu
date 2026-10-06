@@ -23,6 +23,24 @@ export fn results(siteUrl: Str, search: &Search.Index, query: Str) -> Html.Html 
   Layout.page(siteUrl, heading, "Search results from the Pudu public API catalogue.", "/search", false, None, body)
 }
 
+/// The page answering a request whose input was refused: what was wrong, and
+/// nothing the reader sent echoed back beyond the names of its fields.
+export fn invalid(siteUrl: Str, path: Str, problems: &Array[Str]) -> Html.Html {
+  Layout.page(siteUrl, "Bad request", "The request could not be answered as sent.", path, false, None, H.article().class("doc").holding([
+        Pudu.around(Pudu.SHY, true, Layout.banner("page-banner", "400", "That request could not be answered.", "Something in it was longer than this site reads.", [])),
+        H.ul().holding(problems.map(|problem: Str| H.li().says(problem))),
+        H.p().holding([H.a().href("/").says("Return to search")])
+      ]).html())
+}
+
+/// A page saying the site failed, naming nothing of how.
+export fn failed(siteUrl: Str, path: Str) -> Html.Html {
+  Layout.page(siteUrl, "Something went wrong", "The site could not answer this request.", path, false, None, H.article().class("doc").holding([
+        Pudu.around(Pudu.SHY, true, Layout.banner("page-banner", "500", "Something went wrong.", "The site could not answer this request. Try again in a moment.", [])),
+        H.p().holding([H.a().href("/").says("Return to search")])
+      ]).html())
+}
+
 /// The shared dynamic fallback page.
 export fn missing(siteUrl: Str, path: Str) -> Html.Html {
   Layout.page(siteUrl, "Not found", "The requested Pudu page does not exist.", path, false, None, H.article().class("doc").holding([

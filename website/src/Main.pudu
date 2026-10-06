@@ -2,43 +2,55 @@ module Main
 
 import Std.Http.Server as Server
 import Std.Io as Io
+import App.Logging as Logging
+import App.Static as StaticApp
 import Config as Config
 import Error as SiteError
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Value as Value
 import Site as Site
+import Web.Access as Access
 import Web.LiveReload as LiveReload
 import Web.Routes as Web
 
 fn main() -> Int {
   match Config.load() {
-    case Err(problem) => fail(&problem)
+    case Err(problem) => unconfigured(&problem)
     case Ok(settings) => {
-      match Site.load(&settings) {
-        case Err(problem) => fail(&problem)
-        case Ok(site) => serve(&settings, &site)
+      let logs = Logging.logs(&settings.log)
+      let loaded = match Site.load(&settings) {
+        case Ok(site) => StaticApp.assemble(&site, &logs)
+        case Err(problem) => Err(problem)
+      }
+      match loaded {
+        case Err(problem) => fail(&logs, &problem)
+        case Ok(app) => serve(&settings, &app)
       }
     }
   }
 }
 
-fn serve(settings: &Config.Config, site: &Site.Site) -> Int {
+fn serve(settings: &Config.Config, app: &StaticApp.App) -> Int {
+  let log = app.logs.requests
   match Server.start(settings.host, settings.port) {
-    case Err(_) => fail(&SiteError.ListenFailed)
+    case Err(_) => fail(&app.logs, &SiteError.ListenFailed)
     case Ok(live) => {
-      let _announced = Io.writeLine("Pudu docs listening on http://" + settings.host + ":" + show(Server.portOf(&live)))
-      if site.playground.enabled {
-        let _playground = Io.writeLine("Playground runs programs with runner " + settings.playground.runner)
+      log.information("Pudu docs listening on \{Url\}", [Value.text("http://" + settings.host + ":" + show(Server.portOf(&live)))])
+      if app.site.playground.enabled {
+        log.information("Playground runs programs with runner \{Runner\}", [Value.text(settings.playground.runner)])
       }
-      let routed = Server.server(&Web.routes(site)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536)
+      let routed = Server.server(&Web.routes(app)).withLimits(65536, settings.playground.sourceBytes * 4 + 65536).using(Access.middleware(&log))
       // Run under `pudu run --watch`, every page follows the files it was made from.
       let served = match LiveReload.fromEnvironment() {
         case Some(watch) => {
-          let _following = Io.writeLine("Pages reload when a watched file changes (start " + watch.start + ")")
+          log.information("Pages reload when a watched file changes (start \{Start\})", [Value.text(watch.start)])
           routed.using(LiveReload.middleware(&watch))
         }
         case None => routed
       }
       let result = Server.run(&served, &live, settings.connections)
       let _stopped = Server.stop(&live)
+      Logger.close(&log)
       match result {
         case Ok(_) => 0
         case Err(_) => 1
@@ -47,7 +59,15 @@ fn serve(settings: &Config.Config, site: &Site.Site) -> Int {
   }
 }
 
-fn fail(problem: &SiteError.SiteError) -> Int {
+/// A site that could not start, said through the site's logger.
+fn fail(logs: &Logging.Logs, problem: &SiteError.SiteError) -> Int {
+  logs.requests.fatal("The site could not start: \{Reason\}", [Value.text(SiteError.explain(problem))])
+  Logger.close(&logs.requests)
+  1
+}
+
+/// Settings too wrong to build a logger from, said on standard error.
+fn unconfigured(problem: &SiteError.SiteError) -> Int {
   let _written = Io.writeErrorLine(SiteError.explain(problem))
   1
 }

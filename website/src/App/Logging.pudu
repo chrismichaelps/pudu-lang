@@ -1,0 +1,69 @@
+module App.Logging
+
+import Config as Config
+import PuduLangLog.Configuration as Configuration
+import PuduLangLog.Formatting.Compact as Compact
+import PuduLangLog as Log
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Sinks.Console as Console
+import PuduLangLog.Value as Value
+
+/// The level each configured name means.
+const LEVELS: Map[Str, Log.Level] = mapOf([
+    ("verbose", Log.Verbose),
+    ("debug", Log.Debug),
+    ("information", Log.Information),
+    ("warning", Log.Warning),
+    ("error", Log.Error),
+    ("fatal", Log.Fatal)
+  ])
+
+/// The application every event names.
+export const APPLICATION: Str = "pudu-lang.org"
+
+/// The levels below information: set, they show every message's start and end.
+const DETAILED: Set[Str] = setOf(["verbose", "debug"])
+
+/// The site's two loggers: one event per HTTP request in `requests`, and the
+/// mediator's events in `messages`, which writes only failures unless a
+/// detailed level was asked for, so a request is one line at the usual level.
+export type Logs = { requests: Logger.Logger, messages: Logger.Logger }
+
+/// The loggers the settings describe.
+export fn logs(settings: &Config.Logging) -> Logs {
+  let messages = if DETAILED.contains(settings.level) { *settings } else { Config.Logging{..*settings, level: "warning"} }
+  Logs{requests: logger(settings), messages: logger(&messages).forSource("PuduLangMediator")}
+}
+
+/// The loggers for a program that answers many requests nobody watches one by
+/// one: warnings and worse unless a level was set explicitly.
+export fn batch(settings: &Config.Logging) -> Logs {
+  if settings.explicit { logs(settings) } else { logs(&Config.Logging{..*settings, level: "warning"}) }
+}
+
+/// Loggers that write nothing.
+export fn quiet() -> Logs { Logs{requests: Logger.none(), messages: Logger.none()} }
+
+/// A logger writing every event at or above the configured level to standard
+/// error as plain or coloured lines or as compact JSON, naming the application.
+fn logger(settings: &Config.Logging) -> Logger.Logger {
+  let console = Console.defaults()
+  let formatted = match settings.format {
+    case "json" => Console.Options{..console, colored: false, formatter: Some(Compact.rendered())}
+    case "console" => Console.Options{..console, colored: true}
+    case _ => Console.Options{..console, colored: false}
+  }
+  Configuration.create()
+    .minimumLevel(levelOf(settings.level))
+    .enrichWithProperty("Application", Value.text(APPLICATION))
+    .writeTo(Console.sink(Console.Options{..formatted, standardErrorFromLevel: Some(Log.Verbose)}))
+    .createLogger()
+}
+
+/// The level a configured name means; information when the name is unknown.
+fn levelOf(name: Str) -> Log.Level {
+  match LEVELS.get(name) {
+    case Some(level) => level
+    case None => Log.Information
+  }
+}

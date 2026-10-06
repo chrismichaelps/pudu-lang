@@ -5,6 +5,8 @@ import Std.Http as Http
 import Std.Io as Io
 import Std.Json as Json
 import Std.Option as Option
+import App.Logging as Logging
+import App.Static as StaticApp
 import Config as Config
 import Error as SiteError
 import Site as Site
@@ -14,11 +16,15 @@ fn main() -> Int {
   match Config.load() {
     case Err(problem) => failed(&problem)
     case Ok(settings) => {
-      match Site.load(&settings) {
+      let loaded = match Site.load(&settings) {
+        case Ok(site) => StaticApp.assemble(&site, &Logging.batch(&settings.log))
+        case Err(problem) => Err(problem)
+      }
+      match loaded {
         case Err(problem) => failed(&problem)
-        case Ok(site) => {
+        case Ok(app) => {
           let target = Option.unwrapOr(Env.at(0), "/")
-          let _written = Io.writeLine(envelope(&Web.render(&site, target)))
+          let _written = Io.writeLine(envelope(&Web.render(&app, target)))
           0
         }
       }

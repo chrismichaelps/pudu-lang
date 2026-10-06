@@ -4,7 +4,9 @@ import Std.Adler32 as Adler32
 import Std.Bytes as ByteSeq
 import Std.Result as Result
 import Std.Sync as Sync
+import App.Dynamic as DynamicApp
 import Domain.Playground as Play
+import Edge as Edge
 import Service.Catalog as Catalog
 import Service.LiveIndex as LiveIndex
 import Service.LivePackages as LivePackages
@@ -13,7 +15,6 @@ import Service.Packages as Packages
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
 import Service.Search as Search
-import Web.Dynamic as DynamicWeb
 
 export const API: Str = "https://api.github.com/repos/"
 export const RAW: Str = "https://raw.githubusercontent.com/"
@@ -123,14 +124,16 @@ export fn github() -> Array[(Str, Str)] {
   ]
 }
 
-export fn edge(packages: &Packages.Packages, overlay: &LivePackages.Live) -> DynamicWeb.Dynamic {
-  DynamicWeb.Dynamic {
-    siteUrl: "https://pudu.example",
-    catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: []},
-    search: Search.index(&[]),
-    packages: *packages,
-    live: *overlay,
-    playground: Playground.using(&Playground.disabled("not in this suite"), &Examples.Examples{entries: []}, &Play.defaultLimits()),
-    gates: Playground.openGates()
-  }
+/// The function's application over `packages` with `overlay` laid on them,
+/// with search empty, the playground switched off, and nothing logged.
+export fn edge(packages: &Packages.Packages, overlay: &LivePackages.Live) -> DynamicApp.App {
+  DynamicApp.quiet(&Edge.Edge {
+      siteUrl: "https://pudu.example",
+      catalog: Catalog.Catalog{languageVersion: "", entries: [], modules: []},
+      search: Search.index(&[]),
+      packages: *packages,
+      live: *overlay,
+      playground: Playground.using(&Playground.disabled("not in this suite"), &Examples.Examples{entries: []}, &Play.defaultLimits()),
+      gates: Playground.openGates()
+    })
 }

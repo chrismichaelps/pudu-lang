@@ -1,0 +1,45 @@
+module App.Pipeline
+
+import App.Messages as Messages
+import App.Rules as Rules
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Value as Value
+import PuduLangMediator.Behaviors.Logging as Recording
+import PuduLangMediator.Context as Context
+import PuduLangMediator.Message as Message
+import PuduLangMediator as Messaging
+import PuduLangMediator.Open as Open
+import PuduLangMediator.Registration as Registration
+
+/// The event written for a failure that is a fault rather than an answer.
+export const FAULT: Str = "\{MessageName\} failed unexpectedly: \{Failure\}"
+
+/** An open exception action that reports faults as errors. */
+type Alarm = { logger: Logger.Logger }
+
+impl Open.ExceptionAction for Alarm {
+  /// Writes an error event for a crash or a missing or mismatched route.
+  fn onFailure[Q, E](self: &Self, request: &Q, failure: &Messaging.Failure[E], info: &Message.Info, context: Context.Context) -> () {
+    if isFault(failure) { self.logger.error(FAULT, [Value.text(info.name), Value.text(Messaging.describe(failure))]) }
+  }
+}
+
+/// The registrations both mediators start with: the recorder outermost, the
+/// alarm, then the validation of the kinds both sites answer.
+export fn registrations(kinds: &Messages.Kinds, messages: &Logger.Logger) -> Array[Registration.Registration] {
+  [
+    Registration.openBehavior(Recording.of(*messages)),
+    Registration.openExceptionAction(Alarm{logger: *messages})
+  ].concat(Rules.shared(kinds))
+}
+
+/// Whether a failure is a fault of the site rather than an answer to the reader.
+export fn isFault[E](failure: &Messaging.Failure[E]) -> Bool {
+  match failure {
+    case Messaging.Crashed(_) => true
+    case Messaging.Unhandled(_) => true
+    case Messaging.Mismatched(_) => true
+    case Messaging.Aggregate(parts) => parts.filter(|part: Messaging.Failure[E]| isFault(&part)).length() > 0
+    case _ => false
+  }
+}

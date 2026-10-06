@@ -18,14 +18,50 @@ configure — the script runs the site under `pudu run --watch`, which tells the
 (`website/src/Web/LiveReload.pudu`); a site not run that way serves exactly what it deploys.
 `PUDU` names another compiler and `PUDU_SITE_PORT` another port.
 
+## Packages
+
+The site is a Pudu project built on three packages: `pudu-lang-mediator` routes every page and
+playground command, `pudu-lang-log` writes its structured logs, and `pudu-lang-validator` checks what
+readers send and what the environment configures. `website/pudu.toml` names them and
+`website/pudu.lock` pins them; they are installed into `website/deps/`, which is never committed:
+
+```bash
+(cd website && pudu install --locked)
+```
+
+`website/scripts/dev.sh` and `website/scripts/build-vercel.sh` run that themselves. Without it, every
+compile under `website/` stops with `E7202` naming the packages to install.
+
+## Application layer and logs
+
+A router turns a request into a typed message (`website/src/App/Messages.pudu`), sends it to the
+mediator the application built once at startup, and turns the outcome into a response. Every message
+passes the same layers: a fault alarm, the mediator's logging recorder, validation, and, for the
+playground, admission and a run audit. A query longer than the site reads is answered with a no-index
+`400` naming the field.
+
+Logs go to standard error: one event per request (method, path, status, milliseconds — never the query
+string), failures from the mediator, and every playground run without the reader's address.
+
+| Setting | Values | Default |
+| --- | --- | --- |
+| `PUDU_SITE_LOG_LEVEL` | `verbose`, `debug`, `information`, `warning`, `error`, `fatal` | `information`; the renderer and prerender use `warning` unless set |
+| `PUDU_SITE_LOG_FORMAT` | `text`, `console` (coloured), `json` | `text`; `dev.sh` uses `console`, the Vercel function `json` |
+
+A level of `debug` or `verbose` also shows every message's start and end. Every wrong setting, the
+site's and the playground's, is named in one refusal at startup.
+
+## Checks
+
 Regenerating the data the site reads, and the checks continuous integration runs:
 
 ```bash
 website/scripts/generate-catalog.sh pudu
 node website/scripts/generate-releases.mjs
-pudu check website/src/Main.pudu website/src/Render.pudu
-pudu fmt --check website/src/Main.pudu website/src/Render.pudu
-pudu test website/src/Test/Website.pudu
+(cd website && pudu install --locked)
+pudu check $(find website/src -name '*.pudu')
+pudu fmt --check website/src website/playground/examples
+pudu test website/src/Test/Website.pudu website/src/Test/Application.pudu website/src/Test/Playground.pudu
 ```
 
 `generate-releases.mjs` writes `website/data/releases.json` from the published releases, which is

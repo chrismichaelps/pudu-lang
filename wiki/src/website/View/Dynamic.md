@@ -22,3 +22,7 @@ The page states the closed filter vocabulary and the `name :: type` form beside 
 query language is discoverable without separate instructions.
 A result's summary renders through [[website View MarkdownInline]], as the symbol page does, so a
 code span in a doc comment reads as code in search results too.
+
+`invalid` is the no-index `400` page naming each refused field without echoing what was sent, and
+`failed` the `500` page that names nothing of how the site failed. Both are answered through
+[[website Web Answers]].

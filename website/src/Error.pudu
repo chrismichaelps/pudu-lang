@@ -1,7 +1,7 @@
 module Error
 
 export type SiteError
-  = BadSetting(Str)
+  = SettingsInvalid(Array[Str])
   | CatalogueUnreadable(Str)
   | CatalogueInvalid
   | CatalogueEmpty
@@ -15,10 +15,11 @@ export type SiteError
   | ExamplesUnreadable(Str)
   | PlaygroundMisconfigured(Str)
   | ListenFailed
+  | ApplicationInvalid(Str)
 
 export fn explain(problem: &SiteError) -> Str {
   match problem {
-    case BadSetting(name) => "invalid website setting: " + name
+    case SettingsInvalid(problems) => "invalid website settings: " + problems.join("; ")
     case CatalogueUnreadable(path) => "the API catalogue could not be read at " + path
     case CatalogueInvalid => "the API catalogue is not valid generated documentation"
     case CatalogueEmpty => "the API catalogue contains no public declarations"
@@ -32,5 +33,6 @@ export fn explain(problem: &SiteError) -> Str {
     case ExamplesUnreadable(path) => "the playground examples could not be read at " + path
     case PlaygroundMisconfigured(reason) => "the playground is misconfigured: " + reason
     case ListenFailed => "the website listener could not start"
+    case ApplicationInvalid(reason) => "the website's application could not be assembled: " + reason
   }
 }

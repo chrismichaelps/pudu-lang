@@ -7,8 +7,9 @@ import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Json as Json
 import Std.Option as Option
+import App.Messages as Messages
 import Domain.Playground as Play
-import Service.Playground.Admission as Admission
+import PuduLangMediator.Mediator as Mediator
 import Service.Playground.Examples as Examples
 import Service.Playground as Playground
 import Service.Playground.Wire as Wire
@@ -16,16 +17,17 @@ import View.Playground as View
 
 /// What the playground routes are served with.
 ///
-/// `reader` names who a request is from, `gates` decide whether that reader
-/// may run another program or ask another question now, and `missing` answers
-/// an address the playground does not have. The routes are shared by the
-/// site's own server and by the serverless function, which differ in exactly
-/// these three.
+/// `reader` names who a request is from, `mediator` runs programs and answers
+/// questions through the application's commands (which decide whether that
+/// reader may run another now), and `missing` answers an address the
+/// playground does not have. The routes are shared by the site's own server
+/// and by the serverless function, which differ in exactly these.
 export type Serving = {
   siteUrl: Str,
   playground: Playground.Playground,
   reader: fn(&Route.Request) -> Str,
-  gates: Playground.Gates,
+  mediator: Mediator.Mediator,
+  kinds: Messages.Kinds,
   missing: fn(Str) -> Http.Response
 }
 
@@ -114,8 +116,9 @@ fn submitted(serving: &Serving, asked: &Route.Request) -> Http.Response {
   let fields = Route.fieldsOf(asked)
   let source = Play.normalized(Option.unwrapOr(fields.get("code"), ""))
   let action = Option.unwrapOr(Play.actionFrom(Option.unwrapOr(fields.get("action"), "run")), Play.Run)
-  let wait = waitingFor(serving, &serving.gates.runs, asked)
-  let outcome = if wait > 0 { tooMany(wait) } else { Playground.run(&serving.playground, source, action, readerOf(serving, asked)) }
+  let ran = run(serving, asked, source, action)
+  let outcome = ran.outcome
+  let wait = ran.wait
   let shown = match outcome {
     case Play.Formatted(formatted) => formatted
     case _other => source
@@ -143,8 +146,9 @@ fn runApi(serving: &Serving, asked: &Route.Request) -> Http.Response {
       return private(&Reply.jsonValue(400, Wire.outcomeValue(&Play.Refused("The request body is not \{\"source\": \"...\", \"action\": \"run\"\}."))))
     }
   }
-  let wait = waitingFor(serving, &serving.gates.runs, asked)
-  let outcome = if wait > 0 { tooMany(wait) } else { Playground.run(&serving.playground, requested[0], requested[1], readerOf(serving, asked)) }
+  let ran = run(serving, asked, requested[0], requested[1])
+  let outcome = ran.outcome
+  let wait = ran.wait
   let described = Json.withField(
       &Json.withField(&Wire.outcomeValue(&outcome), "headline", Json.Text(Play.headline(&outcome, &serving.playground.limits))),
     "meaning",
@@ -167,12 +171,16 @@ fn assistApi(serving: &Serving, asked: &Route.Request) -> Http.Response {
       return private(&Reply.json(400, Wire.answerText(&Play.NotAnswered("The request body is not \{\"source\", \"method\", \"line\", \"character\"\}."))))
     }
   }
-  let wait = waitingFor(serving, &serving.gates.questions, asked)
-  if wait > 0 {
-    let refused = Reply.json(429, Wire.answerText(&Play.NotAnswered("Too many questions. Try again in " + show(wait) + " seconds.")))
-    return private(&withHeaders(&refused, &retryAfter(wait)))
+  let command = Messages.AskQuestion{source: requested[0], question: requested[1], reader: readerOf(serving, asked)}
+  let asking = match Mediator.send(&serving.mediator, &serving.kinds.ask, command) {
+    case Ok(found) => found
+    case Err(_) => Messages.Asked{answer: Play.NotAnswered(Playground.UNANSWERED_REASON), wait: 0}
   }
-  let answer = Playground.ask(&serving.playground, requested[0], &requested[1], readerOf(serving, asked))
+  if asking.wait > 0 {
+    let refused = Reply.json(429, Wire.answerText(&asking.answer))
+    return private(&withHeaders(&refused, &retryAfter(asking.wait)))
+  }
+  let answer = asking.answer
   let status = match answer {
     case Play.Answered{..} => 200
     case Play.NotAnswered(_) => if serving.playground.enabled { 422 } else { 503 }
@@ -184,13 +192,15 @@ fn carriesJson(asked: &Route.Request) -> Bool {
   Option.unwrapOr(Route.header(asked, "content-type"), "").toLower().startsWith(JSON_TYPE)
 }
 
-/// How long the reader must wait before this request, or nothing.
-///
-/// A playground that runs nothing counts nothing, so a reader of a site with
-/// the playground switched off is told why rather than told to wait.
-fn waitingFor(serving: &Serving, gate: &Admission.Gate, asked: &Route.Request) -> Int {
-  if !serving.playground.enabled { return 0 }
-  Admission.waitFor(gate, readerOf(serving, asked))
+/// What a run answered and how long the reader must wait, through the
+/// application's run command. A failure of the site itself is answered as the
+/// playground being unavailable, which a client may retry.
+fn run(serving: &Serving, asked: &Route.Request, source: Str, action: Play.Action) -> Messages.Ran {
+  let command = Messages.RunProgram{source: source, action: action, reader: readerOf(serving, asked)}
+  match Mediator.send(&serving.mediator, &serving.kinds.run, command) {
+    case Ok(ran) => ran
+    case Err(_) => Messages.Ran{outcome: Play.Unavailable(Playground.UNANSWERED_REASON), wait: 0}
+  }
 }
 
 /// Who a request is from, by the serving's own rule. Called through a local
@@ -198,10 +208,6 @@ fn waitingFor(serving: &Serving, gate: &Admission.Gate, asked: &Route.Request) -
 fn readerOf(serving: &Serving, asked: &Route.Request) -> Str {
   let identify = serving.reader
   identify(asked)
-}
-
-fn tooMany(wait: Int) -> Play.Outcome {
-  Play.Refused("You have run a lot of programs in a short time. Try again in " + show(wait) + " seconds.")
 }
 
 fn retryAfter(wait: Int) -> Array[(Str, Str)] {

@@ -1,0 +1,77 @@
+module App.Playground
+
+import App.Messages as Messages
+import Domain.Playground as Play
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Value as Value
+import PuduLangMediator.Context as Context
+import PuduLangMediator as Messaging
+import PuduLangMediator.Registration as Registration
+import PuduLangMediator.Request as Request
+import Service.Playground.Admission as Admission
+import Service.Playground as Playground
+
+/// The event written for every run: its action, what it answered, and how long the program ran.
+export const RAN: Str = "Playground \{Action\} answered \{Result\} in \{Elapsed\} ms"
+
+/// The playground's commands, admitted by the reader's gates and audited
+/// without the reader's address.
+export fn registrations(kinds: &Messages.Kinds, playground: &Playground.Playground, gates: &Playground.Gates, requests: &Logger.Logger) -> Array[Registration.Registration] {
+  let held = *playground
+  let runs = gates.runs
+  let questions = gates.questions
+  let audit = *requests
+  [
+    Registration.behavior(&kinds.run, fn(command: Messages.RunProgram, context: Context.Context, next: Request.Next[Messages.Ran, Messages.Problem]) -> Messaging.Outcome[Messages.Ran, Messages.Problem] {
+        let wait = waitingFor(&held, &runs, command.reader)
+        if wait > 0 { Ok(Messages.Ran{outcome: tooMany(wait), wait: wait}) } else { next(context) }
+      }),
+    Registration.postProcessor(&kinds.run, fn(command: Messages.RunProgram, ran: Messages.Ran, _context: Context.Context) -> Messaging.Outcome[(), Messages.Problem] {
+        audit.information(RAN, [Value.text(Play.actionName(&command.action)), Value.text(resultOf(&ran.outcome)), Value.int(millisOf(&ran.outcome))])
+        Ok(())
+      }),
+    Registration.handler(&kinds.run, fn(command: Messages.RunProgram, _context: Context.Context) -> Messaging.Outcome[Messages.Ran, Messages.Problem] {
+        Ok(Messages.Ran{outcome: Playground.run(&held, command.source, command.action, command.reader), wait: 0})
+      }),
+    Registration.behavior(&kinds.ask, fn(command: Messages.AskQuestion, context: Context.Context, next: Request.Next[Messages.Asked, Messages.Problem]) -> Messaging.Outcome[Messages.Asked, Messages.Problem] {
+        let wait = waitingFor(&held, &questions, command.reader)
+        if wait > 0 { Ok(Messages.Asked{answer: Play.NotAnswered("Too many questions. Try again in " + show(wait) + " seconds."), wait: wait}) } else { next(context) }
+      }),
+    Registration.handler(&kinds.ask, fn(command: Messages.AskQuestion, _context: Context.Context) -> Messaging.Outcome[Messages.Asked, Messages.Problem] {
+        Ok(Messages.Asked{answer: Playground.ask(&held, command.source, &command.question, command.reader), wait: 0})
+      })
+  ]
+}
+
+/// How long a reader must wait before this command, or nothing.
+///
+/// A playground that runs nothing counts nothing, so a reader of a site with
+/// the playground switched off is told why rather than told to wait.
+fn waitingFor(playground: &Playground.Playground, gate: &Admission.Gate, reader: Str) -> Int {
+  if !playground.enabled { return 0 }
+  Admission.waitFor(gate, reader)
+}
+
+/// The refusal a reader over their allowance is given.
+fn tooMany(wait: Int) -> Play.Outcome {
+  Play.Refused("You have run a lot of programs in a short time. Try again in " + show(wait) + " seconds.")
+}
+
+/// The name a run's answer is logged under.
+fn resultOf(outcome: &Play.Outcome) -> Str {
+  match outcome {
+    case Play.Finished(_) => "finished"
+    case Play.TimedOut(_) => "timed out"
+    case Play.Formatted(_) => "formatted"
+    case Play.Refused(_) => "refused"
+    case Play.Unavailable(_) => "unavailable"
+  }
+}
+
+/// How long the program ran, or nothing when it did not run.
+fn millisOf(outcome: &Play.Outcome) -> Int {
+  match Play.runOf(outcome) {
+    case Some(run) => run.millis
+    case None => 0
+  }
+}

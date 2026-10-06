@@ -1,9 +1,13 @@
 module Config
 
 import Std.Env as Env
+import Std.Map as Map
 import Std.Option as Option
 import Std.Text as Text
 import Error as SiteError
+import PuduLangValidator.Result as Validated
+import PuduLangValidator.Rule as Rule
+import PuduLangValidator.Validator as Validator
 
 export type Config = {
   host: Str,
@@ -16,8 +20,18 @@ export type Config = {
   documentsPath: Str,
   releaseNotesPath: Str,
   siteUrl: Str,
+  log: Logging,
   playground: Playground
 }
+
+/// Where the site writes what it does, read from the environment.
+///
+/// `level` is the least severe event written; `format` is `text` for plain
+/// lines, `console` for coloured lines at a terminal, or `json` for a
+/// platform's log search. `explicit` says
+/// whether the level was set rather than defaulted, so a program that writes
+/// thousands of pages can choose a quieter default of its own.
+export type Logging = { level: Str, format: Str, explicit: Bool }
 
 /// How the playground runs programs, read from the environment.
 ///
@@ -51,9 +65,46 @@ export const RUNNER_LOCAL: Str = "local"
 export const ISOLATION_CONFINED: Str = "confined"
 const ISOLATIONS: Set[Str] = setOf(["bwrap", "confined", "none"])
 
+/// The names a log level is written with, least severe first.
+export const LOG_LEVELS: Set[Str] = setOf(["verbose", "debug", "information", "warning", "error", "fatal"])
+
+/// The log formats: plain lines, coloured lines, or compact newline-delimited JSON.
+export const LOG_FORMATS: Set[Str] = setOf(["text", "console", "json"])
+
+/// The level written when none is set.
+export const DEFAULT_LOG_LEVEL: Str = "information"
+
+/** Every setting one load reads, as it was written or defaulted. */
+type Written = { values: Map[Str, Str] }
+
+/// Every whole-number site setting: its default and the bounds it must fall within.
+const SITE_NUMBERS: Array[(Str, Int, Int, Int)] = [
+  ("PUDU_SITE_PORT", 8080, 0, 65535),
+  ("PUDU_SITE_CONNECTIONS", 0, 0, 1000000)
+]
+
+/// Every whole-number playground setting: its default and the bounds it must fall within.
+const PLAYGROUND_NUMBERS: Array[(Str, Int, Int, Int)] = [
+  ("PUDU_PLAYGROUND_MEMORY_MB", 256, 16, 65536),
+  ("PUDU_PLAYGROUND_SOURCE_BYTES", 65536, 64, 1048576),
+  ("PUDU_PLAYGROUND_RUN_MS", 10000, 100, 60000),
+  ("PUDU_PLAYGROUND_OUTPUT_BYTES", 65536, 256, 1048576),
+  ("PUDU_PLAYGROUND_RUNS_PER_MINUTE", 30, 1, 100000),
+  ("PUDU_PLAYGROUND_QUESTIONS_PER_MINUTE", 240, 1, 1000000),
+  ("PUDU_PLAYGROUND_TRACKED_CLIENTS", 10000, 1, 10000000),
+  ("PUDU_PLAYGROUND_CACHE_ENTRIES", 256, 0, 100000),
+  ("PUDU_PLAYGROUND_CONCURRENCY", 4, 1, 1024),
+  ("PUDU_RUNNER_PORT", 8090, 0, 65535)
+]
+
+/// The settings, or every site and playground setting that is wrong at once.
 export fn load() -> Result[Config, SiteError.SiteError] {
-  let playground = loadPlayground() ?
-  loadWith(&playground)
+  match (loadWith(&switchedOff()), loadPlayground()) {
+    case (Ok(settings), Ok(playground)) => Ok(Config{..settings, playground: playground})
+    case (Err(SiteError.SettingsInvalid(site)), Err(SiteError.SettingsInvalid(playground))) => Err(SiteError.SettingsInvalid(site.concat(playground)))
+    case (Err(problem), _) => Err(problem)
+    case (_, Err(problem)) => Err(problem)
+  }
 }
 
 /// The settings, with a playground that cannot be configured switched off
@@ -95,86 +146,136 @@ export fn switchedOff() -> Playground {
   }
 }
 
+/// The site's settings around `playground`, or every site setting that is wrong.
 fn loadWith(playground: &Playground) -> Result[Config, SiteError.SiteError] {
-  let port = whole("PUDU_SITE_PORT", Env.variableOr("PUDU_SITE_PORT", "8080"), 0, 65535) ?
-  let connections = whole(
-    "PUDU_SITE_CONNECTIONS",
-    Env.variableOr("PUDU_SITE_CONNECTIONS", "0"),
-    0,
-    1000000
-  ) ?
+  let written = read(&SITE_NUMBERS, &[
+      ("PUDU_SITE_URL", "http://127.0.0.1:8080"),
+      ("PUDU_SITE_LOG_LEVEL", DEFAULT_LOG_LEVEL),
+      ("PUDU_SITE_LOG_FORMAT", "text")
+    ])
+  var rules = numberRules(&SITE_NUMBERS)
+  rules = rules.push(Rule.build(Rule.withMessage(Rule.must(Rule.ruleFor("PUDU_SITE_URL", |held: Written| textOf(&held, "PUDU_SITE_URL").trim()), isWebOrigin), "must start with https:// or http://")))
+  rules = rules.push(oneOf("PUDU_SITE_LOG_LEVEL", &LOG_LEVELS))
+  rules = rules.push(oneOf("PUDU_SITE_LOG_FORMAT", &LOG_FORMATS))
+  checked(&written, rules) ?
   Ok(Config {
       host: Env.variableOr("PUDU_SITE_HOST", "127.0.0.1"),
-      port: port,
-      connections: connections,
+      port: wholeOf(&written, "PUDU_SITE_PORT"),
+      connections: wholeOf(&written, "PUDU_SITE_CONNECTIONS"),
       cataloguePath: Env.variableOr("PUDU_CATALOG_PATH", "website/data/api.json"),
       packagesPath: Env.variableOr("PUDU_PACKAGES_PATH", "website/data/packages"),
       docsPath: Env.variableOr("PUDU_DOCS_PATH", "website/docs"),
       releasesPath: Env.variableOr("PUDU_RELEASES_PATH", "website/data/releases.json"),
       documentsPath: Env.variableOr("PUDU_DOCUMENTS_PATH", "."),
       releaseNotesPath: Env.variableOr("PUDU_RELEASE_NOTES_PATH", "packages/pudu/v0.1/release-notes"),
-      siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?,
+      siteUrl: baseUrl(textOf(&written, "PUDU_SITE_URL")),
+      log: Logging {
+        level: textOf(&written, "PUDU_SITE_LOG_LEVEL").trim().toLower(),
+        format: textOf(&written, "PUDU_SITE_LOG_FORMAT").trim().toLower(),
+        explicit: Env.isSet("PUDU_SITE_LOG_LEVEL")
+      },
       playground: *playground
     })
 }
 
-/// The playground's settings, refused when they could not work together.
+/// The playground's settings, or every playground setting that is wrong.
+///
+/// A runner's URL without its secret is refused with the rest: such a
+/// playground could not run anything.
 export fn loadPlayground() -> Result[Playground, SiteError.SiteError] {
-  let runner = Env.variableOr("PUDU_PLAYGROUND_RUNNER", RUNNER_OFF).trim()
-  let token = Env.variableOr("PUDU_PLAYGROUND_TOKEN", "")
-  let isolation = Env.variableOr("PUDU_PLAYGROUND_ISOLATION", "bwrap").trim()
-  let remote = runner.startsWith("https://") || runner.startsWith("http://")
-  if runner != RUNNER_OFF && runner != RUNNER_LOCAL && !remote {
-    return Err(SiteError.BadSetting("PUDU_PLAYGROUND_RUNNER"))
-  }
-  if remote && token.isEmpty() {
-    return Err(SiteError.PlaygroundMisconfigured("a remote runner needs PUDU_PLAYGROUND_TOKEN"))
-  }
-  if !ISOLATIONS.contains(isolation) {
-    return Err(SiteError.BadSetting("PUDU_PLAYGROUND_ISOLATION"))
-  }
+  let written = read(&PLAYGROUND_NUMBERS, &[
+      ("PUDU_PLAYGROUND_RUNNER", RUNNER_OFF),
+      ("PUDU_PLAYGROUND_TOKEN", ""),
+      ("PUDU_PLAYGROUND_ISOLATION", "bwrap")
+    ])
+  var rules = numberRules(&PLAYGROUND_NUMBERS)
+  rules = rules.push(Rule.build(Rule.withMessage(Rule.must(Rule.ruleFor("PUDU_PLAYGROUND_RUNNER", |held: Written| runnerOf(&held)), isRunner), "must be off, local, or a runner's https:// or http:// address")))
+  rules = rules.push(Rule.build(Rule.withMessage(Rule.mustWith(Rule.ruleFor("PUDU_PLAYGROUND_TOKEN", |held: Written| textOf(&held, "PUDU_PLAYGROUND_TOKEN")), fn(held: Written, token: Str) -> Bool {
+            !isWebOrigin(runnerOf(&held)) || !token.isEmpty()
+          }), "is required when PUDU_PLAYGROUND_RUNNER is a runner's address")))
+  rules = rules.push(oneOf("PUDU_PLAYGROUND_ISOLATION", &ISOLATIONS))
+  checked(&written, rules) ?
   Ok(Playground {
-      runner: runner,
-      token: token,
+      runner: runnerOf(&written),
+      token: textOf(&written, "PUDU_PLAYGROUND_TOKEN"),
       sandbox: Env.variableOr("PUDU_PLAYGROUND_SANDBOX", "website/playground/sandbox.sh"),
       compiler: Env.variableOr("PUDU_PLAYGROUND_COMPILER", "pudu"),
       library: Env.variableOr("PUDU_PLAYGROUND_LIBRARY", "packages/pudu/v0.1/lib"),
       workspace: Env.variableOr("PUDU_PLAYGROUND_WORKSPACE", ""),
-      isolation: isolation,
-      memoryMegabytes: bounded("PUDU_PLAYGROUND_MEMORY_MB", 256, 16, 65536) ?,
+      isolation: textOf(&written, "PUDU_PLAYGROUND_ISOLATION").trim(),
+      memoryMegabytes: wholeOf(&written, "PUDU_PLAYGROUND_MEMORY_MB"),
       examplesPath: Env.variableOr("PUDU_PLAYGROUND_EXAMPLES", "website/playground/examples"),
-      sourceBytes: bounded("PUDU_PLAYGROUND_SOURCE_BYTES", 65536, 64, 1048576) ?,
-      runMillis: bounded("PUDU_PLAYGROUND_RUN_MS", 10000, 100, 60000) ?,
-      outputBytes: bounded("PUDU_PLAYGROUND_OUTPUT_BYTES", 65536, 256, 1048576) ?,
-      runsPerMinute: bounded("PUDU_PLAYGROUND_RUNS_PER_MINUTE", 30, 1, 100000) ?,
-      questionsPerMinute: bounded("PUDU_PLAYGROUND_QUESTIONS_PER_MINUTE", 240, 1, 1000000) ?,
-      trackedClients: bounded("PUDU_PLAYGROUND_TRACKED_CLIENTS", 10000, 1, 10000000) ?,
-      cacheEntries: bounded("PUDU_PLAYGROUND_CACHE_ENTRIES", 256, 0, 100000) ?,
-      concurrency: bounded("PUDU_PLAYGROUND_CONCURRENCY", 4, 1, 1024) ?,
+      sourceBytes: wholeOf(&written, "PUDU_PLAYGROUND_SOURCE_BYTES"),
+      runMillis: wholeOf(&written, "PUDU_PLAYGROUND_RUN_MS"),
+      outputBytes: wholeOf(&written, "PUDU_PLAYGROUND_OUTPUT_BYTES"),
+      runsPerMinute: wholeOf(&written, "PUDU_PLAYGROUND_RUNS_PER_MINUTE"),
+      questionsPerMinute: wholeOf(&written, "PUDU_PLAYGROUND_QUESTIONS_PER_MINUTE"),
+      trackedClients: wholeOf(&written, "PUDU_PLAYGROUND_TRACKED_CLIENTS"),
+      cacheEntries: wholeOf(&written, "PUDU_PLAYGROUND_CACHE_ENTRIES"),
+      concurrency: wholeOf(&written, "PUDU_PLAYGROUND_CONCURRENCY"),
       listenHost: Env.variableOr("PUDU_RUNNER_HOST", "127.0.0.1"),
-      listenPort: bounded("PUDU_RUNNER_PORT", 8090, 0, 65535) ?
+      listenPort: wholeOf(&written, "PUDU_RUNNER_PORT")
     })
 }
 
-/// A whole-number setting, or its default when unset.
-fn bounded(name: Str, fallback: Int, least: Int, greatest: Int) -> Result[Int, SiteError.SiteError] {
-  whole(name, Env.variableOr(name, show(fallback)), least, greatest)
+/// Every named setting as the environment states it, or its default.
+fn read(numbers: &Array[(Str, Int, Int, Int)], texts: &Array[(Str, Str)]) -> Written {
+  var values: Map[Str, Str] = Map.empty()
+  for number in numbers { values = Map.insert(&values, number[0], Env.variableOr(number[0], show(number[1]))) }
+  for text in texts { values = Map.insert(&values, text[0], Env.variableOr(text[0], text[1])) }
+  Written{values: values}
 }
 
-fn baseUrl(written: Str) -> Result[Str, SiteError.SiteError] {
+/// `Ok` when every rule holds, or every setting that broke one, in rule order.
+fn checked(written: &Written, rules: Array[Rule.Rule[Written]]) -> Result[(), SiteError.SiteError] {
+  var validator: Validator.Validator[Written] = Validator.create()
+  for rule in rules { validator = Validator.add(validator, rule) }
+  let result = Validator.validate(&validator, *written)
+  if result.isValid { return Ok(()) }
+  Err(SiteError.SettingsInvalid(result.errors.map(|failure: Validated.Failure| failure.propertyName + " " + failure.errorMessage)))
+}
+
+/// One rule per whole-number setting: written as a whole number within its bounds.
+fn numberRules(numbers: &Array[(Str, Int, Int, Int)]) -> Array[Rule.Rule[Written]] {
+  numbers.map(fn(number: (Str, Int, Int, Int)) -> Rule.Rule[Written] {
+      let name = number[0]
+      let least = number[2]
+      let greatest = number[3]
+      Rule.build(Rule.withMessage(Rule.must(Rule.ruleFor(name, |held: Written| textOf(&held, name)), |text: Str| wholeWithin(text, least, greatest)), "must be a whole number from " + show(least) + " to " + show(greatest)))
+    })
+}
+
+/// A rule that a setting is one of `allowed`, ignoring case and surrounding space.
+fn oneOf(name: Str, allowed: &Set[Str]) -> Rule.Rule[Written] {
+  let choices = *allowed
+  Rule.build(Rule.withMessage(Rule.must(Rule.ruleFor(name, |held: Written| textOf(&held, name)), |text: Str| choices.contains(text.trim().toLower())), "must be one of " + choices.toArray().join(", ")))
+}
+
+/// The text a setting was written as.
+fn textOf(written: &Written, name: Str) -> Str { Option.unwrapOr(Map.get(&written.values, name), "") }
+
+/// A setting that the rules already proved is a whole number.
+fn wholeOf(written: &Written, name: Str) -> Int { Option.unwrapOr(Text.wholeOf(textOf(written, name)), 0) }
+
+/// The playground runner as written, without surrounding space.
+fn runnerOf(written: &Written) -> Str { textOf(written, "PUDU_PLAYGROUND_RUNNER").trim() }
+
+/// Whether text is a whole number within the bounds.
+fn wholeWithin(text: Str, least: Int, greatest: Int) -> Bool {
+  match Text.wholeOf(text) {
+    case Some(value) => value >= least && value <= greatest
+    case None => false
+  }
+}
+
+/// Whether text is the address of a web origin.
+fn isWebOrigin(text: Str) -> Bool { text.trim().startsWith("https://") || text.trim().startsWith("http://") }
+
+/// Whether text names a runner: off, local, or an address.
+fn isRunner(text: Str) -> Bool { text == RUNNER_OFF || text == RUNNER_LOCAL || isWebOrigin(text) }
+
+/// The site's origin as configured, without a trailing slash.
+fn baseUrl(written: Str) -> Str {
   let clean = written.trim()
-  if !clean.startsWith("https://") && !clean.startsWith("http://") {
-    return Err(SiteError.BadSetting("PUDU_SITE_URL"))
-  }
-  if clean.endsWith("/") { Ok(clean.take(clean.length() - 1)) } else { Ok(clean) }
-}
-
-fn whole(name: Str, written: Str, least: Int, greatest: Int) -> Result[Int, SiteError.SiteError] {
-  match Text.wholeOf(written) {
-    case Some(value) => {
-      if value < least || value > greatest { Err(SiteError.BadSetting(name)) }
-        else { Ok(value) }
-    }
-    case None => Err(SiteError.BadSetting(name))
-  }
+  if clean.endsWith("/") { clean.take(clean.length() - 1) } else { clean }
 }

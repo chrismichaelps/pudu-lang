@@ -51,6 +51,9 @@ export type Playground = {
 }
 
 /// The reason a playground with no runner gives.
+/// What a reader is told when the site failed while running their program.
+export const UNANSWERED_REASON: Str = "The playground could not answer just now. Try again in a moment."
+
 export const DISABLED_REASON: Str = "Running programs is not enabled on this site. Install Pudu to run this program on your own machine."
 
 /// A runner that runs nothing and says why.

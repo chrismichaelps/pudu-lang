@@ -1,0 +1,36 @@
+module Web.Access
+
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Time as Time
+import PuduLangLog.Logger as Logger
+import PuduLangLog.Value as Value
+
+/// The event written for every request: its method, path, status, and elapsed milliseconds.
+export const ANSWERED: Str = "HTTP \{RequestMethod\} \{RequestPath\} responded \{StatusCode\} in \{Elapsed\} ms"
+
+/// A middleware writing one access event per request it passes on.
+export fn middleware(logger: &Logger.Logger) -> Route.Middleware {
+  let held = *logger
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response { around(&held, request, next) }
+}
+
+/// The answer `next` gives, with one access event written for it: information
+/// for an answer, warning for a refusal other than a missing page, and error
+/// for a failure of the site. The query string is never written.
+export fn around(logger: &Logger.Logger, request: Route.Request, next: Route.Handler) -> Http.Response {
+  let began = Time.elapsed()
+  let method = Http.methodName(&request.message.method)
+  let path = request.path
+  let response = next(request)
+  let status = response.status.code
+  let properties = [Value.text(method), Value.text(path), Value.int(status), Value.int(Time.elapsed() - began)]
+  if status >= 500 {
+    logger.error(ANSWERED, properties)
+  } else if status >= 400 && status != 404 {
+    logger.warning(ANSWERED, properties)
+  } else {
+    logger.information(ANSWERED, properties)
+  }
+  response
+}

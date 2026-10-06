@@ -1,0 +1,22 @@
+module Edge
+
+import Service.Catalog as Catalog
+import Service.LivePackages as LivePackages
+import Service.Packages as Packages
+import Service.Playground as Playground
+import Service.Search as Search
+
+/// What the serverless function serves with: the requests that are not static
+/// files at the edge.
+export type Edge = {
+  siteUrl: Str,
+  catalog: Catalog.Catalog,
+  /// The catalogue as search reads it, prepared once per cold start.
+  search: Search.Index,
+  packages: Packages.Packages,
+  /// GitHub laid over `packages`, so a package published since the build is
+  /// listed and has a page without another deployment.
+  live: LivePackages.Live,
+  playground: Playground.Playground,
+  gates: Playground.Gates
+}

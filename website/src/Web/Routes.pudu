@@ -1,119 +1,89 @@
 module Web.Routes
 
 import Std.Char as Chars
+import Std.Html as Html
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Io as Io
+import Std.Json as Json
 import Std.Option as Option
 import Std.Text as Text
+import App.Messages as Messages
+import App.Static as StaticApp
 import Constants as Constants
+import PuduLangMediator.Mediator as Mediator
+import PuduLangMediator as Messaging
 import Seo as Seo
-import Service.Catalog as Catalog
-import Service.Documents as Documents
 import Service.Packages as Packages
 import Service.Playground.Admission as Admission
-import Site as Site
-import View.About as About
-import View.Docs as DocsView
-import View.Document as Document
 import View.Documentation as Documentation
-import View.Donation as Donation
-import View.Download as Download
-import View.Home as Home
 import View.Packages.Catalog as PackageCatalog
 import View.Packages.Suggest as PackageSuggest
-import View.Releases as ReleasesView
+import Web.Access as Access
+import Web.Answers as Answers
 import Web.PackagePages as PackagePages
 import Web.Playground as PlaygroundWeb
 
 /// Every route of the complete site.
 ///
-/// The playground's routes are its own module's, served here with the peer
-/// of each connection as the reader: this router is reached directly or
+/// Every page is a message sent to the application's mediator, so validation,
+/// logging, and failure handling apply to each the same way; assets are read
+/// here. The playground's routes are its own module's, served here with the
+/// peer of each connection as the reader: this router is reached directly or
 /// through a proxy this program cannot vouch for, so no forwarded address is
 /// believed.
-export fn routes(site: &Site.Site) -> Route.Router {
-  let siteUrl = site.siteUrl
-  let catalog = &site.catalog
-  let search = &site.search
-  let docs = &site.docs
-  let release = &site.release
-  let documents = &site.documents
+export fn routes(app: &StaticApp.App) -> Route.Router {
+  let held = *app
+  let siteUrl = held.site.siteUrl
+  let packages = held.site.packages
   let playground = PlaygroundWeb.Serving {
     siteUrl: siteUrl,
-    playground: site.playground,
+    playground: held.site.playground,
     reader: Admission.peerReader,
-    gates: site.gates,
-    missing: fn(path: Str) -> Http.Response { Reply.page(404, Documentation.missing(siteUrl, path)) }
+    mediator: held.mediator,
+    kinds: held.kinds,
+    missing: fn(path: Str) -> Http.Response { missing(siteUrl, path) }
   }
-  let packages = &site.packages
   Route.withFallback(&Route.routing(&PlaygroundWeb.routes(&playground).concat([
-          Route.get("/", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, Home.home(siteUrl, catalog, release, packages))
-            }),
+          Route.get("/", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.Home, asked.path) }),
           Route.get("/search", fn(asked: Route.Request) -> Http.Response {
-              Reply.page(200, Home.results(siteUrl, search, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+              page(&held, asked.path, &Mediator.send(&held.mediator, &held.kinds.search, Messages.SearchQuery{query: queryOf(&asked, "q")}))
             }),
-          Route.get("/modules", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, Documentation.modules(siteUrl, catalog))
-            }),
+          Route.get("/modules", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.Modules, asked.path) }),
           Route.get("/module/:module", fn(asked: Route.Request) -> Http.Response {
-              let name = Option.unwrapOr(Route.param(&asked, "module"), "")
-              match Documentation.modulePage(siteUrl, catalog, name) {
-                case Some(page) => Reply.page(200, page)
-                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
-              }
+              page(&held, asked.path, &Mediator.send(&held.mediator, &held.kinds.reference, Messages.ModuleQuery{name: paramOf(&asked, "module")}))
             }),
           Route.get("/docs/:module/:kind/:name", fn(asked: Route.Request) -> Http.Response {
-              let moduleName = Option.unwrapOr(Route.param(&asked, "module"), "")
-              let kind = Option.unwrapOr(Route.param(&asked, "kind"), "")
-              let name = Option.unwrapOr(Route.param(&asked, "name"), "")
-              let entries = Catalog.findAll(catalog, moduleName, kind, name)
-              if entries.length() == 0 {
-                Reply.page(404, Documentation.missing(siteUrl, asked.path))
-              } else {
-                Reply.page(200, Documentation.symbols(siteUrl, &entries))
-              }
+              let symbol = Messages.SymbolQuery{moduleName: paramOf(&asked, "module"), kind: paramOf(&asked, "kind"), name: paramOf(&asked, "name")}
+              page(&held, asked.path, &Mediator.send(&held.mediator, &held.kinds.symbol, symbol))
             }),
-          Route.get("/docs", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
-            }),
+          Route.get("/docs", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.DocsIndex, asked.path) }),
           Route.get("/docs/:page", fn(asked: Route.Request) -> Http.Response {
-              let slug = Option.unwrapOr(Route.param(&asked, "page"), "")
-              match DocsView.page(siteUrl, docs, slug, catalog.languageVersion) {
-                case Some(page) => Reply.page(200, page)
-                case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
-              }
+              page(&held, asked.path, &Mediator.send(&held.mediator, &held.kinds.doc, Messages.SlugQuery{slug: paramOf(&asked, "page")}))
             }),
           // The guide became the documentation. The old address still answers,
           // with the documentation's own canonical address, so a link to it keeps
           // working and a crawler is told which address to keep.
-          Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
-            }),
-          Route.get("/download", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, Download.page(siteUrl, release))
-            }),
-          Route.get("/releases", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, ReleasesView.page(siteUrl, release))
-            }),
-          Route.get("/packages", fn(_request: Route.Request) -> Http.Response {
-              packageCatalog(siteUrl, packages, "", 1)
-            }),
+          Route.get("/guide", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.DocsIndex, asked.path) }),
+          Route.get("/download", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.Download, asked.path) }),
+          Route.get("/releases", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.Releases, asked.path) }),
+          Route.get("/packages", fn(asked: Route.Request) -> Http.Response { listing(&held, asked.path, 1) }),
           Route.get("/packages/search", fn(asked: Route.Request) -> Http.Response {
-              packageCatalogFiltered(siteUrl, packages, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1")), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+              let query = Messages.PackageQuery{query: queryOf(&asked, "q"), filter: queryOf(&asked, "filter"), page: pageOf(Option.unwrapOr(Route.queryParam(&asked, "page"), "1"))}
+              page(&held, asked.path, &shownPage(Mediator.send(&held.mediator, &held.kinds.packages, query)))
             }),
           Route.get(PackageSuggest.PATH, fn(asked: Route.Request) -> Http.Response {
-              PackageSuggest.reply(packages, &catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), ""), Option.unwrapOr(Route.queryParam(&asked, "filter"), ""))
+              let suggested = Mediator.send(&held.mediator, &held.kinds.suggest, Messages.SuggestQuery{query: queryOf(&asked, "q"), filter: queryOf(&asked, "filter")})
+              Answers.json(&askedFor(siteUrl, asked.path), &suggestions(suggested))
             }),
           Route.get("/packages/page/:page", fn(asked: Route.Request) -> Http.Response {
-              let page = pageOf(Option.unwrapOr(Route.param(&asked, "page"), ""))
-              if page < 2 || page > PackageCatalog.pages(packages.projects.length()) { Reply.page(404, Documentation.missing(siteUrl, asked.path)) } else { packageCatalog(siteUrl, packages, "", page) }
+              let number = pageOf(paramOf(&asked, "page"))
+              if number < 2 { missing(siteUrl, asked.path) } else { listing(&held, asked.path, number) }
             }),
           Route.get("/packages/avatars/:login", fn(asked: Route.Request) -> Http.Response {
-              let login = Option.unwrapOr(Route.param(&asked, "login"), "")
-              match Packages.avatarBytes(packages, login) {
+              let login = paramOf(&asked, "login")
+              match Packages.avatarBytes(&packages, login) {
                 case Some(bytes) => {
                   let mediaType = if login.endsWith(".jpg") { "image/jpeg" } else if login.endsWith(".webp") { "image/webp" } else if login.endsWith(".gif") { "image/gif" } else { "image/png" }
                   cached(Reply.bytes(200, mediaType, &bytes), mediaType)
@@ -121,36 +91,20 @@ export fn routes(site: &Site.Site) -> Route.Router {
                 case None => Reply.text(404, "asset not found")
               }
             }),
-          Route.get("/conduct", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "conduct", &asked)
-            }),
-          Route.get("/contributing", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "contributing", &asked)
-            }),
-          Route.get("/security", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "security", &asked)
-            }),
-          Route.get("/community", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "community", &asked)
-            }),
-          Route.get("/privacy", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "privacy", &asked)
-            }),
-          Route.get("/brand", fn(asked: Route.Request) -> Http.Response {
-              published(siteUrl, documents, "brand", &asked)
-            }),
-          Route.get("/about", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, About.page(siteUrl))
-            }),
-          Route.get("/donate", fn(_request: Route.Request) -> Http.Response {
-              Reply.page(200, Donation.page(siteUrl))
-            }),
+          Route.get("/conduct", fn(asked: Route.Request) -> Http.Response { published(&held, "conduct", asked.path) }),
+          Route.get("/contributing", fn(asked: Route.Request) -> Http.Response { published(&held, "contributing", asked.path) }),
+          Route.get("/security", fn(asked: Route.Request) -> Http.Response { published(&held, "security", asked.path) }),
+          Route.get("/community", fn(asked: Route.Request) -> Http.Response { published(&held, "community", asked.path) }),
+          Route.get("/privacy", fn(asked: Route.Request) -> Http.Response { published(&held, "privacy", asked.path) }),
+          Route.get("/brand", fn(asked: Route.Request) -> Http.Response { published(&held, "brand", asked.path) }),
+          Route.get("/about", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.About, asked.path) }),
+          Route.get("/donate", fn(asked: Route.Request) -> Http.Response { screen(&held, Messages.Donate, asked.path) }),
           Route.get("/health", fn(_request: Route.Request) -> Http.Response { noIndex(Reply.text(200, "ok")) }),
           Route.get("/robots.txt", fn(_request: Route.Request) -> Http.Response {
               cached(Reply.text(200, Seo.robots(siteUrl)), "text/plain; charset=utf-8")
             }),
           Route.get("/sitemap.xml", fn(_request: Route.Request) -> Http.Response {
-              cached(Reply.text(200, Seo.sitemap(siteUrl, catalog, docs, &site.playground.examples, packages)), "application/xml; charset=utf-8")
+              cached(Reply.text(200, Seo.sitemap(siteUrl, &held.site.catalog, &held.site.docs, &held.site.playground.examples, &packages)), "application/xml; charset=utf-8")
             }),
           Route.get("/assets/site.css", fn(_request: Route.Request) -> Http.Response {
               asset(Constants.STYLESHEET_PATH, "text/css; charset=utf-8")
@@ -223,22 +177,56 @@ export fn routes(site: &Site.Site) -> Route.Router {
           Route.get("/fonts/Nunito-BoldItalic.woff2", fn(_request: Route.Request) -> Http.Response {
               binary("website/public/fonts/Nunito-BoldItalic.woff2", "font/woff2")
             })
-        ].concat(PackagePages.routes(&PackagePages.Pages{siteUrl: siteUrl, packages: *packages, detail: fn(project: Packages.Project, _tab: Str, _file: Str) -> Packages.Project { project }, missing: fn(path: Str) -> Http.Response { Reply.page(404, Documentation.missing(siteUrl, path)) }})))), fn(asked: Route.Request) -> Http.Response {
-      Reply.page(404, Documentation.missing(siteUrl, asked.path))
+        ].concat(PackagePages.routes(&PackagePages.Pages{siteUrl: siteUrl, packages: packages, detail: fn(project: Packages.Project, _tab: Str, _file: Str) -> Packages.Project { project }, missing: fn(path: Str) -> Http.Response { missing(siteUrl, path) }})))), fn(asked: Route.Request) -> Http.Response {
+      missing(siteUrl, asked.path)
     })
 }
 
+/// A page with nothing to fill in, as the mediator answers it.
+fn screen(app: &StaticApp.App, shown: Messages.Screen, path: Str) -> Http.Response {
+  page(app, path, &Mediator.send(&app.mediator, &app.kinds.screen, shown))
+}
+
+/// A page outcome as this router answers it.
+fn page(app: &StaticApp.App, path: Str, outcome: &Messaging.Outcome[Html.Html, Messages.Problem]) -> Http.Response {
+  Answers.page(&askedFor(app.site.siteUrl, path), outcome)
+}
+
+/// One page of the package listing.
+fn listing(app: &StaticApp.App, path: Str, number: Int) -> Http.Response {
+  page(app, path, &shownPage(Mediator.send(&app.mediator, &app.kinds.listing, Messages.ListingQuery{page: number})))
+}
+
+/// A document the repository keeps, or the missing page when there is none.
+fn published(app: &StaticApp.App, slug: Str, path: Str) -> Http.Response {
+  page(app, path, &Mediator.send(&app.mediator, &app.kinds.document, Messages.SlugQuery{slug: slug}))
+}
+
+/// The page a shown outcome holds; this router serves every page as fixed.
+fn shownPage(outcome: Messaging.Outcome[Messages.Shown, Messages.Problem]) -> Messaging.Outcome[Html.Html, Messages.Problem] {
+  Ok(outcome ?.page)
+}
+
+/// The JSON a suggestions outcome holds.
+fn suggestions(outcome: Messaging.Outcome[Messages.Suggested, Messages.Problem]) -> Messaging.Outcome[Json.Json, Messages.Problem] {
+  Ok(outcome ?.body)
+}
+
+/// How this router answers a failure at `path`.
+fn askedFor(siteUrl: Str, path: Str) -> Answers.Asked {
+  Answers.Asked{siteUrl: siteUrl, path: path, missing: fn(missed: Str) -> Http.Response { missing(siteUrl, missed) }}
+}
+
+/// The complete site's missing page.
+fn missing(siteUrl: Str, path: Str) -> Http.Response { Reply.page(404, Documentation.missing(siteUrl, path)) }
+
+/// A query parameter, or empty text when the request has none.
+fn queryOf(asked: &Route.Request, name: Str) -> Str { Option.unwrapOr(Route.queryParam(asked, name), "") }
+
+/// A path parameter, or empty text when the route has none.
+fn paramOf(asked: &Route.Request, name: Str) -> Str { Option.unwrapOr(Route.param(asked, name), "") }
+
 fn pageOf(raw: Str) -> Int { Option.unwrapOr(Text.wholeOf(raw), 0) }
-
-fn packageCatalog(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int) -> Http.Response {
-  if page < 1 || page > PackageCatalog.resultPages(packages, query) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
-  Reply.page(200, PackageCatalog.pageNumber(siteUrl, packages, query, page))
-}
-
-fn packageCatalogFiltered(siteUrl: Str, packages: &Packages.Packages, query: Str, page: Int, filter: Str) -> Http.Response {
-  if page < 1 || page > PackageCatalog.resultPagesFiltered(packages, query, filter) { return Reply.page(404, Documentation.missing(siteUrl, "/packages/search")) }
-  Reply.page(200, PackageCatalog.pageNumberFiltered(siteUrl, packages, query, page, filter))
-}
 
 /// A request for a page, as a platform or a test asks for one: a `GET` with no
 /// headers and nothing in its body.
@@ -253,21 +241,14 @@ export fn requestFor(target: Str) -> Route.Request {
 }
 
 /// The site's answer to a request for a page.
-export fn render(site: &Site.Site, target: Str) -> Http.Response {
-  answer(site, requestFor(target))
+export fn render(app: &StaticApp.App, target: Str) -> Http.Response {
+  answer(app, requestFor(target))
 }
 
-/// The site's answer to any request.
-export fn answer(site: &Site.Site, request: Route.Request) -> Http.Response {
-  Route.dispatch(&routes(site), request)
-}
-
-/// A document the repository keeps, or the missing page when there is none.
-fn published(siteUrl: Str, documents: &Documents.Documents, slug: Str, asked: &Route.Request) -> Http.Response {
-  match Document.page(siteUrl, documents, slug) {
-    case Some(page) => Reply.page(200, page)
-    case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
-  }
+/// The site's answer to any request, with its access event written.
+export fn answer(app: &StaticApp.App, request: Route.Request) -> Http.Response {
+  let router = routes(app)
+  Access.around(&app.logs.requests, request, fn(passed: Route.Request) -> Http.Response { Route.dispatch(&router, passed) })
 }
 
 fn binary(path: Str, mediaType: Str) -> Http.Response {

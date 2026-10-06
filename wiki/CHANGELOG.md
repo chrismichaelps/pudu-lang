@@ -5,6 +5,31 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-06 — Website application layer: mediator, structured logs, validation
+
+- The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,
+  `pudu-lang-log`, and `pudu-lang-validator`, pinned by `website/pudu.lock` and fetched with
+  `pudu install --locked` into the ignored `website/deps/` by the development script, the Vercel
+  build, and every workflow that compiles the site ([[architecture/WEBSITE]]).
+- Every page and playground command is a typed message ([[website App Messages]]) sent to a
+  mediator built once per process over [[website Site]] ([[website App Static]]) or [[website Edge]]
+  ([[website App Dynamic]]). The routers translate requests to messages and outcomes to responses
+  through [[website Web Answers]]; views and services are unchanged, and every existing suite passes
+  with the same 420 assertions.
+- Validation ([[website App Rules]]) bounds search to 512 characters and filters and names to 256,
+  answering a no-index `400` that names the field without echoing it; suggestions keep truncating
+  within a 2048-character hard limit. Playground admission and a run audit that never records the
+  reader's address are mediator behaviors ([[website App Playground]]); an alarm writes an error
+  event for every fault ([[website App Pipeline]]).
+- Structured logs on standard error ([[website App Logging]]): one access event per request without
+  its query string ([[website Web Access]]), mediator failures, and playground runs, as plain text,
+  coloured console lines, or JSON (`PUDU_SITE_LOG_FORMAT`, the function's is `json`) at
+  `PUDU_SITE_LOG_LEVEL`; the renderer and the prerender write warnings unless a level is set.
+- [[website Config]] checks every setting with validator rules and refuses startup naming every wrong
+  site and playground setting at once (`SettingsInvalid`).
+- [[website application suite]] covers validation, unchanged answers, access and audit events,
+  failure translation, the function's application, and a real start with three wrong settings.
+
 ## 2026-10-05 — Release 0.1.3 (#438)
 
 - `pudu.cabal` and `pudu-tests.cabal` at 0.1.3, with

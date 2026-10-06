@@ -26,3 +26,9 @@ the first package request and remembered per instance ([[website Service LiveSou
 
 Resolved Grill Log: start-up must not depend on GitHub; a cold start that cannot reach it still
 serves the compact snapshot.
+
+## Application and logging
+
+Builds [[website Edge]] once per cold start, assembles [[website App Dynamic]] over it, and answers every
+invocation through it. Startup warnings and a stopped invocation loop are log events; the Vercel build
+sets `PUDU_SITE_LOG_FORMAT=json` so the platform's log search reads them.

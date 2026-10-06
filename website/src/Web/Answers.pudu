@@ -1,0 +1,51 @@
+module Web.Answers
+
+import Std.Html as Html
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Json as Json
+import App.Messages as Messages
+import PuduLangMediator as Messaging
+import View.Dynamic as DynamicView
+
+/// What a router needs to answer a failure: the site's address, the path asked
+/// for, and its own missing page.
+export type Asked = { siteUrl: Str, path: Str, missing: fn(Str) -> Http.Response }
+
+/// A page outcome as a response: the page as `200`, or the failure's answer.
+export fn page(asked: &Asked, outcome: &Messaging.Outcome[Html.Html, Messages.Problem]) -> Http.Response {
+  match outcome {
+    case Ok(shown) => Reply.page(200, shown)
+    case Err(failure) => failed(asked, &failure)
+  }
+}
+
+/// A suggestions outcome as a response: the JSON as `200`, or the failure's answer.
+export fn json(asked: &Asked, outcome: &Messaging.Outcome[Json.Json, Messages.Problem]) -> Http.Response {
+  match outcome {
+    case Ok(body) => Reply.jsonValue(200, body)
+    case Err(failure) => failed(asked, &failure)
+  }
+}
+
+/// A failure's answer. `NotFound` and `NotYetListed` are the router's missing
+/// page; `Invalid` is a no-index `400` naming each field that was refused;
+/// `Unavailable` is `503`; anything else is a no-index `500` naming nothing of
+/// how the site failed.
+export fn failed(asked: &Asked, failure: &Messaging.Failure[Messages.Problem]) -> Http.Response {
+  match failure {
+    case Messaging.Raised(Messages.NotFound) => (asked.missing)(asked.path)
+    case Messaging.Raised(Messages.NotYetListed) => (asked.missing)(asked.path)
+    case Messaging.Raised(Messages.Unavailable(reason)) => noIndex(Reply.text(503, reason))
+    case Messaging.Invalid(violations) => {
+      let problems = violations.map(|violation: Messaging.Violation| violation.property + ": " + violation.message)
+      noIndex(Reply.page(400, DynamicView.invalid(asked.siteUrl, asked.path, &problems)))
+    }
+    case _ => noIndex(Reply.page(500, DynamicView.failed(asked.siteUrl, asked.path)))
+  }
+}
+
+/// The response, marked against indexing.
+export fn noIndex(response: Http.Response) -> Http.Response {
+  Http.Response{..response, headers: response.headers.push(("X-Robots-Tag", "noindex"))}
+}

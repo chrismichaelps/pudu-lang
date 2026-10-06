@@ -32,6 +32,14 @@ export PUDU_PLAYGROUND_RUNNER="${PUDU_PLAYGROUND_RUNNER:-local}"
 export PUDU_PLAYGROUND_ISOLATION="${PUDU_PLAYGROUND_ISOLATION:-none}"
 export PUDU_PLAYGROUND_COMPILER="${PUDU_PLAYGROUND_COMPILER:-$(command -v "$compiler")}"
 
+# The packages the site is built on, fetched once as its lock names them.
+if [[ ! -d website/deps ]]; then
+  (cd website && "$compiler" install --locked)
+fi
+# Coloured log lines for a reader at a terminal; set PUDU_SITE_LOG_FORMAT=text
+# or json to see what a server or the platform writes.
+export PUDU_SITE_LOG_FORMAT="${PUDU_SITE_LOG_FORMAT:-console}"
+
 # The Pudu sources under website/src are watched already; these are what the
 # site reads besides them.
 exec "$compiler" run --watch \
