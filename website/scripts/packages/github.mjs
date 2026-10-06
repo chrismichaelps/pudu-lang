@@ -36,10 +36,20 @@ export function githubClient(api, stored = {}) {
   }
 
   async function send(url, extra = {}, accept = JSON_TYPE) {
-    counts.requests += 1;
-    const answer = await fetch(url, { headers: { ...headers(accept), ...extra }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MILLIS) });
-    track(answer);
-    return answer;
+    // A snapshot build wipes its output before fetching, so one refused
+    // connection must not kill it: a network failure is retried, spaced out,
+    // while an HTTP answer is returned for the caller to judge.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        counts.requests += 1;
+        const answer = await fetch(url, { headers: { ...headers(accept), ...extra }, redirect: "follow", signal: AbortSignal.timeout(TIMEOUT_MILLIS) });
+        track(answer);
+        return answer;
+      } catch (problem) {
+        if (attempt >= 3) throw problem;
+        await sleep(2000 * attempt);
+      }
+    }
   }
 
   async function json(path) {
