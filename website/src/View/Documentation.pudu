@@ -96,6 +96,18 @@ export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -
   }
 }
 
+/// API documentation examples are Pudu by project convention: every bare
+/// fence in a doc comment holds usage, so it is painted like the guides'
+/// tagged blocks instead of left plain.
+fn fencedAsPudu(lines: &Array[Str]) -> Array[Str] {
+  var painted: Array[Str] = []
+  for line in lines {
+    if line.trim() == "```" { painted = painted.push("```pudu") }
+      else { painted = painted.push(line) }
+  }
+  painted
+}
+
 export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
   let primary = entries[0]
   var declarations: Array[H.Node] = []
@@ -108,7 +120,7 @@ export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
     ]
     let provider = providerNote(entry.kind)
     if !provider.isEmpty() { content = content.push(H.p().class("kind-explanation").says(provider)) }
-    for block in Markdown.parseBody(&entry.documentation).blocks { content = content.push(block) }
+    for block in Markdown.parseBody(&fencedAsPudu(&entry.documentation)).blocks { content = content.push(block) }
     declarations = declarations.push(H.section().class("declaration").holding(content))
   }
   Layout.page(siteUrl, Domain.qualifiedName(&primary), Markdown.plainText(Domain.summary(&primary)), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
