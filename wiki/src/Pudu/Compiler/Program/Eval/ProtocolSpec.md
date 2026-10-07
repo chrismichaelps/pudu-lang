@@ -9,6 +9,8 @@ aliases: [Protocol Evaluation Spec]
 ---
 # Protocol Evaluation Spec
 
+[[Uses Resource Disposal]] proves typed disposal outcomes through both evaluators.
+
 ## Purpose and interface
 
 Runs Pudu fixtures that exercise serialization, HTTP, networking, Lambda invocation, TLS, database

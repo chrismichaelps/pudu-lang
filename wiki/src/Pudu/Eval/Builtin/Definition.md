@@ -15,6 +15,9 @@ aliases: [Eval Builtin Definition]
 
 # Eval Builtin Definition
 
+`CellDisposeBuiltin`, `MutexDisposeBuiltin` and `ForgetThreadBuiltin` append explicit disposal tags
+with names `cellDispose`, `mutexDispose` and `forgetThread`. Resolved Grill Log: preserve existing tags.
+
 ## Purpose
 
 Name the evaluator's closed set of wired-in functions and provide the one canonical mapping from

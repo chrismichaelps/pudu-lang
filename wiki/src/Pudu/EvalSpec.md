@@ -8,6 +8,9 @@ aliases: [Eval Test Coordinator]
 
 # Eval Test Coordinator
 
+Register explicit runtime disposal from [[Eval System Tests]], including actual registry removal
+and compile-time effect refusal. Resolved Grill Log: execute lifetime regressions in the full suite.
+
 ## Purpose and interface
 
 Register the focused evaluator properties in the executable test runner. The exported property list is consumed by `test/Main.hs`.

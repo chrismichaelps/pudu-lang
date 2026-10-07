@@ -10,19 +10,25 @@ module Pudu.Eval.Concurrent
   , cellNew
   , cellRead
   , cellSwap
+  , cellDispose
+  , concurrentCounts
   , mutexNew
   , mutexLock
   , mutexUnlock
+  , mutexDispose
   , newConcurrentStore
   , sleepFor
   , threadJoin
   , threadRegister
+  , threadForget
   ) where
 
 import Control.Concurrent (ThreadId, killThread, myThreadId, threadDelay)
+import Control.Exception (mask_)
 import Control.Concurrent.MVar
   ( MVar
   , readMVar
+  , tryReadMVar
   )
 import Control.Concurrent.STM
   ( TVar
@@ -70,15 +76,17 @@ data Channel = Channel
   , channelClosed :: !(TVar Bool)
   }
 
+data MutexState = Available | HeldBy !ThreadId | Retired
+
 newtype Mutex = Mutex
-  { mutexOwner :: TVar (Maybe ThreadId)
+  { mutexOwner :: TVar MutexState
   }
 
 data ConcurrentStore = ConcurrentStore
   { threadTable :: !(IORef (IntMap Running))
   , channelTable :: !(IORef (IntMap Channel))
   , mutexTable :: !(IORef (IntMap Mutex))
-  , cellTable :: !(IORef (IntMap (TVar Value)))
+  , cellTable :: !(IORef (IntMap (TVar (Maybe Value))))
   , concurrentNextToken :: !(IORef Int)
   }
 
@@ -123,6 +131,19 @@ threadJoin store token = do
       pure $ case reported of
         Nothing -> IoDone ()
         Just problem -> IoFailed problem
+
+{-| Release a completed outcome without detaching active work. -}
+threadForget :: ConcurrentStore -> Int -> IO (IoOutcome ())
+threadForget store token = mask_ $ do
+  found <- IntMap.lookup token <$> readIORef (threadTable store)
+  case found of
+    Nothing -> pure (IoFailed "no such thread")
+    Just running -> do
+      reported <- tryReadMVar (runningOutcome running)
+      case reported of
+        Nothing -> pure (IoFailed "the thread is still running")
+        Just _ -> atomicModifyIORef' (threadTable store) $ \table ->
+          (IntMap.delete token table, if IntMap.member token table then IoDone () else IoFailed "no such thread")
 
 {-| A channel holding at most the given count of items.
 
@@ -200,7 +221,7 @@ withChannel store token action = do
 {-| A lock, held by at most one thread at a time. -}
 mutexNew :: ConcurrentStore -> IO Int
 mutexNew store = do
-  lock <- Mutex <$> newTVarIO Nothing
+  lock <- Mutex <$> newTVarIO Available
   token <- freshToken store
   atomicModifyIORef' (mutexTable store) (\table -> (IntMap.insert token lock table, ()))
   pure token
@@ -212,10 +233,11 @@ mutexLock store token = withMutex store token $ \lock -> do
   atomically $ do
     heldBy <- readTVar (mutexOwner lock)
     case heldBy of
-      Nothing -> do
-        writeTVar (mutexOwner lock) (Just owner)
+      Available -> do
+        writeTVar (mutexOwner lock) (HeldBy owner)
         pure (IoDone ())
-      Just _ -> retry
+      HeldBy _ -> retry
+      Retired -> pure (IoFailed "no such lock")
 
 {-| Release a lock only from the thread that acquired it.
 
@@ -228,12 +250,26 @@ mutexUnlock store token = withMutex store token $ \lock -> do
   atomically $ do
     heldBy <- readTVar (mutexOwner lock)
     case heldBy of
-      Nothing -> pure (IoFailed "the lock is not held")
-      Just current
+      Available -> pure (IoFailed "the lock is not held")
+      Retired -> pure (IoFailed "no such lock")
+      HeldBy current
         | current == owner -> do
-            writeTVar (mutexOwner lock) Nothing
+            writeTVar (mutexOwner lock) Available
             pure (IoDone ())
         | otherwise -> pure (IoFailed "the lock is owned by another thread")
+
+{-| Retire before removal so admitted waiters observe disposal. -}
+mutexDispose :: ConcurrentStore -> Int -> IO (IoOutcome ())
+mutexDispose store token = mask_ $ withMutex store token $ \lock -> do
+  outcome <- atomically $ do
+    state <- readTVar (mutexOwner lock)
+    case state of
+      Available -> writeTVar (mutexOwner lock) Retired >> pure (IoDone ())
+      HeldBy _ -> pure (IoFailed "the lock is still held")
+      Retired -> pure (IoFailed "no such lock")
+  case outcome of
+    IoDone () -> atomicModifyIORef' (mutexTable store) (\table -> (IntMap.delete token table, IoDone ()))
+    IoFailed problem -> pure (IoFailed problem)
 
 withMutex :: ConcurrentStore -> Int -> (Mutex -> IO (IoOutcome a)) -> IO (IoOutcome a)
 withMutex store token action = do
@@ -250,13 +286,15 @@ withMutex store token action = do
     the load that makes the loss hardest to reproduce. -}
 cellNew :: ConcurrentStore -> Value -> IO Int
 cellNew store value = do
-  holder <- newTVarIO value
+  holder <- newTVarIO (Just value)
   token <- freshToken store
   atomicModifyIORef' (cellTable store) (\table -> (IntMap.insert token holder table, ()))
   pure token
 
 cellRead :: ConcurrentStore -> Int -> IO (IoOutcome Value)
-cellRead store token = withCell store token (fmap IoDone . readTVarIO)
+cellRead store token = withCell store token $ \holder -> atomically $ do
+  value <- readTVar holder
+  pure $ maybe (IoFailed "no such cell") IoDone value
 
 {-| Replace what a cell holds and answer what it held, in one step nothing can
     come between. -}
@@ -264,15 +302,36 @@ cellSwap :: ConcurrentStore -> Int -> Value -> IO (IoOutcome Value)
 cellSwap store token value = withCell store token $ \holder ->
   atomically $ do
     held <- readTVar holder
-    writeTVar holder value
-    pure (IoDone held)
+    case held of
+      Nothing -> pure (IoFailed "no such cell")
+      Just previous -> writeTVar holder (Just value) >> pure (IoDone previous)
 
-withCell :: ConcurrentStore -> Int -> (TVar Value -> IO (IoOutcome a)) -> IO (IoOutcome a)
+{-| Retire before removal so an admitted swap cannot restore a payload. -}
+cellDispose :: ConcurrentStore -> Int -> IO (IoOutcome ())
+cellDispose store token = mask_ $ withCell store token $ \holder -> do
+  outcome <- atomically $ do
+    held <- readTVar holder
+    case held of
+      Nothing -> pure (IoFailed "no such cell")
+      Just _ -> writeTVar holder Nothing >> pure (IoDone ())
+  case outcome of
+    IoDone () -> atomicModifyIORef' (cellTable store) (\table -> (IntMap.delete token table, IoDone ()))
+    IoFailed problem -> pure (IoFailed problem)
+
+withCell :: ConcurrentStore -> Int -> (TVar (Maybe Value) -> IO (IoOutcome a)) -> IO (IoOutcome a)
 withCell store token action = do
   found <- IntMap.lookup token <$> readIORef (cellTable store)
   case found of
     Nothing -> pure (IoFailed "no such cell")
     Just holder -> action holder
+
+{-| Quiescent registry counts for lifetime regression checks. -}
+concurrentCounts :: ConcurrentStore -> IO (Int, Int, Int, Int)
+concurrentCounts store = (,,,)
+  <$> (IntMap.size <$> readIORef (threadTable store))
+  <*> (IntMap.size <$> readIORef (channelTable store))
+  <*> (IntMap.size <$> readIORef (mutexTable store))
+  <*> (IntMap.size <$> readIORef (cellTable store))
 
 {-| Wait, without holding the machine while doing it. -}
 sleepFor :: Int -> IO (IoOutcome ())

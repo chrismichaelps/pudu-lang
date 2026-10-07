@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Explicit runtime disposal (#453)
+
+- [[Eval Concurrent]], [[Std Sync]] and [[Std Concurrent]] retire cells and unowned locks and
+  forget completed tasks, preserving replayable joins until disposal and refusing active owners.
+- [[Std Http Server]] and ordinary action containment release private request resources internally.
+  A 100000-request local retention probe falls from 1750728704 to 137527296 peak resident bytes.
+- [[Eval System Tests]] checks exact table removal, admitted mutex contenders and constant-effect
+  refusal; [[Uses Resource Disposal]] checks typed success and failure through both evaluators.
+- [[App Retention Probe]] preserves the measured workload. Independent semantic and vault-parity
+  review remain required; unfinished-work cancellation and other internal lifetimes remain open.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

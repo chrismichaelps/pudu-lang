@@ -20,6 +20,7 @@ testProtocolEvaluation = do
   cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
   urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
+  disposedResources <- runEntry "test-fixtures/stdlib/UsesResourceDisposal.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
@@ -76,7 +77,8 @@ testProtocolEvaluation = do
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
-    [ counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
+    [ counterexample "explicit resource disposal preserves active owners" (disposedResources === Just "0")
+    , counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
     , counterexample "YAML quoted text decodes escapes and refuses malformed scalars" (yamlQuoted === Just "0")
     , counterexample "compact YAML sequences preserve nested items and sibling keys" (yamlCompact === Just "0")
     , {-| The five lookup tables at both ends and past the end, where a
