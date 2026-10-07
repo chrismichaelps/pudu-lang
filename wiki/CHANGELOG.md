@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Bounded database read-ahead (#445)
+
+- [[Std Db Session]] validates a frame header before reading ahead within the existing byte
+  budget and chunk cap. Following frames remain buffered; fragmented bodies join segments once.
+- [[Database Buffered Read Fixture]] proves exact framing, fragmented delivery, invalid budgets,
+  oversized and malformed headers, EOF cleanup and two reads for 1,000 small frames.
+- [[Database Frame Benchmark]] consumes 20,000 identical frames over a local connection. Three
+  matched runs measured 3,304 / 2,751 / 2,685 ms before and 1,205 / 1,281 / 1,367 ms after;
+  median consumption time fell 53.4%. This is a local workload, not a production capacity guarantee.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

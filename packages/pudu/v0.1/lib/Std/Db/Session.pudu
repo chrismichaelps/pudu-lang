@@ -148,25 +148,27 @@ export fn nextMessageLimited(
 ) -> Result[(Wire.Message, Connection), DbError] {
   if maxBytes < 5 { return Err(Other("the database message budget must be at least five bytes")) }
   var held = stream
-  loop {
-    var required = 5
-    if held.buffer.length() >= 5 {
-      match Wire.messageSize(&held.buffer) {
-        case Err(problem) => { return failedRead(&held, Malformed(show(problem))) }
-        case Ok(total) => { required = total }
-      }
-      if required > maxBytes {
-        return failedRead(&held, Malformed("the database message exceeds its byte budget"))
-      }
-      if held.buffer.length() >= required {
-        match Wire.readMessage(&held.buffer) {
-          case Err(problem) => { return failedRead(&held, Malformed(show(problem))) }
-          case Ok(pair) => { return Ok((pair[0], Connection{..held, buffer: pair[1]})) }
-        }
-      }
-    }
-    let missing = required - held.buffer.length()
-    let requested = if missing < CHUNK { missing } else { CHUNK }
+  if held.buffer.length() < 5 { held = fill(held, 5, 5) ? }
+  let required = match Wire.messageSize(&held.buffer) {
+    case Err(problem) => { return failedRead(&held, Malformed(show(problem))) }
+    case Ok(total) => total
+  }
+  if required > maxBytes {
+    return failedRead(&held, Malformed("the database message exceeds its byte budget"))
+  }
+  if held.buffer.length() < required { held = fill(held, required, maxBytes) ? }
+  match Wire.readMessage(&held.buffer) {
+    case Err(problem) => failedRead(&held, Malformed(show(problem)))
+    case Ok(pair) => Ok((pair[0], Connection{..held, buffer: pair[1]}))
+  }
+}
+
+fn fill(held: Connection, required: Int, budget: Int) -> Result[Connection, DbError] {
+  var pieces: Array[Bytes] = [held.buffer]
+  var size = held.buffer.length()
+  while size < required {
+    let allowance = budget - size
+    let requested = if allowance < CHUNK { allowance } else { CHUNK }
     var wait = -1
     if held.deadline >= 0 {
       wait = held.deadline - Env.elapsedMilliseconds()
@@ -178,10 +180,12 @@ export fn nextMessageLimited(
       case Ok(None) => { return failedRead(&held, Closed) }
       case Ok(Some(bytes)) => {
         if bytes.isEmpty() { return failedRead(&held, Closed) }
-        held = Connection{..held, buffer: held.buffer.concat(bytes)}
+        pieces = pieces.push(bytes)
+        size = size + bytes.length()
       }
     }
   }
+  Ok(Connection{..held, buffer: ByteSeq.join(&pieces)})
 }
 
 fn failedRead[T](stream: &Connection, primary: DbError) -> Result[T, DbError] {

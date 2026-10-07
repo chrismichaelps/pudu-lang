@@ -20,6 +20,7 @@ testProtocolEvaluation = do
   cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
   urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
+  bufferedDatabase <- runEntry "test-fixtures/dbbuffer/Main.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
@@ -516,6 +517,8 @@ testProtocolEvaluation = do
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
         (appDatabase === Just "59")
+    , counterexample "database reads coalesce within validated frame budgets"
+        (bufferedDatabase === Just "0")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
