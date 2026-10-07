@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Database transaction scope (#443)
+
+- [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles
+  after both typed outcomes, before settlement. Expired operations never reach the backend.
+- Bundled transaction callback entries share that boundary. [[Uses Database Transaction Scope]]
+  covers success, primary failure preservation, saved-handle refusal and concurrent commands.
+- [[Application Maturity]] records the audit order and evidence required for application readiness.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

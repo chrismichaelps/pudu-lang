@@ -16,4 +16,8 @@ Adapt the existing PostgreSQL protocol and bounded pool to the backend-neutral D
 - **Q:** Advertise drivers that have no implementation? **A:** No; third-party drivers are supported through the contract, but only concrete adapters are listed as bundled.
 
 ## Referenced by
+
+Transaction callback entry applies the shared scope guard from [[Std Db Driver]] before settlement:
+retained handles expire, and query and execute share exclusive command admission.
+
 [[src/Std/_MOC]] · [[Std App Database]] · [[Std Db]] · [[architecture/STDLIB]]
