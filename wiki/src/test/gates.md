@@ -20,6 +20,9 @@ and the peak memory of the file-streaming readers at ten times the input.
 
 ## Governance and algorithm
 
+[[Application Layer Tests]] and [[Application Layer Gate]] check the application import graph
+before builds, rejecting cycles, missing identities and upward architectural dependencies.
+
 Build products are removed before the warning gate so Cabal cannot answer from an older object. The
 optimized executable path is resolved once and passed to behavioral scripts, including [[Generated
 Project Gate]]. Independent checks continue after one fails; the script exits unsuccessfully when

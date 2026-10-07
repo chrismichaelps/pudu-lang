@@ -14,6 +14,8 @@ Pudu is a statically typed native systems language for developers who need predi
 
 - [[Application Maturity]] — database correctness, measured throughput and application dependency layers.
 
+- [[Application Dependency Layers]] — enforced application source graph and explicit architectural direction.
+
 - [[architecture/LANGUAGE|Architecture Language]] — canonical FMCF vocabulary.
 - [[architecture/OVERVIEW|Compiler Architecture]] — phases, dependency direction, and delivery sequence.
 - [[architecture/SEMANTICS|Pudu Semantic System]] — normative static, dynamic, ownership, failure, and concurrency meaning.
