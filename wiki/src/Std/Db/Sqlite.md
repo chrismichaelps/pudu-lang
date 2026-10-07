@@ -30,6 +30,10 @@ cross-call transaction ownership are not promised by the shared Client API.
 - **Q:** Drop statement ownership after a typed decode failure? **A:** No; always finalize before returning.
 
 ## Referenced by
+
+Transaction callback entry applies the shared scope guard from [[Std Db Driver]] before settlement:
+retained handles expire, and query and execute share exclusive command admission.
+
 [[src/Std/_MOC]] · [[Std Db Driver]] · [[Std App Database]] · [[Pudu SQLite Bridge]]
 
 ## Usage and runtime requirements
