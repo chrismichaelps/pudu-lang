@@ -1,0 +1,45 @@
+module Std.Net
+
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+export type State = { remaining: Bytes, requests: Array[Int], fragment: Int, closed: Bool }
+
+export fn fake(bytes: Bytes, fragment: Int) -> Connection {
+  let cell = Sync.cell(State{remaining: bytes, requests: [], fragment: fragment, closed: false})
+  Connection{token: cell.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&cell), failed)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let wanted = if count < held.fragment { count } else { held.fragment }
+  let bytes = held.remaining.take(wanted)
+  let next = State{..held, remaining: held.remaining.drop(bytes.length()), requests: held.requests.push(count)}
+  Result.mapErr(Sync.set(&cell, next), failed) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&cell, State{..held, closed: true}), failed)
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  Err(Other("opening is outside this fixture"))
+}
+
+export fn send(connection: &Connection, _bytes: &Bytes) -> Result[(), NetError] {
+  if (state(connection) ?).closed { Err(Closed) } else { Ok(()) }
+}
+
+fn failed(reason: Sync.SyncError) -> NetError { Other(show(reason)) }

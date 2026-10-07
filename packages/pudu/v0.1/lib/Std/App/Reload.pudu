@@ -1,0 +1,77 @@
+module Std.App.Reload
+
+import Std.Bytes as ByteSeq
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Mime as Mime
+import Std.Option as Option
+import Std.Random as Random
+import Std.Text as Text
+
+const REVISION_PATH: Str = "/_pudu/reload"
+const SCRIPT_PATH: Str = "/_pudu/reload.js"
+const CLIENT: Str = "(() => \{ const revision = document.currentScript.dataset.puduRevision; "
+  + "async function poll() \{ if (document.hidden) \{ setTimeout(poll, 400); return; \} "
+  + "const controller = new AbortController(); const alarm = setTimeout(() => controller.abort(), 1500); "
+  + "try \{ const response = await fetch('/_pudu/reload', \{cache: 'no-store', signal: controller.signal\}); "
+  + "if (response.ok) \{ const next = (await response.text()).trim(); "
+  + "if (/^[A-Za-z0-9_-]\{1,128\}$/.test(next) && next !== revision) \{ location.reload(); return; \} \} "
+  + "\} catch (_) \{ \} finally \{ clearTimeout(alarm); \} setTimeout(poll, 400); \} poll(); \})();"
+
+/// Resolve development steps before any application resource opens.
+export fn watched() -> Result[Array[Route.Middleware], Str] {
+  forGeneration(Env.variableOr("PUDU_WATCH", ""))
+}
+
+/// A positive watched generation receives a fresh revision even if its supervisor restarted.
+export fn forGeneration(generation: Str) -> Result[Array[Route.Middleware], Str] {
+  let number = Option.unwrapOr(Text.wholeOf(generation), 0)
+  if number < 1 { return Ok([]) }
+  let octets = Random.secureBytes(16) ?
+  let step = middleware(ByteSeq.encodeHex(&octets)) ?
+  Ok([step])
+}
+
+/// Construct a refresh step with an explicit opaque revision.
+export fn middleware(revision: Str) -> Result[Route.Middleware, Str] {
+  if revision.isEmpty() || revision.length() > 128 { return Err("invalid refresh revision") }
+  var index = 0
+  while index < revision.length() {
+    if !"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-".contains(revision.slice(index, index + 1)) {
+      return Err("invalid refresh revision")
+    }
+    index = index + 1
+  }
+  let tag = "<script src=\"" + SCRIPT_PATH + "\" defer data-pudu-revision=\"" + revision + "\"></script>"
+  Ok(fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+      if request.path == REVISION_PATH || request.path == SCRIPT_PATH {
+        if request.message.method != Http.Get && request.message.method != Http.Head {
+          let refused = Reply.text(405, "that method is not allowed here")
+          return Http.Response{..refused, headers: refused.headers.push(("Allow", "GET, HEAD")).push(("cache-control", "no-store"))}
+        }
+        let answer = if request.path == REVISION_PATH { Reply.text(200, revision) } else {
+          Http.Response{..Reply.text(200, CLIENT), headers: [
+              ("content-type", Mime.fromExtension("js") + "; charset=utf-8"), ("content-length", show(CLIENT.toBytes().length()))
+            ] }
+        }
+        return Http.Response{..answer, headers: answer.headers.push(("cache-control", "no-store"))}
+      }
+      let answer = next(request)
+      let media = Option.unwrapOr(Http.header(&answer.headers, "content-type"), "").split(";")[0].trim().toLower()
+      if request.message.method != Http.Get || answer.status.code != 200 || media != "text/html"
+        || Option.isSome(&answer.binaryBody) || Option.isSome(&Http.header(&answer.headers, "content-encoding"))
+        || Option.isSome(&Http.header(&answer.headers, "content-range")) { return answer }
+      var headers: Array[(Str, Str)] = []
+      for pair in answer.headers {
+        if !["content-length", "transfer-encoding", "etag", "last-modified", "cache-control", "expires",
+          "content-md5", "digest", "content-digest", "repr-digest", "accept-ranges"].contains(pair[0].toLower()) {
+          headers = headers.push(pair)
+        }
+      }
+      let body = answer.body + tag
+      Http.Response{..answer, body: body, headers: headers
+          .push(("content-length", show(body.toBytes().length()))).push(("cache-control", "no-store")) }
+    })
+}

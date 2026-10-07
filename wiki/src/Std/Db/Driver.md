@@ -34,3 +34,17 @@ when the driver cannot establish a lossless native mapping. SQL NULL is always `
 The core does not parse vendor connection options, select a hidden driver, or promise portable SQL.
 
 [[Std Db Row]] supplies named/indexed access, exact typed readers and cardinality-aware mapping over these backend-neutral results.
+
+## Guarded transaction scopes
+
+`scoped(held, action)` lends a guarded transaction for one action. Query and execute use the same
+mutex, check live admission under that mutex, and hold it until the command returns. Revocation
+takes that mutex after either typed outcome and precedes driver settlement. Retained handles return
+category `expired` without invoking either original callback. Concurrent calls serialize.
+`transaction(client, action)` applies this guard even to an explicitly supplied client. Bundled
+callback entries also apply it so direct callback use retains the same boundary. Synchronization
+failures stay typed; failed revocation preserves any primary failure and appends its cleanup cause.
+
+Resolved Grill Log: revoke after both outcomes; command admission and revocation share the lock;
+do not claim cleanup after runtime abort or forced cancellation. See [[Application Maturity]] and
+[[Uses Database Transaction Scope]].

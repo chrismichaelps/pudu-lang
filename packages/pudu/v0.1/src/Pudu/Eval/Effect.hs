@@ -59,6 +59,7 @@ import Pudu.Eval.Handle
   )
 import Pudu.Eval.Concurrent
   ( cellNew
+  , cellDispose
   , cellRead
   , cellSwap
   , channelClose
@@ -69,8 +70,10 @@ import Pudu.Eval.Concurrent
   , mutexLock
   , mutexNew
   , mutexUnlock
+  , mutexDispose
   , sleepFor
   , threadJoin
+  , threadForget
   )
 import Pudu.Eval.Tls
   ( closeTlsAt
@@ -224,6 +227,9 @@ effectBuiltins =
   , CellOpenBuiltin
   , CellGetBuiltin
   , CellSwapBuiltin
+  , CellDisposeBuiltin
+  , MutexDisposeBuiltin
+  , ForgetThreadBuiltin
   , SecureBytesBuiltin
   , DesktopOpenBuiltin
   , DesktopPresentBuiltin
@@ -423,6 +429,9 @@ callEffect spanValue builtin arguments = do
         resultOf <$> lift refusal (cellRead concurrent (fromInteger token))
       (CellSwapBuiltin, [IntValue _ token, value]) ->
         resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
+      (CellDisposeBuiltin, [IntValue _ token]) -> effectUnit (cellDispose concurrent (fromInteger token))
+      (MutexDisposeBuiltin, [IntValue _ token]) -> effectUnit (mutexDispose concurrent (fromInteger token))
+      (ForgetThreadBuiltin, [IntValue _ token]) -> effectUnit (threadForget concurrent (fromInteger token))
       (SecureBytesBuiltin, [IntValue _ count]) ->
         resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
       (DesktopOpenBuiltin, [StrValue title, IntValue _ width, IntValue _ height, BoolValue resizable]) -> do

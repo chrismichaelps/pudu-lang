@@ -37,6 +37,11 @@ export fn join(worker: &Task) -> Result[(), ConcurrentError] {
   Result.mapErr(joinThread(worker.token), causeOf)
 }
 
+/// Forget a completed task after its outcome is no longer needed.
+export fn forget(worker: &Task) -> Result[(), ConcurrentError] {
+  Result.mapErr(forgetThread(worker.token), causeOf)
+}
+
 /// Wait for every thread, in the order they were started.
 ///
 /// The order is what makes a failure among them predictable: with several
@@ -81,7 +86,9 @@ export fn parallel(actions: &Array[fn() -> ()]) -> Result[(), ConcurrentError] {
 /// `Std.Concurrent.*` puts around caller code.
 export fn contain(action: fn() -> ()) -> Result[(), ConcurrentError] {
   let worker = start(action) ?
-  join(&worker)
+  let outcome = join(&worker)
+  let _forgotten = forget(&worker)
+  outcome
 }
 
 /// Wait, without holding the machine while waiting.

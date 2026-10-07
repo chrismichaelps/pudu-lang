@@ -9,6 +9,12 @@ aliases: [Protocol Evaluation Spec]
 ---
 # Protocol Evaluation Spec
 
+[[Uses App Reload]] verifies the development middleware's exact responses and production inactivity.
+
+[[Uses App Metrics Concurrent]] proves exact request observations under concurrent load.
+
+[[Uses Resource Disposal]] proves typed disposal outcomes through both evaluators.
+
 ## Purpose and interface
 
 Runs Pudu fixtures that exercise serialization, HTTP, networking, Lambda invocation, TLS, database
@@ -16,6 +22,12 @@ wire formats, and related standard-library protocols. Each fixture returns an ex
 the Haskell property reports a named counterexample when that count changes.
 
 ## Governance and algorithm
+
+[[Uses Database Transaction Scope]] runs in the full suite with an exact zero result. It proves
+transaction callback revocation and exclusive command admission against an explicit client seam.
+
+[[Database Buffered Read Fixture]] runs the shipped session reader through exact transport
+fragmentation, frame budget, coalescing and cleanup checks, with a required zero result.
 
 The HTTP client fixture includes a loopback peer that sends a complete length-framed response and
 keeps the connection open beyond the client's deadline. Success proves message framing, rather than

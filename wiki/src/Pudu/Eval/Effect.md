@@ -15,6 +15,10 @@ aliases: [Eval Effect]
 
 # Eval Effect
 
+Disposal primitives dispatch one token to [[Eval Concurrent]] and return Result[(), Str]. They belong
+to the ordinary effect list and remain forbidden during constant evaluation. Resolved Grill Log:
+resource cleanup follows the same admission boundary as resource creation.
+
 ## Purpose
 
 Perform the operations that reach outside the program — reading and writing files, the environment,

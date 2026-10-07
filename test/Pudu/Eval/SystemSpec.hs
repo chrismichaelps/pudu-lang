@@ -7,14 +7,19 @@ module Pudu.Eval.SystemSpec
   , testEffects
   , testFailures
   , testResourceIsolation
+  , testResourceDisposal
   , testScopes
   , testUnsafeRegions
   ) where
 
-import Control.Monad (when)
+import Control.Monad (replicateM, when)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import GHC.Conc (BlockReason (BlockedOnSTM), ThreadStatus (ThreadBlocked), threadStatus)
 import qualified Data.Text as Text
 import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
 import System.IO (hClose, openTempFile)
+import System.Timeout (timeout)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 import Pudu.Eval.Common
@@ -28,9 +33,19 @@ import Pudu.Eval.Common
   )
 import Pudu.Eval.Concurrent
   ( cellNew
+  , cellDispose
   , cellRead
+  , cellSwap
+  , concurrentCounts
   , closeConcurrentStore
+  , mutexNew
+  , mutexLock
+  , mutexUnlock
+  , mutexDispose
   , newConcurrentStore
+  , threadRegister
+  , threadJoin
+  , threadForget
   )
 import Pudu.Eval.Handle
   ( closeHandleStore
@@ -51,7 +66,98 @@ systemProperties =
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("calendar time and subprocesses answer with results", testClock)
   , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
+  , ("explicit disposal removes completed runtime resources", testResourceDisposal)
   ]
+
+testResourceDisposal :: IO Property
+testResourceDisposal = do
+  store <- newConcurrentStore
+  token <- cellNew store UnitValue
+  disposed <- cellDispose store token
+  repeated <- cellDispose store token
+  afterRead <- cellRead store token
+  afterSwap <- cellSwap store token UnitValue
+  fresh <- cellNew store UnitValue
+  _ <- cellDispose store fresh
+  lock <- mutexNew store
+  _ <- mutexLock store lock
+  owned <- mutexDispose store lock
+  released <- mutexUnlock store lock
+  retired <- mutexDispose store lock
+  afterLock <- mutexLock store lock
+  afterUnlock <- mutexUnlock store lock
+  repeatedLock <- mutexDispose store lock
+  outcome <- newEmptyMVar
+  proceed <- newEmptyMVar
+  child <- forkIO (takeMVar proceed >> putMVar outcome Nothing)
+  worker <- threadRegister store child outcome
+  active <- threadForget store worker
+  putMVar proceed ()
+  joined <- threadJoin store worker
+  replayed <- threadJoin store worker
+  forgotten <- threadForget store worker
+  afterJoin <- threadJoin store worker
+  repeatedThread <- threadForget store worker
+  cycles <- replicateM 100 $ do
+    holder <- cellNew store UnitValue
+    _ <- cellDispose store holder
+    gate <- mutexNew store
+    _ <- mutexDispose store gate
+    concurrentCounts store
+  races <- replicateM 20 $ do
+    gate <- mutexNew store
+    _ <- mutexLock store gate
+    ready <- newEmptyMVar
+    entered <- newEmptyMVar
+    finished <- newEmptyMVar
+    contender <- forkIO $ do
+      putMVar ready ()
+      acquired <- mutexLock store gate
+      case acquired of
+        IoDone () -> do
+          _ <- mutexUnlock store gate
+          pure ()
+        IoFailed _ -> pure ()
+      putMVar entered acquired
+      putMVar finished Nothing
+    registered <- threadRegister store contender finished
+    takeMVar ready
+    parked <- timeout 1000000 (waitUntilBlocked contender)
+    _ <- mutexUnlock store gate
+    disposal <- mutexDispose store gate
+    result <- timeout 1000000 (takeMVar entered)
+    completed <- timeout 1000000 (threadJoin store registered)
+    _ <- threadForget store registered
+    case disposal of
+      IoDone () -> pure ()
+      IoFailed _ -> do
+        _ <- mutexDispose store gate
+        pure ()
+    pure (parked == Just (), completed == Just (IoDone ())
+      && (result == Just (IoDone ()) || result == Just (IoFailed "no such lock")))
+  counts <- concurrentCounts store
+  closeConcurrentStore store
+  refused <- mapM (codesOfConstant . (\call -> "{ let _ = " <> call <> "\n true }"))
+    ["cellDispose(1)", "mutexDispose(1)", "forgetThread(1)"]
+  pure $ conjoin
+    [ disposed === IoDone (), repeated === IoFailed "no such cell"
+    , afterRead === IoFailed "no such cell", afterSwap === IoFailed "no such cell"
+    , counterexample "tokens are never reused" (property (fresh > token))
+    , owned === IoFailed "the lock is still held", released === IoDone (), retired === IoDone ()
+    , afterLock === IoFailed "no such lock", afterUnlock === IoFailed "no such lock"
+    , repeatedLock === IoFailed "no such lock", active === IoFailed "the thread is still running"
+    , joined === IoDone (), replayed === IoDone (), forgotten === IoDone ()
+    , afterJoin === IoFailed "no such thread", repeatedThread === IoFailed "no such thread"
+    , counterexample "disposal removes every registry entry" (cycles === replicate 100 (0, 0, 0, 0))
+    , counterexample "retirement cannot strand admitted contenders" (races === replicate 20 (True, True))
+    , counts === (0, 0, 0, 0), refused === replicate 3 ["E7009"]
+    ]
+ where
+  waitUntilBlocked thread = do
+    status <- threadStatus thread
+    case status of
+      ThreadBlocked BlockedOnSTM -> pure ()
+      _ -> threadDelay 100 >> waitUntilBlocked thread
 
 testResourceIsolation :: IO Property
 testResourceIsolation = do

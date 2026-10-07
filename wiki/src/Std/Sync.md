@@ -8,12 +8,17 @@ tags: [module, stdlib, synchronization]
 aliases: [Std Sync]
 ---
 # Std Sync
+
+`disposeCell` and `disposeMutex` release runtime registrations explicitly. Cells retire immediately;
+mutexes must be unowned. Copied tokens also become invalid and unknown/repeated disposal is Missing.
+Resolved Grill Log: disposal is separate from unlock and from value replacement.
 ## Purpose
 Provide runtime-owned mutual exclusion and atomic shared cells for thread coordination.
 ## Interface
-Exports mutex/lock/unlock/withLock, typed cell read/swap/set, and a counter composed from them.
+Exports mutex/lock/unlock/withLock, typed cell read/swap/set, explicit mutex/cell disposal and a
+counter composed from them.
 ## Governance and algorithm
-Tokens name runtime objects that cannot be fabricated through public constructors. Cell swap is
+Tokens name runtime objects; fabricated unknown tokens are refused. Cell swap is
 atomic; compound read-modify-write requires the mutex. A mutex is owned by the host thread that
 acquired it, so an unlocked or foreign release fails instead of manufacturing an extra permit.
 Failures remain `SyncError` values.

@@ -77,7 +77,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
                       }
                     }
                   }
-                  let answered = action(inside)
+                  let answered = Driver.scoped(&inside, action)
                   match Sync.get(&held) {
                     case Err(problem) => (Err(Session.Other(show(problem))), started)
                     case Ok(current) => {

@@ -1,0 +1,106 @@
+module UsesDbTransactionScope
+
+import Std.Concurrent as Concurrent
+import Std.Db.Driver as Driver
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer {
+    case Ok(value) => value
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+
+fn empty() -> Driver.Rows { Driver.Rows{columns: [], rows: [], command: "done"} }
+
+fn expired(answer: Result[Driver.Rows, Driver.Error]) -> Bool {
+  match answer {
+    case Err(problem) => problem.category == "expired" && !problem.message.isEmpty()
+    case Ok(_) => false
+  }
+}
+
+fn client(calls: Sync.Counter) -> Driver.Client {
+  let held = Driver.Tx {
+    query: fn(_sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+      let _count = require(Sync.increment(&calls, 1))
+      Ok(empty())
+    },
+    execute: fn(_sql: Str) -> Result[Driver.Rows, Driver.Error] {
+      let _count = require(Sync.increment(&calls, 1))
+      Ok(empty())
+    }
+  }
+  Driver.Client{query: held.query, execute: held.execute,
+    transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+      action(held)
+    }, close: fn() -> Result[(), Driver.Error] { Ok(()) } }
+}
+
+fn saved(kept: Sync.Cell[Option[Driver.Tx]], calls: Sync.Counter, fail: Bool) -> () {
+  let target = client(calls)
+  let refusal = Driver.Error{driver: "test", category: "constraint", code: Some("7"), message: "refused"}
+  let outcome = Driver.transaction(&target, fn(held: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      let _kept = require(Sync.set(&kept, Some(held)))
+      check(require(Driver.ask(&held, "read", &[])) == empty(), "query value")
+      check(require(Driver.run(&held, "write")) == empty(), "execute value")
+      if fail { Err(refusal) } else { Ok(empty()) }
+    })
+  if fail { check(outcome == Err(refusal), "primary failure preserved") }
+    else { check(outcome == Ok(empty()), "success preserved") }
+  let before = require(Sync.count(&calls))
+  let held = match require(Sync.get(&kept)) {
+    case None => panic("transaction was not captured")
+    case Some(value) => value
+  }
+  check(expired(Driver.ask(&held, "late read", &[])), "retained query refused")
+  check(expired((held.execute)("late write")), "retained direct execute refused")
+  check(require(Sync.count(&calls)) == before, "expired calls never reach backend")
+}
+
+fn parallel() -> () {
+  let active = Sync.counter(0)
+  let overlap = Sync.counter(0)
+  let calls = Sync.counter(0)
+  let command = fn() -> Result[Driver.Rows, Driver.Error] {
+    if require(Sync.increment(&active, 1)) != 1 {
+      let _found = require(Sync.increment(&overlap, 1))
+    }
+    let _yielded = Concurrent.sleep(5)
+    let _done = require(Sync.increment(&active, -1))
+    let _count = require(Sync.increment(&calls, 1))
+    Ok(empty())
+  }
+  let raw = Driver.Tx {
+    query: fn(_sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] { command() },
+    execute: fn(_sql: Str) -> Result[Driver.Rows, Driver.Error] { command() }
+  }
+  let _answer = require(Driver.scoped(&raw, fn(held: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        var work: Array[fn() -> ()] = []
+        for index in 0..8 {
+          work = work.push(fn() -> () {
+              let _rows = if index % 2 == 0 { require(Driver.ask(&held, "read", &[])) }
+                else { require(Driver.run(&held, "write")) }
+              ()
+            })
+        }
+        let _joined = require(Concurrent.parallel(&work))
+        Ok(empty())
+      }))
+  check(require(Sync.count(&calls)) == 8, "all commands completed")
+  check(require(Sync.count(&active)) == 0, "commands settled")
+  check(require(Sync.count(&overlap)) == 0, "commands share exclusive admission")
+}
+
+export fn main() -> Int {
+  let kept = Sync.cell[Option[Driver.Tx]](None)
+  let calls = Sync.counter(0)
+  saved(kept, calls, false)
+  saved(kept, calls, true)
+  check(require(Sync.count(&calls)) == 4, "only scoped calls reached backend")
+  parallel()
+  0
+}

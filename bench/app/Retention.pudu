@@ -1,0 +1,28 @@
+module Retention
+
+import Std.App as App
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Option as Option
+import Std.Text as Text
+
+export fn main() -> Int {
+  let count = Option.unwrapOr(Text.wholeOf(Env.variableOr("PUDU_RETENTION_COUNT", "100")), 100)
+  if count < 1 || count > 1000000 { panic("request count must be in 1..1000000") }
+  let router = Route.routing(&[Route.get("/", fn(one: Route.Request) {
+          Reply.text(200, one.message.body + "payload".repeat(20))
+        })])
+  let handle = Server.handlerOf(&Server.server(&router))
+  for index in 0..count {
+    let message = Http.withBody(&Http.request(Http.Get, "/"), show(index))
+    let answer = handle(Route.Request{message: message, path: "/", params: mapOf([]), query: mapOf([]), peer: "test"})
+    if answer.status.code != 200 || answer.body != show(index) + "payload".repeat(20) {
+      panic("handler response changed")
+    }
+  }
+  print(show(count))
+  0
+}

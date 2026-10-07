@@ -5,6 +5,25 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
+
+- [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]
+  — exact database reader calls, framing boundaries and measured local consumption.
+
+- [[Application Layer Gate]] · [[Application Layer Model]] · [[Application Layer Tests]]
+  — enforced Pudu framework imports and architectural direction.
+- [[Pudu Continuous Verification]] — behavioral and architectural integration checks.
+
+- [[Uses App Reload]] — exact watched application response transformation and refusal.
+
+- [[Uses App Metrics Concurrent]] — exact request observations and concurrent handler execution.
+
+- [[App Retention Probe]] — repeated request containment and memory measurement.
+- [[Eval System Tests]] — runtime isolation and explicit resource disposal.
+- [[Uses Resource Disposal]] — typed disposal success and refusal.
+
+- [[Eval Arithmetic Tests]] · [[Uses Tuple Ordering]] — tuple-ordering regression coverage.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.

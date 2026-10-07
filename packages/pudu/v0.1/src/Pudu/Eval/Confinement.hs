@@ -73,6 +73,9 @@ keptWhenConfined builtin = case builtin of
   CellOpenBuiltin -> True
   CellGetBuiltin -> True
   CellSwapBuiltin -> True
+  CellDisposeBuiltin -> True
+  MutexDisposeBuiltin -> True
+  ForgetThreadBuiltin -> True
   _ -> False
 
 {-| Stop the program at `spanValue` when this process is confined and the

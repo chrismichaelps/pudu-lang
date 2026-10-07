@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Arithmetic Tests]] — scalar operators and tuple-ordering regression checks.
+
 - [[Eval MultiMap]] — fused persistent append and indexed membership beneath Std.MultiMap.
 
 - [[Eval Function Closure Tests]] — receiver, generic, qualified, and missing Decimal dispatch checks.

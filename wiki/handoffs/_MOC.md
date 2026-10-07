@@ -5,6 +5,20 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-07-app-maturity]] — sequential application hardening, beginning with transaction isolation.
+
+- [[2026-10-07-database-read-ahead]] — bounded database transport coalescing and measured consumption.
+
+- [[2026-10-07-app-layers]] — explicit application graph enforcement and validation integration.
+
+- [[2026-10-07-app-hot-reload]] — automatic refresh for watched application runs.
+
+- [[2026-10-07-app-request-measurements]] — preserve concurrent application observations.
+
+- [[2026-10-07-runtime-disposal]] — explicit runtime lifetime foundation.
+
+- [[2026-10-07-tuple-ordering]] — issue #442 expression and collection order alignment.
+
 - [[2026-10-01-derive-integration]] — complete derive integration, committing each validated slice; no PR yet.
 
 - [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).

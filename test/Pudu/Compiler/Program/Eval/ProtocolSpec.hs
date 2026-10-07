@@ -20,6 +20,11 @@ testProtocolEvaluation = do
   cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
   urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
+  transactionScope <- runEntry "test-fixtures/stdlib/UsesDbTransactionScope.pudu"
+  bufferedDatabase <- runEntry "test-fixtures/dbbuffer/Main.pudu"
+  appReload <- runEntry "test-fixtures/stdlib/UsesAppReload.pudu"
+  appMeasurements <- runEntry "test-fixtures/stdlib/UsesAppMetricsConcurrent.pudu"
+  disposedResources <- runEntry "test-fixtures/stdlib/UsesResourceDisposal.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
@@ -76,7 +81,10 @@ testProtocolEvaluation = do
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
-    [ counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
+    [ counterexample "watched application refresh preserves ordinary responses" (appReload === Just "0")
+    , counterexample "concurrent application requests retain every measurement" (appMeasurements === Just "0")
+    , counterexample "explicit resource disposal preserves active owners" (disposedResources === Just "0")
+    , counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
     , counterexample "YAML quoted text decodes escapes and refuses malformed scalars" (yamlQuoted === Just "0")
     , counterexample "compact YAML sequences preserve nested items and sibling keys" (yamlCompact === Just "0")
     , {-| The five lookup tables at both ends and past the end, where a
@@ -516,6 +524,10 @@ testProtocolEvaluation = do
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
         (appDatabase === Just "59")
+    , counterexample "transaction handles expire and commands cannot overlap"
+        (transactionScope === Just "0")
+    , counterexample "database reads coalesce within validated frame budgets"
+        (bufferedDatabase === Just "0")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"

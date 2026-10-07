@@ -9,6 +9,15 @@ tags: [module, runtime, concurrency]
 aliases: [Eval Concurrent]
 ---
 # Eval Concurrent
+
+## Explicit disposal
+
+`cellDispose` retires its holder before removing it; later reads and swaps fail. `mutexDispose`
+requires an unowned lock, retires its state before removal and wakes admitted waiters to refusal.
+`threadForget` removes only completed outcomes; replayable joining remains unchanged beforehand.
+Unknown and repeated disposal fail. Tokens are never reused. Mask the retirement/removal phase
+against interruption. `concurrentCounts` exposes quiescent table sizes for runtime regression tests.
+Resolved Grill Log: retire before removal to close admitted-operation races; refuse active owners.
 ## Purpose
 Own one evaluation's host threads, bounded channels, mutexes, and atomic cells referenced by opaque
 Pudu tokens.
@@ -19,10 +28,9 @@ concurrency resources in that evaluation's store at teardown.
 Tables use never-reused tokens. Channels use a `Seq`, so enqueue, dequeue, and pending-count remain
 constant-time while STM enforces capacity and close conditions. A mutex records the owning host
 thread; only that thread may release it, and an unlocked or foreign release is an `IoOutcome`
-failure. Cell swaps are atomic and joined outcomes are replayable. `threadCancel` interrupts a thread
-and waits on its outcome slot before answering, so cancellation is complete rather than requested;
-cancelling a finished thread is a no-op and an unknown token is an `IoOutcome` failure. Blocking runtime
-waits are interruptible, while a call held inside foreign code stops only once it returns. Host exceptions become
+failure. Cell swaps are atomic and joined outcomes are replayable. No public primitive interrupts
+an active thread; explicit forgetting refuses it. Blocking runtime waits are interruptible during
+evaluation teardown, while a call held inside foreign code stops only once it returns. Host exceptions become
 `IoOutcome` failures at the evaluator boundary. Stores are isolated per evaluation, and teardown
 cannot invalidate another embedded program's tokens. Teardown stops remaining threads through
 `trySynchronous` from [[Eval Io]], so an interrupt arriving while threads are stopped still ends the
@@ -34,4 +42,4 @@ program rather than being absorbed as a failed stop.
 - **Q:** Keep one process-global table? **A:** No. _Rationale:_ an evaluation owns only the workers
   and synchronization objects it created. _Rejected:_ global clearing at program exit.
 ## Referenced by
-[[src/Pudu/Eval/_MOC]] · [[Std Concurrent]] · [[Std Channel]] · [[Std Sync]]
+[[src/Pudu/Eval/_MOC]] · [[Std Concurrent]] · [[Std Channel]] · [[Std Sync]] · [[Eval System Tests]]

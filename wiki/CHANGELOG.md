@@ -5,6 +5,68 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Database transaction scope (#443)
+
+- [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles
+  after both typed outcomes, before settlement. Expired operations never reach the backend.
+- Bundled transaction callback entries share that boundary. [[Uses Database Transaction Scope]]
+  covers success, primary failure preservation, saved-handle refusal and concurrent commands.
+- [[Application Maturity]] records the audit order and evidence required for application readiness.
+
+## 2026-10-07 — Bounded database read-ahead (#445)
+
+- [[Std Db Session]] validates a frame header before reading ahead within the existing byte
+  budget and chunk cap. Following frames remain buffered; fragmented bodies join segments once.
+- [[Database Buffered Read Fixture]] proves exact framing, fragmented delivery, invalid budgets,
+  oversized and malformed headers, EOF cleanup and two reads for 1,000 small frames.
+- [[Database Frame Benchmark]] consumes 20,000 identical frames over a local connection. Three
+  matched runs measured 3,304 / 2,751 / 2,685 ms before and 1,205 / 1,281 / 1,367 ms after;
+  median consumption time fell 53.4%. This is a local workload, not a production capacity guarantee.
+
+## 2026-10-07 — Application dependency layers (#447)
+
+- [[Application Dependency Layers]] assigns explicit framework layers independently of measured
+  graph depth. [[Application Layer Gate]] rejects missing imports, cycles, path mismatches,
+  unclassified framework modules and upward edges across the complete framework closure.
+- [[Application Layer Tests]] proves refusals and deterministic traversal; the shipped library
+  contains 214 modules and 94 framework dependencies with no findings. Integration and local
+  gates run this check before behavioral validation.
+
+## 2026-10-07 — Watched application page refresh (#448)
+
+- [[Std App]] enables [[Std App Reload]] internally during watched runs. Saved sources and watched
+  assets restart the process and refresh successful HTML pages; ordinary runs expose no resources.
+- Sequential bounded polling recovers after rejected saves. Responses preserve the security policy,
+  recalculate UTF-8 lengths and discard stale validators. Exact, packed and live-page checks pass;
+  the optimized full compatibility suite passes. Independent review remains required.
+
+## 2026-10-07 — Concurrent request measurements (#450)
+
+- [[Std App]] serializes each measurement step's snapshot update while handlers remain concurrent.
+  Duration excludes waiting for the measurement lock. Missing cells preserve handler responses.
+- [[Uses App Metrics Concurrent]] proves exact counts, independent stores and rendered output;
+  removing synchronization restores the original lost-update failure. External writers remain
+  responsible for coordinating access to caller-owned cells.
+
+## 2026-10-07 — Explicit runtime disposal (#453)
+
+- [[Eval Concurrent]], [[Std Sync]] and [[Std Concurrent]] retire cells and unowned locks and
+  forget completed tasks, preserving replayable joins until disposal and refusing active owners.
+- [[Std Http Server]] and ordinary action containment release private request resources internally.
+  A 100000-request local retention probe falls from 1750728704 to 137527296 peak resident bytes.
+- [[Eval System Tests]] checks exact table removal, admitted mutex contenders and constant-effect
+  refusal; [[Uses Resource Disposal]] checks typed success and failure through both evaluators.
+- [[App Retention Probe]] preserves the measured workload. Independent semantic and vault-parity
+  review remain required; unfinished-work cancellation and other internal lifetimes remain open.
+
+## 2026-10-07 — Tuple ordering repair (#442)
+
+- [[Eval Operator]] uses the existing lexicographic value order for all four tuple ordering
+  relations, preserving structural equality and E7001 refusal for unorderable payloads.
+- [[Eval Arithmetic Tests]] and [[Uses Tuple Ordering]] cover constants, nested and tied keys,
+  generic callbacks, stable multi-part sorting, operand effects and exact refusal locations.
+- Independent semantic and vault-parity review remain required before integration.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

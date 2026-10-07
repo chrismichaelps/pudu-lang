@@ -15,6 +15,17 @@ aliases: [Eval Operator]
 
 # Eval Operator
 
+## Tuple ordering repair (#442)
+
+The four ordering relations between tuples delegate to the existing [[Eval Order]] wrapper after
+both complete operands pass `comparableValue`. Tuple fields follow the same lexicographic order as
+collection keys, including nested comparable aggregates. Equality retains its existing structural
+path. Function, task and partially applied method payloads retain E7001 at the whole comparison;
+unsupported tuple arithmetic still fails. Static operand-type unification remains unchanged.
+
+Resolved Grill Log: reuse the established value order; never reach its unorderable fallback without
+the comparability guard. Do not broaden other aggregate operators or replace structural equality.
+
 ## Purpose
 
 Own operator and access semantics for [[Evaluator]]. `readIndex` handles tuples, strings, and arrays; `readMember` dispatches fields and methods including the full array accessor method table (42 methods: core accessors, mutation, higher-order, construction, aggregation, ordering, and transformation).
@@ -61,7 +72,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Linkage
 
-- **Requires:** [[Float Literal]], [[Eval Value]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Float Literal]], [[Eval Value]], [[Eval Order]], [[Syntax Tree]], [[Diagnostic Model]].
 - **Consumed by:** [[Evaluator]].
 
 ## Algorithm

@@ -8,6 +8,12 @@ aliases: [Eval Test Coordinator]
 
 # Eval Test Coordinator
 
+Register explicit runtime disposal from [[Eval System Tests]], including actual registry removal
+and compile-time effect refusal. Resolved Grill Log: execute lifetime regressions in the full suite.
+
+Register `testTupleOrdering` from [[Eval Arithmetic Tests]] for tuple relations, constants, stable
+multi-part sorting, operand order and exact refusals. Resolved Grill Log: execute the regression.
+
 ## Purpose and interface
 
 Register the focused evaluator properties in the executable test runner. The exported property list is consumed by `test/Main.hs`.

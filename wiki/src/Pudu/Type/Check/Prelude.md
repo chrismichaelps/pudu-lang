@@ -15,6 +15,9 @@ aliases: [Type Check Prelude]
 
 # Type Check Prelude
 
+The three disposal primitives each take Int and return Result[(), Str]. Resolved Grill Log: typed
+resource wrappers own their token-specific public signatures without changing existing operations.
+
 ## Purpose
 
 The names a program has without declaring them: the constructors every program can write, and the signature of every effect the prelude provides.
