@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Eval Arithmetic Tests]] · [[Uses Tuple Ordering]] — tuple-ordering regression coverage.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.

@@ -6,6 +6,7 @@ import Test.QuickCheck (Property)
 import Pudu.Eval.ArithmeticSpec
   ( testArithmetic
   , testIntegerWidths
+  , testTupleOrdering
   )
 import Pudu.Eval.BindingFlowSpec
   ( testBindings
@@ -48,6 +49,7 @@ evalProperties =
   [ ("Decimal equality follows numbers inside every structure", testDecimalEquality)
   , ("Decimal implementations reach direct generic and qualified calls", testDecimalImpls)
   , ("arithmetic and comparison follow declared operators", testArithmetic)
+  , ("tuple relations follow lexicographic value ordering", testTupleOrdering)
   , ("bindings assignment and blocks evaluate in order", testBindings)
   , ("functions defaults and recursion evaluate", testFunctions)
   , ("conditionals and pattern matching select branches", testBranching)

@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Tuple ordering repair (#442)
+
+- [[Eval Operator]] uses the existing lexicographic value order for all four tuple ordering
+  relations, preserving structural equality and E7001 refusal for unorderable payloads.
+- [[Eval Arithmetic Tests]] and [[Uses Tuple Ordering]] cover constants, nested and tied keys,
+  generic callbacks, stable multi-part sorting, operand effects and exact refusal locations.
+- Independent semantic and vault-parity review remain required before integration.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,
