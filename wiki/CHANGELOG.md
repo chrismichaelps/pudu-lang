@@ -32,6 +32,14 @@ tags: [changelog]
   contains 214 modules and 94 framework dependencies with no findings. Integration and local
   gates run this check before behavioral validation.
 
+## 2026-10-07 — Watched application page refresh (#448)
+
+- [[Std App]] enables [[Std App Reload]] internally during watched runs. Saved sources and watched
+  assets restart the process and refresh successful HTML pages; ordinary runs expose no resources.
+- Sequential bounded polling recovers after rejected saves. Responses preserve the security policy,
+  recalculate UTF-8 lengths and discard stale validators. Exact, packed and live-page checks pass;
+  the optimized full compatibility suite passes. Independent review remains required.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

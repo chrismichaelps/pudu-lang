@@ -11,6 +11,8 @@ tags: [moc, handoff]
 
 - [[2026-10-07-app-layers]] — explicit application graph enforcement and validation integration.
 
+- [[2026-10-07-app-hot-reload]] — automatic refresh for watched application runs.
+
 - [[2026-10-01-derive-integration]] — complete derive integration, committing each validated slice; no PR yet.
 
 - [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).

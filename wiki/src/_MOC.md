@@ -14,6 +14,8 @@ tags: [moc, module]
   — enforced Pudu framework imports and architectural direction.
 - [[Pudu Continuous Verification]] — behavioral and architectural integration checks.
 
+- [[Uses App Reload]] — exact watched application response transformation and refusal.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
