@@ -17,6 +17,15 @@ leave the pipeline unchanged. Revision creation failure is a Configuration refus
 open. Saved sources and explicitly watched assets restart the process and refresh connected pages.
 Resolved Grill Log: automatic watched-run integration requires no application package wiring and
 does not read development state while building the application value.
+
+## Concurrent request measurements
+
+Each `measuring` step owns a mutex shared by its requests. Handler execution stays outside the lock;
+duration is captured on handler return. Read, counter/distribution update and snapshot write occur
+under that mutex. A missing cell does not alter the handler's response or invent an empty snapshot.
+Separately constructed steps and external writers over the same cell must coordinate their writes.
+Resolved Grill Log: protect the compound update, retain caller-owned state and serialize no handlers.
+[[Uses App Metrics Concurrent]] proves exact totals and concurrent handler execution.
 ## Purpose
 The program itself as a value: what it is made of, what starts it, and what stops it.
 ## Interface
