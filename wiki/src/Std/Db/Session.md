@@ -32,8 +32,12 @@ whether a transaction is open.
 
 `nextMessage` uses a 16 MiB complete-message cap. `nextMessageLimited(stream, maxBytes)` accepts a
 caller-selected cap of at least five bytes. The advertised size is checked once a header is present,
-before body accumulation. Only the current frame's missing bytes are requested, capped at 64 KiB per
-read; bytes already buffered for subsequent frames remain in the returned connection.
+before body accumulation. An incomplete header requests only its missing bytes. Once a complete
+header has passed the budget check, the reader may take up to 64 KiB within the remaining buffer
+budget, including following frames. Complete buffered frames require no transport call; following
+bytes remain in the returned connection. Fragmented input obeys the same rules.
+Incomplete frames accumulate byte segments and join once on completion, so a fragmented large
+body does not repeatedly copy its growing prefix. Header admission precedes that accumulation.
 
 Malformed framing, oversized frames, read failures, and EOF terminate this read and close the socket.
 A close failure is included with the primary error rather than silently replacing it. An invalid
@@ -63,6 +67,9 @@ connection after 403 ms.
   body allocation. Applications may explicitly select a larger budget.
 - **Q:** Return a partially consumed connection after failure? **A:** No; this API returns no
   successor on failure, so the unusable transport is closed instead of leaking it.
+- **Q:** Coalesce reads before validating the header? **A:** No; validate the advertised frame
+  first. Read-ahead then stays within the existing buffer byte budget and chunk cap.
+- **Q:** Concatenate the growing body after every fragment? **A:** No; retain segments and join once.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Db Protocol]] · [[Std Net]]

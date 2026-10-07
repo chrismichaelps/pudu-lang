@@ -7,6 +7,8 @@ tags: [moc, handoff]
 
 - [[2026-10-07-app-maturity]] — sequential application hardening, beginning with transaction isolation.
 
+- [[2026-10-07-database-read-ahead]] — bounded database transport coalescing and measured consumption.
+
 - [[2026-10-01-derive-integration]] — complete derive integration, committing each validated slice; no PR yet.
 
 - [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).
