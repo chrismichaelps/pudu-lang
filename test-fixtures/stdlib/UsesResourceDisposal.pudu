@@ -1,0 +1,49 @@
+module UsesResourceDisposal
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn expect(held: Bool, named: Str) -> () { if !held { panic(named) } }
+
+export fn main() -> Int {
+  let cell = Sync.cell("payload")
+  expect(Result.isOk(&Sync.disposeCell(&cell)), "cell disposed")
+  expect(Sync.get(&cell) == Err(Sync.Missing), "retired cell unreadable")
+  expect(Sync.set(&cell, "replacement") == Err(Sync.Missing), "retired cell cannot revive")
+  expect(Sync.disposeCell(&cell) == Err(Sync.Missing), "repeated cell disposal")
+  let unknown: Sync.Cell[Str] = Sync.Cell{token: -1}
+  expect(Sync.disposeCell(&unknown) == Err(Sync.Missing), "unknown cell refused")
+  let mutex = Sync.mutex()
+  expect(Result.isOk(&Sync.lock(&mutex)), "lock acquired")
+  expect(Result.isErr(&Sync.disposeMutex(&mutex)), "owned mutex refused")
+  expect(Result.isOk(&Sync.unlock(&mutex)), "owner can still release")
+  expect(Result.isOk(&Sync.disposeMutex(&mutex)), "unowned mutex disposed")
+  expect(Sync.lock(&mutex) == Err(Sync.Missing), "retired mutex cannot be entered")
+  expect(Sync.unlock(&mutex) == Err(Sync.Missing), "retired mutex cannot be released")
+  expect(Sync.disposeMutex(&mutex) == Err(Sync.Missing), "repeated mutex disposal")
+  expect(Sync.disposeMutex(&Sync.Mutex{token: -1}) == Err(Sync.Missing), "unknown mutex refused")
+  let proceed: Channel.Channel[()] = Channel.channel(1)
+  let made = Concurrent.start(fn() -> () { let _received = Channel.receive(&proceed) })
+  expect(Result.isOk(&made), "task started")
+  let worker = Result.unwrapOr(made, Concurrent.Task{token: -1})
+  expect(Result.isErr(&Concurrent.forget(&worker)), "active task refused")
+  let _sent = Channel.send(&proceed, ())
+  expect(Result.isOk(&Concurrent.join(&worker)), "task joined")
+  expect(Result.isOk(&Concurrent.join(&worker)), "join replay remains")
+  expect(Result.isOk(&Concurrent.forget(&worker)), "completed task forgotten")
+  expect(Concurrent.join(&worker) == Err(Concurrent.Missing), "forgotten task cannot join")
+  expect(Concurrent.forget(&worker) == Err(Concurrent.Missing), "repeated forgetting refused")
+  expect(Concurrent.forget(&Concurrent.Task{token: -1}) == Err(Concurrent.Missing), "unknown task refused")
+  let failed = Concurrent.start(fn() -> () { panic("failed task") })
+  expect(Result.isOk(&failed), "failing task started")
+  let doomed = Result.unwrapOr(failed, Concurrent.Task{token: -1})
+  let refusal = Concurrent.join(&doomed)
+  expect(Result.isErr(&refusal), "task failure reported")
+  expect(Concurrent.join(&doomed) == refusal, "failed join replays")
+  expect(Result.isOk(&Concurrent.forget(&doomed)), "failed completed task forgotten")
+  expect(Concurrent.join(&doomed) == Err(Concurrent.Missing), "failed forgotten task missing")
+  let _closed = Channel.close(&proceed)
+  0
+}

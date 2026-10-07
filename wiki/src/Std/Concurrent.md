@@ -8,10 +8,15 @@ tags: [module, stdlib, concurrency]
 aliases: [Std Concurrent]
 ---
 # Std Concurrent
+
+`forget` releases a completed task registration. It refuses active tasks and invalidates subsequent
+joins. Repeatable joins retain their contract before forgetting. Resolved Grill Log: forgetting is
+explicit and never detaches live work.
 ## Purpose
 Expose runtime threads as joinable task handles for blocking host work.
 ## Interface
-Exports start, join, join-all, parallel execution, and duration-based sleep results.
+Exports start, replayable join, completed-task forgetting, join-all, parallel execution, contained
+actions and duration-based sleep results.
 ## Governance and algorithm
 Every started task has a runtime token and an observable join result; worker failure becomes
 `ConcurrentError`. This host-thread surface does not redefine Pudu async task-tree semantics.
@@ -58,7 +63,8 @@ Resolved Grill Log:
 `contain(action)` runs an action on a thread of its own and joins it, so a crash inside the action is
 answered as `Failed` instead of ending the caller. Every waiting construct in the concurrency modules
 puts caller code behind this boundary, so a crash can neither leave a future unsettled nor keep a
-lock or a permit.
+lock or a permit. The private task registration is forgotten after joining, on success and failure.
+Resolved Grill Log: containment owns its task and retains the join result before releasing it.
 
 ## Cancellation and deadlines
 

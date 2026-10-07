@@ -20,6 +20,16 @@ export type Cell[T] = { token: Int }
 /// A number more than one thread may add to without losing an addition.
 export type Counter = { lock: Mutex, holder: Cell[Int] }
 
+/// Dispose an unowned lock; held locks remain usable and return a refusal.
+export fn disposeMutex(target: &Mutex) -> Result[(), SyncError] {
+  Result.mapErr(mutexDispose(target.token), causeOf)
+}
+
+/// Retire a shared cell and release its retained value.
+export fn disposeCell[T](target: &Cell[T]) -> Result[(), SyncError] {
+  Result.mapErr(cellDispose(target.token), causeOf)
+}
+
 /// A new lock, not held.
 export fn mutex() -> Mutex { Mutex{token: mutexOpen()} }
 

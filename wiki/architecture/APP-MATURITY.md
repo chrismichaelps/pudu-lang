@@ -51,6 +51,21 @@ deadline work; this guard does not establish those guarantees.
 - **Q:** Call this production-ready after focused tests? **A:** No; maturity follows complete boundary,
   load, failure, portability and independent review evidence.
 
+## Combined validation boundary
+
+The local validation branch combines transaction admission, bounded database read-ahead,
+dependency enforcement, watched page refresh, concurrent request measurements and request
+resource disposal. The constituent changes were separate drafts when assembled. The maintainer subsequently
+requested merging completed requests into development in creation order. Combined build, full
+suite, formatting, dependency gates and the packed retention workload pass. Independent review
+has not occurred; these checks establish compatibility evidence, not production readiness.
+
+The audit still identifies scoped savepoint cleanup, callback abort cleanup, database admission
+deadlines, aggregate result budgets and server shutdown ownership as unresolved boundaries.
+The server head reader also returns surplus bytes that request parsing currently discards;
+coalesced requests require a focused transport regression before a repair is claimed.
+Existing feature availability and passing fixtures do not establish production readiness.
+
 ## Referenced by
 
 [[architecture/_MOC]] · [[Std App]] · [[Std App Database]] · [[Std Db Driver]] · [[2026-10-07-app-maturity]]

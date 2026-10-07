@@ -37,6 +37,7 @@ import Pudu.Eval.SystemSpec
   , testEffects
   , testFailures
   , testResourceIsolation
+  , testResourceDisposal
   , testScopes
   , testUnsafeRegions
   )
@@ -74,4 +75,5 @@ evalProperties =
   , ("fixed-width integers keep their width at run time", testIntegerWidths)
   , ("implementations reach built-in types", testBuiltinImpls)
   , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
+  , ("explicit disposal removes completed runtime resources", testResourceDisposal)
   ]
