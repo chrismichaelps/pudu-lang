@@ -23,8 +23,7 @@ language and vault-parity review.
 
 ## Exact next action
 
-Measure database frame read coalescing against the existing reader, then deliver bounded read-ahead
-with framing, fragmentation and byte-budget regressions.
+Resolve and implement savepoint scope cleanup under issue #456 from the updated development branch.
 
 ## Transaction evidence
 
@@ -40,6 +39,19 @@ Hot Reload must connect saved source and asset changes to real-time browser refr
 existing watched application generation. It must be disabled for ordinary hosting and preserve
 response safety, byte lengths and middleware order. Any additional Pudu packages remain internal
 implementation dependencies: their types and wiring do not become developer requirements.
+
+## Local framework assembly
+
+Runtime Engineer owns sequential local integration of issues #443, #445, #447, #448, #450
+and #453 on `feature/443-app-validation`. Shared fixture registrations and vault additions
+are preserved together. This branch is a validation checkout; the six original drafts remain
+the original change boundaries. The maintainer explicitly requested oldest-first merges after
+implementation. No independent review is claimed.
+
+Combined warning-strict optimized build and full suite pass. All committed Pudu sources pass
+formatting. Five application graph tests and nine graph-engine tests pass; the combined source
+graph contains 215 modules and 96 framework dependencies with no findings. The packed retention
+probe validates 1000 exact responses. This is local compatibility evidence, not deployment capacity.
 
 ## Referenced by
 

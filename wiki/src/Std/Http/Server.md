@@ -8,6 +8,28 @@ tags: [module, stdlib, http, server]
 aliases: [Std Http Server]
 ---
 # Std Http Server
+## Request containment disposal
+
+Each contained request joins its private task, forgets the completed registration, copies the
+response out of its holder and disposes that cell before returning either success or a 500.
+Startup failure disposes the empty holder too. Applications need no cleanup wiring.
+Resolved Grill Log: copy the answer before retiring its cell; preserve handler failure reporting
+and repeatable joins for public task handles. Cleanup does not interrupt a handler that never ends.
+
+Local sequential containment measurements include application dependency linking and fresh request
+payloads. [[App Retention Probe]] retains the workload; it checks response identity and accepts
+`PUDU_RETENTION_COUNT` after `pudu build bench/app/Retention.pudu`. Peak resident bytes were:
+
+| Requests | Before disposal | After disposal |
+| --- | ---: | ---: |
+| 1000 | 161366016 | 138199040 |
+| 10000 | 422445056 | 138231808 |
+| 100000 | 1750728704 | 137527296 |
+
+Repeating 100000 requests reached 138149888 bytes; the repository probe with exact response-body
+assertions reached 138264576. These are local retention measurements, without
+transport or concurrent production traffic; they establish neither capacity nor a global memory bound.
+
 ## Purpose
 Read requests off connections, answer them, and stop when asked.
 ## Interface
@@ -90,12 +112,13 @@ Resolved Grill Log: reuse the immutable handler closure, never a response or req
 
 `Server.drainMillis` defaults to 10000ms and is configured via `withDrainDeadline(base: &Server, millis: Int) -> Server`.
 When `Server.run` or `Server.listenAndServe` is asked to stop, the listener is closed and the incoming queue finishes.
-In-flight worker draining is bound by `drainMillis`: worker tasks are joined concurrently against an asynchronous
-deadline timer. If in-flight requests do not drain within `drainMillis`, `Server.run` aborts waiting and reports
-`Err(Other("worker draining deadline exceeded"))` rather than blocking indefinitely.
+Worker tasks are joined concurrently against a deadline timer. If the timer wins, `Server.run`
+returns an `Other` error containing `drain deadline exceeded`. The deadline bounds the
+wait, without interrupting workers or stopping the timer when joining wins.
 
 Resolved Grill Log:
-- **Q:** Why bound worker joining with a deadline? **A:** If a slow client or long-running request hangs, unbounded joining causes deployment orchestrators (Kubernetes / systemd) to SIGKILL the process abruptly, corrupting unclosed streams. A draining deadline allows in-flight requests a graceful completion window before forcing termination.
+- **Q:** Why bound worker joining with a deadline? **A:** Bound the caller's shutdown wait and
+  report unfinished draining. Forced worker termination remains unresolved.
 
 
 ## TLS and binary compression implementation contract

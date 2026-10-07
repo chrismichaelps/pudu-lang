@@ -13,6 +13,8 @@ aliases: [Protocol Evaluation Spec]
 
 [[Uses App Metrics Concurrent]] proves exact request observations under concurrent load.
 
+[[Uses Resource Disposal]] proves typed disposal outcomes through both evaluators.
+
 ## Purpose and interface
 
 Runs Pudu fixtures that exercise serialization, HTTP, networking, Lambda invocation, TLS, database

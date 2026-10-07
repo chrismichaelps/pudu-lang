@@ -86,6 +86,7 @@ effectValueNames =
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
+  , "cellDispose", "mutexDispose", "forgetThread"
   , "secureRandomBytes"
   , "desktopOpen", "desktopPresent", "desktopPump", "desktopInputs", "desktopClipboardRead", "desktopClipboardWrite", "desktopAccessibility", "desktopAccessibilityReport", "desktopMenu", "desktopMenuReport", "desktopClose", "audioDevicePlay"
   , "audioStreamOpen", "audioStreamWrite", "audioStreamPause", "audioStreamResume"

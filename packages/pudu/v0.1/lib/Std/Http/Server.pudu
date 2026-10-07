@@ -98,12 +98,18 @@ fn contained(handle: Route.Handler, request: Route.Request) -> Http.Response {
       let _kept = Sync.set(&held, Some(handle(asked)))
     })
   let outcome = match started {
-    case Ok(runner) => Result.mapErr(Concurrent.join(&runner), fn(problem: Concurrent.ConcurrentError) -> Str { show(problem) })
+    case Ok(runner) => {
+      let joined = Concurrent.join(&runner)
+      let _forgotten = Concurrent.forget(&runner)
+      Result.mapErr(joined, fn(problem: Concurrent.ConcurrentError) -> Str { show(problem) })
+    }
     case Err(problem) => Err("the handler could not start: " + show(problem))
   }
+  let answer = Result.unwrapOr(Sync.get(&held), None)
+  let _disposed = Sync.disposeCell(&held)
   match outcome {
     case Ok(_) => {
-      match Result.unwrapOr(Sync.get(&held), None) {
+      match answer {
         case Some(answer) => answer
         case None => failedRequest(&request, "the handler gave no answer")
       }

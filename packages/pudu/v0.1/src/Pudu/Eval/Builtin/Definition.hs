@@ -214,6 +214,9 @@ data Builtin
   | JsonDecodeBuiltin
   | JsonEncodeBuiltin
   | XmlDecodeBuiltin
+  | CellDisposeBuiltin
+  | MutexDisposeBuiltin
+  | ForgetThreadBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -308,6 +311,9 @@ builtinName value = case value of
   CellOpenBuiltin -> "cellOpen"
   CellGetBuiltin -> "cellGet"
   CellSwapBuiltin -> "cellSwap"
+  CellDisposeBuiltin -> "cellDispose"
+  MutexDisposeBuiltin -> "mutexDispose"
+  ForgetThreadBuiltin -> "forgetThread"
   SecureBytesBuiltin -> "secureRandomBytes"
   DesktopOpenBuiltin -> "desktopOpen"
   DesktopPresentBuiltin -> "desktopPresent"

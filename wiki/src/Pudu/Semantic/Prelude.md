@@ -15,6 +15,9 @@ aliases: [Semantic Prelude]
 
 # Semantic Prelude
 
+`cellDispose`, `mutexDispose` and `forgetThread` are discoverable primitive names consumed by typed
+resource wrappers. Resolved Grill Log: keep type signatures and execution in their owning phases.
+
 ## Purpose
 
 Separate the types the compiler wires in from the names an implicitly imported prelude module supplies, so the prelude stays replaceable while the primitives stay inviolable.
