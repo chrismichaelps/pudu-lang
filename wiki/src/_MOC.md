@@ -22,6 +22,8 @@ tags: [moc, module]
 - [[Eval System Tests]] — runtime isolation and explicit resource disposal.
 - [[Uses Resource Disposal]] — typed disposal success and refusal.
 
+- [[Eval Arithmetic Tests]] · [[Uses Tuple Ordering]] — tuple-ordering regression coverage.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.

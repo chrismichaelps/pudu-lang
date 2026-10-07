@@ -1,0 +1,35 @@
+module UsesTupleOrdering
+
+import Std.List as List
+
+const BEFORE: Bool = (1, 2) < (1, 3)
+const SAME: Bool = (1.0d, 2) <= (1.00d, 2)
+
+type Item = { first: Int, second: Str, tag: Int }
+
+fn expect(held: Bool, named: Str) -> () { if !held { panic(named) } }
+fn before[T](left: T, right: T) -> Bool { (0, left) < (0, right) }
+fn byKey(left: Item, right: Item) -> Bool {
+  (left.first, left.second) < (right.first, right.second)
+}
+
+export fn main() -> Int {
+  expect(BEFORE && SAME, "tuple constants fold")
+  expect((1, 2) < (1, 3), "second field decides")
+  expect((1, 99) < (2, 0), "first field has priority")
+  expect((1, 3) > (1, 2), "greater relation")
+  expect((1, 2) <= (1, 2), "equal lower boundary")
+  expect((1, 2) >= (1, 2), "equal upper boundary")
+  expect(!((1, 2) < (1, 2)) && !((1, 2) > (1, 2)), "strict relations refuse equality")
+  expect(((1, 2), 9) < ((1, 3), 0), "nested tuple fields")
+  expect(([1], 9) < ([1, 0], 0), "aggregate prefix order")
+  expect((1.0d, 2) < (1.00d, 3), "Decimal equality advances comparison")
+  expect((1.0d, 2) == (1.00d, 2), "tuple equality preserved")
+  expect(before(2, 3) && before("a", "b"), "generic tuple comparison")
+  let items = [Item{first: 2, second: "a", tag: 0}, Item{first: 1, second: "b", tag: 1}, Item{first: 1, second: "a", tag: 2}, Item{first: 1, second: "b", tag: 3}]
+  let expected = [items[2], items[1], items[3], items[0]]
+  expect(items.sortBy(byKey) == expected, "array sorting keeps tied keys stable")
+  expect(List.sortBy(&items, byKey) == expected, "list sorting uses tuple keys")
+  expect(items[0].tag == 0, "source order remains unchanged")
+  0
+}

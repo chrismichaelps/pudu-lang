@@ -17,6 +17,8 @@ tags: [moc, handoff]
 
 - [[2026-10-07-runtime-disposal]] — explicit runtime lifetime foundation.
 
+- [[2026-10-07-tuple-ordering]] — issue #442 expression and collection order alignment.
+
 - [[2026-10-01-derive-integration]] — complete derive integration, committing each validated slice; no PR yet.
 
 - [[2026-10-01-derive-frontend]] — derive syntax slice (issue #430, active).
