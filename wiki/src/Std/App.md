@@ -8,6 +8,15 @@ tags: [module, stdlib, application, lifecycle]
 aliases: [Std App]
 ---
 # Std App
+
+## Watched application refresh
+
+Before starting stages, `run` obtains the optional [[Std App Reload]] middleware. Positive watched
+generations enable it after the declared steps, retaining their protective wrapping. Ordinary runs
+leave the pipeline unchanged. Revision creation failure is a Configuration refusal before resources
+open. Saved sources and explicitly watched assets restart the process and refresh connected pages.
+Resolved Grill Log: automatic watched-run integration requires no application package wiring and
+does not read development state while building the application value.
 ## Purpose
 The program itself as a value: what it is made of, what starts it, and what stops it.
 ## Interface
