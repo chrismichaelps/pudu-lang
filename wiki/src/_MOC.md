@@ -16,6 +16,8 @@ tags: [moc, module]
 
 - [[Uses App Reload]] — exact watched application response transformation and refusal.
 
+- [[Uses App Metrics Concurrent]] — exact request observations and concurrent handler execution.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.

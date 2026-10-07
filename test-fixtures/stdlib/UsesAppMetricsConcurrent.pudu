@@ -1,0 +1,67 @@
+module UsesAppMetricsConcurrent
+import Std.App as App
+import Std.App.Config as Config
+import Std.App.Metrics as Metrics
+import Std.Concurrent as Concurrent
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Result as Result
+import Std.Sync as Sync
+fn expect(value: Bool, name: Str) -> () { if !value { panic(name) } }
+fn request(path: Str) -> Route.Request {
+  Route.Request{message: Http.request(Http.Get, path), path: path, params: mapOf([]), query: mapOf([]), peer: "test"}
+}
+export fn main() -> Int {
+  let routes = Route.routing(&[])
+  let base = App.over("measurements", &Config.empty(), &routes)
+  let store = Sync.cell(App.requestMeasurements())
+  let measured = App.measuring(&base, store, "/metrics")
+  let steps = App.stepsOf(&measured)
+  let step = steps[steps.length() - 1]
+  let active = Sync.counter(0)
+  let peak = Sync.cell(0)
+  let guard = Sync.mutex()
+  let handler: Route.Handler = fn(one: Route.Request) -> Http.Response {
+    let inside = Result.unwrapOr(Sync.increment(&active, 1), -1)
+    let _seen = Sync.withLock(&guard, fn() -> () {
+        if inside > Result.unwrapOr(Sync.get(&peak), 0) { let _kept = Sync.set(&peak, inside) }
+      })
+    let _waited = Concurrent.sleep(1)
+    let _left = Sync.increment(&active, -1)
+    Reply.text(if one.path == "/failed" { 503 } else { 200 }, "answered")
+  }
+  var actions: Array[fn() -> ()] = []
+  for index in 0..8 {
+    actions = actions.push(fn() -> () {
+        for count in 0..64 {
+          let path = if count % 2 == 0 { "/ok" } else { "/failed" }
+          let answer = step(request(path), handler)
+          expect(answer.body == "answered", "handler answer preserved")
+        }
+      })
+  }
+  expect(Result.isOk(&Concurrent.parallelBounded(&actions, 8)), "all requests complete")
+  expect(Result.unwrapOr(Sync.get(&peak), 0) > 1, "handlers overlap")
+  let held = Result.unwrapOr(Sync.get(&store), Metrics.empty())
+  for status in ["200", "503"] {
+    let labels = [("method", "GET"), ("status", status)]
+    expect(Metrics.valueOr(&held, "http.requests", &labels) == 256, "every request counted")
+    expect(Metrics.valueOr(&held, "http.request.milliseconds", &labels) == 256, "every duration counted")
+  }
+  expect(Metrics.seriesCount(&held, "http.requests") == 2, "labels remain bounded")
+  let rendered = Route.dispatch(&App.routerOf(&measured), request("/metrics"))
+  expect(rendered.body == Metrics.render(&held), "exact measurement endpoint output")
+  let other = Sync.cell(App.requestMeasurements())
+  let another = App.measuring(&base, other, "/other-metrics")
+  let more = App.stepsOf(&another)
+  let _answer = more[more.length() - 1](request("/ok"), handler)
+  let separate = Result.unwrapOr(Sync.get(&other), Metrics.empty())
+  expect(Metrics.valueOr(&separate, "http.requests", &[("method", "GET"), ("status", "200")]) == 1, "separate application store")
+  expect(Result.unwrapOr(Sync.get(&store), Metrics.empty()) == held, "first store untouched")
+  let missing: Sync.Cell[Metrics.Metrics] = Sync.Cell{token: -1}
+  let unavailable = App.measuring(&base, missing, "/missing-metrics")
+  let absent = App.stepsOf(&unavailable)
+  expect(absent[absent.length() - 1](request("/ok"), handler).body == "answered", "missing store preserves answer")
+  0
+}

@@ -23,6 +23,7 @@ testProtocolEvaluation = do
   transactionScope <- runEntry "test-fixtures/stdlib/UsesDbTransactionScope.pudu"
   bufferedDatabase <- runEntry "test-fixtures/dbbuffer/Main.pudu"
   appReload <- runEntry "test-fixtures/stdlib/UsesAppReload.pudu"
+  appMeasurements <- runEntry "test-fixtures/stdlib/UsesAppMetricsConcurrent.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
@@ -80,6 +81,7 @@ testProtocolEvaluation = do
   overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
     [ counterexample "watched application refresh preserves ordinary responses" (appReload === Just "0")
+    , counterexample "concurrent application requests retain every measurement" (appMeasurements === Just "0")
     , counterexample "YAML block scalars retain content and following structural values" (yamlBlock === Just "0")
     , counterexample "YAML quoted text decodes escapes and refuses malformed scalars" (yamlQuoted === Just "0")
     , counterexample "compact YAML sequences preserve nested items and sibling keys" (yamlCompact === Just "0")

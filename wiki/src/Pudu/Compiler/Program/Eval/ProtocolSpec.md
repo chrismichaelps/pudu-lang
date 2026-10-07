@@ -11,6 +11,8 @@ aliases: [Protocol Evaluation Spec]
 
 [[Uses App Reload]] verifies the development middleware's exact responses and production inactivity.
 
+[[Uses App Metrics Concurrent]] proves exact request observations under concurrent load.
+
 ## Purpose and interface
 
 Runs Pudu fixtures that exercise serialization, HTTP, networking, Lambda invocation, TLS, database

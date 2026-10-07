@@ -410,17 +410,22 @@ export fn measuring(base: &App, into: Sync.Cell[Metrics.Metrics], at: Str) -> Ap
 /// [[Std App Metrics]] exists to hold, and holding it starts here.
 fn counting(into: Sync.Cell[Metrics.Metrics]) -> Route.Middleware {
   let store = into
+  let gate = Sync.mutex()
   fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let began = clock()
     let answer = next(request)
+    let elapsed = clock() - began
     let labels = [
       ("method", Http.methodName(&request.message.method)),
       ("status", show(answer.status.code))
     ]
-    let held = Result.unwrapOr(Sync.get(&store), Metrics.empty())
-    let timed = held.increment(REQUESTS_MEASURED, &labels)
-      .observe(REQUEST_MILLISECONDS, &labels, clock() - began)
-    let _kept = Sync.set(&store, timed)
+    let _recorded = Sync.withLock(&gate, fn() -> () {
+        if let Ok(held) = Sync.get(&store) {
+          let timed = held.increment(REQUESTS_MEASURED, &labels)
+            .observe(REQUEST_MILLISECONDS, &labels, elapsed)
+          let _kept = Sync.set(&store, timed)
+        }
+      })
     answer
   }
 }
