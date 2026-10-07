@@ -10,6 +10,10 @@ tags: [moc, module]
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]
   — exact database reader calls, framing boundaries and measured local consumption.
 
+- [[Application Layer Gate]] · [[Application Layer Model]] · [[Application Layer Tests]]
+  — enforced Pudu framework imports and architectural direction.
+- [[Pudu Continuous Verification]] — behavioral and architectural integration checks.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
