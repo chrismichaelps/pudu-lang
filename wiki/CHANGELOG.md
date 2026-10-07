@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Concurrent request measurements (#450)
+
+- [[Std App]] serializes each measurement step's snapshot update while handlers remain concurrent.
+  Duration excludes waiting for the measurement lock. Missing cells preserve handler responses.
+- [[Uses App Metrics Concurrent]] proves exact counts, independent stores and rendered output;
+  removing synchronization restores the original lost-update failure. External writers remain
+  responsible for coordinating access to caller-owned cells.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,

@@ -8,6 +8,15 @@ tags: [module, stdlib, application, lifecycle]
 aliases: [Std App]
 ---
 # Std App
+
+## Concurrent request measurements
+
+Each `measuring` step owns a mutex shared by its requests. Handler execution stays outside the lock;
+duration is captured on handler return. Read, counter/distribution update and snapshot write occur
+under that mutex. A missing cell does not alter the handler's response or invent an empty snapshot.
+Separately constructed steps and external writers over the same cell must coordinate their writes.
+Resolved Grill Log: protect the compound update, retain caller-owned state and serialize no handlers.
+[[Uses App Metrics Concurrent]] proves exact totals and concurrent handler execution.
 ## Purpose
 The program itself as a value: what it is made of, what starts it, and what stops it.
 ## Interface
