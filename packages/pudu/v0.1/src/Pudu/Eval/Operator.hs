@@ -25,6 +25,7 @@ import Pudu.DecimalLiteral
   , decimalSubtract
   )
 import Pudu.Eval.Env (Evaluator, abortAt)
+import Pudu.Eval.Order (OrdValue (..), comparableValue)
 import Pudu.Eval.Operator.Access
   ( builtinMethodNamesFor
   , nominalNameOf
@@ -93,6 +94,10 @@ combine spanValue operator left right = case (left, right) of
   (StrValue a, StrValue b) -> textOperation spanValue operator a b
   (CharValue a, CharValue b) -> comparisonOnly spanValue operator a b
   (BoolValue a, BoolValue b) -> comparisonOnly spanValue operator a b
+  (TupleValue _, TupleValue _)
+    | operator `elem` ["<", "<=", ">", ">="]
+    , comparableValue left && comparableValue right ->
+        comparisonOnly spanValue operator (OrdValue left) (OrdValue right)
   _ | operator == "==" -> pure (BoolValue (left == right))
     | operator == "!=" -> pure (BoolValue (left /= right))
   _ ->
