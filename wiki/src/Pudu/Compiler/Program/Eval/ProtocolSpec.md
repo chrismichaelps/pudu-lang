@@ -9,6 +9,8 @@ aliases: [Protocol Evaluation Spec]
 ---
 # Protocol Evaluation Spec
 
+[[Uses App Reload]] verifies the development middleware's exact responses and production inactivity.
+
 ## Purpose and interface
 
 Runs Pudu fixtures that exercise serialization, HTTP, networking, Lambda invocation, TLS, database

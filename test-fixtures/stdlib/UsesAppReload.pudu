@@ -1,0 +1,67 @@
+module UsesAppReload
+
+import Std.App.Reload as Reload
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Mime as Mime
+import Std.Option as Option
+import Std.Result as Result
+
+fn expect(held: Bool, named: Str) -> () { if !held { panic(named) } }
+fn request(method: Http.Method, path: Str) -> Route.Request {
+  Route.Request{message: Http.request(method, path), path: path, params: mapOf([]), query: mapOf([]), peer: "test"}
+}
+fn header(answer: &Http.Response, name: Str) -> Str { Option.unwrapOr(Http.header(&answer.headers, name), "") }
+
+export fn main() -> Int {
+  for generation in ["", "0", "-1", "invalid"] {
+    match Reload.forGeneration(generation) {
+      case Ok(steps) => expect(steps.isEmpty(), "ordinary generation has no refresh")
+      case Err(_) => panic("ordinary generation must succeed")
+    }
+  }
+  for revision in ["", "bad\"value", "bad<value", "x".repeat(129)] {
+    expect(Result.isErr(&Reload.middleware(revision)), "invalid revision refused")
+  }
+  let step = Result.unwrapOr(Reload.middleware("revision_1"), fn(one: Route.Request, next: Route.Handler) -> Http.Response { next(one) })
+  let plain: Route.Handler = fn(_one: Route.Request) -> Http.Response { Reply.text(418, "untouched") }
+  let revision = step(request(Http.Get, "/_pudu/reload"), plain)
+  expect(revision.body == "revision_1" && revision.status.code == 200, "revision resource")
+  expect(header(&revision, "cache-control") == "no-store", "revision never cached")
+  let script = step(request(Http.Head, "/_pudu/reload.js"), plain)
+  expect(header(&script, "content-type") == Mime.fromExtension("js") + "; charset=utf-8", "script media type")
+  expect(script.body.contains("setTimeout(poll, 400)") && script.body.contains("controller.abort()"), "bounded sequential polls")
+  expect(script.body.contains("location.reload()") && script.body.contains("document.hidden"), "refresh and hidden pause")
+  let refused = step(request(Http.Post, "/_pudu/reload"), plain)
+  expect(refused.status.code == 405 && header(&refused, "allow") == "GET, HEAD", "method refusal")
+  expect(header(&refused, "cache-control") == "no-store", "refusal never cached")
+  let original = Reply.html(200, "<html><body>café</body></html>")
+  let guarded = Http.Response{..original, headers: original.headers.concat([
+        ("ETag", "old"), ("Last-Modified", "old"), ("Transfer-Encoding", "chunked"), ("Cache-Control", "public"),
+        ("Content-Security-Policy", "script-src 'self'"), ("X-Content-Type-Options", "nosniff")
+      ]) }
+  let html: Route.Handler = fn(_one: Route.Request) -> Http.Response { guarded }
+  let changed = step(request(Http.Get, "/"), html)
+  expect(changed.body.startsWith(original.body) && changed.body.endsWith("revision_1\"></script>"), "external script appended")
+  expect(header(&changed, "content-length") == show(changed.body.toBytes().length()), "exact UTF-8 length")
+  expect(header(&changed, "etag").isEmpty() && header(&changed, "last-modified").isEmpty(), "old validators removed")
+  expect(header(&changed, "transfer-encoding").isEmpty() && header(&changed, "cache-control") == "no-store", "fresh framing and caching")
+  expect(header(&changed, "content-security-policy") == "script-src 'self'" && header(&changed, "x-content-type-options") == "nosniff", "protection preserved")
+  expect(step(request(Http.Head, "/"), html) == guarded, "ordinary HEAD untouched")
+  for answer in [Reply.json(200, "\{\}"), Reply.html(404, "missing"), Reply.html(206, "partial"),
+    Http.Response{..original, binaryBody: Some("bytes".toBytes())},
+    Http.Response{..original, headers: original.headers.push(("Content-Encoding", "gzip"))},
+    Http.Response{..original, headers: original.headers.push(("Content-Range", "bytes 0-3/10"))}] {
+    let carried = answer
+    expect(step(request(Http.Get, "/"), fn(_one: Route.Request) -> Http.Response { carried }) == answer, "other response exact")
+  }
+  expect(step(request(Http.Get, "/other"), plain).body == "untouched", "unrelated handler called")
+  let first = Result.unwrapOr(Reload.forGeneration("1"), [])
+  let second = Result.unwrapOr(Reload.forGeneration("1"), [])
+  expect(first.length() == 1 && second.length() == 1, "watched generation enabled")
+  let a = first[0](request(Http.Get, "/_pudu/reload"), plain).body
+  let b = second[0](request(Http.Get, "/_pudu/reload"), plain).body
+  expect(a.length() == 32 && b.length() == 32 && a != b, "fresh start revisions")
+  0
+}

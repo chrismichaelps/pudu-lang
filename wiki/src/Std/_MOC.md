@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std App Reload]] — automatic watched application page refresh.
+
 - [[Std Meta]] — compile-time field and variant descriptor contracts.
 - [[Std Show]] — rendering helpers, the `Show` trait and its derive.
 
