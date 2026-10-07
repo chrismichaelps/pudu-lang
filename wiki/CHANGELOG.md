@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Application dependency layers (#447)
+
+- [[Application Dependency Layers]] assigns explicit framework layers independently of measured
+  graph depth. [[Application Layer Gate]] rejects missing imports, cycles, path mismatches,
+  unclassified framework modules and upward edges across the complete framework closure.
+- [[Application Layer Tests]] proves refusals and deterministic traversal; the shipped library
+  contains 214 modules and 94 framework dependencies with no findings. Integration and local
+  gates run this check before behavioral validation.
+
 ## 2026-10-06 — Website application layer: mediator, structured logs, validation
 
 - The website is a Pudu project: `website/pudu.toml` depends on `pudu-lang-mediator`,
