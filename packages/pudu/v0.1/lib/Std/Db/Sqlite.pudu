@@ -75,7 +75,7 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
                       perform(database, sql, &[])
                     }
                   }
-                  match action(inside) {
+                  match Driver.scoped(&inside, action) {
                     case Ok(rows) => {
                       match perform(database, "COMMIT", &[]) {
                         case Ok(_) => Ok(rows)

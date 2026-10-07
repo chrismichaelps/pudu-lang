@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.

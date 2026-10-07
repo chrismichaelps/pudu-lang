@@ -1,5 +1,8 @@
 module Std.Db.Driver
 
+import Std.Result as Result
+import Std.Sync as Sync
+
 /// Values retain their kind across the driver boundary; drivers bind them separately.
 export type Value
   = NullValue
@@ -102,8 +105,50 @@ export fn transaction(
   client: &Client,
   action: fn(Tx) -> Result[Rows, Error]
 ) -> Result[Rows, Error] {
-  (client.transaction)(action)
+  (client.transaction)(fn(held: Tx) -> Result[Rows, Error] { scoped(&held, action) })
 }
+
+/// Serialize commands and revoke the lent handle before transaction settlement.
+export fn scoped(held: &Tx, action: fn(Tx) -> Result[Rows, Error]) -> Result[Rows, Error] {
+  let original = *held
+  let gate = Sync.mutex()
+  let live = Sync.cell(true)
+  let guarded = Tx {
+    query: fn(sql: Str, values: Array[Value]) -> Result[Rows, Error] {
+      admitted(&gate, &live, fn() -> Result[Rows, Error] { (original.query)(sql, values) })
+    },
+    execute: fn(sql: Str) -> Result[Rows, Error] {
+      admitted(&gate, &live, fn() -> Result[Rows, Error] { (original.execute)(sql) })
+    }
+  }
+  let outcome = action(guarded)
+  // Revocation joins any admitted command before the driver settles the connection.
+  let revoked = Result.andThen(Result.mapErr(Sync.withLock(&gate, fn() -> Result[(), Error] {
+          Result.mapErr(Sync.set(&live, false), synchronization)
+        }), synchronization), fn(answer: Result[(), Error]) -> Result[(), Error] { answer })
+  match revoked {
+    case Ok(_) => outcome
+    case Err(cleanup) => {
+      match outcome {
+        case Ok(_) => Err(cleanup)
+        case Err(primary) => Err(Error{..primary, message: primary.message + "; scope revocation failed: " + cleanup.message})
+      }
+    }
+  }
+}
+
+fn admitted(gate: &Sync.Mutex, live: &Sync.Cell[Bool], action: fn() -> Result[Rows, Error]) -> Result[Rows, Error] {
+  let lock = *gate
+  let state = *live
+  Result.mapErr(Sync.withLock(&lock, fn() -> Result[Rows, Error] {
+        if !Result.mapErr(Sync.get(&state), synchronization) ? {
+          return Err(error("", "expired", "the transaction scope has ended"))
+        }
+        action()
+      }), synchronization) ?
+}
+
+fn synchronization(problem: Sync.SyncError) -> Error { error("", "synchronization", show(problem)) }
 
 /// Ask a transaction's own connection, rather than the pool.
 export fn ask(held: &Tx, sql: Str, values: &Array[Value]) -> Result[Rows, Error] {
