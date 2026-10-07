@@ -1,0 +1,106 @@
+module Main
+
+import Std.Db as Db
+import Std.Db.Session as Session
+import Std.List as List
+import Std.Net as Net
+import Std.Sync as Sync
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer {
+    case Ok(value) => value
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+fn primary() -> Session.DbError { Session.Server("ERROR", "P4000", "action refused") }
+fn refusal(command: Str) -> Session.DbError { Session.Server("ERROR", "P0001", "refused: " + command) }
+fn combined(command: Str) -> Session.DbError {
+  Session.Other(show(primary()) + "; cleanup also failed: " + show(refusal(command)))
+}
+
+fn started(failOn: Str) -> Session.Connection {
+  require(Db.begin(Session.Connection{socket: Net.fake(failOn), buffer: bytesOf([]), parameters: [],
+        status: Session.Idle, lease: Sync.cell(0), epoch: 0, deadline: -1 }))
+}
+
+fn unsuccessful(open: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+  (Err(primary()), open)
+}
+
+fn successful(open: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) { (Ok(7), open) }
+
+fn observed(open: &Session.Connection) -> Net.State { require(Net.state(&open.socket)) }
+
+fn ordinary() -> () {
+  let open = started("")
+  let kept = Db.withSavepoint(open, "step", successful)
+  check(kept[0] == Ok(7) && kept[1].status == Session.Active, "successful value and outer transaction")
+  check(observed(&kept[1]).commands == ["BEGIN", "SAVEPOINT \"step\"", "RELEASE SAVEPOINT \"step\""], "successful cleanup order")
+  let failed = Db.withSavepoint(kept[1], "step", unsuccessful)
+  check(failed[0] == Err(primary()), "exact action error survives successful cleanup")
+  check(observed(&failed[1]).commands == ["BEGIN", "SAVEPOINT \"step\"", "RELEASE SAVEPOINT \"step\"",
+      "SAVEPOINT \"step\"", "ROLLBACK TO SAVEPOINT \"step\"", "RELEASE SAVEPOINT \"step\""], "failed cleanup order")
+  check(observed(&failed[1]).marks.isEmpty() && failed[1].status == Session.Active, "failed scope releases its mark")
+  let ended = require(Db.commit(failed[1]))
+  check(ended.status == Session.Idle && observed(&ended).pending.isEmpty(), "outer transaction remains committable")
+}
+
+fn nested() -> () {
+  let open = require(Db.savepoint(started(""), "outer"))
+  let outer = Db.withSavepoint(open, "outer", fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+      let inner = Db.withSavepoint(inside, "outer", unsuccessful)
+      check(inner[0] == Err(primary()), "nested error")
+      check(observed(&inner[1]).marks == ["\"outer\"", "\"outer\""], "inner cleanup preserves enclosing same-name marks")
+      (Ok(7), inner[1])
+    })
+  check(outer[0] == Ok(7), "outer success")
+  check(observed(&outer[1]).marks == ["\"outer\""] && observed(&outer[1]).peak == 3, "nested scopes restore original depth")
+  let quoted = Db.withSavepoint(outer[1], "odd\" mark", unsuccessful)
+  let commands = observed(&quoted[1]).commands
+  check(List.drop(&commands, commands.length() - 3) == ["SAVEPOINT \"odd\"\" mark\"", "ROLLBACK TO SAVEPOINT \"odd\"\" mark\"",
+      "RELEASE SAVEPOINT \"odd\"\" mark\""], "quoted name travels intact through cleanup")
+  check(quoted[0] == Err(primary()) && observed(&quoted[1]).marks == ["\"outer\""], "quoted scope preserves outer mark")
+  check(observed(&require(Db.release(quoted[1], "outer"))).marks.isEmpty(), "original mark remains releasable")
+}
+
+fn repeated() -> () {
+  var open = started("")
+  for index in 0..1000 {
+    let attempted = Db.withSavepoint(open, "step", unsuccessful)
+    check(attempted[0] == Err(primary()), "repeated original error")
+    open = attempted[1]
+  }
+  check(observed(&open).marks.isEmpty(), "completed marks retained: " + show(observed(&open).marks.length()))
+  check(observed(&open).peak == 1 && observed(&open).commands.length() == 3001, "repeated cleanup stays at depth one")
+}
+
+fn cleanupFailures() -> () {
+  let rollback = "ROLLBACK TO SAVEPOINT \"step\""
+  let release = "RELEASE SAVEPOINT \"step\""
+  let failedRollback = Db.withSavepoint(started(rollback), "step", unsuccessful)
+  check(failedRollback[0] == Err(combined(rollback)), "rollback failure retains both causes in order")
+  check(observed(&failedRollback[1]).commands == ["BEGIN", "SAVEPOINT \"step\"", rollback], "failed rollback prevents release")
+  let failedRelease = Db.withSavepoint(started(release), "step", unsuccessful)
+  check(failedRelease[0] == Err(combined(release)), "release failure retains both causes in order")
+  check(observed(&failedRelease[1]).commands == ["BEGIN", "SAVEPOINT \"step\"", rollback, release], "release follows confirmed rollback")
+  let successfulRelease = Db.withSavepoint(started(release), "step", successful)
+  check(successfulRelease[0] == Err(refusal(release)), "successful action cannot hide failed release")
+  check(observed(&successfulRelease[1]).commands == ["BEGIN", "SAVEPOINT \"step\"", release], "successful action needs no rollback")
+  let called = Sync.cell(false)
+  let initial = Db.withSavepoint(started("SAVEPOINT \"step\""), "step", fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+      require(Sync.set(&called, true))
+      (Ok(7), inside)
+    })
+  check(initial[0] == Err(refusal("SAVEPOINT \"step\"")) && !require(Sync.get(&called)), "initial refusal skips action")
+  check(observed(&initial[1]).commands == ["BEGIN", "SAVEPOINT \"step\""], "initial refusal performs no cleanup")
+}
+
+export fn main() -> Int {
+  repeated()
+  ordinary()
+  nested()
+  cleanupFailures()
+  0
+}

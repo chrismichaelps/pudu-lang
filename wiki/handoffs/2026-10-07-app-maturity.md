@@ -23,7 +23,7 @@ language and vault-parity review.
 
 ## Exact next action
 
-Resolve and implement savepoint scope cleanup under issue #456 from the updated development branch.
+Complete validation and publication of issue #456, then audit bounded database pool admission.
 
 ## Transaction evidence
 

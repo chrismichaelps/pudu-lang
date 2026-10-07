@@ -136,6 +136,31 @@ multiple command results instead of mixing rows from different schemas.
 - **Q:** Combine several command results into one `Rows` value? **A:** No; a single schema cannot
   describe arbitrary multiple results. Multi-result execution needs a separate explicit API.
 
+## Scoped savepoint cleanup
+
+`withSavepoint` owns its mark until completion. Successful actions release it. Failed actions
+first roll back to it and then release it, leaving enclosing marks and the outer transaction
+intact. A failed rollback prevents release because the enclosing state is uncertain. Initial
+mark refusal skips the action and performs no cleanup for a mark that was never established.
+
+Successful cleanup preserves the exact action value or structured error. Failed cleanup is
+reported using the existing combined-error policy: a successful action yields the cleanup error;
+an action error followed by cleanup failure becomes `Other` containing both rendered causes in
+occurrence order. The returned connection is the latest successful successor. A cleanup failure
+does not establish reusable state and must be propagated to the enclosing owner.
+
+[[Database Savepoint Fixture]] drives the shipped helper and session reader through exact command
+responses and independently tracks active marks. Repeated recoverable failures must return to
+the starting mark depth. This avoids accumulating completed scopes inside long transactions;
+the extra release command is necessary to finish ownership and is not a throughput claim.
+
+### Resolved Grill Log
+
+- **Q:** Does rollback to a mark end its lifetime? **A:** No; it retains the mark for reuse.
+- **Q:** Release after an unsuccessful rollback? **A:** No; preserve the failure without advancing cleanup.
+- **Q:** Hide cleanup refusal behind the action's error? **A:** No; retain both causes in order.
+- **Q:** Change whole-transaction cleanup or admission here? **A:** No; those are separate boundaries.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
 
