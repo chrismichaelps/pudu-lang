@@ -1,0 +1,48 @@
+module Frames
+
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Db.Protocol as Wire
+import Std.Db.Session as Session
+import Std.Env as Env
+import Std.Net as Net
+import Std.Sync as Sync
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer {
+    case Ok(value) => value
+    case Err(problem) => panic(show(problem))
+  }
+}
+
+export fn main() -> Int {
+  let count = 20000
+  let payload = "a database row with a small payload".toBytes()
+  let message = Wire.frame("D", &payload)
+  var frames: Array[Bytes] = []
+  for index in 0..count { frames = frames.push(message) }
+  let bytes = ByteSeq.join(&frames)
+  let listener = require(Net.listenLocal(0))
+  let port = require(Net.portOf(&listener))
+  let worker = require(Concurrent.start(fn() -> () {
+        let peer = require(Net.accept(&listener))
+        let _closed = require(Net.closeListener(&listener))
+        let _sent = require(Net.send(&peer, &bytes))
+        let _done = require(Net.close(&peer))
+        ()
+      }))
+  let socket = require(Net.connect("127.0.0.1", port))
+  var held = Session.Connection{socket: socket, buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: Env.elapsedMilliseconds() + 30000 }
+  let start = clock()
+  for index in 0..count {
+    let pair = require(Session.nextMessage(held))
+    if pair[0].kind != "D" || pair[0].payload != payload { panic("message changed") }
+    held = pair[1]
+  }
+  let elapsed = clock() - start
+  let _closed = require(Net.close(&socket))
+  let _joined = require(Concurrent.join(&worker))
+  print(show(elapsed) + " milliseconds for " + show(count) + " rows")
+  0
+}

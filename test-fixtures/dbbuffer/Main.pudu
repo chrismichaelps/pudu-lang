@@ -1,0 +1,81 @@
+module Main
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Sync as Sync
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer {
+    case Ok(value) => value
+    case Err(reason) => panic(show(reason))
+  }
+}
+
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+
+fn stream(socket: Net.Connection) -> Session.Connection {
+  Session.Connection{socket: socket, buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: -1 }
+}
+
+fn batch(fragment: Int, budget: Int, count: Int) -> () {
+  let payload = "row".toBytes()
+  let message = Wire.frame("D", &payload)
+  var frames: Array[Bytes] = []
+  for index in 0..count { frames = frames.push(message) }
+  let socket = Net.fake(ByteSeq.join(&frames), fragment)
+  var held = stream(socket)
+  for index in 0..count {
+    let pair = require(Session.nextMessageLimited(held, budget))
+    check(pair[0].kind == "D" && pair[0].payload == payload, "exact frame payload")
+    held = pair[1]
+    check(held.buffer.length() <= budget, "retained buffer stays within budget")
+  }
+  let state = require(Net.state(&socket))
+  check(state.remaining.isEmpty() && held.buffer.isEmpty(), "complete batch consumed")
+  check(!state.closed, "valid transport stays open")
+  for wanted in state.requests { check(wanted <= budget && wanted <= 65536, "read stays bounded") }
+  if fragment == 65536 && budget == 65536 {
+    check(state.requests.length() == 2, "small frames coalesce into two reads")
+    check(state.requests[0] == 5, "validate header before body read")
+  }
+}
+
+fn refused(bytes: Bytes, budget: Int, reads: Int, closes: Bool) -> () {
+  let socket = Net.fake(bytes, 65536)
+  let answer = Session.nextMessageLimited(stream(socket), budget)
+  match answer {
+    case Ok(_) => panic("invalid frame accepted")
+    case Err(_) => {}
+  }
+  let state = require(Net.state(&socket))
+  check(state.requests.length() == reads, "refusal read count")
+  check(state.closed == closes, "refusal closes only unusable transport")
+}
+
+export fn main() -> Int {
+  batch(65536, 65536, 1000)
+  batch(1, 16, 4)
+  batch(3, 16, 4)
+  batch(65536, 8, 4)
+  batch(65536, 16, 40)
+  var chunks: Array[Bytes] = []
+  for index in 0..4096 { chunks = chunks.push("a fragmented body".toBytes()) }
+  let payload = ByteSeq.join(&chunks)
+  let large = Net.fake(Wire.frame("D", &payload), 47)
+  let read = require(Session.nextMessageLimited(stream(large), payload.length() + 5))
+  check(read[0].payload == payload && read[1].buffer.isEmpty(), "large fragmented frame")
+  let empty = Wire.frame("Z", &bytesOf([]))
+  let socket = Net.fake(empty.concat(empty), 65536)
+  let first = require(Session.nextMessage(stream(socket)))
+  let second = require(Session.nextMessage(first[1]))
+  check(first[0].payload.isEmpty() && second[0].payload.isEmpty(), "empty frame payload")
+  check(require(Net.state(&socket)).requests == [5, 5], "empty frames require only their headers")
+  refused(Wire.frame("D", &"oversized".toBytes()), 8, 1, true)
+  refused(bytesOf([68u8, 0u8, 0u8, 0u8, 3u8]), 16, 1, true)
+  refused(bytesOf([68u8, 0u8, 0u8, 0u8, 8u8, 1u8]), 16, 3, true)
+  refused(empty, 4, 0, false)
+  0
+}

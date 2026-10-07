@@ -20,6 +20,9 @@ the Haskell property reports a named counterexample when that count changes.
 [[Uses Database Transaction Scope]] runs in the full suite with an exact zero result. It proves
 transaction callback revocation and exclusive command admission against an explicit client seam.
 
+[[Database Buffered Read Fixture]] runs the shipped session reader through exact transport
+fragmentation, frame budget, coalescing and cleanup checks, with a required zero result.
+
 The HTTP client fixture includes a loopback peer that sends a complete length-framed response and
 keeps the connection open beyond the client's deadline. Success proves message framing, rather than
 EOF, ends the response. The Lambda fixture checks request identifiers and response/error paths against

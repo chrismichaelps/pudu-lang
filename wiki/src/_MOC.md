@@ -7,6 +7,9 @@ tags: [moc, module]
 
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
+- [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]
+  — exact database reader calls, framing boundaries and measured local consumption.
+
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
 
 - [[Type Implementation Proof Spec]] — concrete conditional capability evidence.
