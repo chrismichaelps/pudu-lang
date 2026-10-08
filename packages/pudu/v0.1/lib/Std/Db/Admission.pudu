@@ -1,0 +1,26 @@
+module Std.Db.Admission
+
+import Std.Channel as Channel
+import Std.Db.Session as Session
+import Std.Result as Result
+
+/// The default time a borrower may wait for connection capacity, in milliseconds.
+export const DEFAULT_WAIT_MILLISECONDS: Int = 10000
+
+/// Whether a capacity wait is a finite policy from an immediate probe through one hour.
+export fn validWait(waitMillis: Int) -> Bool { waitMillis >= 0 && waitMillis <= 3600000 }
+
+/// Transfer one pool slot atomically; expiry transfers nothing and performs no work.
+export fn takeWithin(
+  ready: &Channel.Channel[Option[Session.Connection]],
+  waitMillis: Int
+) -> Result[Option[Session.Connection], Session.DbError] {
+  if !validWait(waitMillis) { return Err(Session.Other("pool wait must be from 0 to 3600000 milliseconds")) }
+  let taken = Result.mapErr(Channel.receiveWithin(ready, waitMillis),
+    fn(problem: Channel.ChannelError) -> Session.DbError { Session.Other(show(problem)) }) ?
+  match taken {
+    case Channel.Received(slot) => Ok(slot)
+    case Channel.Finished => Err(Session.Closed)
+    case Channel.TimedOut => Err(Session.AdmissionTimedOut)
+  }
+}

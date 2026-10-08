@@ -63,3 +63,9 @@ case proves the production Lambda failure cannot regress silently.
 ## Referenced by
 
 [[UsesHttpClient]] · [[Std Http Client]] · [[Std Http Server Lambda]]
+
+## Bounded pool admission (#468)
+
+[[Database Admission Fixture]] must return exact zero in the full suite after exercising the shipped capacity wait, close paths and configured connector. Its private [[Database Admission Transport]] supplies complete controlled replies; no remote service is required.
+
+Resolved Grill Log: exact fixture outcome is mandatory and all started workers are joined and forgotten before an assertion reports failure.
