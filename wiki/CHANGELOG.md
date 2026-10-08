@@ -3841,3 +3841,9 @@ map construction. No tests, builds, reviews or measurements run, as requested.
 [[Repl Session]] now sequences token-based session extension in IO in the type
 inspection path, correcting the reported `IO Session` versus `Session` build error.
 No builds, tests, reviews or measurements run.
+
+## 2026-10-07 — Primitive capability documentation (#459)
+
+- [[Std Order]] and [[Std Num]] explain their explicit primitive leaf implementations while
+  acknowledging Pudu aggregate deriving. Executable source and public identities are unchanged.
+- [[2026-10-07-derive-documentation]] records the focused generated-documentation validation.

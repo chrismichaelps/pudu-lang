@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Num]] · [[Std Order]] — primitive numeric and ordering capabilities.
+
 - [[Std App Reload]] — automatic watched application page refresh.
 
 - [[Std Meta]] — compile-time field and variant descriptor contracts.

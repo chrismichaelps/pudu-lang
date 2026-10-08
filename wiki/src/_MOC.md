@@ -5,6 +5,9 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Std Num]] — primitive numeric capability implementation mirror.
+
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]
