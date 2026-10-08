@@ -8,6 +8,12 @@ tags: [moc, module]
 - [[Std Num]] — primitive numeric capability implementation mirror.
 
 
+- [[Bundle Environment Gate]] — exact environment ownership through both bundle execution paths.
+
+- [[Uses Channel Wait]] — explicit bounded channel outcomes and preserved payloads.
+
+- [[Database Savepoint Fixture]] · [[Savepoint Fixture Transport]] — scoped mark cleanup and exact refusals.
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]

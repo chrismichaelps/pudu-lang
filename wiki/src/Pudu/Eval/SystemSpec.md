@@ -7,6 +7,16 @@ aliases: [Eval System Tests]
 ---
 # Eval System Tests
 
+Bounded channel cases cover immediate probes, ready and closed queues, invalid waits and tokens,
+timeout followed by successful receipt, parked delivery and closure, and competing consumers.
+Source cases require exact nested option results and E7009 during constant evaluation.
+Wrong argument type reports E3001; wrong arity reports E3003. Parked receivers expose private
+timer identities and require retirement after delivery, closure and interruption. Removing timer
+cleanup must fail all three cases. Twenty competing-receiver and twenty delivery/expiry cases
+assert item conservation without requiring one scheduling order.
+Resolved Grill Log: bound test joins independently so a stranded waiter fails visibly; assert
+conservation of queued payloads and quiescent registry counts.
+
 ## Purpose and interface
 
 Focused evaluator properties cover exact failure diagnostics, cold asynchronous calls, borrowing,

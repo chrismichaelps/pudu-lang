@@ -15,6 +15,13 @@ aliases: [Compiler Library]
 
 # Compiler Library
 
+## Isolated bundle resolution (#460)
+
+`isolatedResolutionContext(root)` is pure and searches only the materialized source root for every
+module. It reads no environment, installation, working directory or manifest; all setup metrics
+and diagnostics are empty. Resolved Grill Log: a complete executable owns its module closure;
+missing bundled modules must fail rather than fall back to host code.
+
 ## Purpose
 
 Decide where a module is looked for: the program's own tree, and — for a `Std` module — the

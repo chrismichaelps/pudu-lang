@@ -3,6 +3,7 @@ module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   , compileProgramCached
+  , compileBundledProgram
   , compileProgramSource
   , compileProgramSourceOver
   , programDependencies
@@ -48,6 +49,7 @@ import Pudu.Compiler.Library
   ( ResolutionContext
   , isStandardModule
   , newResolutionContext
+  , isolatedResolutionContext
   , resolutionDiagnostics
   , resolutionSearchRoots
   , resolutionTriedRoots
@@ -146,7 +148,7 @@ programFolded result =
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
 compileProgram :: FilePath -> IO ProgramResult
-compileProgram = compileProgramWith AnalysisProducts disabledCache
+compileProgram = compileProgramWith AnalysisProducts disabledCache newResolutionContext
 {-| Compile a program, reusing what an earlier run stored for modules that have
     not changed.
 
@@ -155,10 +157,14 @@ compileProgram = compileProgramWith AnalysisProducts disabledCache
     and documentation are not kept, so tooling that reads those compiles with
     `compileProgram`. -}
 compileProgramCached :: ProductCache -> FilePath -> IO ProgramResult
-compileProgramCached = compileProgramWith ExecutionProducts
+compileProgramCached cache = compileProgramWith ExecutionProducts cache newResolutionContext
 
-compileProgramWith :: ProductUse -> ProductCache -> FilePath -> IO ProgramResult
-compileProgramWith products cache rootPath = do
+{-| Resolve a complete bundle without consulting or changing the caller's environment. -}
+compileBundledProgram :: ProductCache -> FilePath -> IO ProgramResult
+compileBundledProgram cache = compileProgramWith ExecutionProducts cache (pure . isolatedResolutionContext)
+
+compileProgramWith :: ProductUse -> ProductCache -> (FilePath -> IO ResolutionContext) -> FilePath -> IO ProgramResult
+compileProgramWith products cache resolve rootPath = do
   rootRead <- readSource rootPath
   case rootRead of
     Left _ -> do
@@ -183,7 +189,9 @@ compileProgramWith products cache rootPath = do
                 (ProgramResult (Just rootName) (Map.singleton rootName (publishProduct products compiled))
                   [rootSource] (Map.singleton rootName rootSource) [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
-            else discoverFrom products cache Map.empty sourceRoot rootSource rootFrontend rootModule
+            else do
+              resolution <- resolve sourceRoot
+              discoverFrom products cache Map.empty resolution rootSource rootFrontend rootModule
 
 {-| Compile a program whose root is already in memory.
 
@@ -216,15 +224,16 @@ compileProgramSourceOver overlay sourceRoot rootSource = do
             (frontendDiagnostics rootFrontend)
             (CompileContext (exportIndex Map.empty) emptyInterfaceGraph True)
         )
-    Just rootModule -> discoverFrom AnalysisProducts disabledCache overlay sourceRoot rootSource rootFrontend rootModule
+    Just rootModule -> do
+      resolution <- newResolutionContext sourceRoot
+      discoverFrom AnalysisProducts disabledCache overlay resolution rootSource rootFrontend rootModule
 
 {-| Walk a root module's imports and compile everything the walk reaches. -}
-discoverFrom :: ProductUse -> ProductCache -> Map FilePath Text.Text -> FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
-discoverFrom products cache overlay sourceRoot rootSource rootFrontend rootModule = do
+discoverFrom :: ProductUse -> ProductCache -> Map FilePath Text.Text -> ResolutionContext -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom products cache overlay resolution rootSource rootSourceFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
-  resolution <- newResolutionContext sourceRoot
   discovered <- discover products cache overlay resolution
-    (Map.singleton rootName rootFrontend)
+    (Map.singleton rootName rootSourceFrontend)
     (Map.singleton rootName rootSource)
     Set.empty
     (resolutionDiagnostics resolution)

@@ -9,6 +9,9 @@ aliases: [Protocol Evaluation Spec]
 ---
 # Protocol Evaluation Spec
 
+[[Uses Channel Wait]] requires exact zero after checking typed receive outcomes and payload
+preservation. Resolved Grill Log: execute the public wrapper through the actual fixture runner.
+
 [[Uses App Reload]] verifies the development middleware's exact responses and production inactivity.
 
 [[Uses App Metrics Concurrent]] proves exact request observations under concurrent load.
@@ -22,6 +25,9 @@ wire formats, and related standard-library protocols. Each fixture returns an ex
 the Haskell property reports a named counterexample when that count changes.
 
 ## Governance and algorithm
+
+[[Database Savepoint Fixture]] runs the shipped scope helper against controlled protocol replies
+and must return zero. It checks complete cleanup ordering, exact causes and bounded mark depth.
 
 [[Uses Database Transaction Scope]] runs in the full suite with an exact zero result. It proves
 transaction callback revocation and exclusive command admission against an explicit client seam.

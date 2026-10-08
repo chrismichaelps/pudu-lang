@@ -3,6 +3,7 @@ module Pudu.Compiler.Library
   ( ResolutionContext
   , ResolutionMetrics (..)
   , newResolutionContext
+  , isolatedResolutionContext
   , resolutionDiagnostics
   , resolutionSearchRoots
   , resolutionTriedRoots
@@ -92,6 +93,19 @@ newResolutionContext sourceRoot = do
             , resolutionLibraryRootProbes = length (discoveryCandidates library)
             }
       }
+
+{-| A complete bundle resolves only its own materialized module closure. -}
+isolatedResolutionContext :: FilePath -> ResolutionContext
+isolatedResolutionContext root =
+  ResolutionContext
+    { contextSourceRoot = root
+    , contextProjectRoots = []
+    , contextPackageRoots = []
+    , contextLibraryRoots = []
+    , contextAttemptedLibraryRoots = []
+    , contextDiagnostics = []
+    , contextMetrics = ResolutionMetrics 0 0 0 0 0
+    }
 
 resolutionDiagnostics :: ResolutionContext -> [Diagnostic]
 resolutionDiagnostics = contextDiagnostics

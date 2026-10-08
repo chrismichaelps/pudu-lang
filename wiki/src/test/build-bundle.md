@@ -10,6 +10,12 @@ aliases: [Bundle End-to-End Gate]
 
 # Bundle End-to-End Gate
 
+[[Bundle Environment Gate]] runs for ordinary bundles and the runtime with a differing source
+identity. Resolved Grill Log: prove the same environment ownership with cached products and with
+source checking; retain the complete deployment and artifact-refusal gate. The deliberately altered
+runtime remains executable by refreshing its local fixture signature where required; its differing
+source digest and empty product section are still asserted.
+
 ## Purpose
 
 Verify that a built program runs after being copied away from the build directory with an empty
@@ -36,8 +42,11 @@ nonzero with collected failures. The optional executable path defaults to `pudu`
   carries at least one product; a build onto a runtime built from the same sources carries them too,
   while a runtime whose source digest differs (the compiler with one digest digit changed) carries
   none, still runs, and the build says it will be checked at every start.
-- Temporary executables are removed after use so the gate does not retain several compiler-sized
-  artifacts.
+- Temporary executables are removed immediately after their last assertion. The environment
+  probe adds another compiler-sized artifact; retaining already-tested copies caused disk
+  exhaustion. Resolved Grill Log: preserve every assertion while bounding live fixture artifacts. Run the differing-runtime
+  assertions only after releasing the named-runtime artifact, so the source-only probe owns
+  at most one runtime and one generated application.
 
 ## Negative Logic
 
