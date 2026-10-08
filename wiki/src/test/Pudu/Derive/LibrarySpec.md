@@ -46,3 +46,14 @@ answers in both evaluators.
 ## References
 
 [[Derive Graph Spec]] · [[Derive Design]] · [[src/_MOC]]
+
+## Static field owner selection (#457)
+
+[[Static Collect Fixture]] and [[Static Collect Bind Fixture]] exercise imported strategies,
+collect and build, nested optional/container heads, reordered implementation parameters, generic
+record targets, inferred and explicit method-local parameters, empty and error inputs, and exact
+ordered failures. Both evaluators must agree without diagnostics. Resolved Grill Log: the reported
+literal implementation answers 1, so its reproduction expects 1; no assertion invents a parse of 5.
+
+[[Static Collect Local Fixture]] also recompiles and executes its printed expansion.
+Resolved Grill Log: a runtime-only repair cannot establish expansion parity.

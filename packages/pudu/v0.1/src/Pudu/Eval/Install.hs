@@ -24,6 +24,7 @@ import Pudu.Eval.Env
   , bind
   , recordVariantOwner
   , bindMethod
+  , markModuleScope
   )
 import Pudu.Eval.Value
   ( Builtin (..)
@@ -77,6 +78,7 @@ loadModuleDeclarationsWith evaluateWith folded declarations = do
   let traits = traitTable declarations
       layouts = recordLayouts declarations
   mapM_ (installDeclaration traits layouts) declarations
+  markModuleScope
   mapM_ (initializeDeclaration evaluateWith folded) declarations
 
 {-| Trait members by trait name, so an implementation inherits the defaults it

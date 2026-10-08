@@ -249,10 +249,11 @@ expression depth context original@(Located at value) = do
       | Just written <- Map.lookup name (substitutions context) -> do
           resolved <- syntax depth context{substitutions = Map.empty} written
           case locatedValue resolved of
-            NamedType path _ -> do
+            NamedType path arguments -> do
               owner <- generated at (NameExpression (moduleNameSegments path))
+              target <- if null arguments then pure owner else generated at (TypeApplication owner arguments)
               selected <- retag member
-              out (MemberExpression owner selected)
+              out (MemberExpression target selected)
             _ -> refuse at "a static trait call needs a nominal type"
     MemberExpression receiver member -> MemberExpression <$> recurse receiver <*> retag member >>= out
     IndexExpression target index -> IndexExpression <$> recurse target <*> recurse index >>= out

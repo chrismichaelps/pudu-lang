@@ -1,0 +1,67 @@
+module StaticCollect.Bind
+
+import Std.Meta as Meta
+
+export trait Variable { fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] }
+impl Variable for Int {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    if text == Some("bad") { Err("bad " + key) } else { Ok(1) }
+  }
+}
+impl Variable for Str {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    match text { case Some(value) => Ok(value) case None => Err("missing " + key) }
+  }
+}
+impl [A: Variable] Variable for Option[A] {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    match text { case Some(_) => Ok(Some(A.fromVariable(key, text) ?)) case None => Ok(None) }
+  }
+}
+impl [A: Variable] Variable for Array[A] {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    Ok([A.fromVariable(key, text) ?, A.fromVariable(key, text) ?])
+  }
+}
+export type Pair[L, R] = { left: L, right: R }
+impl [B: Variable, A: Variable] Variable for Pair[A, B] {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    Ok(Pair{left: A.fromVariable(key, text) ?, right: B.fromVariable(key, text) ?})
+  }
+}
+export type Wrap[A] = { held: A }
+impl [A: Variable] Variable for Wrap[Option[A]] {
+  fn fromVariable(key: Str, text: Option[Str]) -> Result[Self, Str] {
+    Ok(Wrap{held: Some(A.fromVariable(key, text) ?)})
+  }
+}
+
+export trait Bind { fn bind(values: &Map[Str, Str]) -> Result[Self, Str] }
+export derive Bind for T: Record {
+  fn bind(values: &Map[Str, Str]) -> Result[T, Str] {
+    let problems = Meta.collect[T](fn(field: Meta.Field[T, F]) -> Option[Str] where F: Variable {
+        match F.fromVariable(field.name, values.get(field.name)) {
+          case Ok(_) => None
+          case Err(problem) => Some(problem)
+        }
+      })
+    if !problems.isEmpty() { return Err(problems.join(", ")) }
+    Meta.build[T](fn(field: Meta.Field[T, F]) -> Result[F, Str] where F: Variable {
+        F.fromVariable(field.name, values.get(field.name))
+      })
+  }
+}
+
+export trait Stamp { fn stamp[Tag](tag: Tag) -> Str }
+impl [A: Variable] Stamp for Option[A] {
+  fn stamp[Tag](tag: Tag) -> Str { show(A.fromVariable("stamp", Some("x"))) + show(tag) }
+}
+export trait Label { fn label() -> Str }
+export derive Label for T: Record {
+  fn label() -> Str {
+    let notes = Meta.collect[T](fn(field: Meta.Field[T, F]) -> Option[Str] where F: Stamp {
+        Some(F.stamp(true))
+      })
+    notes.join(";")
+  }
+}

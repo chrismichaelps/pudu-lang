@@ -49,3 +49,11 @@ remains formation's responsibility.
 ## Referenced by
 
 [[Type Formation]] · [[Type Env]] · [[Type Trait Proof]] · [[src/Pudu/Type/_MOC]]
+
+## Static field owner selection (#457)
+
+`selectImplementationTarget` exposes the pure target-head parameter selections used by
+`matchImplementation`. Retain structural matching, repeated-parameter agreement and canonical
+identity; return partial selections without changing the proof function's completeness guard.
+Resolved Grill Log: static owner selection and conditional proof share one matcher; method bounds
+are still discharged by ordinary scheme instantiation. Never match by parameter position alone.

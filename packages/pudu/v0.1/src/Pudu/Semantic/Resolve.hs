@@ -9,7 +9,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , ComptimeFor (..)
@@ -499,4 +499,8 @@ walkType (Located typeSpan value) = case value of
 walkMemberTarget :: Located Expression -> Resolver ()
 walkMemberTarget target@(Located spanValue expression) = case expression of
   NameExpression path -> resolveMemberHead spanValue path
+  TypeApplication (Located ownerAt (NameExpression path)) arguments
+    | Just _ <- spanOrigin spanValue -> do
+        resolveTypePath ownerAt (ModuleName path)
+        mapM_ walkType arguments
   _ -> walkExpression target

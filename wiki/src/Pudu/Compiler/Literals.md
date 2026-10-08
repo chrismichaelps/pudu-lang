@@ -14,7 +14,7 @@ aliases: [Compiler Literals]
 ---
 # Compiler Literals
 
-`resolveLiterals :: Map Span Text -> Module -> Module` rewrites every integer literal in expression
+`resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module` rewrites every integer literal in expression
 position into `ResolvedInteger kind value` once, after type checking. The kind is the checker's
 answer for the literal's span, else the literal's own suffix, else the platform `Int`; the value is
 the parsed number. The evaluator then builds the value directly, with no parsing and no `Map Span`
@@ -23,7 +23,8 @@ stands.
 
 The rewrite is a `GHC.Generics` traversal over the syntax tree that stops at `Located Expression`
 holding an integer literal. Only the module handed to the evaluator (`compileModule`) is rewritten;
-`compileSyntax`, which tooling reads for positions and text, keeps the parser's tree.
+`compileSyntax`, which tooling reads for positions and text, retains authored literals and selections.
+Generated owner annotations lower through `resolveOwnerSelections :: Map Span [Type] -> Module -> Module`.
 
 See [[Compiler Pipeline]] · [[architecture/PERFORMANCE]] · [[Eval Match]].
 
@@ -48,3 +49,18 @@ See [[Compiler Pipeline]] · [[architecture/PERFORMANCE]] · [[Eval Match]].
 
 `resolveLiterals` takes the static selections too: a recorded reference becomes an explicit type application of every chosen type, in declaration order, and an explicit application's written prefix is replaced by the full list. Types are written with their canonical keys; a rigid parameter keeps its one-segment name.
 - **Q:** Add a runtime channel for selections? **A:** No; the existing post-check rewrite makes them ordinary syntax, cached and evaluated like any other.
+
+## Static field owner selection (#457)
+
+`resolveOwnerSelections` lowers only generated complete static owners into ordinary method
+applications with the checker-selected implementation and method arguments. Other authored syntax
+and integer literals stay unchanged. Use an existing distinct generated owner-application span for
+the lowered callee so the printer retains the explicit selection. Executable lowering erases the
+owner application only after transferring its complete checked selection. Resolved Grill Log:
+expanded code must reparse without introducing a new bracket ambiguity or a new public syntax.
+
+An empty selection map returns the original module without traversal. Resolved Grill Log:
+ordinary modules with no static selections do not pay for the additional owner-only projection.
+
+Both projections retain that distinct callee span. Resolved Grill Log: an execution product reused
+for printed expansion must retain the same explicit owner selection as an analysis product.

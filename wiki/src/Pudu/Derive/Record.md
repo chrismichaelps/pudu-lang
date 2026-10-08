@@ -87,3 +87,11 @@ choose methods by runtime result values or infer a missing field capability.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Derive Design]] · [[Derive Residual State]]
+
+## Static field owner selection (#457)
+
+Retain a substituted generic owner's complete type as the target of its static member:
+`F.read` becomes `Option[Int].read`, using ordinary member and type-application syntax.
+Resolved Grill Log: erasing owner arguments leaves a discarded collect result unconstrained;
+blindly treating owner arguments as implementation parameters breaks reordered or nested heads.
+The checker selects through the complete owner; derive expansion never selects an implementation.

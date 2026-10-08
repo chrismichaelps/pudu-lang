@@ -1,0 +1,18 @@
+module StaticCollect
+
+import StaticCollect.Bind as Bind
+
+type Only = { extra: Option[Int] } derives Bind.Bind
+type Nested = { extra: Option[Option[Int]], items: Array[Option[Str]], pair: Bind.Pair[Int, Str], wrap: Bind.Wrap[Option[Int]] } derives Bind.Bind
+type Generic[A: Bind.Variable] = { value: Option[A] } derives Bind.Bind
+type Errors = { first: Option[Int], second: Array[Int], required: Str } derives Bind.Bind
+type Stamped = { value: Option[Int] } derives Bind.Label
+
+export fn main() -> Str {
+  let one = Only.bind(&mapOf([("extra", "5")]))
+  let absent = Only.bind(&mapOf([]))
+  let nested = Nested.bind(&mapOf([("extra", "x"), ("items", "text"), ("pair", "pair"), ("wrap", "x")]))
+  let generic: Result[Generic[Int], Str] = Generic.bind(&mapOf([("value", "x")]))
+  let errors = Errors.bind(&mapOf([("first", "bad"), ("second", "bad")]))
+  show(one) + "|" + show(absent) + "|" + show(nested) + "|" + show(generic) + "|" + show(errors) + "|" + Stamped.label() + "|" + Option.stamp[Int, Str]("tag")
+}

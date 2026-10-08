@@ -13,7 +13,7 @@ module Pudu.Compiler
   , rejectFrontend
   ) where
 
-import Pudu.Compiler.Literals (resolveLiterals)
+import Pudu.Compiler.Literals (resolveLiterals, resolveOwnerSelections)
 import Pudu.Diagnostic (Diagnostic, hasErrors, sortDiagnostics)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
@@ -169,17 +169,21 @@ compileFrontendWithDependencies dependencyFolded dependencyKinds dependencies co
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
+                let settledSyntax = resolveLiterals (maybe Map.empty moduleIntegerKinds typing)
+                      (maybe Map.empty moduleSelections typing) parsed
+                    ownedSyntax = if hasErrors typed then parsed else
+                      resolveOwnerSelections (maybe Map.empty moduleSelections typing) parsed
                 (constantDiagnostics, folded) <-
                   if hasErrors typed
                     then pure ([], Map.empty)
                     else foldConstants dependencyFolded
-                      (Map.union (maybe Map.empty moduleIntegerKinds typing) dependencyKinds) dependencies parsed
+                      (Map.union (maybe Map.empty moduleIntegerKinds typing) dependencyKinds) dependencies settledSyntax
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
                   CompileResult
                     { compileTokens = frontendTokens
-                    , compileModule = if hasErrors diagnostics then Nothing else Just (resolveLiterals (maybe Map.empty moduleIntegerKinds typing) (maybe Map.empty moduleSelections typing) parsed)
-                    , compileSyntax = Just parsed
+                    , compileModule = if hasErrors diagnostics then Nothing else Just settledSyntax
+                    , compileSyntax = Just ownedSyntax
                     , compileResolution = Just resolution
                     , compileTypes = types
                     , compileIntegerKinds =

@@ -27,11 +27,15 @@ actually run.
 
 ```haskell
 newtype CheckExpression = CheckExpression
-  { runCheck :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type }
+  { runCheck :: DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type }
 
-checkCallee        :: CheckExpression -> DeclaredTypes -> [Text] -> Located Expression -> Checker Type
-traitQualifiedCall :: CheckExpression -> DeclaredTypes -> [Text]
+checkCallee        :: CheckExpression -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
+traitQualifiedCall :: CheckExpression -> DeclaredTypes -> [(Text, Int)]
                    -> Located Expression -> [Located Expression] -> Checker (Maybe (Type, [Type]))
+selectedStaticCallee :: DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> [Type]
+                     -> Checker (Maybe Type)
+checkCalleeLending :: CheckExpression -> DeclaredTypes -> [(Text, Int)]
+                   -> Located Expression -> Checker (Type, Maybe (Located Expression))
 throughBorrow      :: Type -> Checker Type
 ```
 
@@ -106,3 +110,18 @@ full scoped bounds through Type.Check.Method. Trait parameters and Self speciali
 before remaining method-local parameters instantiate. Check the receiver once and
 reuse its type when checking the full call. Resolved Grill Log: qualifying a
 Holds[Int] receiver as Holds.get must not allow the result to become Bool.
+
+## Static field owner selection (#457)
+
+`selectedStaticCallee` recognizes a member qualified by a complete nominal type application.
+Form the owner, resolve its unambiguous method and provider, then match the provider's implementation
+head through [[Type Implementation Rules]]. Instantiate implementation parameters in declaration
+order from those structural bindings; remaining parameters are inferred normally. Explicit method
+arguments follow the selected implementation prefix. Record the complete ordinary static selection.
+Resolved Grill Log: preserving `Pair[B, A]` and nested heads requires structural matching, not zipping
+owner arguments. Missing or ambiguous selection returns a located diagnostic, never a guessed owner.
+
+The interface graph and local declaration collection can contribute identical implementation facts.
+Collapse identical matching rules in one linear pass before deciding uniqueness; keep different
+heads, traits, parameters or conditions distinct. Resolved Grill Log: repeated facts do not create
+ambiguity, and existing coherence checks still reject duplicate authored implementations.

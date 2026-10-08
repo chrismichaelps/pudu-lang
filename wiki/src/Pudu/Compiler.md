@@ -140,7 +140,7 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
   error must not cost the editor its syntax. _Rejected:_ relaxing `compileModule` admission, which
   would let a rejected module reach linking.
 - **Q:** Should program compilation re-run the frontend after graph discovery? **A:** No; pass the saved `FrontendResult` into `compileFrontendWith`. _Rationale:_ a module is parsed once per program compile and phase provenance stays stable. _Rejected:_ calling `runCompile` again for every loaded source.
-- **Q:** Apply selections to the tooling syntax too? **A:** No; tooling reads what was written.
+- **Q:** Apply authored selections to the tooling syntax too? **A:** No; tooling reads what was written. Generated owner annotations lower to printable ordinary selections.
 
 ## Variants
 
@@ -169,3 +169,19 @@ these executable products only after the consumer passes resolution and typing.
 
 Resolved Grill Log: imports have the same scope during folding and execution. Reuse the evaluator's
 linker with effects denied rather than inventing constructor or alias lookup in the compiler.
+
+## Static field owner selection (#457)
+
+After checking, lower generated complete static owners through [[Compiler Literals]] for the
+tooling syntax too. Preserve every authored node and unresolved literal; only the new generated
+owner annotation becomes an ordinary explicit method application. Resolved Grill Log: retain
+position fidelity and existing public grammar while making generic expansion executable.
+
+The same settled owner syntax feeds constant folding after successful checking. Failed checking
+retains its original tooling tree and never folds. Resolved Grill Log: a generated static call
+must use the same selection during constant evaluation and ordinary execution.
+
+Folding uses the fully settled executable syntax, including selections inside generic method
+bodies, and the same tree supplies the executable product. Resolved Grill Log: resolving only
+the derived call's owner leaves a nested parameter call erased during constant evaluation; reuse
+the existing complete literal/selection projection once rather than adding a folding resolver.
