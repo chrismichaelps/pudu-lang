@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Uses Channel Wait]] — explicit bounded channel outcomes and preserved payloads.
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]

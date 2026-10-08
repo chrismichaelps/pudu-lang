@@ -7,6 +7,9 @@ aliases: [Eval Confinement]
 ---
 # Eval Confinement
 
+`channelPullWithin` is admitted alongside channel receive. Resolved Grill Log: a finite wait
+requires no capability beyond the already admitted evaluation-owned channel.
+
 Cell/mutex disposal and completed-thread forgetting are admitted because they only release resources
 owned by the evaluation. Resolved Grill Log: confinement must permit cleanup of admitted creation.
 

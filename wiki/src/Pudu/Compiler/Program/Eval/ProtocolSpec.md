@@ -9,6 +9,9 @@ aliases: [Protocol Evaluation Spec]
 ---
 # Protocol Evaluation Spec
 
+[[Uses Channel Wait]] requires exact zero after checking typed receive outcomes and payload
+preservation. Resolved Grill Log: execute the public wrapper through the actual fixture runner.
+
 [[Uses App Reload]] verifies the development middleware's exact responses and production inactivity.
 
 [[Uses App Metrics Concurrent]] proves exact request observations under concurrent load.

@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Bounded channel admission (#462)
+
+- [[Std Channel]] adds distinct bounded receive outcomes for values, closure and expiry.
+- [[Eval Concurrent]] selects dequeue and timeout atomically and releases each private wait timer.
+- [[Eval System Tests]] covers competing receivers, expiry races and timer retirement;
+  [[Uses Channel Wait]] checks exact typed outcomes and preserved optional payloads.
+- Database consumers still require explicit integration before admission deadlines are claimed.
+
 ## 2026-10-07 — Database transaction scope (#443)
 
 - [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles

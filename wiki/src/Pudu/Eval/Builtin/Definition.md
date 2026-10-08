@@ -15,6 +15,9 @@ aliases: [Eval Builtin Definition]
 
 # Eval Builtin Definition
 
+`ChannelPullWithinBuiltin` appends the name `channelPullWithin`. Resolved Grill Log: append the
+constructor to preserve existing packed tag identities; typed wrappers own public outcomes.
+
 `CellDisposeBuiltin`, `MutexDisposeBuiltin` and `ForgetThreadBuiltin` append explicit disposal tags
 with names `cellDispose`, `mutexDispose` and `forgetThread`. Resolved Grill Log: preserve existing tags.
 

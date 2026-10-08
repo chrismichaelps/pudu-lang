@@ -62,6 +62,8 @@ has not occurred; these checks establish compatibility evidence, not production 
 
 The audit still identifies scoped savepoint cleanup, callback abort cleanup, database admission
 deadlines, aggregate result budgets and server shutdown ownership as unresolved boundaries.
+Bounded channel receiving supplies an atomic wait foundation with distinct delivery, closure and
+expiry outcomes. Database consumers must adopt it before their admission wait is bounded.
 The server head reader also returns surplus bytes that request parsing currently discards;
 coalesced requests require a focused transport regression before a repair is claimed.
 Existing feature availability and passing fixtures do not establish production readiness.
