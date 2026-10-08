@@ -5,6 +5,9 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Std Num]] — primitive numeric capability implementation mirror.
+
+
 - [[Bundle Environment Gate]] — exact environment ownership through both bundle execution paths.
 
 - [[Uses Channel Wait]] — explicit bounded channel outcomes and preserved payloads.

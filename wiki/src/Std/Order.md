@@ -21,6 +21,15 @@ buckets. Equal values must hash equally; collisions remain distinct until `Eq` c
 `Ord.before` asks whether the left value belongs strictly before the right value. Equal values and
 values ordered after the right value both answer `false`. Primitive implementations inherit this
 contract text in generated documentation unless a concrete implementation supplies its own note.
+## Primitive implementation documentation
+
+Resolved Grill Log: explicit primitive implementations supply the leaf equality, ordering and
+hashing operations used by aggregate derive strategies. The source and generated documentation
+state that boundary without claiming Pudu lacks deriving. This issue changes only comments.
+The existing module exceeds the default size; expanding or extracting its implementations is
+outside this bounded documentation repair. [[Std Num]] shares the primitive-capability boundary.
+[[2026-10-07-derive-documentation]] records validation and review status.
+
 ## Grill Log
 - **Q:** Put `Hash` inside `Std.HashMap`? **A:** No. _Rationale:_ the law belongs to the key type and
   is reusable by every hashed collection. _Rejected:_ treating SHA-256 as the trait operation.

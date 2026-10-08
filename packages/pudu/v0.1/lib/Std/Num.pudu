@@ -86,10 +86,9 @@ export fn spread[T: Sub](items: &Array[T], largest: T, smallest: T) -> T {
   largest.minus(&smallest)
 }
 
-/// Implementations follow for every integer width and both floating widths.
-/// They are written out rather than derived because the language has no
-/// deriving, and written here rather than in each caller because the point of a
-/// bound is that a caller does not repeat it.
+/// Primitive numeric implementations use Pudu's built-in arithmetic operations.
+/// They supply the leaf capabilities used by generic numeric algorithms.
+/// Aggregate types can define derive strategies for their own numeric semantics.
 
 impl Zero for Int { fn zero(self: &Self) -> Self { 0 } }
 impl Zero for Int8 { fn zero(self: &Self) -> Self { 0i8 } }
