@@ -26,6 +26,9 @@ the Haskell property reports a named counterexample when that count changes.
 
 ## Governance and algorithm
 
+[[Database Savepoint Fixture]] runs the shipped scope helper against controlled protocol replies
+and must return zero. It checks complete cleanup ordering, exact causes and bounded mark depth.
+
 [[Uses Database Transaction Scope]] runs in the full suite with an exact zero result. It proves
 transaction callback revocation and exclusive command admission against an explicit client seam.
 

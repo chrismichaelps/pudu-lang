@@ -7,6 +7,8 @@ tags: [moc, module]
 
 - [[Uses Channel Wait]] — explicit bounded channel outcomes and preserved payloads.
 
+- [[Database Savepoint Fixture]] · [[Savepoint Fixture Transport]] — scoped mark cleanup and exact refusals.
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]

@@ -33,3 +33,11 @@ Exact next action: publish the validated bounded channel seam for independent re
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Std Channel]] · [[Eval Concurrent]] · [[Application Maturity]]
+
+Maintainer requested integration into development. The overlap in [[Protocol Evaluation Spec]]
+retains both the bounded-channel and savepoint fixture registrations and exact-zero assertions.
+Both matching mirrors, changelog records and module-map entries remain present.
+
+Integration validation: warning-strict optimized build, full compatibility suite, both seams
+formatting and lint, fourteen dependency tests and both actual dependency graphs pass.
+The application graph has zero findings; the source graph has zero import cycles.

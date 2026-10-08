@@ -60,7 +60,9 @@ requested merging completed requests into development in creation order. Combine
 suite, formatting, dependency gates and the packed retention workload pass. Independent review
 has not occurred; these checks establish compatibility evidence, not production readiness.
 
-The audit still identifies scoped savepoint cleanup, callback abort cleanup, database admission
+Scoped savepoint cleanup now releases completed marks and preserves cleanup failures; the exact
+protocol regression and its removal control establish bounded mark depth under repeated failures.
+The audit still identifies callback abort cleanup, database admission
 deadlines, aggregate result budgets and server shutdown ownership as unresolved boundaries.
 Bounded channel receiving supplies an atomic wait foundation with distinct delivery, closure and
 expiry outcomes. Database consumers must adopt it before their admission wait is bounded.

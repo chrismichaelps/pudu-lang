@@ -384,13 +384,19 @@ export fn withSavepoint[T](
   if let Err(reason) = marked { return (Err(reason), start) }
   let stream = Result.unwrapOr(marked, start)
   let outcome = action(stream)
+  var current = outcome[1]
   if Result.isErr(&outcome[0]) {
-    let undone = rollbackTo(outcome[1], name)
-    (outcome[0], Result.unwrapOr(undone, outcome[1]))
-  } else {
-    let freed = release(outcome[1], name)
-    (outcome[0], Result.unwrapOr(freed, outcome[1]))
+    match rollbackTo(current, name) {
+      case Err(problem) => {
+        let cleanup: Result[(), Session.DbError] = Err(problem)
+        return (afterCleanup(outcome[0], cleanup), current)
+      }
+      case Ok(restored) => { current = restored }
+    }
   }
+  let freed = release(current, name)
+  let cleanup = Result.map(freed, fn(_stream: Session.Connection) -> () { () })
+  (afterCleanup(outcome[0], cleanup), Result.unwrapOr(freed, current))
 }
 
 /// A pool of open connections, shared between threads.
