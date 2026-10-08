@@ -8,6 +8,7 @@ module Pudu.Semantic.Interface
   , exportIndex
   , exportsOf
   , importBindings
+  , isolatedImportBindings
   , moduleExportKeys
   , moduleExports
   ) where
@@ -52,6 +53,7 @@ data ImportBinding = ImportBinding
   { bindingNamespace :: !Namespace
   , bindingName :: !Text
   , bindingSpan :: !Span
+  , bindingModuleQualifier :: !Bool
   }
   deriving stock (Eq, Show)
 
@@ -119,13 +121,20 @@ variantExports owner (Located _ definition) = case definition of
 importBindings :: ExportIndex -> Located Import -> ([ImportBinding], [Diagnostic])
 importBindings (ExportIndex modules) (Located importSpan value) =
   case Map.lookup importedModule modules of
-    Nothing -> (opaqueBindings value qualifier importSpan, [])
+    Nothing -> (opaqueBindings False value qualifier importSpan, [])
     Just exports -> case importItems value of
-      [] -> (qualifierBindings qualifier importSpan, [])
+      [] -> (qualifierBindings True qualifier importSpan, [])
       items -> foldMap (selectedBindings importedModule exports) items
  where
   importedModule = locatedValue (importModule value)
   qualifier = maybe (moduleQualifier importedModule) locatedValue (importAlias value)
+
+isolatedImportBindings :: Located Import -> [ImportBinding]
+isolatedImportBindings (Located at value) =
+  opaqueBindings True value qualifier qualifierSpan
+ where
+  qualifier = maybe (moduleQualifier (locatedValue (importModule value))) locatedValue (importAlias value)
+  qualifierSpan = maybe at locatedSpan (importAlias value)
 
 selectedBindings
   :: ModuleName -> ModuleExports -> Located Text -> ([ImportBinding], [Diagnostic])
@@ -140,19 +149,19 @@ selectedBindings owner (ModuleExports exports) item =
     , Just found <- [Map.lookup (namespace, locatedValue item) exports]
     ]
   toBinding found =
-    ImportBinding (exportedNamespace found) (locatedValue item) (locatedSpan item)
+    ImportBinding (exportedNamespace found) (locatedValue item) (locatedSpan item) False
 
-qualifierBindings :: Text -> Span -> [ImportBinding]
-qualifierBindings name spanValue =
-  [ ImportBinding ValueSpace name spanValue
-  , ImportBinding TypeSpace name spanValue
+qualifierBindings :: Bool -> Text -> Span -> [ImportBinding]
+qualifierBindings known name spanValue =
+  [ ImportBinding ValueSpace name spanValue known
+  , ImportBinding TypeSpace name spanValue known
   ]
 
-opaqueBindings :: Import -> Text -> Span -> [ImportBinding]
-opaqueBindings value qualifier spanValue = case importItems value of
-  [] -> qualifierBindings qualifier spanValue
+opaqueBindings :: Bool -> Import -> Text -> Span -> [ImportBinding]
+opaqueBindings known value qualifier spanValue = case importItems value of
+  [] -> qualifierBindings known qualifier spanValue
   items ->
-    [ ImportBinding namespace (locatedValue item) (locatedSpan item)
+    [ ImportBinding namespace (locatedValue item) (locatedSpan item) False
     | item <- items
     , namespace <- [ValueSpace, TypeSpace]
     ]

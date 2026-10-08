@@ -305,6 +305,7 @@ library
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Resolve.State
     Pudu.Semantic.Resolve.Canonical
     Pudu.Semantic.Resolve.Reflection
     Pudu.Semantic.Resolve.Bindings

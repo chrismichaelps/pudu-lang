@@ -9,7 +9,7 @@ import Control.Monad (when)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , ComptimeFor (..)
@@ -51,6 +51,7 @@ import Pudu.Semantic.Interface
   ( ExportIndex
   , ImportBinding (..)
   , importBindings
+  , isolatedImportBindings
   )
 import Pudu.Semantic.Resolve.Context
   ( Resolver
@@ -59,6 +60,7 @@ import Pudu.Semantic.Resolve.Context
   , declarePreludeName
   , markAmbiguousVariant
   , declareNamed
+  , declareModuleQualifier
   , inScope
   , inScopeOver
   , insideLoop
@@ -67,7 +69,7 @@ import Pudu.Semantic.Resolve.Context
   , visibleAfter
   , resolveLoopTarget
   , resolveTypeName
-  , resolveValueName
+  , resolveExpressionName
   , setReflectionImports
   , declareLoopTypeParameter
   , declareReflectedTypeParameter
@@ -129,7 +131,7 @@ resolveUnit prepared moduleValue = do
     declarePrelude (moduleImports moduleValue)
     inScope $ do
       case prepared of
-        Nothing -> mapM_ collectImport (moduleImports moduleValue)
+        Nothing -> mapM_ (collectPreparedImport . isolatedImportBindings) (moduleImports moduleValue)
         Just bindings -> mapM_ collectPreparedImport bindings
       setReflectionImports (moduleImports moduleValue)
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
@@ -167,30 +169,14 @@ declarePrelude imports
 importsPrelude :: Located Import -> Bool
 importsPrelude (Located _ value) = isPreludeModule (locatedValue (importModule value))
 
-{-| Imports never re-export. An alias or selected item becomes one opaque
-    external symbol in both namespaces, because which namespace it belongs to is
-    only knowable once cross-module resolution exists. -}
-collectImport :: Located Import -> Resolver ()
-collectImport (Located spanValue value) = case importAlias value of
-  Just alias -> external (locatedValue alias) (locatedSpan alias)
-  Nothing -> case importItems value of
-    [] -> external (moduleQualifier (locatedValue (importModule value))) spanValue
-    items -> mapM_ (\item -> external (locatedValue item) (locatedSpan item)) items
- where
-  external name nameSpan = do
-    declareNamed ValueSpace ImportOrigin Private False (Located nameSpan name)
-    declareNamed TypeSpace ImportOrigin Private False (Located nameSpan name)
-
 collectPreparedImport :: [ImportBinding] -> Resolver ()
 collectPreparedImport = mapM_ declare
  where
-  declare binding =
-    declareNamed
-      (bindingNamespace binding)
-      ImportOrigin
-      Private
-      False
-      (Located (bindingSpan binding) (bindingName binding))
+  declare binding
+    | bindingNamespace binding == ValueSpace && bindingModuleQualifier binding = declareModuleQualifier name
+    | otherwise = declareNamed (bindingNamespace binding) ImportOrigin Private False name
+   where
+    name = Located (bindingSpan binding) (bindingName binding)
 
 {-| Collect every module-scope declaration before walking any body, so module
     order cannot change what resolves. -}
@@ -472,7 +458,7 @@ walkExpression (Located spanValue expression) = case expression of
 walkFieldInit :: Located FieldInit -> Resolver ()
 walkFieldInit (Located _ field) = case fieldInitValue field of
   Just value -> walkExpression value
-  Nothing -> resolveValueName (locatedSpan (fieldInitName field)) (locatedValue (fieldInitName field))
+  Nothing -> resolveExpressionName (locatedSpan (fieldInitName field)) (locatedValue (fieldInitName field))
 
 walkArm :: Located MatchArm -> Resolver ()
 walkArm (Located spanValue arm) = inScopeOver (spanExtent spanValue) $ do

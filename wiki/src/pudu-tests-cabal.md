@@ -99,3 +99,5 @@ field callbacks, static selection and the expansion snapshot run in both
 evaluators within the complete suite.
 
 Register [[Lsp Impl Members Spec]]. Resolved Grill Log: implementation member completion and its quick fix run through the server's request path in the complete suite.
+
+Register [[Module Qualifier Spec]] explicitly. Resolved Grill Log: isolated/loaded identity, privacy, recovery, diagnostic and execution evidence runs in the complete suite without a new dependency.

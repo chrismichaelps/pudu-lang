@@ -80,3 +80,5 @@ Register [[Derive Graph Spec]] independently of kernel transformations and inclu
 its real loaded-program successes/refusals in aggregate exit status.
 
 Registers [[Lsp Impl Members Spec]] with the language-server properties.
+
+Register [[Module Qualifier Spec]] beside resolution properties and include its outcomes in aggregate exit status. Resolved Grill Log: focused and full runs execute the same boundary properties.

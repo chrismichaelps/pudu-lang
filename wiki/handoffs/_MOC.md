@@ -158,3 +158,5 @@ tags: [moc, handoff]
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
+
+- [[Module Qualifier Delivery]] — namespace/value agreement prerequisite (#470).

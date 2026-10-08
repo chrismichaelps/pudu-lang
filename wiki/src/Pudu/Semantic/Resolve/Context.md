@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Semantic/Resolve/Context.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Semantic/Resolve/Context.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Semantics]]"
@@ -17,14 +17,13 @@ aliases: [Resolve Context]
 
 ## Purpose
 
-Own the resolver's private state and the primitives that thread it: a pure `Resolver` monad over an explicit state record, scope-frame management, symbol introduction with same-frame duplicate and outer-shadow classification, ambiguous-variant marking, and the value/type name resolution that the [[Name Resolution]] facade walks.
+Own the resolver primitives over the pure invocation-local action and state in [[Resolve State]]: scope-frame management, symbol introduction with same-frame duplicate and outer-shadow classification, ambiguous-variant marking, and the value/type name resolution that the [[Name Resolution]] facade walks.
 
 ## Interface
 
 ### Signatures
 
 ```haskell
-data ResolveState
 data ResolverProducts = ResolverProducts
   { producedSymbols     :: ![Symbol]
   , producedReferences  :: ![Reference]
@@ -76,7 +75,7 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 
 ### Linkage
 
-- **Requires:** [[Scope Model]], [[Symbol Model]], [[Diagnostic Model]], [[Semantic Prelude]], [[Syntax Tree]], [[architecture/SEMANTICS]].
+- **Requires:** [[Resolve State]], [[Scope Model]], [[Symbol Model]], [[Diagnostic Model]], [[Semantic Prelude]], [[Syntax Tree]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Name Resolution]] (the facade that drives the walk).
 
 ## Algorithm
@@ -150,3 +149,9 @@ shadowing obey the same rule as runtime-reflection refusal.
 Resolved Grill Log: enforce the restriction on resolved references, not only
 member syntax; selected and first-class imports cannot bypass it. Preserve
 unknown-name diagnostics and ordinary lexical shadowing.
+
+## Qualifier refusal and state boundary (#470)
+
+[[Resolve State]] owns the pure state record, action instances and initial state; this module retains the abstract facade, scope primitives and sorted products. `declareModuleQualifier` introduces the ordinary ValueSpace import and records its resolved SymbolId. Plain expressions check that identity before accepting a runtime value. E2010 names the namespace and asks for an exported member; no runtime reference is recorded for it.
+
+Resolved Grill Log: track identity in invocation-owned state so selected exports and legitimate local shadows remain values. Both declaration namespaces remain intact. Reflection E2018 takes priority outside derives, with no second E2010; qualified paths still record their references. Failed loaded interfaces remain opaque. See [[Scoped Import Design]].

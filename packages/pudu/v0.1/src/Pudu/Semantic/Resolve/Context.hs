@@ -5,6 +5,7 @@ module Pudu.Semantic.Resolve.Context
   , declareBuiltin
   , declarePreludeName
   , declareNamed
+  , declareModuleQualifier
   , inScope
   , inScopeOver
   , visibleAfter
@@ -27,7 +28,6 @@ module Pudu.Semantic.Resolve.Context
   ) where
 
 import Data.Maybe (listToMaybe)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic
@@ -42,11 +42,10 @@ import Pudu.Diagnostic
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Import (..), TypeSyntax, Visibility (Private))
+import Pudu.Semantic.Resolve.State (ResolveState (..), Resolver (..), initialState)
 import Pudu.Semantic.Resolve.Reflection (reflectionImports, fieldTypeParameter)
 import Pudu.Semantic.Scope
-  ( ScopeStack
-  , declareSymbol
-  , emptyStack
+  ( declareSymbol
   , lookupSymbol
   , popScope
   , pushScope
@@ -62,33 +61,6 @@ import Pudu.Semantic.Symbol
   )
 import Pudu.Source (Span, spanStart, unOffset)
 
-{-| @Semantic.Resolve.State — the resolver's private working state -}
-data ResolveState = ResolveState
-  { stateAmbiguous :: ![Text]
-  , stateNext :: !Int
-  , stateScopes :: !ScopeStack
-  , stateLoops :: ![Maybe Text]
-  , stateSymbolsRev :: ![Symbol]
-  , stateReferencesRev :: ![Reference]
-  , stateDiagnosticsRev :: ![Diagnostic]
-  {-| The frames open now, innermost first, by the identity each was given. -}
-  , stateFrames :: ![Int]
-  , stateFramesRev :: ![(Int, Frame)]
-  {-| Each binding's frame, the offset it is visible after, and its symbol. -}
-  , stateBindingsRev :: ![(Int, Int, SymbolId)]
-  {-| Where the bindings being declared now become visible, when that is later
-      than their names: a `let` is visible after its statement. -}
-  , stateVisibleAfter :: !(Maybe Int)
-  {-| Canonical reflection imports, including selections, classified once.
-      Uses are checked against the resolved namespace and symbol origin. -}
-  , stateReflectionImports :: !(Set (Namespace, Text))
-  {-| Whether a derive definition's members are being walked. Compile-time
-      reflection is refused everywhere else, because only derivation unrolls
-      the code that names it. -}
-  , stateInDerive :: !Bool
-  , stateCanonicalTypes :: !Bool
-  }
-
 {-| @Semantic.Resolve.Products — everything one resolution run produced -}
 data ResolverProducts = ResolverProducts
   { producedSymbols :: ![Symbol]
@@ -96,28 +68,6 @@ data ResolverProducts = ResolverProducts
   , producedDiagnostics :: ![Diagnostic]
   , producedScopes :: !ScopeIndex
   }
-
-{-| @Semantic.Resolve.Action — threads resolver state explicitly -}
-newtype Resolver a = Resolver (ResolveState -> (a, ResolveState))
-
-instance Functor Resolver where
-  fmap transform (Resolver action) =
-    Resolver $ \state -> let (value, next) = action state in (transform value, next)
-
-instance Applicative Resolver where
-  pure value = Resolver $ \state -> (value, state)
-  Resolver leftAction <*> Resolver rightAction =
-    Resolver $ \state ->
-      let (transform, afterLeft) = leftAction state
-          (value, afterRight) = rightAction afterLeft
-       in (transform value, afterRight)
-
-instance Monad Resolver where
-  Resolver action >>= continue =
-    Resolver $ \state ->
-      let (value, next) = action state
-          Resolver continued = continue value
-       in continued next
 
 runResolver :: Resolver a -> ResolverProducts
 runResolver (Resolver action) =
@@ -128,25 +78,6 @@ runResolver (Resolver action) =
         , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
         , producedScopes = scopeIndex (stateFramesRev finalState) (stateBindingsRev finalState)
         }
-
-initialState :: ResolveState
-initialState =
-  ResolveState
-    { stateAmbiguous = []
-    , stateNext = 0
-    , stateScopes = emptyStack
-    , stateLoops = []
-    , stateSymbolsRev = []
-    , stateReferencesRev = []
-    , stateDiagnosticsRev = []
-    , stateFrames = [0]
-    , stateFramesRev = [(0, Frame Nothing Nothing)]
-    , stateBindingsRev = []
-    , stateVisibleAfter = Nothing
-    , stateReflectionImports = Set.empty
-    , stateInDerive = False
-    , stateCanonicalTypes = False
-    }
 
 {-| Labels have an independent stack; duplicate labels warn but select the
     innermost enclosing loop. -}
@@ -254,17 +185,20 @@ withCanonicalTypes formed (Resolver action) = Resolver $ \state ->
 recordResolvedReference :: Span -> Symbol -> Resolver ()
 recordResolvedReference at symbol = do
   recordReference (Reference at (symbolId symbol))
-  restricted <- Resolver $ \state ->
-    ( not (stateInDerive state)
-        && symbolOrigin symbol == ImportOrigin
-        && Set.member (symbolNamespace symbol, symbolName symbol) (stateReflectionImports state)
-    , state
-    )
+  restricted <- reflectionRestricted symbol
   if restricted
     then emit "E2018" Error at
       ("compile-time reflection `" <> symbolName symbol <> "` is only named from derive definitions")
       (Just "move the reflection into a derive body")
     else pure ()
+
+reflectionRestricted :: Symbol -> Resolver Bool
+reflectionRestricted symbol = Resolver $ \state ->
+    ( not (stateInDerive state)
+        && symbolOrigin symbol == ImportOrigin
+        && Set.member (symbolNamespace symbol, symbolName symbol) (stateReflectionImports state)
+    , state
+    )
 
 {-| Run an action inside a fresh lexical frame. The frame is discarded on exit,
     so nothing a nested scope declared can leak outward. -}
@@ -310,6 +244,15 @@ declarePreludeName namespace name =
 declareNamed :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Located Text -> Resolver ()
 declareNamed namespace origin visibility mutable name =
   introduce namespace origin visibility mutable (locatedValue name) (Just (locatedSpan name))
+
+declareModuleQualifier :: Located Text -> Resolver ()
+declareModuleQualifier name = do
+  declareNamed ValueSpace ImportOrigin Private False name
+  found <- lookupCurrent ValueSpace (locatedValue name)
+  case found of
+    Nothing -> pure ()
+    Just symbol -> Resolver $ \state ->
+      ((), state{stateModuleQualifiers = Set.insert (symbolId symbol) (stateModuleQualifiers state)})
 
 {-| Introduce a symbol, reporting a same-frame duplicate as `E2001` with the
     first declaration attached, and an outer shadow as `W2001` when the
@@ -383,7 +326,7 @@ resolveExpressionName spanValue name = do
     else do
       value <- lookupCurrent ValueSpace name
       case value of
-        Just symbol -> recordResolvedReference spanValue symbol
+        Just symbol -> resolveExpressionReference spanValue symbol
         Nothing -> do
           typeSymbol <- lookupCurrent TypeSpace name
           case typeSymbol of
@@ -393,6 +336,19 @@ resolveExpressionName spanValue name = do
             Nothing ->
               emit "E2010" Error spanValue ("unresolved value name " <> name)
                 (Just "declare the name, import it, or check the spelling")
+
+resolveExpressionReference :: Span -> Symbol -> Resolver ()
+resolveExpressionReference at symbol = do
+  qualifier <- Resolver $ \state ->
+    (Set.member (symbolId symbol) (stateModuleQualifiers state), state)
+  if qualifier
+    then do
+      restricted <- reflectionRestricted symbol
+      if restricted
+        then recordResolvedReference at symbol
+        else emit "E2010" Error at (symbolName symbol <> " is a module namespace, not a value")
+          (Just "select an exported member with the qualifier, or import a named value")
+    else recordResolvedReference at symbol
 
 isAmbiguous :: Text -> Resolver Bool
 isAmbiguous name = Resolver $ \state -> (name `elem` stateAmbiguous state, state)

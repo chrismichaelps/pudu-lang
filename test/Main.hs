@@ -58,6 +58,7 @@ import Pudu.EvalSpec (evalProperties)
 import Pudu.DocSpec (docProperties)
 import Pudu.Repl.AnswerSpec (answerProperties)
 import Pudu.Repl.SessionSpec (replProperties)
+import Pudu.Semantic.QualifierSpec (qualifierProperties)
 import Pudu.Semantic.ResolveSpec (resolveProperties)
 import Pudu.Semantic.ReflectionSpec (reflectionProperties)
 import Pudu.Type.CheckSpec (typeProperties)
@@ -133,7 +134,7 @@ main = do
   parserDeriveOutcomes <- traverse (uncurry check) parserDeriveProperties
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
-  resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties)
+  resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties)
   evalOutcomes <- traverse (uncurry check) evalProperties
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties

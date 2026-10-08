@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Semantic/Resolve.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Semantic/Resolve.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Semantics]]"
@@ -172,3 +172,9 @@ in the type namespace. Authored values and indexes retain their existing walk. R
 owner arguments are type references, while generated provenance confines this exception; canonical
 and lexical resolution still enforce visibility. The existing source is slightly above the default
 size; this bounded repair adds only this namespace case and leaves extraction to a separate slice.
+
+## Qualifier collection (#470)
+
+Both isolated and loaded imports use [[Semantic Interface]] binding projection and one collector. A ValueSpace qualifier enters through `declareModuleQualifier`; all other bindings keep `declareNamed`. Qualified paths and both declaration namespaces remain unchanged. Record field shorthand reads an ordinary runtime value and uses strict expression resolution.
+
+Resolved Grill Log: remove duplicate import projection from this facade; authoritative qualifier identity belongs to [[Resolve Context]], not spelling in the expression walk. Missing interfaces preserve opaque recovery. See [[Scoped Import Design]].
