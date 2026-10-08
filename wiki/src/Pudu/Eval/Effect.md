@@ -15,6 +15,10 @@ aliases: [Eval Effect]
 
 # Eval Effect
 
+`channelPullWithin` is an effect, dispatching mathematical token and wait values to [[Eval Concurrent]].
+It encodes timeout as `None`, closure as `Some(None)` and delivery as `Some(Some(value))` inside
+`Result`. Resolved Grill Log: preserve nested option shape and E7009 constant-evaluation refusal.
+
 Disposal primitives dispatch one token to [[Eval Concurrent]] and return Result[(), Str]. They belong
 to the ordinary effect list and remain forbidden during constant evaluation. Resolved Grill Log:
 resource cleanup follows the same admission boundary as resource creation.

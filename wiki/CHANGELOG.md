@@ -13,6 +13,23 @@ tags: [changelog]
 - [[Bundle Environment Gate]] checks absent, empty and supplied `PUDU_LIB` values through cached
   and source-only execution. [[Program Graph Spec]] rejects host fallback and unrelated manifests.
 
+## 2026-10-07 — Bounded channel admission (#462)
+
+- [[Std Channel]] adds distinct bounded receive outcomes for values, closure and expiry.
+- [[Eval Concurrent]] selects dequeue and timeout atomically and releases each private wait timer.
+- [[Eval System Tests]] covers competing receivers, expiry races and timer retirement;
+  [[Uses Channel Wait]] checks exact typed outcomes and preserved optional payloads.
+- Database consumers still require explicit integration before admission deadlines are claimed.
+
+## 2026-10-07 — Savepoint scope cleanup (#456)
+
+- [[Std Db]] releases each completed scoped mark after success or confirmed rollback and reports
+  cleanup refusal. Successful cleanup preserves the original action value or structured error.
+- [[Database Savepoint Fixture]] checks exact causes and commands, enclosing and duplicate marks,
+  quoted names and skipped callbacks. One thousand failed scopes retain zero marks with peak
+  depth one; removing release retains all one thousand and makes the regression fail.
+- [[Savepoint Fixture Transport]] independently models mark ownership over complete protocol replies.
+
 ## 2026-10-07 — Database transaction scope (#443)
 
 - [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles

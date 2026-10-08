@@ -5,6 +5,7 @@ module Pudu.Eval.Concurrent
   , channelNew
   , channelPending
   , channelReceive
+  , channelReceiveWithin
   , channelSend
   , closeConcurrentStore
   , cellNew
@@ -23,15 +24,16 @@ module Pudu.Eval.Concurrent
   , threadForget
   ) where
 
-import Control.Concurrent (ThreadId, killThread, myThreadId, threadDelay)
-import Control.Exception (mask_)
+import Control.Concurrent (ThreadId, forkIO, killThread, myThreadId, threadDelay)
+import Control.Exception (bracket, mask_)
 import Control.Concurrent.MVar
   ( MVar
   , readMVar
   , tryReadMVar
   )
 import Control.Concurrent.STM
-  ( TVar
+  ( STM
+  , TVar
   , atomically
   , newTVarIO
   , readTVar
@@ -190,15 +192,38 @@ channelSend store token value = withChannel store token $ \channel ->
     closing says no more will arrive, not that what arrived is discarded. -}
 channelReceive :: ConcurrentStore -> Int -> IO (IoOutcome (Maybe Value))
 channelReceive store token = withChannel store token $ \channel ->
-  atomically $ do
-    items <- readTVar (channelItems channel)
-    case Seq.viewl items of
-      first :< rest -> do
-        writeTVar (channelItems channel) rest
-        pure (IoDone (Just first))
-      EmptyL -> do
-        closed <- readTVar (channelClosed channel)
-        if closed then pure (IoDone Nothing) else retry
+  IoDone <$> atomically (pollChannel channel >>= maybe retry pure)
+
+{-| Expiry and dequeue share one atomic decision; a timeout never consumes an item. -}
+channelReceiveWithin :: ConcurrentStore -> Integer -> Integer -> IO (IoOutcome (Maybe (Maybe Value)))
+channelReceiveWithin store token millis
+  | millis < 0 || millis > toInteger (maxBound :: Int) `div` 1000 =
+      pure (IoFailed "invalid channel wait")
+  | token < 1 || token > toInteger (maxBound :: Int) = pure (IoFailed "no such channel")
+  | otherwise = withChannel store (fromInteger token) $ \channel -> do
+      ready <- atomically (pollChannel channel)
+      case ready of
+        Just _ -> pure (IoDone ready)
+        Nothing | millis == 0 -> pure (IoDone Nothing)
+        Nothing -> do
+          expired <- newTVarIO False
+          let timer = threadDelay (fromInteger (millis * 1000)) >> atomically (writeTVar expired True)
+          IoDone <$> bracket (forkIO timer) killThread (\_ -> atomically $ do
+            available <- pollChannel channel
+            case available of
+              Just _ -> pure available
+              Nothing -> do
+                elapsed <- readTVar expired
+                if elapsed then pure Nothing else retry)
+
+pollChannel :: Channel -> STM (Maybe (Maybe Value))
+pollChannel channel = do
+  items <- readTVar (channelItems channel)
+  case Seq.viewl items of
+    first :< rest -> writeTVar (channelItems channel) rest >> pure (Just (Just first))
+    EmptyL -> do
+      closed <- readTVar (channelClosed channel)
+      pure (if closed then Just Nothing else Nothing)
 
 {-| How many items are waiting. -}
 channelPending :: ConcurrentStore -> Int -> IO (IoOutcome Int)

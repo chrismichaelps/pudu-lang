@@ -7,6 +7,10 @@ tags: [moc, handoff]
 
 - [[2026-10-07-requested-issue-repairs]] — bundle environment, derive behavior and documentation repairs.
 
+- [[2026-10-07-channel-waits]] — bounded admission without lost channel values.
+
+- [[2026-10-07-savepoint-cleanup]] — completed mark ownership and preserved cleanup failures.
+
 - [[2026-10-07-app-maturity]] — sequential application hardening, beginning with transaction isolation.
 
 - [[2026-10-07-database-read-ahead]] — bounded database transport coalescing and measured consumption.

@@ -8,14 +8,16 @@ module Pudu.Eval.SystemSpec
   , testFailures
   , testResourceIsolation
   , testResourceDisposal
+  , testChannelWait
   , testScopes
   , testUnsafeRegions
   ) where
 
 import Control.Monad (replicateM, when)
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO, killThread, threadDelay)
+import Control.Exception (finally)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
-import GHC.Conc (BlockReason (BlockedOnSTM), ThreadStatus (ThreadBlocked), threadStatus)
+import GHC.Conc (BlockReason (BlockedOnSTM), ThreadStatus (ThreadBlocked, ThreadDied, ThreadFinished), listThreads, threadStatus)
 import qualified Data.Text as Text
 import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
 import System.IO (hClose, openTempFile)
@@ -33,6 +35,11 @@ import Pudu.Eval.Common
   )
 import Pudu.Eval.Concurrent
   ( cellNew
+  , channelNew
+  , channelSend
+  , channelReceiveWithin
+  , channelPending
+  , channelClose
   , cellDispose
   , cellRead
   , cellSwap
@@ -67,7 +74,101 @@ systemProperties =
   , ("calendar time and subprocesses answer with results", testClock)
   , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
   , ("explicit disposal removes completed runtime resources", testResourceDisposal)
+  , ("bounded channel waits preserve atomic admission and timer lifetime", testChannelWait)
   ]
+
+testChannelWait :: IO Property
+testChannelWait = do
+  store <- newConcurrentStore
+  token <- channelNew store 1
+  let receive = channelReceiveWithin store (toInteger token)
+  probe <- receive 0
+  elapsed <- timeout 1000000 (receive 1)
+  invalid <- receive (-1)
+  overflow <- receive (toInteger (maxBound :: Int))
+  aliased <- channelReceiveWithin store (toInteger token + toInteger (maxBound :: Int) + 1) 0
+  _ <- channelSend store token UnitValue
+  delivered <- receive 0
+  _ <- channelSend store token UnitValue
+  _ <- channelClose store token
+  queued <- receive 0
+  finished <- receive 10
+  ownership <- mapM (parkedWait store) [0 :: Int, 1, 2]
+  races <- replicateM 20 $ do
+    queue <- channelNew store 1
+    outcomes <- newEmptyMVar
+    let consumer = channelReceiveWithin store (toInteger queue) 60000 >>= putMVar outcomes
+    first <- forkIO consumer
+    second <- forkIO consumer
+    _ <- channelSend store queue UnitValue
+    _ <- channelClose store queue
+    both <- timeout 1000000 ((,) <$> takeMVar outcomes <*> takeMVar outcomes)
+    pending <- channelPending store queue
+    killThread first
+    killThread second
+    let value = IoDone (Just (Just UnitValue))
+        closed = IoDone (Just Nothing)
+    pure (pending == IoDone 0 && (both == Just (value, closed) || both == Just (closed, value)))
+  expiries <- replicateM 20 $ do
+    queue <- channelNew store 1
+    answer <- newEmptyMVar
+    receiver <- forkIO (channelReceiveWithin store (toInteger queue) 1 >>= putMVar answer)
+    threadDelay 1000
+    _ <- channelSend store queue UnitValue
+    outcome <- timeout 1000000 (takeMVar answer)
+    remaining <- channelReceiveWithin store (toInteger queue) 0
+    killThread receiver
+    pure ((outcome == Just (IoDone Nothing) && remaining == IoDone (Just (Just UnitValue)))
+      || (outcome == Just (IoDone (Just (Just UnitValue))) && remaining == IoDone Nothing))
+  counts <- concurrentCounts store
+  closeConcurrentStore store
+  refusal <- codesOfConstant "{ let _ = channelPullWithin(1, 0)\n true }"
+  wrongType <- codesOf "channelPullWithin(1, true)"
+  wrongArity <- codesOf "channelPullWithin(1)"
+  pure $ conjoin
+    [ probe === IoDone Nothing, elapsed === Just (IoDone Nothing)
+    , invalid === IoFailed "invalid channel wait", overflow === IoFailed "invalid channel wait"
+    , aliased === IoFailed "no such channel", delivered === IoDone (Just (Just UnitValue))
+    , queued === IoDone (Just (Just UnitValue)), finished === IoDone (Just Nothing)
+    , counterexample "delivery closure and interruption release their timer" (ownership === replicate 3 True)
+    , counterexample "competing receivers conserve the queued item" (races === replicate 20 True)
+    , counterexample "delivery racing expiry cannot discard an item" (expiries === replicate 20 True)
+    , counts === (0, 44, 0, 0), refusal === ["E7009"]
+    , wrongType === ["E3001"], wrongArity === ["E3003"]
+    ]
+ where
+  parkedWait store ending = do
+    queue <- channelNew store 1
+    before <- listThreads
+    answer <- newEmptyMVar
+    stopped <- newEmptyMVar
+    receiver <- forkIO $ (channelReceiveWithin store (toInteger queue) 60000 >>= putMVar answer)
+      `finally` putMVar stopped ()
+    parked <- timeout 1000000 (waitUntilBlocked receiver)
+    during <- listThreads
+    let timers = filter (\thread -> thread /= receiver && thread `notElem` before) during
+    case ending of
+      0 -> do { _ <- channelSend store queue UnitValue; pure () }
+      1 -> do { _ <- channelClose store queue; pure () }
+      _ -> killThread receiver
+    result <- if ending == 2 then pure Nothing else timeout 1000000 (takeMVar answer)
+    ended <- timeout 1000000 (takeMVar stopped)
+    retiredTimers <- timeout 1000000 (mapM_ waitUntilRetired timers)
+    mapM_ killThread (receiver : timers)
+    let expected = if ending == 0 then Just (IoDone (Just (Just UnitValue))) else Just (IoDone (Just Nothing))
+    pure (parked == Just () && ended == Just () && (ending == 2 || result == expected)
+      && not (null timers) && retiredTimers == Just ())
+  waitUntilRetired thread = do
+    status <- threadStatus thread
+    case status of
+      ThreadFinished -> pure ()
+      ThreadDied -> pure ()
+      _ -> threadDelay 100 >> waitUntilRetired thread
+  waitUntilBlocked thread = do
+    status <- threadStatus thread
+    case status of
+      ThreadBlocked BlockedOnSTM -> pure ()
+      _ -> threadDelay 100 >> waitUntilBlocked thread
 
 testResourceDisposal :: IO Property
 testResourceDisposal = do

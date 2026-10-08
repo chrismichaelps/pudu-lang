@@ -217,6 +217,7 @@ data Builtin
   | CellDisposeBuiltin
   | MutexDisposeBuiltin
   | ForgetThreadBuiltin
+  | ChannelPullWithinBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -303,6 +304,7 @@ builtinName value = case value of
   ChannelOpenBuiltin -> "channelOpen"
   ChannelPushBuiltin -> "channelPush"
   ChannelPullBuiltin -> "channelPull"
+  ChannelPullWithinBuiltin -> "channelPullWithin"
   ChannelWaitingBuiltin -> "channelWaiting"
   ChannelFinishBuiltin -> "channelFinish"
   MutexOpenBuiltin -> "mutexOpen"

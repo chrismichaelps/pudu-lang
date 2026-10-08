@@ -10,6 +10,17 @@ aliases: [Eval Concurrent]
 ---
 # Eval Concurrent
 
+## Bounded channel waits
+
+`channelReceiveWithin` validates mathematical token and millisecond values before narrowing.
+Its nested optional outcome denotes timeout, closed-empty or a delivered value. An atomic probe
+avoids allocating a timer for ready, closed or zero-wait calls. Empty positive waits create one
+private timer, bracket its lifetime and atomically select an available value, closure or expiry.
+Queued values and closure precede expiry; timeout performs no dequeue. Interruption releases the
+timer. No timer enters the evaluation's resource registries.
+Resolved Grill Log: bound multiplication before delay conversion; release timers after every
+outcome; retain ordinary blocking receive and reuse the same atomic queue probe.
+
 ## Explicit disposal
 
 `cellDispose` retires its holder before removing it; later reads and swaps fail. `mutexDispose`
