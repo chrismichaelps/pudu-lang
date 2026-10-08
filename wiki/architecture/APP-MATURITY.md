@@ -60,7 +60,9 @@ requested merging completed requests into development in creation order. Combine
 suite, formatting, dependency gates and the packed retention workload pass. Independent review
 has not occurred; these checks establish compatibility evidence, not production readiness.
 
-The audit still identifies scoped savepoint cleanup, callback abort cleanup, database admission
+Scoped savepoint cleanup now releases completed marks and preserves cleanup failures; the exact
+protocol regression and its removal control establish bounded mark depth under repeated failures.
+The audit still identifies callback abort cleanup, database admission
 deadlines, aggregate result budgets and server shutdown ownership as unresolved boundaries.
 The server head reader also returns surplus bytes that request parsing currently discards;
 coalesced requests require a focused transport regression before a repair is claimed.

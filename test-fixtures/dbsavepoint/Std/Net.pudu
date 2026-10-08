@@ -1,0 +1,93 @@
+module Std.Net
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.List as List
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+export type State = {
+  pending: Bytes, commands: Array[Str], marks: Array[Str], peak: Int, failOn: Str, closed: Bool
+}
+
+export fn fake(failOn: Str) -> Connection {
+  let cell = Sync.cell(State{pending: bytesOf([]), commands: [], marks: [], peak: 0, failOn: failOn, closed: false})
+  Connection{token: cell.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&cell), failed)
+}
+
+fn store(connection: &Connection, held: State) -> Result[(), NetError] {
+  let cell: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&cell, held), failed)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length())}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  if !held.pending.isEmpty() { return Err(Other("unread command response")) }
+  let message = Result.mapErr(Wire.readMessage(bytes), fn(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }) ?
+  if message[0].kind != "Q" || !message[1].isEmpty() { return Err(Other("expected one simple command")) }
+  let read = Result.mapErr(Wire.readCString(&message[0].payload), fn(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }) ?
+  if !read[1].isEmpty() { return Err(Other("unread command text")) }
+  let command = read[0]
+  var marks = held.marks
+  var status = 84u8
+  let answer = if command == held.failOn {
+    status = 69u8
+    Wire.frame("E", &ByteSeq.join(&[Wire.cString("SERROR"), Wire.cString("CP0001"),
+          Wire.cString("Mrefused: " + command), bytesOf([0u8])]))
+  } else {
+    if command.startsWith("SAVEPOINT ") {
+      marks = marks.push(command.drop("SAVEPOINT ".length()))
+    } else if command.startsWith("ROLLBACK TO SAVEPOINT ") {
+      let at = latest(&marks, command.drop("ROLLBACK TO SAVEPOINT ".length()))
+      if at < 0 { return Err(Other("rollback named no mark")) }
+      marks = List.take(&marks, at + 1)
+    } else if command.startsWith("RELEASE SAVEPOINT ") {
+      let at = latest(&marks, command.drop("RELEASE SAVEPOINT ".length()))
+      if at < 0 { return Err(Other("release named no mark")) }
+      marks = List.take(&marks, at)
+    } else if command == "BEGIN" || command == "COMMIT" {
+      marks = []
+      if command == "COMMIT" { status = 73u8 }
+    } else { return Err(Other("unexpected command")) }
+    Wire.frame("C", &Wire.cString(command))
+  }
+  let peak = if marks.length() > held.peak { marks.length() } else { held.peak }
+  store(connection, State{..held, commands: held.commands.push(command), marks: marks, peak: peak,
+      pending: answer.concat(Wire.frame("Z", &bytesOf([status]))) })
+}
+
+fn latest(marks: &Array[Str], name: Str) -> Int {
+  var index = marks.length() - 1
+  while index >= 0 {
+    if marks[index] == name { return index }
+    index = index - 1
+  }
+  -1
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  Err(Other("opening is outside this fixture"))
+}
+
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Savepoint scope cleanup (#456)
+
+- [[Std Db]] releases each completed scoped mark after success or confirmed rollback and reports
+  cleanup refusal. Successful cleanup preserves the original action value or structured error.
+- [[Database Savepoint Fixture]] checks exact causes and commands, enclosing and duplicate marks,
+  quoted names and skipped callbacks. One thousand failed scopes retain zero marks with peak
+  depth one; removing release retains all one thousand and makes the regression fail.
+- [[Savepoint Fixture Transport]] independently models mark ownership over complete protocol replies.
+
 ## 2026-10-07 — Database transaction scope (#443)
 
 - [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles

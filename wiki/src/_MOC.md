@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Database Savepoint Fixture]] · [[Savepoint Fixture Transport]] — scoped mark cleanup and exact refusals.
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]
