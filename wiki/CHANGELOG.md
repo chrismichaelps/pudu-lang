@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-07 — Bundled environment ownership (#460)
+
+- [[Pudu CLI]] preserves the caller's environment and working directory while executing a bundle.
+- [[Compiler Program]] uses [[Compiler Library]]'s root-only context for the complete bundled
+  graph; ordinary discovery and cache reuse keep their existing boundaries.
+- [[Bundle Environment Gate]] checks absent, empty and supplied `PUDU_LIB` values through cached
+  and source-only execution. [[Program Graph Spec]] rejects host fallback and unrelated manifests.
+
 ## 2026-10-07 — Database transaction scope (#443)
 
 - [[Std Db Driver]] serializes commands through a lent transaction and revokes saved handles

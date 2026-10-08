@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Bundle Environment Gate]] — exact environment ownership through both bundle execution paths.
+
 - [[Uses Database Transaction Scope]] — transaction admission, revocation and concurrent command isolation.
 
 - [[Database Buffered Read Fixture]] · [[Database Fixture Transport]] · [[Database Frame Benchmark]]

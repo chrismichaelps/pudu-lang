@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-07-requested-issue-repairs]] — bundle environment, derive behavior and documentation repairs.
+
 - [[2026-10-07-app-maturity]] — sequential application hardening, beginning with transaction isolation.
 
 - [[2026-10-07-database-read-ahead]] — bounded database transport coalescing and measured consumption.
