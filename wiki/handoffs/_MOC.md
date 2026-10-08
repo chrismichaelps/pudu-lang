@@ -158,3 +158,5 @@ tags: [moc, handoff]
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
+
+- [[Qualified Shadow Delivery]] — issue #471 lexical qualification across typing and execution.

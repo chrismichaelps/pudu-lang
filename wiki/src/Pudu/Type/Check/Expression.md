@@ -30,12 +30,12 @@ In derive checking, a call whose callee is a field callback is checked by `check
 
 ```haskell
 data CheckSurroundings = CheckSurroundings
-  { aroundBlock     :: DeclaredTypes -> [Text] -> Located Block -> Checker Type
-  , aroundAgainst   :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
-  , aroundParameter :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
+  { aroundBlock     :: DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
+  , aroundAgainst   :: DeclaredTypes -> [(Text, Int)] -> Type -> Located Expression -> Checker Type
+  , aroundParameter :: DeclaredTypes -> [(Text, Int)] -> Located Parameter -> Checker Type
   }
 
-checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+checkExpression :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
 ```
 
 ### Governance
@@ -134,3 +134,7 @@ Delegate explicit method applications on a selected nominal owner to [[Type Chec
 the ordinary dotted-name application path. That path retains existing type argument count, kind,
 bound and inference checks. Resolved Grill Log: method-local arguments cannot overwrite the owner's
 implementation selection; the settled full selection still uses ordinary literal elaboration.
+
+## Lexical member admission (#471)
+
+A dotted explicit type application whose first name is a nearer local cannot select an unrelated imported function. Route it through the existing E3028 expression-application refusal and check its actual receiver. Bare local function names and explicit nominal type owners retain current behavior. Resolved Grill Log: repair the qualification bypass without silently introducing a new generic receiver-method surface.

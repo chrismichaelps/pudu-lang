@@ -42,7 +42,7 @@ readPath       :: CallNeeds -> ...
 - A call's arguments are expressions and an expression may be a call, so **what
   this needs of the evaluator arrives as a record**: an argument is an
   expression, a function's body is a block.
-- **A path is read longest-binding-first.** `a.b.c` may be a module member, a
+- **A local path head takes precedence; other paths read longest-binding-first.** `a.b.c` may be a module member, a
   field of a field, or a method on a value, and the longest name that actually
   binds is the one the reader meant — trying shortest-first would find a
   variable `a` and then fail on `.b` for a module that was in scope all along.
@@ -238,3 +238,7 @@ The pre-existing argument/place extraction into [[Eval Call Argument]] and callb
 record extraction into [[Eval Call Needs]] are included by the user's request to
 commit all uncommitted work. Call re-exports CallNeeds and delegates argument and
 receiver discovery, preserving its invocation behavior and keeping it below 500 lines.
+
+## Lexical member admission (#471)
+
+Delegate qualified-path admission to Eval Call Path for explicit type-applied dispatch. A nearer ordinary local takes callMemberSelecting; a witness or unshadowed module retains static dispatch. Remove the capitalization-only helper, preserving arguments, lending and chosen witnesses. Resolved Grill Log: path spelling cannot override lexical scope, and prepared calls already share this coordinator.

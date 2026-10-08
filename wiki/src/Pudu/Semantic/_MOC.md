@@ -28,3 +28,5 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 - [[Reflection Resolution Spec]] — import and namespace refusal regression checks.
 
 - [[Name Resolution Spec]] — compiler and lexical-only phase evidence.
+
+- [[Qualified Shadow Spec]] — exact loaded lexical precedence and evaluator agreement.

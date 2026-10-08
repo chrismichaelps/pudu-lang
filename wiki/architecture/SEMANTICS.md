@@ -307,3 +307,5 @@ These obligations require executable property/conformance tests now and mechaniz
 ## Referenced by
 
 [[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[2026-08-21-frontend-foundation]]
+
+Qualified expression paths honor a nearer local value before imported exports or nominal/trait member selection. Explicit type-owner positions retain independent type lookup. [[Qualified Shadow Delivery]] repairs #471 without introducing block-local import syntax.

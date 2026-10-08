@@ -80,3 +80,7 @@ Register [[Derive Graph Spec]] independently of kernel transformations and inclu
 its real loaded-program successes/refusals in aggregate exit status.
 
 Registers [[Lsp Impl Members Spec]] with the language-server properties.
+
+## Qualified shadow registration (#471)
+
+Register Qualified Shadow Spec beside resolution checks and aggregate every result. Resolved Grill Log: focused and complete runs execute the same lexical, loaded, diagnostic and evaluator regressions.

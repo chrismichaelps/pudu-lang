@@ -3881,3 +3881,5 @@ No builds, tests, reviews or measurements run.
 - [[Std Order]] and [[Std Num]] explain their explicit primitive leaf implementations while
   acknowledging Pudu aggregate deriving. Executable source and public identities are unchanged.
 - [[2026-10-07-derive-documentation]] records the focused generated-documentation validation.
+
+- #471: honor local value heads before qualified typing, call dispatch and compile-time metadata; preserve type owners and existing generic restrictions. Actual warm-product, lexical, diagnostic, evaluator and packaged regressions plus all 605 suite groups pass. Independent reviews remain pending; block-local import syntax remains separate.

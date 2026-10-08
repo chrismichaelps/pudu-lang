@@ -6,6 +6,7 @@ module Pudu.Eval.Call.Path
   , pathValue
   , qualifiedCallee
   , qualifiedParts
+  , qualifiedPath
   , readPath
   , readName
   , typeArgumentName
@@ -46,9 +47,11 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
     local <- lookupLocal first
     direct <- case local of
       Just witness@TypeWitnessValue{} -> witnessMethod witness method
-      _ -> lookupName (first <> "." <> method)
+      Just _ -> pure Nothing
+      Nothing -> lookupName (first <> "." <> method)
     case direct of
       Just found -> pure (Just found)
+      Nothing | not (qualifies local) -> pure Nothing
       Nothing -> case values of
         receiver : _ -> do
           owners <- receiverOwners receiver
@@ -57,8 +60,8 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
 
 {-| A qualified callee reaches the parser as a member access on a bare name, so
     `A.label` and a two-segment path are the same selection written twice.
-    Only names beginning with an uppercase letter are nominal types or traits;
-    local variables and parameters cannot qualify method resolution. -}
+    Uppercase spelling filters candidates; a local constant still has to pass
+    lexical admission before it can qualify method resolution. -}
 qualifiedParts :: Expression -> Maybe (Text, Text)
 qualifiedParts expression = case expression of
   NameExpression (first :| [method])
@@ -75,6 +78,18 @@ qualifiedParts expression = case expression of
   isNominalType name = case Text.uncons name of
     Just (c, _) -> isUpper c
     Nothing -> False
+
+{-| A nominal-looking path may instead start with an ordinary local constant. -}
+qualifiedPath :: Expression -> Evaluator Bool
+qualifiedPath expression = case flattenPath expression of
+  Just (first : _) | Just (initial, _) <- Text.uncons first, isUpper initial ->
+    qualifies <$> lookupLocal first
+  _ -> pure False
+
+qualifies :: Maybe Value -> Bool
+qualifies Nothing = True
+qualifies (Just TypeWitnessValue{}) = True
+qualifies (Just _) = False
 
 {-| Read a dotted path.
 

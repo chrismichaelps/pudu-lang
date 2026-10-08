@@ -99,3 +99,7 @@ field callbacks, static selection and the expansion snapshot run in both
 evaluators within the complete suite.
 
 Register [[Lsp Impl Members Spec]]. Resolved Grill Log: implementation member completion and its quick fix run through the server's request path in the complete suite.
+
+## Qualified shadow registration (#471)
+
+Register Qualified Shadow Spec with the existing test dependencies. Resolved Grill Log: complete loaded and isolated lexical evidence must compile and execute in the repository suite.
