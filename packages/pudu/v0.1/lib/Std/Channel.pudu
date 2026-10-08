@@ -8,6 +8,9 @@ export type ChannelError
   | Missing
   | Other(Str)
 
+/// A bounded receive distinguishes expiry from closed-empty and optional payloads.
+export type Receive[T] = Received(T) | Finished | TimedOut
+
 /// A queue with a bound, carrying values of one type between threads.
 ///
 /// The type parameter is carried by the channel rather than by what it holds,
@@ -46,6 +49,18 @@ export fn send[T](target: &Channel[T], value: T) -> Result[(), ChannelError] {
 /// closing says nothing more will arrive, not that what arrived is discarded.
 export fn receive[T](source: &Channel[T]) -> Result[Option[T], ChannelError] {
   Result.mapErr(channelPull(source.token), causeOf)
+}
+
+/// Wait for the given milliseconds; zero probes immediately and negative waits are refused.
+export fn receiveWithin[T](source: &Channel[T], waitMillis: Int) -> Result[Receive[T], ChannelError] {
+  Result.map(Result.mapErr(channelPullWithin(source.token, waitMillis), causeOf),
+    fn(value: Option[Option[T]]) -> Receive[T] {
+      match value {
+        case None => TimedOut
+        case Some(None) => Finished
+        case Some(Some(item)) => Received(item)
+      }
+    })
 }
 
 /// How many values are waiting.

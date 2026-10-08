@@ -442,6 +442,7 @@ effectSignatures =
   , ("channelOpen", monotype (FunctionTypeValue False [integerType] integerType))
   , ("channelPush", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf unitTypeValue)))
   , ("channelPull", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (NominalType "Option" [RigidType "T"]))))
+  , ("channelPullWithin", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [NominalType "Option" [RigidType "T"]]))))
   , ("channelWaiting", monotype (FunctionTypeValue False [integerType] (resultOf integerType)))
   , ("channelFinish", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("mutexOpen", monotype (FunctionTypeValue False [] integerType))

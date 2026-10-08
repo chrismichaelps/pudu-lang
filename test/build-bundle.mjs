@@ -10,9 +10,10 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { testBundleEnvironment } from "./build-bundle-env.mjs";
 
 const executable = process.argv[2] ?? "pudu";
 const directory = mkdtempSync(join(tmpdir(), "pudu-build-"));
@@ -45,6 +46,14 @@ const built = join(directory, "bundled");
 writeFileSync(source, program);
 
 const failures = [];
+const forget = (path) => {
+  try {
+    rmSync(path, { force: true });
+  } catch {
+    // A file that could not be removed is not a reason to fail the run.
+  }
+};
+failures.push(...testBundleEnvironment(executable));
 
 // The product section is length-prefixed after the modules. Reading its count
 // checks the artifact itself, rather than inferring what the build carried from
@@ -176,6 +185,8 @@ if (withArguments !== "Bundled true") {
 // read, reported as a module that was present and readable. The same applies
 // to what a program reads and writes itself, so both directions are checked
 // here, under a locale that names no encoding at all.
+forget(elsewhere);
+
 const encodingDirectory = mkdtempSync(join(tmpdir(), "pudu-encoding-"));
 const roundTripped = "an em dash \u2014 and an accent \u00e9";
 writeFileSync(join(encodingDirectory, "carried.txt"), roundTripped + "\n", "utf8");
@@ -238,6 +249,8 @@ if (answered !== roundTripped) {
   failures.push(`under a C locale it wrote back ${JSON.stringify(answered)}`);
 }
 
+forget(encoded);
+
 // The compiler itself must still behave as a compiler.
 const version = execFileSync(executable, ["version"], { stdio: "pipe" }).toString().trim();
 if (!version.startsWith("pudu ")) {
@@ -282,6 +295,9 @@ if (existsSync(guarded + ".pending")) {
   failures.push("a failed build left its partial file behind");
 }
 
+forget(guarded);
+forget(built);
+
 // A program can be attached to a runtime other than the one building it, which
 // is what lets one machine build an artefact for a platform it is not.
 //
@@ -295,13 +311,6 @@ if (existsSync(guarded + ".pending")) {
 // is the size of the compiler, so holding four of them at once is most of a
 // gigabyte — enough to fail this gate on a machine that is merely low on space,
 // which would report a full disk as a fault in the build.
-const forget = (path) => {
-  try {
-    rmSync(path, { force: true });
-  } catch {
-    // A file that could not be removed is not a reason to fail the run.
-  }
-};
 
 const onto = join(directory, "onto-named-runtime");
 {
@@ -325,7 +334,7 @@ if (productCount(onto) < 1) {
 // none, and the build says why. The stand-in is this compiler with one digit of
 // its source digest changed, which is what a runtime from another checkout is
 // to the check: the same file shape, a different digest.
-{
+const testForeignRuntime = () => {
   const foreignRuntime = join(directory, "foreign-runtime");
   const bytes = readFileSync(executable);
   const needle = Buffer.from("PUDU-SOURCE-DIGEST:");
@@ -339,6 +348,10 @@ if (productCount(onto) < 1) {
     const digit = at + needle.length;
     bytes[digit] = bytes[digit] === 0x30 ? 0x31 : 0x30;
     writeFileSync(foreignRuntime, bytes, { mode: 0o755 });
+    if (platform() === "darwin") {
+      execFileSync("/usr/bin/codesign", ["--force", "--sign", "-", foreignRuntime], { stdio: "pipe" });
+    }
+    failures.push(...testBundleEnvironment(executable, foreignRuntime));
     const foreignOut = join(directory, "onto-foreign-runtime");
     const built = spawnSync(executable, ["build", source, "-o", foreignOut, "--runtime", foreignRuntime], { encoding: "utf8" });
     if (built.status !== 0) {
@@ -357,7 +370,7 @@ if (productCount(onto) < 1) {
     forget(foreignRuntime);
     forget(foreignOut);
   }
-}
+};
 
 // Naming a runtime that already carries a program replaces that program rather
 // than burying it. The trailer is read from the end of the file, so appending to
@@ -399,6 +412,7 @@ if (run(onto) !== "Bundled true") {
   failures.push("a build onto a missing runtime damaged the target it was aimed at");
 }
 forget(onto);
+testForeignRuntime();
 
 // A flag that was misspelled is refused rather than skipped. Skipped, it would
 // produce a plausible artefact built to different settings than the ones asked

@@ -84,6 +84,7 @@ effectValueNames =
   , "tlsReceive", "tlsReceiveWithin", "tlsClose", "tlsCloseWithin", "tlsPeer"
   , "spawnThread", "joinThread", "sleepMillis"
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
+  , "channelPullWithin"
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "cellDispose", "mutexDispose", "forgetThread"

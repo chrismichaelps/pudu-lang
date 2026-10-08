@@ -10,6 +10,7 @@ module Pudu.Compiler.Program.GraphSpec
   , testInterfaceGraph
   , testPathDependencies
   , testResolutionContext
+  , testIsolatedResolution
   , testSourceRootOnce
   ) where
 
@@ -18,6 +19,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Compiler.Library
   ( ResolutionMetrics (..)
   , newResolutionContext
+  , isolatedResolutionContext
   , resolutionDiagnostics
   , resolutionMetrics
   , resolutionSearchRoots
@@ -26,7 +28,9 @@ import Pudu.Compiler (CompileContext (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileBundledProgram
   )
+import Pudu.Compiler.Cache (disabledCache)
 import Pudu.Compiler.Program.Common (codes, runEntry)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
@@ -47,9 +51,33 @@ graphProperties =
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("bundled resolution preserves isolated module ownership", testIsolatedResolution)
   , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   ]
+
+testIsolatedResolution :: IO Property
+testIsolatedResolution = withSystemTempDirectory "pudu-isolated" $ \root -> do
+  let context = isolatedResolutionContext root
+      entry = root </> "App" </> "Probe.pudu"
+      standard = ModuleName ("Std" :| ["Env"])
+      ordinary = ModuleName ("App" :| ["Other"])
+  createDirectoryIfMissing True (root </> "App")
+  TextIO.writeFile (root </> "pudu.toml") "not a valid manifest"
+  TextIO.writeFile entry "module App.Probe\nimport Std.Env as Env\nfn main() -> Int { 0 }\n"
+  missing <- compileBundledProgram disabledCache entry
+  TextIO.writeFile entry "module App.Probe\nfn main() -> Int { 0 }\n"
+  isolated <- compileBundledProgram disabledCache entry
+  pure $ conjoin
+    [ resolutionSearchRoots context standard === [root]
+    , resolutionSearchRoots context ordinary === [root]
+    , resolutionDiagnostics context === []
+    , resolutionMetrics context === ResolutionMetrics 0 0 0 0 0
+    , counterexample "a missing bundled import cannot use the installed library"
+        (map (diagnosticCodeText . diagnosticCode) (programDiagnostics missing) === ["E2014"])
+    , counterexample "an unrelated manifest cannot refuse the bundle"
+        (programDiagnostics isolated === [])
+    ]
 
 testImportedMethods :: IO Property
 testImportedMethods = do

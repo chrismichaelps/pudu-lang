@@ -39,6 +39,7 @@ import Pudu.Eval.SystemSpec
   , testFailures
   , testResourceIsolation
   , testResourceDisposal
+  , testChannelWait
   , testScopes
   , testUnsafeRegions
   )
@@ -78,4 +79,5 @@ evalProperties =
   , ("implementations reach built-in types", testBuiltinImpls)
   , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
   , ("explicit disposal removes completed runtime resources", testResourceDisposal)
+  , ("bounded channel waits preserve atomic admission and timer lifetime", testChannelWait)
   ]

@@ -446,9 +446,8 @@ export fn clamped[T: Ord](value: &T, lower: &T, upper: &T) -> T {
   }
 }
 
-/// Implementations for every type the language wires in. Written out because
-/// the language has no deriving, and here rather than in each caller because a
-/// bound exists so a caller does not repeat it.
+/// Primitive implementations supply the leaf equality, ordering and hashing
+/// operations used by Pudu's aggregate derive strategies.
 
 /// Every wired-in type hashes through the runtime, which reads the value
 /// rather than its rendering: a number is mixed from its own bytes, and text

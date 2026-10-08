@@ -38,8 +38,18 @@ graph and 283-module source graph pass with no dependency findings. The pre-repa
 the imported fixture with E7001. The three optional text decoder snapshot changes were inspected.
 The final added-link audit resolves every vault link; private inputs remain outside the diff.
 
-Exact next action: publish the validated draft for #457, then prepare #458 from fresh development.
+Exact next action: repair #458 on a fresh branch from integrated development.
 
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Derive Library Spec]] · [[Derive Record Residualizer]]
+
+## Development integration (2026-10-08)
+
+Release Owner performs the maintainer-requested merges in creation order. Earlier repairs
+#461, #463, #464 and #465 are integrated. This final overlap preserves all changelog and
+navigation entries; implementation sources merge without conflict. No independent review is inferred.
+The combined warning-strict optimized build, full compatibility suite, complete bundle deployment
+gate and fourteen graph tests pass. Cached and source-only execution preserve caller environment;
+all added vault links resolve. The framework graph has zero findings and source imports have no cycles.
+The broader application audit and derive index repair remain active.

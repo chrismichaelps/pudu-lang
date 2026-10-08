@@ -15,6 +15,9 @@ aliases: [Program Spec]
 
 # Program Spec
 
+Register isolated bundle resolution from [[Program Graph Spec]]. Resolved Grill Log: execute the
+host-fallback refusal alongside ordinary discovery and cache compatibility.
+
 ## Purpose
 
 Aggregate the layered program-compiler properties into one list for the package test runner.

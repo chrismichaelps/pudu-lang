@@ -15,6 +15,9 @@ aliases: [Semantic Prelude]
 
 # Semantic Prelude
 
+`channelPullWithin` is a discoverable effect name. Resolved Grill Log: naming introduces no
+signature or execution policy here; the typed channel wrapper remains the application surface.
+
 `cellDispose`, `mutexDispose` and `forgetThread` are discoverable primitive names consumed by typed
 resource wrappers. Resolved Grill Log: keep type signatures and execution in their owning phases.
 
