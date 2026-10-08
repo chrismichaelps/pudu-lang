@@ -15,6 +15,9 @@ aliases: [Type Check Prelude]
 
 # Type Check Prelude
 
+`channelPullWithin[T](Int, Int) -> Result[Option[Option[T]], Str]` preserves optional payloads.
+Resolved Grill Log: separate timeout from closure without changing the existing receive signature.
+
 The three disposal primitives each take Int and return Result[(), Str]. Resolved Grill Log: typed
 resource wrappers own their token-specific public signatures without changing existing operations.
 

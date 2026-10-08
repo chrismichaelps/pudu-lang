@@ -1,0 +1,37 @@
+module UsesChannelWait
+
+import Std.Channel as Channel
+import Std.Result as Result
+
+fn expect(held: Bool, named: Str) -> () { if !held { panic(named) } }
+
+export fn main() -> Int {
+  let queue: Channel.Channel[Int] = Channel.channel(2)
+  expect(Channel.receiveWithin(&queue, 0) == Ok(Channel.TimedOut), "empty probe")
+  expect(Channel.receiveWithin(&queue, 1) == Ok(Channel.TimedOut), "empty expiry")
+  expect(Channel.receiveWithin(&queue, -1) == Err(Channel.Other("invalid channel wait")), "invalid wait")
+  expect(Channel.receiveWithin(&queue, 9223372036854775807) == Err(Channel.Other("invalid channel wait")), "wait overflow")
+  let unknown: Channel.Channel[Int] = Channel.Channel{token: -1}
+  expect(Channel.receiveWithin(&unknown, 0) == Err(Channel.Missing), "unknown channel")
+  for value in 0..100 {
+    expect(Channel.receiveWithin(&queue, 0) == Ok(Channel.TimedOut), "repeated empty probe")
+    expect(Result.isOk(&Channel.send(&queue, value)), "value sent")
+    expect(Channel.receiveWithin(&queue, 0) == Ok(Channel.Received(value)), "value retained after expiry")
+  }
+  let _first = Channel.send(&queue, 7)
+  expect(Channel.receive(&queue) == Ok(Some(7)), "ordinary receive retained")
+  let _second = Channel.send(&queue, 8)
+  let _third = Channel.send(&queue, 9)
+  let _closed = Channel.close(&queue)
+  expect(Channel.receiveWithin(&queue, 0) == Ok(Channel.Received(8)), "closed queue first value")
+  expect(Channel.receiveWithin(&queue, 10) == Ok(Channel.Received(9)), "closed queue second value")
+  expect(Channel.receiveWithin(&queue, 0) == Ok(Channel.Finished), "closed empty probe")
+  expect(Channel.receiveWithin(&queue, 10) == Ok(Channel.Finished), "closed empty wait")
+  let optional: Channel.Channel[Option[Int]] = Channel.channel(1)
+  let _sent = Channel.send(&optional, None)
+  expect(Channel.receiveWithin(&optional, 0) == Ok(Channel.Received(None)), "optional payload delivered")
+  expect(Channel.receiveWithin(&optional, 0) == Ok(Channel.TimedOut), "optional queue empty")
+  let _finished = Channel.close(&optional)
+  expect(Channel.receiveWithin(&optional, 0) == Ok(Channel.Finished), "optional queue closed")
+  0
+}

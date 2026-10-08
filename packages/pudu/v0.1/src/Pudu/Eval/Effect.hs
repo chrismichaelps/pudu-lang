@@ -66,6 +66,7 @@ import Pudu.Eval.Concurrent
   , channelNew
   , channelPending
   , channelReceive
+  , channelReceiveWithin
   , channelSend
   , mutexLock
   , mutexNew
@@ -219,6 +220,7 @@ effectBuiltins =
   , ChannelOpenBuiltin
   , ChannelPushBuiltin
   , ChannelPullBuiltin
+  , ChannelPullWithinBuiltin
   , ChannelWaitingBuiltin
   , ChannelFinishBuiltin
   , MutexOpenBuiltin
@@ -415,6 +417,9 @@ callEffect spanValue builtin arguments = do
       (ChannelPullBuiltin, [IntValue _ token]) -> do
         outcome <- lift refusal (channelReceive concurrent (fromInteger token))
         pure (resultOf (fmap optionalValue outcome))
+      (ChannelPullWithinBuiltin, [IntValue _ token, IntValue _ millis]) -> do
+        outcome <- lift refusal (channelReceiveWithin concurrent token millis)
+        pure (resultOf (fmap (optionalValue . fmap optionalValue) outcome))
       (ChannelWaitingBuiltin, [IntValue _ token]) ->
         resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending concurrent (fromInteger token))
       (ChannelFinishBuiltin, [IntValue _ token]) ->

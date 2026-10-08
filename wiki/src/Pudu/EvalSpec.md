@@ -8,6 +8,9 @@ aliases: [Eval Test Coordinator]
 
 # Eval Test Coordinator
 
+Register bounded channel waiting from [[Eval System Tests]]. Resolved Grill Log: execute atomic
+admission and timeout regression cases through the actual full-suite coordinator.
+
 Register explicit runtime disposal from [[Eval System Tests]], including actual registry removal
 and compile-time effect refusal. Resolved Grill Log: execute lifetime regressions in the full suite.
 

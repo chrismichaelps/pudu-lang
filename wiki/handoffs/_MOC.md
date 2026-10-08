@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-07-channel-waits]] — bounded admission without lost channel values.
+
 - [[2026-10-07-savepoint-cleanup]] — completed mark ownership and preserved cleanup failures.
 
 - [[2026-10-07-app-maturity]] — sequential application hardening, beginning with transaction isolation.

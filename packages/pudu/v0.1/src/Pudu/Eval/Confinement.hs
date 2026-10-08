@@ -65,6 +65,7 @@ keptWhenConfined builtin = case builtin of
   ChannelOpenBuiltin -> True
   ChannelPushBuiltin -> True
   ChannelPullBuiltin -> True
+  ChannelPullWithinBuiltin -> True
   ChannelWaitingBuiltin -> True
   ChannelFinishBuiltin -> True
   MutexOpenBuiltin -> True
