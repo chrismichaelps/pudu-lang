@@ -210,3 +210,10 @@ overflow, and E7008 for unorderable keys or values. Do not scan complete maps on
 Closure construction initializes the internal MultiMap forwarding proof cache to
 Nothing; module scoping later proves and memoizes eligible captured wrappers.
 Resolved Grill Log: installation does not infer a primitive from declaration names.
+
+## Static selection during initialization (#457)
+
+Mark the current module frames after installing declarations and before evaluating constants.
+Nested calls then recognize local type witnesses during folding and ordinary loading alike.
+Resolved Grill Log: one declaration-loading boundary covers root and dependency initializers;
+imports stay outside the local witness frame and effect permissions remain unchanged.

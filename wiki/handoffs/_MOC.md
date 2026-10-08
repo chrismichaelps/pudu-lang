@@ -5,6 +5,9 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-07-static-field-selection]] — preserve complete static field owners (#457).
+
+
 - [[2026-10-07-derive-documentation]] — correct primitive implementation documentation (#459).
 
 - [[2026-10-07-requested-issue-repairs]] — bundle environment, derive behavior and documentation repairs.

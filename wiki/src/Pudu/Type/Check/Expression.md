@@ -127,3 +127,10 @@ through the record.
 Compile-time loop where bounds are formed under enclosing and fresh loop-local parameters and retain their full trait applications.
 
 Resolved Grill Log: fields bounded by a generic trait must not receive arbitrary trait arguments during generic derive checking.
+
+## Static field owner selection (#457)
+
+Delegate explicit method applications on a selected nominal owner to [[Type Check Call]] before
+the ordinary dotted-name application path. That path retains existing type argument count, kind,
+bound and inference checks. Resolved Grill Log: method-local arguments cannot overwrite the owner's
+implementation selection; the settled full selection still uses ordinary literal elaboration.

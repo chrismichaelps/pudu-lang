@@ -54,6 +54,7 @@ import Pudu.Type.Check.Safety
   )
 import Pudu.Type.Check.Call
   ( CheckExpression (..)
+  , selectedStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -391,8 +392,12 @@ inferExpression around declared rigid spanValue expression = case expression of
         inside the module, and a caller should not have to import a name
         unqualified to pin its type. A qualifier is written as a member access,
         so the chain is flattened back into the dotted name it stands for. -}
-    case dottedName (locatedValue target) of
-      Just name -> do
+    selected <- selectedStaticCallee declared rigid spanValue (locatedValue target) formed
+    case (selected, dottedName (locatedValue target)) of
+      (Just applied, _) -> do
+        recordExpression (locatedSpan target) applied
+        pure applied
+      (Nothing, Just name) -> do
         found <- lookupName name
         case found of
           Just scheme -> do
@@ -403,7 +408,7 @@ inferExpression around declared rigid spanValue expression = case expression of
             report "E2010" spanValue ("unresolved value name " <> name)
               (Just "declare the name, import it, or check the spelling")
             pure ErrorType
-      Nothing -> do
+      (Nothing, Nothing) -> do
         report "E3028" spanValue "only a name may carry type arguments"
           ( Just
               ( "write the type arguments on the function's own name; an "

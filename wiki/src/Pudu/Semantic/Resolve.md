@@ -164,3 +164,11 @@ Self-referential and forward parameter applications therefore resolve within the
 header's complete scope. Value parameters and defaults retain left-to-right
 activation. Resolved Grill Log: Mapper[F] in F's own bound names that constructor,
 not an unresolved module type or a same-spelled outer declaration.
+
+## Generated static owners (#457)
+
+A generated member target holding a nominal type application resolves its owner and arguments
+in the type namespace. Authored values and indexes retain their existing walk. Resolved Grill Log:
+owner arguments are type references, while generated provenance confines this exception; canonical
+and lexical resolution still enforce visibility. The existing source is slightly above the default
+size; this bounded repair adds only this namespace case and leaves extraction to a separate slice.

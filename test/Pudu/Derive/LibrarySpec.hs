@@ -32,6 +32,8 @@ deriveLibraryProperties =
       "\"3beezz;bad int;missing missing;dot,pair11,named4label,no variant Nope,\"")
   , ("static calls through a generic parameter reach the selected owner", runs "StaticSelection"
       "\"4;5/6;67qpairleftqpairright\"")
+  , ("static field owners survive collect with nested and reordered implementation heads", runs "StaticCollect"
+      staticCollectExpected)
   , ("a static member answers its own owner rather than its first argument's", runs "StaticMember" "\"3abc\"")
   , ("an inferred type argument selects through an imported trait", runs "InferredSelection"
       "\"1\\\"s\\\"\\\"s\\\"[true]{\\\"x\\\":1,\\\"y\\\":2}\"")
@@ -53,7 +55,11 @@ deriveLibraryProperties =
   , ("a hundred types with six derives each check without exhausting coherence", manyRequests)
   , ("expansion prints exactly the implementations a module requested", expands)
   , ("a same-module expansion written in place of its derives runs the same", expandsInPlace)
+  , ("static collect owner selection survives executable expansion", expansionRoundTrip "StaticCollectLocal" "Inspect" "\"\"")
   ]
+
+staticCollectExpected :: Text
+staticCollectExpected = "\"Ok(Only{extra: Some(1)})|Ok(Only{extra: None})|Ok(Nested{extra: Some(Some(1)), items: [Some(\\\"text\\\"), Some(\\\"text\\\")], pair: Pair{left: 1, right: \\\"pair\\\"}, wrap: Wrap{held: Some(1)}})|Ok(Generic{value: Some(1)})|Err(\\\"bad first, bad second, missing required\\\")|Ok(1)true|Ok(1)\\\"tag\\\"\""
 
 jsonExpected :: Text
 jsonExpected = Text.concat
@@ -113,14 +119,17 @@ panics name expected = do
     printed expansion appended: the text checks, and both evaluators answer
     what the derived program answers. -}
 expandsInPlace :: IO Property
-expandsInPlace = do
-  let path = fixture "ExpandLocal"
+expandsInPlace = expansionRoundTrip "ExpandLocal" "Describe" "\"Point x=1 y=2; Dot; Circle 3; Rect 4 5\""
+
+expansionRoundTrip :: String -> Text -> Text -> IO Property
+expansionRoundTrip name trait expectedValue = do
+  let path = fixture name
   original <- TextIO.readFile path
   printed <- expansionText =<< compileProgram path
   let written = Text.unlines (withoutDerives (Text.lines original)) <> "\n" <> printed
   source <- newSource (SourceName (Text.pack path)) written
   program <- compileProgramSourceOver Map.empty "test-fixtures/derive" source
-  expected <- runs "ExpandLocal" "\"Point x=1 y=2; Dot; Circle 3; Rect 4 5\""
+  expected <- runs name expectedValue
   answers <- case rootCompileResult program >>= compileModule of
     Just unit | not (hasErrors (programDiagnostics program)) -> mapM (\mode -> inMode mode $ do
       outcome <- evaluateProgramEntry (programIntegerKinds program) (programDependencies program) "main" unit
@@ -129,14 +138,14 @@ expandsInPlace = do
   pure $ conjoin
     [ expected
     , counterexample (Text.unpack written <> show (map diagnosticMessage (programDiagnostics program)))
-        (answers === replicate 2 (Just "\"Point x=1 y=2; Dot; Circle 3; Rect 4 5\""))
+        (answers === replicate 2 (Just expectedValue))
     ]
  where
   withoutDerives lines' = case lines' of
     [] -> []
     line : rest
       | "derive " `Text.isPrefixOf` line -> withoutDerives (drop 1 (dropWhile (/= "}") rest))
-      | otherwise -> Text.replace " derives Describe" "" line : withoutDerives rest
+      | otherwise -> Text.replace (" derives " <> trait) "" line : withoutDerives rest
 
 {-| Six hundred requests over records and sums that cannot overlap: coherence
     compares heads that could, so a large valid program is never refused. -}

@@ -112,15 +112,15 @@ impl Decode for Expand.Line {
             let fallback = {
               Null
             }
-            break @__derive_value_2 within(Key(key), Option.decode(&fallback))
+            break @__derive_value_2 within(Key(key), Option.decode[Str](&fallback))
             match (match consumed(&entries, key) {
                 case Ok(__derive_ok) => __derive_ok
                 case Err(__derive_err) => {
                   break @__derive_build_2 Err(__derive_err)
                 }
               }) {
-              case Some(found) => within(Key(key), Option.decode(&found))
-              case None => absent(key, Option.decode(&fallback))
+              case Some(found) => within(Key(key), Option.decode[Str](&found))
+              case None => absent(key, Option.decode[Str](&fallback))
             }
           }
         }) {

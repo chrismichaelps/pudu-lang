@@ -2,6 +2,7 @@
 module Pudu.Type.Check.Call
   ( CheckExpression (..)
   , checkCallee
+  , selectedStaticCallee
   , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
@@ -15,21 +16,30 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Maybe (mapMaybe)
+import Pudu.Type.Formation (formType)
+import Pudu.Type.Implementation (ImplementationRule (..), selectImplementationTarget)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Expression (..)
+  ( Expression (..), TypeSyntax (NamedType)
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , ambiguousProviders
+  , recordSelection
+  , freshVariable
+  , lookupImplementations
+  , methodProvider
   , lookupName
   , recordExpression
   , report
   )
 import Pudu.Type.Check.Rule
-  ( instantiate
+  ( instantiateWith
+  , instantiate
   , memberType
   , namedVariantAsValue
   , qualifiedMemberType
@@ -80,7 +90,9 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
     case refused of
       Just value -> pure (value, Nothing)
       Nothing -> do
-        named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
+        selected <- selectedStaticCallee declared rigid calleeSpan expression []
+        named <- maybe (qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member))
+          (pure . Just) selected
         qualified <- case named of
           Just found -> pure (Just found)
           Nothing -> qualifiedMemberType declared calleeSpan (locatedValue target) (locatedValue member)
@@ -112,6 +124,43 @@ checkCalleeLending checker declared rigid located@(Located calleeSpan expression
                 recordExpression calleeSpan applied
                 pure (applied, if changesReceiver then Just target else Nothing)
   _ -> (\found -> (found, Nothing)) <$> runCheck checker declared rigid located
+
+{-| A complete nominal owner selects implementation parameters by its head,
+    before method-local arguments instantiate the ordinary method scheme. -}
+selectedStaticCallee :: DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> [Type] -> Checker (Maybe Type)
+selectedStaticCallee declared rigid at expression written = case expression of
+  MemberExpression (Located ownerAt (TypeApplication owner arguments)) member
+    | Just path <- nominalPath (locatedValue owner) -> do
+        selected <- formType declared rigid (Located ownerAt (NamedType (ModuleName path) arguments))
+        case selected of
+          NominalType identity _ -> do
+            scheme <- methodScheme at selected (locatedValue member)
+            provider <- methodProvider (nominalKey identity <> "." <> locatedValue member)
+            case (scheme, provider) of
+              (Just Scheme{schemeType = ErrorType}, _) -> pure (Just ErrorType)
+              (Just found, Just trait) -> do
+                rules <- lookupImplementations identity trait
+                let matching = mapMaybe (\rule -> (rule,) <$> selectImplementationTarget selected rule) rules
+                case matching of
+                  (rule, bindings) : rest | all ((== rule) . fst) rest -> do
+                    prefix <- mapM (\(name, _) -> maybe freshVariable pure (lookup name bindings))
+                      (implementationParameters rule)
+                    remaining <- mapM (const freshVariable)
+                      (drop (length prefix + length written) (schemeParams found))
+                    let chosen = prefix <> written <> remaining
+                    recordSelection at chosen
+                    Just <$> instantiateWith at found chosen
+                  _ -> refusal "E3013" "the static owner has no unique implementation selection"
+              (Just found, Nothing) -> Just <$> instantiateWith at found written
+              _ -> refusal "E3005" "the static owner has no such method"
+          _ -> refusal "E3028" "a static owner must be a nominal type"
+  _ -> pure Nothing
+ where
+  refusal code message = report code at message Nothing >> pure (Just ErrorType)
+  nominalPath value = case value of
+    NameExpression path -> Just path
+    MemberExpression target member -> (<> NonEmpty.singleton (locatedValue member)) <$> nominalPath (locatedValue target)
+    _ -> Nothing
 
 {-| A callee written as `Name.member` may select a method by the trait that
     declares it or by the type that implements it. The written name is mapped to

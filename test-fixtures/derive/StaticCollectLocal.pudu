@@ -1,0 +1,19 @@
+module StaticCollectLocal
+
+import Std.Meta
+
+trait Make { fn make() -> Result[Self, Str] }
+impl Make for Int { fn make() -> Result[Self, Str] = Ok(1) }
+impl [A: Make] Make for Option[A] { fn make() -> Result[Self, Str] = Ok(Some(A.make() ?)) }
+trait Inspect { fn inspect() -> Str }
+derive Inspect for T: Record {
+  fn inspect() -> Str {
+    let problems = Meta.collect[T](fn(field: Meta.Field[T, F]) -> Option[Str] where F: Make {
+        match F.make() { case Ok(_) => None case Err(problem) => Some(problem) }
+      })
+    problems.join(";")
+  }
+}
+type Probe = { value: Option[Int] } derives Inspect
+const CHECKED: Str = Probe.inspect()
+export fn main() -> Str { CHECKED }

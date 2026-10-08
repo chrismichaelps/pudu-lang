@@ -14,7 +14,8 @@
     static member is rewritten to apply them explicitly, in the declaration's
     parameter order, so the call carries the selection erasure would lose. -}
 module Pudu.Compiler.Literals
-  ( resolveLiterals
+  ( resolveOwnerSelections
+  , resolveLiterals
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
@@ -38,21 +39,38 @@ import Pudu.Type.Value (Type (..), nominalKey)
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
 resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module
-resolveLiterals kinds selections = walk (Facts kinds selections)
+resolveLiterals kinds selections = walk (Facts kinds selections False)
+
+{-| Lower only generated owner annotations into printable ordinary applications. -}
+resolveOwnerSelections :: Map Span [Type] -> Module -> Module
+resolveOwnerSelections selections
+  | Map.null selections = id
+  | otherwise = walk (Facts Map.empty selections True)
 
 data Facts = Facts
   { factKinds :: !(Map Span Text)
   , factSelections :: !(Map Span [Type])
+  , factOwnersOnly :: !Bool
   }
 
 {-| The reference with its selection applied. An explicit application already
     carries the written prefix of the same list, so it is replaced whole. -}
 select :: Span -> [Type] -> Expression -> Expression
-select spanValue chosen value = case value of
-  TypeApplication target _ -> TypeApplication target written
-  _ -> TypeApplication (Located spanValue value) written
+select spanValue chosen value = TypeApplication target written
  where
+  target = stripOwner $ case value of
+    TypeApplication inner _ -> inner
+    _ -> Located spanValue value
+  stripOwner (Located _ (MemberExpression (Located ownerAt (TypeApplication owner _)) member)) =
+    Located ownerAt (MemberExpression owner member)
+  stripOwner other = other
   written = map (typeSyntax spanValue) chosen
+
+hasSelectedOwner :: Expression -> Bool
+hasSelectedOwner value = case value of
+  MemberExpression (Located _ TypeApplication{}) _ -> True
+  TypeApplication inner _ -> hasSelectedOwner (locatedValue inner)
+  _ -> False
 
 {-| A settled type as the syntax naming it. A nominal keeps its full key, so
     only a parameter is written with one segment; what has no name is invalid
@@ -111,9 +129,10 @@ instance (GWalk f, GWalk g) => GWalk (f :*: g) where
 instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
     Just Refl
-      | LiteralExpression literal <- value ->
+      | not (factOwnersOnly kinds), LiteralExpression literal <- value ->
           Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
-      | Just chosen <- Map.lookup spanValue (factSelections kinds) ->
+      | not (factOwnersOnly kinds) || hasSelectedOwner value
+      , Just chosen <- Map.lookup spanValue (factSelections kinds) ->
           Located spanValue (select spanValue chosen (walk kinds value))
     _ -> Located spanValue (walk kinds value)
 

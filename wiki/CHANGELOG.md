@@ -3867,6 +3867,15 @@ map construction. No tests, builds, reviews or measurements run, as requested.
 inspection path, correcting the reported `IO Session` versus `Session` build error.
 No builds, tests, reviews or measurements run.
 
+## 2026-10-07 — Complete static field owners (#457)
+
+- [[Derive Record Residualizer]] retains generic static owner arguments. [[Type Check Call]]
+  selects implementation parameters through the shared structural matcher before method inference.
+- [[Static Collect Fixture]] covers imported collect/build execution and nested owner selection.
+- [[Eval Install]] marks module scope before constants run; [[Static Collect Local Fixture]]
+  verifies constant and expansion parity. [[Derive Expand Expected]] retains three optional text
+  selections inspected against the previous snapshot.
+
 ## 2026-10-07 — Primitive capability documentation (#459)
 
 - [[Std Order]] and [[Std Num]] explain their explicit primitive leaf implementations while

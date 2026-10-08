@@ -5,6 +5,10 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Static Collect Fixture]] · [[Static Collect Bind Fixture]] · [[Static Collect Local Fixture]] — generic static field selection.
+
+
+
 - [[Std Num]] — primitive numeric capability implementation mirror.
 
 
@@ -185,3 +189,5 @@ tags: [moc, module]
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
+
+- [[Derive Expand Expected]]
