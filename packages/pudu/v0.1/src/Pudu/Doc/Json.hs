@@ -7,13 +7,12 @@ module Pudu.Doc.Json
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Doc (DocEntry (..), DocIndex (..), kindLabel)
+import Pudu.Doc (DeriveDoc (..), DocEntry (..), DocIndex (..), DocKind (..), deriveShapeLabel, entrySignature, kindLabel)
 import Pudu.Type.Value (capabilityName)
 import Pudu.Doc.Signature
   ( SigType (..)
   , Signature (..)
   , renderSigType
-  , renderSignature
   )
 
 {-| Encode the whole index.
@@ -34,14 +33,21 @@ encodeIndex index =
 encodeEntry :: DocEntry -> Text
 encodeEntry value =
   object
-    [ ("name", string (docName value))
+    ([ ("name", string (docName value))
     , ("kind", string (kindLabel (docKind value)))
     , ("module", string (docModule value))
-    , ("signature", maybe "null" (string . renderSignature) (docSignature value))
+    , ("signature", maybe "null" string (entrySignature value))
     , ("shape", maybe "null" encodeSignature (docSignature value))
     , ("doc", array (map string (docComment value)))
     , ("span", array [number (fst (docSpan value)), number (snd (docSpan value))])
-    ]
+    ] <> case docKind value of
+      DocDerive metadata -> [("derive", object
+        [ ("trait", string (docDeriveTrait metadata))
+        , ("parameter", string (docDeriveParameter metadata))
+        , ("shape", string (deriveShapeLabel (docDeriveShape metadata)))
+        , ("exported", boolean (docDeriveExported metadata))
+        ])]
+      _ -> [])
 
 encodeSignature :: Signature -> Text
 encodeSignature signature =

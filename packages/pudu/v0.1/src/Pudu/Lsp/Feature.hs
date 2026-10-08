@@ -20,7 +20,7 @@ import Data.Char (isAlphaNum)
 import Data.List (sortOn)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
+import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..), deriveSignature, entrySignature)
 import Pudu.Doc.Signature (Signature (..), renderSignature)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (Position (..), Range (..), rangeJson)
@@ -161,7 +161,9 @@ hoverContents entry =
   Text.intercalate "\n\n" ([signatureBlock] <> documentation <> [origin])
  where
   signatureBlock =
-    "```pudu\n" <> docName entry <> signatureSuffix <> "\n```"
+    "```pudu\n" <> (case docKind entry of
+      DocDerive metadata -> deriveSignature metadata
+      _ -> docName entry <> signatureSuffix) <> "\n```"
   signatureSuffix = case docSignature entry of
     Nothing -> Text.empty
     Just value -> " : " <> takesNothing value <> renderSignature value
@@ -188,6 +190,7 @@ kindText kind = case kind of
   DocConstant -> "constant"
   DocType -> "type"
   DocTrait -> "trait"
+  DocDerive _ -> "derive strategy"
   DocMacro -> "macro"
   DocForeign library -> "foreign function from " <> library <> ", asserted rather than proved"
 
@@ -220,9 +223,7 @@ documentSymbols content index = JsonArray (map symbol (indexEntries index))
           ]
 
 detailOf :: DocEntry -> Text
-detailOf entry = case docSignature entry of
-  Nothing -> Text.empty
-  Just value -> renderSignature value
+detailOf entry = maybe Text.empty id (entrySignature entry)
 
 {-| The protocol's symbol numbers. A method is reported as a method rather than
     a function so an editor's outline groups it the way the reader wrote it. -}
@@ -234,6 +235,7 @@ symbolKind kind = case kind of
   DocConstant -> 14
   DocType -> 23
   DocTrait -> 11
+  DocDerive _ -> 11
   DocMacro -> 12
   DocForeign _ -> 12
 
@@ -243,7 +245,11 @@ symbolKind kind = case kind of
     editor's completion list answers "what is this" without a second request.
     Ordering is left to the client, which knows what the reader has typed. -}
 completionItems :: DocIndex -> Json
-completionItems index = JsonArray (map completionItem (indexEntries index))
+completionItems index = JsonArray
+  [completionItem entry | entry <- indexEntries index, bindable (docKind entry)]
+ where
+  bindable (DocDerive _) = False
+  bindable _ = True
 
 {-| One declaration as a completion: its name, its kind, its signature, and its
     documentation. -}
@@ -269,5 +275,6 @@ completionKind kind = case kind of
   DocConstant -> 21
   DocType -> 22
   DocTrait -> 8
+  DocDerive _ -> 8
   DocMacro -> 3
   DocForeign _ -> 3

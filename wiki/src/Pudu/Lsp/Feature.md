@@ -59,3 +59,9 @@ Direct structural recursion over the shape being read or written; no caching and
 Offsets clamp negative lines to the start and lines beyond the document to EOF. UTF-16
 positions inside a surrogate pair clamp before that scalar, rather than splitting or moving
 beyond it. Resolved Grill Log: malformed direct positions must not produce offsets past EOF.
+
+## Derive index contract (#458)
+
+Strategy declarations show their full headers on hover and in outline detail with the trait symbol category. They are excluded from binding completion lists. Ordinary callable hover rendering remains unchanged.
+
+Resolved Grill Log: [[Doc Index]] metadata is visible for declaration inspection but does not invent a callable or importable binding.

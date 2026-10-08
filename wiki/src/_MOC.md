@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Derive Index Output Gate]] — checked strategy output and visibility.
+
 - [[Static Collect Fixture]] · [[Static Collect Bind Fixture]] · [[Static Collect Local Fixture]] — generic static field selection.
 
 

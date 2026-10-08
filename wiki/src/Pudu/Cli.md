@@ -247,3 +247,9 @@ through [[Cli RuntimePack]]. `linux-musl-x86_64` attaches the program to the por
 `lambda-x86_64` writes `-o` (default `<name>-lambda`) as a directory holding `bootstrap` and the
 packaged loader and libraries, each executable. `--target` and `--runtime` together, or an unknown
 target, are refused before anything is fetched.
+
+## Derive index contract (#458)
+
+Documentation includes strategy headers from [[Compiler Program]]. Public API output appends only exported strategy entries belonging to each requested root module, encoded by [[Doc Json]]. Ordinary export identity objects remain unchanged; private and dependency strategies are excluded. Failed compilation still emits no API output. [[Derive Index Output Gate]] proves these boundaries.
+
+Resolved Grill Log: metadata never creates a resolver binding or an implicit re-export. The existing large command module receives only the bounded API projection change.
