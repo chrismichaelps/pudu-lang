@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-10-07-requested-issue-repairs]] — bundle environment, derive behavior and documentation repairs.
+
 - [[2026-10-07-channel-waits]] — bounded admission without lost channel values.
 
 - [[2026-10-07-savepoint-cleanup]] — completed mark ownership and preserved cleanup failures.

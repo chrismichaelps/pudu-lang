@@ -15,6 +15,14 @@ aliases: [Compiler Program]
 
 # Compiler Program
 
+## Bundled program boundary (#460)
+
+`compileBundledProgram(cache, path)` retains ordinary root-name validation, graph discovery,
+checking and product reuse while selecting [[Compiler Library]]'s isolated context after root
+derivation. Ordinary and in-memory compilation keep their existing discovery context.
+Resolved Grill Log: select resolution at the invocation boundary; share the complete graph and
+cache pipeline, without publishing private roots through the program environment.
+
 ## Purpose
 
 Turn one root `.pudu` path into a deterministic, checked module graph without letting filesystem policy leak into name resolution or typing.
@@ -91,7 +99,7 @@ compileProgramSourceOver :: Map FilePath Text -> FilePath -> Source -> IO Progra
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
 - `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
 - Manifest validation verifies project `pudu.toml` constraints via `manifestVersionDiagnostics`. If `package.language` is incompatible with the compiler's version, `E2090` is reported without compiling modules.
-- `discoverFrom` creates one invocation-owned `ResolutionContext` before chasing imports. Every
+- Each compilation entry creates one invocation-owned `ResolutionContext` before chasing imports. Every
   import in that graph sees the same manifest snapshot, ordered project roots, ordered standard
   library roots, and diagnostic attempted-root descriptions. The context is discarded when the
   invocation returns, so a later compile observes environment, manifest, executable, and filesystem

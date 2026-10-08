@@ -58,6 +58,7 @@ import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   , compileProgramCached
+  , compileBundledProgram
   , programDependencies
   , programFolded
   , programIntegerKinds
@@ -87,7 +88,7 @@ import Pudu.Diagnostic.Render
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, SourceName (..), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
-import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
+import System.Environment (getArgs, getEnvironment, getExecutablePath, lookupEnv, withArgs)
 import System.Process
   ( CreateProcess (env)
   , ProcessHandle
@@ -390,7 +391,8 @@ runBundled bundle = withSystemTempDirectory "pudu-bundle" $ \root -> do
   style <- detectStyle
   entry <- materialise root bundle
   cache <- bundledCache bundle
-  withEnvironment "PUDU_LIB" root (runProgramWith cache style entry)
+  program <- compileBundledProgram cache entry
+  runCompiledProgram style program
 
 {-| The products a bundle carries, when the compiler that made them is this
     one; otherwise a cache in memory with none, so the program compiles from
@@ -402,15 +404,6 @@ bundledCache bundle =
     if bundleCompiler bundle == identityText
       then Map.fromList [(Text.unpack name, bytes) | (name, bytes) <- bundleProducts bundle]
       else Map.empty
-
-{-| Run an action with one environment variable set, restoring it afterwards. -}
-withEnvironment :: String -> String -> IO a -> IO a
-withEnvironment name value action =
-  bracket (lookupEnv name) restore (\_ -> setEnv name value >> action)
- where
-  restore previous = case previous of
-    Just held -> setEnv name held
-    Nothing -> unsetEnv name
 
 runCommand :: IO ()
 runCommand = do
@@ -612,6 +605,10 @@ runProgram style path = do
 runProgramWith :: ProductCache -> RenderStyle -> FilePath -> IO ()
 runProgramWith cache style path = do
   program <- compileProgramCached cache path
+  runCompiledProgram style program
+
+runCompiledProgram :: RenderStyle -> ProgramResult -> IO ()
+runCompiledProgram style program = do
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
     TextIO.hPutStrLn stderr (renderProgramDiagnostics style program diagnostics)

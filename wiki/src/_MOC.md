@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Bundle Environment Gate]] — exact environment ownership through both bundle execution paths.
+
 - [[Uses Channel Wait]] — explicit bounded channel outcomes and preserved payloads.
 
 - [[Database Savepoint Fixture]] · [[Savepoint Fixture Transport]] — scoped mark cleanup and exact refusals.

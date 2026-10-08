@@ -26,6 +26,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testAliasedReexport
   , testPathDependencies
   , testResolutionContext
+  , testIsolatedResolution
   , testSourceRootOnce
   , testInterfaceGraph
   )
@@ -56,6 +57,7 @@ programProperties = reflectionProgramProperties <>
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("resolution setup is once per fresh invocation", testResolutionContext)
+  , ("bundled resolution preserves isolated module ownership", testIsolatedResolution)
   , ("a project's source root is searched once from src and reached from test", testSourceRootOnce)
   , ("interface facts are prepared once per module graph", testInterfaceGraph)
   , ("stored products compile and run exactly as source does", testCacheEquivalence)

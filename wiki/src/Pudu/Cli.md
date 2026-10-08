@@ -15,6 +15,14 @@ aliases: [Pudu CLI]
 
 # Pudu CLI
 
+## Bundle environment ownership (#460)
+
+`runBundled` compiles through the explicit isolated bundle entry and shares the ordinary compiled
+program runner. It does not change `PUDU_LIB`, any other environment variable or the working
+directory. The temporary materialization root belongs only to resolution and remains private.
+Resolved Grill Log: preserve absent, empty and supplied environment values during execution;
+changing and restoring a variable afterward cannot preserve what the running program observes.
+
 ## Purpose
 
 Provide the `pudu` executable: start `puduci`, check files, and report version and usage.
@@ -204,7 +212,7 @@ the readiness evidence.
 
 ## Initialization path validation and bundle isolation
 
-`pudu init` normalizes and validates target directory paths, preventing accidental target escapes. It populates `package.language` with the canonical minor-bounded constraint from `Pudu.Version`. Bundled binary execution (`runBundled`) extracts attached modules into an isolated per-process temporary directory using `withSystemTempDirectory "pudu-bundle"`, and reliably restores environment modifications via `bracket`.
+`pudu init` normalizes and validates target directory paths, preventing accidental target escapes. It populates `package.language` with the canonical minor-bounded constraint from `Pudu.Version`. Bundled binary execution (`runBundled`) extracts attached modules into an isolated temporary directory and gives that root to resolution while preserving the caller's environment.
 
 `pudu build` compiles through an in-memory product cache and includes the collected entries in the
 bundle. `runBundled` seeds an in-memory cache from those entries when the bundled compiler version

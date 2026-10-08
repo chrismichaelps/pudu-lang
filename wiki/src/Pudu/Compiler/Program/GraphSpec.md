@@ -15,6 +15,10 @@ aliases: [Program Graph Spec]
 
 # Program Graph Spec
 
+`testIsolatedResolution` verifies exact root-only searches, zero setup metrics, ignored unrelated
+manifest failures and E2014 for a bundled import absent from its root even when available locally.
+Resolved Grill Log: assert resolution ownership directly and register the compiled refusal.
+
 ## Purpose
 
 Verify module discovery, graph edges, interface preparation, manifest-declared dependency roots, and
