@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-09 — Integrated Database graph expectations (#478)
+
+- [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
+- [[Application Dependency Layers]] retains both safeguards in the documented catalog; [[Graph Integration Delivery]] records the observed integration failure and repair.
+
 ## 2026-10-08 — Bounded Database authentication (#474)
 
 - [[Std Db Challenge]] admits canonical phases, unique fields, nonce contribution and finite rounds before derivation; [[Std Db Session]] bounds challenge frames and compares decoded proof bytes.

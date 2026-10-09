@@ -30,3 +30,9 @@ A focused graph accepts pool → admission → session → protocol and rejects 
 Resolved Grill Log: executable refusal demonstrates the new layer's direction, rather than relying on a clean current graph alone.
 
 The challenge admission layer sits above wire preparation and below Session. Pin the resulting upward-edge diagnostic, including the hosting layer number. Resolved Grill Log: exact-output expectations change only with the inspected architectural catalog delta.
+
+## Integrated safeguard regression (#478)
+
+Pin hosting at eleven, capacity admission at six and pool at seven after inspecting the actual catalog. Exercise the combined pool → capacity admission → session → challenge → protocol chain, including its exact layers, and refuse challenge → session. Existing reverse-capacity, scanner, missing-module, unclassified-module, cycle, deterministic-order, long-chain and actual-library checks remain active.
+
+Resolved Grill Log: an exact-output change must follow the verified combined catalog, not weaken import direction or discard either safeguard. Both old expectations failed on development 342cf945 before this repair.
