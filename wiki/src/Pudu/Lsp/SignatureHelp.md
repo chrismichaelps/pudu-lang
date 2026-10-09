@@ -49,3 +49,9 @@ signatureHelpAt :: Analysis -> Int -> Json
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Server]]
+
+## Derive index contract (#458)
+
+Strategy headers are explicitly non-callable in signature selection.
+
+Resolved Grill Log: a declaration header cannot supply arguments for a call.

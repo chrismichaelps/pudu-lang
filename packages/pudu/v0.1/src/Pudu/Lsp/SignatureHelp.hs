@@ -149,6 +149,7 @@ declared value name =
   callable kind = case kind of
     DocType -> False
     DocTrait -> False
+    DocDerive _ -> False
     DocConstant -> False
     _ -> True
 

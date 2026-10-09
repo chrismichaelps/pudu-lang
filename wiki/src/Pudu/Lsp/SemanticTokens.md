@@ -50,3 +50,9 @@ semanticTokensFull   :: Analysis -> Json
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Server]]
+
+## Derive index contract (#458)
+
+Strategy metadata has the trait token category as a total fallback; ordinary resolved trait identities remain authoritative.
+
+Resolved Grill Log: the documentation kind extension cannot leave token classification partial.

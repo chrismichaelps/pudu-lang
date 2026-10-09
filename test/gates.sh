@@ -78,6 +78,9 @@ run 'a watched program starts again for its sources and its --also paths' \
 run 'the documentation site keeps its contract' \
   bash -c '"$PUDU" doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
 
+run 'derive documentation and public API boundaries' \
+  bash -c 'node test/derive-index.mjs "$PUDU"'
+
 if [ "$failed" -ne 0 ]; then
   printf '\nat least one gate failed\n'
   exit 1

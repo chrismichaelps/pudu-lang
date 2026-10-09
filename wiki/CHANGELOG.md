@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-08 — Derive declaration output (#458)
+
+- [[Doc Index]] retains authored strategy headers with structured visibility and shape metadata.
+- [[Compiler Program]] keeps that projection in analysis products; [[Pudu CLI]] adds root public strategies to API output.
+- [[Derive Index Output Gate]] checks actual output, private boundaries and existing identities.
+
 ## 2026-10-07 — Bundled environment ownership (#460)
 
 - [[Pudu CLI]] preserves the caller's environment and working directory while executing a bundle.

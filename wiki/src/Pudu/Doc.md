@@ -29,7 +29,7 @@ names as the checked one: the editor indexes the authored text, whose `derive` d
 elaboration removed before checking.
 
 ```haskell
-data DocKind = DocFunction | DocTraitMethod !Text | DocMethod !Text | DocConstant | DocType | DocTrait | DocMacro | DocForeign !Text
+data DocKind = DocFunction | DocTraitMethod !Text | DocMethod !Text | DocConstant | DocType | DocTrait | DocMacro | DocForeign !Text | DocDerive !DeriveDoc
 data DocEntry = DocEntry { docName, docModule :: !Text, docKind :: !DocKind
                          , docSignature :: !(Maybe Signature), docComment :: ![Text]
                          , docSpan :: !(Int, Int) }
@@ -55,7 +55,7 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
   the implementation and the member name, so documentation cannot cross between unrelated traits
   that happen to use the same method name.
 
-- **A signature is never reconstructed from written syntax.** It comes from the scheme the checker
+- **A callable signature is never reconstructed from written syntax.** It comes from the scheme the checker
   ended with, so a declaration with no annotations is still described, and one with annotations is
   described as the compiler understood it rather than as it was spelled. This is the module's
   central rule and the reason `ModuleTypes` exists.
@@ -81,7 +81,7 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 
 ### Linkage
 
-- **Requires:** [[Doc Signature]], [[Syntax Tree]], [[Source Token]], [[Type Boundary]].
+- **Requires:** [[Syntax Printer]], [[Doc Signature]], [[Syntax Tree]], [[Token]], [[Type Boundary]].
 - **Consumed by:** [[Compiler Pipeline]], [[Doc Search]], [[Doc Json]], [[Pudu REPL]], [[Pudu CLI]].
 
 ## Algorithm
@@ -93,7 +93,7 @@ and attaches a direct comment or the matching inherited trait comment.
 ## Negative Logic (Prohibited Paths)
 
 - No type checking, no inference, and no evaluation: the index reports, it does not decide.
-- No signature invented for a name the checker had none for; the entry reports no signature instead.
+- No callable signature invented for a name the checker had none for; declaration headers use separate metadata.
 - No documentation attached across an intervening ordinary comment, and none attached to a
   declaration that has none, except for the explicit trait-member inheritance rule.
 - No inheritance by member name alone and no inheritance over a direct implementation comment.
@@ -142,3 +142,9 @@ trait identity, while direct implementation documentation remains authoritative.
 ## Referenced by
 
 [[src/Pudu/Doc/_MOC]] · [[Compiler Pipeline]] · [[Doc Search]]
+
+## Derive index contract (#458)
+
+A strategy contributes a `DocDerive DeriveDoc` header before its members. Metadata holds `docDeriveTrait :: Text`, `docDeriveParameter :: Text`, `docDeriveShape :: DeriveShape` and `docDeriveExported :: Bool`: the complete rendered trait application, parameter, structural shape and export flag. `entrySignature` renders that declaration header; its callable `docSignature` remains absent. Header comments use the top-level bound and members keep their enclosing bound. `deriveShapeLabel` names Record or Sum. [[Syntax Printer]] owns type rendering; [[Compiler Program]] preserves authored strategies for analysis.
+
+Resolved Grill Log: a strategy is declaration metadata, never a fabricated callable scheme. Equal trait names with different shapes retain distinct entries and spans.

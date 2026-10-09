@@ -112,6 +112,7 @@ namespaceOf kind = case kind of
 
 isMember :: DocKind -> Bool
 isMember kind = case kind of
+  DocDerive _ -> True
   DocMethod _ -> True
   DocTraitMethod _ -> True
   _ -> False

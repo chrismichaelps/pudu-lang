@@ -66,7 +66,7 @@ expandModule :: Module -> (Module, [Diagnostic])
 ### Linkage
 
 - **Requires:** [[Syntax Tree]], [[Diagnostic Model]], [[Source]], [[Macro Design]], [[src/Pudu/Frontend/Expand/Substitute]].
-- **Consumed by:** [[Compiler Pipeline]], between parsing and [[Name Resolution]].
+- **Consumed by:** [[Compiler Pipeline]], between parsing and [[Name Resolution]], and [[Compiler Program]] for the authored analysis documentation projection.
 
 ## Algorithm
 
