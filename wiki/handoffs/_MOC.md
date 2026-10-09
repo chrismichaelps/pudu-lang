@@ -164,3 +164,5 @@ tags: [moc, handoff]
 [[00-INDEX]] · [[Engineering Delivery]]
 
 - [[Module Qualifier Delivery]] — namespace/value agreement prerequisite (#470).
+
+- [[Qualified Shadow Delivery]] — issue #471 lexical qualification across typing and execution.

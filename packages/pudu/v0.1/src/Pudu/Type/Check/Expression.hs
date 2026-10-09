@@ -12,6 +12,7 @@ module Pudu.Type.Check.Expression
 import Control.Monad (foldM, unless, when)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -80,6 +81,7 @@ import Pudu.Type.Check.Rule
   , selfName
   , namedVariantAsValue
   , qualifiedMemberType
+  , localValueHead
   , tryType
   , unaryType
   )
@@ -393,7 +395,11 @@ inferExpression around declared rigid spanValue expression = case expression of
         unqualified to pin its type. A qualifier is written as a member access,
         so the chain is flattened back into the dotted name it stands for. -}
     selected <- selectedStaticCallee declared rigid spanValue (locatedValue target) formed
-    case (selected, dottedName (locatedValue target)) of
+    local <- localValueHead (locatedValue target)
+    let written = case dottedName (locatedValue target) of
+          Just name | not local || not (Text.isInfixOf "." name) -> Just name
+          _ -> Nothing
+    case (selected, written) of
       (Just applied, _) -> do
         recordExpression (locatedSpan target) applied
         pure applied

@@ -31,3 +31,5 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 
 - [[Resolve State]] — invocation-owned pure state and action mechanics.
 - [[Module Qualifier Spec]] — namespace/value identity and loaded execution evidence.
+
+- [[Qualified Shadow Spec]] — exact loaded lexical precedence and evaluator agreement.

@@ -80,7 +80,7 @@ immediate calls do: self unifies before it is removed, and default arity survive
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.
 - These rules never recurse into sub-expressions; the walk in [[Type Check]] owns that, which is what keeps the two modules free of a cycle.
 - Qualified value paths are looked up in full rather than by final segment. Trait and concrete-receiver method lookup use canonical `NominalId` keys, keeping same-basename declarations in different modules distinct.
-- `qualifiedMemberType` recognizes the parser's module-dot-value shape and instantiates the full qualified binding before ordinary field/method dispatch. `enclosingReturnType` reads the current function signature, and `tryType` owns the closed `Result` propagation rule.
+- `qualifiedMemberType` recognizes the parser's module-dot-value shape and, after excluding a nearer local head, instantiates the full qualified binding before ordinary field/method dispatch. `enclosingReturnType` reads the current function signature, and `tryType` owns the closed `Result` propagation rule.
 - `callType` normalizes an asynchronous function's already formed surface result into `Task[success, failure]`: `Result[S, E]` supplies both channels and every other `T` becomes `Task[T, Never]`. [[Type Check]] requires complete async signatures before this closed rule is reached. `awaitType` accepts only a `Task`, yields its success channel, and routes a non-`Never` failure through the enclosing async function's `Result` declaration.
 - `literalType` decodes integer text through [[Integer Literal]] and registers a deferred checker constraint instead of returning hard-coded `Int`. Unary negation updates that constraint's mathematical value before fit checking, so `-128i8` is admitted while `-129i8` and `-1u8` are rejected.
 - Prefix `*` reads through a borrow: `*r` has the referent's type when `r` is `&T` or `&mut T`, an unsolved operand is constrained to a shared reference, and anything else reports `E3020`. There is no implicit conversion in either direction, because [[architecture/SEMANTICS]] admits no general subtyping in v1.
@@ -191,3 +191,7 @@ implementation's own signature governs its calls; the evaluator makes the same c
 Call instantiation substitutes both sides of every full trait obligation. Rigid member access delegates scheme selection to Type.Check.Method, sharing trait-argument specialization with immediate calls.
 
 Resolved Grill Log: no second identity-only rigid resolver; a captured method keeps the same concrete result as an immediate call.
+
+## Lexical member admission (#471)
+
+localValueHead follows name/member syntax to its first lexical name through Type Env. qualifiedMemberType yields to ordinary fields/methods when that head is local; nameType folds dotted local paths through memberType. Keep full qualified lookup for unshadowed namespaces. Undotted names retain their single ordinary lookup; lexical path admission adds no second search to that common case. A selected nominal type application remains a type owner. Resolved Grill Log: query local identity before the global member spelling; do not use shared bare interface names to decide shadowing. This bounded name rule stays in the existing closed-rule table.

@@ -42,6 +42,7 @@ module Pudu.Type.Env
   , lookupOwnerVariants
   , lookupTypeParams
   , lookupName
+  , lookupLocalName
   , qualifiesSomething
   , isImportedMethod
   , isMethodKey
@@ -704,13 +705,23 @@ isImportedMethod name =
   Checker $ \state -> (Set.member name (stateImportedMethods state), state)
 
 lookupName :: Text -> Checker (Maybe Scheme)
-lookupName name = Checker $ \state -> (search (stateFrames state), state)
+lookupName name = Checker $ \state -> (searchName name (stateFrames state), state)
+
+{-| The final frame holds shared module signatures, not lexical locals. -}
+lookupLocalName :: Text -> Checker (Maybe Scheme)
+lookupLocalName name = Checker $ \state -> (searchLocal (stateFrames state), state)
  where
-  search frames = case frames of
-    [] -> Nothing
-    current : rest -> case Map.lookup name current of
-      Just found -> Just found
-      Nothing -> search rest
+  searchLocal (current : rest@(_ : _)) = case Map.lookup name current of
+    Just found -> Just found
+    Nothing -> searchLocal rest
+  searchLocal _ = Nothing
+
+searchName :: Text -> [Map Text Scheme] -> Maybe Scheme
+searchName name frames = case frames of
+  [] -> Nothing
+  current : rest -> case Map.lookup name current of
+    Just found -> Just found
+    Nothing -> searchName name rest
 
 {-| Whether any name is bound beneath this qualifier.
 
