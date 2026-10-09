@@ -7,6 +7,8 @@ tags: [moc, module]
 
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
+- [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
+
 - [[Static Collect Fixture]] · [[Static Collect Bind Fixture]] · [[Static Collect Local Fixture]] — generic static field selection.
 
 

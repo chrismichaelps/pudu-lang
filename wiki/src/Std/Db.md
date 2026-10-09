@@ -48,12 +48,7 @@ restarts. The settings are kept inside a function, so showing a pool cannot show
 Checked against a live PostgreSQL 14 server: after both backends of a two-connection pool were
 terminated, each failed one request and the next requests were answered by fresh connections.
 
-**Taking a connection waits without a limit.** A borrower that finds every connection lent waits on
-the pool's channel until one comes back, however long that is. Under a burst larger than the pool,
-requests queue rather than fail, which is the ordinary behaviour of a pool, but nothing yet turns a
-wait that has gone on too long into a refusal. Bounding it needs a timed receive on [[Std Channel]],
-and the runtime's channel primitives (`channelPull` and its siblings) take no time limit today. Until
-then, the server's `statement_timeout` is what bounds how long any one lent connection is held.
+**Taking a connection has a finite capacity wait.** The default is ten seconds; an explicit override accepts zero through one hour. Expiry consumes no slot and admits no callback. Reopening, admitted commands and callback execution retain their separate deadlines and ownership boundaries.
 
 `closePool` closes admission and the queue, drains queued connections, and attempts all closes.
 It does not wait for active callbacks; their returns perform final cleanup. Host panic and forced
@@ -165,3 +160,9 @@ the extra release command is necessary to finish ownership and is not a throughp
 [[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
 
 Connection URI opening is available through [[Std Db ConnectionString]]; [[Std App Database]] connects pool lifetime to application stages and provides parameterized queries for handlers.
+
+## Bounded pool admission (#468)
+
+`DEFAULT_POOL_WAIT_MILLISECONDS` is ten seconds. `withConnection` delegates to `withConnectionWithin(target, waitMillis, action)`. An override accepts zero through one hour; zero probes immediately. [[Std Db Admission]] validates before dequeuing and atomically distinguishes a slot, channel completion and expiry. Expiry returns `Session.AdmissionTimedOut`, invokes neither callback nor reopening, and conserves capacity. Existing post-acquisition closing, lending renewal, return and cleanup logic stays shared.
+
+Resolved Grill Log: bound capacity admission, not admitted work. Preserve the nominal Pool record and callback contract. The existing large aggregate receives only the bounded shared entry change; extracting its nominal public types is a separate compatibility decision.

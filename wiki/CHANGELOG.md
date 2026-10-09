@@ -11,6 +11,12 @@ tags: [changelog]
 - [[Compiler Program]] keeps that projection in analysis products; [[Pudu CLI]] adds root public strategies to API output.
 - [[Derive Index Output Gate]] checks actual output, private boundaries and existing identities.
 
+## 2026-10-08 — Bounded database admission (#468)
+
+- [[Std Db Admission]] separates typed capacity expiry from closure and lost lending.
+- [[Std Db]] uses a finite default and explicit wait override without changing Pool shape.
+- [[Database Admission Fixture]] and graph refusal checks cover configuration, slot conservation and closure.
+
 ## 2026-10-07 — Bundled environment ownership (#460)
 
 - [[Pudu CLI]] preserves the caller's environment and working directory while executing a bundle.

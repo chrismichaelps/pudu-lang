@@ -1,6 +1,7 @@
 module Std.Db.Postgres
 
 import Std.Bytes as ByteSeq
+import Std.Db.Admission as Admission
 import Std.Db.ConnectionString as ConnectionString
 import Std.Db as Db
 import Std.Db.Driver as Driver
@@ -15,13 +16,28 @@ export fn driver() -> Driver.Driver {
     placeholders: Driver.DollarNumber, open: connect }
 }
 
+/// Prepare a connector with a stated capacity wait, validated before opening.
+export fn driverWithWait(waitMillis: Int) -> Result[Driver.Driver, Driver.Error] {
+  if !Admission.validWait(waitMillis) { return Err(invalidWait()) }
+  let ordinary = driver()
+  Ok(Driver.Driver{..ordinary, open: fn(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
+        connectWithWait(uri, size, waitMillis)
+      } })
+}
+
 /// Open a client on a PostgreSQL connection string.
 export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
+  connectWithWait(uri, size, Admission.DEFAULT_WAIT_MILLISECONDS)
+}
+
+/// Open a client with a finite capacity wait; the limit never interrupts admitted work.
+export fn connectWithWait(uri: Str, size: Int, waitMillis: Int) -> Result[Driver.Client, Driver.Error] {
+  if !Admission.validWait(waitMillis) { return Err(invalidWait()) }
   let pool = Result.mapErr(ConnectionString.pool(uri, size), adaptError) ?
   Ok(Driver.Client {
       query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
         let parameters = textParameters(&values) ?
-        let rows = Result.mapErr(Db.withConnection(&pool,
+        let rows = Result.mapErr(Db.withConnectionWithin(&pool, waitMillis,
             fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
               match Db.run(stream, sql, &parameters) {
                 case Ok(pair) => (Ok(pair[0]), pair[1])
@@ -31,7 +47,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
         Ok(Db.asDriverRows(&rows))
       },
       execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
-        let rows = Result.mapErr(Db.withConnection(&pool,
+        let rows = Result.mapErr(Db.withConnectionWithin(&pool, waitMillis,
             fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
               match Db.simple(stream, sql) {
                 case Ok(pair) => (Ok(pair[0]), pair[1])
@@ -45,7 +61,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
         // taken and the transaction opened and closed. The inner one is the
         // action's own answer, kept whole so a driver failure keeps its
         // category and code rather than being flattened into a protocol error.
-        let settled = Result.mapErr(Db.withConnection(&pool,
+        let settled = Result.mapErr(Db.withConnectionWithin(&pool, waitMillis,
             fn(stream: Session.Connection) -> (Result[Result[Driver.Rows, Driver.Error], Session.DbError], Session.Connection) {
               match Db.begin(stream) {
                 case Err(reason) => (Err(reason), stream)
@@ -126,6 +142,10 @@ fn textParameters(values: &Array[Driver.Value]) -> Result[Array[Option[Str]], Dr
   Ok(found)
 }
 
+fn invalidWait() -> Driver.Error {
+  Driver.error("postgresql", "configuration", "pool wait must be from 0 to 3600000 milliseconds")
+}
+
 fn synchronization(problem: Sync.SyncError) -> Driver.Error {
   Driver.error("postgresql", "operation", show(problem))
 }
@@ -138,6 +158,7 @@ fn adaptError(problem: Session.DbError) -> Driver.Error {
     case Session.Malformed(message) => Driver.error("postgresql", "protocol", message)
     case Session.Unsupported(message) => Driver.error("postgresql", "unsupported", message)
     case Session.Closed => Driver.error("postgresql", "closed", "database connection is closed")
+    case Session.AdmissionTimedOut => Driver.error("postgresql", "admission-timeout", "connection capacity was not available within its wait limit")
     case Session.Expired => Driver.error("postgresql", "expired", "the scope that lent this connection has ended")
     case Session.Other(message) => Driver.error("postgresql", "operation", message)
   }

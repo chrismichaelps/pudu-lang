@@ -73,3 +73,9 @@ connection after 403 ms.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Db Protocol]] · [[Std Net]]
+
+## Bounded pool admission (#468)
+
+`DbError` adds `AdmissionTimedOut` for pool capacity expiry. It is distinct from a closed pool, expired lending, opening failure and command failure. Connection opening and message reading do not manufacture this cause. Existing exhaustive matches over this public sum must add the new case.
+
+Resolved Grill Log: a pool wait is a typed cause rather than a message-text convention. This additive public variant requires independent contract review.
