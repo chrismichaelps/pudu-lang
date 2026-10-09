@@ -207,3 +207,7 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin has an appended MutexAcquireWithinBuiltin tag and total name mapping. Resolved Grill Log (#476): append after existing tags to preserve packed identities; execution stays in [[Eval Concurrent]].
+
+## Joined scope retirement (#480)
+
+Append MutexCloseBuiltin after all existing tags with the single source name mutexClose. Resolved Grill Log: preserve packed tag identities and keep lifecycle execution in the concurrency coordinator.

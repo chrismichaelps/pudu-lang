@@ -18,3 +18,7 @@ owned by the evaluation. Resolved Grill Log: confinement must permit cleanup of 
 Resolved Grill Log: the kept effects are an allow-list, so an effect added to the runtime is refused in a confined run until it is deliberately listed; nothing a program runs can clear the switch.
 
 mutexAcquireWithin is admitted beside ordinary acquisition. Resolved Grill Log (#476): a bounded wait grants no additional capability.
+
+## Joined scope retirement (#480)
+
+Admit mutexClose alongside evaluation-owned lock creation and disposal. Resolved Grill Log: closing grants no new external capability and cannot escape effect admission.

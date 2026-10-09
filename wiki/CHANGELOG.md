@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-09 — Database scope retirement (#480)
+
+- [[Eval Concurrent]] closes mutex admission before joining its owner; [[Std Sync]] exposes joined closure.
+- [[Std Db Driver]] revokes before private guard retirement; [[Database Scope Retirement Fixture]] and [[Mutex Admission Spec]] require exact outcomes and pre-teardown registry counts.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
