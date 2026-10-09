@@ -76,10 +76,15 @@ be opened. The numeric code is kept in `code`. A code the table does not name ke
 The result command is `SQLITE_DONE`, not an affected-row count. Integers remain Int64, SQL NULL
 remains NullValue, and empty blobs/text remain distinct. Decimal parameters require an explicit
 application storage choice. Standalone BEGIN/COMMIT calls do not reserve a client for one caller;
-a scoped transaction API with exclusive client ownership remains follow-up work.
+use the scoped transaction callback to reserve exclusive ownership through settlement.
 
 ABI contracts are based on SQLite's [opening API](https://www.sqlite.org/c3ref/open.html),
 [parameter binding](https://www.sqlite.org/c3ref/bind_blob.html),
 [statement preparation](https://www.sqlite.org/c3ref/prepare.html), and
 [column access](https://www.sqlite.org/c3ref/column_blob.html).
-No compilation, tests, code review, or live SQLite execution was performed in this delivery.
+Earlier validation evidence belongs to its original deliveries; current admission evidence is recorded in [[Database Mutex Delivery]].
+
+## Local client admission (#476)
+
+The Pudu local connector defaults to 10000 milliseconds and exposes driverWithWait/connectWithWait. Overrides admit 0..3600000 before opening. Query, execute, transaction and close share a finite outer mutex wait; expiry returns admission-timeout with fixed redacted text and executes nothing. Self-reentry returns synchronization. The admitted owner retains the mutex through commands, callback, settlement and native file-lock waiting.
+Resolved Grill Log: do not time out scope revocation or release an unfinished transaction. Typed callback failure rolls back before returning; rollback failure retires the connection and retains cleanup evidence. Command, callback, runtime abort and cancellation budgets remain separate work. [[Mutex Admission Fixture]] tests real local contention.

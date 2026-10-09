@@ -29,13 +29,28 @@ foreign "pudu_sqlite" {
   fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
 }
 
-/// The SQLite driver, for a set a program assembles itself.
-export fn driver() -> Driver.Driver {
-  Driver.Driver{name: "sqlite", schemes: ["sqlite"], placeholders: Driver.QuestionMark, open: connect}
+/// Default finite wait for admission to the local Database client.
+export const DEFAULT_WAIT_MILLISECONDS: Int = 10000
+
+/// The local Database driver with the default admission wait.
+export fn driver() -> Driver.Driver { driverWithWait(DEFAULT_WAIT_MILLISECONDS) }
+
+/// Override client admission; invalid waits are refused before opening.
+export fn driverWithWait(millis: Int) -> Driver.Driver {
+  Driver.Driver{name: "sqlite", schemes: ["sqlite"], placeholders: Driver.QuestionMark,
+    open: fn(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error] { connectWithWait(uri, capacity, millis) } }
 }
 
-/// One serialized connection preserves a single database for :memory: clients.
+/// One serialized connection preserves one local Database with finite admission.
 export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error] {
+  connectWithWait(uri, capacity, DEFAULT_WAIT_MILLISECONDS)
+}
+
+/// Bound client admission, retaining ownership through complete transaction settlement.
+export fn connectWithWait(uri: Str, capacity: Int, millis: Int) -> Result[Driver.Client, Driver.Error] {
+  if millis < 0 || millis > Sync.MAX_WAIT_MILLISECONDS {
+    return Err(problem("configuration", "client admission wait must be from zero through 3600000 milliseconds"))
+  }
   if capacity < 1 { return Err(problem("configuration", "connection capacity must be positive")) }
   if uri.take(7).toLower() != "sqlite:" { return Err(problem("configuration", "expected a sqlite connection string")) }
   let path = uri.drop(7)
@@ -50,59 +65,59 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
   let current = Sync.cell(Some(database))
   Ok(Driver.Client {
       query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
-        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
-              let held = Result.mapErr(Sync.get(&current), synchronization) ?
-              match held {
-                case None => Err(problem("closed", "SQLite client is closed"))
-                case Some(database) => perform(database, sql, &values)
-              }
-            }), synchronization) ?
+        admit(&lock, millis, fn() -> Result[Driver.Rows, Driver.Error] {
+            let held = Result.mapErr(Sync.get(&current), synchronization) ?
+            match held {
+              case None => Err(problem("closed", "SQLite client is closed"))
+              case Some(database) => perform(database, sql, &values)
+            }
+          })
       },
       transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
-        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
-              let held = Result.mapErr(Sync.get(&current), synchronization) ?
-              match held {
-                case None => Err(problem("closed", "SQLite client is closed"))
-                case Some(database) => {
-                  // The lock is held for the whole action, so nothing else
-                  // reaches this database between the begin and the commit.
-                  let _begun = perform(database, "BEGIN", &[]) ?
-                  let inside = Driver.Tx {
-                    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
-                      perform(database, sql, &values)
-                    },
-                    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
-                      perform(database, sql, &[])
-                    }
-                  }
-                  match Driver.scoped(&inside, action) {
-                    case Ok(rows) => {
-                      match perform(database, "COMMIT", &[]) {
-                        case Ok(_) => Ok(rows)
-                        case Err(reason) => recoverTransaction(database, &current, reason)
-                      }
-                    }
-                    case Err(reason) => recoverTransaction(database, &current, reason)
+        admit(&lock, millis, fn() -> Result[Driver.Rows, Driver.Error] {
+            let held = Result.mapErr(Sync.get(&current), synchronization) ?
+            match held {
+              case None => Err(problem("closed", "SQLite client is closed"))
+              case Some(database) => {
+                // The lock is held for the whole action, so nothing else
+                // reaches this database between the begin and the commit.
+                let _begun = perform(database, "BEGIN", &[]) ?
+                let inside = Driver.Tx {
+                  query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+                    perform(database, sql, &values)
+                  },
+                  execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+                    perform(database, sql, &[])
                   }
                 }
+                match Driver.scoped(&inside, action) {
+                  case Ok(rows) => {
+                    match perform(database, "COMMIT", &[]) {
+                      case Ok(_) => Ok(rows)
+                      case Err(reason) => recoverTransaction(database, &current, reason)
+                    }
+                  }
+                  case Err(reason) => recoverTransaction(database, &current, reason)
+                }
               }
-            }), synchronization) ?
+            }
+          })
       },
       execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
-        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
-              let held = Result.mapErr(Sync.get(&current), synchronization) ?
-              match held {
-                case None => Err(problem("closed", "SQLite client is closed"))
-                case Some(database) => perform(database, sql, &[])
-              }
-            }), synchronization) ?
+        admit(&lock, millis, fn() -> Result[Driver.Rows, Driver.Error] {
+            let held = Result.mapErr(Sync.get(&current), synchronization) ?
+            match held {
+              case None => Err(problem("closed", "SQLite client is closed"))
+              case Some(database) => perform(database, sql, &[])
+            }
+          })
       },
       close: fn() -> Result[(), Driver.Error] {
-        Result.mapErr(Sync.withLock(&lock, fn() -> Result[(), Driver.Error] {
-              let held = Result.mapErr(Sync.swap(&current, None), synchronization) ?
-              if let Some(database) = held { unsafe(foreign) { releaseDatabase(database) } }
-              Ok(())
-            }), synchronization) ?
+        admit(&lock, millis, fn() -> Result[(), Driver.Error] {
+            let held = Result.mapErr(Sync.swap(&current, None), synchronization) ?
+            if let Some(database) = held { unsafe(foreign) { releaseDatabase(database) } }
+            Ok(())
+          })
       }
     })
 }
@@ -328,3 +343,10 @@ fn statusError(code: Int32) -> Driver.Error {
 fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
 fn synchronization(reason: Sync.SyncError) -> Driver.Error { Driver.error("sqlite", "synchronization", show(reason)) }
 fn badText(_problem: ByteSeq.BytesError) -> Driver.Error { Driver.error("sqlite", "decode", "SQLite returned invalid text or byte encoding") }
+
+fn admit[T](target: &Sync.Mutex, millis: Int, action: fn() -> Result[T, Driver.Error]) -> Result[T, Driver.Error] {
+  match Result.mapErr(Sync.withLockWithin(target, millis, action), synchronization) ? {
+    case Sync.Acquired(outcome) => outcome
+    case Sync.LockExpired => Err(problem("admission-timeout", "client admission wait expired"))
+  }
+}

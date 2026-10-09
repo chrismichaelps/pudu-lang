@@ -235,3 +235,5 @@ ordinary call semantics.
 Resolved Grill Log: use explicit primitives rather than recognizing a library function
 by name. Preserve persistence, key representatives, duplicate counts, checked Int
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
+
+mutexAcquireWithin is discoverable as an effect name. Resolved Grill Log (#476): this list owns names only; admission and signatures retain their phase owners.

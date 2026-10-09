@@ -1,0 +1,98 @@
+module UsesMutexWait
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Db.Driver as Driver
+import Std.Db.Sqlite as Local
+import Std.Result as Result
+import Std.Sync as Sync
+
+fn expect(held: Bool, named: Str) -> () { if !held { panic(named) } }
+fn required[T, E](value: Result[T, E]) -> T {
+  match value { case Ok(held) => held case Err(reason) => panic(show(reason)) }
+}
+fn expiry[T](value: Result[T, Driver.Error]) -> () {
+  match value {
+    case Err(reason) => expect(reason.category == "admission-timeout" && reason.message == "client admission wait expired", "redacted admission expiry")
+    case Ok(_) => panic("contended client was admitted")
+  }
+}
+
+export fn main() -> Int {
+  let mutex = Sync.mutex()
+  expect(Sync.MAX_WAIT_MILLISECONDS == 3600000 && Local.DEFAULT_WAIT_MILLISECONDS == 10000, "finite defaults")
+  let optional = Sync.withLockWithin(&mutex, 0, fn() -> Option[Int] { None })
+  expect(optional == Ok(Sync.Acquired(None)), "optional callback is distinct from expiry")
+  let typed = Sync.withLockWithin(&mutex, 0, fn() -> Result[Int, Str] { Err("typed") })
+  expect(typed == Ok(Sync.Acquired(Err("typed"))), "typed callback failure releases ownership")
+  required(Sync.lockWithin(&mutex, Sync.MAX_WAIT_MILLISECONDS))
+  expect(Sync.lock(&mutex) == Err(Sync.Other("the lock is already owned by this thread")), "ordinary self-reentry")
+  expect(Sync.lockWithin(&mutex, 0) == Err(Sync.Other("the lock is already owned by this thread")), "bounded self-reentry")
+  let ran = Sync.cell(false)
+  let contender = required(Concurrent.start(fn() -> () {
+        for millis in [0, 1] {
+          let outcome = Sync.withLockWithin(&mutex, millis, fn() -> () { required(Sync.set(&ran, true)) })
+          expect(outcome == Ok(Sync.LockExpired), "no callback after expiry")
+        }
+      }))
+  required(Concurrent.join(&contender))
+  expect(Sync.get(&ran) == Ok(false), "expired action did not execute")
+  required(Sync.unlock(&mutex))
+  for millis in [-1, 3600001, 9223372036854775807] {
+    expect(Sync.lockWithin(&mutex, millis) == Err(Sync.Other("invalid mutex wait")), "invalid wait refused")
+  }
+  required(Sync.disposeMutex(&mutex))
+  expect(Sync.lockWithin(&mutex, 0) == Err(Sync.Missing), "retired mutex refused")
+  required(Sync.disposeCell(&ran))
+  required(Concurrent.forget(&contender))
+
+  for millis in [0, 1] { clientContention(millis) }
+  for millis in [-1, 3600001] {
+    let invalid = Driver.connect(&[Local.driverWithWait(millis)], "sqlite::memory:", 1)
+    match invalid { case Err(reason) => expect(reason.category == "configuration", "invalid override before opening") case Ok(_) => panic("invalid override opened") }
+    expect(Result.isErr(&Local.connectWithWait("wrong:", 1, millis)), "direct invalid override")
+  }
+  required(Driver.close(&required(Local.connect("sqlite::memory:", 1))))
+  required(Driver.close(&required(Local.connectWithWait("sqlite::memory:", 1, Sync.MAX_WAIT_MILLISECONDS))))
+  0
+}
+
+fn clientContention(millis: Int) -> () {
+  let client = required(Driver.connect(&[Local.driverWithWait(millis)], "sqlite::memory:", 1))
+  required(Driver.execute(&client, "create table held (value integer)"))
+  let entered: Channel.Channel[()] = Channel.channel(1)
+  let release: Channel.Channel[()] = Channel.channel(1)
+  let worker = required(Concurrent.start(fn() -> () {
+        let _committed = required(Driver.transaction(&client, fn(tx: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+              let _written = (tx.execute)("insert into held values (1)") ?
+              required(Channel.send(&entered, ()))
+              required(Channel.receive(&release))
+              (tx.query)("select count(*) from held", [])
+            }))
+      }))
+  expect(Channel.receiveWithin(&entered, 10000) == Ok(Channel.Received(())), "transaction entered")
+  expiry(Driver.query(&client, "select count(*) from held", &[]))
+  expiry(Driver.execute(&client, "insert into held values (99)"))
+  let ran = Sync.cell(false)
+  expiry(Driver.transaction(&client, fn(tx: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        required(Sync.set(&ran, true))
+        (tx.execute)("insert into held values (99)")
+      }))
+  expiry(Driver.close(&client))
+  expect(Sync.get(&ran) == Ok(false), "expired transaction callback never ran")
+  required(Channel.send(&release, ()))
+  required(Concurrent.join(&worker))
+  let rows = required(Driver.query(&client, "select count(*) from held", &[]))
+  expect(rows.rows[0][0] == Driver.IntegerValue(1i64), "expiry neither wrote nor closed")
+  let recursive = Driver.transaction(&client, fn(tx: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      let _written = (tx.execute)("insert into held values (2)") ?
+      Driver.query(&client, "select count(*) from held", &[])
+    })
+  match recursive { case Err(reason) => expect(reason.category == "synchronization", "recursive client refusal") case Ok(_) => panic("recursive client admitted") }
+  let after = required(Driver.query(&client, "select count(*) from held", &[]))
+  expect(after.rows[0][0] == Driver.IntegerValue(1i64), "recursive failure rolled back")
+  required(Driver.close(&client))
+  required(Driver.close(&client))
+  required(Sync.disposeCell(&ran))
+  required(Concurrent.forget(&worker))
+}

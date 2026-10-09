@@ -69,6 +69,7 @@ import Pudu.Eval.Concurrent
   , channelReceiveWithin
   , channelSend
   , mutexLock
+  , mutexLockWithin
   , mutexNew
   , mutexUnlock
   , mutexDispose
@@ -225,6 +226,7 @@ effectBuiltins =
   , ChannelFinishBuiltin
   , MutexOpenBuiltin
   , MutexAcquireBuiltin
+  , MutexAcquireWithinBuiltin
   , MutexReleaseBuiltin
   , CellOpenBuiltin
   , CellGetBuiltin
@@ -427,6 +429,8 @@ callEffect spanValue builtin arguments = do
       (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal (mutexNew concurrent)
       (MutexAcquireBuiltin, [IntValue _ token]) ->
         effectUnit (mutexLock concurrent (fromInteger token))
+      (MutexAcquireWithinBuiltin, [IntValue _ token, IntValue _ millis]) ->
+        resultOf . fmap BoolValue <$> lift refusal (mutexLockWithin concurrent token millis)
       (MutexReleaseBuiltin, [IntValue _ token]) ->
         effectUnit (mutexUnlock concurrent (fromInteger token))
       (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew concurrent value)

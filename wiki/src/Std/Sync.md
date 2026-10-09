@@ -29,3 +29,8 @@ Failures remain `SyncError` values.
   and can violate mutual exclusion. _Rejected:_ an ownerless binary permit.
 ## Referenced by
 [[src/Std/_MOC]] · [[Eval Concurrent]] · [[architecture/STDLIB]]
+
+## Finite admission (#476)
+
+LockAttempt[T] = Acquired(T) | LockExpired distinguishes a completed optional value from expiry. MAX_WAIT_MILLISECONDS is 3600000. lockWithin takes a validated 0..maximum duration; zero probes immediately. withLockWithin runs no action after expiry, releases after normal action return and retains typed failures as values. Recursive acquisition returns Other without releasing the original owner. Unknown/disposed tokens return Missing.
+Resolved Grill Log: neither callback execution nor cleanup is timed; runtime abort and cancellation cleanup remain a separate recovery contract. Existing withLock also releases only after normal return. [[Mutex Admission Spec]] exercises the real public wrappers.

@@ -166,3 +166,5 @@ tags: [moc, handoff]
 - [[Module Qualifier Delivery]] — namespace/value agreement prerequisite (#470).
 
 - [[Qualified Shadow Delivery]] — issue #471 lexical qualification across typing and execution.
+
+- [[Database Mutex Delivery]] — finite local client admission and recursive refusal.

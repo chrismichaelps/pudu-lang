@@ -120,6 +120,7 @@ test-suite pudu-test
     Pudu.Eval.DataSpec
     Pudu.Eval.FunctionClosureSpec
     Pudu.Eval.SystemSpec
+    Pudu.Eval.MutexSpec
     Pudu.DocSpec
     Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec

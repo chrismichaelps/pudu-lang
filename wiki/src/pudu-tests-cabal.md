@@ -105,3 +105,5 @@ Register [[Module Qualifier Spec]] explicitly. Resolved Grill Log: isolated/load
 ## Qualified shadow registration (#471)
 
 Register Qualified Shadow Spec with the existing test dependencies. Resolved Grill Log: complete loaded and isolated lexical evidence must compile and execute in the repository suite.
+
+Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.

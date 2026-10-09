@@ -85,7 +85,7 @@ effectValueNames =
   , "spawnThread", "joinThread", "sleepMillis"
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
   , "channelPullWithin"
-  , "mutexOpen", "mutexAcquire", "mutexRelease"
+  , "mutexOpen", "mutexAcquire", "mutexAcquireWithin", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "cellDispose", "mutexDispose", "forgetThread"
   , "secureRandomBytes"
