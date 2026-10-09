@@ -5,6 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
+
+- [[Database Admission Delivery]] — finite pool capacity waiting (#468).
+
 - [[2026-10-07-static-field-selection]] — preserve complete static field owners (#457).
 
 
@@ -158,5 +162,9 @@ tags: [moc, handoff]
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
+
+- [[Module Qualifier Delivery]] — namespace/value agreement prerequisite (#470).
+
+- [[Qualified Shadow Delivery]] — issue #471 lexical qualification across typing and execution.
 
 - [[Database Mutex Delivery]] — finite local client admission and recursive refusal.

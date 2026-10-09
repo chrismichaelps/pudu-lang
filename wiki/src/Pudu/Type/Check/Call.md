@@ -52,7 +52,7 @@ throughBorrow      :: Type -> Checker Type
   reads as a call and a field would have to be parenthesised to be called anyway.
 - A borrow is followed as far as it goes before the receiver's type is read. `&&T` is writable, and
   stopping after one would report a mismatch against a type the reader never intended.
-- `Q.member` where `Q` is a module qualifier that exports `member` is that export, even when a type
+- With no nearer ordinary local value, `Q.member` where `Q` is a module qualifier that exports `member` is that export, even when a type
   of `Q`'s spelling is also declared: `Json.encode` is the module's function whether or not the
   `Json` type implements `Encode`. Only when the module exports no such value is `Q` read as a type.
 - Ambiguity between two traits providing one member is reported at the call rather than at the
@@ -125,3 +125,7 @@ The interface graph and local declaration collection can contribute identical im
 Collapse identical matching rules in one linear pass before deciding uniqueness; keep different
 heads, traits, parameters or conditions distinct. Resolved Grill Log: repeated facts do not create
 ambiguity, and existing coherence checks still reject duplicate authored implementations.
+
+## Lexical member admission (#471)
+
+Qualified nominal/trait lookup must yield to localValueHead before selecting a module export or receiver-owner fallback. Ordinary receiver checking then owns fields, methods, borrowing and diagnostic identity. Complete explicit nominal type applications retain their independent type-owner selection. Resolved Grill Log: an uppercase constant can be an ordinary receiver; capitalization alone cannot prove qualification. Never recheck a receiver or erase a rigid witness.

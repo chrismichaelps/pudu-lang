@@ -15,6 +15,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Expression (..), Function (..))
 import Pudu.Source (Span)
 import Pudu.Type.Value (capabilityName)
+import Pudu.Type.Check.Rule (localValueHead)
 import Pudu.Type.Env
   ( Checker
   , UnsafeFrame (..)
@@ -52,7 +53,8 @@ requireComptimePurity value
 checkComptimeCall :: Span -> Located Expression -> Checker ()
 checkComptimeCall spanValue callee = do
   inside <- inComptime
-  when inside $ case dottedName (locatedValue callee) of
+  local <- if inside then localValueHead (locatedValue callee) else pure False
+  when (inside && not local) $ case dottedName (locatedValue callee) of
     Just name -> do
       known <- isComptimeFunction name
       {-| Refused only when the callee is a declared function that may not fold.

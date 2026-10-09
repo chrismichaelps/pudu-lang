@@ -63,3 +63,9 @@ including externally observable filesystem modes that portable permission boolea
 ## Referenced by
 
 [[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Atomic Permission Gate]] · [[Pudu CLI]]
+
+## Derive index contract (#458)
+
+[[Derive Index Output Gate]] runs after documentation parity against the same freshly built executable.
+
+Resolved Grill Log: local and integration delivery both exercise actual strategy output and public visibility.

@@ -128,7 +128,9 @@ test-suite pudu-test
     Pudu.Repl.Session.CommandSpec
     Pudu.Repl.Session.ContextSpec
     Pudu.Repl.Session.EvaluationSpec
+    Pudu.Semantic.QualifiedShadowSpec
     Pudu.Semantic.ResolveSpec
+    Pudu.Semantic.QualifierSpec
     Pudu.Semantic.ReflectionSpec
     Pudu.Type.CheckSpec
     Pudu.Type.Check.Common

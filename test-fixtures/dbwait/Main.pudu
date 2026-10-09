@@ -1,0 +1,203 @@
+module Main
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Db.Admission as Admission
+import Std.Db as Db
+import Std.Db.Driver as Driver
+import Std.Db.Postgres as Connector
+import Std.Db.Protocol as Wire
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Sync as Sync
+
+fn require[T, E](held: Result[T, E]) -> T {
+  match held { case Ok(value) => value case Err(reason) => panic(show(reason)) }
+}
+fn check(held: Bool, message: Str) -> () { if !held { panic(message) } }
+fn finish(worker: &Concurrent.Task) -> () {
+  let joined = Concurrent.join(worker)
+  let forgotten = Concurrent.forget(worker)
+  require(joined)
+  require(forgotten)
+}
+fn fresh() -> Session.Connection {
+  Session.Connection{socket: Net.fake(), buffer: bytesOf([]), parameters: [], status: Session.Idle,
+    lease: Sync.cell(0), epoch: 0, deadline: -1 }
+}
+fn pool(slot: Option[Option[Session.Connection]], openings: &Sync.Counter) -> Db.Pool {
+  let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(1)
+  if let Some(held) = slot { require(Channel.send(&ready, held)) }
+  Db.Pool{ready: ready, size: 1, closing: Sync.cell(false),
+    reopen: fn() -> Result[Session.Connection, Session.DbError] {
+      require(Sync.increment(openings, 1))
+      Ok(fresh())
+    } }
+}
+fn action(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) { (Ok(7), stream) }
+
+fn expires(useDefault: Bool, wait: Int, watchdog: Int) -> () {
+  let openings = Sync.counter(0)
+  let calls = Sync.counter(0)
+  let target = pool(None, &openings)
+  let answers: Channel.Channel[Result[Int, Session.DbError]] = Channel.channel(1)
+  let worker = require(Concurrent.start(fn() -> () {
+        let work = fn(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+          require(Sync.increment(&calls, 1))
+          action(stream)
+        }
+        let answer = if useDefault { Db.withConnection(&target, work) } else { Db.withConnectionWithin(&target, wait, work) }
+        require(Channel.send(&answers, answer))
+      }))
+  let observed = require(Channel.receiveWithin(&answers, watchdog))
+  require(Db.closePool(&target))
+  finish(&worker)
+  check(observed == Channel.Received(Err(Session.AdmissionTimedOut)), "capacity wait did not expire")
+  check(require(Sync.count(&calls)) == 0 && require(Sync.count(&openings)) == 0, "expiry ran work")
+  check(require(Channel.pending(&target.ready)) == 0, "expiry consumed capacity")
+}
+
+fn readySlots() -> () {
+  let openings = Sync.counter(0)
+  let calls = Sync.counter(0)
+  let target = pool(None, &openings)
+  let work = fn(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+    require(Sync.increment(&calls, 1))
+    action(stream)
+  }
+  for index in 0..1000 {
+    check(Db.withConnectionWithin(&target, 0, work) == Err(Session.AdmissionTimedOut), "zero probe lost expiry")
+  }
+  check(require(Channel.pending(&target.ready)) == 0 && require(Sync.count(&calls)) == 0, "expiry changed queue or work")
+  require(Channel.send(&target.ready, Some(fresh())))
+  for wait in [-1, 3600001, 9223372036854775807] {
+    check(Db.withConnectionWithin(&target, wait, work) == Err(Session.Other("pool wait must be from 0 to 3600000 milliseconds")), "invalid wait accepted")
+    check(require(Channel.pending(&target.ready)) == 1, "invalid wait dequeued capacity")
+  }
+  let retained: Sync.Cell[Option[Session.Connection]] = Sync.cell(None)
+  let answer = Db.withConnectionWithin(&target, 0,
+    fn(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+      require(Sync.set(&retained, Some(stream)))
+      work(stream)
+    })
+  check(answer == Ok(7) && require(Sync.count(&calls)) == 1, "ready slot not delivered once")
+  let stale = match require(Sync.get(&retained)) { case Some(stream) => stream case None => panic("no lent value") }
+  check(Session.write(&stale, &Wire.query("unexpected")) == Err(Session.Expired), "returned loan remained live")
+  check(require(Net.state(&stale.socket)).commands.isEmpty(), "expired loan reached transport")
+  check(require(Channel.pending(&target.ready)) == 1 && require(Sync.count(&openings)) == 0, "return lost capacity")
+  require(Db.closePool(&target))
+  let replacement = pool(Some(None), &openings)
+  check(Db.withConnectionWithin(&replacement, 0, action) == Ok(7), "replacement slot treated as closure")
+  check(require(Sync.count(&openings)) == 1 && require(Channel.pending(&replacement.ready)) == 1, "replacement lost capacity")
+  require(Db.closePool(&replacement))
+  let absent: Channel.Channel[Option[Session.Connection]] = Channel.Channel{token: -1}
+  match Admission.takeWithin(&absent, 0) { case Err(Session.Other(_)) => {} case _ => panic("missing channel cause lost") }
+}
+
+fn closedSlots() -> () {
+  let openings = Sync.counter(0)
+  let target = pool(None, &openings)
+  let started: Channel.Channel[()] = Channel.channel(1)
+  let answers: Channel.Channel[Result[Int, Session.DbError]] = Channel.channel(1)
+  let worker = require(Concurrent.start(fn() -> () {
+        require(Channel.send(&started, ()))
+        require(Channel.send(&answers, Db.withConnectionWithin(&target, 3600000, action)))
+      }))
+  let entered = require(Channel.receiveWithin(&started, 1000))
+  require(Db.closePool(&target))
+  let observed = require(Channel.receiveWithin(&answers, 1000))
+  finish(&worker)
+  check(entered == Channel.Received(()) && observed == Channel.Received(Err(Session.Closed)), "closure did not wake borrower")
+  check(Db.withConnectionWithin(&target, 0, action) == Err(Session.Closed), "finished queue accepted work")
+  let stream = fresh()
+  let closing = pool(Some(Some(stream)), &openings)
+  require(Sync.set(&closing.closing, true))
+  check(Db.withConnectionWithin(&closing, 0, action) == Err(Session.Closed), "closing pool lent queued value")
+  check(require(Net.state(&stream.socket)).closed, "closing queued connection not retired")
+  require(Db.closePool(&closing))
+  let inside = fresh()
+  let during = pool(Some(Some(inside)), &openings)
+  check(Db.withConnectionWithin(&during, 0,
+      fn(held: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+        require(Db.closePool(&during))
+        action(held)
+      }) == Ok(7), "callback closure changed result")
+  check(require(Net.state(&inside.socket)).closed && require(Sync.count(&openings)) == 0, "closure reopened or leaked connection")
+}
+
+fn exclusive() -> () {
+  let openings = Sync.counter(0)
+  let active = Sync.counter(0)
+  let overlap = Sync.counter(0)
+  let target = pool(Some(Some(fresh())), &openings)
+  let answers: Channel.Channel[Result[Int, Session.DbError]] = Channel.channel(8)
+  var workers: Array[Concurrent.Task] = []
+  for index in 0..8 {
+    workers = workers.push(require(Concurrent.start(fn() -> () {
+            let answer = Db.withConnectionWithin(&target, 1000,
+              fn(stream: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+                if require(Sync.increment(&active, 1)) != 1 { require(Sync.increment(&overlap, 1)) }
+                require(Concurrent.sleep(1))
+                require(Sync.increment(&active, -1))
+                action(stream)
+              })
+            require(Channel.send(&answers, answer))
+          })))
+  }
+  for worker in workers { finish(&worker) }
+  for index in 0..8 { check(require(Channel.receiveWithin(&answers, 1000)) == Channel.Received(Ok(7)), "concurrent borrower lost result") }
+  check(require(Sync.count(&overlap)) == 0 && require(Sync.count(&active)) == 0, "capacity lent concurrently")
+  check(require(Channel.pending(&target.ready)) == 1 && require(Sync.count(&openings)) == 0, "concurrent return lost capacity")
+  require(Db.closePool(&target))
+}
+
+fn category[T](answer: Result[T, Driver.Error], wanted: Str) -> () {
+  match answer { case Err(reason) => check(reason.category == wanted, "driver cause changed") case Ok(_) => panic("driver accepted refused work") }
+}
+fn configured() -> () {
+  category(Connector.driverWithWait(-1), "configuration")
+  category(Connector.connectWithWait("invalid", 1, 3600001), "configuration")
+  let selected = require(Connector.driverWithWait(0))
+  let client = require(Driver.connect(&[selected], "postgresql://u:p@local/db?sslmode=disable", 1))
+  let entered: Channel.Channel[()] = Channel.channel(1)
+  let release: Channel.Channel[()] = Channel.channel(1)
+  let answers: Channel.Channel[Result[Driver.Rows, Driver.Error]] = Channel.channel(1)
+  let calls = Sync.counter(0)
+  let empty = Driver.Rows{columns: [], rows: [], command: ""}
+  let worker = require(Concurrent.start(fn() -> () {
+        let result = Driver.transaction(&client, fn(_held: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+            require(Channel.send(&entered, ()))
+            require(Channel.receive(&release))
+            Ok(empty)
+          })
+        require(Channel.send(&answers, result))
+      }))
+  let observed = require(Channel.receiveWithin(&entered, 1000))
+  let executed = Driver.execute(&client, "unexpected")
+  let queried = Driver.query(&client, "unexpected", &[])
+  let nested = Driver.transaction(&client, fn(_held: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      require(Sync.increment(&calls, 1))
+      Ok(empty)
+    })
+  require(Channel.send(&release, ()))
+  finish(&worker)
+  let settled = require(Channel.receiveWithin(&answers, 1000))
+  require(Driver.close(&client))
+  check(observed == Channel.Received(()) && settled == Channel.Received(Ok(empty)), "admitted transaction did not finish")
+  category(executed, "admission-timeout")
+  category(queried, "admission-timeout")
+  category(nested, "admission-timeout")
+  check(require(Sync.count(&calls)) == 0, "expired transaction invoked callback")
+}
+
+export fn main() -> Int {
+  expires(false, 5, 1000)
+  check(Db.DEFAULT_POOL_WAIT_MILLISECONDS == 10000 && Admission.DEFAULT_WAIT_MILLISECONDS == 10000, "default changed")
+  check(Admission.validWait(0) && Admission.validWait(3600000) && !Admission.validWait(-1) && !Admission.validWait(3600001), "wait policy changed")
+  readySlots()
+  closedSlots()
+  exclusive()
+  configured()
+  expires(true, 0, 15000)
+  0
+}

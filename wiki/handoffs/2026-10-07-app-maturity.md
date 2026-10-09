@@ -23,7 +23,7 @@ language and vault-parity review.
 
 ## Exact next action
 
-Complete validation and publication of issue #456, then audit bounded database pool admission.
+Complete [[Database Admission Delivery]] on issue #468; savepoint repair #456 is integrated.
 
 ## Transaction evidence
 

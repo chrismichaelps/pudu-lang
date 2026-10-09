@@ -39,10 +39,10 @@ typeArgumentName :: Located TypeSyntax -> Text
 ### Governance
 
 - Extracted from `Pudu.Eval.Call` to enforce strict modular file length limits (< 500 lines).
-- `readPath` resolves a dotted path longest-binding-first, ensuring linked modules take precedence over shorter prefixes while cleanly walking trailing field accesses via `readMember`.
+- `readPath` resolves a dotted path longest-binding-first, after honoring a local first segment, then walks trailing field accesses via `readMember`.
 - `pathValue` flattens member access syntax chains into dotted strings for direct environment lookup when every part is a valid identifier.
 - `qualifiedCallee` resolves method calls qualified by declaring trait or concrete type (e.g., `Trait.method(receiver)`), checking receiver owners dynamically.
-- `qualifiedParts` guards qualification to identifiers starting with an uppercase letter, ensuring local variables and parameters never trigger redundant trait/type qualification queries.
+- `qualifiedParts` guards qualification to identifiers starting with an uppercase letter, filtering nominal candidates before lexical admission distinguishes constants and witnesses.
 - `typeArgumentNames` extracts written nominal type annotations from type application syntax to preserve caller-provided integer conversion targets at runtime.
 
 ### Linkage
@@ -92,3 +92,7 @@ implementation lookup, diagnostic spans, or name-lookup tallies.
 `readName` exposes this same bare-name branch for the tree's operand path and
 permits inlining. Resolved Grill Log: share the undefined-name diagnostic and
 lookup tally rather than introducing a second name-resolution policy.
+
+## Lexical member admission (#471)
+
+qualifiedCallee returns Nothing immediately for an ordinary local head, skipping both dotted export lookup and receiver-owner fallback. A TypeWitnessValue retains witnessed method selection and its fallback. qualifiedPath performs the same local/witness distinction for explicit type-applied call dispatch; retain uppercase filtering only after lexical admission. Resolved Grill Log: constants may qualify ordinary value members; both evaluators must honor the same local frame and restore the outer namespace on exit.

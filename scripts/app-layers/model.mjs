@@ -9,6 +9,7 @@ const groups = [
   ['Std.Db.Protocol', 'Std.Db.Query', 'Std.Http.Server.Reply', 'Std.Http.Server.Security',
     'Std.Http.Server.Resilience', 'Std.App.Otlp'],
   ['Std.Db.Session', 'Std.Db.Query.Shape', 'Std.Http.Server.Route'],
+  ['Std.Db.Admission'],
   ['Std.Db', 'Std.App.Problem', 'Std.Http.Server.Stream'],
   ['Std.Db.ConnectionString', 'Std.Db.Migrate', 'Std.Db.Store', 'Std.Http.Server',
     'Std.Http.Server.Guard', 'Std.Http.Server.Socket', 'Std.Http.Server.Lambda', 'Std.App.Idempotency'],

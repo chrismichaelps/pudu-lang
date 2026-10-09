@@ -45,3 +45,9 @@ Resolved Grill Log: the fixture checks the success, override, and cross-trait is
 ## Referenced by
 
 [[Doc Index]] · [[Doc Search]] · [[Doc Json]] · [[Doc Site]]
+
+## Derive index contract (#458)
+
+The checked program graph must retain public Record and Sum headers, private strategies, trait applications, declaration and member comment boundaries, distinct spans and full rendered headers. Strategies carry no callable scheme and are excluded from shape search and binding completions; hover and outline inspection retain them.
+
+Resolved Grill Log: assertions exercise graph compilation, so testing an isolated index cannot conceal earlier elaboration loss. [[Derive Index Output Gate]] independently checks actual command output.

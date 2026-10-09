@@ -22,7 +22,6 @@ module Pudu.Eval.Call
 
 import Data.Map.Strict (Map)
 import Data.Text (Text)
-import Data.Char (isUpper)
 import qualified Data.Text as Text
 import Pudu.Eval.Builtin
   ( callArrayMethod
@@ -53,7 +52,7 @@ import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
 import Pudu.Eval.Call.Argument (argumentOf, receiverOf)
 import Pudu.Eval.Call.Needs (CallNeeds (..))
 import Pudu.Eval.Call.Path
-  ( flattenPath
+  ( qualifiedPath
   , lastPathSegment
   , pathValue
   , qualifiedCallee
@@ -138,13 +137,15 @@ evaluateCall needs spanValue callee arguments = do
       {-| The callee under a type application is read as an ordinary expression
           rather than as a callee, because a qualified name is what carries type
           arguments and reading it as a path is what resolves it. -}
-      -- Witnesses are built only for a callee that binds them.
       let chosen = case locatedValue callee of
             TypeApplication _ written -> mapM witnessOf written
             _ -> pure []
       qualified <- qualifiedCallee inner values
+      ordinaryTarget <- case locatedValue inner of
+        MemberExpression target _ -> not <$> qualifiedPath (locatedValue target)
+        _ -> pure False
       case (qualified, locatedValue inner) of
-        (Nothing, MemberExpression target (Located _ member)) | not (isPath target) -> do
+        (Nothing, MemberExpression target (Located _ member)) | ordinaryTarget -> do
           (receiverPlace, receiver) <- receiverOf needs target
           selected <- chosen
           callMemberSelecting (selectTypes selected) needs spanValue (locatedSpan inner)
@@ -168,13 +169,6 @@ evaluateCall needs spanValue callee arguments = do
           _ -> do
             target <- evaluateCallee needs callee
             dispatchCall needs spanValue lent target values
-
-{-| A callee's target that names a type or module rather than a value: the
-    leading segment of a written path, capitalised as nominals are. -}
-isPath :: Located Expression -> Bool
-isPath (Located _ expression) = case flattenPath expression of
-  Just (first : _) | Just (initial, _) <- Text.uncons first -> isUpper initial
-  _ -> False
 
 {-| A method called on a receiver already evaluated, with its arguments: an
     implementation written for the receiver's type, else the member the value

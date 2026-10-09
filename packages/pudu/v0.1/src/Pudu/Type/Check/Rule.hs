@@ -16,13 +16,14 @@ module Pudu.Type.Check.Rule
   , nameType
   , namedVariantAsValue
   , qualifiedMemberType
+  , localValueHead
   , selfName
   , tryType
   , typesNamingModules
   , unaryType
   ) where
 
-import Control.Monad (unless, when)
+import Control.Monad (foldM, unless, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -30,6 +31,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.FloatLiteral
   ( ParsedFloat (..), floatWidthType, parseFloatLiteral )
 import Pudu.Source (Span)
+import Pudu.Frontend.Syntax.Located (locatedValue)
 import Pudu.Semantic.Prelude (preludeTypeNames, preludeValueNames)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerKindName, integerSuffixType, parseIntegerLiteral )
@@ -54,6 +56,7 @@ import Pudu.Type.Env
   , lookupField
   , isMethodKey
   , lookupName
+  , lookupLocalName
   , lookupVariantFields
   , qualifiesSomething
   , lookupTypeParams
@@ -126,7 +129,16 @@ literalType spanValue literal = case literal of
     An undotted miss stays silent: resolution reports those as `E2010`, and
     saying it twice would be two diagnostics for one mistake. -}
 nameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
-nameType spanValue names = do
+nameType spanValue names@(_ NonEmpty.:| []) = namespaceNameType spanValue names
+nameType spanValue names@(first NonEmpty.:| remaining) = do
+  local <- lookupLocalName first
+  case (local, remaining) of
+    (Just scheme, _ : _) -> instantiate spanValue scheme >>= \value ->
+      foldM (memberType spanValue) value remaining
+    _ -> namespaceNameType spanValue names
+
+namespaceNameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
+namespaceNameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
   found <- lookupName written
   named <- namedVariantAsValue spanValue (NonEmpty.last names)
@@ -157,7 +169,19 @@ nameType spanValue names = do
     export is the mistake — reported here rather than left to become an
     `undefined name` at run time naming the alias instead of the member. -}
 qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
-qualifiedMemberType declared spanValue target member = case target of
+qualifiedMemberType declared spanValue target member = do
+  local <- localValueHead target
+  if local then pure Nothing else namespaceMemberType declared spanValue target member
+
+{-| Only nested frames establish value shadowing; shared bare exports do not. -}
+localValueHead :: Tree.Expression -> Checker Bool
+localValueHead expression = case expression of
+  Tree.NameExpression (first NonEmpty.:| _) -> (/= Nothing) <$> lookupLocalName first
+  Tree.MemberExpression target _ -> localValueHead (locatedValue target)
+  _ -> pure False
+
+namespaceMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
+namespaceMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
     found <- lookupName (owner <> "." <> member)

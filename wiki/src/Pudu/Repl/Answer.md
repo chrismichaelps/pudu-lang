@@ -90,3 +90,9 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 ## Referenced by
 
 [[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[2026-08-31-static-repl-inspection]]
+
+## Derive index contract (#458)
+
+Module listings include a Derives group whose entries use the shared declaration renderer, preserving shape and parameter information.
+
+Resolved Grill Log: strategies are listed independently of ordinary trait and callable entries.

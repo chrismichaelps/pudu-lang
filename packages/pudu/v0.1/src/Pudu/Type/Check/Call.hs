@@ -43,6 +43,7 @@ import Pudu.Type.Check.Rule
   , memberType
   , namedVariantAsValue
   , qualifiedMemberType
+  , localValueHead
   )
 import Pudu.Type.Check.Method
   ( methodScheme
@@ -168,7 +169,12 @@ selectedStaticCallee declared rigid at expression written = case expression of
     declaration and an imported one are reached the same way. -}
 qualifiedByName
   :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
-qualifiedByName declared spanValue target member = case target of
+qualifiedByName declared spanValue target member = do
+  local <- localValueHead target
+  if local then pure Nothing else qualifiedByType declared spanValue target member
+
+qualifiedByType :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
+qualifiedByType declared spanValue target member = case target of
   NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
     Nothing -> pure Nothing
     Just identity -> do
@@ -228,7 +234,9 @@ traitQualifiedCall checker declared rigid (Located calleeSpan callee) arguments 
   (MemberExpression target member, receiver : rest)
     | Just traitIdentity <- namedType (locatedValue target)
     , Set.member traitIdentity (declaredTraitNames declared) -> do
-      declaredMember <- lookupName (nominalKey traitIdentity <> "." <> locatedValue member)
+      local <- localValueHead (locatedValue target)
+      declaredMember <- if local then pure Nothing else
+        lookupName (nominalKey traitIdentity <> "." <> locatedValue member)
       -- Only a member taking `self` has a receiver to dispatch on; a static
       -- member's first argument is ordinary data, so its owner is inferred.
       if not (maybe False (takesSelf . schemeType) declaredMember) then pure Nothing else do
