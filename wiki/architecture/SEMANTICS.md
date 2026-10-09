@@ -71,6 +71,7 @@ Supporting judgements:
 - A value expression must resolve to a value binding. Type-namespace fallback exists only while
   resolving a constructor or qualified member path; a bare or called type name reports `E2010`
   before typing, and a non-variant member through a type reports `E3034` during typing.
+- A module qualifier names a namespace and has no runtime value. Bare value use reports E2010; selected exported values and ordinary lexical shadows retain their value identity.
 - Imports never re-export implicitly.
 - Ambiguous unqualified references are errors with related spans for every candidate.
 - Trait method lookup considers inherent methods first, then in-scope traits; multiple applicable trait methods require qualification.
