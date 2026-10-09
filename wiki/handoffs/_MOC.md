@@ -170,3 +170,5 @@ tags: [moc, handoff]
 - [[Database Mutex Delivery]] — finite local client admission and recursive refusal.
 
 - [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.
+
+- [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).

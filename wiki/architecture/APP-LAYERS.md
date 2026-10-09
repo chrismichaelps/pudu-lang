@@ -18,17 +18,18 @@ what a module may depend on. A graph's computed depth cannot authorize an upward
 | 3 | Database query and frame construction; response and security values; trace delivery. |
 | 4 | Pure Database authentication challenge admission. |
 | 5 | Database session and query shape; routing. |
-| 6 | Database pool; application problems and streamed replies. |
-| 7 | Database migration and storage composition; server and middleware. |
-| 8 | Concrete database connectors. |
-| 9 | Application resource and request integration. |
-| 10 | Application hosting composition. |
+| 6 | Database capacity admission policy. |
+| 7 | Database pool; application problems and streamed replies. |
+| 8 | Database migration and storage composition; server and middleware. |
+| 9 | Concrete database connectors. |
+| 10 | Application resource and request integration. |
+| 11 | Application hosting composition. |
 
 Every specialized module has an explicit catalog entry. A new application, database or server
 module without an entry fails validation. Specialized imports descend strictly; imports among
 ordinary foundation modules may remain within layer zero, while their cycles remain forbidden.
 Foundation dependencies reachable from the framework cannot import specialized services.
-The watched-run refresh adapter planned in issue #448 belongs to layer nine.
+The application reload adapter belongs to layer ten.
 
 The gate scans all shipped declarations to validate identities, paths, missing imports and cycles.
 Layer enforcement uses the complete transitive closure rooted in application, database and server
