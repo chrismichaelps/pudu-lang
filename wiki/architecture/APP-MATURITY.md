@@ -73,3 +73,5 @@ Existing feature availability and passing fixtures do not establish production r
 ## Referenced by
 
 [[architecture/_MOC]] · [[Std App]] · [[Std App Database]] · [[Std Db Driver]] · [[2026-10-07-app-maturity]]
+
+Completed scope guards retained two registrations per call until evaluation teardown. [[Database Scope Retirement Delivery]] now revokes, closes admission, joins private-gate owners and retires the cell. The actual 1,000-scope regression changes from 1,000 retained mutexes and cells each to zero before teardown in both evaluators; successful and failed outcomes and retained-handle expiry remain exact. Callback abort cleanup remains an open lifetime boundary.

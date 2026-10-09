@@ -219,6 +219,7 @@ data Builtin
   | ForgetThreadBuiltin
   | ChannelPullWithinBuiltin
   | MutexAcquireWithinBuiltin
+  | MutexCloseBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -317,6 +318,7 @@ builtinName value = case value of
   CellSwapBuiltin -> "cellSwap"
   CellDisposeBuiltin -> "cellDispose"
   MutexDisposeBuiltin -> "mutexDispose"
+  MutexCloseBuiltin -> "mutexClose"
   ForgetThreadBuiltin -> "forgetThread"
   SecureBytesBuiltin -> "secureRandomBytes"
   DesktopOpenBuiltin -> "desktopOpen"

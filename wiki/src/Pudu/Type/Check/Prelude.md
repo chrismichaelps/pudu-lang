@@ -279,3 +279,7 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin(Int, Int) -> Result[Bool, Str] is a monomorphic signature. Resolved Grill Log (#476): the boolean distinguishes admission from expiry without altering existing effects. This closed signature table has a bounded size exception at 513 lines; no checking or lifecycle policy enters it.
+
+## Joined scope retirement (#480)
+
+Declare mutexClose(Int) -> Result[(), Str] alongside synchronization effects. Resolved Grill Log: preserve existing schemes; the closed signature table has a bounded exception at 514 lines with no lifecycle logic.

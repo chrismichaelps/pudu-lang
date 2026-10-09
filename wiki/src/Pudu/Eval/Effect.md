@@ -117,3 +117,7 @@ constant folding nor confined evaluation can bypass the filesystem boundary.
 
 mutexAcquireWithin dispatches two mathematical integers to [[Eval Concurrent]] and wraps its boolean result. Constant evaluation refuses it with E7009. The effect list installs it automatically; [[Eval Confinement]] admits evaluation-owned synchronization.
 Resolved Grill Log: retain the existing arity and packed tags. This closed dispatch table has a bounded size exception at 748 lines; only registration and one delegation change here, with lifecycle policy kept in the coordinator. A dispatch extraction requires its own cohesive phase contract. Synchronous failures are projected; interruption remains a control signal.
+
+## Joined scope retirement (#480)
+
+mutexClose dispatches one mathematical token through the ordinary effect boundary and wraps Result[(), Str]. Constant evaluation refuses E7009; interruption remains a control signal. Resolved Grill Log: this closed delegation table has a bounded exception at 751 lines; only registration and delegation enter it, with closure policy owned by the coordinator.

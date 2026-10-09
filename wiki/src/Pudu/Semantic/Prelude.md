@@ -237,3 +237,7 @@ by name. Preserve persistence, key representatives, duplicate counts, checked In
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
 
 mutexAcquireWithin is discoverable as an effect name. Resolved Grill Log (#476): this list owns names only; admission and signatures retain their phase owners.
+
+## Joined scope retirement (#480)
+
+Register mutexClose as an ordinary primitive value name. Resolved Grill Log: naming owns neither signature nor lifecycle policy.

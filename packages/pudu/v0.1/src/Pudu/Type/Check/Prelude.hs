@@ -452,6 +452,7 @@ effectSignatures =
   , ("cellOpen", polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   , ("cellDispose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("mutexDispose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("mutexClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("forgetThread", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("cellGet", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (RigidType "T"))))
   , ("cellSwap", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf (RigidType "T"))))
