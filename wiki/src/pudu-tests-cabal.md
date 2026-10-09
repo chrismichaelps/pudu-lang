@@ -26,7 +26,7 @@ Separating this package makes the compiler's source distribution self-contained:
 
 - The test package declares no library or executable shipped to users.
 - Test sources remain single-copy under `test/`; the package layout changes, not test behavior.
-- The suite depends on `pudu == 0.1.2` so it cannot silently validate a different compiler version.
+- The suite depends on `pudu == 0.1.3` so it cannot silently validate a different compiler version.
 - The native C++ fixture remains test-only and uses the same platform export flags.
 - [[Pudu CLI Init Spec]] is registered explicitly and uses `temporary` for isolated filesystem
   evidence and `filepath` for portable project paths.
@@ -107,3 +107,5 @@ Register [[Module Qualifier Spec]] explicitly. Resolved Grill Log: isolated/load
 Register Qualified Shadow Spec with the existing test dependencies. Resolved Grill Log: complete loaded and isolated lexical evidence must compile and execute in the repository suite.
 
 Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
+
+Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.

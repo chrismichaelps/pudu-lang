@@ -31,6 +31,8 @@ modules and imports that fail the explicit direction policy. Sort reports and fi
 
 [[Application Layer Gate]] · [[Application Layer Tests]] · [[Application Dependency Layers]]
 
+Classify [[Std Db Challenge]] above wire preparation and below [[Std Db Session]]. Resolved Grill Log: its byte/text admission depends only on foundation modules and the existing protocol reader.
+
 ## Bounded pool admission (#468)
 
 [[Std Db Admission]] occupies a dedicated layer between sessions and pool ownership. Higher architectural layers shift together, preserving strict descending imports. Classification remains explicit and cannot be inferred from existing source edges.

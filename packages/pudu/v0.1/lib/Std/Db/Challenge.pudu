@@ -1,0 +1,103 @@
+module Std.Db.Challenge
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Result as Result
+
+/// Maximum authentication payload size, including its phase word.
+export const PAYLOAD_BYTES: Int = 8192
+
+/// Maximum server-selected work admitted before deriving an authentication key.
+export const MAX_ROUNDS: Int = 1000000
+
+/// Admitted first-phase data with the exact text bound into the proof.
+export type First = { text: Str, nonce: Str, salt: Bytes, rounds: Int }
+
+/// Validate a complete first phase before performing any key derivation.
+export fn first(payload: &Bytes, clientNonce: Str) -> Result[First, Str] {
+  let text = phase(payload, 11) ?
+  let fields = attributes(text) ?
+  if fields.length() < 3 || !fields[0].startsWith("r=") ||
+  !fields[1].startsWith("s=") || !fields[2].startsWith("i=") {
+    return Err("the challenge must begin with nonce, salt and rounds")
+  }
+  let nonce = fields[0].drop(2)
+  if clientNonce.isEmpty() || !nonce.startsWith(clientNonce) || nonce.length() <= clientNonce.length() {
+    return Err("the server's nonce does not extend the one sent")
+  }
+  for letter in nonce.chars() {
+    if letter.code() < 33 || letter.code() > 126 || letter == ',' {
+      return Err("the challenge nonce is not printable")
+    }
+  }
+  let salt = decoded(fields[1].drop(2)) ?
+  if salt.isEmpty() { return Err("the challenge salt is empty") }
+  let rounds = iterations(fields[2].drop(2)) ?
+  Ok(First{text: text, nonce: nonce, salt: salt, rounds: rounds})
+}
+
+/// Decode an admitted final proof for constant-time byte comparison.
+export fn signature(payload: &Bytes) -> Result[Bytes, Str] {
+  let fields = attributes(phase(payload, 12) ?) ?
+  if fields[0].startsWith("e=") { return Err("the server refused the authentication proof") }
+  if !fields[0].startsWith("v=") { return Err("the challenge carried no server proof") }
+  for field in fields {
+    if field.startsWith("e=") { return Err("the challenge carries conflicting proof results") }
+  }
+  let proof = decoded(fields[0].drop(2)) ?
+  if proof.length() != 32 { return Err("the server proof must contain 32 bytes") }
+  Ok(proof)
+}
+
+fn phase(payload: &Bytes, expected: Int) -> Result[Str, Str] {
+  if payload.length() > PAYLOAD_BYTES { return Err("the challenge exceeds its byte budget") }
+  let kind = Result.mapErr(Wire.authenticationKind(payload), fn(_problem: Wire.ProtocolError) -> Str {
+      "the challenge phase is truncated"
+    }) ?
+  if kind != expected { return Err("the challenge has an unexpected phase") }
+  match payload.drop(4).toText() {
+    case None => Err("the challenge text is malformed")
+    case Some(text) => Ok(text)
+  }
+}
+
+fn attributes(text: Str) -> Result[Array[Str], Str] {
+  let fields = text.split(",")
+  var seen: Array[Str] = []
+  for field in fields {
+    if field.length() < 3 || field[1] != '=' || field.contains("\0") {
+      return Err("the challenge attribute is malformed")
+    }
+    let key = field.take(1)
+    let letter = field[0].code()
+    if !((letter >= 65 && letter <= 90) || (letter >= 97 && letter <= 122)) {
+      return Err("the challenge attribute name is malformed")
+    }
+    if seen.contains(key) { return Err("the challenge repeats an attribute") }
+    if key == "m" { return Err("the challenge requires an unsupported extension") }
+    seen = seen.push(key)
+  }
+  Ok(fields)
+}
+
+fn iterations(text: Str) -> Result[Int, Str] {
+  if text.isEmpty() || text[0] < '1' || text[0] > '9' {
+    return Err("the challenge rounds must be a positive decimal number")
+  }
+  var count = 0
+  for letter in text.chars() {
+    if letter < '0' || letter > '9' { return Err("the challenge rounds must be a positive decimal number") }
+    let digit = letter.code() - 48
+    if count > (MAX_ROUNDS - digit) / 10 { return Err("the challenge rounds exceed their work budget") }
+    count = count * 10 + digit
+  }
+  Ok(count)
+}
+
+fn decoded(text: Str) -> Result[Bytes, Str] {
+  let bytes = Result.mapErr(ByteSeq.decodeBase64(text), fn(_problem: ByteSeq.BytesError) -> Str {
+      "the challenge byte encoding is malformed"
+    }) ?
+  if ByteSeq.encodeBase64(&bytes) != text { return Err("the challenge byte encoding is not canonical") }
+  Ok(bytes)
+}

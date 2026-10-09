@@ -8,6 +8,7 @@ const groups = [
   ].map(name => `Std.App.${name}`)],
   ['Std.Db.Protocol', 'Std.Db.Query', 'Std.Http.Server.Reply', 'Std.Http.Server.Security',
     'Std.Http.Server.Resilience', 'Std.App.Otlp'],
+  ['Std.Db.Challenge'],
   ['Std.Db.Session', 'Std.Db.Query.Shape', 'Std.Http.Server.Route'],
   ['Std.Db.Admission'],
   ['Std.Db', 'Std.App.Problem', 'Std.Http.Server.Stream'],

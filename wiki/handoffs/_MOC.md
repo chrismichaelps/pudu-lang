@@ -168,3 +168,5 @@ tags: [moc, handoff]
 - [[Qualified Shadow Delivery]] — issue #471 lexical qualification across typing and execution.
 
 - [[Database Mutex Delivery]] — finite local client admission and recursive refusal.
+
+- [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.

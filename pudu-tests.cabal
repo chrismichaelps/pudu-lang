@@ -70,6 +70,7 @@ test-suite pudu-test
     Pudu.Lsp.SchedulerSpec
     Pudu.Compiler.LiteralsSpec
     Pudu.Compiler.ProgramSpec
+    Pudu.Compiler.Program.AuthenticationSpec
     Pudu.Compiler.Program.Common
     Pudu.Compiler.Program.CacheSpec
     Pudu.Compiler.Program.GraphSpec

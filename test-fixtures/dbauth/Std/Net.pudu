@@ -1,0 +1,105 @@
+module Std.Net
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+export type State = { pending: Bytes, mode: Str, stage: Int, first: Str, nonce: Str,
+  proofs: Int, requests: Array[Int], closed: Bool }
+
+export fn fake(mode: Str) -> Connection {
+  let holder = Sync.cell(State{pending: bytesOf([]), mode: mode, stage: 0, first: "", nonce: "",
+      proofs: 0, requests: [], closed: false })
+  Connection{token: holder.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let holder: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&holder), failed)
+}
+
+fn store(connection: &Connection, next: State) -> Result[(), NetError] {
+  let holder: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&holder, next), failed)
+}
+
+export fn connectWithin(_host: Str, token: Int, _wait: Int) -> Result[Connection, NetError] {
+  let connection = Connection{token: token}
+  state(&connection) ?
+  Ok(connection)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  if held.mode == "deadline" && held.stage == 2 && held.requests.length() == 3 {
+    let _paused = sleepMillis(_wait + 5)
+  }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length()), requests: held.requests.push(count)}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  if held.stage == 0 {
+    return store(connection, State{..held, stage: 1,
+        pending: reply(10, "SCRAM-SHA-256\0\0") })
+  }
+  if held.stage == 1 {
+    let clientFirst = Option.unwrapOr(bytes.drop(23).toText(), "")
+    if !clientFirst.startsWith("n,,n=,r=") { return Err(Other("unexpected client opening")) }
+    let clientNonce = clientFirst.drop(8)
+    let nonce = if held.mode == "nonce" { clientNonce } else { clientNonce + "server" }
+    let rounds = match held.mode {
+      case "malformed" => "wrong"
+      case "zero" => "0"
+      case "excess" => "10000001"
+      case "overflow" => "9".repeat(100)
+      case _ => "4096"
+    }
+    var text = "r=" + nonce + ",s=c2FsdA==,i=" + rounds
+    if held.mode == "valid-boundary" {
+      text = text + ",z=" + "x".repeat(8192 - 4 - text.toBytes().length() - 3)
+    }
+    if held.mode == "duplicate" { text = text + ",i=4096" }
+    if held.mode == "oversized" { text = "x".repeat(8193) }
+    let kind: UInt32 = if held.mode == "phase" { 12 } else { 11 }
+    return store(connection, State{..held, stage: 2, first: text, nonce: nonce, pending: reply(kind, text)})
+  }
+  if held.stage == 2 {
+    let finalBare = "c=biws,r=" + held.nonce
+    let firstBare = "n=,r=" + held.nonce.take(held.nonce.length() - 6)
+    let message = (firstBare + "," + held.first + "," + finalBare).toBytes()
+    let salted = deriveKey("pencil".toBytes(), "salt".toBytes(), 4096, 32)
+    let clientKey = hmacSha256Of(salted, "Client Key".toBytes())
+    let proof = ByteSeq.xorWith(&clientKey, &hmacSha256Of(sha256Of(clientKey), message))
+    if bytes.drop(5) != (finalBare + ",p=" + ByteSeq.encodeBase64(&proof)).toBytes() {
+      return Err(Other("incorrect client proof"))
+    }
+    let signature = hmacSha256Of(hmacSha256Of(salted, "Server Key".toBytes()), message)
+    let text = if held.mode == "proof" { "v=" + ByteSeq.encodeBase64(&bytesOf([])) }
+      else if held.mode == "mismatch" { "v=" + ByteSeq.encodeBase64(&ByteSeq.repeat(&bytesOf([0u8]), 32)) }
+      else { "v=" + ByteSeq.encodeBase64(&signature) }
+    let finalKind: UInt32 = if held.mode == "final-phase" { 11 } else { 12 }
+    let response = reply(finalKind, text).concat(reply(0, "")).concat(Wire.frame("Z", &bytesOf([73u8])))
+    return store(connection, State{..held, stage: 3, proofs: held.proofs + 1, pending: response})
+  }
+  Ok(())
+}
+
+fn reply(kind: UInt32, text: Str) -> Bytes {
+  Wire.frame("R", &ByteSeq.putU32Be(kind).concat(text.toBytes()))
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

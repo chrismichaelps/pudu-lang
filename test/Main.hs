@@ -28,6 +28,7 @@ import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
+import Pudu.Compiler.Program.AuthenticationSpec (authenticationProperties)
 import Pudu.Cli.InitSpec (initProperties)
 import Pudu.PackageSpec (packageProperties)
 import Pudu.Cli.LintSpec (lintCommandProperties)
@@ -112,7 +113,7 @@ main = do
   lspOutcomes <- traverse (uncurry check) (serverProperties <> implMemberProperties <> diagnosticsProperties <> methodDefinitionProperties <> deriveToolingProperties)
   schedulerOutcomes <- traverse (uncurry check) schedulerProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
-  programOutcomes <- traverse (uncurry check) programProperties
+  programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
