@@ -50,3 +50,9 @@ importedEntry  :: Analysis -> ExportedName -> Maybe DocEntry
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Definition]] · [[Lsp Hover]]
+
+## Derive index contract (#458)
+
+Imported declaration lookup excludes strategy headers when selecting a documented symbol identity.
+
+Resolved Grill Log: a strategy sharing its trait name cannot displace that trait declaration.

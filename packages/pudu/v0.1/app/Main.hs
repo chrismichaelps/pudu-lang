@@ -69,11 +69,11 @@ import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntryFolded, evaluateProgramTalliedFolded)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value (Value (..))
-import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
+import Pudu.Doc (DeriveDoc (..), DocEntry (..), DocIndex, DocKind (..), indexEntries, renderEntryLines)
 import Pudu.Derive.Expand (expansionText)
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Server (runServer)
-import Pudu.Doc.Json (encodeIndex, escapeJson)
+import Pudu.Doc.Json (encodeEntry, encodeIndex, escapeJson)
 import Pudu.Semantic (Resolution (..), Symbol (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Doc.Search (Match (..), searchText)
@@ -1246,5 +1246,14 @@ apiPaths paths = do
             , Just resolution <- [compileResolution compiled]
             , symbol <- resolutionExports resolution
             ]
+          strategies =
+            [ encodeEntry entry
+            | program <- programs
+            , Just name <- [programRoot program]
+            , entry <- indexEntries (programDocs program)
+            , docModule entry == moduleNameText name
+            , DocDerive metadata <- [docKind entry]
+            , docDeriveExported metadata
+            ]
       TextIO.putStrLn ("{\"version\":\"" <> versionText <> "\",\"exports\":["
-        <> Text.intercalate "," entries <> "]}")
+        <> Text.intercalate "," (entries <> strategies) <> "]}")

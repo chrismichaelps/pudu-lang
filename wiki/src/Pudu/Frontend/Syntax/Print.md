@@ -43,3 +43,9 @@ qualification.
 ## References
 
 Referenced by [[Derive Expansion Output]] · [[src/Pudu/Frontend/Syntax/_MOC]].
+
+## Derive index contract (#458)
+
+`printType :: ModuleName -> Located TypeSyntax -> Text` exposes the existing total type renderer to [[Doc Index]], preserving trait arguments and qualified paths in strategy headers.
+
+Resolved Grill Log: reuse one type renderer rather than reconstructing declaration types in consumers.

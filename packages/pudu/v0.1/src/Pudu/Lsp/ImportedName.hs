@@ -76,6 +76,7 @@ importedEntry value exported =
     ]
  where
   isMember kind = case kind of
+    DocDerive _ -> True
     DocMethod _ -> True
     DocTraitMethod _ -> True
     _ -> False

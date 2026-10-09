@@ -7,6 +7,7 @@
     Layout is left to the formatter. -}
 module Pudu.Frontend.Syntax.Print
   ( printImpl
+  , printType
   ) where
 
 import qualified Data.List as List
@@ -70,6 +71,9 @@ constraints home written = " where " <> commaSeparated (map (one . locatedValue)
 bounds :: Home -> [Located TypeSyntax] -> Text
 bounds _ [] = ""
 bounds home written = ": " <> Text.intercalate " + " (map (typeText home) written)
+
+printType :: Home -> Located TypeSyntax -> Text
+printType = typeText
 
 typeText :: Home -> Located TypeSyntax -> Text
 typeText home (Located _ written) = case written of

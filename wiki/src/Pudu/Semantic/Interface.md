@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Semantic/Interface.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Semantic/Interface.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Semantics]]"
@@ -92,3 +92,9 @@ DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, decl
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Compiler Program]] · [[Name Resolution]] · [[Resolve Context]] · [[Type Interface]]
+
+## Qualifier identity (#470)
+
+`ImportBinding` also records whether an authoritative binding is a module qualifier. `isolatedImportBindings` preserves alias/item spans and syntactically known qualifiers while selections remain opaque. Loaded missing interfaces retain unclassified recovery bindings; E2014/E2015 belongs to discovery. Selected exports are never qualifiers.
+
+Resolved Grill Log: share import binding projection with [[Name Resolution]] without erasing qualified declaration conflicts or admitting a namespace as a value. [[Scoped Import Design]] owns the distinction.

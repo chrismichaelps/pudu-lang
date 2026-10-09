@@ -2,6 +2,7 @@ module Std.Db
 
 import Std.Bytes as ByteSeq
 import Std.Channel as Channel
+import Std.Db.Admission as Admission
 import Std.Db.Driver as Driver
 import Std.Db.Protocol as Wire
 import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
@@ -402,8 +403,8 @@ export fn withSavepoint[T](
 /// A pool of open connections, shared between threads.
 ///
 /// The connections are held in a channel, which is what makes taking one wait
-/// rather than fail when they are all in use: a channel's receive already
-/// blocks until something is there, so the pool needs no waiting of its own.
+/// rather than fail when they are all in use. Atomic bounded receives transfer
+/// capacity without a separate waiting queue.
 /// It also means a pool cannot hand out more connections than it opened, which
 /// is the whole reason a database wants one.
 export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
@@ -443,6 +444,9 @@ export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbE
   }
 }
 
+/// The default time waiting for pool capacity; admitted work has its own lifetime.
+export const DEFAULT_POOL_WAIT_MILLISECONDS: Int = Admission.DEFAULT_WAIT_MILLISECONDS
+
 /// Take a connection, hand it to an action, and put it back however the action
 /// ended.
 ///
@@ -460,11 +464,17 @@ export fn withConnection[T](
   target: &Pool,
   action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
 ) -> Result[T, Session.DbError] {
-  let taken = Result.mapErr(Channel.receive(&target.ready), asChannel) ?
-  let slot = match taken {
-    case Some(found) => found
-    case None => { return Err(Closed) }
-  }
+  withConnectionWithin(target, DEFAULT_POOL_WAIT_MILLISECONDS, action)
+}
+
+/// Wait at most the given milliseconds for capacity; zero probes without waiting.
+/// Expiry invokes no action or reopening and leaves every pool slot untouched.
+export fn withConnectionWithin[T](
+  target: &Pool,
+  waitMillis: Int,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  let slot = Admission.takeWithin(&target.ready, waitMillis) ?
   match Sync.get(&target.closing) {
     case Err(problem) => {
       let failed: Result[T, Session.DbError] = Err(Other(show(problem)))

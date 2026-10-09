@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: REVIEW_PENDING
+status: MERGE_AUTHORIZED
 issue: 471
 aliases: [Qualified Shadow Delivery]
 tags: [imports, resolution]
@@ -21,7 +21,9 @@ Eight direct checks and eight runs prove expected results in both evaluators; in
 
 All 243 shipped library/example sources, formatting, command lint and diagnostic consistency pass. API coverage is 3628 of 3987 exports, above the 3598 floor, with no undocumented export. Five application graph regressions pass; 215 modules and 96 dependencies have no findings. The compiler source graph has 282 modules, 31 dependency layers and no missing internal edges or cycles. Owned mirrors now describe the actual shared module frame and current capability ownership. The author completed the local parity audit; independent semantic, implementation and vault-parity reviews remain pending.
 
-Exact next action: obtain independent semantic, implementation and vault-parity review of the draft #471 delivery before integration. Scoped import syntax remains separate; the broader application goal remains active.
+Delivery owner integration: the user authorized ordered integration into development using the already passing checks without waiting for refreshed runs. Ownership is limited to retaining both resolution test registrations and their mirrored documentation, handoff and maps. The conflict introduces no new language behavior. Both original property families and manifest entries remain registered. Independent approval is not claimed.
+
+Exact next action: merge the reconciled #473 head into development, then integrate #475. Scoped import syntax remains separate; the broader application goal remains active.
 
 ## Referenced by
 
