@@ -46,11 +46,11 @@ whole-query deadlines and aggregate row budgets remain separate work.
 
 ## Opening has a time limit
 
-`Config.connectMillis` bounds opening a connection from dialling through the end of authentication:
+`Config.connectMillis` sets one opening deadline from dialling through authentication:
 `connect` dials with `Net.connectWithin`, and every read until the server reports it is ready waits
 only for the time that remains. A host that drops packets and a server that accepts and then says
 nothing are each refused with `Connect("the database did not finish opening the connection within
-its time limit")`. The limit lives on the connection as a deadline that `connect` clears once the
+its time limit")`. Bounded derivation is checked before and after computation; it is not interrupted, so return may follow the deadline under computation or scheduling load. The limit lives on the connection as a deadline that `connect` clears once the
 connection is ready, so a query that legitimately runs long is never cut short; bounding a query is
 the server's `statement_timeout`. `config` defaults the limit to `DEFAULT_CONNECT_MILLISECONDS`, ten
 seconds. Against a local server that accepted and stayed silent, a 400 ms limit refused the
@@ -73,3 +73,9 @@ connection after 403 ms.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Db Protocol]] · [[Std Net]]
+
+## Bounded authentication admission (#474)
+
+Use [[Std Db Challenge]] before derivation and decode each phase through nextMessageLimited with an 8197-byte complete-frame cap. Prior bounded read-ahead may already contain following bytes; the phase cap refuses before additional body accumulation. First-phase refusals send no proof. Map pure redacted refusals to Auth. Compare admitted final proof bytes with constantTimeEqual. Check the opening deadline immediately before and after derivation, returning the existing Connect refusal when expired; computation itself is not interrupted. Failed opening retains the existing socket close path. No Config shape changes.
+
+Resolved Grill Log: malformed rounds never default or reach a runtime arithmetic/derivation refusal; challenge limits precede body accumulation and costly work. Protected transport, outer authentication state ordering and lease-cell retirement remain separate work.

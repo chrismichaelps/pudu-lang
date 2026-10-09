@@ -22,3 +22,5 @@ and complete-graph checks. Temporary invalid library roots exercise unsuccessful
 ## Referenced by
 
 [[Application Layer Model]] · [[Application Layer Gate]] · [[src/_MOC]]
+
+The challenge admission layer sits above wire preparation and below Session. Pin the resulting upward-edge diagnostic, including the hosting layer number. Resolved Grill Log: exact-output expectations change only with the inspected architectural catalog delta.

@@ -30,3 +30,5 @@ modules and imports that fail the explicit direction policy. Sort reports and fi
 ## Referenced by
 
 [[Application Layer Gate]] · [[Application Layer Tests]] · [[Application Dependency Layers]]
+
+Classify [[Std Db Challenge]] above wire preparation and below [[Std Db Session]]. Resolved Grill Log: its byte/text admission depends only on foundation modules and the existing protocol reader.

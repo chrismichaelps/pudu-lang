@@ -28,7 +28,7 @@ test('explicit layers reject upward edges and missing classification', () => {
   const valid = [node('Std.App', ['Std.App.Stage']), node('Std.App.Stage')];
   assert.deepEqual(analyze(valid).findings, []);
   assert.deepEqual(analyze([...valid, node('Std.Db.Driver', ['Std.App'])]).findings,
-    ['upward import: Std.Db.Driver [1] -> Std.App [9]']);
+    ['upward import: Std.Db.Driver [1] -> Std.App [10]']);
   assert.deepEqual(analyze([node('Std.App.NewService')]).findings, ['unclassified module: Std.App.NewService']);
   assert.deepEqual(analyze([node('Std.App', ['Std.Missing'])]).findings, ['missing import: Std.App -> Std.Missing']);
 });

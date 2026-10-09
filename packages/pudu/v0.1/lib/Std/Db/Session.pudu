@@ -1,6 +1,7 @@
 module Std.Db.Session
 
 import Std.Bytes as ByteSeq
+import Std.Db.Challenge as Challenge
 import Std.Db.Protocol as Wire
 import Std.Env as Env
 import Std.Net as Net
@@ -8,7 +9,6 @@ import Std.Option as Option
 import Std.Random as Random
 import Std.Result as Result
 import Std.Sync as Sync
-import Std.Text as Text
 
 /// Opening a connection and keeping it: the handshake, what the server asks
 /// for, and the messages that cross afterwards.
@@ -398,57 +398,42 @@ fn scram(start: Connection, settings: &Config) -> Result[Connection, DbError] {
   let firstBare = "n=,r=" + clientNonce
   write(&stream, &Wire.saslInitial("SCRAM-SHA-256", "n,," + firstBare)) ?
 
-  let continued = nextMessage(stream) ?
+  let continued = nextMessageLimited(stream, Challenge.PAYLOAD_BYTES + 5) ?
   stream = continued[1]
   if continued[0].kind == "E" { return Err(serverFailure(&continued[0].payload)) }
   if continued[0].kind != "R" { return Err(Auth("the server did not continue the challenge")) }
-  let serverFirst = textOf(&continued[0].payload.drop(4))
-  let salt = fieldIn(serverFirst, "s") ?
-  let rounds = fieldIn(serverFirst, "i") ?
-  let serverNonce = fieldIn(serverFirst, "r") ?
-  if !serverNonce.startsWith(clientNonce) {
-    return Err(Auth("the server's nonce does not extend the one sent"))
-  }
-
-  let saltBytes = Result.mapErr(ByteSeq.decodeBase64(salt), asBytes) ?
-  let iterations = Option.unwrapOr(Text.countOf(rounds), 4096)
-  let salted = deriveKey(settings.password.toBytes(), saltBytes, iterations, 32)
+  let admitted = Result.mapErr(Challenge.first(&continued[0].payload, clientNonce), asAuth) ?
+  openingLive(&stream) ?
+  let salted = deriveKey(settings.password.toBytes(), admitted.salt, admitted.rounds, 32)
+  openingLive(&stream) ?
   let clientKey = hmacSha256Of(salted, "Client Key".toBytes())
   let storedKey = sha256Of(clientKey)
-  let finalBare = "c=biws,r=" + serverNonce
-  let authMessage = (firstBare + "," + serverFirst + "," + finalBare).toBytes()
+  let finalBare = "c=biws,r=" + admitted.nonce
+  let authMessage = (firstBare + "," + admitted.text + "," + finalBare).toBytes()
   let clientSignature = hmacSha256Of(storedKey, authMessage)
   let proof = ByteSeq.xorWith(&clientKey, &clientSignature)
   write(&stream, &Wire.saslResponse(finalBare + ",p=" + ByteSeq.encodeBase64(&proof))) ?
 
-  let finished = nextMessage(stream) ?
+  let finished = nextMessageLimited(stream, Challenge.PAYLOAD_BYTES + 5) ?
   stream = finished[1]
   if finished[0].kind == "E" { return Err(serverFailure(&finished[0].payload)) }
   if finished[0].kind != "R" { return Err(Auth("the server did not finish the challenge")) }
-  let serverFinal = textOf(&finished[0].payload.drop(4))
-  let signature = fieldIn(serverFinal, "v") ?
+  let signature = Result.mapErr(Challenge.signature(&finished[0].payload), asAuth) ?
   let serverKey = hmacSha256Of(salted, "Server Key".toBytes())
   let expected = hmacSha256Of(serverKey, authMessage)
-  if ByteSeq.encodeBase64(&expected) != signature {
+  if !constantTimeEqual(expected, signature) {
     Err(Auth("the server did not prove it knows the password"))
   } else {
     Ok(stream)
   }
 }
 
-/// One field of the challenge's comma-separated text.
-fn fieldIn(source: Str, name: Str) -> Result[Str, DbError] {
-  var found: Option[Str] = None
-  for piece in source.split(",") {
-    if piece.startsWith(name + "=") && Option.isNone(&found) {
-      found = Some(piece.drop(name.length() + 1))
-    }
-  }
-  if let Some(carried) = found {
-    Ok(carried)
-  } else {
-    Err(Auth("the challenge carried no " + name))
-  }
+fn asAuth(problem: Str) -> DbError { Auth(problem) }
+
+fn openingLive(stream: &Connection) -> Result[(), DbError] {
+  if stream.deadline >= 0 && Env.elapsedMilliseconds() >= stream.deadline {
+    Err(Connect(OPENING_TIMED_OUT))
+  } else { Ok(()) }
 }
 
 /// Text the client contributes to the challenge, which must differ every time.
@@ -470,11 +455,7 @@ export fn close(stream: &Connection) -> Result[(), DbError] {
 
 fn asWire(problem: Wire.ProtocolError) -> DbError { Malformed(show(problem)) }
 
-fn asBytes(problem: ByteSeq.BytesError) -> DbError { Malformed(show(problem)) }
-
 /// A message carrying nothing, for a read that found none.
 export fn emptyMessage() -> Wire.Message {
   Wire.Message{kind: "?", payload: ByteSeq.empty()}
 }
-
-fn textOf(payload: &Bytes) -> Str { Option.unwrapOr(payload.toText(), "") }

@@ -158,3 +158,5 @@ tags: [moc, handoff]
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
+
+- [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.

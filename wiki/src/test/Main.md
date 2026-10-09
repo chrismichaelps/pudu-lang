@@ -80,3 +80,5 @@ Register [[Derive Graph Spec]] independently of kernel transformations and inclu
 its real loaded-program successes/refusals in aggregate exit status.
 
 Registers [[Lsp Impl Members Spec]] with the language-server properties.
+
+Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.

@@ -1,0 +1,98 @@
+module Main
+
+import Std.Bytes as ByteSeq
+import Std.Db.Challenge as Challenge
+import Std.Db.Session as Session
+import Std.Net as Net
+import Std.Result as Result
+
+fn require[T, E](answer: Result[T, E]) -> T {
+  match answer { case Ok(value) => value case Err(reason) => panic(show(reason)) }
+}
+fn check(holds: Bool, name: Str) -> () { if !holds { panic(name) } }
+fn payload(kind: UInt32, text: Str) -> Bytes { ByteSeq.putU32Be(kind).concat(text.toBytes()) }
+fn refused(text: Str) -> Bool { Result.isErr(&Challenge.first(&payload(11, text), "client")) }
+
+fn boundaries() -> () {
+  check(Challenge.PAYLOAD_BYTES == 8192 && Challenge.MAX_ROUNDS == 1000000, "declared work and byte budgets")
+  let prefix = "r=clientserver,s=c2FsdA==,i=1,z="
+  let boundary = prefix + "x".repeat(Challenge.PAYLOAD_BYTES - 4 - prefix.toBytes().length())
+  let admitted: Challenge.First = require(Challenge.first(&payload(11, boundary), "client"))
+  check(admitted.rounds == 1, "exact byte boundary admitted")
+  check(refused(boundary + "x"), "one byte beyond budget refused")
+
+  for rounds in ["1", "4096", "65536", "1000000"] {
+    let first = require(Challenge.first(&payload(11, "r=clientserver,s=c2FsdA==,i=" + rounds), "client"))
+    check(show(first.rounds) == rounds && first.salt == "salt".toBytes(), "admitted round boundary")
+  }
+  let extension = "r=clientserver,s=c2FsdA==,i=4096,z=é=x"
+  check(require(Challenge.first(&payload(11, extension), "client")).text == extension, "exact extension text")
+  for rounds in ["0", "-1", "+1", "01", " 1", "1 ", "1_000", "1.0", "wrong", "1000001", "10000001", "9".repeat(100)] {
+    check(refused("r=clientserver,s=c2FsdA==,i=" + rounds), "invalid rounds refused")
+  }
+  for text in ["", "r=clientserver,s=c2FsdA==", "s=c2FsdA==,r=clientserver,i=1",
+    "r=client,s=c2FsdA==,i=1", "r=other,s=c2FsdA==,i=1", "r=clienté,s=c2FsdA==,i=1",
+    "r=client server,s=c2FsdA==,i=1", "r=clientserver,s=wrong,i=1", "r=clientserver,s=,i=1",
+    "r=clientserver,s=c2FsdB==,i=1", "r=clientserver,s=c2FsdA==,i=1,i=2",
+    "r=clientserver,s=c2FsdA==,i=1,z=x,z=y", "m=required,r=clientserver,s=c2FsdA==,i=1",
+    "r=clientserver,s=c2FsdA==,i=1,zz=x", "r=clientserver,s=c2FsdA==,i=1,z=\0",
+    "r=clientserver,s=c2FsdA==,i=1,"] { check(refused(text), "malformed challenge refused") }
+  check(Challenge.first(&payload(11, "r=clientserver,s=c2FsdA==,i=0"), "client") ==
+    Err("the challenge rounds must be a positive decimal number"), "typed round refusal")
+  check(Challenge.first(&payload(11, "r=clientserver,s=c2FsdA==,i=1000001"), "client") ==
+    Err("the challenge rounds exceed their work budget"), "typed work refusal")
+  check(Result.isErr(&Challenge.first(&payload(12, "r=clientserver,s=c2FsdA==,i=1"), "client")), "phase refusal")
+  check(Result.isErr(&Challenge.first(&bytesOf([0u8, 0u8, 0u8]), "client")), "truncated phase")
+  check(Result.isErr(&Challenge.first(&bytesOf([0u8, 0u8, 0u8, 11u8, 255u8]), "client")), "invalid text")
+  check(Result.isErr(&Challenge.first(&payload(11, "x".repeat(8193)), "client")), "payload cap")
+  let proof = ByteSeq.repeat(&bytesOf([0u8]), 32)
+  let signature = "v=" + ByteSeq.encodeBase64(&proof)
+  check(require(Challenge.signature(&payload(12, signature + ",z=extension"))) == proof, "decoded proof")
+  for text in ["", "e=unknown", "v=wrong", "v=AA==", signature + ",v=AA==", signature + ",e=error"] {
+    check(Result.isErr(&Challenge.signature(&payload(12, text))), "invalid proof refused")
+  }
+  check(Result.isErr(&Challenge.signature(&payload(11, signature))), "final phase refusal")
+  check(Result.isErr(&Challenge.signature(&bytesOf([0u8, 0u8, 0u8, 12u8, 255u8]))), "invalid final text")
+  check(Result.isErr(&Challenge.signature(&payload(12, "x".repeat(8193)))), "final payload cap")
+  let nonce = "rOprNGfwEbeRWgbNEkqO"
+  let server = "r=" + nonce + "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096"
+  let first = require(Challenge.first(&payload(11, server), nonce))
+  let salted = deriveKey("pencil".toBytes(), first.salt, first.rounds, 32)
+  let message = ("n=user,r=" + nonce + "," + first.text + ",c=biws,r=" + first.nonce).toBytes()
+  let expected = hmacSha256Of(hmacSha256Of(salted, "Server Key".toBytes()), message)
+  check(ByteSeq.encodeBase64(&expected) == "6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=", "independent server proof vector")
+}
+
+fn exchange(mode: Str) -> () {
+  let socket = Net.fake(mode)
+  let base = Session.at(&Session.config("app", "user", "pencil"), "fixture", socket.token)
+  let settings = if mode == "deadline" { Session.Config{..base, connectMillis: 25} } else { base }
+  let answer = Session.connect(&settings)
+  let held = require(Net.state(&socket))
+  if mode == "valid" || mode == "valid-boundary" {
+    let opened = require(answer)
+    check(opened.deadline == -1 && held.proofs == 1 && !held.closed, "successful opening")
+    require(Session.close(&opened))
+  } else {
+    check(Result.isErr(&answer) && held.closed, "failed opening closes")
+    check(held.proofs == (if mode == "proof" || mode == "mismatch" || mode == "final-phase" { 1 } else { 0 }), "refused first phase sends no proof")
+    if mode == "malformed" || mode == "zero" {
+      check(answer == Err(Session.Auth("the challenge rounds must be a positive decimal number")), "session auth error")
+    }
+    if mode == "excess" || mode == "overflow" {
+      check(answer == Err(Session.Auth("the challenge rounds exceed their work budget")), "session work error")
+    }
+    if mode == "deadline" {
+      check(answer == Err(Session.Connect("the database did not finish opening the connection within its time limit")), "expired opening")
+    }
+    if mode == "oversized" { check(held.requests == [5, 65536, 5], "oversized body never read: " + show(held.requests)) }
+  }
+}
+
+export fn main() -> Int {
+  boundaries()
+  for mode in ["valid", "valid-boundary", "malformed", "zero", "excess", "overflow", "duplicate", "nonce", "phase", "oversized", "proof", "mismatch", "final-phase", "deadline"] {
+    exchange(mode)
+  }
+  0
+}

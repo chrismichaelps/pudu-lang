@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-08 — Bounded Database authentication (#474)
+
+- [[Std Db Challenge]] admits canonical phases, unique fields, nonce contribution and finite rounds before derivation; [[Std Db Session]] bounds challenge frames and compares decoded proof bytes.
+- [[Database Challenge Fixture]] covers exact byte/work boundaries, typed refusals, proof binding, deadlines and transport cleanup in both evaluators.
+- [[Application Dependency Layers]] classifies pure challenge admission below Session; [[Database Authentication Delivery]] records evidence and remaining production gaps.
+
 ## 2026-10-07 — Bundled environment ownership (#460)
 
 - [[Pudu CLI]] preserves the caller's environment and working directory while executing a bundle.
