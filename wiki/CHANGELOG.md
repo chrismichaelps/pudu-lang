@@ -11,6 +11,25 @@ tags: [changelog]
 - [[Database Challenge Fixture]] covers exact byte/work boundaries, typed refusals, proof binding, deadlines and transport cleanup in both evaluators.
 - [[Application Dependency Layers]] classifies pure challenge admission below Session; [[Database Authentication Delivery]] records evidence and remaining production gaps.
 
+## 2026-10-08 — Derive declaration output (#458)
+
+- [[Doc Index]] retains authored strategy headers with structured visibility and shape metadata.
+- [[Compiler Program]] keeps that projection in analysis products; [[Pudu CLI]] adds root public strategies to API output.
+- [[Derive Index Output Gate]] checks actual output, private boundaries and existing identities.
+
+## 2026-10-08 — Bounded database admission (#468)
+
+- [[Std Db Admission]] separates typed capacity expiry from closure and lost lending.
+- [[Std Db]] uses a finite default and explicit wait override without changing Pool shape.
+- [[Database Admission Fixture]] and graph refusal checks cover configuration, slot conservation and closure.
+
+## 2026-10-08 — Module qualifier value refusal (#470)
+
+- [[Semantic Interface]] distinguishes module qualifiers from selected values while retaining opaque missing-interface recovery.
+- [[Name Resolution]] shares import projection and checks field shorthand as a value; [[Resolve Context]] refuses bare namespaces by resolved identity while preserving reflection priority.
+- [[Resolve State]] owns pure invocation-local state. [[Module Qualifier Spec]] covers refusal diagnostics, selected and shadowed values, privacy and loaded execution.
+- [[Scoped Import Design]] records the proposed build-time block imports and repeated outer/inner binding behavior. New syntax and independent review remain pending.
+
 ## 2026-10-07 — Bundled environment ownership (#460)
 
 - [[Pudu CLI]] preserves the caller's environment and working directory while executing a bundle.
@@ -3887,3 +3906,6 @@ No builds, tests, reviews or measurements run.
 - [[Std Order]] and [[Std Num]] explain their explicit primitive leaf implementations while
   acknowledging Pudu aggregate deriving. Executable source and public identities are unchanged.
 - [[2026-10-07-derive-documentation]] records the focused generated-documentation validation.
+
+ - #471: honor local value heads before qualified typing, call dispatch and compile-time metadata; preserve type owners and existing generic restrictions. Actual warm-product, lexical, diagnostic, evaluator and packaged regressions plus all 605 suite groups pass. Independent reviews remain pending; block-local import syntax remains separate.
+ - #476: implement finite mutex admission, recursive ownership refusal and local Database wait overrides; full local gates pass, independent review pending.

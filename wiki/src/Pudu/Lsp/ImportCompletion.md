@@ -73,3 +73,9 @@ importQualifiers  :: Analysis -> Analysis -> [(Text, ModuleName)]
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Completion]] · [[Lsp Context]]
+
+## Derive index contract (#458)
+
+Strategy headers are excluded from import and module binding candidates; the trait declaration remains the ordinary importable identity.
+
+Resolved Grill Log: strategy metadata does not introduce duplicate bindings.

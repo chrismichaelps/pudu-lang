@@ -60,7 +60,7 @@ Direct structural encoding, with objects and arrays assembled by `Text.intercala
 
 ## Edge Cases
 
-- An entry with no signature encodes `null` for both the rendering and the structure, so a consumer
+- An ordinary entry with no signature encodes `null` for both the rendering and the structure, so a consumer
   never has to distinguish "absent" from "empty".
 
 ## Depth
@@ -81,3 +81,9 @@ DEPTH 0.30 (SHALLOW by intent). It is a serializer.
 Bound applications retain their existing JSON string shape at the protocol edge,
 rendered from the structural SigType bound representation. Resolved Grill Log:
 keep the existing consumer shape while preserving generic arguments internally.
+
+## Derive index contract (#458)
+
+Strategy entries have kind `derive`, a full declaration `signature`, null callable `shape`, and a dedicated `derive` object containing `trait`, `parameter`, `shape` and `exported`. All text uses the ordinary escaping boundary; existing entries retain their exact fields. [[Derive Index Output Gate]] exercises both command outputs.
+
+Resolved Grill Log: declaration metadata is structured separately from inferred callable types, preserving existing consumer shapes.

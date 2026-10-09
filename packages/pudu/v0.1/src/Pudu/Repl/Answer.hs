@@ -233,6 +233,7 @@ renderCategorizedModule modName entries = do
   renderGroup "Constants" [e | e <- entries, docKind e == DocConstant]
   renderGroup "Types" [e | e <- entries, docKind e == DocType]
   renderGroup "Traits" [e | e <- entries, docKind e == DocTrait]
+  renderGroup "Derives" [e | e <- entries, DocDerive _ <- [docKind e]]
   renderGroup "Functions" [e | e <- entries, isFuncKind (docKind e)]
   renderGroup "Foreign" [e | e <- entries, isForeignKind (docKind e)]
  where

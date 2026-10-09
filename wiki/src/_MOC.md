@@ -5,6 +5,10 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Derive Index Output Gate]] — checked strategy output and visibility.
+
+- [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
+
 - [[Static Collect Fixture]] · [[Static Collect Bind Fixture]] · [[Static Collect Local Fixture]] — generic static field selection.
 
 
@@ -192,4 +196,5 @@ tags: [moc, module]
 
 - [[Derive Expand Expected]]
 
+- [[Mutex Admission Fixture]] — real local Database contention and recovery.
 - [[Database Challenge Spec]] · [[Database Challenge Fixture]] · [[Database Challenge Transport]]

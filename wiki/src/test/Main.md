@@ -81,4 +81,16 @@ its real loaded-program successes/refusals in aggregate exit status.
 
 Registers [[Lsp Impl Members Spec]] with the language-server properties.
 
+Register [[Module Qualifier Spec]] beside resolution properties and include its outcomes in aggregate exit status. Resolved Grill Log: focused and full runs execute the same boundary properties.
+
+## Qualified shadow registration (#471)
+
+Register Qualified Shadow Spec beside resolution checks and aggregate every result. Resolved Grill Log: focused and complete runs execute the same lexical, loaded, diagnostic and evaluator regressions.
+
+## Ordered integration (#471)
+
+Register both Module Qualifier Spec and Qualified Shadow Spec in the same resolution result group. Resolved Grill Log: integrating earlier repairs retains both imports, both property collections, and aggregate failure propagation.
+
+Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
+
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.

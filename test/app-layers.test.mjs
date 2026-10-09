@@ -33,6 +33,15 @@ test('explicit layers reject upward edges and missing classification', () => {
   assert.deepEqual(analyze([node('Std.App', ['Std.Missing'])]).findings, ['missing import: Std.App -> Std.Missing']);
 });
 
+test('pool admission has an explicit descending boundary', () => {
+  assert.deepEqual(analyze([
+    node('Std.Db', ['Std.Db.Admission']), node('Std.Db.Admission', ['Std.Db.Session']),
+    node('Std.Db.Session', ['Std.Db.Protocol']), node('Std.Db.Protocol')
+  ]).findings, []);
+  assert.deepEqual(analyze([node('Std.Db.Admission', ['Std.Db']), node('Std.Db')]).findings,
+    ['upward import: Std.Db.Admission [5] -> Std.Db [6]']);
+});
+
 test('foundation closure cannot depend on specialized services', () => {
   const report = analyze([node('Std.App', ['Std.Core']), node('Std.Core', ['Std.Db.Driver']), node('Std.Db.Driver')]);
   assert.deepEqual(report.findings, ['upward import: Std.Core [0] -> Std.Db.Driver [1]']);

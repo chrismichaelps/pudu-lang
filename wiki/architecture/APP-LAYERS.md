@@ -28,7 +28,7 @@ Every specialized module has an explicit catalog entry. A new application, datab
 module without an entry fails validation. Specialized imports descend strictly; imports among
 ordinary foundation modules may remain within layer zero, while their cycles remain forbidden.
 Foundation dependencies reachable from the framework cannot import specialized services.
-The application reload adapter belongs to layer nine.
+The watched-run refresh adapter planned in issue #448 belongs to layer nine.
 
 The gate scans all shipped declarations to validate identities, paths, missing imports and cycles.
 Layer enforcement uses the complete transitive closure rooted in application, database and server

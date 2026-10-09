@@ -70,6 +70,7 @@ keptWhenConfined builtin = case builtin of
   ChannelFinishBuiltin -> True
   MutexOpenBuiltin -> True
   MutexAcquireBuiltin -> True
+  MutexAcquireWithinBuiltin -> True
   MutexReleaseBuiltin -> True
   CellOpenBuiltin -> True
   CellGetBuiltin -> True

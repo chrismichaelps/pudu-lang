@@ -63,7 +63,7 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 
 ## Negative Logic (Prohibited Paths)
 
-- No host exceptions escape. Every failure becomes a `Result` or an `E7xxx` diagnostic.
+- Synchronous failures become a Result or diagnostic; interruption remains a control signal.
 - No effect performed during constant folding, on any path.
 - No typing decisions.
 - Network connect/send/receive effects carry a millisecond operation timeout; negative retains the
@@ -112,3 +112,8 @@ constant folding nor confined evaluation can bypass the filesystem boundary.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]
+
+## Bounded mutex effect (#476)
+
+mutexAcquireWithin dispatches two mathematical integers to [[Eval Concurrent]] and wraps its boolean result. Constant evaluation refuses it with E7009. The effect list installs it automatically; [[Eval Confinement]] admits evaluation-owned synchronization.
+Resolved Grill Log: retain the existing arity and packed tags. This closed dispatch table has a bounded size exception at 748 lines; only registration and one delegation change here, with lifecycle policy kept in the coordinator. A dispatch extraction requires its own cohesive phase contract. Synchronous failures are projected; interruption remains a control signal.

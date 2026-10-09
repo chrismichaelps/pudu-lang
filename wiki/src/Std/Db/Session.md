@@ -79,3 +79,9 @@ connection after 403 ms.
 Use [[Std Db Challenge]] before derivation and decode each phase through nextMessageLimited with an 8197-byte complete-frame cap. Prior bounded read-ahead may already contain following bytes; the phase cap refuses before additional body accumulation. First-phase refusals send no proof. Map pure redacted refusals to Auth. Compare admitted final proof bytes with constantTimeEqual. Check the opening deadline immediately before and after derivation, returning the existing Connect refusal when expired; computation itself is not interrupted. Failed opening retains the existing socket close path. No Config shape changes.
 
 Resolved Grill Log: malformed rounds never default or reach a runtime arithmetic/derivation refusal; challenge limits precede body accumulation and costly work. Protected transport, outer authentication state ordering and lease-cell retirement remain separate work.
+
+## Bounded pool admission (#468)
+
+`DbError` adds `AdmissionTimedOut` for pool capacity expiry. It is distinct from a closed pool, expired lending, opening failure and command failure. Connection opening and message reading do not manufacture this cause. Existing exhaustive matches over this public sum must add the new case.
+
+Resolved Grill Log: a pool wait is a typed cause rather than a message-text convention. This additive public variant requires independent contract review.

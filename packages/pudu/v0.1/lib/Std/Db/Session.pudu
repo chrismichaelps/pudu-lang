@@ -34,6 +34,7 @@ export type DbError
   | Closed
   | Unsupported(Str)
   | Expired
+  | AdmissionTimedOut
   | Other(Str)
 
 /// Where a database is and who is asking.

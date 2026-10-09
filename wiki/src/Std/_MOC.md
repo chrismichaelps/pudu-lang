@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Db Admission]] — finite capacity wait below pool ownership.
+
 - [[Std Num]] · [[Std Order]] — primitive numeric and ordering capabilities.
 
 - [[Std App Reload]] — automatic watched application page refresh.

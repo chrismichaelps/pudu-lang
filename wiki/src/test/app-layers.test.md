@@ -23,4 +23,10 @@ and complete-graph checks. Temporary invalid library roots exercise unsuccessful
 
 [[Application Layer Model]] · [[Application Layer Gate]] · [[src/_MOC]]
 
+## Bounded pool admission (#468)
+
+A focused graph accepts pool → admission → session → protocol and rejects admission → pool. The hosting-layer diagnostic updates with the new explicit layer numbering.
+
+Resolved Grill Log: executable refusal demonstrates the new layer's direction, rather than relying on a clean current graph alone.
+
 The challenge admission layer sits above wire preparation and below Session. Pin the resulting upward-edge diagnostic, including the hosting layer number. Resolved Grill Log: exact-output expectations change only with the inspected architectural catalog delta.

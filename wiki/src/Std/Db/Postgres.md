@@ -21,3 +21,9 @@ Transaction callback entry applies the shared scope guard from [[Std Db Driver]]
 retained handles expire, and query and execute share exclusive command admission.
 
 [[src/Std/_MOC]] · [[Std App Database]] · [[Std Db]] · [[architecture/STDLIB]]
+
+## Bounded pool admission (#468)
+
+The default connector uses the ten-second capacity wait. `driverWithWait(waitMillis)` prepares a connector with an explicit admission limit; `connectWithWait(uri, size, waitMillis)` validates the same policy before parsing or opening. All query, execution and transaction borrows pass that limit through [[Std Db]]'s shared entry. Expiry maps to stable driver category `admission-timeout`; invalid limits map to `configuration`. [[Std App Database]] can use the prepared driver through its ordinary explicit selection seam.
+
+Resolved Grill Log: the setting bounds capacity waiting only and never interrupts an admitted callback or extends the connection-opening deadline.
