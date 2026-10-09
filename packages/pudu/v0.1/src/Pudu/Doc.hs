@@ -3,6 +3,10 @@ module Pudu.Doc
   ( DocEntry (..)
   , DocIndex (..)
   , DocKind (..)
+  , DeriveDoc (..)
+  , deriveSignature
+  , deriveShapeLabel
+  , entrySignature
   , buildIndex
   , buildIndexFrom
   , entriesFor
@@ -21,9 +25,12 @@ import qualified Data.Text as Text
 import Pudu.Doc.Signature (SigType (..), Signature (..), renderSignature, schemeSignature)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Frontend.Syntax.Print (printType)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Derive (..)
+  , DeriveShape (..)
+  , Visibility (..)
   , Foreign (..)
   , ForeignFunction (..)
   , Function (..)
@@ -50,6 +57,7 @@ data DocKind
   | DocType
   | DocTrait
   | DocMacro
+  | DocDerive !DeriveDoc
   {-| A function of a library written elsewhere, and the library it is in.
 
       Kept apart from an ordinary function because the difference matters to
@@ -57,6 +65,15 @@ data DocKind
       declaration and proved by nothing, and a reader deciding how carefully to
       check a call wants to be told that without having to go and look. -}
   | DocForeign !Text
+  deriving stock (Eq, Ord, Show)
+
+{-| @Doc.Derive — declaration metadata, independent of callable schemes. -}
+data DeriveDoc = DeriveDoc
+  { docDeriveTrait :: !Text
+  , docDeriveParameter :: !Text
+  , docDeriveShape :: !DeriveShape
+  , docDeriveExported :: !Bool
+  }
   deriving stock (Eq, Ord, Show)
 
 {-| @Doc.Entry — one documented name.
@@ -91,7 +108,7 @@ instance Monoid DocIndex where
     the module says what was declared and where, the checker says what type each
     declaration has, and the token stream says what was documented. Nothing is
     re-derived from a source that only approximates it — in particular the
-    signature is never reconstructed from the written syntax, because the
+    callable signature is never reconstructed from the written syntax, because the
     written syntax is optional and the inferred type is not. -}
 buildIndex :: [Token] -> ModuleTypes -> Module -> DocIndex
 buildIndex tokens types = buildIndexFrom tokens (moduleSchemes types)
@@ -157,7 +174,16 @@ buildIndexFrom tokens settled moduleValue =
         parameter is the only name the derive introduces for its target. A
         request carries no members. -}
     DeriveDeclaration value ->
-      memberEntries (deriveMember value) declarationSpan (deriveFunctions value)
+      let name = case locatedValue (deriveTrait value) of
+            NamedType path _ -> moduleNameText path
+            _ -> "?"
+          metadata = DeriveDoc
+            (printType (locatedValue (moduleName moduleValue)) (deriveTrait value))
+            (locatedValue (deriveParameter value))
+            (locatedValue (deriveShape value))
+            (deriveVisibility value == Exported)
+       in make lowerBound name (DocDerive metadata) declarationSpan name
+            : memberEntries (deriveMember value) declarationSpan (deriveFunctions value)
     DeriveImplDeclaration _ -> []
     MacroDeclaration value ->
       [make lowerBound (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
@@ -232,7 +258,9 @@ buildIndexFrom tokens settled moduleValue =
       { docName = name
       , docKind = kind
       , docModule = owner
-      , docSignature = concreteSelf kind . schemeSignature <$> lookupScheme key name
+      , docSignature = case kind of
+          DocDerive _ -> Nothing
+          _ -> concreteSelf kind . schemeSignature <$> lookupScheme key name
       , docComment = case docsBefore lowerBound (unOffset (spanStart spanValue)) of
           [] -> inherited
           direct -> direct
@@ -379,14 +407,31 @@ kindLabel kind = case kind of
   DocType -> "type"
   DocTrait -> "trait"
   DocMacro -> "macro"
+  DocDerive _ -> "derive"
   DocForeign _ -> "foreign"
 
 {-| One line, the way a search result lists it: the name, its type, and where it
     came from. -}
 renderEntry :: DocEntry -> Text
-renderEntry value =
-  docName value
+renderEntry value = case docKind value of
+  DocDerive metadata -> deriveSignature metadata
+  _ -> docName value
     <> maybe Text.empty (\signature -> " :: " <> renderSignature signature) (docSignature value)
+
+deriveShapeLabel :: DeriveShape -> Text
+deriveShapeLabel shape = case shape of
+  RecordShape -> "Record"
+  SumShape -> "Sum"
+
+deriveSignature :: DeriveDoc -> Text
+deriveSignature metadata =
+  "derive " <> docDeriveTrait metadata <> " for " <> docDeriveParameter metadata
+    <> ": " <> deriveShapeLabel (docDeriveShape metadata)
+
+entrySignature :: DocEntry -> Maybe Text
+entrySignature entry = case docKind entry of
+  DocDerive metadata -> Just (deriveSignature metadata)
+  _ -> renderSignature <$> docSignature entry
 
 {-| The full description, the way a documentation listing shows it. -}
 renderEntryLines :: DocEntry -> [Text]

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
+
 - [[Database Admission Delivery]] — finite pool capacity waiting (#468).
 
 - [[2026-10-07-static-field-selection]] — preserve complete static field owners (#457).

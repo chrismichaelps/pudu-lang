@@ -171,3 +171,5 @@ jobs:
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
           ! cabal run -v0 pudu -- doc --html > /dev/null
           ! cabal run -v0 pudu -- doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null
+      - name: Verify derive documentation and public API boundaries
+        run: node test/derive-index.mjs "$PUDU"

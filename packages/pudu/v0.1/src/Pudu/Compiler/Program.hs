@@ -54,7 +54,8 @@ import Pudu.Compiler.Library
   , resolutionSearchRoots
   , resolutionTriedRoots
   )
-import Pudu.Doc (DocIndex)
+import Pudu.Doc (DocIndex, buildIndexFrom)
+import Pudu.Frontend.Expand (expandModule)
 import Pudu.Derive.Graph (elaborateGraph)
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Diagnostic
@@ -332,7 +333,12 @@ finish products cache rootName Discovery{discoveredFrontends, discoveredSources,
         result <- case Map.lookup name discoveredSources of
           Nothing -> publishProduct products <$> compile
           Just source -> checkedFor products cache graph source frontend compile
-        pure (Map.insert name result compiled)
+        let documented = case (products, Map.lookup name originalModules, compileDocs result) of
+              (AnalysisProducts, Just authored, Just _) -> result
+                { compileDocs = Just (buildIndexFrom (frontendTokens frontend)
+                    (compileSchemes result) (fst (expandModule authored))) }
+              _ -> result
+        pure (Map.insert name documented compiled)
   compiled <- if any hasErrors (Map.elems deriveErrors)
     then pure (Map.mapWithKey (\name frontend -> publishProduct products
       (rejectFrontend frontend (Map.findWithDefault [] name deriveErrors))) discoveredFrontends)

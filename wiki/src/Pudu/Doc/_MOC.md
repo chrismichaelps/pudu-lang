@@ -16,7 +16,9 @@ aliases: [Doc Module Map]
   regression coverage.
 
 Dependency direction: Signature → Index → Query/Search/Json → Site. Nothing here performs IO, and
-nothing re-derives a type from written syntax.
+nothing re-derives a callable type from written syntax. Strategy headers use declaration metadata.
+
+- [[Derive Index Output Gate]] — actual strategy documentation and public visibility.
 
 ## Referenced by
 

@@ -130,3 +130,9 @@ source root; the catalog is run only when the cursor is at an import site.
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Lsp Server]] · [[Lsp Import Completion]]
+
+## Derive index contract (#458)
+
+Strategy headers are excluded alongside member-only entries from file and selected-import binding candidates.
+
+Resolved Grill Log: documented strategies do not become value or type bindings.
