@@ -206,3 +206,9 @@ signatures; a value depending on an unavailable cyclic initializer remains a dia
 
 Resolved Grill Log: link checked dependency products for a fold, never untyped frontend trees or
 unrelated modules compiled earlier. The evaluator retains capability denial while installing imports.
+
+## Derive index contract (#458)
+
+Analysis products use [[Macro Expansion]] to rebuild documentation from authored modules and settled checked schemes, after graph elaboration. This retains strategy headers and definition comments without exposing generated implementations as authored declarations. Execution products retain no additional documentation or tree traversal.
+
+Resolved Grill Log: [[Doc Index]] is rebuilt only for admitted analysis documentation; ordinary compilation, diagnostics and execution retention remain unchanged.

@@ -105,6 +105,7 @@ classifyIdentifier value content sp name =
               DocTraitMethod _ -> spanTuple content sp 3 mods
               DocType -> spanTuple content sp 0 mods
               DocTrait -> spanTuple content sp 1 mods
+              DocDerive _ -> spanTuple content sp 1 mods
               DocConstant -> spanTuple content sp 4 (mods + 4)
               DocForeign _ -> spanTuple content sp 2 mods
               DocMacro -> spanTuple content sp 2 mods

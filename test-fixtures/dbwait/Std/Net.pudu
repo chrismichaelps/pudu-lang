@@ -1,0 +1,68 @@
+module Std.Net
+
+import Std.Db.Protocol as Wire
+import Std.Result as Result
+import Std.Sync as Sync
+
+export type NetError = Other(Str) | Closed | NetOperationTimedOut
+export type Connection = { token: Int }
+export type State = { pending: Bytes, commands: Array[Str], opening: Bool, closed: Bool }
+
+export fn fake() -> Connection {
+  let held = Sync.cell(State{pending: bytesOf([]), commands: [], opening: false, closed: false})
+  Connection{token: held.token}
+}
+
+export fn state(connection: &Connection) -> Result[State, NetError] {
+  let held: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.get(&held), failed)
+}
+
+fn store(connection: &Connection, value: State) -> Result[(), NetError] {
+  let held: Sync.Cell[State] = Sync.Cell{token: connection.token}
+  Result.mapErr(Sync.set(&held, value), failed)
+}
+
+export fn connectWithin(_host: Str, _port: Int, _wait: Int) -> Result[Connection, NetError] {
+  let connection = fake()
+  let held = state(&connection) ?
+  store(&connection, State{..held, opening: true}) ?
+  Ok(connection)
+}
+
+export fn receiveWithin(connection: &Connection, count: Int, _wait: Int) -> Result[Option[Bytes], NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  let bytes = held.pending.take(count)
+  store(connection, State{..held, pending: held.pending.drop(bytes.length())}) ?
+  if bytes.isEmpty() { Ok(None) } else { Ok(Some(bytes)) }
+}
+
+export fn send(connection: &Connection, bytes: &Bytes) -> Result[(), NetError] {
+  let held = state(connection) ?
+  if held.closed { return Err(Closed) }
+  if !held.pending.isEmpty() { return Err(Other("unread command response")) }
+  if held.opening {
+    if *bytes != Wire.startup(&[("user", "u"), ("database", "db")]) { return Err(Other("unexpected startup")) }
+    let ready = Wire.frame("R", &bytesOf([0u8, 0u8, 0u8, 0u8])).concat(Wire.frame("Z", &bytesOf([73u8])))
+    return store(connection, State{..held, opening: false, pending: ready})
+  }
+  let message = Result.mapErr(Wire.readMessage(bytes), fn(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }) ?
+  if !message[1].isEmpty() { return Err(Other("expected one command")) }
+  if message[0].kind == "X" { return store(connection, State{..held, commands: held.commands.push("terminate")}) }
+  if message[0].kind != "Q" { return Err(Other("unexpected command kind")) }
+  let text = Result.mapErr(Wire.readCString(&message[0].payload), fn(problem: Wire.ProtocolError) -> NetError { Other(show(problem)) }) ?
+  if !text[1].isEmpty() { return Err(Other("unread command text")) }
+  let command = text[0]
+  if command != "BEGIN" && command != "COMMIT" && command != "ROLLBACK" { return Err(Other("unexpected command")) }
+  let status = if command == "BEGIN" { 84u8 } else { 73u8 }
+  let ready = Wire.frame("C", &Wire.cString(command)).concat(Wire.frame("Z", &bytesOf([status])))
+  store(connection, State{..held, commands: held.commands.push(command), pending: ready})
+}
+
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  let held = state(connection) ?
+  store(connection, State{..held, closed: true})
+}
+
+fn failed(problem: Sync.SyncError) -> NetError { Other(show(problem)) }

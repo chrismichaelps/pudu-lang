@@ -28,9 +28,18 @@ test('explicit layers reject upward edges and missing classification', () => {
   const valid = [node('Std.App', ['Std.App.Stage']), node('Std.App.Stage')];
   assert.deepEqual(analyze(valid).findings, []);
   assert.deepEqual(analyze([...valid, node('Std.Db.Driver', ['Std.App'])]).findings,
-    ['upward import: Std.Db.Driver [1] -> Std.App [9]']);
+    ['upward import: Std.Db.Driver [1] -> Std.App [10]']);
   assert.deepEqual(analyze([node('Std.App.NewService')]).findings, ['unclassified module: Std.App.NewService']);
   assert.deepEqual(analyze([node('Std.App', ['Std.Missing'])]).findings, ['missing import: Std.App -> Std.Missing']);
+});
+
+test('pool admission has an explicit descending boundary', () => {
+  assert.deepEqual(analyze([
+    node('Std.Db', ['Std.Db.Admission']), node('Std.Db.Admission', ['Std.Db.Session']),
+    node('Std.Db.Session', ['Std.Db.Protocol']), node('Std.Db.Protocol')
+  ]).findings, []);
+  assert.deepEqual(analyze([node('Std.Db.Admission', ['Std.Db']), node('Std.Db')]).findings,
+    ['upward import: Std.Db.Admission [5] -> Std.Db [6]']);
 });
 
 test('foundation closure cannot depend on specialized services', () => {

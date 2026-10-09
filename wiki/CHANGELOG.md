@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-08 — Derive declaration output (#458)
+
+- [[Doc Index]] retains authored strategy headers with structured visibility and shape metadata.
+- [[Compiler Program]] keeps that projection in analysis products; [[Pudu CLI]] adds root public strategies to API output.
+- [[Derive Index Output Gate]] checks actual output, private boundaries and existing identities.
+
+## 2026-10-08 — Bounded database admission (#468)
+
+- [[Std Db Admission]] separates typed capacity expiry from closure and lost lending.
+- [[Std Db]] uses a finite default and explicit wait override without changing Pool shape.
+- [[Database Admission Fixture]] and graph refusal checks cover configuration, slot conservation and closure.
+
 ## 2026-10-08 — Module qualifier value refusal (#470)
 
 - [[Semantic Interface]] distinguishes module qualifiers from selected values while retaining opaque missing-interface recovery.

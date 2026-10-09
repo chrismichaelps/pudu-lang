@@ -1,12 +1,17 @@
 module Pudu.DocSpec (docProperties) where
 
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler.Program (ProgramResult (..), compileProgramSourceOver, programDocs)
+import Pudu.Diagnostic (hasErrors)
 import Pudu.Doc
   ( DocEntry (..)
   , DocIndex (..)
   , DocKind (..)
+  , DeriveDoc (..)
+  , entrySignature
   , entriesFor
   )
 import Pudu.Doc.Json (encodeIndex, escapeJson)
@@ -14,6 +19,8 @@ import Pudu.Doc.Query (Query (..), parseQuery)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
 import Pudu.Doc.Signature (renderSignature)
+import Pudu.Lsp.Feature (completionItems, documentSymbols, hoverContents)
+import Pudu.Lsp.Json (Json (..), lookupField)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -28,6 +35,7 @@ docProperties =
   , ("the encoded index is well formed", testEncoding)
   , ("the documentation site embeds and presents the index", testSite)
   , ("the documentation site contains source text safely", testSiteSafety)
+  , ("the checked graph retains authored derive headers without bindings", testDeriveHeaders)
   ]
 
 {-| The whole point of building the index from the checker: a declaration with
@@ -260,6 +268,55 @@ testSiteSafety = do
         (property (Text.isInfixOf "\\u003c/script\\u003e" beforeProgram))
     , counterexample "the page owns only its fixed executable script"
         (Text.count "</script>" site === 2)
+    ]
+
+testDeriveHeaders :: IO Property
+testDeriveHeaders = do
+  let content = Text.unlines
+        [ "module Doc"
+        , "export trait Named { fn named(self: &Self) -> Str }"
+        , "/// Record guide."
+        , "export derive Named for T: Record {"
+        , "  /// Member guide."
+        , "  fn named(self: &T) -> Str { \"record\" }"
+        , "}"
+        , "/// Sum guide."
+        , "export derive Named for T: Sum { fn named(self: &T) -> Str { \"sum\" } }"
+        , "trait Hidden { fn hidden(self: &Self) -> Str }"
+        , "derive Hidden for T: Record { fn hidden(self: &T) -> Str { \"hidden\" } }"
+        , "export trait Typed[A] { fn tag(self: &Self) -> Str }"
+        , "export derive Typed[Int] for U: Record { fn tag(self: &U) -> Str { \"typed\" } }"
+        , "type Example = { value: Int } derives Named"
+        ]
+  source <- newSource (SourceName "Doc.pudu") content
+  compiled <- compileProgramSourceOver Map.empty "." source
+  let index = programDocs compiled
+      headers = [entry | entry <- indexEntries index, DocDerive _ <- [docKind entry]]
+      comments = map docComment headers
+      metadata = [value | entry <- headers, DocDerive value <- [docKind entry]]
+      completions = case completionItems index of
+        JsonArray items -> [name | item <- items, Just (JsonText name) <- [lookupField "label" item]]
+        _ -> []
+      outlines = case documentSymbols content index of
+        JsonArray items -> [detail | item <- items, Just (JsonText detail) <- [lookupField "detail" item], "derive " `Text.isPrefixOf` detail]
+        _ -> []
+  pure $ counterexample (show (programDiagnostics compiled, headers)) $ conjoin
+    [ hasErrors (programDiagnostics compiled) === False
+    , map entrySignature headers === map Just
+        ["derive Named for T: Record", "derive Named for T: Sum", "derive Hidden for T: Record", "derive Typed[Int] for U: Record"]
+    , comments === [["Record guide."], ["Sum guide."], [], []]
+    , map docDeriveExported metadata === [True, True, False, True]
+    , map docDeriveTrait metadata === ["Named", "Named", "Hidden", "Typed[Int]"]
+    , map docDeriveParameter metadata === ["T", "T", "T", "U"]
+    , map docSignature headers === replicate 4 Nothing
+    , property (all (\entry -> docSpan entry /= (0, 0)) headers)
+    , property (and (zipWith (<) (map (fst . docSpan) headers) (drop 1 (map (fst . docSpan) headers))))
+    , length (filter (== "Named") completions) === 1
+    , length outlines === 4
+    , property (all (\entry -> maybe False (`Text.isInfixOf` hoverContents entry) (entrySignature entry)) headers)
+    , property (all (\match -> case docKind (matchEntry match) of DocDerive _ -> False; _ -> True) (searchText "-> Str" index))
+    , property (not (any (\entry -> docKind entry == DocMethod "Example") (indexEntries index)))
+    , property (any (\entry -> docComment entry == ["Member guide."]) (indexEntries index))
     ]
 
 indexOf :: [Text] -> IO DocIndex

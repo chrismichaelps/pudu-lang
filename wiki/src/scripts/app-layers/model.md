@@ -30,3 +30,9 @@ modules and imports that fail the explicit direction policy. Sort reports and fi
 ## Referenced by
 
 [[Application Layer Gate]] · [[Application Layer Tests]] · [[Application Dependency Layers]]
+
+## Bounded pool admission (#468)
+
+[[Std Db Admission]] occupies a dedicated layer between sessions and pool ownership. Higher architectural layers shift together, preserving strict descending imports. Classification remains explicit and cannot be inferred from existing source edges.
+
+Resolved Grill Log: a policy boundary that imports sessions must descend from the pool rather than share either layer.

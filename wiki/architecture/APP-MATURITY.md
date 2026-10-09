@@ -65,7 +65,7 @@ protocol regression and its removal control establish bounded mark depth under r
 The audit still identifies callback abort cleanup, database admission
 deadlines, aggregate result budgets and server shutdown ownership as unresolved boundaries.
 Bounded channel receiving supplies an atomic wait foundation with distinct delivery, closure and
-expiry outcomes. Database consumers must adopt it before their admission wait is bounded.
+expiry outcomes. Database consumers adopt it through [[Database Admission Delivery]]; validation and review are required before that admission bound is claimed.
 The server head reader also returns surplus bytes that request parsing currently discards;
 coalesced requests require a focused transport regression before a repair is claimed.
 Existing feature availability and passing fixtures do not establish production readiness.
