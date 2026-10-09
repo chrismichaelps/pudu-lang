@@ -54,3 +54,8 @@ program rather than being absorbed as a failed stop.
   and synchronization objects it created. _Rejected:_ global clearing at program exit.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Std Concurrent]] · [[Std Channel]] · [[Std Sync]] · [[Eval System Tests]]
+
+## Bounded mutex admission (#476)
+
+mutexLockWithin validates mathematical token and duration before narrowing: 0 through 3600000 milliseconds. A shared atomic probe acquires an available mutex, refuses its current owner or retired state, and waits only for another owner. Ordinary acquisition uses the same probe. Expiry changes no ownership; admission precedes expiry atomically. Ready and zero waits allocate no timer. The private bracketed timer helper also preserves channel dequeue/closure precedence and retires on completion or interruption.
+Resolved Grill Log: recursive ownership is a refusal, never a retry; bound admission without canceling an admitted callback. Preserve owner-only release and retirement races. [[Mutex Admission Spec]] proves these boundaries.

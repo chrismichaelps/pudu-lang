@@ -55,6 +55,7 @@ import Pudu.Frontend.ParserTypeSpec (parserTypeProperties)
 import Pudu.Frontend.SyntaxSpec (syntaxProperties)
 import Pudu.Frontend.TokenSpec (tokenProperties)
 import Pudu.EvalSpec (evalProperties)
+import Pudu.Eval.MutexSpec (mutexProperties)
 import Pudu.DocSpec (docProperties)
 import Pudu.Repl.AnswerSpec (answerProperties)
 import Pudu.Repl.SessionSpec (replProperties)
@@ -134,7 +135,7 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties)
-  evalOutcomes <- traverse (uncurry check) evalProperties
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties

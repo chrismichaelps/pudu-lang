@@ -7,6 +7,12 @@ export type SyncError
   = Missing
   | Other(Str)
 
+/// A completed action or an admission wait that expired without taking ownership.
+export type LockAttempt[T] = Acquired(T) | LockExpired
+
+/// Largest accepted finite acquisition wait, in milliseconds.
+export const MAX_WAIT_MILLISECONDS: Int = 3600000
+
 /// A lock, held by at most one thread at a time.
 export type Mutex = { token: Int }
 
@@ -46,16 +52,30 @@ export fn unlock(target: &Mutex) -> Result[(), SyncError] {
 }
 
 /// Run an action with a lock held, and release it after the action returns.
-///
-/// There is no unlock a caller can forget, because there is no unlock. A lock
-/// released only on the normal return path would usually be unsafe. Pudu does
-/// not recover from a runtime abort inside the action; program teardown owns
-/// that path and discards all runtime synchronization resources.
+/// Runtime abort and cancellation do not run this normal-return cleanup.
 export fn withLock[T](target: &Mutex, action: fn() -> T) -> Result[T, SyncError] {
   lock(target) ?
   let outcome = action()
   unlock(target) ?
   Ok(outcome)
+}
+
+/// Acquire within a finite wait; zero probes immediately and expiry owns nothing.
+export fn lockWithin(target: &Mutex, millis: Int) -> Result[LockAttempt[()], SyncError] {
+  let acquired = Result.mapErr(mutexAcquireWithin(target.token, millis), causeOf) ?
+  Ok(if acquired { Acquired(()) } else { LockExpired })
+}
+
+/// Bound acquisition only; run no action on expiry and release after normal return.
+export fn withLockWithin[T](target: &Mutex, millis: Int, action: fn() -> T) -> Result[LockAttempt[T], SyncError] {
+  match lockWithin(target, millis) ? {
+    case LockExpired => Ok(LockExpired)
+    case Acquired(_) => {
+      let outcome = action()
+      unlock(target) ?
+      Ok(Acquired(outcome))
+    }
+  }
 }
 
 /// A cell holding a value.

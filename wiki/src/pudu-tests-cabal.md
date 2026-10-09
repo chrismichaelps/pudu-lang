@@ -99,3 +99,5 @@ field callbacks, static selection and the expansion snapshot run in both
 evaluators within the complete suite.
 
 Register [[Lsp Impl Members Spec]]. Resolved Grill Log: implementation member completion and its quick fix run through the server's request path in the complete suite.
+
+Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.

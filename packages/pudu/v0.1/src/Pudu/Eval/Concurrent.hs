@@ -15,6 +15,7 @@ module Pudu.Eval.Concurrent
   , concurrentCounts
   , mutexNew
   , mutexLock
+  , mutexLockWithin
   , mutexUnlock
   , mutexDispose
   , newConcurrentStore
@@ -201,20 +202,32 @@ channelReceiveWithin store token millis
       pure (IoFailed "invalid channel wait")
   | token < 1 || token > toInteger (maxBound :: Int) = pure (IoFailed "no such channel")
   | otherwise = withChannel store (fromInteger token) $ \channel -> do
-      ready <- atomically (pollChannel channel)
-      case ready of
-        Just _ -> pure (IoDone ready)
-        Nothing | millis == 0 -> pure (IoDone Nothing)
-        Nothing -> do
-          expired <- newTVarIO False
-          let timer = threadDelay (fromInteger (millis * 1000)) >> atomically (writeTVar expired True)
-          IoDone <$> bracket (forkIO timer) killThread (\_ -> atomically $ do
-            available <- pollChannel channel
-            case available of
-              Just _ -> pure available
-              Nothing -> do
-                elapsed <- readTVar expired
-                if elapsed then pure Nothing else retry)
+      IoDone <$> waitWithin millis (pollChannel channel)
+
+-- Admission and expiry share a transaction; only contended positive waits own timers.
+waitWithin :: Integer -> STM (Maybe a) -> IO (Maybe a)
+waitWithin millis probe = do
+  ready <- atomically probe
+  case ready of
+    Just _ -> pure ready
+    Nothing | millis == 0 -> pure Nothing
+    Nothing -> do
+      expired <- newTVarIO False
+      let timer = delay (millis * 1000) >> atomically (writeTVar expired True)
+      bracket (forkIO timer) killThread (\_ -> atomically $ do
+        available <- probe
+        case available of
+          Just _ -> pure available
+          Nothing -> do
+            elapsed <- readTVar expired
+            if elapsed then pure Nothing else retry)
+ where
+  delay remaining
+    | remaining <= 0 = pure ()
+    | otherwise = do
+        let chunk = min remaining (toInteger (maxBound :: Int))
+        threadDelay (fromInteger chunk)
+        delay (remaining - chunk)
 
 pollChannel :: Channel -> STM (Maybe (Maybe Value))
 pollChannel channel = do
@@ -255,14 +268,29 @@ mutexNew store = do
 mutexLock :: ConcurrentStore -> Int -> IO (IoOutcome ())
 mutexLock store token = withMutex store token $ \lock -> do
   owner <- myThreadId
-  atomically $ do
-    heldBy <- readTVar (mutexOwner lock)
-    case heldBy of
-      Available -> do
-        writeTVar (mutexOwner lock) (HeldBy owner)
-        pure (IoDone ())
-      HeldBy _ -> retry
-      Retired -> pure (IoFailed "no such lock")
+  atomically (pollMutex lock owner >>= maybe retry pure)
+
+{-| Expiry leaves the existing owner intact and never grants a permit. -}
+mutexLockWithin :: ConcurrentStore -> Integer -> Integer -> IO (IoOutcome Bool)
+mutexLockWithin store token millis
+  | millis < 0 || millis > 3600000 = pure (IoFailed "invalid mutex wait")
+  | token < 1 || token > toInteger (maxBound :: Int) = pure (IoFailed "no such lock")
+  | otherwise = withMutex store (fromInteger token) $ \lock -> do
+      owner <- myThreadId
+      outcome <- waitWithin millis (pollMutex lock owner)
+      pure $ case outcome of
+        Nothing -> IoDone False
+        Just held -> True <$ held
+
+pollMutex :: Mutex -> ThreadId -> STM (Maybe (IoOutcome ()))
+pollMutex lock owner = do
+  heldBy <- readTVar (mutexOwner lock)
+  case heldBy of
+    Available -> writeTVar (mutexOwner lock) (HeldBy owner) >> pure (Just (IoDone ()))
+    HeldBy current
+      | current == owner -> pure (Just (IoFailed "the lock is already owned by this thread"))
+      | otherwise -> pure Nothing
+    Retired -> pure (Just (IoFailed "no such lock"))
 
 {-| Release a lock only from the thread that acquired it.
 

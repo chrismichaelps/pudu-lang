@@ -447,6 +447,7 @@ effectSignatures =
   , ("channelFinish", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("mutexOpen", monotype (FunctionTypeValue False [] integerType))
   , ("mutexAcquire", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("mutexAcquireWithin", monotype (FunctionTypeValue False [integerType, integerType] (resultOf boolType)))
   , ("mutexRelease", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
   , ("cellOpen", polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   , ("cellDispose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))

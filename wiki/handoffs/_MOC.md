@@ -158,3 +158,5 @@ tags: [moc, handoff]
 ## Referenced by
 
 [[00-INDEX]] · [[Engineering Delivery]]
+
+- [[Database Mutex Delivery]] — finite local client admission and recursive refusal.

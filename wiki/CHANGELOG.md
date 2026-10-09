@@ -3881,3 +3881,5 @@ No builds, tests, reviews or measurements run.
 - [[Std Order]] and [[Std Num]] explain their explicit primitive leaf implementations while
   acknowledging Pudu aggregate deriving. Executable source and public identities are unchanged.
 - [[2026-10-07-derive-documentation]] records the focused generated-documentation validation.
+
+- #476: implement finite mutex admission, recursive ownership refusal and local Database wait overrides; full local gates pass, independent review pending.

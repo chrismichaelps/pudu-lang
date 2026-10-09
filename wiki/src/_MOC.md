@@ -191,3 +191,5 @@ tags: [moc, module]
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.
 
 - [[Derive Expand Expected]]
+
+- [[Mutex Admission Fixture]] — real local Database contention and recovery.
