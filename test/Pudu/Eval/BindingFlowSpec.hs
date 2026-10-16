@@ -253,6 +253,35 @@ testLoops = do
     , "value"
     ]
   bounded <- codesOfConstant "{ var count = 0\n while true { count = count + 1 }\n true }"
+  machineRemainder <- evaluateStatements
+    [ "var index = -5", "var total = 0"
+    , "while index < 0 {"
+    , "  total = total + index % 3"
+    , "  index = index + 1"
+    , "}"
+    , "total"
+    ]
+  machineGuard <- evaluateStatements
+    [ "var index = 0", "var limit = 3"
+    , "while index < limit && index >= 0 { index = index + 1 }"
+    , "index"
+    ]
+  machineDivision <- evaluateStatements
+    [ "var index = 0", "var total = 100"
+    , "while index < 4 { total = total / 2\n index = index + 1 }"
+    , "total"
+    ]
+  machineOverflow <- evaluateStatements
+    [ "var value = 9223372036854775807", "var index = 0"
+    , "while index < 1 { index = index + 1\n value = value + 1 }"
+    , "value"
+    ]
+  machineDivideZero <- evaluateStatements
+    [ "var index = 1", "var zero = 0"
+    , "while index > 0 { index = index / zero }"
+    , "index"
+    ]
+  machineBounded <- codesOfConstant "{ var count = 0\n while count < 1 { count = count + 0 }\n true }"
   indexed <- evaluateStatements
     [ "var values = [10, 20, 30]", "let snapshot = values", "let other = [40, 50, 60]"
     , "var index = 0", "var reads = 0", "var total = 0"
@@ -273,6 +302,13 @@ testLoops = do
     , counterexample "short-circuiting skips invalid arithmetic" (shortCircuit === "3")
     , counterexample "pure loops retain checked overflow" (overflow === "failed: E7005")
     , counterexample "pure constant loops retain the step refusal" (bounded === ["E7002"])
+    , counterexample "machine-word regions preserve truncated remainders of negatives"
+        (machineRemainder === "-6")
+    , counterexample "machine-word regions short-circuit compound guards" (machineGuard === "3")
+    , counterexample "machine-word regions truncate integer division" (machineDivision === "6")
+    , counterexample "machine-word regions refuse widened overflow" (machineOverflow === "failed: E7005")
+    , counterexample "machine-word regions refuse division by zero" (machineDivideZero === "failed: E7004")
+    , counterexample "machine-word constant loops retain the step refusal" (machineBounded === ["E7002"])
     , counterexample "index reads retain receiver order, skipped errors and immutable snapshots"
         (indexed === "(2, 1212, 80, [10, 20, 30])")
     , counterexample "closed bodies retain parameter indexing" (indexedCall === "15")

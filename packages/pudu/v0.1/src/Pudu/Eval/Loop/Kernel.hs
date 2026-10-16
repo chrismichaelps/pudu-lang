@@ -14,6 +14,7 @@ import Pudu.Eval.Env
   , lookupLocal, lookupModule, lookupName, tally, updateExisting )
 import Pudu.Eval.Frame (frameLookup)
 import Pudu.Eval.Loop.Step (Step, finallyStep, liftStep, runStep, stopStep)
+import qualified Pudu.Eval.Loop.Unboxed as Unboxed
 import Pudu.Eval.Match (integerLiteralValue, literalValue)
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains, multiMapWrapper)
 import Pudu.Eval.Operator (applyUnary, checkedResult, combine, readIndex, readMember)
@@ -40,6 +41,7 @@ pureLoop spanValue condition body = do
       layout = Map.fromList (zip names [0 ..])
   test <- planExpression LoopRegion layout condition
   turn <- planBlock LoopRegion layout body
+  unboxed <- Unboxed.planRegion spanValue layout condition body
   case (test, turn) of
     (Just (Plan testCode _ testWrites testCallees testScratch),
       Just (Plan bodyCode _ bodyWrites bodyCallees bodyScratch))
@@ -51,7 +53,7 @@ pureLoop spanValue condition body = do
               writable <- mapM (boundIn (envFrames env)) (Set.toList (testWrites <> bodyWrites))
               pure (Done (if and writable
                 then Just (execute spanValue names initial (testWrites <> bodyWrites)
-                  (max testScratch bodyScratch) testCode bodyCode)
+                  (max testScratch bodyScratch) unboxed testCode bodyCode)
                 else Nothing) env)
     _ -> pure Nothing
  where
@@ -62,28 +64,45 @@ pureLoop spanValue condition body = do
       Just _ -> pure True
       Nothing -> boundIn rest name
 
-execute :: Span -> [Text] -> [Value] -> Set Text -> Int -> Code -> Code -> Evaluator Value
-execute spanValue names initial written scratch test body = Evaluator $ \env -> do
-  slots <- newIOArray (0, length names + scratch - 1) UnitValue
-  mapM_ (uncurry (unsafeWriteIOArray slots)) (zip [0 ..] initial)
-  outcome <- runStep (loop slots env (0 :: Int))
-  case outcome of
-    Left stopped -> pure stopped
-    Right _ -> do
-      finals <- mapM (\(position, name) -> do
-        value <- unsafeReadIOArray slots position
-        pure (name, value)) [(position, name) | (position, name) <- zip [0 ..] names, name `Set.member` written]
-      let Evaluator commit = mapM_ (\(name, value) -> updateExisting name value) finals >> pure UnitValue
-      commit env
+{-| The machine-word region runs when the region planned into the integer
+    grammar and every snapshot binding is a platform Int; otherwise the boxed
+    execution runs unchanged. Both commit the same names in the same order. -}
+execute
+  :: Span -> [Text] -> [Value] -> Set Text -> Int -> Maybe Unboxed.Region -> Code -> Code -> Evaluator Value
+execute spanValue names initial written scratch unboxed test body = Evaluator $ \env ->
+  case (unboxed, traverse Unboxed.platformIntValue initial) of
+    (Just region, Just ints) -> do
+      outcome <- Unboxed.executeRegion region env ints (not (envEffects env))
+      case outcome of
+        Left stopped -> pure stopped
+        Right finals -> do
+          let Evaluator commit = mapM_ (\(name, value) -> updateExisting name value) finals >> pure UnitValue
+          commit env
+    _ -> case runBoxed of
+      Evaluator run -> run env
  where
-  loop slots env iterations
-    | iterations > iterationLimit && not (envEffects env) =
-        action env (abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
-          (Just "a constant is folded while the compiler runs; restructure the loop"))
-    | otherwise = bindResult (test slots env) $ \value ->
-        bindResult (boolean env spanValue value) $ \truth -> case truth of
-          True -> bindResult (body slots env) (\_ -> loop slots env (iterations + 1))
-          _ -> pure UnitValue
+  runBoxed :: Evaluator Value
+  runBoxed = Evaluator $ \env -> do
+    slots <- newIOArray (0, length names + scratch - 1) UnitValue
+    mapM_ (uncurry (unsafeWriteIOArray slots)) (zip [0 ..] initial)
+    outcome <- runStep (loop slots env (0 :: Int))
+    case outcome of
+      Left stopped -> pure stopped
+      Right _ -> do
+        finals <- mapM (\(position, name) -> do
+          value <- unsafeReadIOArray slots position
+          pure (name, value)) [(position, name) | (position, name) <- zip [0 ..] names, name `Set.member` written]
+        let Evaluator commit = mapM_ (\(name, value) -> updateExisting name value) finals >> pure UnitValue
+        commit env
+   where
+    loop slots env iterations
+      | iterations > iterationLimit && not (envEffects env) =
+          action env (abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
+            (Just "a constant is folded while the compiler runs; restructure the loop"))
+      | otherwise = bindResult (test slots env) $ \value ->
+          bindResult (boolean env spanValue value) $ \truth -> case truth of
+            True -> bindResult (body slots env) (\_ -> loop slots env (iterations + 1))
+            _ -> pure UnitValue
 
 {-| Primitive actions are pure apart from the runtime's own call tally. -}
 {-# INLINE action #-}
