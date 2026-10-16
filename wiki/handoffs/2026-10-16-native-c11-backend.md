@@ -41,8 +41,8 @@ byte-identical refusals, `E6001`/`E6003` refusals render through the CLI, the
 interpreter record from #483 — and a 34,032-byte executable against the
 98,037,480-byte compiler.
 
-Exact next action: run `test/gates.sh` for the full optimized validation, then
-commit `refs #486`, push `feature/486-native-c11-backend`, and open the PR
-stacked on #485.
+Exact next action: PR #487 is open against `feature/483-backend-performance`
+until #485 merges, then retarget to `dev`; await Language Architect review of
+the `--native` surface and Forensic Guardian wiki-parity review.
 
 ---
