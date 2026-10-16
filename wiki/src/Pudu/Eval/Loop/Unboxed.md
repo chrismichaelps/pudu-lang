@@ -58,7 +58,8 @@ aborting program sees byte-identical codes, messages and help.
 ## Dependencies and consumers
 
 Requires [[Eval Env]] spans and kind lookup, [[Eval Match]] literal decoding,
-[[Integer Literal]] kind names, [[Compile Time Limits]] for the iteration
+[[Integer Literal]] kind names, [[Diagnostic Arithmetic]] for the shared
+`E7004`/`E7005` refusal text, [[Compile Time Limits]] for the iteration
 boundary, and GHC unboxed primops. Consumed only by [[Eval Loop Kernel]].
 
 ## Grill Log

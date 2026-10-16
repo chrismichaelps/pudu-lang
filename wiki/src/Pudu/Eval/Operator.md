@@ -72,7 +72,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Linkage
 
-- **Requires:** [[Float Literal]], [[Eval Value]], [[Eval Order]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Float Literal]], [[Eval Value]], [[Eval Order]], [[Syntax Tree]], [[Diagnostic Model]], [[Diagnostic Arithmetic]] (the `E7004`/`E7005` refusal text, shared with the native runtime).
 - **Consumed by:** [[Evaluator]].
 
 ## Algorithm

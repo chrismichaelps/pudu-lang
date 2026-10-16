@@ -67,6 +67,8 @@ test-suite pudu-test
     Pudu.Lsp.MethodDefinitionSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
+    Pudu.Backend.EmitSpec
+    Pudu.Backend.NativeSpec
     Pudu.Lsp.SchedulerSpec
     Pudu.Compiler.LiteralsSpec
     Pudu.Compiler.ProgramSpec

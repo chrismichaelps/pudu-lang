@@ -18,12 +18,20 @@ import GHC.Exts
   , newByteArray#, readInt64Array#, writeInt64Array# )
 import GHC.IO (IO (..))
 import Pudu.Comptime.Limits (iterationLimit)
+import Pudu.Diagnostic.Arithmetic
+  ( CheckedOperation (..)
+  , divideByZeroCode
+  , divideByZeroMessage
+  , overflowCode
+  , overflowHelp
+  , overflowMessage
+  )
 import Pudu.Eval.Env (Env, Eval (..), Evaluator (..), abortAt, integerKindAt)
 import Pudu.Eval.Match (integerLiteralValue)
 import Pudu.Eval.Value (Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Block (..), Expression (..), Statement (..))
-import Pudu.IntegerLiteral (IntegerKind (..), integerKindName)
+import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
 type Slots = MutableByteArray# RealWorld
@@ -180,7 +188,7 @@ negateCode :: Span -> Code -> Code
 negateCode spanValue code = thenCode code $ \value env _ state ->
   case extremal value minWord of
     0# -> (# state, (# negateInt# value | #) #)
-    _ -> overflowAt env state spanValue "negate"
+    _ -> overflowAt env state spanValue CheckedNegate
  where
   minWord = negateInt# 9223372036854775807# -# 1#
 
@@ -189,11 +197,11 @@ arithmeticAt spanValue operator left right = case operator of
   "+" -> binary left right (\a b env _ state -> case addIntC# a b of
     (# result, carry #) -> case carry of
       0# -> (# state, (# result | #) #)
-      _ -> overflowAt env state spanValue "add")
+      _ -> overflowAt env state spanValue CheckedAdd)
   "-" -> binary left right (\a b env _ state -> case subIntC# a b of
     (# result, borrow #) -> case borrow of
       0# -> (# state, (# result | #) #)
-      _ -> overflowAt env state spanValue "subtract")
+      _ -> overflowAt env state spanValue CheckedSubtract)
   "*" -> binary left right (multiplyAt spanValue)
   "/" -> binary left right (divideAt spanValue)
   _ -> binary left right (remainderAt spanValue)
@@ -209,11 +217,11 @@ multiplyAt spanValue left right env _ state = case right of
   0# -> (# state, (# 0# | #) #)
   _ -> case extremal right minusOne of
     0# -> case extremal (quotInt# (left *# right) right) left of
-      0# -> overflowAt env state spanValue "multiply"
+      0# -> overflowAt env state spanValue CheckedMultiply
       _ -> (# state, (# left *# right | #) #)
     _ -> case extremal left minWord of
       0# -> (# state, (# left *# right | #) #)
-      _ -> overflowAt env state spanValue "multiply"
+      _ -> overflowAt env state spanValue CheckedMultiply
  where
   minusOne = negateInt# 1#
   minWord = negateInt# 9223372036854775807# -# 1#
@@ -226,7 +234,7 @@ divideAt spanValue left right env _ state = case right of
     0# -> (# state, (# quotInt# left right | #) #)
     _ -> case extremal right (negateInt# 1#) of
       0# -> (# state, (# quotInt# left right | #) #)
-      _ -> overflowAt env state spanValue "divide"
+      _ -> overflowAt env state spanValue CheckedDivide
  where
   minWord = negateInt# 9223372036854775807# -# 1#
 
@@ -274,13 +282,13 @@ notCode code = thenCode code $ \value -> case value of
 constant :: Int# -> Code
 constant value _ _ state = (# state, (# value | #) #)
 
-overflowAt :: Env -> State# RealWorld -> Span -> Text -> (# State# RealWorld, (# Int# | Eval Value #) #)
-overflowAt env state spanValue what = stopAt env state spanValue "E7005"
-  (integerKindName PlatformSigned <> " cannot hold the result of this " <> what)
-  (Just "use the wrapping or saturating form, or a wider type; checked arithmetic never truncates quietly")
+overflowAt :: Env -> State# RealWorld -> Span -> CheckedOperation -> (# State# RealWorld, (# Int# | Eval Value #) #)
+overflowAt env state spanValue operation = stopAt env state spanValue overflowCode
+  (overflowMessage PlatformSigned operation)
+  (Just overflowHelp)
 
 divideByZeroAt :: Env -> State# RealWorld -> Span -> (# State# RealWorld, (# Int# | Eval Value #) #)
-divideByZeroAt env state spanValue = stopAt env state spanValue "E7004" "division by zero" Nothing
+divideByZeroAt env state spanValue = stopAt env state spanValue divideByZeroCode divideByZeroMessage Nothing
 
 stopAt :: Env -> State# RealWorld -> Span -> Text -> Text -> Maybe Text -> (# State# RealWorld, (# Int# | Eval Value #) #)
 stopAt env state spanValue code message help =

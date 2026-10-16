@@ -290,4 +290,14 @@ passes the CLI and the residualizer share.
 
 Register [[Lsp Impl Members]] without new dependencies. Resolved Grill Log: completion and code actions share one unwritten-member computation.
 
+## Native backend modules
+
+Register [[Pudu Core]], [[Compiler Lower]], [[Backend Emit]], [[Backend Runtime]],
+[[Backend Toolchain]], [[Diagnostic Arithmetic]] and [[Diagnostic Native]] in the
+library's exposed modules; register [[Backend Emit Tests]] and [[Backend Native
+Tests]] in the test suite. Resolved Grill Log: the toolchain uses only the
+existing `process`, `directory` and `filepath` dependencies; the runtime is
+Haskell text, so no data files or extra-library linkage are added; the emitter
+imports no frontend or semantic module.
+
 Register [[Resolve State]] for the private pure resolver action and state boundary. Resolved Grill Log: preserve the abstract [[Resolve Context]] facade and existing state/diagnostic ordering without a new dependency.

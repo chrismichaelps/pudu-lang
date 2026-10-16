@@ -12,6 +12,7 @@ import Pudu.Comptime.Limits (iterationLimit)
 import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, callLimit, descend, expectBool, integerKindAt
   , lookupLocal, lookupModule, lookupName, tally, updateExisting )
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.Eval.Frame (frameLookup)
 import Pudu.Eval.Loop.Step (Step, finallyStep, liftStep, runStep, stopStep)
 import qualified Pudu.Eval.Loop.Unboxed as Unboxed
@@ -324,9 +325,9 @@ boolean env spanValue value = fmap (== BoolValue True)
 
 scalar :: Span -> Text -> Value -> Value -> Evaluator Value
 scalar spanValue operator = case operator of
-  "+" -> arithmetic "add" (+)
-  "-" -> arithmetic "subtract" (-)
-  "*" -> arithmetic "multiply" (*)
+  "+" -> arithmetic CheckedAdd (+)
+  "-" -> arithmetic CheckedSubtract (-)
+  "*" -> arithmetic CheckedMultiply (*)
   "%" -> \left right -> case (left, right) of
     (IntValue a x, IntValue b y) | y /= 0 -> pure (IntValue (integerKindMeet a b) (rem x y))
     _ -> general left right
@@ -339,8 +340,8 @@ scalar spanValue operator = case operator of
   _ -> general
  where
   general = combine spanValue operator
-  arithmetic name operation left right = case (left, right) of
-    (IntValue a x, IntValue b y) -> checkedResult spanValue (integerKindMeet a b) name (operation x y)
+  arithmetic operation operation' left right = case (left, right) of
+    (IntValue a x, IntValue b y) -> checkedResult spanValue (integerKindMeet a b) operation (operation' x y)
     _ -> general left right
   comparison predicate left right = case (left, right) of
     (IntValue _ x, IntValue _ y) -> pure (BoolValue (predicate x y))

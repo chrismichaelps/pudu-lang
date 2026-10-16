@@ -18,6 +18,8 @@ aliases: [Program Compiler Module Map]
 
 - [[Compiler Program]] — dependency discovery, module graph ordering, and cross-module interface
   orchestration.
+- [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001` refusals for everything the
+  native subset does not carry.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.
 - [[Compiler Literals]] — integer literals resolved to their kind and value once, after checking.
 - [[Compiler Literals Spec]] — resolved and preserved literal regressions.
