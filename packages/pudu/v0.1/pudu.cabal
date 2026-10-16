@@ -86,16 +86,23 @@ library
     Pudu.Version.Digest
     Pudu.Bundle
     Pudu.Cache.Persist
+    Pudu.Backend.Emit
+    Pudu.Backend.Runtime
+    Pudu.Backend.Toolchain
     Pudu.Compiler
     Pudu.Compiler.Constants
     Pudu.Compiler.Cache
     Pudu.Compiler.ComptimeDependencies
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
+    Pudu.Compiler.Lower
     Pudu.Compiler.Manifest
     Pudu.Compiler.Program
     Pudu.Compiler.Product
+    Pudu.Core
     Pudu.Diagnostic
+    Pudu.Diagnostic.Arithmetic
+    Pudu.Diagnostic.Native
     Pudu.Diagnostic.Render
     Pudu.Eval
     Pudu.Eval.Array

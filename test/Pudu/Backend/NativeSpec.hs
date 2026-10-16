@@ -1,0 +1,436 @@
+{-| @Test.Backend.NativeSpec — native execution held to the tree interpreter,
+    byte for byte.
+
+    For each conformance program this runs the program in-process through the
+    evaluator and as a real compiled executable through [[Pudu.Backend.Toolchain]],
+    and compares standard output, rendered diagnostic text, and exit status.
+    This is the test that makes "the interpreter is the semantic oracle" a
+    checked fact rather than a design intention. When no C compiler is found
+    the execution checks are skipped with an explicit note; they are never
+    silently passed.
+-}
+module Pudu.Backend.NativeSpec (backendNativeProperties) where
+
+import Control.Exception (IOException, finally, try)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import Pudu.Backend.Emit (emitProgram)
+import Pudu.Backend.Toolchain
+  ( ToolchainFailure (..)
+  , ToolchainRequest (..)
+  , compileNative
+  )
+import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Program
+  ( ProgramResult
+  , compileProgram
+  , programDependencies
+  , programDiagnostics
+  , programFolded
+  , programIntegerKinds
+  , programSources
+  , rootCompileResult
+  )
+import Pudu.Diagnostic
+  ( Diagnostic
+  , diagnosticCode
+  , diagnosticCodeText
+  , diagnosticMessage
+  , diagnosticSpan
+  , hasErrors
+  )
+import qualified Pudu.Diagnostic.Native as Native
+import Pudu.Diagnostic.Render
+  ( RenderStyle (..)
+  , defaultRenderConfig
+  , renderDiagnosticsWith
+  )
+import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Program (evaluateProgramEntryFolded)
+import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Value (Value (..))
+import Pudu.Source
+  ( Source
+  , SourceName (SourceName)
+  , emptySpan
+  , newSource
+  , sourceName
+  , spanSource
+  , unSourceName
+  )
+import Pudu.Version (versionText)
+import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import System.Directory
+  ( findExecutable
+  , getPermissions
+  , removeFile
+  , setOwnerExecutable
+  , setPermissions
+  )
+import System.Environment (lookupEnv, setEnv, unsetEnv)
+import System.Exit (ExitCode (..))
+import System.FilePath ((</>))
+import System.IO (hClose, hFlush, openTempFile, stdout)
+import System.IO.Temp (withSystemTempDirectory)
+import System.Process (readProcessWithExitCode)
+import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
+
+backendNativeProperties :: [(String, IO Property)]
+backendNativeProperties =
+  [ ("native execution matches the interpreter on success programs", testSuccessConformance)
+  , ("native execution matches the interpreter on exit statuses", testStatusConformance)
+  , ("native refusals match the interpreter byte for byte", testRefusalConformance)
+  , ("a compiler that cannot be found is E6002", testToolchainNotFound)
+  , ("a compiler that cannot be started is E6003", testToolchainInvocation)
+  , ("a compiler that hangs past the timeout is E6004", testToolchainTimeout)
+  , ("a compiler that rejects the C is E6005", testToolchainRejected)
+  , ("an output that cannot be published is E6006", testToolchainPublish)
+  ]
+
+programWith :: [Text] -> Text
+programWith body =
+  Text.unlines (["module Main", "", "fn main() -> Int {"] <> body <> ["}"])
+
+successPrograms :: [(String, Text)]
+successPrograms =
+  [ ("arithmetic and comparisons", programWith
+      [ "  var first = 1 + 2 * 3"
+      , "  var second = first - 4"
+      , "  var third = second * 5 / 2"
+      , "  if first > second {"
+      , "    print(display(first))"
+      , "  } else {"
+      , "    print(display(second))"
+      , "  }"
+      , "  return third"
+      ])
+  , ("if and else values", programWith
+      [ "  var chosen = if 1 < 2 { 10 } else { 20 }"
+      , "  return chosen"
+      ])
+  , ("while with accumulating locals", programWith
+      [ "  var total = 0"
+      , "  var index = 0"
+      , "  while index < 10 {"
+      , "    total = total + index"
+      , "    index = index + 1"
+      , "  }"
+      , "  return total"
+      ])
+  , ("early return", programWith
+      [ "  var index = 0"
+      , "  while index < 5 {"
+      , "    if index == 3 {"
+      , "      return 7"
+      , "    }"
+      , "    index = index + 1"
+      , "  }"
+      , "  return 1"
+      ])
+  , ("print of integers, booleans, and strings", programWith
+      [ "  print(\"literal\")"
+      , "  print(display(42))"
+      , "  print(display(true))"
+      , "  return 0"
+      ])
+  , ("unary operators", programWith
+      [ "  var value = 0 - 21"
+      , "  var flipped = !false"
+      , "  if flipped {"
+      , "    return 0 - value"
+      , "  }"
+      , "  return value"
+      ])
+  ]
+
+statusPrograms :: [(String, Text)]
+statusPrograms =
+  [ ("zero exits zero", programWith ["  return 0"])
+  , ("a small nonzero result exits as itself", programWith ["  return 3"])
+  , ("a result above 255 clamps", programWith ["  return 300"])
+  , ("a negative result clamps to one", programWith ["  return 0 - 5"])
+  ]
+
+refusalPrograms :: [(String, Text)]
+refusalPrograms =
+  [ ("division by zero", programWith
+      [ "  var value = 10 / 0"
+      , "  return value"
+      ])
+  , ("add overflow", programWith
+      [ "  var value = 9223372036854775807 + 1"
+      , "  return value"
+      ])
+  , ("subtract overflow", programWith
+      [ "  var value = 0 - 9223372036854775807"
+      , "  var smaller = value - 2"
+      , "  return smaller"
+      ])
+  , ("multiply overflow", programWith
+      [ "  var value = 9223372036854775807 * 2"
+      , "  return value"
+      ])
+  , ("divide overflow", programWith
+      [ "  var value = 0 - 9223372036854775807 - 1"
+      , "  return value / (0 - 1)"
+      ])
+  , ("negate overflow", programWith
+      [ "  var value = 0 - 9223372036854775807 - 1"
+      , "  return -value"
+      ])
+  ]
+
+testSuccessConformance :: IO Property
+testSuccessConformance = do
+  outcomes <- mapM (uncurry conformance) successPrograms
+  pure (conjoin outcomes)
+
+testStatusConformance :: IO Property
+testStatusConformance = do
+  outcomes <- mapM (uncurry conformance) statusPrograms
+  pure (conjoin outcomes)
+
+testRefusalConformance :: IO Property
+testRefusalConformance = do
+  outcomes <- mapM (uncurry conformance) refusalPrograms
+  pure (conjoin outcomes)
+
+{-| Write the program as an ordinary file whose name matches its module, run it
+    both ways, and hold the two runs to each other. -}
+conformance :: String -> Text -> IO Property
+conformance label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+  let path = root </> "Main.pudu"
+  TextIO.writeFile path programText
+  available <- compilerAvailable
+  if not available
+    then do
+      putStrLn "[skip] no C compiler found (PUDU_CC unset and cc not on PATH); native execution checks skipped"
+      pure (property True)
+    else do
+      program <- compileProgram path
+      interpreted <- interpret root program
+      case interpreted of
+        Left problem -> pure (counterexample (label <> ": interpreter: " <> problem) False)
+        Right (interpOut, interpErr, interpStatus) -> do
+          native <- buildAndRun root program
+          case native of
+            Left problem -> pure (counterexample (label <> ": native: " <> problem) False)
+            Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin
+              [ counterexample (label <> ": stdout differs; interpreter=" <> show interpOut <> " native=" <> show nativeOut)
+                  (nativeOut === interpOut)
+              , counterexample (label <> ": stderr differs; interpreter=" <> show interpErr <> " native=" <> show nativeErr)
+                  (nativeErr === interpErr)
+              , counterexample (label <> ": status differs; interpreter=" <> show interpStatus <> " native=" <> show nativeStatus)
+                  (nativeStatus === interpStatus)
+              , counterexample (label <> ": the generated C drew compiler warnings: " <> Text.unpack warnings)
+                  (warnings === Text.empty)
+              ]
+
+{-| The interpreter side, mirroring the `pudu` executable's run path: standard
+    output captured from the evaluator itself, diagnostics rendered with the
+    interpreter's own renderer in plain style, and the exit-status arithmetic
+    mirrored from `reportResult` (0 stays 0, everything else is 1..255, a run
+    that reported anything fails). -}
+interpret :: FilePath -> ProgramResult -> IO (Either String (Text, Text, Int))
+interpret captureRoot program
+  | hasErrors diagnostics =
+      pure (Left ("compile diagnostics: " <> show (map diagnosticCodeText (map diagnosticCode diagnostics))))
+  | otherwise = case rootCompileResult program >>= compileModule of
+      Nothing -> pure (Left "the program produced no module")
+      Just parsed -> do
+        (outcome, captured) <- captureStdout captureRoot $
+          evaluateProgramEntryFolded
+            (programFolded program)
+            (programIntegerKinds program)
+            (programDependencies program)
+            "main"
+            parsed
+        let reported = outcomeDiagnostics outcome
+            runtimeText = Text.concat [renderLikeCli program value <> "\n" | value <- reported]
+            resultText = case outcomeValue outcome of
+              Just value
+                | null reported
+                , not (isIntOrUnit value) -> captured <> renderValue value <> "\n"
+              _ -> captured
+            status
+              | not (null reported) = 1
+              | otherwise = case outcomeValue outcome of
+                  Nothing -> 1
+                  Just UnitValue -> 0
+                  Just (IntValue _ number) ->
+                    if number == 0 then 0 else fromInteger (max 1 (min 255 number))
+                  Just _ -> 0
+        pure (Right (resultText, runtimeText, status))
+ where
+  diagnostics = programDiagnostics program
+  isIntOrUnit value = case value of
+    IntValue{} -> True
+    UnitValue -> True
+    _ -> False
+
+{-| The CLI's own diagnostic rendering, for a program's sources, in plain
+    style: one diagnostic at a time, exactly as `runCompiledProgram` writes
+    each runtime diagnostic to standard error. -}
+renderLikeCli :: ProgramResult -> Diagnostic -> Text
+renderLikeCli program value = case sourceFor value of
+  Nothing ->
+    "error["
+      <> diagnosticCodeText (diagnosticCode value)
+      <> "]: "
+      <> diagnosticMessage value
+      <> "\n  --> "
+      <> unSourceName (spanSource (diagnosticSpan value))
+  Just source -> renderDiagnosticsWith (defaultRenderConfig PlainStyle) source [value]
+ where
+  sourceFor diagnostic =
+    let expected = spanSource (diagnosticSpan diagnostic)
+        matches = filter ((== expected) . sourceName) (programSources program)
+     in case matches of
+          found : _ -> Just found
+          [] -> Nothing
+
+captureStdout :: FilePath -> IO a -> IO (a, Text)
+captureStdout directory action = do
+  (path, handle) <- openTempFile directory "capture"
+  saved <- hDuplicate stdout
+  hDuplicateTo handle stdout
+  outcome <- try (action `finally` (hFlush stdout >> hDuplicateTo saved stdout))
+  hClose saved
+  hClose handle
+  case outcome of
+    Left problem -> do
+      removeFile path
+      ioError (problem :: IOException)
+    Right value -> do
+      captured <- TextIO.readFile path
+      removeFile path
+      pure (value, captured)
+
+buildAndRun :: FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
+buildAndRun root program = case rootCompileResult program >>= compileModule of
+  Nothing -> pure (Left "the program did not compile")
+  Just parsed -> case lowerProgram "main" parsed of
+    LowerRefused refusals ->
+      pure (Left ("lowering refused: " <> show (map diagnosticMessage refusals)))
+    Lowered core -> do
+      let executable = root </> "Main.bin"
+          request =
+            ToolchainRequest
+              { toolchainSource = emitProgram versionText (programSources program) core
+              , toolchainOutput = executable
+              }
+      compiled <- compileNative request
+      case compiled of
+        Left failure -> pure (Left ("toolchain failure: " <> show failure))
+        Right warnings -> do
+          (code, out, err) <- readProcessWithExitCode executable [] ""
+          pure (Right (Text.pack out, Text.pack err, statusOf code, warnings))
+ where
+  statusOf ExitSuccess = 0
+  statusOf (ExitFailure number) = number
+
+compilerAvailable :: IO Bool
+compilerAvailable = do
+  override <- lookupEnv "PUDU_CC"
+  case override of
+    Just value | not (null value) -> pure True
+    _ -> maybe False (const True) <$> findExecutable "cc"
+
+{-| Run an action with environment variables changed, restoring whatever was
+    there before however the action ends. -}
+withEnvironment :: [(String, Maybe String)] -> IO a -> IO a
+withEnvironment changes action = do
+  saved <- mapM save (map fst changes)
+  mapM_ apply changes
+  action `finally` mapM_ restore saved
+ where
+  save name = (,) name <$> lookupEnv name
+  apply (name, Nothing) = unsetEnv name
+  apply (name, Just value) = setEnv name value
+  restore (name, value) = maybe (unsetEnv name) (setEnv name) value
+
+writeExecutable :: FilePath -> Text -> IO ()
+writeExecutable path body = do
+  TextIO.writeFile path body
+  permissions <- getPermissions path
+  setPermissions path (setOwnerExecutable True permissions)
+
+toolchainSpan :: IO Source
+toolchainSpan = newSource (SourceName "toolchain.pudu") "module Main\n"
+
+toolchainRequest :: FilePath -> ToolchainRequest
+toolchainRequest root =
+  ToolchainRequest
+    { toolchainSource = "int main(void) { return 0; }"
+    , toolchainOutput = root </> "out"
+    }
+
+testToolchainNotFound :: IO Property
+testToolchainNotFound = withSystemTempDirectory "pudu-toolchain" $ \root -> do
+  source <- toolchainSpan
+  let spanValue = emptySpan source
+  {-| An empty search path would make `findExecutable` throw rather than
+      answer, so the compiler is hidden by searching an empty directory. -}
+  withEnvironment [("PUDU_CC", Nothing), ("PATH", Just root)] $ do
+    failure <- compileNative (toolchainRequest root)
+    pure $ conjoin
+      [ counterexample (show failure) (failure === Left (ToolchainNotFound "cc"))
+      , diagnosticCodeText (diagnosticCode (Native.toolchainNotFound spanValue "cc")) === "E6002"
+      ]
+
+testToolchainInvocation :: IO Property
+testToolchainInvocation = withSystemTempDirectory "pudu-toolchain" $ \root -> do
+  source <- toolchainSpan
+  let spanValue = emptySpan source
+  withEnvironment [("PUDU_CC", Just (root </> "missing-compiler"))] $ do
+    failure <- compileNative (toolchainRequest root)
+    pure $ case failure of
+      Left (ToolchainInvocation _) ->
+        diagnosticCodeText (diagnosticCode (Native.toolchainInvocationFailed spanValue "reason")) === "E6003"
+      other -> counterexample ("expected ToolchainInvocation, got " <> show other) False
+
+testToolchainTimeout :: IO Property
+testToolchainTimeout = withSystemTempDirectory "pudu-toolchain" $ \root -> do
+  source <- toolchainSpan
+  let spanValue = emptySpan source
+      script = root </> "hanging-cc"
+  writeExecutable script "#!/bin/sh\nexec sleep 30\n"
+  withEnvironment [("PUDU_CC", Just script), ("PUDU_CC_TIMEOUT", Just "1")] $ do
+    failure <- compileNative (toolchainRequest root)
+    pure $ case failure of
+      Left (ToolchainTimedOut seconds) -> conjoin
+        [ counterexample ("expected a one-second timeout, got " <> show seconds) (seconds === 1)
+        , diagnosticCodeText (diagnosticCode (Native.toolchainTimedOut spanValue seconds)) === "E6004"
+        ]
+      other -> counterexample ("expected ToolchainTimedOut, got " <> show other) False
+
+testToolchainRejected :: IO Property
+testToolchainRejected = withSystemTempDirectory "pudu-toolchain" $ \root -> do
+  source <- toolchainSpan
+  let spanValue = emptySpan source
+      script = root </> "rejecting-cc"
+  writeExecutable script "#!/bin/sh\necho \"generated.c:1:1: error: boom\" >&2\nexit 1\n"
+  withEnvironment [("PUDU_CC", Just script)] $ do
+    failure <- compileNative (toolchainRequest root)
+    pure $ case failure of
+      Left (ToolchainRejected output) -> conjoin
+        [ counterexample ("the compiler's words were lost: " <> show output)
+            (property (Text.isInfixOf "boom" output))
+        , diagnosticCodeText (diagnosticCode (Native.toolchainRejected spanValue output)) === "E6005"
+        ]
+      other -> counterexample ("expected ToolchainRejected, got " <> show other) False
+
+testToolchainPublish :: IO Property
+testToolchainPublish = withSystemTempDirectory "pudu-toolchain" $ \root -> do
+  source <- toolchainSpan
+  let spanValue = emptySpan source
+      script = root </> "silent-cc"
+  writeExecutable script "#!/bin/sh\nexit 0\n"
+  withEnvironment [("PUDU_CC", Just script)] $ do
+    failure <- compileNative (toolchainRequest root)
+    pure $ case failure of
+      Left (ToolchainPublishFailed _) ->
+        diagnosticCodeText (diagnosticCode (Native.toolchainPublishFailed spanValue "reason")) === "E6006"
+      other -> counterexample ("expected ToolchainPublishFailed, got " <> show other) False

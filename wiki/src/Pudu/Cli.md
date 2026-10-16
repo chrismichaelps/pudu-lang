@@ -248,6 +248,25 @@ through [[Cli RuntimePack]]. `linux-musl-x86_64` attaches the program to the por
 packaged loader and libraries, each executable. `--target` and `--runtime` together, or an unknown
 target, are refused before anything is fetched.
 
+## Native compilation (#486)
+
+`pudu build <file> --native` lowers the checked program through [[Compiler Lower]] and
+[[Backend Emit]] and publishes a host executable through [[Backend Toolchain]]; the output
+defaults to the program stem and `-o` names it. A program outside the native subset is
+refused with `E6001` at the construct, and toolchain failures surface as `E6002`–`E6006`
+with the compiler's bounded output. `--native` with `--runtime` or `--target` is refused
+before any work: those name a bundled artifact, not a native one. The interpreter remains
+the default path: `--native` never changes what `pudu run` does.
+
+### Resolved Grill Log
+
+- **Q:** Why a flag on `build` instead of a new `pudu native` command? **A:** It is a
+  build: the same checking, the same refusals, a different artifact. A new command would
+  fork the argument surface and the diagnostic path for no gain. _Rejected:_ `pudu native`.
+- **Q:** Why default the output to the program stem? **A:** It matches `build`'s existing
+  default and makes `pudu build main.pudu --native && ./main` work with no flags, which is
+  the loop a developer actually runs. _Rejected:_ requiring `-o` for native builds.
+
 ## Derive index contract (#458)
 
 Documentation includes strategy headers from [[Compiler Program]]. Public API output appends only exported strategy entries belonging to each requested root module, encoded by [[Doc Json]]. Ordinary export identity objects remain unchanged; private and dependency strategies are excluded. Failed compilation still emits no API output. [[Derive Index Output Gate]] proves these boundaries.

@@ -31,6 +31,7 @@ import Pudu.Eval.Env
   )
 import Pudu.Eval.Call (CallNeeds (..), callClosure, evaluateCall)
 import Pudu.Eval.Call.Path (flattenPath, lastPathSegment, pathValue)
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.Eval.Compile.Layout (slotLayout)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Loop (LoopNeeds (..), evaluateFor, evaluateWhile)
@@ -365,9 +366,9 @@ compileBinary walker located@(Located spanValue _) left operator right = case op
     `combine`'s, so the two cannot disagree. -}
 operationFor :: Span -> Text -> Value -> Value -> Evaluator Value
 operationFor spanValue operator = case operator of
-  "+" -> arithmetic "add" (+)
-  "-" -> arithmetic "subtract" (-)
-  "*" -> arithmetic "multiply" (*)
+  "+" -> arithmetic CheckedAdd (+)
+  "-" -> arithmetic CheckedSubtract (-)
+  "*" -> arithmetic CheckedMultiply (*)
   "<" -> comparing (<)
   "<=" -> comparing (<=)
   ">" -> comparing (>)
@@ -380,9 +381,9 @@ operationFor spanValue operator = case operator of
     _ -> combine spanValue operator left right
   _ -> combine spanValue operator
  where
-  arithmetic what apply left right = case (left, right) of
+  arithmetic operation apply left right = case (left, right) of
     (IntValue leftKind a, IntValue rightKind b) ->
-      checkedResult spanValue (integerKindMeet leftKind rightKind) what (apply a b)
+      checkedResult spanValue (integerKindMeet leftKind rightKind) operation (apply a b)
     _ -> combine spanValue operator left right
   comparing test left right = case (left, right) of
     (IntValue _ a, IntValue _ b) -> pure (BoolValue (test a b))

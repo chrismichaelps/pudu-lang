@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-16 — Native C11 backend milestone 1 (#486)
+
+- [[Pudu Core]] is the concrete [[Core IR]] module: span-first statements and expressions, identified locals, and value forms for `if` and blocks.
+- [[Compiler Lower]] gates the frozen scalar subset — `Int`/`Bool` locals, `while`, `if`, `print`, checked arithmetic — with typed `E6001` refusals at each unsupported construct's own span; [[Diagnostic Native]] owns the `E6xxx` family.
+- [[Diagnostic Arithmetic]] becomes the one home of `E7004`/`E7005` refusal text, shared by the evaluator, the unboxed loop path, and the native runtime.
+- [[Backend Emit]] emits deterministic C11 with baked diagnostic sites whose excerpt geometry comes from [[Diagnostic Render]]'s exported arithmetic; [[Backend Runtime]] is a named-parts list whose checked helpers, interpreter-identical refusal rendering, and `reportResult` clamp are carried only when a module uses them, so the fixed `-Wall -Wextra` build stays warning-free.
+- [[Backend Toolchain]] is the seam's production adapter: `PUDU_CC` discovery, fixed `-std=c11 -O2 -Wall -Wextra`, concurrent bounded capture, bounded wait, atomic publication, and `E6002`–`E6006` translation.
+- [[Pudu CLI]] gains `pudu build <file> --native`; [[Backend Emit Tests]] and [[Backend Native Tests]] hold emission determinism and byte-for-byte conformance against the interpreter.
+- Native Loop (`bench/eval/Loop.pudu`, 3,000,000 iterations): 9.1–12.9 ms across five runs (median ~11 ms) against the 245/246 ms interpreter record from #483, in a 34,032-byte executable; the full 628-check suite is green.
+
 ## 2026-10-16 — Machine-word loop regions measured (#483)
 
 - [[Eval Loop Unboxed]] executes a proven pure integer while-region over unboxed 64-bit slots with the boxed kernel's admission, commit and diagnostics; [[Eval Loop Kernel]] offers each planned region and demotes on any mismatch.

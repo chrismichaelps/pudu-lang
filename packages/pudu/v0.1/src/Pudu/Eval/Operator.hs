@@ -24,6 +24,14 @@ import Pudu.DecimalLiteral
   , decimalNegate
   , decimalSubtract
   )
+import Pudu.Diagnostic.Arithmetic
+  ( CheckedOperation (..)
+  , divideByZeroCode
+  , divideByZeroMessage
+  , overflowCode
+  , overflowHelp
+  , overflowMessage
+  )
 import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Order (OrdValue (..), comparableValue)
 import Pudu.Eval.Operator.Access
@@ -62,7 +70,7 @@ import Pudu.Source (Span)
     becomes observable when ownership checking and a store exist. -}
 applyUnary :: Span -> Text -> Value -> Evaluator Value
 applyUnary spanValue operator value = case (operator, value) of
-  ("-", IntValue kind number) -> checkedResult spanValue kind "negate" (negate number)
+  ("-", IntValue kind number) -> checkedResult spanValue kind CheckedNegate (negate number)
   ("-", FloatValue width number) -> pure (FloatValue width (negate number))
   {-| A decimal negates as the other numbers do. Without this `-1.50d` checked
       as an ordinary negation and then refused at run time, which made a
@@ -114,9 +122,9 @@ integerFast :: Span -> IntegerKind -> Text -> Integer -> Integer -> Evaluator Va
 integerFast spanValue kind operator left right = case Text.uncons operator of
   Just (first, rest)
     | Text.null rest -> case first of
-        '+' -> checkedResult spanValue kind "add" (left + right)
-        '-' -> checkedResult spanValue kind "subtract" (left - right)
-        '*' -> checkedResult spanValue kind "multiply" (left * right)
+        '+' -> checkedResult spanValue kind CheckedAdd (left + right)
+        '-' -> checkedResult spanValue kind CheckedSubtract (left - right)
+        '*' -> checkedResult spanValue kind CheckedMultiply (left * right)
         '%' | right /= 0 -> pure (IntValue kind (rem left right))
         '<' -> pure (BoolValue (left < right))
         '>' -> pure (BoolValue (left > right))
@@ -146,9 +154,9 @@ integerFast spanValue kind operator left right = case Text.uncons operator of
     three got whichever the machine's integers happened to do. -}
 integerOperation :: Span -> IntegerKind -> Text -> Integer -> Integer -> Evaluator Value
 integerOperation spanValue kind operator left right = case operator of
-  "+" -> checkedResult spanValue kind "add" (left + right)
-  "-" -> checkedResult spanValue kind "subtract" (left - right)
-  "*" -> checkedResult spanValue kind "multiply" (left * right)
+  "+" -> checkedResult spanValue kind CheckedAdd (left + right)
+  "-" -> checkedResult spanValue kind CheckedSubtract (left - right)
+  "*" -> checkedResult spanValue kind CheckedMultiply (left * right)
   "&+" -> pure (IntValue kind (integerKindAddWrapping kind left right))
   "&-" -> pure (IntValue kind (integerKindSubtractWrapping kind left right))
   "&*" -> pure (IntValue kind (integerKindMultiplyWrapping kind left right))
@@ -157,11 +165,11 @@ integerOperation spanValue kind operator left right = case operator of
   "*|" -> saturatedResult kind (left * right)
   "/" ->
     if right == 0
-      then abortAt (Just spanValue) "E7004" "division by zero" Nothing
-      else checkedResult spanValue kind "divide" (quot left right)
+      then abortAt (Just spanValue) divideByZeroCode divideByZeroMessage Nothing
+      else checkedResult spanValue kind CheckedDivide (quot left right)
   "%" ->
     if right == 0
-      then abortAt (Just spanValue) "E7004" "division by zero" Nothing
+      then abortAt (Just spanValue) divideByZeroCode divideByZeroMessage Nothing
       else pure (IntValue kind (rem left right))
   ".." -> pure (TupleValue (map (IntValue kind) [left .. right - 1]))
   "..=" -> pure (TupleValue (map (IntValue kind) [left .. right]))
@@ -177,18 +185,16 @@ integerOperation spanValue kind operator left right = case operator of
     The diagnostic names the type rather than the operator, because a reader
     seeing `UInt8` in it learns why the answer did not fit; the operator is
     already on the line in front of them. -}
-checkedResult :: Span -> IntegerKind -> Text -> Integer -> Evaluator Value
+checkedResult :: Span -> IntegerKind -> CheckedOperation -> Integer -> Evaluator Value
 {-# INLINE checkedResult #-}
-checkedResult spanValue kind what value
+checkedResult spanValue kind operation value
   | integerKindFits kind value = pure (IntValue kind value)
   | otherwise =
-      abortAt (Just spanValue) "E7005"
-        (integerKindName kind <> " cannot hold the result of this " <> what)
-        ( Just
-            ( "use the wrapping or saturating form, or a wider type; "
-                <> "checked arithmetic never truncates quietly"
-            )
-        )
+      abortAt
+        (Just spanValue)
+        overflowCode
+        (overflowMessage kind operation)
+        (Just overflowHelp)
 
 {-| A saturating result, clamped to the type's ends.
 

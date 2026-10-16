@@ -1,8 +1,10 @@
 {-| @Diagnostic.Render.Module — renders diagnostics for people -}
 module Pudu.Diagnostic.Render
-  ( RenderConfig (..)
+  ( Excerpt (..)
+  , RenderConfig (..)
   , RenderStyle (..)
   , defaultRenderConfig
+  , excerptGeometry
   , interactiveRenderConfig
   , renderDiagnostic
   , renderDiagnosticWith
@@ -102,6 +104,19 @@ renderRelated config source related =
   "   = note: " <> relatedMessage related
     <> " (" <> locationText config source (relatedSpan related) <> ")"
 
+{-| @Diagnostic.Render.Excerpt — the geometry of one quoted line: the text with
+    tabs expanded, the caret's indent and width in expanded columns, and
+    whether the span continues past the line. Exported so the native backend
+    bakes exactly this geometry into its diagnostic sites instead of deriving
+    a second, drifting copy. -}
+data Excerpt = Excerpt
+  { excerptLineText :: !Text
+  , excerptIndent :: !Int
+  , excerptWidth :: !Int
+  , excerptMultiline :: !Bool
+  }
+  deriving stock (Eq, Show)
+
 {-| A span from another snapshot still reports its location, but never borrows a
     line of unrelated text to quote. -}
 renderExcerpt :: RenderConfig -> Source -> Span -> [Text]
@@ -109,26 +124,44 @@ renderExcerpt config source spanValue
   | spanSource spanValue /= sourceName source = []
   | otherwise = case positionsOf source spanValue of
       Nothing -> []
-      Just (start, end) ->
+      Just (start, _) ->
         let lineNumber = positionLine start
             style = renderStyle config
             gutter = Text.pack (show (displayLine config lineNumber))
             pad = Text.replicate (Text.length gutter) " "
-            lineText = expandTabs (sourceLine source lineNumber)
-            sameLine = positionLine end == lineNumber
-            startColumn = expandedColumn (sourceLine source lineNumber) (positionColumn start)
-            endColumn
-              | sameLine = expandedColumn (sourceLine source lineNumber) (positionColumn end)
-              | otherwise = Text.length lineText + 1
-            width = max 1 (endColumn - startColumn)
-            caret = Text.replicate (max 0 (startColumn - 1)) " " <> Text.replicate width "^"
-            continuation = if sameLine then Text.empty else " ..."
-         in [ " " <> pad <> " |"
-            , " " <> gutter <> " | " <> lineText
-            , " " <> pad <> " | " <> paint style (severityColorOf style) caret <> continuation
-            ]
+         in case excerptGeometry source spanValue of
+              Nothing -> []
+              Just excerpt ->
+                let caret =
+                      Text.replicate (excerptIndent excerpt) " "
+                        <> Text.replicate (excerptWidth excerpt) "^"
+                    continuation = if excerptMultiline excerpt then " ..." else Text.empty
+                 in [ " " <> pad <> " |"
+                    , " " <> gutter <> " | " <> excerptLineText excerpt
+                    , " " <> pad <> " | " <> paint style (severityColorOf style) caret <> continuation
+                    ]
  where
   severityColorOf _ = red
+
+{-| The excerpt arithmetic itself: expanded line text, caret indent and width,
+    and the continuation flag, all in the interpreter's own conventions. -}
+excerptGeometry :: Source -> Span -> Maybe Excerpt
+excerptGeometry source spanValue = do
+  (start, end) <- positionsOf source spanValue
+  let lineNumber = positionLine start
+      lineText = expandTabs (sourceLine source lineNumber)
+      sameLine = positionLine end == lineNumber
+      startColumn = expandedColumn (sourceLine source lineNumber) (positionColumn start)
+      endColumn
+        | sameLine = expandedColumn (sourceLine source lineNumber) (positionColumn end)
+        | otherwise = Text.length lineText + 1
+  pure
+    Excerpt
+      { excerptLineText = lineText
+      , excerptIndent = max 0 (startColumn - 1)
+      , excerptWidth = max 1 (endColumn - startColumn)
+      , excerptMultiline = not sameLine
+      }
 
 positionsOf :: Source -> Span -> Maybe (Position, Position)
 positionsOf source spanValue = do

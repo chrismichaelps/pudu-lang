@@ -26,6 +26,8 @@ tags: [moc, module]
 - [[Float Literal]] — shared floating suffixes, total conversion, overflow detection, and runtime precision normalization.
 - [[Compiler Pipeline]] — the fixed lex, parse, resolve, type phase boundary and error gate.
 - [[src/Pudu/Compiler/_MOC|Program compiler modules]] — dependency discovery, module graph ordering, and cross-module interface orchestration.
+- [[Pudu Core]] — the checked, span-carrying [[Core IR]] module the native backend consumes.
+- [[src/Pudu/Backend/_MOC|Backend modules]] — C11 emission, the embedded native runtime, and the bounded toolchain seam.
 - [[src/Pudu/Semantic/_MOC|Semantic modules]] — symbols, scopes, the prelude layering, and name resolution.
 - [[src/Pudu/Type/_MOC|Type modules]] — type formation, unification, and bidirectional checking.
 - [[src/Pudu/Eval/_MOC|Evaluator modules]] — tree-walking execution, runtime values, and bounded control flow.
@@ -33,6 +35,8 @@ tags: [moc, module]
   type-shape search, and the self-contained browser projection.
 - [[src/Pudu/Repl/_MOC|REPL modules]] — the `puduci` session, its commands, and its structural outline.
 - [[Diagnostic Render]] — human-readable diagnostics with source excerpts and carets.
+- [[Diagnostic Arithmetic]] — the one home of checked-arithmetic refusal text, shared by the evaluator, the unboxed loop path and the native runtime.
+- [[Diagnostic Native]] — the `E6xxx` family: native-subset refusals and toolchain failures.
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu Version]] — Cabal-derived version reporting, language constraints, and semver checking.
 - [[Cli RuntimePack]] — the release's musl runtime, fetched, verified, and kept for `pudu build --target`.

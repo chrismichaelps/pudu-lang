@@ -134,6 +134,8 @@ tags: [moc, module]
   the installable compiler archive while preserving the full Cabal gate.
 - [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.
 - [[Runtime Evaluation Spec]] — exact-count language, runtime, concurrency, filesystem, process, and cryptography fixture contracts.
+- [[Backend Emit Tests]] — lowering refusals, deterministic emission, and verbatim site text without a C compiler.
+- [[Backend Native Tests]] — byte-for-byte native-vs-interpreter conformance and the `E6002`–`E6006` toolchain paths.
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 - [[Uses Ui Layout]] — exact-frame, accessibility, and repaint-equality coverage for layout.
 - [[Uses Ui Screen]] — input routing, focus, and incremental frames equal to fresh ones.

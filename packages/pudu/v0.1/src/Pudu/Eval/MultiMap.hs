@@ -10,6 +10,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
+import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.Eval.Builtin.Collection (unorderableKey)
 import Pudu.Eval.Env (Env (..), Evaluator (..), abortAt, callLimit, descend, tally)
 import Pudu.Eval.Operator (checkedResult)
@@ -50,7 +51,7 @@ callMultiMapAdd spanValue arguments = case arguments of
           Nothing -> result
           Just (IntValue kind count)
             | integerKindFits (integerKindMeet kind defaultIntegerKind) (count + 1) -> result
-            | otherwise -> checkedResult spanValue (integerKindMeet kind defaultIntegerKind) "add" (count + 1)
+            | otherwise -> checkedResult spanValue (integerKindMeet kind defaultIntegerKind) CheckedAdd (count + 1)
           _ -> abortAt (Just spanValue) "E7001" "multiMapAdd expects Int occurrence counts" Nothing
    where
     append _ _ (ArrayValue members) = ArrayValue (members Seq.|> value)
