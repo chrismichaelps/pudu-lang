@@ -36,6 +36,7 @@ tags: [moc, module]
 - [[src/Pudu/Repl/_MOC|REPL modules]] — the `puduci` session, its commands, and its structural outline.
 - [[Diagnostic Render]] — human-readable diagnostics with source excerpts and carets.
 - [[Diagnostic Arithmetic]] — the one home of checked-arithmetic refusal text, shared by the evaluator, the unboxed loop path and the native runtime.
+- [[Diagnostic Evaluation]] — the call-depth (`E7002`) refusal text the interpreter and the native runtime both print.
 - [[Diagnostic Native]] — the `E6xxx` family: native-subset refusals and toolchain failures.
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu Version]] — Cabal-derived version reporting, language constraints, and semver checking.

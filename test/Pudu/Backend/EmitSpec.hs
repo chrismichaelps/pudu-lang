@@ -19,6 +19,8 @@ import Pudu.Core
   ( CoreBlock (..)
   , CoreExpressionShape (..)
   , CoreFunction (..)
+  , CoreParameter (..)
+  , CoreLocal (..)
   , CoreModule (..)
   , CoreStatement (..)
   , CoreStatementShape (..)
@@ -31,6 +33,7 @@ import Pudu.Diagnostic
   , diagnosticCodeText
   , diagnosticMessage
   , diagnosticSpan
+  , hasErrors
   )
 import Pudu.Diagnostic.Arithmetic
   ( CheckedOperation (..)
@@ -57,8 +60,10 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 backendEmitProperties :: [(String, IO Property)]
 backendEmitProperties =
   [ ("a supported program lowers to the expected core shapes", testSupportedLowering)
-  , ("only the entry function is emitted", testEntryOnly)
+  , ("unreachable helpers are omitted", testEntryOnly)
+  , ("transitively reachable typed functions lower once", testReachableFunctions)
   , ("unsupported constructs refuse with E6001 at their own span", testRefusals)
+  , ("function values and indirect calls refuse at their own spans", testLocalFunctionRefusal)
   , ("emission is deterministic", testDeterminism)
   , ("sites carry the checked-arithmetic text verbatim", testSiteText)
   , ("one site per checked operation", testSiteCount)
@@ -73,11 +78,13 @@ compileAndLower :: Text -> IO (Either [Diagnostic] (Source, CoreModule))
 compileAndLower text = do
   source <- newSource (SourceName "emit.pudu") text
   result <- runCompile source
-  pure $ case compileModule result of
-    Nothing -> Left (compileDiagnostics result)
-    Just parsed -> case lowerProgram "main" parsed of
-      LowerRefused refusals -> Left refusals
-      Lowered core -> Right (source, core)
+  pure $ if hasErrors (compileDiagnostics result)
+    then Left (compileDiagnostics result)
+    else case compileModule result of
+      Nothing -> Left (compileDiagnostics result)
+      Just parsed -> case lowerProgram "main" parsed of
+        LowerRefused refusals -> Left refusals
+        Lowered core -> Right (source, core)
 
 emitText :: Text -> IO (Either [Diagnostic] Text)
 emitText text = do
@@ -140,10 +147,7 @@ testSupportedLowering = do
     Just _ -> True
     Nothing -> False
 
-{-| A declaration the entry cannot reach does not block the build: calls are
-    refused in this milestone, so an uncalled function is unreachable and only
-    the entry is carried. A module with no `main` refuses instead, naming its
-    first declaration. -}
+{-| An unsupported but unreachable declaration cannot block the entry. -}
 testEntryOnly :: IO Property
 testEntryOnly = do
   compiled <- compileAndLower entryWithOther
@@ -162,9 +166,31 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other() -> Int {"
-      , "  return 1"
+      , "fn other(value: Str) -> Str {"
+      , "  return value"
       , "}"
+      ]
+
+testReachableFunctions :: IO Property
+testReachableFunctions = do
+  compiled <- compileAndLower $ Text.unlines
+    [ "module Reachable"
+    , "fn second(flag: Bool) -> Bool { return !flag }"
+    , "fn unused(value: Str) -> Str { return value }"
+    , "fn main() -> Int { return first(9, second(false)) }"
+    , "fn first(value: Int, flag: Bool) -> Int {"
+    , "  if second(flag) { return 0 }"
+    , "  return value"
+    , "}"
+    ]
+  pure $ case compiled of
+    Left refusals -> counterexample (show refusals) False
+    Right (_, core) -> conjoin
+      [ map coreFunctionName (coreModuleFunctions core) === ["second", "main", "first"]
+      , [ (coreFunctionResult function, map (coreLocalType . coreParameterLocal) (coreFunctionParameters function))
+        | function <- coreModuleFunctions core
+        ] === [(CoreBoolType, [CoreBoolType]), (CoreIntegerType PlatformSigned, []),
+               (CoreIntegerType PlatformSigned, [CoreIntegerType PlatformSigned, CoreBoolType])]
       ]
 
 {-| Each case is a program that compiles and a marker whose first occurrence is
@@ -173,7 +199,20 @@ testEntryOnly = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
+  [ ("unannotated parameter", helperProgram "fn helper(value) -> Int { return value }" "helper(1)", "value)")
+  , ("unannotated result", helperProgram "fn helper(value: Int) { return value }" "helper(1)", "helper(value")
+  , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
+  , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
+  , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
+  , ("unit parameter", helperProgram "fn helper(value: ()) -> Int { return 1 }" "helper(())", "()")
+  , ("sized integer parameter", helperProgram "fn helper(value: Int8) -> Int { return 1 }" "helper(1i8)", "Int8")
+  , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
+  , ("call to entry", statementProgram "main()", "main()\n")
+  , ("trailing print result", Text.unlines
+      ["module Refuse", "fn main() { print(\"x\") }"], "print(")
+  , ("explicit print result", Text.unlines
+      ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
+  , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("floating-point values", bindingProgram "var ratio = 1.5", "1.5")
   , ("break", statementProgram "while true { break }", "break")
   , ("bindings of type Str", bindingProgram "var greeting = \"hello\"", "var greeting")
@@ -196,6 +235,8 @@ refusalCases =
       ], "other")
       ]
  where
+  helperProgram helper call = Text.unlines
+    ["module Refuse", helper, "fn main() -> Int {", "  return " <> call, "}"]
   bindingProgram binding = statementProgram binding
   statementProgram statement =
     Text.unlines
@@ -216,10 +257,10 @@ refusalOutcome :: (String, Text, Text) -> IO Property
 refusalOutcome (label, sourceText', marker) = do
   source <- newSource (SourceName "refuse.pudu") sourceText'
   result <- runCompile source
-  pure $ case compileModule result of
-    Nothing ->
-      counterexample (label <> ": the program did not compile") False
-    Just parsed -> case lowerProgram "main" parsed of
+  pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
+    (True, _) -> counterexample (label <> ": compile errors: " <> show (compileDiagnostics result)) False
+    (_, Nothing) -> counterexample (label <> ": the program did not compile") False
+    (False, Just parsed) -> case lowerProgram "main" parsed of
       Lowered _ -> counterexample (label <> ": lowered, but a refusal was expected") False
       LowerRefused refusals -> conjoin
         [ counterexample
@@ -234,6 +275,23 @@ refusalOutcome (label, sourceText', marker) = do
                   Nothing -> counterexample (label <> ": the refusal span has no position") False
             _ -> counterexample (label <> ": expected exactly one refusal") False
         ]
+
+testLocalFunctionRefusal :: IO Property
+testLocalFunctionRefusal = do
+  source <- newSource (SourceName "indirect.pudu") $ Text.unlines
+    [ "module Indirect", "fn helper() -> Int { return 1 }"
+    , "fn main() -> Int {", "  let chosen = helper", "  return chosen()", "}"
+    ]
+  result <- runCompile source
+  pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
+    (False, Just parsed) -> case lowerProgram "main" parsed of
+      Lowered _ -> counterexample "indirect call unexpectedly lowered" False
+      LowerRefused refusals -> conjoin
+        [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001", "E6001"]
+        , map (offsetPosition source . spanStart . diagnosticSpan) refusals
+            === map (markerPosition source) ["helper\n", "chosen()"]
+        ]
+    _ -> counterexample ("indirect-call fixture: " <> show (compileDiagnostics result)) False
 
 markerPosition :: Source -> Text -> Maybe Position
 markerPosition source marker = do

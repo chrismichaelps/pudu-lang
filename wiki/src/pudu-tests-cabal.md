@@ -109,3 +109,7 @@ Register Qualified Shadow Spec with the existing test dependencies. Resolved Gri
 Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
+
+## Native function and process regressions (#488)
+
+Register [[Backend Function Programs]] as the native function corpus and [[Backend Toolchain Tests]] as an executed property family. Resolved Grill Log: the full suite must run independent differential and adversarial process regressions through static registration; no new test dependency.

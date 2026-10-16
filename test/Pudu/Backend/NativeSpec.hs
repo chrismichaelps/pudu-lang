@@ -16,6 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (emitProgram)
+import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
   , ToolchainRequest (..)
@@ -80,6 +81,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 backendNativeProperties :: [(String, IO Property)]
 backendNativeProperties =
   [ ("native execution matches the interpreter on success programs", testSuccessConformance)
+  , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
+  , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native execution matches the interpreter on exit statuses", testStatusConformance)
   , ("native refusals match the interpreter byte for byte", testRefusalConformance)
   , ("a compiler that cannot be found is E6002", testToolchainNotFound)
@@ -186,6 +189,12 @@ testSuccessConformance :: IO Property
 testSuccessConformance = do
   outcomes <- mapM (uncurry conformance) successPrograms
   pure (conjoin outcomes)
+
+testFunctionConformance :: IO Property
+testFunctionConformance = conjoin <$> mapM (uncurry conformance) functionSuccessPrograms
+
+testFunctionRefusals :: IO Property
+testFunctionRefusals = conjoin <$> mapM (uncurry conformance) functionRefusalPrograms
 
 testStatusConformance :: IO Property
 testStatusConformance = do

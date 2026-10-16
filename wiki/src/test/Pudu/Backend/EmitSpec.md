@@ -20,35 +20,48 @@ code — [[Backend Native Tests]] owns execution.
 ## Behavior and dependencies
 
 - Lowering: a supported program lowers to a module with the expected function,
-  locals, and statement shapes, and only the entry function is emitted — a
-  declaration the entry cannot reach does not block the build, because calls
-  are refused and it is unreachable; each unsupported construct (imports, a
-  module without `main`, patterns, `break`, floats, suffixed integers, `Text`
-  locals, borrows, matches) lowers to a refusal whose code is `E6001` and
-  whose span is the construct's own.
+  locals, statement shapes, and call shapes, and only functions reachable from
+  the entry are carried — a declaration the entry cannot reach does not block
+  the build and does not refuse, because the interpreter never runs it; each
+  unsupported construct (a module without `main`, arrays, `break`,
+  floats, `Str` locals, borrows, matches, function values and calls through
+  local values, calls to the entry, parameters without annotations or of
+  unsupported types, default parameter values, functions without a declared
+  return type, expression-bodied non-entry functions, and trailing or explicitly
+  returned print results) lowers to a refusal whose
+  code is `E6001` and whose span is the construct's own.
 - Emission: emitting the same core module twice yields identical text;
   emitting different sources at the same offsets does not confuse site
-  excerpts; the generated translation unit contains the runtime prologue, one
-  site per checked operation with the operation's own excerpt, and no
-  `#line`, no nonstandard extension, and no source identifier used as a C
-  identifier.
+  excerpts; the generated translation unit contains one site per checked
+  operation with the operation's own excerpt, no `#line`, only the approved
+  standard/platform includes, and generated local names rather than source
+  identifiers. [[Backend Native Tests]] checks function prototypes, wrappers,
+  symbol portability, and operand/argument sequencing through compilation
+  without warnings and observable differential execution.
 - Diagnostics: `E7004`/`E7005` site entries carry the message and help text
-  of [[Diagnostic Arithmetic]] verbatim, so the native and interpreted texts
+  of [[Diagnostic Arithmetic]] verbatim and call sites carry [[Diagnostic
+  Evaluation]]'s `E7002` text verbatim, so the native and interpreted texts
   are equal by construction and the differential tests then prove the
   renderers agree.
 
 ## Algorithm and negative logic
 
-Programs are compiled from source strings through the ordinary compiler
-before lowering, so refusals are about the real checked tree, not a hand-made
-one. The suite asserts what is present and what is absent; it does not
+Programs must pass the ordinary compiler without error diagnostics before
+lowering is tested, so refusals are about the real checked tree, not a
+hand-made one. The suite asserts what is present and what is absent; it does not
 snapshot the whole translation unit, because the runtime text changes for
 reasons unrelated to any one check and a full snapshot would turn every
 runtime edit into a test rewrite. Emission stability is asserted by
 re-emission, and shape by targeted containment.
 
-Uses [[Compiler Lower]], [[Backend Emit]], [[Diagnostic Arithmetic]],
-[[Diagnostic Native]], [[Compiler Pipeline]] and the shared test coordinator.
+Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
+[[Diagnostic Arithmetic]], [[Diagnostic Evaluation]], [[Diagnostic Native]],
+[[Compiler Pipeline]] and the shared test coordinator.
+
+## Resolved Grill Log
+
+- **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
+- **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
 
 ## Referenced by
 

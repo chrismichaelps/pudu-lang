@@ -5,7 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
-- [[Native C11 Backend Delivery]] — milestone 1 of the native backend, stacked on PR #485 (#486).
+- [[Native C11 Backend Delivery]] — native C11 backend and function/recursion hardening (#486, #488).
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 

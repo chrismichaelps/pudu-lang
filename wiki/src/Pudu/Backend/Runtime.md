@@ -25,7 +25,7 @@ data RuntimePart = RuntimePart
   , runtimePartLines :: !Text
   }
 runtimeParts :: [RuntimePart]
-  -- prelude, site, colored, fail, add, sub, mul, div, rem, neg,
+  -- prelude, site, colored, fail, call_depth, add, sub, mul, div, rem, neg,
   -- print_int, print_bool, print_str, status
 runtimeRevision :: Text -- the contract revision baked into every artifact
 ```
@@ -41,6 +41,8 @@ typedef struct {
 } pudu_site;
 
 void pudu_fail(const pudu_site *site);
+static int64_t pudu_depth; /* the live call depth, entry starts at 1 */
+void pudu_enter(const pudu_site *site);
 int64_t pudu_add(int64_t, int64_t, const pudu_site *);
 int64_t pudu_sub(int64_t, int64_t, const pudu_site *);
 int64_t pudu_mul(int64_t, int64_t, const pudu_site *);
@@ -57,10 +59,22 @@ int pudu_status(int64_t);
 
 - The runtime is a fixed, ordered list of named parts: the prelude (includes,
   `INT64_MIN`, the site record, checked-range helpers), the site table, the
-  colour decision, the refusal renderer, one part per checked helper, one part
-  per printer, and the status clamp. [[Backend Emit]] selects the parts a
-  module needs and concatenates them in this order, each followed by a blank
-  line, so the translation unit carries exactly the helpers it calls.
+  colour decision, the refusal renderer, the call-depth check, one part per
+  checked helper, one part per printer, and the status clamp. [[Backend Emit]]
+  selects the parts a module needs and concatenates them in this order, each
+  followed by a blank line, so the translation unit carries exactly the helpers
+  it calls.
+- Call depth is runtime state, not emitted code: `pudu_depth` starts at `0`
+  and the emitted C `main` sets it to `1`, so the entry runs at depth 1 exactly
+  as the evaluator's entry `descend` counts it. Every call reaches
+  `pudu_enter` through an emitted wrapper, and the check is `depth > 4096`
+  *before* the increment — the evaluator's own order — so the program aborts on
+  the call that would exceed the bound, at the call's own span, with
+  [[Diagnostic Evaluation]]'s `E7002` text through the same `pudu_fail`. The
+  bound is written into this part from [[Compile Time Limits]]'s
+  `callDepthLimit`, so the runtime and the evaluator cannot drift; the wrapper
+  emits the decrement after a normal return, because an abort exits and never
+  returns.
 - Checked arithmetic is defined for every input: `pudu_add`/`pudu_sub` compare
   against `INT64_MAX`/`INT64_MIN` before adding; `pudu_mul` refuses the two
   `INT64_MIN`/`-1` pairs and otherwise bounds-checks by division; `pudu_div`
@@ -99,8 +113,9 @@ int pudu_status(int64_t);
 Consumed by [[Backend Emit]], which selects and concatenates the runtime parts
 into every generated translation unit. It depends on nothing in Pudu: the C
 side includes only `<stdint.h>`, `<stdio.h>`, `<stdlib.h>`, `<string.h>`, and
-`<unistd.h>` or `<io.h>` for `isatty`. Its Haskell side is a literal with no
-imports beyond `Data.Text`.
+`<unistd.h>` or `<io.h>` for `isatty`. Its Haskell side imports `Data.Text`
+and [[Compile Time Limits]] — pure constants, no frontend, semantic, or
+evaluator module — so the depth bound is the evaluator's own.
 
 ## Grill Log
 
@@ -133,9 +148,23 @@ imports beyond `Data.Text`.
   output would show different interleaving with diagnostics on a shared
   terminal, which is exactly the difference the conformance tests compare.
   _Rejected:_ relying on process-exit flushing.
+- **Q:** Why is the call depth a runtime global instead of an emitted
+  parameter? **A:** The evaluator keeps depth as environment state, not as an
+  argument; a global with a checked `pudu_enter` is that state in C, and it
+  keeps the emitted wrapper a call plus a decrement rather than a second
+  calling convention. _Rejected:_ passing depth through every signature.
+- **Q:** Why is the bound written from [[Compile Time Limits]] rather than
+  repeated as a literal? **A:** The evaluator's bound is the contract; a second
+  literal here would be a copy that can silently disagree, and the runtime part
+  is generated text anyway, so baking the one constant costs nothing.
+  _Rejected:_ a `#define` in the prelude and a literal here.
 
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Backend Emit]] ·
 [[Backend Toolchain]] · [[Diagnostic Arithmetic]] · [[Backend]] ·
 [[Compilation Artifact]]
+
+## Strict C11 terminal detection
+
+Use the standard output descriptor `1` with `isatty`/`_isatty`, avoiding `fileno` whose POSIX declaration is hidden by strict C11 on glibc. Resolved Grill Log: terminal detection has no stream mutation and needs no feature-test macro or compiler extension.

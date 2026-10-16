@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-16 — Native functions and C11 production hardening (#488)
+
+- [[Compiler Lower]] carries only reachable typed functions, including recursion and mutual recursion; [[Compiler Lower Body]], [[Compiler Lower State]], and [[Compiler Lower Signature]] separate traversal, state, and signature admission.
+- [[Backend Emit]] sequences eager operands and guards short-circuit setup, preserving mutable reads, nested comparison grouping, failure order, and argument effects. [[Backend Emit Support]] uses injective Unicode name encoding; [[Backend Emit State]] escapes C11 trigraph candidates.
+- Explicit entry returns preserve exit status; escaping print results refuse as `E6001`. [[Diagnostic Evaluation]] shares recursion-limit text with the evaluator and native runtime.
+- [[Backend Toolchain]] bounds process completion and output drains together, kills isolated POSIX process groups on timeout, and preserves existing outputs on failure.
+- [[Backend Function Programs]] and [[Backend Toolchain Tests]] extend differential output/status/diagnostic and adversarial process coverage. Validation results are recorded in [[Native C11 Backend Delivery]].
+
 ## 2026-10-16 — Native C11 backend milestone 1 (#486)
 
 - [[Pudu Core]] is the concrete [[Core IR]] module: span-first statements and expressions, identified locals, and value forms for `if` and blocks.

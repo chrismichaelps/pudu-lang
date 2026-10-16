@@ -1,0 +1,158 @@
+{-| @Test.Backend.FunctionPrograms — source-level function conformance corpus.
+    The native harness compares every observable result with the evaluator;
+    these programs make sequencing and call-depth boundaries observable. -}
+module Pudu.Backend.FunctionPrograms
+  ( functionSuccessPrograms, functionRefusalPrograms ) where
+
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Comptime.Limits (callDepthLimit)
+
+functionSuccessPrograms :: [(String, Text)]
+functionSuccessPrograms =
+  [ ("typed parameters and Bool results", program
+      [ "fn choose(value: Int, accept: Bool) -> Int {"
+      , "  if accept { return value }"
+      , "  return 0"
+      , "}"
+      , "fn invert(value: Bool) -> Bool { return !value }"
+      , "fn main() -> Int { return choose(17, invert(false)) }"
+      ])
+  , ("nested calls preserve printed argument order", program
+      [ "fn mark(value: Int) -> Int {"
+      , "  print(display(value))"
+      , "  return value"
+      , "}"
+      , "fn pair(left: Int, right: Int) -> Int { return left * 10 + right }"
+      , "fn main() -> Int { return pair(mark(1), pair(mark(2), mark(3))) }"
+      ])
+  , ("unit helpers and explicit early returns", program
+      [ "fn announce(value: Int) -> () {"
+      , "  if value == 0 { return }"
+      , "  print(display(value))"
+      , "  return"
+      , "}"
+      , "fn main() -> () {"
+      , "  announce(0)"
+      , "  announce(7)"
+      , "  return"
+      , "}"
+      ])
+  , ("unit helper call can be returned", program
+      [ "fn noop() -> () { return }"
+      , "fn relay() -> () { return noop() }"
+      , "fn main() -> () { return relay() }"
+      ])
+  , ("argument values freeze before later mutations", program
+      [ "fn pair(left: Int, right: Int) -> Int { return left * 10 + right }"
+      , "fn main() -> Int {"
+      , "  var value = 1"
+      , "  return pair(value, {"
+      , "    value = 2"
+      , "    value"
+      , "  })"
+      , "}"
+      ])
+  , ("binary left operands freeze before right mutations", program
+      [ "fn main() -> Int {"
+      , "  var value = 3"
+      , "  return value * {"
+      , "    value = 7"
+      , "    value"
+      , "  }"
+      , "}"
+      ])
+  , ("short circuit suppresses and sequences helper effects", program
+      [ "fn mark(value: Bool) -> Bool {"
+      , "  print(display(value))"
+      , "  return value"
+      , "}"
+      , "fn main() -> Int {"
+      , "  var skippedAnd = false && mark(true)"
+      , "  var skippedOr = true || mark(false)"
+      , "  var takenAnd = true && mark(false)"
+      , "  var takenOr = false || mark(true)"
+      , "  if skippedAnd || !skippedOr || takenAnd || !takenOr { return 1 }"
+      , "  return 0"
+      , "}"
+      ])
+  , ("direct recursion", program
+      [ "fn factorial(value: Int) -> Int {"
+      , "  if value == 0 { return 1 }"
+      , "  return value * factorial(value - 1)"
+      , "}"
+      , "fn main() -> Int { return factorial(5) }"
+      ])
+  , ("mutual recursion", program
+      [ "fn even(value: Int) -> Bool {"
+      , "  if value == 0 { return true }"
+      , "  return odd(value - 1)"
+      , "}"
+      , "fn odd(value: Int) -> Bool {"
+      , "  if value == 0 { return false }"
+      , "  return even(value - 1)"
+      , "}"
+      , "fn main() -> Int {"
+      , "  if even(12) && odd(11) { return 0 }"
+      , "  return 1"
+      , "}"
+      ])
+  , ("Unicode helper symbols remain portable C11", program
+      [ "fn café(value: Int) -> Int { return value + 1 }"
+      , "fn λ(value: Int) -> Int { return café(value) }"
+      , "fn main() -> Int { return λ(8) }"
+      ])
+  , ("trigraph text and unused locals remain warning free", program
+      [ "fn ignore(unused: Int) -> Int {"
+      , "  let discarded = 42"
+      , "  return 0"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(\"??/n ??= ??' ??( ??) ??! ??< ??> ??-\")"
+      , "  return ignore(9)"
+      , "}"
+      ])
+  , ("comparison operands keep their grouping", program
+      [ "fn main() -> Int {"
+      , "  if (1 < 2) == (3 < 4) { return 0 }"
+      , "  return 1"
+      , "}"
+      ])
+  , ("called wrapper survives a later resultless body", program
+      [ "fn leaf() -> Int { return 4 }"
+      , "fn caller() -> Int { return leaf() }"
+      , "fn main() -> () {"
+      , "  print(display(caller()))"
+      , "  return"
+      , "}"
+      ])
+  , ("depth boundary accepts and restores depth across calls", depthProgram
+      [ "  print(display(descend(" <> depth (callDepthLimit - 1) <> ")))"
+      , "  return descend(" <> depth (callDepthLimit - 1) <> ")"
+      ])
+  ]
+
+functionRefusalPrograms :: [(String, Text)]
+functionRefusalPrograms =
+  [ ("one call beyond the depth boundary", depthProgram
+      ["  return descend(" <> depth callDepthLimit <> ")"])
+  , ("checked failure inside a called helper", program
+      [ "fn divide(value: Int) -> Int { return 10 / value }"
+      , "fn main() -> Int { return divide(0) }"
+      ])
+  ]
+
+program :: [Text] -> Text
+program body = Text.unlines (["module Main", ""] <> body)
+
+depth :: Int -> Text
+depth = Text.pack . show
+
+depthProgram :: [Text] -> Text
+depthProgram body = program
+  ([ "fn descend(value: Int) -> Int {"
+   , "  if value == 0 { return 0 }"
+   , "  return descend(value - 1)"
+   , "}"
+   , "fn main() -> Int {"
+   ] <> body <> ["}"])

@@ -22,6 +22,7 @@ vocabulary and neither invents its own.
 ```haskell
 data CoreModule = CoreModule
   { coreModuleName :: !Text
+  , coreModuleEntry :: !Text
   , coreModuleFunctions :: ![CoreFunction]
   }
 
@@ -30,6 +31,11 @@ data CoreFunction = CoreFunction
   , coreFunctionParameters :: ![CoreParameter]
   , coreFunctionResult :: !CoreType
   , coreFunctionBody :: !CoreBlock
+  }
+
+data CoreParameter = CoreParameter
+  { coreParameterLocal :: !CoreLocal
+  , coreParameterSpan :: !Span
   }
 
 data CoreBlock = CoreBlock
@@ -67,6 +73,7 @@ data CoreExpressionShape
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
   | CorePrint !CoreExpression
+  | CoreCall !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
 
@@ -94,11 +101,19 @@ coreTypeName :: CoreType -> Text
   `CorePrint` arguments; [[Compiler Lower]] refuses every other position, so
   the emitter may rely on that discipline rather than re-check it.
 - `CoreUnitType` is the type of effects the interpreter also types as Unit —
-  `print`, assignment, `if` without else, `while` — so a discarded value is
-  typed, never guessed.
+  assignment, `if` without else, `while` — so a discarded value is
+  typed, never guessed. `CorePrint` uses this effect representation only in discarded positions; lowering refuses its Result escaping into a native return.
 - `CoreReturn` is a statement, not an expression: a return is control flow and
   the interpreter treats it that way, so nothing downstream has to reason
   about a value that never arrives.
+- `CoreCall` names its callee and carries its arguments in source order:
+  argument evaluation order is the evaluator's left-to-right order, so the
+  emitter must sequence them itself rather than lean on C's unspecified order.
+  The callee is a name because function symbols are name-derived and unique per
+  module; the emitter resolves it once, the way it resolves every local.
+- `coreModuleEntry` names the function the process enters: the emitter writes
+  its C `main` from this field rather than from a hard-coded `"main"`, so the
+  entry vocabulary stays the caller's decision all the way to code generation.
 - The module is deliberately silent about execution: no evaluation order, no
   calling convention, no C. Those are [[Backend Emit]]'s contract.
 
@@ -138,6 +153,16 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
   Names are ambiguous under shadowing and types are needed to choose checked
   helpers; resolving once at lowering keeps the emitter a translation, not a
   second resolver. _Rejected:_ name-keyed maps rebuilt per pass.
+- **Q:** Why is `CoreCall` a callee name rather than a function identity?
+  **A:** Function symbols are already name-derived (`pudu_fn_<encoded-name>`) and
+  module function names are unique, so a second identity space would exist
+  only to be mapped back to the name at emission. _Rejected:_ numeric function
+  ids in the IR.
+- **Q:** Why does the module carry its entry name? **A:** The emitter writes a
+  C `main` and must call something; leaving `"main"` hard-coded in emission
+  would make the entry vocabulary a code-generation constant instead of the
+  caller's decision it already is in lowering and evaluation. _Rejected:_ a
+  literal entry symbol in [[Backend Emit]].
 
 ## Referenced by
 

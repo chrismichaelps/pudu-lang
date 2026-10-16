@@ -28,6 +28,7 @@ import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Cache.PersistSpec (persistProperties)
 import Pudu.Backend.EmitSpec (backendEmitProperties)
 import Pudu.Backend.NativeSpec (backendNativeProperties)
+import Pudu.Backend.ToolchainSpec (backendToolchainProperties)
 import Pudu.Compiler.LiteralsSpec (literalsProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
 import Pudu.Compiler.Program.AuthenticationSpec (authenticationProperties)
@@ -117,7 +118,7 @@ main = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (backendEmitProperties <> backendNativeProperties)
+  backendOutcomes <- traverse (uncurry check) (backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties

@@ -26,3 +26,13 @@ aliases: [Backend Module Map]
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/_MOC]] · [[Backend]]
+
+## Native function delivery (#488)
+
+- [[Backend Emit State]]
+- [[Backend Emit Support]]
+- [[Compiler Lower Body]]
+- [[Compiler Lower State]]
+- [[Compiler Lower Signature]]
+- [[Backend Function Programs]]
+- [[Backend Toolchain Tests]]

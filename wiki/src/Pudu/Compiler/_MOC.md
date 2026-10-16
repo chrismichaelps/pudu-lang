@@ -20,6 +20,8 @@ aliases: [Program Compiler Module Map]
   orchestration.
 - [[Compiler Lower]] — checked tree to [[Core IR]], with typed `E6001` refusals for everything the
   native subset does not carry.
+- [[Compiler Lower Body]] — the block, statement, expression, and call-site traversal the reachability
+  driver drives; state and signature admission have separate modules.
 - [[Compiler Library]] — where a module is looked for, and how `Std` resolves from the distribution.
 - [[Compiler Literals]] — integer literals resolved to their kind and value once, after checking.
 - [[Compiler Literals Spec]] — resolved and preserved literal regressions.
@@ -37,3 +39,8 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Compiler Pipeline]]
+
+## Native function delivery (#488)
+
+- [[Compiler Lower State]]
+- [[Compiler Lower Signature]]
