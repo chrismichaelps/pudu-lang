@@ -332,6 +332,7 @@ library
     Pudu.Eval.MultiMap
     Pudu.Eval.Loop.Kernel
     Pudu.Eval.Loop.Step
+    Pudu.Eval.Loop.Unboxed
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
     Pudu.Runtime.SeriesMap

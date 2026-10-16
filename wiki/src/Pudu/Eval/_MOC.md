@@ -80,6 +80,7 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Loop Kernel]] — complete pure regions, proven MultiMap calls and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — strict unboxed region outcomes, structured refusal/transfer and scratch cleanup.
+- [[Eval Loop Unboxed]] — machine-word integer fast path for proven kernel regions, exact refusal parity with the boxed kernel.
 
 - [[Eval Call Argument]] — argument values and receiver lending places.
 - [[Eval Call Needs]] — evaluator callbacks shared by call dispatch and argument discovery.

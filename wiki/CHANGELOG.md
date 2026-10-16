@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-16 — Machine-word loop regions measured (#483)
+
+- [[Eval Loop Unboxed]] executes a proven pure integer while-region over unboxed 64-bit slots with the boxed kernel's admission, commit and diagnostics; [[Eval Loop Kernel]] offers each planned region and demotes on any mismatch.
+- Loop workload: 560/555 ms to 245/246 ms tree/compiled and 2,334 MB to 2 MB allocated; six focused fixture checks plus the full 612-check suite pass with every other workload unchanged.
+- [[Package Binary]] real-artifact verification: stripped compiler keeps Mach-O validity, ad-hoc signature, identical dylibs, extracted execution, the dlopen'ed SQLite adapter and a 32.9% smaller attached bundle.
+- Promotion withheld: residual ~78 ns/iteration is interpreter dispatch and the 98 MB compiler does not compete with native sizes, so issue #483's commit gate stays unmet; the measured record is committed on feature/483-backend-performance and opened as a PR to dev for review.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

@@ -51,8 +51,8 @@ these constructs are outside the kernel's admitted region.
 ## Dependencies and consumers
 
 Requires [[Eval Env]], [[Eval Frame]], [[Eval Match]], [[Eval MultiMap]],
-[[Eval Operator]], [[Eval Place]], [[Eval Value]], [[Syntax Tree]], [[Syntax Name]]
-and GHC runtime arrays.
+[[Eval Operator]], [[Eval Place]], [[Eval Value]], [[Syntax Tree]], [[Syntax Name]],
+[[Eval Loop Unboxed]] and GHC runtime arrays.
 Consumed only by [[Eval Loop]].
 
 ## Grill Log
@@ -75,7 +75,7 @@ Consumed only by [[Eval Loop]].
 
 ## Referenced by
 
-[[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Loop]] · [[Eval MultiMap]]
+[[src/Pudu/Eval/_MOC]] · [[src/_MOC]] · [[Eval Loop]] · [[Eval MultiMap]] · [[Eval Loop Unboxed]]
 
 ## Static dispatch allocation
 
@@ -178,3 +178,27 @@ zero/one/two/three-argument sequencing once and invoke its consumer directly;
 larger arities retain the general ordered list path. Record field construction
 uses the same consumer boundary. Resolved Grill Log: eliminate intermediate
 argument-result wrappers, preserving complete evaluation before parameter writes.
+
+## Machine-word region execution
+
+After the complete-region proof and the writability check pass, the same
+planned region is offered to [[Eval Loop Unboxed]]. It is used only when the
+condition and body plan entirely into the platform-signed integer grammar and
+every snapshot binding is a platform `Int`; then slots are unboxed 64-bit
+elements and the boxed kernel's per-scalar `Value` traffic disappears.
+Otherwise the existing boxed execution runs, so admission, diagnostics,
+commit order, the constant step-limit boundary and abort behavior are
+unchanged. Resolved Grill Log: measured ticky attribution puts all Loop cost
+and 38% of MultiMap cost in this file's boxed scalar path; the representation
+cut is confined to regions whose full semantics are already proven, and a
+runtime initialization mismatch demotes to the boxed path after the same
+checks. Rejected: recognizing benchmark names or sizes, relaxing the proof, or
+producing any different diagnostic.
+
+Measured on GHC 9.10.3/aarch64: the scalar Loop workload falls from 560 ms to
+245 ms wall (tree) and 555 ms to 246 ms (compiled) while total allocation falls
+from 2,334 MB to 2 MB; scaling is linear to three million iterations and every
+other workload, fixture output and suite check is unchanged. The residual is
+about 78 ns per iteration of interpreter closure dispatch, so millisecond
+parity with native code still requires native emission; no promotion is
+claimed from this cut.

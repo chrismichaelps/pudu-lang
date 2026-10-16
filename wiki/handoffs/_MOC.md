@@ -172,3 +172,5 @@ tags: [moc, handoff]
 - [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
+
+- [[Backend Performance Delivery]] — measured runtime layers, release size and conditional dev integration (#483).

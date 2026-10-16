@@ -130,6 +130,48 @@ handing one back to be found again, or parsers written over `Bytes`, where a pos
 names. Until one of those, no parser in the library should be pointed at a document of any size, and
 `Std.Bytes.Cursor` is what a program reading a large one should reach for.
 
+## Machine-word loop regions and the #483 gate
+
+On 2026-10-16 the backend-performance workstream (issue #483, `GHC 9.10.3/aarch64`,
+`PUDU_CACHE=off`, five samples of the seven-workload `bench/eval.mjs` harness on the
+optimized compiler sha256 `5619d630…`) profiled every workload by ticky attribution and
+resolved one measured seam: the scalar Loop workload spends all its cost in the boxed
+scalar kernel path (2.16 GB ticky, ~27 closures and 778 B allocated per iteration), so
+[[Eval Loop Unboxed]] executes a fully proven pure integer while-region over unboxed
+64-bit slots with identical admission, commit and diagnostics.
+
+| workload | tree before → after (ms) | compiled before → after (ms) | allocated before → after |
+| --- | --- | --- | --- |
+| Arrays | 773 → 745 | 574 → 562 | 3316 MB → 3316 MB |
+| Calls | 425 → 424 | 259 → 256 | 3262 MB → 3262 MB |
+| Iterate | 418 → 405 | 307 → 308 | 1846 MB → 1846 MB |
+| Loop | 560 → 245 | 555 → 246 | 2334 MB → 2 MB |
+| Maps | 766 → 781 | 556 → 568 | 3742 MB → 3742 MB |
+| MultiMap | 702 → 688 | 694 → 687 | 2580 MB → 2580 MB |
+| Records | 353 → 340 | 351 → 343 | 1268 MB → 1268 MB |
+
+Loop improves 2.29×/2.26× with a 1000× allocation cut and linear scaling to three
+million iterations; every other workload stays within noise and every output, the six
+focused fixture checks and all 612 optimized suite checks are unchanged.
+
+The gate is nevertheless measurably unmet and no commit or promotion is authorized:
+an equivalent `clang -O2` Loop program runs in about 0–2 ms from a 33 KB binary while
+Pudu still runs 246 ms from a 98,037,480-byte compiler, the residual ≈78 ns per
+iteration is interpreter closure dispatch that this representation cut cannot remove,
+and the remaining workloads still run entirely boxed. Variant measurements (3M
+iterations: condition+increment 112 ms, Loop 245 ms, then 366/518/627 ms as one, two
+and three further `total = total + (i % k) * m` statements are added) show the
+marginal cost of each statement is a flat 36–51 ns because `planInt` composes one
+heap closure per expression node and calls each one indirectly every iteration; a
+flat opcode-array execution of the same proven region is the identified next bounded
+lever (~2–2.5× on scalar loops, larger on statement-heavy bodies) and was measured,
+recorded, and deliberately not taken — the owner stopped the experiment here. The [[Package Binary]] strip
+policy (verified on the real artifact) shrinks the distributed compiler to 65,766,184
+bytes and attached bundles by 32.9%, which affects download bytes but not native
+program speed. Reaching issue #483's millisecond gate requires the planned native
+emission path, not further interpreter tuning; the branch remains uncommitted and the
+full record lives in [[Backend Performance Delivery]].
+
 ## Benchmark and Regression Gates
 
 - Criterion-style microbenchmarks: source indexing, lexing, parsing, name lookup, unification, ownership dataflow, lowering, each optimization pass, C emission.
@@ -149,4 +191,4 @@ names. Until one of those, no parser in the library should be pointed at a docum
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[architecture/SEMANTICS]] · [[ADR-0005-performance-and-low-level-optimization]] · [[Frontend]] · [[Semantics]] · [[Backend]]
+[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[architecture/SEMANTICS]] · [[ADR-0005-performance-and-low-level-optimization]] · [[Frontend]] · [[Semantics]] · [[Backend]] · [[Backend Performance Delivery]]
