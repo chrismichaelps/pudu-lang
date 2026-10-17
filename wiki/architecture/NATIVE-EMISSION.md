@@ -28,6 +28,24 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
+## Published progress (#496)
+
+The README progress bar counts **completed coverage areas**, not individual language
+constructs, implementation effort or release readiness. Its denominator is every row
+of the Coverage ledger above; only `Implemented` counts. `Partial` and `Pending`
+contribute zero. Display floor(100 × completed / total) and a 20-cell bar with
+floor(20 × completed / total) filled cells. Broad areas have equal weight; changing
+this inventory can decrease the percentage. A 100% area count still requires the
+completion evidence matrix below before claiming full production coverage.
+
+[[Native Progress Generator]] derives the README marker block from this table;
+[[Native Progress Workflow]] refreshes it on every dev push, including PR merges.
+Update row states only with matching implementation and evidence in the same PR.
+[[Native Progress Tests]] rejects malformed inventory and ambiguous output markers.
+
+Resolved Grill Log: no subjective partial credit or test-count proxy. The count and
+denominator stay visible so readers can audit the coarse measure.
+
 ## Current Core control-flow contract
 
 [[Pudu Core]] carries numeric CoreLoopId identities; source labels resolve nearest-first during lowering. CoreWhileValue is unit, CoreLoopValue carries its observed break type (or CoreNeverType without a local break), and CoreBreak/CoreContinue identify their destination. A while condition is lowered outside that while's loop frame: control transfer there targets an enclosing loop, matching the checker and interpreter. Never joins a reachable branch without inventing a value. Only direct terminal transfers or provably divergent trailing results make a block divergent.

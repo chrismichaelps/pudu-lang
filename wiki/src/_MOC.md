@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Repository README]] · [[Native Progress Generator]] · [[Native Progress Tests]] · [[Native Progress Workflow]] — auditable C11 completion publishing.
+
 - [[Derive Index Output Gate]] — checked strategy output and visibility.
 
 - [[Database Admission Fixture]] · [[Database Admission Transport]] — bounded pool ownership.
