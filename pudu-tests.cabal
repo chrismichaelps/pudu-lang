@@ -70,6 +70,7 @@ test-suite pudu-test
     Pudu.Backend.EmitSpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
+    Pudu.Backend.ControlPrograms
     Pudu.Backend.ToolchainSpec
     Pudu.Lsp.SchedulerSpec
     Pudu.Compiler.LiteralsSpec

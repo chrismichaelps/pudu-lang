@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-16 — Native loop control (#489)
+
+- [[Native Emission Coverage]] defines completion against implemented language behavior and records pending native surfaces.
+- [[Pudu Core]] resolves loop targets by identity and carries while/loop values, break/continue transfers, and Never results; [[Compiler Lower Body]] and [[Backend Emit]] preserve checked condition scope and source-ordered transfer operands.
+- Scalar loop-control differential cases, arithmetic refusals, divergent lowering and mutable unit-local effects pass; the clean optimized full gate passes on GHC 9.10.3. [[Native C11 Backend Delivery]] records independent review and the outstanding GHC 9.14.1 matrix.
+
 ## 2026-10-16 — Native functions and C11 production hardening (#488)
 
 - [[Compiler Lower]] carries only reachable typed functions, including recursion and mutual recursion; [[Compiler Lower Body]], [[Compiler Lower State]], and [[Compiler Lower Signature]] separate traversal, state, and signature admission.

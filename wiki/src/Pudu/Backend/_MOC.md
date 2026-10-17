@@ -36,3 +36,7 @@ aliases: [Backend Module Map]
 - [[Compiler Lower Signature]]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
+
+- [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).
+
+- [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).

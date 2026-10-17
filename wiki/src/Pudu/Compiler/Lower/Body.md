@@ -27,12 +27,12 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 
 - Entry functions have no parameters and obey shared function admission. Their
   result comes from the trailing body expression or observed explicit returns,
-  and must be Int or unit. A resultless outer block cannot erase an explicit
+  and must be Int, unit, or Never; a Never-only entry uses the unit ABI. A resultless outer block cannot erase an explicit
   Int return. Non-entry functions retain their validated declared result.
 - Blocks push a lexical scope, lower statements left to right, lower their
   trailing expression and pop the scope. Locals resolve nearest-first and are
   numbered independently per function. Assignments become CoreAssign and yield
-  unit; declarations carry only Int or Bool and reject explicit annotations.
+  unit; declarations carry Int, Bool, unit, or Never and reject explicit annotations.
 - Return operands must match the declared non-entry result, or Int/unit for
   the entry. The first explicit entry return records its type. Bare returns
   carry no Core operand. The checker already proves return agreement.
@@ -47,9 +47,12 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   still lower. Integer syntax must already be ResolvedInteger PlatformSigned;
   unresolved integers and other numeric kinds refuse. Arithmetic, comparisons,
   equality and short-circuit booleans retain source spans.
-- Statement if and while lower with explicit blocks; value if requires both
-  branches and equal supported types. Assignment-as-value, value while,
-  labels, break and continue remain explicit refusals.
+- Statement if lowers with explicit blocks; an if without else in value position
+  carries unit only when its taken branch yields actual unit/Never, or Never when its condition transfers. Value if with else joins
+  supported branch types, joining Never with the reachable branch type. While
+  yields unit and loops carry their scalar/unit break type, or Never without
+  a local break. Labels, break and continue resolve through Control.
+  Assignment-as-value remains an explicit refusal.
 - Calls resolve print/display first, then refuse local callable values and
   calls to the entry, then consult the top-level function table. Signatures
   are memoized. Arguments lower left to right; calls enqueue their callee and
@@ -67,7 +70,7 @@ inference, semantic rechecking and C emission are outside this module.
 
 ## Dependencies and consumers
 
-Requires [[Compiler Lower State]], [[Compiler Lower Signature]], [[Frontend Syntax]],
+Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower Signature]], [[Frontend Syntax]],
 [[Pudu Core]], and [[Integer Literal]]. Consumed by [[Compiler Lower]].
 
 ## Grill Log
@@ -91,3 +94,49 @@ Requires [[Compiler Lower State]], [[Compiler Lower Signature]], [[Frontend Synt
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·
 [[Compiler Lower State]] · [[Compiler Lower Signature]] · [[Core IR]] · [[Backend]]
+
+## Scalar loop-control extension (#489)
+
+[[Compiler Lower Control]] owns nearest labelled target resolution, break-type joins,
+while/loop values and direct terminal Never detection. State resets loop numbering
+and frames per function. Body delegates through traversal callbacks; if branches
+join Never with reachable types. Print-valued break operands refuse Result erasure.
+
+Resolved Grill Log: while conditions lower before their frame; operands lower
+before break observation; labels become numeric identities; only scalar/unit
+results are admitted. Rejected silent Result erasure and source-label C names.
+
+## Never operand admission (#489)
+
+Resolved Grill Log: Never operands are admitted in scalar expected contexts
+without retagging their Core type or inventing an inhabited value. Eager unary,
+binary and call expressions remain Never when an operand cannot return; logical
+right operands remain guarded and therefore do not make the whole expression
+Never. A Never condition makes its conditional Never. Never initializers bind
+a Never local, and Never assignments and return operands retain their transfer.
+Result-valued print expressions remain effect-only: bindings, call arguments,
+explicit returns, break operands and function results cannot erase their carrier.
+A divergent block's unreachable trailing print does not produce a value.
+
+Resolved Grill Log: an admitted if without else has unit value and can be represented by
+a Core block containing its conditional statement; no new literal or runtime
+representation is needed. A Never condition preserves divergence.
+
+## If-without-else oracle boundary
+
+The checker assigns unit to an if without else, but the evaluator returns the
+taken block's actual trailing value. Value-position lowering therefore admits
+only unit/Never branches whose value is not print's Result carrier, or a Never
+condition that cannot reach either branch. Other branch values refuse E6001
+until the evaluator/checker discrepancy is resolved through semantic governance.
+Statement-position conditionals continue to discard branch values. Resolved
+Grill Log: preserve actual interpreter observations rather than silently assume
+that its checked unit type erases the taken block value.
+
+## Unit local admission (#489)
+
+Resolved Grill Log: unit-valued initializers may bind a unit local; the emitter
+runs their effects before producing its unit sentinel. Unit assignments retain
+their right operand's effects. Reads retain unit type. Print-valued initializers
+and assignment operands still refuse because Result[(), Str] cannot become unit.
+Unit literals and unit-typed parameters are independent admission boundaries.

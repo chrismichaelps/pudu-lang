@@ -1,7 +1,7 @@
 ---
 type: handoff
-status: VALIDATED-LOCALLY
-issue: 488
+status: ACTIVE
+issue: 489
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -80,3 +80,29 @@ Delivery Owner → Commit Owner: commit the validated source, tests, and matchin
 ## Commit validation
 
 The pre-commit native-property refresh passed, including function ordering, recursion, diagnostic parity, hostile compiler deadlines, inherited pipes, and live cancellation. Staged whitespace checks pass, including newly tracked modules. The validated implementation and matching vault are committed together; release promotion remains gated on GHC 9.14.1 CI. The unrelated profiling build directory is excluded.
+
+## Continuation toward complete emission
+
+Delivery Owner → Language Architect: expand through independently validated native surfaces in [[Native Emission Coverage]]. The next slice is scalar loop control, including labels, break values and Never branch joins. Continue in this worktree, stacked on the committed #488 implementation. Architect resolved the Core contract before implementation; bounded ownership assignments will cover lowering, emission and tests with independent review.
+
+Issue #489 is ready and owns loop control on `feature/489-native-control-flow`, stacked on #488 because its Core/function machinery is required. Delivery Owner owns Core, manifests and shared vault navigation; Lowering Engineer owns Lower.hs/Lower/* and mirrors; Emission Engineer owns Emit.hs/Emit/* and mirrors; Test Engineer owns backend test specs/corpora and mirrors. Independent Reviewer owns no implementation file. Preserve each other's work; no concurrent shared-file ownership. Exact next action: implement the resolved Core loop contract and run differential control-flow conformance.
+
+## Full-emission goal re-anchor — 2026-10-17
+
+The active user goal is complete C11 emission with non-native behavioral parity, including all implemented language and runtime surfaces. #489 is progress only. The goal remains active until every coverage-ledger obligation is implemented and validated. Code comments stay concise and describe invariants without tutorial narration.
+
+Issue #490 records the verified checker/evaluator disagreement for if-without-else results; #489 keeps an explicit incomplete boundary instead of silently changing behavior. Next architectural seam: feed existing solved CompileResult type/scheme facts into lowering, then publish canonical local declaration and callable-specialization identities for aggregate/generic expansion.
+
+## #489 validation complete
+
+The optimized warnings-as-errors build passes on GHC 9.10.3. Fresh scalar loop-control differential validation passes 40 success programs; two discarded-break arithmetic refusal programs and divergent-entry lower-only checks are included in the suite. The actual-unit noelse cases and mutable unit-local effects were corrected and independently checked against the interpreter; a prior test incorrectly equated checked Unit with runtime Unit and was corrected rather than weakening the refusal boundary. The clean `test/gates.sh` completed with exit 0: all 19 build, suite, dependency, formatting, diagnostic, permissions, release, coverage, residency, package, generated-project, lint, LSP, watch, documentation and derive gates passed on the current sources. Evidence: `/tmp/pudu-489-gates.log` (local validation log).
+
+A GHC 9.14.1 installation was attempted after free space became available, but unpacking and staging exhausted the volume before installation completed. The installer was stopped; only its own named temporary download/unpack/staging directories were removed, restoring space. The installed compiler selection was not changed. Locked-toolchain evidence remains outstanding.
+
+## #490 regression preparation
+
+Language Architect approves correcting no-else if to yield unit on normal completion, consistent with its checked type and existing if-let behavior. Transfers and errors remain unchanged; with-else values remain unchanged. Runtime ownership will cover Eval.hs, Eval/Compile.hs and Eval/Loop/Kernel.hs; derive ownership will cover Derive/Record.hs; backend ownership removes the temporary value admission refusal only after oracle agreement. Before those changes, Test Engineer may create only test/Pudu/Eval/IfUnitSpec.hs and its complete mirror as an unregistered regression family. Existing #489 source stays frozen during its clean validation run.
+
+Delivery Owner → Independent Reviewer → Forensic Guardian: refresh the scoped #489 approval after the clean gates, then commit loop control and its matching vault. The unregistered #490 test family and unrelated profiling directory remain excluded. Full native completion and GHC 9.14.1 validation remain outstanding.
+
+Final #489 review: independent implementation and Language Architect approval report no outstanding P0/P1 findings after the clean gates. Forensic Guardian verified mirrors, registrations, navigation, private-file exclusions and evidence; its requested completed-validation update is recorded above. Exact next action: establish the #490 unit-result contract and repair all evaluator/derive paths before broadening native admission.

@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..)
+  ( CoreSignature (..), LowerContext (..), LowerState (..), LoopFrame (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
   ) where
 
@@ -38,7 +38,17 @@ data LowerState = LowerState
   { lowerContext :: !LowerContext
   , lowerNextLocal :: !Int
   , lowerScopes :: ![[(Text, CoreLocal)]]
+  , lowerNextLoop :: !Int
+  , lowerLoops :: ![LoopFrame]
   , lowerFunctionResult :: !(Maybe CoreType)
+  }
+
+{-| A lexical loop destination and the scalar type observed at its breaks.
+    Frames survive operand traversal so nested transfers update their target. -}
+data LoopFrame = LoopFrame
+  { loopIdentity :: !CoreLoopId
+  , loopLabel :: !(Maybe Text)
+  , loopBreakType :: !(Maybe CoreType)
   }
 
 {-| @Compiler.Lower.Signature — a validated non-entry function: its parameter
@@ -66,7 +76,9 @@ emptyContext entryName table =
 startFunction :: LowerState -> [CoreParameter] -> Maybe CoreType -> LowerState
 startFunction state parameters resultType =
   state
-    { lowerNextLocal = length parameters
+    { lowerNextLoop = 0
+    , lowerLoops = []
+    , lowerNextLocal = length parameters
     , lowerScopes =
         [ [ (coreLocalName local, local)
           | parameter <- parameters

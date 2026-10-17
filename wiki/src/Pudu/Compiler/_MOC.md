@@ -44,3 +44,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 
 - [[Compiler Lower State]]
 - [[Compiler Lower Signature]]
+
+- [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).

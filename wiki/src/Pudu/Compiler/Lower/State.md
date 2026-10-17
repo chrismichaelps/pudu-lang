@@ -15,7 +15,7 @@ aliases: [Compiler Lower State]
 
 Own program context, per-function scopes, local numbering and accumulated typed refusals.
 
-Exports: `LowerContext(..), LowerState(..), CoreSignature(..), emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType`.
+Exports: `LowerContext(..), LowerState(..), LoopFrame(..), CoreSignature(..), emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType`.
 
 ## Algorithm and invariants
 
@@ -24,9 +24,11 @@ Program context survives function boundaries; local numbering and scopes reset. 
 The program context carries the entry name, declaration-ordered function
 table, signature memo, worklist queue, visited set, accumulated refusals and
 completed Core functions. Per-function state carries next local ID, lexical
-scope frames and optional result type. CoreSignature carries the parameter
+scope frames, optional result type, numeric loop supply and nearest-first loop
+frames holding optional source labels and observed break types. CoreSignature carries the parameter
 locals and result type. `startFunction` binds parameters in a fresh frame,
-numbers them from zero and starts subsequent locals after them; context remains
+numbers them from zero and starts subsequent locals after them; loop IDs restart
+at zero and loop frames empty at each function boundary; context remains
 unchanged. Lookup searches inner frames before outer frames. A refusal prepends
 one source-spanned native diagnostic; `halt` adds it and returns no subtree,
 while `refused` returns no subtree without adding a duplicate diagnostic.
@@ -53,3 +55,14 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]
+
+## Scalar loop-control extension (#489)
+
+[[Compiler Lower Control]] owns nearest labelled target resolution, break-type joins,
+while/loop values and direct terminal Never detection. State resets loop numbering
+and frames per function. Body delegates through traversal callbacks; if branches
+join Never with reachable types. Print-valued break operands refuse Result erasure.
+
+Resolved Grill Log: while conditions lower before their frame; operands lower
+before break observation; labels become numeric identities; only scalar/unit
+results are admitted. Rejected silent Result erasure and source-label C names.

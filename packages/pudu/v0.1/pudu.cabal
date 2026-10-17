@@ -99,6 +99,7 @@ library
     Pudu.Compiler.Library
     Pudu.Compiler.Lower
     Pudu.Compiler.Lower.Body
+    Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Signature
     Pudu.Compiler.Manifest

@@ -161,3 +161,14 @@ imports no frontend, semantic, or evaluator module.
 [[Backend Emit State]] owns state, escaping and site geometry; [[Backend Emit Support]] owns runtime selection and signatures. Every eager binary operand is materialized in a separate C statement before the next operand starts, preserving both side effects and reads of mutable locals. Logical operators emit a conditional block around the entire right operand, including argument setup. Unary and call expressions are materialized by their eager binary consumers or by argument temporaries; a single-operand consumer may keep them inline. Every local receives a `(void)` use to keep unread bindings warning-free without suppressing compiler diagnostics. Wrappers are emitted for every reachable non-entry function, avoiding a second, lossy reachability walk.
 
 Resolved Grill Log: C evaluation order cannot implement Pudu left-to-right semantics. Sequenced scalar temporaries preserve evaluation and grouping; guarded right operands preserve short circuit. Injective hexadecimal function symbols preserve distinct Unicode identifiers. Rejected: inline calls, unguarded preludes, and lossy sanitization.
+
+## Resolved loop-control extension (#489)
+
+Numeric loop destinations emit as function-local C labels. Continue labels precede all condition setup; break labels follow the loop body. Labels are emitted only when a generated transfer references them. Loop result slots are initialized scalar temporaries and are mapped by resolved identity while emitting nested regions. A break operand finishes evaluation before the destination slot is written or control transfers, so nested transfers preserve the interpreter's behavior. Body trailing values are evaluated and discarded. Never expressions emit their control effects without assigning a fabricated result to an enclosing destination; initialized join slots keep strict C11 flow analysis warning-free.
+
+- **Q:** Can an outer break value overwrite its slot before an operand transfers elsewhere? **A:** No; the operand is emitted fully before assignment. Rejected: assignment before operand setup.
+- **Q:** How are unused labels avoided? **A:** Emission records actual transfer references while capturing each loop region, then writes only referenced destination labels. Rejected: warning suppression or unconditional labels.
+
+## Unit locals (#489)
+
+Unit locals use an integer sentinel, never a C void value. Initializers and assignment operands execute for their effects before the sentinel is stored; reading or discarding a unit local has no effect. Resolved Grill Log: unit has a single inhabitant, so the sentinel carries no user-visible payload; discarded initializers must still preserve calls, diagnostics and transfers. Rejected: assigning a C void expression to an integer local.

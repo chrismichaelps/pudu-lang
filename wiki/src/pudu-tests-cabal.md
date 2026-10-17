@@ -113,3 +113,7 @@ Register [[Database Challenge Spec]] explicitly with existing dependencies. Reso
 ## Native function and process regressions (#488)
 
 Register [[Backend Function Programs]] as the native function corpus and [[Backend Toolchain Tests]] as an executed property family. Resolved Grill Log: the full suite must run independent differential and adversarial process regressions through static registration; no new test dependency.
+
+## Native control flow (#489)
+
+Register the loop-control lowering helper and native control-flow property/corpus modules through explicit module lists and the existing test aggregator. Resolved Grill Log: no new dependency or source discovery; focused and full suites execute the same control-flow evidence.

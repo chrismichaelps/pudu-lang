@@ -60,6 +60,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 backendEmitProperties :: [(String, IO Property)]
 backendEmitProperties =
   [ ("a supported program lowers to the expected core shapes", testSupportedLowering)
+  , ("divergent entries lower without execution", testDivergentEntries)
+  , ("invalid loop transfers fail before lowering", testControlDiagnostics)
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
   , ("unsupported constructs refuse with E6001 at their own span", testRefusals)
@@ -136,7 +138,9 @@ testSupportedLowering = do
     CoreDeclare{} -> True
     _ -> False
   isWhile statement = case coreStatementShape statement of
-    CoreWhile{} -> True
+    CoreEvaluate expression -> case coreExpressionShape expression of
+      CoreWhileValue{} -> True
+      _ -> False
     _ -> False
   isPrint statement = case coreStatementShape statement of
     CoreEvaluate expression -> case coreExpressionShape expression of
@@ -146,6 +150,37 @@ testSupportedLowering = do
   isJustResult block = case coreBlockResult block of
     Just _ -> True
     Nothing -> False
+
+testDivergentEntries :: IO Property
+testDivergentEntries = conjoin <$> mapM check ["loop {}", "return loop {}"]
+ where
+  check ending = do
+    compiled <- compileAndLower $ Text.unlines
+      ["module Divergent", "fn main() -> Int {", "  " <> ending, "}"]
+    pure $ case compiled of
+      Left diagnostics -> counterexample
+        (Text.unpack ending <> ": " <> show diagnostics) False
+      Right (_, core) ->
+        map coreFunctionName (coreModuleFunctions core) === ["main"]
+
+testControlDiagnostics :: IO Property
+testControlDiagnostics = conjoin <$> mapM check cases
+ where
+  cases =
+    [ ("unknown break label", "loop { break @missing }", "E2017")
+    , ("unknown continue label", "loop { continue @missing }", "E2017")
+    , ("break value from while", "while true { break 3 }", "E3029")
+    , ("break outside loop", "break", "E2016")
+    ]
+  check (label, statement, code) = do
+    source <- newSource (SourceName "control.pudu") $ Text.unlines
+      ["module Control", "fn main() -> Int {", "  " <> statement, "  return 0", "}"]
+    result <- runCompile source
+    let diagnostics = compileDiagnostics result
+    pure $ counterexample (label <> ": " <> show diagnostics) $ conjoin
+      [ property (hasErrors diagnostics)
+      , property (code `elem` map (diagnosticCodeText . diagnosticCode) diagnostics)
+      ]
 
 {-| An unsupported but unreachable declaration cannot block the entry. -}
 testEntryOnly :: IO Property
@@ -212,9 +247,11 @@ refusalCases =
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
+  , ("non-unit if without else value", bindingProgram "let chosen = if true { 7 }", "if true")
+  , ("print-valued if without else", bindingProgram "let chosen = if true { print(\"x\") }", "if true")
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("floating-point values", bindingProgram "var ratio = 1.5", "1.5")
-  , ("break", statementProgram "while true { break }", "break")
+  , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("bindings of type Str", bindingProgram "var greeting = \"hello\"", "var greeting")
   , ("match expressions", bindingProgram "var chosen = match 1 { case _ => 0 }", "match")
   , ("borrows", Text.unlines

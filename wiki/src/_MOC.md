@@ -210,3 +210,7 @@ tags: [moc, module]
 - [[Backend Function Programs]]
 - [[Backend Toolchain Tests]]
 - [[Diagnostic Evaluation]]
+
+- [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).
+
+- [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).

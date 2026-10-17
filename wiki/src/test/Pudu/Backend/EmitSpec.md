@@ -23,13 +23,16 @@ code — [[Backend Native Tests]] owns execution.
   locals, statement shapes, and call shapes, and only functions reachable from
   the entry are carried — a declaration the entry cannot reach does not block
   the build and does not refuse, because the interpreter never runs it; each
-  unsupported construct (a module without `main`, arrays, `break`,
+  unsupported construct (a module without `main`, arrays, ownership-bearing break values,
   floats, `Str` locals, borrows, matches, function values and calls through
   local values, calls to the entry, parameters without annotations or of
   unsupported types, default parameter values, functions without a declared
   return type, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
   code is `E6001` and whose span is the construct's own.
+- Control-flow diagnostics: invalid enclosing labels and values carried out of a while loop remain semantic errors, before native lowering; structured codes and hasErrors are checked. The supported while expression is carried in CoreEvaluate as CoreWhileValue.
+- If-without-else: value contexts with a non-unit taken-branch result refuse with `E6001` at the if expression, including a trailing print whose runtime result is a Result despite the checker assigning unit. Native lowering does not silently coerce the interpreter value.
+- Divergence: entry bodies ending in `loop {}` or `return loop {}` pass the ordinary checker and native lowering. These acceptance tests never execute either infinite program.
 - Emission: emitting the same core module twice yields identical text;
   emitting different sources at the same offsets does not confuse site
   excerpts; the generated translation unit contains one site per checked
@@ -60,6 +63,7 @@ Uses [[Compiler Lower]], [[Compiler Lower Body]], [[Backend Emit]],
 
 ## Resolved Grill Log
 
+- **Q:** How can a wholly divergent entry be tested safely? **A:** Compile and lower both trailing-loop and returned-loop forms, assert the entry is carried, and never run them. Their body-derived ABI has no observable successful result.
 - **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
 - **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
 
