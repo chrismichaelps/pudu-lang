@@ -15,9 +15,9 @@ aliases: [Diagnostic Evaluation, Evaluation Diagnostics]
 
 One home for the text of evaluation-phase refusals that a *running* program can
 surface, so the tree evaluator and the native C runtime cannot drift apart in
-what a programmer reads. The module owns the call-depth refusal (`E7002`): the
-code, the message, and the help the interpreter prints when recursion passes
-the evaluator's bound.
+what a programmer reads. The module owns call-depth (`E7002`) and operator (`E7001`) refusal vocabulary,
+including the unchanged distinct operator dispatch messages. Call depth also
+carries the help printed when recursion passes the evaluator's bound.
 
 ```haskell
 callDepthCode :: Text      -- "E7002"
@@ -75,3 +75,10 @@ site table, [[Backend Emit]] and [[Backend Runtime]].
 
 [[src/Pudu/_MOC]] · [[Eval Env]] · [[Backend Emit]] · [[Backend Runtime]] ·
 [[Diagnostic Arithmetic]] · [[Diagnostic Model]]
+
+
+## Explicit scalar runtime refusals (#494)
+
+Export operatorCode E7001 and unary/binary cannot-apply plus unsupported-operator message factories. Reuse exact existing interpreter strings with no help line. Consumers are Eval Operator, Compiler Lower Scalar and Backend Emit State. Existing E7002 text remains unchanged.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

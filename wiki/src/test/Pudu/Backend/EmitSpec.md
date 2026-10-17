@@ -93,3 +93,10 @@ The unit signature acceptance case also carries unit display and equality. Expli
 Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
 
 #493 carrier audit: explicit display and equality guards reject Core print carriers, including nested blocks/conditional values, before unit admission. Refusal regressions use checked Result-valued source, so print is never silently formatted or compared as unit. Genuine no-else unit boundaries remain admitted.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Previously refused unit arithmetic/ordering now lower to explicit runtime traps; remove only those obsolete refusal entries. Preserve direct/nested print Result display/equality refusals and unsupported owned/numeric cases.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

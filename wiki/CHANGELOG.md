@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Native scalar runtime refusals (#494)
+
+- [[Compiler Lower Scalar]] separates unary/binary lowering and emits explicit Never-typed operator failures, using exact settled facts and shared interpreter vocabulary from [[Diagnostic Evaluation]]. Boolean ordering remains valid; invalid Unit/Bool operations preserve their actual E7001 messages, operand order and whole-operation spans.
+- [[Backend Emit]] and its state/runtime-selection helpers evaluate trap operands before the existing failure renderer. Pure fact/span/message checks and native success/failure cases pass, including macros, Unicode/tabs, short circuit, abrupt operands and print Result protection. Fresh optimized GHC 9.14.1 warnings-as-errors compilation, all 654 property groups and all 19 repository gates pass. Real CLI tree/compiled/native output, status and merged stdout/stderr order agree. Independent review and full native coverage remain pending.
+
 ## 2026-10-17 — Native unit display and equality (#493)
 
 - [[Compiler Lower Body]] admits unit display and equality/inequality; [[Backend Emit]] shares effect-first scalar operand freezing with call arguments. Unit display selects the string printer through [[Backend Emit Support]] and evaluates operands exactly once.

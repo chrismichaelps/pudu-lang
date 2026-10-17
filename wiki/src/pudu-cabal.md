@@ -316,3 +316,10 @@ Register the loop-control lowering helper and native control-flow property/corpu
 Register Pudu.Compiler.Lower.Types explicitly beside the existing native lowering modules. Use existing type and containers dependencies; no backend dependency on semantic modules is introduced.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Explicit scalar runtime refusals (#494)
+
+Register Pudu.Compiler.Lower.Scalar explicitly with existing dependencies; no implicit module discovery or new package.
+
+Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.

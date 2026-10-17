@@ -78,6 +78,7 @@ needExpression needs expression = case coreExpressionShape expression of
   CoreDisplay operand -> needExpression needs operand
   CorePrint argument ->
     needExpression (Set.insert (printerFor argument) needs) argument
+  CoreOperatorFailure _ operands -> foldl' needExpression (checked "fail" needs) operands
   CoreCall _ arguments -> foldl' needExpression (checked "call_depth" needs) arguments
   CoreBlockValue block -> needBlock needs block
   CoreWhileValue _ condition body -> needBlock (needExpression needs condition) body

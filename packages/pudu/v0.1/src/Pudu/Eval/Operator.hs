@@ -32,6 +32,8 @@ import Pudu.Diagnostic.Arithmetic
   , overflowHelp
   , overflowMessage
   )
+import Pudu.Diagnostic.Evaluation
+  ( operatorCode, cannotApplyUnaryMessage, cannotApplyBinaryMessage, unsupportedOperatorMessage )
 import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Order (OrdValue (..), comparableValue)
 import Pudu.Eval.Operator.Access
@@ -84,8 +86,8 @@ applyUnary spanValue operator value = case (operator, value) of
   ("&mut", _) -> pure value
   ("*", _) -> pure value
   _ ->
-    abortAt (Just spanValue) "E7001"
-      ("cannot apply " <> operator <> " to a " <> valueKind value) Nothing
+    abortAt (Just spanValue) operatorCode
+      (cannotApplyUnaryMessage operator (valueKind value)) Nothing
 
 combine :: Span -> Text -> Value -> Value -> Evaluator Value
 {-# INLINE combine #-}
@@ -109,8 +111,8 @@ combine spanValue operator left right = case (left, right) of
   _ | operator == "==" -> pure (BoolValue (left == right))
     | operator == "!=" -> pure (BoolValue (left /= right))
   _ ->
-    abortAt (Just spanValue) "E7001"
-      ("cannot apply " <> operator <> " to a " <> valueKind left <> " and a " <> valueKind right)
+    abortAt (Just spanValue) operatorCode
+      (cannotApplyBinaryMessage operator (valueKind left) (valueKind right))
       Nothing
 
 {-| The integer operators a loop spends its time on, chosen by reading the
@@ -285,7 +287,7 @@ decimalOperation spanValue operator left right = case operator of
   "<=" -> comparison (/= GT)
   ">" -> comparison (== GT)
   ">=" -> comparison (/= LT)
-  _ -> abortAt (Just spanValue) "E7001" ("unsupported operator " <> operator) Nothing
+  _ -> abortAt (Just spanValue) operatorCode (unsupportedOperatorMessage operator) Nothing
  where
   comparison accept = pure (BoolValue (accept (decimalCompare left right)))
 
@@ -302,4 +304,4 @@ comparisonOnly spanValue operator left right = case operator of
   "<=" -> pure (BoolValue (left <= right))
   ">" -> pure (BoolValue (left > right))
   ">=" -> pure (BoolValue (left >= right))
-  _ -> abortAt (Just spanValue) "E7001" ("unsupported operator " <> operator) Nothing
+  _ -> abortAt (Just spanValue) operatorCode (unsupportedOperatorMessage operator) Nothing

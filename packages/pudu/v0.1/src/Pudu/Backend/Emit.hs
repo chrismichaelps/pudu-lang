@@ -254,6 +254,10 @@ emitExpression state expression = case coreExpressionShape expression of
   CoreTextLiteral text -> (state, cString text)
   CoreDisplay _ -> invariant "a display outside a print"
   CorePrint argument -> emitPrint state argument
+  CoreOperatorFailure message operands ->
+    let afterOperands = foldl' emitDiscard state operands
+        (afterSite, index) = operatorFailureSite afterOperands (coreExpressionSpan expression) message
+     in (line afterSite ("pudu_fail(&pudu_sites[" <> textOfInt index <> "]);"), "0")
   CoreCall callee arguments ->
     let (afterArguments, argumentTemps) = emitCallArguments state arguments
         (afterSite, index) = callDepthSite afterArguments (coreExpressionSpan expression)

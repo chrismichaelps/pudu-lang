@@ -50,3 +50,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Compiler Lower Types]] — same-module solved types for native lowering (#491).
 
 - [[Native Solved Types Tests]] — canonical representation and fact identity regressions.
+
+- [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).

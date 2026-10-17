@@ -10,7 +10,33 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("unit display retains helper branch and discarded effects", program
+  [ ("Boolean ordering matches comparisonOnly", program
+      [ "fn main() -> Int {"
+      , "  if !(false < true) || false > true || !(false <= false) || !(true >= false) { return 99 }"
+      , "  print(display(false <= true))"
+      , "  return 0"
+      , "}"
+      ])
+  , ("operator traps stay inside short circuit", program
+      [ "fn main() -> Int {"
+      , "  let left = false && (true + false)"
+      , "  let right = true || (() < ())"
+      , "  if left || !right { return 99 }"
+      , "  return 0"
+      , "}"
+      ])
+  , ("Never operands transfer before invalid operators", program
+      [ "fn early() -> Int { { return 7 } + ()\n return 0 }"
+      , "fn main() -> Int {"
+      , "  let result = loop { () + { break 9 } }"
+      , "  var count = 0"
+      , "  while count < 3 { count = count + 1\n () < { continue }\n print(\"unreachable\") }"
+      , "  return result + count + early()"
+      , "}"
+      ])
+  , ("Never comparison discards print carrier without consuming it", program
+      [ "fn main() -> Int { print(\"before\") == { return 7 }\n return 0 }" ])
+  , ("unit display retains helper branch and discarded effects", program
       [ "fn mark(value: Int) -> () { print(display(value))\n return () }"
       , "fn main() -> () {"
       , "  print(display(()))"
@@ -222,7 +248,7 @@ functionSuccessPrograms =
   ]
 
 functionRefusalPrograms :: [(String, Text)]
-functionRefusalPrograms =
+functionRefusalPrograms = operatorRefusals <>
   [ ("unit display failure precedes printing", program
       [ "fn fail() -> () { 10 / 0\n return () }"
       , "fn main() -> () { print(display(fail()))\n return () }"
@@ -245,6 +271,44 @@ functionRefusalPrograms =
       , "fn main() -> Int { return divide(0) }"
       ])
   ]
+
+operatorRefusals :: [(String, Text)]
+operatorRefusals =
+  [ ("unit operator " <> Text.unpack operator, fault ("() " <> operator <> " ()"))
+  | operator <- ["+", "-", "*", "/", "%", "<", "<=", ">", ">=", "&", "|", "^", "&+", "+|"]
+  ] <>
+  [ ("Boolean operator " <> Text.unpack operator, fault ("true " <> operator <> " false"))
+  | operator <- ["+", "-", "*", "/", "%", "&", "|", "^", "&+", "+|"]
+  ] <>
+  [ ("unary or shift " <> Text.unpack expression, fault expression)
+  | expression <- ["-()", "-true", "~()", "~false", "() << 1", "true << 1"]
+  ] <>
+  [ ("expanded macro operator failure", program
+      [ "macro invalid() = () + ()"
+      , "fn main() -> Int { invalid!()\n return 0 }"
+      ])
+  , ("Unicode and tabbed operator failure", program
+      [ "fn λ() -> () {"
+      , "\t() + ()"
+      , "}"
+      , "fn main() -> Int { λ()\n return 0 }"
+      ])
+  , ("invalid unit operands print in source order", program
+      [ "fn mark(value: Int) -> () { print(display(value))\n return () }"
+      , "fn main() -> Int { mark(1) + mark(2)\n return 0 }"
+      ])
+  , ("invalid Boolean operands retain comparisonOnly wording", program
+      [ "fn mark(value: Bool) -> Bool { print(display(value))\n return value }"
+      , "fn main() -> Int { mark(true) + mark(false)\n return 0 }"
+      ])
+  , ("operand arithmetic failure precedes operator refusal", program
+      [ "fn first() -> () { 1 / 0\n return () }"
+      , "fn later() -> () { print(\"later\")\n return () }"
+      , "fn main() -> Int { first() + later()\n return 0 }"
+      ])
+  ]
+ where
+  fault expression = program ["fn main() -> Int {", "  " <> expression, "  return 0", "}"]
 
 program :: [Text] -> Text
 program body = Text.unlines (["module Main", ""] <> body)

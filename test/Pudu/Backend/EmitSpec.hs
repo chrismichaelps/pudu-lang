@@ -260,11 +260,12 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
+  [ ("pending integer bitwise", statementProgram "1 & 2", "1 & 2")
+  , ("pending integer complement", statementProgram "~1", "~1")
+  , ("unary print Result", statementProgram "-print(\"x\")", "-print")
+  , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
   , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
   , ("print Result equality", statementProgram "print(\"x\") == print(\"y\")", "print(\"x\")")
-  , ("unit ordering", statementProgram "() < ()", "() < ()")
-  , ("unit arithmetic", statementProgram "() + ()", "() + ()")
   , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
