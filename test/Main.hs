@@ -38,6 +38,7 @@ import Pudu.Cli.LintSpec (lintCommandProperties)
 import Pudu.LintSpec (lintProperties)
 import Pudu.Foreign.SlotSpec (slotProperties)
 import Pudu.Foreign.OwnershipSpec (ownershipProperties)
+import Pudu.Eval.IfUnitSpec (ifUnitProperties)
 import Pudu.Eval.Foreign.ResultSpec (resultProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
 import Pudu.Frontend.ExpandSpec (expandProperties)
@@ -142,7 +143,7 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties <> qualifiedShadowProperties)
-  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties)
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> ifUnitProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties

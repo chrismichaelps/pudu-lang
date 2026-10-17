@@ -46,9 +46,9 @@ The emitter places continuation targets before condition setup and break targets
 
 [[architecture/_MOC]] · [[Backend]] · [[Native C11 Backend Delivery]]
 
-## Oracle discrepancy #490
+## Unit-result conformance #490
 
-Value-position if-without-else has checked Unit type but the evaluator returns its taken branch's actual value. Native code cannot erase an Int/Bool/Result merely because the checker says Unit. Issue #490 owns the compatibility decision and parity repair. Until resolved, #489 admits genuinely Unit/Never branches and refuses other taken values explicitly; these refusals remain incomplete coverage.
+[[ADR-0025-if-without-else-unit-results]] resolves the checker/evaluator discrepancy as a correctness repair: a no-else if yields unit on both normal paths, preserving all effects, transfers, errors and cleanup. Tree, compiled and boxed-region evaluation, derive true-folding and dynamic contextual checking now agree in focused regression checks. Native lowering removes the temporary taken-value refusal and its differential cases pass. With-else values stay unchanged. This closes the #489 oracle boundary for represented branch values; unsupported syntax and runtime representations remain incomplete coverage.
 
 ## Solved type publication
 

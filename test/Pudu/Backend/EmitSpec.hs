@@ -61,6 +61,7 @@ backendEmitProperties :: [(String, IO Property)]
 backendEmitProperties =
   [ ("a supported program lowers to the expected core shapes", testSupportedLowering)
   , ("divergent entries lower without execution", testDivergentEntries)
+  , ("no-else values lower through the unit boundary", testIfUnit)
   , ("invalid loop transfers fail before lowering", testControlDiagnostics)
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
@@ -206,6 +207,16 @@ testEntryOnly = do
       , "}"
       ]
 
+testIfUnit :: IO Property
+testIfUnit = conjoin <$> mapM check ["7", "true", "print(\"taken\")"]
+ where
+  check expression = do
+    result <- compileAndLower $ Text.unlines
+      ["module IfUnit", "fn main() { let token = if true { " <> expression <> " }\n token }"]
+    pure $ case result of
+      Left diagnostics -> counterexample (show diagnostics) False
+      Right (_, core) -> map coreFunctionResult (coreModuleFunctions core) === [CoreUnitType]
+
 testReachableFunctions :: IO Property
 testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
@@ -247,8 +258,6 @@ refusalCases =
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
-  , ("non-unit if without else value", bindingProgram "let chosen = if true { 7 }", "if true")
-  , ("print-valued if without else", bindingProgram "let chosen = if true { print(\"x\") }", "if true")
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("floating-point values", bindingProgram "var ratio = 1.5", "1.5")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")

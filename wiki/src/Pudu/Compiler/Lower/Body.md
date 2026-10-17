@@ -48,7 +48,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
   unresolved integers and other numeric kinds refuse. Arithmetic, comparisons,
   equality and short-circuit booleans retain source spans.
 - Statement if lowers with explicit blocks; an if without else in value position
-  carries unit only when its taken branch yields actual unit/Never, or Never when its condition transfers. Value if with else joins
+  discards the taken branch result and carries unit, or Never when its condition transfers. Value if with else joins
   supported branch types, joining Never with the reachable branch type. While
   yields unit and loops carry their scalar/unit break type, or Never without
   a local break. Labels, break and continue resolve through Control.
@@ -122,16 +122,16 @@ Resolved Grill Log: an admitted if without else has unit value and can be repres
 a Core block containing its conditional statement; no new literal or runtime
 representation is needed. A Never condition preserves divergence.
 
-## If-without-else oracle boundary
+## If-without-else unit boundary (#490)
 
-The checker assigns unit to an if without else, but the evaluator returns the
-taken block's actual trailing value. Value-position lowering therefore admits
-only unit/Never branches whose value is not print's Result carrier, or a Never
-condition that cannot reach either branch. Other branch values refuse E6001
-until the evaluator/checker discrepancy is resolved through semantic governance.
-Statement-position conditionals continue to discard branch values. Resolved
-Grill Log: preserve actual interpreter observations rather than silently assume
-that its checked unit type erases the taken block value.
+Resolved Grill Log: [[ADR-0025-if-without-else-unit-results]] repairs the evaluator
+oracle to return unit after normal completion. Value lowering wraps the existing
+CoreIf statement in a resultless Core block, regardless of the discarded branch
+value. Condition evaluation and branch effects run exactly once; transfers and
+runtime failures remain intact. A Never condition remains Never. Print's Result
+is discarded within this boundary and cannot escape through it. With-else
+branches retain their value and print-result admission rules. Rejected: native-only
+coercion or retaining the temporary #489 refusal after oracle agreement.
 
 ## Unit local admission (#489)
 

@@ -37,6 +37,7 @@ recordResidualProperties =
   [ ("derive record kernel generates ordinary metadata-free methods", testMetadata)
   , ("derive record kernel reads heterogeneous fields through user traits", testReads)
   , ("derive record kernel retains generic targets and lexical bindings", testScopes)
+  , ("derive record kernel preserves no-else unit results", testIfUnit)
   , ("derive record kernel refuses shapes escapes and exhausted budgets", testRefusals)
   ]
 
@@ -132,6 +133,26 @@ testScopes = conjoin <$> sequence [scopeCase, setterCase]
     , "impl Advance for Sample { fn advance(self: &mut Self) -> () = () }"
     , "fn main() -> Int {\n var value = Sample{number: 10, flag: false}\n value.advance()\n value.number\n }"
     ], "11")
+
+testIfUnit :: IO Property
+testIfUnit = runCase ("static no-else unit results", Text.unlines
+  [ "module Probe", "import Std.Meta"
+  , "trait Label { fn label(self: &Self) -> Str }"
+  , "derive Label for T: Record {"
+  , " fn label(self: &T) -> Str {"
+  , "  let token = if Meta.nameOf[T]() == \"Sample\" { 7 }"
+  , "  display(token)"
+  , " }", "}"
+  , "type Sample = { number: Int } derives Label"
+  , "type Other = { number: Int } derives Label"
+  , "impl Label for Sample { fn label(self: &Self) -> Str = \"stub\" }"
+  , "impl Label for Other { fn label(self: &Self) -> Str = \"stub\" }"
+  , "fn main() -> Str {"
+  , " let first = Sample{number: 1}"
+  , " let second = Other{number: 2}"
+  , " first.label() + \":\" + second.label()"
+  , "}"
+  ], "\"():()\"")
 
 runCase :: (String, Text, Text) -> IO Property
 runCase (label, contents, expected) = runCaseOutcome label contents (Just expected, [])

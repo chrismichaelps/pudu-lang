@@ -27,10 +27,10 @@ pin return-operand transfer. Never operands cover both Boolean operator position
 both numeric operand positions, unary operators, if conditions, assignments,
 and call arguments; observable helper effects expose skipped later evaluation.
 If-without-else values preserve unit results while retaining taken-branch print
-effects. Each printing branch ends with `while false {}` so both its checked
-and interpreted result are unit; the interpreter otherwise retains the final
-branch value despite the checker assigning unit to if-without-else. Never conditions in those values, print/display operands, and direct
-Never bindings preserve their enclosing transfer. Mutable unit locals initialize
+effects. The corpus retains genuine-unit branch regressions and adds ordinary Int, Bool
+and print-Result trailing values whose normal results must now be discarded. Never conditions in those values, print/display operands, and direct
+Never bindings preserve their enclosing transfer. Condition counters and later
+printing expose repeated conditions, lost effects and accidental branch execution. Mutable unit locals initialize
 and assign from effectful unit-returning calls, then return the stored unit
 through a unit entry; output pins both calls and their order.
 Failure programs retain arithmetic failure and printed effects when a break
@@ -48,7 +48,7 @@ are. No handmade Core or generated C is used.
 
 ## Resolved Grill Log
 
-- **Q:** Does an if-without-else discard its branch effects? **A:** No; unit-valued bindings and returns run both taken and skipped branches through the interpreter oracle, retaining printing only from the taken branch. Branches end with a genuine unit expression because checker unit typing alone does not establish the interpreter result.
+- **Q:** Does an if-without-else discard its branch effects? **A:** No; unit-valued bindings and returns run both taken and skipped branches through the interpreter oracle, retaining printing only from the taken branch. Branches end with a genuine unit expression and the repaired interpreter also discards ordinary scalar and Result trailing values.
 - **Q:** May a transfer in a scalar operand be lowered as unit? **A:** No; finite examples put break, continue, and return in scalar contexts and compare the independent interpreter result and output. Nested return operands must preserve the inner transfer before the enclosing return.
 - **Q:** Does an unused loop result permit skipping its operand? **A:** No; printed effects and arithmetic failures prove the operand executes before transfer.
 - **Q:** How are label names checked? **A:** Nested loops repeat a label and separately transfer to an outer label; execution distinguishes nearest-first resolution from accidental textual matching.

@@ -71,7 +71,7 @@ errored program.
   A print's internal unit representation is effect-only: an entry's trailing
   print result or an explicit print-valued return refuses because the actual
   result is `Result[(), Str]`. Nested blocks and conditionals are inspected
-  recursively. A trailing `if` without else is admitted when its taken value is actual unit or Never, or its condition transfers. While yields unit unless its condition transfers.
+  recursively. A trailing `if` without else discards any supported taken value and yields unit, or Never if its condition transfers. While yields unit unless its condition transfers.
   Text locals and function results are outside the subset; standalone literal
   text or `display` in discarded statement position can still be lowered.
 - Expression types are computed while lowering: `Int` and `Bool` for values,
@@ -163,13 +163,12 @@ imports it.
 Loop-control extension: [[Compiler Lower Control]] owns scalar/unit loop results,
 labelled transfers and Never joins under [[Native Emission Coverage]].
 
-## If-without-else oracle boundary
+## If-without-else unit conformance (#490)
 
-The checker assigns unit to an if without else, but the evaluator returns the
-taken block's actual trailing value. Value-position lowering therefore admits
-only unit/Never branches whose value is not print's Result carrier, or a Never
-condition that cannot reach either branch. Other branch values refuse E6001
-until the evaluator/checker discrepancy is resolved through semantic governance.
-Statement-position conditionals continue to discard branch values. Resolved
-Grill Log: preserve actual interpreter observations rather than silently assume
-that its checked unit type erases the taken block value.
+[[ADR-0025-if-without-else-unit-results]] repairs normal unit production across
+the interpreter oracle. Value-position lowering then admits any supported then
+block and discards its result inside a resultless CoreIf wrapper. Effects,
+failures and transfers remain intact; a divergent condition remains Never.
+Resolved Grill Log: no native-specific coercion, payload leakage or temporary
+scalar refusal after evaluator agreement. Unsupported branch constructs retain
+their own representation refusals.

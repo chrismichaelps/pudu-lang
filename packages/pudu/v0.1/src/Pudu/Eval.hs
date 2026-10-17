@@ -347,7 +347,9 @@ evaluateHere (Located spanValue expression) = case expression of
     test <- evaluate condition
     truth <- expectBool spanValue test
     if truth
-      then evaluateBlock thenBlock
+      then case elseBranch of
+        Nothing -> evaluateBlock thenBlock >> pure UnitValue
+        Just _ -> evaluateBlock thenBlock
       else case elseBranch of
         Nothing -> pure UnitValue
         Just branch -> evaluate branch

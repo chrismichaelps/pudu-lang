@@ -207,9 +207,12 @@ planExpression region layout (Located spanValue expression) = case expression of
       a@(Plan testCode _ _ _ _) <- test
       b@(Plan thenCode _ _ _ _) <- taken
       c@(Plan elseCode _ _ _ _) <- alternative
-      let code slots env = bindResult (testCode slots env) $ \value ->
+      let selected = case elseBranch of
+            Nothing -> \slots env -> thenCode slots env >> pure UnitValue
+            Just _ -> thenCode
+          code slots env = bindResult (testCode slots env) $ \value ->
             bindResult (boolean env spanValue value) $ \truth ->
-              if truth then thenCode slots env else elseCode slots env
+              if truth then selected slots env else elseCode slots env
       pure (joined code [a, b, c])
   _ -> pure Nothing
  where

@@ -347,13 +347,9 @@ lowerExpression state (Located spanValue expression) = case expression of
       (afterCondition, Nothing) -> refused afterCondition
   IfExpression _ _ Nothing ->
     case lowerStatement state (Located spanValue (ExpressionStatement (Located spanValue expression))) of
-      (after, Just statement@(CoreStatement _ (CoreIf condition thenBlock _)))
-        | coreExpressionType condition == CoreNeverType
-            || (blockType (coreBlockStatements thenBlock) (coreBlockResult thenBlock) `elem` [CoreUnitType, CoreNeverType]
-                  && not (printValued thenBlock)) ->
-            let block = CoreBlock [statement] Nothing
-             in typed after (CoreBlockValue block) (blockType [statement] Nothing)
-        | otherwise -> halt spanValue "an if without else whose taken value is not unit" after
+      (after, Just statement@(CoreStatement _ CoreIf{})) ->
+        let block = CoreBlock [statement] Nothing
+         in typed after (CoreBlockValue block) (blockType [statement] Nothing)
       (after, Just _) -> halt spanValue "an if without else outside the native statement form" after
       (after, Nothing) -> refused after
   WhileExpression label condition body -> lowerWhile lowerExpression lowerBlock spanValue label condition body state

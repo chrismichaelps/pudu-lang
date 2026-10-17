@@ -28,7 +28,8 @@ elaboration rejects such overlapping requests and is tested independently by
 Cover declaration order, attribute names/skip, actual owner-specific field reads,
 heterogeneous field capabilities, mutable writes, strict attribute fallback
 evaluation, multiple target instantiations, generic targets,
-canonical aliases and selected imports, lexical shadowing, nested closures and
+canonical aliases and selected imports, literal-true and literal-false no-else
+unit residualization through real generated methods, lexical shadowing, nested closures and
 patterns. Assert separate generated identities and structured field obligations.
 Refuse wrong shape, unknown sequences, escaping metadata and exhausted limits.
 Test only admitted templates; malformed generic definitions fail before the kernel.
@@ -41,6 +42,9 @@ mode comparisons. Stub impls are test oracles and are removed before checking
 and executing the generated implementations.
 
 ## Grill Log
+
+- **Q:** Can a metadata-known true condition expose the branch value? **A:** No; two target names force opposite compile-time conditions, then actual generated unit-returning methods are checked and run in both modes with explicit unit display expectations.
+
 
 - **Q:** Let the parser accepting a derives clause prove expansion works? **A:** No;
   inspect the generated Impl, check it and compare real evaluation outcomes.

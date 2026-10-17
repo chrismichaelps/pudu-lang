@@ -31,7 +31,7 @@ code — [[Backend Native Tests]] owns execution.
   returned print results) lowers to a refusal whose
   code is `E6001` and whose span is the construct's own.
 - Control-flow diagnostics: invalid enclosing labels and values carried out of a while loop remain semantic errors, before native lowering; structured codes and hasErrors are checked. The supported while expression is carried in CoreEvaluate as CoreWhileValue.
-- If-without-else: value contexts with a non-unit taken-branch result refuse with `E6001` at the if expression, including a trailing print whose runtime result is a Result despite the checker assigning unit. Native lowering does not silently coerce the interpreter value.
+- If-without-else: Int, Bool and print-Result trailing branch values are accepted in unit value contexts after the interpreter correction in [[ADR-0025-if-without-else-unit-results]]. Ordinary escaped print results retain their separate explicit refusal.
 - Divergence: entry bodies ending in `loop {}` or `return loop {}` pass the ordinary checker and native lowering. These acceptance tests never execute either infinite program.
 - Emission: emitting the same core module twice yields identical text;
   emitting different sources at the same offsets does not confuse site

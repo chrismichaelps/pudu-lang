@@ -5,7 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
-- [[Native C11 Backend Delivery]] — native C11 backend and function/recursion hardening (#486, #488).
+- [[Native C11 Backend Delivery]] — native C11 backend, loop control and unit-result conformance (#486, #488–#490).
 
 - [[Derive Index Delivery]] — authored strategy indexing and public metadata (#458).
 

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — No-else conditional unit contract (#490)
+
+- [[ADR-0025-if-without-else-unit-results]] clarifies normal unit results across tree/compiled/boxed evaluation, derive folding, dynamic checking, constants and native lowering; transfers, diagnostics, effects and with-else values remain unchanged.
+- [[architecture/SEMANTICS]] records 1.0.1-draft as a conformance clarification. The runtime, derive, contextual checker and native admission repairs pass focused value/output/diagnostic tests, including actual boxed regions and generated methods. The inspected derive expansion snapshot retains its literal-true no-else wrapper around the same labelled break, and its 200-run property passes. The fresh optimized warnings-as-errors build, all 648 property groups, dependency checks and remaining integration gates pass under GHC 9.14.1; [[Native C11 Backend Delivery]] records evidence and the pending independent implementation review; the full-emission goal remains active.
+
 ## 2026-10-16 — Native loop control (#489)
 
 - [[Native Emission Coverage]] defines completion against implemented language behavior and records pending native surfaces.

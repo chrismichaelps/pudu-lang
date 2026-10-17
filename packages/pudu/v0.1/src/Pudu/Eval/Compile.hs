@@ -132,9 +132,12 @@ compileExpression walker located@(Located spanValue expression) = case expressio
     test <- compileExpression walker condition
     taken <- compileBlock walker thenBlock
     otherwise' <- traverse (compileExpression walker) elseBranch
+    let selected = case otherwise' of
+          Nothing -> taken >> pure UnitValue
+          Just _ -> taken
     pure $ do
       truth <- test >>= expectBool spanValue
-      if truth then taken else maybe (pure UnitValue) id otherwise'
+      if truth then selected else maybe (pure UnitValue) id otherwise'
   -- The loop itself is the tree walker's, so its step limit and its handling of
   -- `break` and `continue` are written once; only the condition and the body
   -- it runs are compiled.

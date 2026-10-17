@@ -67,6 +67,7 @@ Dependency direction: Builtin Definition → Value → Env → Operator/Match/Ar
 
 - [[Eval Test Coordinator]] — executable registration of evaluator regression properties.
 - [[Eval Binding Flow Tests]] — lexical order, branches, transfers and pure loop semantics.
+- [[Eval If Unit Tests]] — no-else unit production, contextual checking, folding and boxed kernel admission.
 
 - [[Runtime Series Map]] — pure numeric occurrence storage beneath Value/MultiMap.
 

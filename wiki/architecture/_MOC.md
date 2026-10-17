@@ -12,6 +12,8 @@ Pudu is a statically typed native systems language for developers who need predi
 
 ## Pages
 
+- [[ADR-0025-if-without-else-unit-results]] — no-else unit conformance across execution and compilation paths.
+
 - [[Application Maturity]] — database correctness, measured throughput and application dependency layers.
 
 - [[Application Dependency Layers]] — enforced application source graph and explicit architectural direction.

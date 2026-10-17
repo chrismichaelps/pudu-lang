@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 489
+issue: 490
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -106,3 +106,108 @@ Language Architect approves correcting no-else if to yield unit on normal comple
 Delivery Owner → Independent Reviewer → Forensic Guardian: refresh the scoped #489 approval after the clean gates, then commit loop control and its matching vault. The unregistered #490 test family and unrelated profiling directory remain excluded. Full native completion and GHC 9.14.1 validation remain outstanding.
 
 Final #489 review: independent implementation and Language Architect approval report no outstanding P0/P1 findings after the clean gates. Forensic Guardian verified mirrors, registrations, navigation, private-file exclusions and evidence; its requested completed-validation update is recorded above. Exact next action: establish the #490 unit-result contract and repair all evaluator/derive paths before broadening native admission.
+
+
+## #490 architecture handoff — 2026-10-17
+
+Delivery Owner → Language Architect → Runtime/Semantic/Derive/Backend Engineers.
+#489 is committed as f8de1bbc; #490 uses feature/490-if-unit-results stacked on it.
+[[ADR-0025-if-without-else-unit-results]] is accepted before implementation and
+clarifies normal unit production across every projection. Semantic version
+1.0.1-draft records a conformance correction rather than preserving accidental
+runtime payload leakage. With-else values and all effects, transfers, diagnostics
+and existing cleanup retain their meaning.
+
+Bounded ownership: runtime owns Eval.hs, Eval/Compile.hs, Eval/Loop/Kernel.hs and
+mirrors; semantic owns Type/Check/Statement.hs and mirror; derive owns
+Derive/Record.hs and mirror; backend owns Lower/Body.hs and mirror; test owns
+IfUnitSpec and affected existing backend/derive test modules and mirrors. Delivery
+Owner sequences shared manifests/navigation. Architecture owns grammar, semantics,
+ADR, coverage ledger and this handoff. Agents are not alone; preserve concurrent
+work and resolve every module's Grill Log before editing its implementation.
+
+Resolved Grill Log: discard only a normal then-block result when else is absent;
+false yields unit; ordinary sequencing must preserve every unwind and diagnostic.
+Literal-true derive folding must preserve unit, and dynamic expected checking
+must check resulting unit rather than the discarded branch. Actual boxed-kernel
+execution needs a separate admitted-path test. Constant folds use the repaired
+oracle. Native value admission broadens only after tree/compiled/kernel agreement.
+
+Exact next action: owners update their complete module mirrors with the resolved
+#490 contract, then implement the four execution/transformation repairs and dynamic
+context correction with independent regression expectations. No #490 validation is
+claimed yet. Full native completion and the GHC 9.14.1 matrix remain outstanding.
+
+
+## #490 direct continuation
+
+The user requires direct execution without activating subagents. Delivery Owner
+continues runtime, derive, checker, backend and test ownership in sequence;
+existing edits are preserved. No new agent review is claimed. The architecture
+contract was independently resolved before this restriction; final implementation
+review remains required before PR promotion.
+
+The focused unit-result run passes explicit tree/compiled results, mutations,
+transfers, failures, direct boxed-kernel execution, folded constants, contextual
+dynamic rejection and actual generated derive methods. Native admission now uses
+the resultless CoreIf boundary for supported branch values. Exact next action:
+finish native differential validation, then run the clean complete gates.
+
+
+Focused #490 evidence: native success/status/refusal/process groups pass, and the
+pure no-else admission group passes. Dynamic expectations nested in arrays and
+record fields reject the unit result with E3001. A real CLI smoke passes:
+`pudu run` and `pudu build --native` both print `taken` once, skip the false
+branch, retain mutable unit values, write no stderr and exit 0. The fresh full
+optimized warnings-as-errors build passes. The clean gate run passed 18 of 19
+gates; the full-suite gate failed with output suppressed by its wrapper. A
+captured direct full-suite rerun identified a stale derive expansion snapshot:
+the repaired residualizer retains a literal-true no-else conditional around a
+labelled break. The inspected diff changes only that wrapper; the refreshed
+snapshot passes its 200-run property check. No passing full-suite result is
+claimed for #490 until the complete rerun finishes.
+
+The background GHC installer was stopped when the user took over installation.
+The user installed and selected GHC 9.14.1 successfully; direct local verification
+confirms the version. The optimized warnings-as-errors suite is now building its
+first GHC 9.14.1 dependency set with captured output. Locked-toolchain validation
+remains unclaimed until that build and its checks finish.
+Issue #491 records the next solved-type-input expansion; its design draft is
+local preparation only and no #491 source has changed.
+
+
+Exact next action: diagnose the captured full-suite failure and finish the GHC
+9.14.1 optimized warnings-as-errors build and suite before committing #490.
+Independent implementation review remains pending before PR promotion; the user
+requires continuation without activating subagents.
+
+
+## #490 locked-toolchain validation complete
+
+Delivery Owner → Validation Owner → Commit Owner. GHC 9.14.1 is installed and
+selected, verified directly. A fresh optimized library, test executable and CLI
+build passes with warnings treated as errors. The captured complete suite
+passes all 648 property groups, including the corrected expansion snapshot,
+tree/compiled/boxed unit results, constants, dynamic expectations, generated
+derive methods and native control/function/process parity. Evidence:
+`/tmp/pudu-490-ghc914.log` and `/tmp/pudu-490-ghc914-build.log`.
+
+Both dependency-layer gates and all 15 remaining post-build integration gates
+pass with the GHC 9.14.1 CLI. These are the existing test/gates.sh checks, run
+without repeating its build-product deletion after the fresh compiler build.
+Evidence: `/tmp/pudu-490-ghc914-layers.log` and
+`/tmp/pudu-490-ghc914-integration.log`. A real CLI smoke compares interpreter
+and native execution: mutable unit bindings, taken print and skipped print
+produce exactly `taken` followed by newline, empty stderr and status 0.
+
+The earlier GHC 9.10.3 captured suite had 647 passing groups and one stale
+derive snapshot failure. Its only textual delta was inspected and corrected;
+the complete GHC 9.14.1 run above validates the final snapshot and sources.
+No check or threshold was weakened. This is local macOS evidence, not a claim
+that remote Linux CI or the complete native coverage matrix has passed.
+
+Commit the #490 source, tests and matching vault together. Independent final
+implementation review remains pending before PR promotion under the user's
+no-subagent restriction. Full native emission remains incomplete.
+Exact next action: resolve the #491 solved-checker-type contract in the vault
+and its affected module mirrors before implementing scalar signature expansion.
