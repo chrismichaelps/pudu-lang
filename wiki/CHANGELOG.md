@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Solved native scalar types (#491)
+
+- [[Compiler Lower Types]] carries exact checked expression facts and settled function schemes into native lowering. Inferred/aliased Int/Bool signatures and Int/Bool/unit results share canonical representation; annotated scalar locals retain effects and structural Never.
+- [[Native Solved Types Tests]] protects source/generated identity and missing-fact refusals; [[Backend Function Programs]] compares inferred calls, recursion, aliases and annotated mutable locals against the interpreter. Focused native function, fact-identity/missing-fact and existing refusal checks pass; the clean GHC 9.14.1 optimized warnings-as-errors build, full suite and all 19 gates pass. A real CLI parity check prints 13 with empty stderr and exit 13. Independent implementation review remains pending and full native coverage remains incomplete.
+
 ## 2026-10-17 — No-else conditional unit contract (#490)
 
 - [[ADR-0025-if-without-else-unit-results]] clarifies normal unit results across tree/compiled/boxed evaluation, derive folding, dynamic checking, constants and native lowering; transfers, diagnostics, effects and with-else values remain unchanged.

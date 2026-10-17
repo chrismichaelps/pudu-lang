@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 490
+issue: 491
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -211,3 +211,31 @@ implementation review remains pending before PR promotion under the user's
 no-subagent restriction. Full native emission remains incomplete.
 Exact next action: resolve the #491 solved-checker-type contract in the vault
 and its affected module mirrors before implementing scalar signature expansion.
+
+## #491 direct implementation handoff
+
+Delivery Owner → Language Architect → Backend Engineer. #490 is committed as 15409bf4. Work continues stacked on it on feature/491-native-solved-types. The #491 solved-fact contract is resolved in Native Emission Coverage and all affected module mirrors before source edits. Direct owner covers Lower/Types, Lower/State, Lower/Signature, Lower/Body, Lower driver, CLI, Cabal registration and the existing backend tests in sequence. Preserve unrelated profiling outputs. No subagents are activated; independent final implementation review remains pending before promotion.
+
+Exact next action: implement the settled fact input and scalar signature admission, then run focused and complete GHC 9.14.1 validation.
+
+## #491 validation and commit handoff
+
+Delivery Owner → Validation Owner → Commit Owner. Clean GHC 9.14.1 optimized
+`-Werror` build and full suite pass. All 19 test/gates.sh gates pass with exit 0
+(`/tmp/pudu-491-gates.log`). The expanded native function differential group
+passes, including inferred Int/Bool/unit helpers, inferred recursive result,
+aliases and annotated mutable locals. Canonical identities, exact source and
+generated spans, missing analysis/schemes/expression facts, existing unsupported
+surfaces and unresolved inferred result refusals pass their focused checks.
+
+The real CLI native build of inferred/aliased calls and annotated locals matches
+`pudu run`: stdout `13` followed by newline, empty stderr and exit 13. Existing
+print-carrier and unsupported formed type/default refusals remain. The checker
+currently leaves unannotated bare-return helper results unresolved; #491 refuses
+those facts explicitly rather than guessing unit. No checker semantics changed.
+
+The direct self-audit is not independent review. Independent implementation,
+architecture and wiki review remain pending before promotion under the user's
+no-subagent restriction. No remote/platform-wide CI claim is made.
+Exact next action: commit #491 and implement the resolved unit-literal/parameter
+slice in issue #492, starting with complete affected module mirrors.

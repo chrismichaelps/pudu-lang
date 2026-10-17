@@ -108,3 +108,7 @@ Register the loop-control lowering helper and native control-flow property/corpu
 Register [[Eval If Unit Tests]] explicitly and execute its property family alongside
 ordinary evaluator checks. Resolved Grill Log: include unit-result, contextual
 Dynamic, constant and actual boxed-kernel regressions in focused and full runs.
+
+## Native solved facts (#491)
+
+Register and run [[Native Solved Types Tests]] alongside backend properties. Resolved Grill Log: missing/colliding facts and canonical identity checks execute in the full suite.

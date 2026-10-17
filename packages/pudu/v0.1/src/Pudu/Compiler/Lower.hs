@@ -20,6 +20,7 @@ import Data.List (sortOn)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
+import Pudu.Compiler.Lower.Types (LowerTypes)
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), emptyContext, startFunction )
@@ -44,8 +45,10 @@ data LowerResult
 
 {-| Lower the root module's entry function and every function reachable from
     it. -}
-lowerProgram :: Text -> Module -> LowerResult
-lowerProgram entryName parsed
+lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult
+lowerProgram _ Nothing parsed =
+  LowerRefused [nativeRefusal (moduleSpan parsed) "missing solved native type facts"]
+lowerProgram entryName (Just types) parsed
   | not (null (moduleImports parsed)) =
       LowerRefused [nativeRefusal (moduleSpan parsed) "imports"]
   | otherwise = case findEntry of
@@ -78,7 +81,7 @@ lowerProgram entryName parsed
     runWorklist entry =
       let initial =
             LowerState
-              { lowerContext = emptyContext entryName table
+              { lowerContext = emptyContext entryName types table
               , lowerNextLoop = 0
               , lowerLoops = []
               , lowerNextLocal = 0

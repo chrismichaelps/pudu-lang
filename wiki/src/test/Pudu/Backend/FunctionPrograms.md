@@ -42,3 +42,10 @@ and introduces no independent runner or skip path.
 ## Referenced by
 
 [[Backend Native Tests]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]]
+
+
+## Solved native type inputs (#491)
+
+Extend the actual differential corpus with inferred Int/Bool parameters/results, inferred unit helper, scalar aliases and annotated mutable locals, and inferred recursive helpers. Preserve printed effect ordering and do not special-case native expected outputs.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

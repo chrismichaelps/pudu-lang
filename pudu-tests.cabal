@@ -68,6 +68,7 @@ test-suite pudu-test
     Pudu.Diagnostic.RenderSpec
     Pudu.Cache.PersistSpec
     Pudu.Backend.EmitSpec
+    Pudu.Backend.LowerTypesSpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.ControlPrograms

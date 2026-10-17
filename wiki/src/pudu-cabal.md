@@ -309,3 +309,10 @@ Register [[Backend Emit State]], [[Backend Emit Support]], [[Compiler Lower Body
 ## Native control flow (#489)
 
 Register the loop-control lowering helper and native control-flow property/corpus modules through explicit module lists and the existing test aggregator. Resolved Grill Log: no new dependency or source discovery; focused and full suites execute the same control-flow evidence.
+
+
+## Solved native type inputs (#491)
+
+Register Pudu.Compiler.Lower.Types explicitly beside the existing native lowering modules. Use existing type and containers dependencies; no backend dependency on semantic modules is introduced.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

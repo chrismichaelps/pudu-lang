@@ -14,6 +14,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
 import Pudu.Core
   ( CoreBlock (..)
@@ -85,7 +86,7 @@ compileAndLower text = do
     then Left (compileDiagnostics result)
     else case compileModule result of
       Nothing -> Left (compileDiagnostics result)
-      Just parsed -> case lowerProgram "main" parsed of
+      Just parsed -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
         LowerRefused refusals -> Left refusals
         Lowered core -> Right (source, core)
 
@@ -245,8 +246,7 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("unannotated parameter", helperProgram "fn helper(value) -> Int { return value }" "helper(1)", "value)")
-  , ("unannotated result", helperProgram "fn helper(value: Int) { return value }" "helper(1)", "helper(value")
+  [ ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
@@ -306,7 +306,7 @@ refusalOutcome (label, sourceText', marker) = do
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (True, _) -> counterexample (label <> ": compile errors: " <> show (compileDiagnostics result)) False
     (_, Nothing) -> counterexample (label <> ": the program did not compile") False
-    (False, Just parsed) -> case lowerProgram "main" parsed of
+    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample (label <> ": lowered, but a refusal was expected") False
       LowerRefused refusals -> conjoin
         [ counterexample
@@ -330,7 +330,7 @@ testLocalFunctionRefusal = do
     ]
   result <- runCompile source
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
-    (False, Just parsed) -> case lowerProgram "main" parsed of
+    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample "indirect call unexpectedly lowered" False
       LowerRefused refusals -> conjoin
         [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001", "E6001"]

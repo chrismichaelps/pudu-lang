@@ -60,6 +60,7 @@ import Pudu.Backend.Toolchain
   , ToolchainRequest (..)
   , compileNative
   )
+import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
 import qualified Pudu.Diagnostic.Native as Native
 import Pudu.Frontend.Syntax (moduleSpan)
@@ -750,7 +751,7 @@ buildNativeProgram style path target = do
       Nothing -> do
         hPutStrLn stderr "pudu build: the program produced no module"
         exitFailure
-      Just parsed -> case lowerProgram entryPointName parsed of
+      Just parsed -> case lowerProgram entryPointName (rootCompileResult program >>= \result -> nativeTypes (compileTypes result) (compileSchemes result)) parsed of
         LowerRefused refusals -> do
           TextIO.putStrLn (renderProgramDiagnostics style program refusals)
           exitFailure

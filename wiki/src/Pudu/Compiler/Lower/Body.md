@@ -28,11 +28,13 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 - Entry functions have no parameters and obey shared function admission. Their
   result comes from the trailing body expression or observed explicit returns,
   and must be Int, unit, or Never; a Never-only entry uses the unit ABI. A resultless outer block cannot erase an explicit
-  Int return. Non-entry functions retain their validated declared result.
+  Int return. Non-entry functions retain their settled validated signature result.
 - Blocks push a lexical scope, lower statements left to right, lower their
   trailing expression and pop the scope. Locals resolve nearest-first and are
   numbered independently per function. Assignments become CoreAssign and yield
-  unit; declarations carry Int, Bool, unit, or Never and reject explicit annotations.
+  unit; declarations carry Int, Bool, unit, or Never. An explicit annotation
+  requires an exact initializer fact matching the structural Core type, with
+  represented facts preserving structural Never.
 - Return operands must match the declared non-entry result, or Int/unit for
   the entry. The first explicit entry return records its type. Bare returns
   carry no Core operand. The checker already proves return agreement.
@@ -56,7 +58,7 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 - Calls resolve print/display first, then refuse local callable values and
   calls to the entry, then consult the top-level function table. Signatures
   are memoized. Arguments lower left to right; calls enqueue their callee and
-  carry the declared result type. A refused signature does not duplicate its
+  carry the settled result type. A refused signature does not duplicate its
   diagnostic at each call.
 - Printable arguments are literal text or display of Int/Bool; the emitter
   can fuse these without introducing text allocation or ownership semantics.
@@ -87,7 +89,7 @@ Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower 
   No; the observed explicit entry return type determines the Core function
   result. _Rejected:_ deriving unit from the absence of a trailing expression.
 - **Q:** Why are argument types not inferred here? **A:** The checker already
-  proves arity and argument compatibility; validated annotations provide the
+  proves arity and argument compatibility; settled schemes provide the
   representation. _Rejected:_ backend inference duplicating the checker.
 
 ## Referenced by
@@ -140,3 +142,10 @@ runs their effects before producing its unit sentinel. Unit assignments retain
 their right operand's effects. Reads retain unit type. Print-valued initializers
 and assignment operands still refuse because Result[(), Str] cannot become unit.
 Unit literals and unit-typed parameters are independent admission boundaries.
+
+
+## Solved native type inputs (#491)
+
+Admit explicit local annotations only when the initializer exact complete Span has a represented solved type compatible with structural Core type. Structural Never still propagates without retagging. Print Result escape guards remain first; missing facts refuse E6001, with no offset lookup, annotation-name expansion or second unifier. Non-entry results use the settled signature, not declared spelling.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.

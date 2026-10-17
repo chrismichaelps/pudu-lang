@@ -14,7 +14,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Area | State | Next obligation |
 | --- | --- | --- |
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented | Preserve differential evidence |
-| Explicit scalar functions, recursion, call depth | Implemented (#488) | Preserve argument ordering and diagnostics |
+| Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
@@ -67,3 +67,9 @@ The full-emission goal is unproven until all of the following are satisfied toge
 7. Clean supported-toolchain builds, complete regression/integration gates, platform runtime tests and independent implementation/architecture/wiki review all pass with remaining limitations stated.
 
 A passing slice or a smaller supported subset cannot satisfy this matrix. The goal remains active while any ledger row, runtime surface or verification obligation is pending.
+
+## Solved scalar signatures (#491)
+
+[[Compiler Lower Types]] projects the complete checked module facts into existing scalar Core representations. Final monomorphic synchronous schemes admit inferred and aliased Int/Bool parameters and Int/Bool/unit results; exact expression facts admit annotated scalar locals. Missing facts and unrepresented formed types retain E6001. This changes backend coverage without changing Pudu semantics.
+
+Resolved Grill Log: facts belong to the same successful root CompileResult, exact complete spans identify generated expressions, and canonical builtin identities select representation. No duplicate inference, interpreter cache expansion or new ownership representation.

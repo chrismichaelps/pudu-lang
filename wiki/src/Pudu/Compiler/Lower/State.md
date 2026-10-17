@@ -34,7 +34,7 @@ one source-spanned native diagnostic; `halt` adds it and returns no subtree,
 while `refused` returns no subtree without adding a duplicate diagnostic.
 
 ```haskell
-emptyContext :: Text -> [(Text, Located Function)] -> LowerContext
+emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext
 startFunction :: LowerState -> [CoreParameter] -> Maybe CoreType -> LowerState
 halt :: Span -> Text -> LowerState -> (LowerState, Maybe a)
 ```
@@ -66,3 +66,10 @@ join Never with reachable types. Print-valued break operands refuse Result erasu
 Resolved Grill Log: while conditions lower before their frame; operands lower
 before break observation; labels become numeric identities; only scalar/unit
 results are admitted. Rejected silent Result erasure and source-label C names.
+
+
+## Solved native type inputs (#491)
+
+LowerContext retains contextTypes :: LowerTypes. emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext. Facts survive every function boundary without rechecking or global state.
+
+Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
