@@ -83,4 +83,13 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 
 Replace the unit-parameter refusal with positive Core admission for a unit literal, unit parameter and unit result. Keep nonempty tuple and print Result refusals independent. Pure checks assert the signature instead of merely accepting any Core.
 
-Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Nonempty tuples remain pending; #493 implements unit display/equality.
+
+
+## Unit display and equality (#493)
+
+The unit signature acceptance case also carries unit display and equality. Explicitly preserve E6001 for unit ordering/arithmetic at the first operand; checker acceptance does not grant integer representation semantics.
+
+Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
+
+#493 carrier audit: explicit display and equality guards reject Core print carriers, including nested blocks/conditional values, before unit admission. Refusal regressions use checked Result-valued source, so print is never silently formatted or compared as unit. Genuine no-else unit boundaries remain admitted.

@@ -178,4 +178,11 @@ Unit locals use an integer sentinel, never a C void value. Initializers and assi
 
 Unit call arguments execute once through emitDiscard, then bind integer zero to their temporary. Never use a void-returning helper call as an initializer. Keep source-order freezing for mixed unit/scalar arguments, transfer/error behavior and wrapper call-depth ordering. Existing C int unit parameter slots and void unit function results remain.
 
-Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Nonempty tuples remain pending; #493 implements unit display/equality.
+
+
+## Unit display and equality (#493)
+
+emitValue freezes a unit operand by emitting its effects once then assigning zero to a temporary. Both eager binary operands and call arguments share this helper. Inline unit display emits operand effects once then pudu_print_str for the two bytes (). Preserve guarded logical operands, transfer/failure order, call-depth site timing and strict-C11 warning policy.
+
+Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.

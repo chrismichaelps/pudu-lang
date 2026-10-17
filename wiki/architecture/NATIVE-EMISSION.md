@@ -16,7 +16,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented | Preserve differential evidence |
 | Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
-| Unit literals and parameters | Implemented (#492) | Preserve effect-first argument temporaries; unit display/equality remain pending |
+| Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display and equality; invalid unit operations remain a runtime-refusal obligation |
 | Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
@@ -81,3 +81,9 @@ Resolved Grill Log: facts belong to the same successful root CompileResult, exac
 An empty Core block represents the source unit literal. Canonical settled UnitTypeValue may occupy a parameter slot using the existing C int sentinel ABI; unit-returning functions remain void. Argument emission discards effects exactly once before binding zero, preserving left-to-right order, abrupt transfer, diagnostics and depth-check timing. No syntax or checker change is introduced. Unit display/equality and general tuple/aggregate representations remain pending.
 
 Resolved Grill Log: never put a void C call in an argument initializer or erase Result as unit. The existing wrappers retain all parameter slots and only execute after arguments complete.
+
+## Unit operations (#493)
+
+Lower display(unit), unit equality and inequality through the existing Core/display model. Freeze every eager unit operand through its effects and an integer-zero temporary. Inline display evaluates its operand once and prints exactly the two UTF-8 bytes (). Select the string runtime printer. Unit arithmetic/ordering remain explicit E6001 boundaries until the interpreter E7001 runtime refusal is represented; accepting those as integer operations would change behavior. No owned text representation is implied.
+
+Resolved Grill Log: effects precede constant unit representation, including calls, transfers and failures; both operands execute left to right. No syntax/checker change or Result erasure.

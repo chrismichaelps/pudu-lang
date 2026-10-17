@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Native unit display and equality (#493)
+
+- [[Compiler Lower Body]] admits unit display and equality/inequality; [[Backend Emit]] shares effect-first scalar operand freezing with call arguments. Unit display selects the string printer through [[Backend Emit Support]] and evaluates operands exactly once.
+- Focused pure, native ordering/mutation/transfer, arithmetic-failure and existing refusal cases pass under GHC 9.14.1. Unit arithmetic/ordering retain explicit incomplete boundaries. The final fresh GHC 9.14.1 warnings-as-errors build, all 652 property groups and remaining integration gates pass with captured output. A self-audit added direct/nested print Result carrier refusal regressions before commit. CLI parity and output preservation pass; full native coverage and independent review remain pending.
+
 ## 2026-10-17 — Native unit values and parameters (#492)
 
 - [[Compiler Lower Body]] represents unit literals as empty Core blocks; [[Compiler Lower Signature]] admits settled unit parameters and aliases. [[Backend Emit]] evaluates unit arguments for effects before storing a zero sentinel, preserving void call validity, ordering, transfers and failures.

@@ -302,13 +302,8 @@ emitCallArguments :: EmitState -> [CoreExpression] -> (EmitState, [Text])
 emitCallArguments state arguments = foldl' step (state, []) arguments
  where
   step (current, temps) argument =
-    let (afterTemp, temp) = freshTemp current
-        (filled, text) = case coreExpressionType argument of
-          CoreUnitType -> (emitDiscard afterTemp argument, "0")
-          _ -> emitExpression afterTemp argument
-     in ( line filled (declarationFor (coreExpressionType argument) temp <> " = " <> text <> ";")
-        , temps <> [temp]
-        )
+    let (filled, temp) = emitValue current argument
+     in (filled, temps <> [temp])
 
 emitPrint :: EmitState -> CoreExpression -> (EmitState, Text)
 emitPrint state argument = case coreExpressionShape argument of
@@ -317,6 +312,7 @@ emitPrint state argument = case coreExpressionShape argument of
     , "pudu_print_str(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")"
     )
   CoreDisplay inner -> case coreExpressionType inner of
+    CoreUnitType -> (emitDiscard state inner, "pudu_print_str(\"()\", 2)")
     CoreIntegerType _ ->
       let (after, text) = emitExpression state inner
        in (after, "pudu_print_int(" <> text <> ")")
@@ -349,7 +345,9 @@ emitElseInto state temp expression = case coreExpressionShape expression of
     read must be captured: the following block can assign that same local. -}
 emitValue :: EmitState -> CoreExpression -> (EmitState, Text)
 emitValue state expression =
-  let (after, text) = emitExpression state expression
+  let (after, text) = case coreExpressionType expression of
+        CoreUnitType -> (emitDiscard state expression, "0")
+        _ -> emitExpression state expression
       (allocated, temp) = freshTemp after
    in (line allocated (declarationFor (coreExpressionType expression) temp <> " = " <> text <> ";"), temp)
 

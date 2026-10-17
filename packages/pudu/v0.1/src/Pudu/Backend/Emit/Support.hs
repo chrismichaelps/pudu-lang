@@ -98,6 +98,7 @@ printerFor :: CoreExpression -> Text
 printerFor argument = case coreExpressionShape argument of
   CoreDisplay inner -> case coreExpressionType inner of
     CoreBoolType -> "print_bool"
+    CoreUnitType -> "print_str"
     _ -> "print_int"
   _ -> "print_str"
 

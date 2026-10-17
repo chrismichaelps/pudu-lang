@@ -55,4 +55,13 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 
 Differential corpus covers unit literals in entry/local/return/break, aliased unit parameters, unit calls before later scalar arguments with printed order, mixed unit/scalar arguments, mutation, wrapper recursion and unit-argument arithmetic failure preventing later effects.
 
-Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Nonempty tuples remain pending; #493 implements unit display/equality.
+
+
+## Unit display and equality (#493)
+
+Add differential unit display, unit helper/branch display and discarded display effects, equality/inequality with ordered printed effects and mutation, transfers, and arithmetic failures preventing later display/equality effects. Use actual interpreter expectations and warning-free C.
+
+Resolved Grill Log: unit has one value but its operands still execute. Reject skipped/repeated effects, void C initializers, wrong runtime printer selection and accidental ordered/arithmetic unit admission. Owned text representation and E7001 invalid-operation lowering remain separate obligations.
+
+#493 carrier regression: displaying a true no-else conditional that discards a print Result remains accepted and prints unit. This protects the distinction between effect-only Result carriers and actual normal unit results.

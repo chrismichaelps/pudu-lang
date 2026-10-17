@@ -170,7 +170,7 @@ testUnitValues :: IO Property
 testUnitValues = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Unit", "fn relay(value: ()) -> () { return value }"
-    , "fn main() -> () { return relay(()) }"
+    , "fn main() -> () { print(display(relay(())))\n print(display(relay(()) == ()))\n return relay(()) }"
     ]
   pure $ case compiled of
     Left diagnostics -> counterexample (show diagnostics) False
@@ -260,7 +260,12 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
+  [ ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
+  , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
+  , ("print Result equality", statementProgram "print(\"x\") == print(\"y\")", "print(\"x\")")
+  , ("unit ordering", statementProgram "() < ()", "() < ()")
+  , ("unit arithmetic", statementProgram "() + ()", "() + ()")
+  , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")

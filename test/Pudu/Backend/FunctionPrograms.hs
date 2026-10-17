@@ -10,7 +10,35 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("unit literal entry result", program
+  [ ("unit display retains helper branch and discarded effects", program
+      [ "fn mark(value: Int) -> () { print(display(value))\n return () }"
+      , "fn main() -> () {"
+      , "  print(display(()))"
+      , "  print(display(if true { print(\"inside\") }))"
+      , "  print(display(if true { mark(1) } else { () }))"
+      , "  display(mark(2))"
+      , "  return ()"
+      , "}"
+      ])
+  , ("unit equality preserves operand ordering and mutation", program
+      [ "fn mark(value: Int) -> () { print(display(value))\n return () }"
+      , "fn main() -> Int {"
+      , "  print(display(mark(1) == mark(2)))"
+      , "  print(display(mark(3) != mark(4)))"
+      , "  var count = 0"
+      , "  let equal = { count = count + 1\n () } == { count = count + 1\n () }"
+      , "  if !equal { return 99 }"
+      , "  return count"
+      , "}"
+      ])
+  , ("unit operation transfers skip consumers", program
+      [ "fn main() -> Int {"
+      , "  let first = loop { print(display({ break () })) }"
+      , "  let second = loop { { break () } == () }"
+      , "  return 0"
+      , "}"
+      ])
+  , ("unit literal entry result", program
       [ "fn main() -> () { () }" ])
   , ("unit aliases locals returns and loop operands", program
       [ "type Token = ()"
@@ -195,7 +223,16 @@ functionSuccessPrograms =
 
 functionRefusalPrograms :: [(String, Text)]
 functionRefusalPrograms =
-  [ ("unit argument failure prevents later argument effects", program
+  [ ("unit display failure precedes printing", program
+      [ "fn fail() -> () { 10 / 0\n return () }"
+      , "fn main() -> () { print(display(fail()))\n return () }"
+      ])
+  , ("unit equality failure precedes right operand effects", program
+      [ "fn fail() -> () { 10 / 0\n return () }"
+      , "fn later() -> () { print(\"later\")\n return () }"
+      , "fn main() -> () { print(display(fail() == later()))\n return () }"
+      ])
+  , ("unit argument failure prevents later argument effects", program
       [ "fn fail() -> () { 10 / 0\n return () }"
       , "fn later() -> Int { print(\"later\")\n return 1 }"
       , "fn accept(token: (), value: Int) -> Int { return value }"
