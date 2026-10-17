@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Native unit values and parameters (#492)
+
+- [[Compiler Lower Body]] represents unit literals as empty Core blocks; [[Compiler Lower Signature]] admits settled unit parameters and aliases. [[Backend Emit]] evaluates unit arguments for effects before storing a zero sentinel, preserving void call validity, ordering, transfers and failures.
+- Pure signature checks, expanded native ordering/recursion and argument-failure differential cases, and existing unsupported-surface refusals pass under GHC 9.14.1. The clean GHC 9.14.1 warnings-as-errors build and 18 integration gates pass; captured direct and Cabal full-suite confirmations pass all 652 groups after an unreproduced initial suite-gate failure with discarded output. The handoff records all evidence; independent review and full-emission completion remain pending.
+
 ## 2026-10-17 — Solved native scalar types (#491)
 
 - [[Compiler Lower Types]] carries exact checked expression facts and settled function schemes into native lowering. Inferred/aliased Int/Bool signatures and Int/Bool/unit results share canonical representation; annotated scalar locals retain effects and structural Never.

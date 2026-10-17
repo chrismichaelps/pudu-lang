@@ -63,6 +63,7 @@ backendEmitProperties =
   [ ("a supported program lowers to the expected core shapes", testSupportedLowering)
   , ("divergent entries lower without execution", testDivergentEntries)
   , ("no-else values lower through the unit boundary", testIfUnit)
+  , ("unit literals and parameters lower with their signature", testUnitValues)
   , ("invalid loop transfers fail before lowering", testControlDiagnostics)
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
@@ -165,6 +166,19 @@ testDivergentEntries = conjoin <$> mapM check ["loop {}", "return loop {}"]
       Right (_, core) ->
         map coreFunctionName (coreModuleFunctions core) === ["main"]
 
+testUnitValues :: IO Property
+testUnitValues = do
+  compiled <- compileAndLower $ Text.unlines
+    [ "module Unit", "fn relay(value: ()) -> () { return value }"
+    , "fn main() -> () { return relay(()) }"
+    ]
+  pure $ case compiled of
+    Left diagnostics -> counterexample (show diagnostics) False
+    Right (_, core) ->
+      [ (coreFunctionResult function, map (coreLocalType . coreParameterLocal) (coreFunctionParameters function))
+      | function <- coreModuleFunctions core
+      ] === [(CoreUnitType, [CoreUnitType]), (CoreUnitType, [])]
+
 testControlDiagnostics :: IO Property
 testControlDiagnostics = conjoin <$> mapM check cases
  where
@@ -250,7 +264,6 @@ refusalCases =
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
-  , ("unit parameter", helperProgram "fn helper(value: ()) -> Int { return 1 }" "helper(())", "()")
   , ("sized integer parameter", helperProgram "fn helper(value: Int8) -> Int { return 1 }" "helper(1i8)", "Int8")
   , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
   , ("call to entry", statementProgram "main()", "main()\n")

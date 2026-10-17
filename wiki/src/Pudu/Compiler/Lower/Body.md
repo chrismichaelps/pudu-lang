@@ -141,7 +141,7 @@ Resolved Grill Log: unit-valued initializers may bind a unit local; the emitter
 runs their effects before producing its unit sentinel. Unit assignments retain
 their right operand's effects. Reads retain unit type. Print-valued initializers
 and assignment operands still refuse because Result[(), Str] cannot become unit.
-Unit literals and unit-typed parameters are independent admission boundaries.
+Unit literals and unit-typed parameters are admitted by #492 through empty Core blocks and settled unit signatures.
 
 
 ## Solved native type inputs (#491)
@@ -149,3 +149,10 @@ Unit literals and unit-typed parameters are independent admission boundaries.
 Admit explicit local annotations only when the initializer exact complete Span has a represented solved type compatible with structural Core type. Structural Never still propagates without retagging. Print Result escape guards remain first; missing facts refuse E6001, with no offset lookup, annotation-name expansion or second unifier. Non-entry results use the settled signature, not declared spelling.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+
+## Unit literals and parameters (#492)
+
+Lower TupleExpression [] to CoreBlockValue (CoreBlock [] Nothing) with CoreUnitType. Keep nonempty tuples refused. Unit literals then work in locals, returns, branches and break operands through existing scalar/unit paths. Print Result guards remain unchanged.
+
+Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Unit display/equality and nonempty tuples remain separate pending boundaries.

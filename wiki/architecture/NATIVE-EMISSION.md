@@ -16,12 +16,14 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented | Preserve differential evidence |
 | Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
+| Unit literals and parameters | Implemented (#492) | Preserve effect-first argument temporaries; unit display/equality remain pending |
 | Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
+| Accepted operations with runtime refusals | Pending | Reproduce E7001 for checker-accepted invalid operand/operator combinations instead of treating E6001 as completed coverage |
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
@@ -73,3 +75,9 @@ A passing slice or a smaller supported subset cannot satisfy this matrix. The go
 [[Compiler Lower Types]] projects the complete checked module facts into existing scalar Core representations. Final monomorphic synchronous schemes admit inferred and aliased Int/Bool parameters and Int/Bool/unit results; exact expression facts admit annotated scalar locals. Missing facts and unrepresented formed types retain E6001. This changes backend coverage without changing Pudu semantics.
 
 Resolved Grill Log: facts belong to the same successful root CompileResult, exact complete spans identify generated expressions, and canonical builtin identities select representation. No duplicate inference, interpreter cache expansion or new ownership representation.
+
+## Unit call representation (#492)
+
+An empty Core block represents the source unit literal. Canonical settled UnitTypeValue may occupy a parameter slot using the existing C int sentinel ABI; unit-returning functions remain void. Argument emission discards effects exactly once before binding zero, preserving left-to-right order, abrupt transfer, diagnostics and depth-check timing. No syntax or checker change is introduced. Unit display/equality and general tuple/aggregate representations remain pending.
+
+Resolved Grill Log: never put a void C call in an argument initializer or erase Result as unit. The existing wrappers retain all parameter slots and only execute after arguments complete.

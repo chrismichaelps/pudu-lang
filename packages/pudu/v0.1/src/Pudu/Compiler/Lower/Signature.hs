@@ -52,7 +52,7 @@ ensureSignature located state = case Map.lookup name (contextSignatures context)
       case parameterDefault parameter of
         Just defaulted -> (refuse (locatedSpan defaulted) "default parameter values" current, collected)
         Nothing -> case formedCoreType parameterTypeValue of
-          Just coreType | coreType == intType || coreType == CoreBoolType ->
+          Just coreType | coreType `elem` [intType, CoreBoolType, CoreUnitType] ->
             ( current
             , collected <> [CoreParameter
                 { coreParameterLocal = CoreLocal index (locatedValue (parameterName parameter)) coreType
