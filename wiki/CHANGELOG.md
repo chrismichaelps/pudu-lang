@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Failing native frame-pressure regression (#499)
+
+- [[Backend Function Programs]] now covers 96 live integer parameters across deep recursion. Tree and compiled evaluation give E7002; the current uncommitted exact-carrier integration instead crashes natively before that bound. [[Native Frame Pressure Repair]] blocks promotion and records the explicit-frame follow-up. This is a failing test checkpoint, not a completed fix.
+
 ## 2026-10-17 — Refuse lossy native literal intermediates (#498 partition)
 
 - [[Compiler Lower Body]] checks platform Int literal carrier bounds before Core construction. Checked positive-2^63 block/local intermediates now receive located E6001 instead of silently narrowing into a wrong native value. Immediate negative-minimum literals remain admitted by [[Compiler Lower Scalar]].
