@@ -169,7 +169,7 @@ Resolved Grill Log: actual strict C11 execution must validate the prerequisite w
 Register [[Native Wide Value Tests]] using existing test dependencies.
 Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.
 
-## Typed wide operation registration (#503, planned)
+## Typed wide operation registration (#503)
 
 Register [[Native Wide Operation Tests]] with existing test dependencies, plus a generated C setjmp failure fixture.
 Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.

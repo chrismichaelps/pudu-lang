@@ -363,7 +363,7 @@ Resolved Grill Log: actual strict C11 execution must validate the prerequisite w
 Register [[Backend Wide Integer Values]] using Text only.
 Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.
 
-## Typed wide operation registration (#503, planned)
+## Typed wide operation registration (#503)
 
 Register [[Backend Wide Operations]] using Text only, without selecting it for ordinary production emission before integration.
 Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.

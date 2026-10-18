@@ -5,9 +5,9 @@ tags: [changelog]
 
 # Changelog
 
-## 2026-10-18 — Wide operation contract (#503, planned)
+## 2026-10-18 — Wide operations (#503)
 
-- [[Native Wide Operations]] resolves checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior before implementation. [[Native Wide Operation Delivery]] assigns the bounded catalogue and independent C-oracle corpus; module mirrors remain Planned until code exists.
+- [[Backend Wide Operations]] implements checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior. [[Native Wide Operation Tests]] passes 6,412 mathematical/refusal rows and 22 minimal helper selections. Clang/GCC 15, ASan/UBSan and all 19 clean gates/674 groups pass. Independent review and additional platforms remain required; source admission is still pending.
 
 ## 2026-10-18 — Exact wide values (#502)
 

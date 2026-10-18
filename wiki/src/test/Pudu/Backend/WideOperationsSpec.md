@@ -1,7 +1,7 @@
 ---
 type: module
 path: "@root/test/Pudu/Backend/WideOperationsSpec.hs"
-fidelity: Planned
+fidelity: Active
 aliases: [Native Wide Operation Tests]
 grammar: "[[grammar/haskell]]"
 ---

@@ -1,7 +1,7 @@
 ---
 type: module
 path: "@root/src/Pudu/Backend/Runtime/Integer/Wide/Operations.hs"
-fidelity: Planned
+fidelity: Active
 aliases: [Backend Wide Operations]
 grammar: "[[grammar/haskell]]"
 ---
