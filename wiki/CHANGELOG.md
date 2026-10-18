@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Wide operation contract (#503, planned)
+
+- [[Native Wide Operations]] resolves checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior before implementation. [[Native Wide Operation Delivery]] assigns the bounded catalogue and independent C-oracle corpus; module mirrors remain Planned until code exists.
+
 ## 2026-10-18 — Exact wide values (#502)
 
 - [[Backend Word128 Kernel]] now exposes named parts/dependencies while preserving its complete C text. [[Backend Wide Integer Values]] adds exact actual-sign carriers, magnitude/construction/normalization, signed/unsigned decoding, ordering and magnitude limits.

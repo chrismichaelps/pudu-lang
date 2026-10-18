@@ -70,3 +70,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Execution Frames]] — explicit continuations and frame ownership for recursion-depth parity (#499).
 
 - [[Native Wide Integers]] — portable 128-bit arithmetic prerequisite.
+
+- [[Native Wide Operations]] — resolved typed 128-bit operation contract (#503).
