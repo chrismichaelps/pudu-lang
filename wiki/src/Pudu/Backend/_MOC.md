@@ -51,3 +51,5 @@ aliases: [Backend Module Map]
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 
 - [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — portable 128-bit arithmetic prerequisite.
+
+- [[Backend Wide Integer Values]] · [[Native Wide Value Tests]] — exact signs and selectable dependencies (#502).

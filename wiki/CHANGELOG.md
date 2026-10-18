@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Exact wide values (#502)
+
+- [[Backend Word128 Kernel]] now exposes named parts/dependencies while preserving its complete C text. [[Backend Wide Integer Values]] adds exact actual-sign carriers, magnitude/construction/normalization, signed/unsigned decoding, ordering and magnitude limits.
+- [[Native Wide Value Tests]] passes 75 values/5,625 comparisons and all 16 single-helper selections as strict C11. Clang/GCC 15 and ASan/UBSan checks pass, as do all 19 clean repository gates/672 groups. The unchanged raw corpus and 319 strict frame C11 translations pass. Typed arithmetic/frame/source integration, additional platforms and independent review remain required.
+
 ## 2026-10-18 — Portable wide-word prerequisite (#501)
 
 - [[Native Wide Integers]] resolves the portable Int128/UInt128 delivery sequence. [[Backend Word128 Kernel]] implements raw two-word arithmetic, overflow/carry evidence, total shifts and explicit zero-divisor results without compiler extensions or a new ABI.

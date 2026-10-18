@@ -113,3 +113,32 @@ and wide-oracle.json.
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Wide Integer Delivery]] · [[Native Emission Coverage]]
+
+## Selectable values (#502)
+
+Keep word128Runtime as the complete ordered compatibility view; also export
+word128RuntimeParts and word128RuntimeDependencies for minimal helper closure.
+Each raw helper depends on word128_value; division additionally needs zero,
+left, compare and sub. No arithmetic body changes in this partition.
+
+Wide.Value exports wideValueRuntimeParts and wideValueRuntimeDependencies.
+wide_value defines pudu_wide_int {pudu_word128 bits; int negative;},
+pudu_wide_kind {int is_signed;} and pudu_wide_calculation {value; int overflow;}.
+wide_make preserves a requested negative flag even on zero: an overflowing
+negative calculation may wrap its magnitude to zero but must still saturate
+toward the negative bound. wide_normal explicitly canonicalizes zero at value
+boundaries. wide_magnitude recovers unsigned magnitude via modular negation.
+wide_from_bits decodes according to kind, wide_compare normalizes zeros and
+compares actual signs before unsigned words, and wide_limit returns the exact
+positive/negative magnitude limit. No source admission, existing frame change,
+new error code or public syntax is part of this prerequisite.
+
+Backend Engineer owns Word128 catalogue extraction and Wide.Value plus the
+production manifest. Test Engineer owns WideValueSpec and suite registration.
+Execute exact make/magnitude/normal/from-bits/compare/limit cases and every
+single-helper dependency closure under strict C11. Include requested negative
+zero, signed/unsigned high bits and positive deferred 2^127. Retain the original
+raw arithmetic corpus unchanged, then run sanitizers, GCC and full gates.
+Resolved Grill Log: normalize only when the mathematical sign is no longer
+needed for an overflowing calculation; no unused-warning suppression, sign-bit
+shortcut, silent dependency omission or typed admission is permitted.

@@ -37,3 +37,13 @@ headers; callers provide stdint.h. No global state or allocation.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Wide Integer Delivery]]
+
+## Selectable catalogue (#502)
+
+Export word128RuntimeParts :: [(Text, [Text])] and
+word128RuntimeDependencies :: Text -> [Text]. The existing word128Runtime
+concatenates the catalogue unchanged. Every helper depends on word128_value;
+divide additionally depends on zero/left/compare/sub. No raw arithmetic changes.
+Resolved Grill Log: minimal selections must compile without unused static
+helpers; the old full executed corpus must remain unchanged. Consumer:
+[[Backend Wide Integer Values]] and [[Native Wide Value Tests]].

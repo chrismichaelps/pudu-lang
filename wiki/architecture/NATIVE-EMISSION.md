@@ -150,3 +150,6 @@ widths (#497), retaining the full unsigned/large/float/Decimal obligations.
 [[Backend Word128 Kernel]] has an independent executed corpus; typed policies,
 frame integration, printing and full source parity remain pending. This does
 not change the completed-area count.
+
+The #502 prerequisite adds [[Backend Wide Integer Values]] and explicit raw
+helper selection; full typed operations and source admission remain pending.

@@ -163,3 +163,8 @@ Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing
 
 Register [[Native Word128 Tests]] with existing test dependencies.
 Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
+
+## Exact wide values (#502)
+
+Register [[Native Wide Value Tests]] using existing test dependencies.
+Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.

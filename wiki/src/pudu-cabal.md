@@ -357,3 +357,8 @@ no allocator; generated bodies suspend through steps instead of recursive calls.
 
 Register [[Backend Word128 Kernel]] with existing Text dependency; no runtime selection or ABI change yet.
 Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
+
+## Exact wide values (#502)
+
+Register [[Backend Wide Integer Values]] using Text only.
+Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.

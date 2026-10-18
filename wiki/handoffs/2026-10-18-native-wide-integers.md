@@ -1,19 +1,19 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 501
+issue: 502
 aliases: [Native Wide Integer Delivery]
 ---
 # Native Wide Integer Delivery
 
 Delivery Owner → Language Architect → Backend Engineer → Test Engineer.
 [[Native Wide Integers]] resolves the portable arithmetic prerequisite #501.
-Direct ownership: Runtime.Integer.Word128, Word128Spec, both Cabal registrations,
-test runner registration and their mirrors. No subagents execute.
+Direct ownership for #502: Word128 selectable catalogue, Wide.Value,
+WideValueSpec, manifests, runner and mirrors. No subagents execute.
 
-Use feature/501-native-word128 stacked on ca2da6d1 because the required native
-work is not on dev yet. Architecture/mirror edits prepared before this branch
-belong only to #501. Preserve unrelated untracked dist-ticky. Fresh dev ancestry
+Use feature/502-native-wide-values stacked on 058b7300 because the required
+native work is not on dev yet. Architecture/mirror edits prepared before this
+branch belong only to #502. Preserve unrelated untracked dist-ticky. Fresh dev ancestry
 and independent implementation/architect/wiki review remain promotion gates;
 no self-approval or production-ready claim.
 
@@ -31,10 +31,15 @@ an explicit typed-adapter integration requirement.
 Test Engineer → Delivery Owner → Language Architect: the prerequisite is
 locally validated. Independent review remains pending before promotion.
 
-Exact next action: prepare a ready dependent issue and resolved mirrors for
-selectable Word128 helpers plus the exact signed carrier, then implement its
-independent executed value corpus. Keep typed arithmetic, frame integration,
-source admission and full-language completion explicitly pending.
+Backend Engineer → Test Engineer → Delivery Owner: #502 is locally validated.
+75 values/5,625 comparisons, all 16 minimal helper selections, unchanged raw
+corpus, Clang/GCC 15 and ASan/UBSan pass. All 19 clean gates pass with 672
+groups and 319 strict frame C11 translations. Logs: ~/.codex/tmp/pudu-502/.
+Independent implementation/architect/wiki review and more platforms remain pending.
+
+Exact next action: continue ready #503's portable arithmetic/bitwise/shift
+adapter with the resolved operation contracts. Typed frame/source admission
+and the full language objective remain incomplete.
 
 ## Referenced by
 

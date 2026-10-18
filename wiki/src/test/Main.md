@@ -128,3 +128,8 @@ Register and run [[Native Solved Types Tests]] alongside backend properties. Res
 
 Register and aggregate [[Native Word128 Tests]] beside native runtime properties.
 Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
+
+## Exact wide values (#502)
+
+Execute and aggregate [[Native Wide Value Tests]] beside the raw word kernel corpus.
+Resolved Grill Log: helper-selection and exact-sign checks must execute without admitting source types early.
