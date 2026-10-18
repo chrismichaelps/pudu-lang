@@ -239,3 +239,5 @@ tags: [moc, module]
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
+
+- [[Backend Word128 Kernel]] · [[Native Word128 Tests]] — portable 128-bit arithmetic prerequisite.

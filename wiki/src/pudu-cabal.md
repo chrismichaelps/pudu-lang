@@ -352,3 +352,8 @@ does not allocate runtime frames or change the native calling convention yet.
 Register Backend.Emit.Frame.Value and Backend.Emit.Frame.Body with existing
 dependencies. Resolved Grill Log: generation returns typed faults and requires
 no allocator; generated bodies suspend through steps instead of recursive calls.
+
+## Portable wide-word prerequisite
+
+Register [[Backend Word128 Kernel]] with existing Text dependency; no runtime selection or ABI change yet.
+Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.

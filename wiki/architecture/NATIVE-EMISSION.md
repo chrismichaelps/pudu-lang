@@ -143,3 +143,10 @@ the contracts and local evidence. Independent implementation/architecture/wiki
 review, other supported platforms and reviewable PR partitioning remain pending
 before promotion. Subsequent numeric work begins with canonical fixed signed
 widths (#497), retaining the full unsigned/large/float/Decimal obligations.
+
+## Wide integer prerequisite (#501)
+
+[[Native Wide Integers]] specifies staged Int128/UInt128 delivery. The raw
+[[Backend Word128 Kernel]] has an independent executed corpus; typed policies,
+frame integration, printing and full source parity remain pending. This does
+not change the completed-area count.

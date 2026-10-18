@@ -123,3 +123,8 @@ Dynamic, constant and actual boxed-kernel regressions in focused and full runs.
 ## Native solved facts (#491)
 
 Register and run [[Native Solved Types Tests]] alongside backend properties. Resolved Grill Log: missing/colliding facts and canonical identity checks execute in the full suite.
+
+## Portable wide-word prerequisite
+
+Register and aggregate [[Native Word128 Tests]] beside native runtime properties.
+Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.

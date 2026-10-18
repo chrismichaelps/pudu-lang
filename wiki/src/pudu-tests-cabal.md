@@ -158,3 +158,8 @@ groups execute its success and refusal lists through the same real compiler,
 interpreter/native and mathematical expected-output harness.
 
 Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+## Portable wide-word prerequisite
+
+Register [[Native Word128 Tests]] with existing test dependencies.
+Resolved Grill Log: actual strict C11 execution must validate the prerequisite without claiming typed emission admission.
