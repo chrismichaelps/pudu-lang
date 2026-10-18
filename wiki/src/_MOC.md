@@ -224,3 +224,5 @@ tags: [moc, module]
 - [[Native Solved Types Tests]] — canonical representation and fact identity regressions.
 
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
+
+- [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.

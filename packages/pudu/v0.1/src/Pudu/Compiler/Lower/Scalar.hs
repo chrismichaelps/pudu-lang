@@ -9,7 +9,8 @@ import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
 import Pudu.Diagnostic.Evaluation
   ( cannotApplyBinaryMessage, cannotApplyUnaryMessage, unsupportedOperatorMessage )
-import Pudu.Frontend.Syntax (Expression, Located (..))
+import Pudu.Frontend.Syntax (Expression (LiteralExpression), Literal (ResolvedInteger), Located (..))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned), integerKindFits)
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -17,11 +18,16 @@ type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (C
 lowerUnary :: LowerExpression -> LowerState -> Span -> Text -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerUnary lower state at operator operand
   | operator `notElem` ["-", "!", "~"] = halt at ("the operator '" <> operator <> "'") state
+  | operator == "-"
+  , LiteralExpression (ResolvedInteger PlatformSigned number) <- locatedValue operand
+  , integerKindFits PlatformSigned (negate number) =
+      built state at (CoreIntegerLiteral PlatformSigned (negate number)) intType
   | otherwise = case lower state operand of
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, kind))
         | expressionIsPrintValued core -> halt at "an operator on a Result[(), Str] value" after
         | operator == "-", kind == intType -> built after at (CoreNegate core) intType
+        | operator == "~", kind == intType -> built after at (CoreComplement core) intType
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
         | kind `elem` [CoreUnitType, CoreBoolType]
         , settled after operand core ->
@@ -66,7 +72,13 @@ represented operator left right
   | left `elem` [intType, CoreBoolType, CoreUnitType], Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
-  arithmetic = [("+", CoreAdd), ("-", CoreSubtract), ("*", CoreMultiply), ("/", CoreDivide), ("%", CoreRemainder)]
+  arithmetic =
+    [ ("+", CoreAdd), ("-", CoreSubtract), ("*", CoreMultiply), ("/", CoreDivide), ("%", CoreRemainder)
+    , ("&", CoreBitAnd), ("|", CoreBitOr), ("^", CoreBitXor)
+    , ("<<", CoreShiftLeft), (">>", CoreShiftRight)
+    , ("&+", CoreWrapAdd), ("&-", CoreWrapSubtract), ("&*", CoreWrapMultiply)
+    , ("+|", CoreSaturateAdd), ("-|", CoreSaturateSubtract), ("*|", CoreSaturateMultiply)
+    ]
   ordering = [("<", CoreLess), ("<=", CoreLessOrEqual), (">", CoreGreater), (">=", CoreGreaterOrEqual)]
   equality = [("==", CoreEqual), ("!=", CoreNotEqual)]
 

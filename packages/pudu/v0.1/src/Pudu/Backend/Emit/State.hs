@@ -2,7 +2,7 @@
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
   ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt
-  , overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, renderSites, cString, cStringBytes
+  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, renderSites, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
@@ -13,7 +13,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Pudu.Core (CoreLoopId, CoreType (..))
-import Pudu.Diagnostic.Arithmetic (CheckedOperation, divideByZeroCode, divideByZeroMessage, overflowCode, overflowHelp, overflowMessage)
+import Pudu.Diagnostic.Arithmetic (CheckedOperation, divideByZeroCode, divideByZeroMessage, overflowCode, overflowHelp, overflowMessage, shiftCode, negativeShiftMessage, negativeShiftHelp, wideShiftMessage, wideShiftHelp)
 import Pudu.Diagnostic.Evaluation (callDepthCode, callDepthHelp, callDepthMessage, operatorCode)
 import Pudu.Diagnostic.Render (Excerpt (..), excerptGeometry)
 import Pudu.IntegerLiteral (IntegerKind)
@@ -109,6 +109,12 @@ siteAt state spanValue code message help =
 overflowSite :: EmitState -> Span -> IntegerKind -> CheckedOperation -> (EmitState, Int)
 overflowSite state spanValue kind operation =
   siteAt state spanValue overflowCode (overflowMessage kind operation) (Just overflowHelp)
+
+shiftSites :: EmitState -> Span -> IntegerKind -> (EmitState, Int, Int)
+shiftSites state at kind =
+  let (afterNegative, negative) = siteAt state at shiftCode negativeShiftMessage (Just negativeShiftHelp)
+      (afterWide, wide) = siteAt afterNegative at shiftCode (wideShiftMessage kind) (Just wideShiftHelp)
+   in (afterWide, negative, wide)
 
 divideByZeroSite :: EmitState -> Span -> (EmitState, Int)
 divideByZeroSite state spanValue =

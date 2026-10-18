@@ -25,12 +25,13 @@ module Pudu.Backend.Runtime
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
 import Pudu.Comptime.Limits (callDepthLimit)
 
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "2"
+runtimeRevision = "3"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -58,7 +59,8 @@ runtimeParts =
   , RuntimePart "div" divLines
   , RuntimePart "rem" remLines
   , RuntimePart "neg" negLines
-  , RuntimePart "print_int" printIntLines
+  ] <> map (uncurry RuntimePart) integerRuntimeParts <>
+  [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
   , RuntimePart "print_str" printStrLines
   , RuntimePart "status" statusLines

@@ -193,3 +193,9 @@ Resolved Grill Log: unit has one value but its operands still execute. Reject sk
 Emit CoreOperatorFailure by discarding operands in their source order, baking the operation site, calling the existing non-returning pudu_fail, and returning only an unreachable scalar sentinel to the emitter traversal. No later operand or trap executes after an earlier failure/transfer.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Emit CoreComplement through pudu_bit_not. New eager binary operators freeze both operands in source order then call their selected helper. Shifts bake negative and width sites only after both operands, passing both to the helper. No direct signed C shift or arithmetic approximation.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

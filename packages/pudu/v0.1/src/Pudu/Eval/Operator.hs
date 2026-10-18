@@ -31,6 +31,7 @@ import Pudu.Diagnostic.Arithmetic
   , overflowCode
   , overflowHelp
   , overflowMessage
+  , shiftCode, negativeShiftMessage, negativeShiftHelp, wideShiftMessage, wideShiftHelp
   )
 import Pudu.Diagnostic.Evaluation
   ( operatorCode, cannotApplyUnaryMessage, cannotApplyBinaryMessage, unsupportedOperatorMessage )
@@ -56,7 +57,6 @@ import Pudu.IntegerLiteral
   , integerKindFits
   , integerKindMeet
   , integerKindMultiplyWrapping
-  , integerKindName
   , integerKindOr
   , integerKindShift
   , integerKindSigned
@@ -218,18 +218,12 @@ saturatedResult kind value = pure (IntValue kind clamped)
 shiftResult :: Span -> IntegerKind -> Bool -> Integer -> Integer -> Evaluator Value
 shiftResult spanValue kind toHigh value count
   | count < 0 =
-      abortAt (Just spanValue) "E7004" "a shift count cannot be negative"
-        (Just "shift by a non-negative count smaller than the type's width")
+      abortAt (Just spanValue) shiftCode negativeShiftMessage (Just negativeShiftHelp)
   | otherwise = case integerKindWidth kind of
       Nothing -> pure (IntValue kind (moved (fromInteger count)))
       Just width
         | count >= fromIntegral width ->
-            abortAt (Just spanValue) "E7004"
-              ( "a shift count must be smaller than "
-                  <> integerKindName kind
-                  <> "'s width"
-              )
-              (Just "mask the count, or use a wider type")
+            abortAt (Just spanValue) shiftCode (wideShiftMessage kind) (Just wideShiftHelp)
         | otherwise -> pure (IntValue kind (integerKindShift kind toHigh value (fromInteger count)))
  where
   moved places

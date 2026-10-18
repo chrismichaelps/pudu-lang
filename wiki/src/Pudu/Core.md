@@ -70,6 +70,7 @@ data CoreExpressionShape
   | CoreTextLiteral !Text
   | CoreReadLocal !CoreLocal
   | CoreNegate !CoreExpression
+  | CoreComplement !CoreExpression
   | CoreNot !CoreExpression
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
@@ -83,6 +84,9 @@ data CoreExpressionShape
 
 data CoreBinaryOperator
   = CoreAdd | CoreSubtract | CoreMultiply | CoreDivide | CoreRemainder
+  | CoreBitAnd | CoreBitOr | CoreBitXor | CoreShiftLeft | CoreShiftRight
+  | CoreWrapAdd | CoreWrapSubtract | CoreWrapMultiply
+  | CoreSaturateAdd | CoreSaturateSubtract | CoreSaturateMultiply
   | CoreLess | CoreLessOrEqual | CoreGreater | CoreGreaterOrEqual
   | CoreEqual | CoreNotEqual | CoreAnd | CoreOr
 
@@ -185,3 +189,9 @@ CoreLoopId is a function-local numeric identity, resolved before emission. While
 Add CoreOperatorFailure Text [CoreExpression] to CoreExpressionShape. It carries an interpreter operator-refusal message and ordered operands; its expression type is CoreNeverType. The enclosing span is the whole operation. This is an explicit semantic trap, not an emitted C error or diagnostic rendering object. No new imports or target ABI data.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Add CoreComplement and binary CoreBitAnd/Or/Xor, CoreShiftLeft/Right, CoreWrapAdd/Subtract/Multiply, CoreSaturateAdd/Subtract/Multiply. All operate on platform Int; shifts carry the whole-operation span and can refuse E7004. Preserve the existing Bool logical operators as distinct forms.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

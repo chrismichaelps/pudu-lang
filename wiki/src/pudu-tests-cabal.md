@@ -127,3 +127,9 @@ Dynamic, constant and actual boxed-kernel regressions in focused and full runs.
 ## Native solved facts (#491)
 
 Register and run [[Native Solved Types Tests]] alongside backend properties. Resolved Grill Log: missing/colliding facts and canonical identity checks execute in the full suite.
+
+## Platform Int operators (#495)
+
+Register Pudu.Backend.IntegerPrograms explicitly in other-modules beside existing native corpora, with no new dependency.
+
+Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.

@@ -65,3 +65,9 @@ a Never local, and Never assignments and return operands retain their transfer.
 Result-valued print expressions remain effect-only: bindings, call arguments,
 explicit returns, break operands and function results cannot erase their carrier.
 A divergent block's unreachable trailing print does not produce a value.
+
+## Platform Int operators (#495)
+
+CoreComplement is a represented unary scalar; expressionIsPrintValued keeps its existing total default and never invents a print carrier. No source change unless exhaustive compiler matching requires one.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

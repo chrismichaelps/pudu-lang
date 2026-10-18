@@ -16,7 +16,7 @@ Own deterministic output state, diagnostic-site baking, byte escaping, and tempo
 
 ## Interface
 
-Exports EmitState fields, emptyEmitState, line, freshTemp, textOfInt, overflowSite, divideByZeroSite, callDepthSite, renderSites, cString, and cStringBytes.
+Exports EmitState fields, emptyEmitState, line, freshTemp, textOfInt, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, shiftSites, renderSites, cString, and cStringBytes.
 
 ## Algorithm and invariants
 
@@ -52,3 +52,9 @@ State also owns the active map from numeric loop identities to optional scalar r
 Export operatorFailureSite :: EmitState -> Span -> Text -> (EmitState, Int), baking shared E7001 with the supplied canonical operator message and no help. Reuse ordinary site geometry/escaping.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Export shiftSites :: EmitState -> Span -> IntegerKind -> (EmitState, Int, Int). Append negative then oversized count sites with shared E7004 message/help and ordinary excerpt geometry.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

@@ -40,3 +40,5 @@ aliases: [Backend Module Map]
 - [[Compiler Lower Control]] — resolved scalar loop targets, transfers and divergence (#489).
 
 - [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).
+
+- [[Backend Runtime Integer]] · [[Backend Integer Programs]] — defined C11 bit patterns, wrapping, saturation and checked shifts.

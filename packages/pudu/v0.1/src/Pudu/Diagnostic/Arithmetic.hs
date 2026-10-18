@@ -15,6 +15,7 @@ module Pudu.Diagnostic.Arithmetic
   , overflowCode
   , overflowHelp
   , overflowMessage
+  , shiftCode, negativeShiftMessage, negativeShiftHelp, wideShiftMessage, wideShiftHelp
   ) where
 
 import Data.Text (Text)
@@ -58,3 +59,18 @@ divideByZeroCode = "E7004"
 
 divideByZeroMessage :: Text
 divideByZeroMessage = "division by zero"
+
+shiftCode :: Text
+shiftCode = "E7004"
+
+negativeShiftMessage :: Text
+negativeShiftMessage = "a shift count cannot be negative"
+
+negativeShiftHelp :: Text
+negativeShiftHelp = "shift by a non-negative count smaller than the type's width"
+
+wideShiftMessage :: IntegerKind -> Text
+wideShiftMessage kind = "a shift count must be smaller than " <> integerKindName kind <> "'s width"
+
+wideShiftHelp :: Text
+wideShiftHelp = "mask the count, or use a wider type"

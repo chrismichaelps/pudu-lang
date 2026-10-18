@@ -122,6 +122,7 @@ data CoreExpressionShape
   | CoreTextLiteral !Text
   | CoreReadLocal !CoreLocal
   | CoreNegate !CoreExpression
+  | CoreComplement !CoreExpression
   | CoreNot !CoreExpression
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
@@ -143,6 +144,17 @@ data CoreBinaryOperator
   | CoreMultiply
   | CoreDivide
   | CoreRemainder
+  | CoreBitAnd
+  | CoreBitOr
+  | CoreBitXor
+  | CoreShiftLeft
+  | CoreShiftRight
+  | CoreWrapAdd
+  | CoreWrapSubtract
+  | CoreWrapMultiply
+  | CoreSaturateAdd
+  | CoreSaturateSubtract
+  | CoreSaturateMultiply
   | CoreLess
   | CoreLessOrEqual
   | CoreGreater

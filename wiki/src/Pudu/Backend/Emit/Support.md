@@ -59,3 +59,9 @@ Resolved Grill Log: unit has one value but its operands still execute. Reject sk
 CoreOperatorFailure visits all ordered operands and selects site, colored and fail runtime parts. Add no unused arithmetic helper or new runtime implementation.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Select bitwise/wrapping helper plus from_bits; saturation selects only its helper; shifts select from_bits plus their helper and checked site/colored/fail dependencies. CoreComplement recursively visits its operand and selects bit_not/from_bits.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
