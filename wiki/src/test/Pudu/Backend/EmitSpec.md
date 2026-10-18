@@ -9,6 +9,10 @@ aliases: [Backend Emit Tests]
 
 # Backend Emit Tests
 
+For #497, replace newly supported narrow integer refusal fixtures with Int128
+and unsigned forms. Resolved Grill Log: source remains checked and exact refusal
+spans remain asserted; admitted narrow cases move into real conformance tests.
+
 ## Explicit frame emission (#499)
 
 Run lowerFrames after structured Core inspection, then handle emitProgram's

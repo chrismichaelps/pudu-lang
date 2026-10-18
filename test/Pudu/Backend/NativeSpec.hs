@@ -85,8 +85,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 backendNativeProperties :: [(String, IO Property)]
 backendNativeProperties =
   [ ("native execution matches the interpreter on success programs", testSuccessConformance)
-  , ("native platform Int operators match mathematical and interpreter results", testIntegerConformance)
-  , ("native platform Int shifts retain exact interpreter refusals", testIntegerRefusals)
+  , ("native integer operators match mathematical and interpreter results", testIntegerConformance)
+  , ("native integer failures retain exact interpreter refusals", testIntegerRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)
@@ -158,7 +158,12 @@ successPrograms =
 
 statusPrograms :: [(String, Text)]
 statusPrograms =
-  [ ("deferred positive boundary clamps to 255", programWith
+  [ ("Int8 negative minimum entry", "module Main\nfn main() -> Int8 { -128i8 }\n")
+  , ("Int8 positive entry", "module Main\nfn main() -> Int8 { 127 }\n")
+  , ("Int16 positive entry clamps", "module Main\nfn main() -> Int16 { 32767 }\n")
+  , ("Int32 negative entry clamps", "module Main\nfn main() -> Int32 { -2147483648i32 }\n")
+  , ("Int64 positive entry clamps", "module Main\nfn main() -> Int64 { 9223372036854775807i64 }\n")
+  , ("deferred positive boundary clamps to 255", programWith
       [ "  let value = 9223372036854775808"
       , "  let minimum: Int = -value"
       , "  return value"

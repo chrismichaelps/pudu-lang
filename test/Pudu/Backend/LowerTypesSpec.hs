@@ -10,7 +10,7 @@ import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan)
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
 import Pudu.Frontend.Syntax (Module (..), ModuleName (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned))
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, SignedKind))
 import Pudu.Source (SourceName (..), emptySpan, generatedSpan, newSource, sourceText, spanStart, spanEnd, unOffset)
 import Pudu.Type (TypeInfo (..))
 import Pudu.Type.Value (NominalId (..), Type (..), boolType, integerType, stringType)
@@ -34,7 +34,14 @@ testCanonical = conjoin
   , formedCoreType NeverType === Just CoreNeverType
   , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "Int") []) === Nothing
   , formedCoreType (TupleTypeValue []) === Nothing
-  , formedCoreType (NominalType "Int8" []) === Nothing
+  , formedCoreType (NominalType "Int8" []) === Just (CoreIntegerType (SignedKind 8))
+  , formedCoreType (NominalType "Int16" []) === Just (CoreIntegerType (SignedKind 16))
+  , formedCoreType (NominalType "Int32" []) === Just (CoreIntegerType (SignedKind 32))
+  , formedCoreType (NominalType "Int64" []) === Just (CoreIntegerType (SignedKind 64))
+  , formedCoreType (NominalType (NominalId (Just (ModuleName ("User" :| []))) "Int8") []) === Nothing
+  , formedCoreType (NominalType "Int128" []) === Nothing
+  , formedCoreType (NominalType "UInt8" []) === Nothing
+  , formedCoreType (NominalType "Int8" [integerType]) === Nothing
   ]
 
 testSpans :: IO Property

@@ -11,6 +11,13 @@ aliases: [Compiler Lower Control]
 
 # Compiler Lower Control
 
+## Fixed signed admission (#497)
+
+Allow nativeScalarType break operands alongside explicit Never. Canonical kind
+equality continues to govern joins; no widening or retagging occurs. Resolved
+Grill Log: preserve condition scope, destination identity, ordered break effects
+and print Result guards while carrying new integer kinds unchanged.
+
 ## Purpose and interface
 
 Own loop targets, transfer lowering, scalar break joins, direct block divergence,

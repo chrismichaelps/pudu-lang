@@ -5,21 +5,21 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (typeForSpan)
+import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeScalarType)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, intType, lookupLocal, refuse, refused )
+  , bindLocal, halt, lookupLocal, refuse, refused )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
   , Function (..), FunctionBody (..), Literal (..), Located (..), Statement (..) )
-import Pudu.IntegerLiteral (IntegerKind (..), integerKindFits)
+import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries Int or unit; a body that never returns uses the unit
+{-| The entry carries an admitted integer or unit; a body that never returns uses the unit
     ABI. Print's Result carrier must not escape through the entry result. -}
 lowerEntryBody :: Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBody located state
@@ -31,7 +31,7 @@ lowerEntryBody located state
         Just (Located _ (BlockBody block)) ->
           let (after, coreBlock, resultType) = lowerBlock state block
            in case maybe resultType id (lowerFunctionResult after) of
-                CoreIntegerType PlatformSigned -> built after coreBlock intType
+                kind@(CoreIntegerType integerKind) | nativeIntegerKind integerKind -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -144,7 +144,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
           , let solved = typeForSpan (contextTypes (lowerContext state)) (locatedSpan value)
           , solved == Nothing || (coreType /= CoreNeverType && solved /= Just coreType) ->
               halt declarationSpan "a binding without matching solved native type facts" after
-          | coreType `elem` [intType, CoreBoolType, CoreUnitType, CoreNeverType] ->
+          | nativeScalarType coreType || coreType == CoreNeverType ->
               let (withLocal, local) = bindLocal after name coreType
                in ( withLocal
                   , Just
@@ -243,18 +243,21 @@ observeReturn resultType state = case lowerFunctionResult state of
   Just _ -> state
 
 {-| Which operand types a `return` may carry: exactly the declared result for
-    a non-entry function, `Int` or `()` under the entry's milestone 1 rule. -}
+    a non-entry function, an admitted integer or unit for the entry. -}
 allowedResultType :: Maybe CoreType -> CoreType -> Bool
 allowedResultType declared operand = case declared of
   Just expected -> operand == expected || operand == CoreNeverType
-  Nothing -> operand `elem` [intType, CoreUnitType, CoreNeverType]
+  Nothing -> case operand of
+    CoreIntegerType kind -> nativeIntegerKind kind
+    _ -> operand `elem` [CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
   LiteralExpression literal -> case literal of
-    ResolvedInteger PlatformSigned number
-      | integerKindFits PlatformSigned number || integerKindFits PlatformSigned (negate number) -> value (CoreIntegerLiteral PlatformSigned number) intType
-      | otherwise -> halt spanValue "an Int literal outside the exact native carrier range" state
+    ResolvedInteger kind number
+      | nativeIntegerKind kind
+      , integerKindFits kind number || integerKindFits kind (negate number) -> value (CoreIntegerLiteral kind number) (CoreIntegerType kind)
+      | nativeIntegerKind kind -> halt spanValue "an integer literal outside the exact native carrier range" state
     ResolvedInteger kind _ ->
       halt spanValue ("the " <> coreTypeName (CoreIntegerType kind) <> " type") state
     IntegerValue _ -> halt spanValue "an unresolved integer literal" state
@@ -289,7 +292,7 @@ lowerExpression state (Located spanValue expression) = case expression of
           (after, Just (coreArgument, _))
             | expressionIsPrintValued coreArgument -> halt spanValue "display of a Result[(), Str] value" after
           (after, Just (coreArgument, operandType))
-            | operandType `elem` [intType, CoreBoolType, CoreUnitType] ->
+            | nativeScalarType operandType ->
                 typed after (CoreDisplay coreArgument) CoreTextType
             | otherwise ->
                 halt spanValue ("display of a " <> coreTypeName operandType <> " value") after

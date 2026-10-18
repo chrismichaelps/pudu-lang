@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Native Signed Programs]] — fixed signed-width mathematical and diagnostic conformance (#497).
+
 - [[Host Failure Vocabulary]] · [[CLI Memory Failure]] · [[CLI Memory Tests]] — shared catchable host-exhaustion presentation without swallowing cancellation (#499).
 - [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — production frame ownership, dispatcher and controlled failure checks (#499).
 

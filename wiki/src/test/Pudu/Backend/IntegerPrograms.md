@@ -6,6 +6,10 @@ aliases: [Backend Integer Programs]
 ---
 # Backend Integer Programs
 
+Append [[Native Signed Programs]] success/failure sources to the existing corpus.
+Resolved Grill Log (#497): retain independent stdout and run actual signed-width
+programs through both ordinary differential and strict-frame compilation groups.
+
 ## Purpose and interface
 
 Export integerSuccessPrograms :: [(String, Text, Text)] (label, source, expected stdout)

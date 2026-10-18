@@ -11,6 +11,13 @@ aliases: [Compiler Lower Signature]
 
 # Compiler Lower Signature
 
+## Fixed signed admission (#497)
+
+Use nativeScalarType for parameters/results, adding canonical fixed signed
+integers through the existing formed projection. Resolved Grill Log: retain
+monomorphic/required-arity checks, memoization, source refusal spans and no
+normalization or inference at the call ABI.
+
 ## Purpose and interface
 
 Validate and memoize the callable native subset independently of expression lowering.
@@ -23,8 +30,8 @@ Validate each reachable function once, including refused signatures. Source
 modifiers, constraints, default values and body shape retain their existing
 refusals. Defaults point at their expression span. Consume the final scheme
 from [[Compiler Lower Types]]: synchronous, monomorphic, all parameters required,
-and arity equal to source parameters. Represented parameters are Int/Bool/unit;
-results are Int/Bool/unit. Inferred and aliased types share this projection.
+and arity equal to source parameters. Represented parameters/results are admitted
+signed integers, Bool and unit. Inferred and aliased types share this projection.
 
 Unsupported formed types point at the annotation when present, otherwise the
 parameter/function name. Missing or polymorphic schemes refuse at the function

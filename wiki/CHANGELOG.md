@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Fixed signed native admission (#497)
+
+- [[Native Signed Integers]] resolves canonical Int8/16/32/64 projection, width-preserving arithmetic and platform-Int shift counts. Lowering admits these kinds in signatures, literals, locals, display, loop results and entry status while retaining the exact carrier and existing runtime helpers.
+- [[Native Signed Programs]] adds independent mathematical matrices, aliases/control/deferred-boundary cases and precise runtime failures. All 19 clean gates/669 groups, 254 strict C11 translations, production sanitizer checks and real CLI status/loop probes pass. Numeric coverage remains Partial and independent review/additional platform evidence remain pending.
+
 ## 2026-10-18 — Production native frame integration (#499)
 
 - [[Backend Frame Program]] and [[Backend Frame Runtime]] replace recursive generated calls with heap-owned slots, argument scratch, continuation steps and checked allocation. [[Pudu CLI]] and differential tests use the new compiler-to-frame boundary; source panics and controlled allocation failures unwind scalar frames.

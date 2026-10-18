@@ -8,6 +8,17 @@ aliases: [Compiler Lower Scalar]
 ---
 # Compiler Lower Scalar
 
+## Fixed signed admission (#497)
+
+Fold pure immediate negation for every admitted kind when the mathematical
+result fits; other negate/complement operations retain that operand kind.
+Represent same-kind integer arithmetic/comparisons. Handle shifts before the
+same-kind guard: left is admitted integer, count is platform Int, result is
+left kind. Existing supported Bool/unit failures retain settled-fact checks;
+two integer operands outside represented operators remain E6001, not a fake
+E7001 for a range. Resolved Grill Log: preserve exact type identity, operand
+order, spans and runtime-bound settlement rather than narrowing values early.
+
 ## Purpose and interface
 
 Own unary/binary scalar representation and operator failure admission outside
@@ -60,13 +71,11 @@ Resolved Grill Log: use defined unsigned bit patterns, validate counts before sh
 
 ### Signed minimum literal admission
 
-A checked immediate negation of ResolvedInteger PlatformSigned is a literal
-when its mathematical negation fits PlatformSigned. Emit that result directly
-at the whole unary span before lowering the operand. The positive magnitude
-2^63 is permitted by the checker only as the operand of the negative minimum;
-emitting it through an int64_t temporary first would narrow it and then report
-a spurious E7005. All nonliteral negations retain the checked helper. If the
-mathematical negation does not fit, keep the runtime checked path.
+A checked immediate negation of a supported ResolvedInteger is a literal when
+its mathematical negation fits that kind. Emit it at the whole unary span.
+The exact carrier also preserves accepted positive-boundary intermediates in
+blocks/locals/calls. Nonliteral negations and values whose negation does not
+fit retain the checked helper with their declared kind's bounds.
 
 Resolved Grill Log: fold only pure immediate canonical integer literals whose
 negated result fits the existing kind bounds. Preserve runtime overflow for

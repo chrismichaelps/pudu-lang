@@ -8,6 +8,10 @@ aliases: [Native Solved Types Tests]
 ---
 # Native Solved Types Tests
 
+For #497, require canonical Int8/16/32/64 projection and reject same-spelling
+user-owned identities, unsigned and Int128. Resolved Grill Log: pin Int64 versus
+platform Int and malformed/generic nominal shapes without spelling-based inference.
+
 ## Purpose and interface
 
 lowerTypesProperties tests canonical formed projection, exact complete source

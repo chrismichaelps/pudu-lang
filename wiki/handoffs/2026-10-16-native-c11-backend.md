@@ -7,6 +7,11 @@ tags: [handoff, backend, native, c11]
 ---
 # Native C11 Backend Delivery
 
+Current implementation continuation: [[Native Signed Integer Delivery]] has
+validated Int8/16/32/64 admission on revision 5. All 19 clean gates and 669
+groups pass. Next is a resolved unsigned-through-64-bit issue; full numeric
+and language coverage remains incomplete. Reviews/platform promotion are pending.
+
 ## Current continuation — 2026-10-18
 
 [[Native Frame Pressure Repair]] now has a validated local revision-5 exact
