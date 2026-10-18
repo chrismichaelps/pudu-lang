@@ -11,6 +11,13 @@ aliases: [Compiler Lower Types]
 
 # Compiler Lower Types
 
+## Unsigned admission
+
+Extend nativeIntegerKind to PlatformUnsigned and UnsignedKind 8/16/32/64.
+The existing canonical identity guard and nativeScalarType propagate admission
+through every scalar consumer. Resolved Grill Log: preserve UInt versus UInt64
+and reject same-spelling user-owned identities, 128-bit types and generic shapes.
+
 ## Fixed signed admission (#497)
 
 Export nativeIntegerKind (PlatformSigned or SignedKind 8/16/32/64) and
@@ -41,7 +48,8 @@ use authored offsets, approximate spans, declaration spelling or another source'
 facts. Generated source identity remains part of the lookup key. Function names
 are scoped to the single checked module; module linking remains a separate slice.
 
-Project canonical compiler-wired Int, Int8/16/32/64 and Bool identities, UnitTypeValue and
+Project canonical compiler-wired Int/UInt and their fixed 8/16/32/64-bit families,
+Bool identities, UnitTypeValue and
 NeverType into their existing Core representations. Recognize canonical Str as
 CoreTextType for admission diagnostics and existing literal/display effects;
 recognition does not admit owned text locals or results. Aliases have already

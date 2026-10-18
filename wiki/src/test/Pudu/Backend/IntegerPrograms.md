@@ -6,6 +6,10 @@ aliases: [Backend Integer Programs]
 ---
 # Backend Integer Programs
 
+Append [[Native Unsigned Programs]] to the ordinary mathematical/differential
+success and failure lists. Resolved Grill Log: full high-bit values and checked
+unsigned failures use the same strict native and frame-translation harnesses.
+
 Append [[Native Signed Programs]] success/failure sources to the existing corpus.
 Resolved Grill Log (#497): retain independent stdout and run actual signed-width
 programs through both ordinary differential and strict-frame compilation groups.

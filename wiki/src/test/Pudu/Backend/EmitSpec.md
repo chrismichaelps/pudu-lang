@@ -9,6 +9,10 @@ aliases: [Backend Emit Tests]
 
 # Backend Emit Tests
 
+Move unsigned complement/parameter refusal fixtures to UInt128, retaining exact
+checked-source refusal spans. Resolved Grill Log: newly admitted smaller kinds
+are tested in the real corpus, and unsupported larger kinds still refuse.
+
 For #497, replace newly supported narrow integer refusal fixtures with Int128
 and unsigned forms. Resolved Grill Log: source remains checked and exact refusal
 spans remain asserted; admitted narrow cases move into real conformance tests.

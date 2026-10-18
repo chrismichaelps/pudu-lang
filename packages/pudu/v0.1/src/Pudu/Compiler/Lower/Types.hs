@@ -7,7 +7,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Core (CoreType (..))
-import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, SignedKind), integerKindOf)
+import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindOf)
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo, typeAt)
 import Pudu.Type.Value
@@ -39,7 +39,9 @@ formedCoreType value
 
 nativeIntegerKind :: IntegerKind -> Bool
 nativeIntegerKind PlatformSigned = True
+nativeIntegerKind PlatformUnsigned = True
 nativeIntegerKind (SignedKind width) = width `elem` [8, 16, 32, 64]
+nativeIntegerKind (UnsignedKind width) = width `elem` [8, 16, 32, 64]
 nativeIntegerKind _ = False
 
 nativeScalarType :: CoreType -> Bool

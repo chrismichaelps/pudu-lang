@@ -267,7 +267,7 @@ testReachableFunctions = do
 refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("pending 128-bit integer bitwise", statementProgram "1i128 & 2i128", "1i128")
-  , ("pending unsigned complement", statementProgram "~1u8", "1u8")
+  , ("pending 128-bit unsigned complement", statementProgram "~1u128", "1u128")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
   , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
@@ -276,7 +276,7 @@ refusalCases =
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
-  , ("unsigned integer parameter", helperProgram "fn helper(value: UInt8) -> Int { return 1 }" "helper(1u8)", "UInt8")
+  , ("128-bit unsigned parameter", helperProgram "fn helper(value: UInt128) -> Int { return 1 }" "helper(1u128)", "UInt128")
   , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("trailing print result", Text.unlines

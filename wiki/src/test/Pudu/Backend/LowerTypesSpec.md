@@ -8,6 +8,10 @@ aliases: [Native Solved Types Tests]
 ---
 # Native Solved Types Tests
 
+Add canonical UInt/UInt8/16/32/64 projections while rejecting user-owned UInt64,
+UInt128 and applied primitive shapes. Resolved Grill Log: preserve signedness
+and platform/fixed identity rather than selecting a signed carrier by width.
+
 For #497, require canonical Int8/16/32/64 projection and reject same-spelling
 user-owned identities, unsigned and Int128. Resolved Grill Log: pin Int64 versus
 platform Int and malformed/generic nominal shapes without spelling-based inference.
