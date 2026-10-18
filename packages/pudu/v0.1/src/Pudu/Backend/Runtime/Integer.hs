@@ -1,96 +1,44 @@
-{-| @Pudu.Backend.Runtime.Integer — defined C11 platform-Int bit and range operations. -}
-module Pudu.Backend.Runtime.Integer (integerRuntimeParts) where
+{-| @Pudu.Backend.Runtime.Integer — ordered exact-integer runtime parts and prerequisites. -}
+module Pudu.Backend.Runtime.Integer (integerRuntimeParts, integerRuntimeDependencies) where
 
 import Data.Text (Text)
+import Pudu.Backend.Runtime.Integer.Value (valueRuntimeParts)
+import Pudu.Backend.Runtime.Integer.Arithmetic (arithmeticRuntimeParts)
+import Pudu.Backend.Runtime.Integer.Bits (bitRuntimeParts)
 
-{-| Dependencies precede their consumers; emission selects only reachable helpers. -}
 integerRuntimeParts :: [(Text, [Text])]
-integerRuntimeParts =
-  [ ("from_bits",
-      [ "static inline int64_t pudu_from_bits(uint64_t bits) {"
-      , "  if (bits <= (uint64_t)INT64_MAX) return (int64_t)bits;"
-      , "  return -1 - (int64_t)(~bits);"
-      , "}"
-      ])
-  , ("bit_and",
-      [ "static inline int64_t pudu_bit_and(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a & (uint64_t)b);"
-      , "}"
-      ])
-  , ("bit_or",
-      [ "static inline int64_t pudu_bit_or(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a | (uint64_t)b);"
-      , "}"
-      ])
-  , ("bit_xor",
-      [ "static inline int64_t pudu_bit_xor(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a ^ (uint64_t)b);"
-      , "}"
-      ])
-  , ("bit_not",
-      [ "static inline int64_t pudu_bit_not(int64_t a) {"
-      , "  return pudu_from_bits(~(uint64_t)a);"
-      , "}"
-      ])
-  , ("shift_left",
-      [ "static inline int64_t pudu_shift_left(int64_t a, int64_t count, const pudu_site *negative, const pudu_site *wide) {"
-      , "  if (count < 0) pudu_fail(negative);"
-      , "  if (count >= 64) pudu_fail(wide);"
-      , "  return pudu_from_bits((uint64_t)a << count);"
-      , "}"
-      ])
-  , ("shift_right",
-      [ "static inline int64_t pudu_shift_right(int64_t a, int64_t count, const pudu_site *negative, const pudu_site *wide) {"
-      , "  uint64_t bits;"
-      , "  if (count < 0) pudu_fail(negative);"
-      , "  if (count >= 64) pudu_fail(wide);"
-      , "  if (count == 0) return a;"
-      , "  bits = (uint64_t)a >> count;"
-      , "  if (a < 0) bits |= UINT64_MAX << (64 - count);"
-      , "  return pudu_from_bits(bits);"
-      , "}"
-      ])
-  , ("wrap_add",
-      [ "static inline int64_t pudu_wrap_add(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a + (uint64_t)b);"
-      , "}"
-      ])
-  , ("wrap_sub",
-      [ "static inline int64_t pudu_wrap_sub(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a - (uint64_t)b);"
-      , "}"
-      ])
-  , ("wrap_mul",
-      [ "static inline int64_t pudu_wrap_mul(int64_t a, int64_t b) {"
-      , "  return pudu_from_bits((uint64_t)a * (uint64_t)b);"
-      , "}"
-      ])
-  , ("sat_add",
-      [ "static inline int64_t pudu_sat_add(int64_t a, int64_t b) {"
-      , "  if (b > 0 && a > INT64_MAX - b) return INT64_MAX;"
-      , "  if (b < 0 && a < INT64_MIN - b) return INT64_MIN;"
-      , "  return a + b;"
-      , "}"
-      ])
-  , ("sat_sub",
-      [ "static inline int64_t pudu_sat_sub(int64_t a, int64_t b) {"
-      , "  if (b < 0 && a > INT64_MAX + b) return INT64_MAX;"
-      , "  if (b > 0 && a < INT64_MIN + b) return INT64_MIN;"
-      , "  return a - b;"
-      , "}"
-      ])
-  , ("sat_mul",
-      [ "static inline int64_t pudu_sat_mul(int64_t a, int64_t b) {"
-      , "  if (a == 0 || b == 0) return 0;"
-      , "  if ((a == -1 && b == INT64_MIN) || (b == -1 && a == INT64_MIN)) return INT64_MAX;"
-      , "  if (a > 0) {"
-      , "    if (b > 0) { if (a > INT64_MAX / b) return INT64_MAX; }"
-      , "    else { if (b < INT64_MIN / a) return INT64_MIN; }"
-      , "  } else {"
-      , "    if (b > 0) { if (a < INT64_MIN / b) return INT64_MIN; }"
-      , "    else { if (a < INT64_MAX / b) return INT64_MAX; }"
-      , "  }"
-      , "  return a * b;"
-      , "}"
-      ])
-  ]
+integerRuntimeParts = valueRuntimeParts <> arithmeticRuntimeParts <> bitRuntimeParts
+
+integerRuntimeDependencies :: Text -> [Text]
+integerRuntimeDependencies part = maybe [] id (lookup part dependencies)
+ where
+  dependencies =
+    [ ("fail", ["cleanup"])
+    , ("memory_failure", ["cleanup"])
+    , ("magnitude", [])
+    , ("make", [])
+    , ("add_math", ["magnitude", "make"])
+    , ("multiply_math", ["magnitude", "make"])
+    , ("print_int", ["magnitude"])
+    , ("from_bits", ["mask"])
+    , ("checked_result", ["magnitude", "from_bits", "site", "colored", "fail"])
+    , ("saturate_result", ["magnitude", "make", "from_bits"])
+    , ("add", ["add_math", "checked_result"])
+    , ("sub", ["add_math", "checked_result"])
+    , ("mul", ["multiply_math", "checked_result"])
+    , ("div", ["magnitude", "make", "checked_result"])
+    , ("rem", ["magnitude", "make", "normal", "site", "colored", "fail"])
+    , ("neg", ["checked_result"])
+    , ("sat_add", ["add_math", "saturate_result"])
+    , ("sat_sub", ["add_math", "saturate_result"])
+    , ("sat_mul", ["multiply_math", "saturate_result"])
+    , ("bit_and", ["bits", "from_bits"])
+    , ("bit_or", ["bits", "from_bits"])
+    , ("bit_xor", ["bits", "from_bits"])
+    , ("wrap_add", ["bits", "from_bits"])
+    , ("wrap_sub", ["bits", "from_bits"])
+    , ("wrap_mul", ["bits", "from_bits"])
+    , ("bit_not", ["bits", "from_bits"])
+    , ("shift_left", ["bits", "from_bits", "site", "colored", "fail"])
+    , ("shift_right", ["bits", "from_bits", "site", "colored", "fail", "mask"])
+    ]

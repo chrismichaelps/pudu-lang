@@ -6,6 +6,11 @@ aliases: [Backend Module Map]
 
 # Backend Module Map
 
+- [[Backend Frame Program]] · [[Backend Frame Runtime]] · [[Native Frame Runtime Tests]] — deterministic assembly, heap ownership and iterative calls.
+
+- [[Backend Frame Values]] · [[Backend Frame Bodies]] — pure operations and suspending bodies over typed frame cells.
+- [[Native Frame Body Tests]] — strict C11 corpus compilation and call-suspension checks.
+
 - [[Backend Emit]] — deterministic C11 emission from [[Core IR]], including
   the diagnostic site tables that give native refusals the interpreter's text.
 
@@ -42,3 +47,5 @@ aliases: [Backend Module Map]
 - [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).
 
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — defined C11 bit patterns, wrapping, saturation and checked shifts.
+
+- [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.

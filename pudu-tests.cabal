@@ -69,9 +69,14 @@ test-suite pudu-test
     Pudu.Cache.PersistSpec
     Pudu.Backend.EmitSpec
     Pudu.Backend.LowerTypesSpec
+    Pudu.Backend.FrameSpec
+    Pudu.Backend.FrameEmitSpec
+    Pudu.Backend.FrameRuntimeSpec
+    Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.IntegerPrograms
+    Pudu.Backend.DeferredPrograms
     Pudu.Backend.ControlPrograms
     Pudu.Backend.ToolchainSpec
     Pudu.Lsp.SchedulerSpec

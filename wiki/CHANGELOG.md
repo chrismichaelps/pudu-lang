@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Production native frame integration (#499)
+
+- [[Backend Frame Program]] and [[Backend Frame Runtime]] replace recursive generated calls with heap-owned slots, argument scratch, continuation steps and checked allocation. [[Pudu CLI]] and differential tests use the new compiler-to-frame boundary; source panics and controlled allocation failures unwind scalar frames.
+- [[Host Failure Vocabulary]] and [[CLI Memory Failure]] align reported allocation failure with catchable CLI HeapOverflow while preserving other asynchronous exceptions. All 19 clean gates and 669 groups pass; production native sanitizer checks pass against the tree evaluator, and real bounded-heap CLI runs match the host contract. README coverage is 4/14 complete areas (28%). Full language coverage, additional supported platforms, independent review and PR partitioning remain open.
+
+## 2026-10-17 — Native suspending C body generation (#499, in progress)
+
+- [[Backend Frame Values]] reuses exact integer helpers and shared diagnostic sites over saved slots. [[Backend Frame Bodies]] emits constant-arity call/return steps with frame-owned arguments and explicit continuations.
+- Ten focused frame groups pass, including 194 strict C11 corpus compilations. A test-only static-frame dispatcher runs the wide-pressure reproduction under AddressSanitizer/UBSan and matches both evaluators' E7002 byte for byte. Production allocation, cleanup and CLI integration remain pending in [[Native Frame Pressure Repair]]; the ordinary native emitter still has the known pressure failure.
+
+## 2026-10-17 — Pure native continuation lowering (#499, in progress)
+
+- [[Core Frame IR]] and [[Compiler Frame Lowering]] flatten structured Core into typed slots, closed blocks and explicit call/resume destinations. [[Compiler Frame State]] owns allocation identities; [[Compiler Frame Body]] preserves snapshots, ordered effects, short circuit and resolved loop transfers.
+- Seven focused [[Native Frame Lowering Tests]] groups pass with optimized GHC 9.14.1 -Werror, including checked native corpora. The runtime dispatcher is not integrated; the known frame-pressure failure remains open and full C11 coverage is incomplete. [[Native Frame Pressure Repair]] records the next action and evidence.
+
 ## 2026-10-17 — Failing native frame-pressure regression (#499)
 
 - [[Backend Function Programs]] now covers 96 live integer parameters across deep recursion. Tree and compiled evaluation give E7002; the current uncommitted exact-carrier integration instead crashes natively before that bound. [[Native Frame Pressure Repair]] blocks promotion and records the explicit-frame follow-up. This is a failing test checkpoint, not a completed fix.

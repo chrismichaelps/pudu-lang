@@ -3,18 +3,18 @@
 module Pudu.Backend.Emit.Support
   ( runtimeNeeds, entryResultType, functionPrototype, wrapperFor, functionSymbol
   , functionSymbolByName, wrapperSymbol, returnTypeFor, integerKindOfExpression
-  , integerLiteralText, declaration, declarationFor, localSymbol, comment
+  , zeroValue, integerKindText, integerLiteralText, declaration, declarationFor, localSymbol, comment
   ) where
 
 import Data.Char (ord)
-import Data.Int (Int64)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Numeric (showHex)
+import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
 import Pudu.Backend.Emit.State (textOfInt)
 import Pudu.Core
-import Pudu.IntegerLiteral (IntegerKind (..))
+import Pudu.IntegerLiteral (IntegerKind (..), integerKindBounds, integerKindWidth, integerKindSigned)
 
 {-| Which runtime parts the module's operations call. The walk reads the same
     shapes emission emits: every checked operation reaches `pudu_fail` through
@@ -24,12 +24,19 @@ import Pudu.IntegerLiteral (IntegerKind (..))
     is not written at all, because an unused `static inline` helper is a
     `-Wunused-function` warning, and a native build must be warning-free. -}
 runtimeNeeds :: CoreModule -> Set.Set Text
-runtimeNeeds coreModule = foldl' needFunction base (coreModuleFunctions coreModule)
+runtimeNeeds coreModule = closeNeeds (foldl' needFunction base (coreModuleFunctions coreModule))
  where
-  base = Set.fromList (["prelude"] <> ["status" | isInteger (entryResultType coreModule)])
+  base = Set.fromList (["prelude", "integer_value"] <> ["status" | isInteger (entryResultType coreModule)])
   isInteger coreType = case coreType of
     CoreIntegerType _ -> True
     _ -> False
+
+closeNeeds :: Set.Set Text -> Set.Set Text
+closeNeeds initial = foldl' visit Set.empty (Set.toList initial)
+ where
+  visit found part
+    | Set.member part found = found
+    | otherwise = foldl' visit (Set.insert part found) (integerRuntimeDependencies part)
 
 needFunction :: Set.Set Text -> CoreFunction -> Set.Set Text
 needFunction needs function = needBlock needs (coreFunctionBody function)
@@ -85,6 +92,15 @@ needExpression needs expression = case coreExpressionShape expression of
           CoreSaturateAdd -> Set.insert "sat_add" needs
           CoreSaturateSubtract -> Set.insert "sat_sub" needs
           CoreSaturateMultiply -> Set.insert "sat_mul" needs
+          CoreLess -> comparisonNeeds
+          CoreLessOrEqual -> comparisonNeeds
+          CoreGreater -> comparisonNeeds
+          CoreGreaterOrEqual -> comparisonNeeds
+          CoreEqual -> comparisonNeeds
+          CoreNotEqual -> comparisonNeeds
+          _ -> needs
+        comparisonNeeds = case coreExpressionType left of
+          CoreIntegerType _ -> Set.insert "compare" needs
           _ -> needs
      in needExpression (needExpression withOperator left) right
   CoreDisplay operand -> needExpression needs operand
@@ -99,7 +115,7 @@ needExpression needs expression = case coreExpressionShape expression of
     needExpression (needBlock (needExpression needs condition) thenBlock) elseExpression
 
 bits :: Text -> Set.Set Text -> Set.Set Text
-bits part = Set.insert "from_bits" . Set.insert part
+bits = Set.insert
 
 {-| A checked operation's helper, the site record it points at, and the
     refusal renderer it calls. -}
@@ -177,7 +193,7 @@ wrapperSymbol name = "pudu_call_" <> sanitize name
 
 returnTypeFor :: CoreType -> Text
 returnTypeFor coreType = case coreType of
-  CoreIntegerType _ -> "int64_t"
+  CoreIntegerType _ -> "pudu_int"
   CoreBoolType -> "int"
   _ -> "void"
 
@@ -189,10 +205,23 @@ integerKindOfExpression expression = case coreExpressionType expression of
   CoreIntegerType kind -> kind
   _ -> PlatformSigned
 
+zeroValue :: CoreType -> Text
+zeroValue (CoreIntegerType _) = "(pudu_int){UINT64_C(0), 0}"
+zeroValue _ = "0"
+
+integerKindText :: IntegerKind -> Maybe Text
+integerKindText kind = case (integerKindBounds kind, integerKindWidth kind) of
+  (Just (low, high), Just width) | width > 0 && width <= 64 ->
+    Just ("(pudu_int_kind){UINT64_C(" <> textOfInteger high <> "), UINT64_C("
+      <> textOfInteger (negate low) <> "), " <> textOfInt width <> ", "
+      <> (if integerKindSigned kind then "1" else "0") <> "}")
+  _ -> Nothing
+
 integerLiteralText :: IntegerKind -> Integer -> Text
-integerLiteralText _ number
-  | number == toInteger (minBound :: Int64) = "INT64_MIN"
-  | otherwise = "(int64_t)" <> textOfInteger number <> "LL"
+integerLiteralText _ number =
+  "(pudu_int){" <> (if number < 0 then "UINT64_C(0) - " else "")
+    <> "UINT64_C(" <> textOfInteger (abs number) <> "), "
+    <> (if number < 0 then "1" else "0") <> "}"
 
 textOfInteger :: Integer -> Text
 textOfInteger = Text.pack . show
@@ -202,7 +231,7 @@ declaration local = declarationFor (coreLocalType local) (localSymbol local)
 
 declarationFor :: CoreType -> Text -> Text
 declarationFor coreType name = case coreType of
-  CoreIntegerType _ -> "int64_t " <> name
+  CoreIntegerType _ -> "pudu_int " <> name
   CoreBoolType -> "int " <> name
   CoreTextType -> "const char *" <> name
   CoreUnitType -> "int " <> name

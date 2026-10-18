@@ -8,6 +8,11 @@ aliases: [Pudu Cabal Manifest]
 
 # Pudu Cabal Manifest
 
+Register Diagnostic.Host, Cli.Memory, Backend.Runtime.Frame and Backend.Emit.Frame
+using existing dependencies. Resolved Grill Log (#499): the CLI and generated
+runtime share host-failure text; frame generation stays independent of compiler
+and frontend modules.
+
 Register [[Compiler Product Publication]] as the bounded cache-admission and
 product-lifetime boundary. Resolved Grill Log: preserve compiler phases and
 cache identity; full analysis remains available independently of executable reuse.
@@ -329,3 +334,21 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 Register Backend.Runtime.Integer with existing dependencies. Register the native integer-program corpus in the test manifest; no new package.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact integer carrier integration (#498)
+
+Register Runtime.Integer.Value, Runtime.Integer.Arithmetic and
+Runtime.Integer.Bits explicitly using existing dependencies. Their Text-only
+catalogues introduce no extra native library or packaged data-file lookup.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+## Pure frame lowering (#499)
+
+Register Core.Frame, Compiler.Frame, Compiler.Frame.State and Compiler.Frame.Body
+using existing dependencies. Resolved Grill Log: this pure compiler partition
+does not allocate runtime frames or change the native calling convention yet.
+
+Register Backend.Emit.Frame.Value and Backend.Emit.Frame.Body with existing
+dependencies. Resolved Grill Log: generation returns typed faults and requires
+no allocator; generated bodies suspend through steps instead of recursive calls.

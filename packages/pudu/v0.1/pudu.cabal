@@ -87,10 +87,15 @@ library
     Pudu.Bundle
     Pudu.Cache.Persist
     Pudu.Backend.Emit
+    Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
+    Pudu.Backend.Runtime.Frame
     Pudu.Backend.Runtime.Integer
+    Pudu.Backend.Runtime.Integer.Value
+    Pudu.Backend.Runtime.Integer.Arithmetic
+    Pudu.Backend.Runtime.Integer.Bits
     Pudu.Backend.Toolchain
     Pudu.Compiler
     Pudu.Compiler.Constants
@@ -99,6 +104,11 @@ library
     Pudu.Compiler.Literals
     Pudu.Compiler.Library
     Pudu.Compiler.Lower
+    Pudu.Compiler.Frame
+    Pudu.Compiler.Frame.Body
+    Pudu.Compiler.Frame.State
+    Pudu.Backend.Emit.Frame.Value
+    Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
@@ -109,7 +119,10 @@ library
     Pudu.Compiler.Program
     Pudu.Compiler.Product
     Pudu.Core
+    Pudu.Core.Frame
     Pudu.Diagnostic
+    Pudu.Diagnostic.Host
+    Pudu.Cli.Memory
     Pudu.Diagnostic.Arithmetic
     Pudu.Diagnostic.Evaluation
     Pudu.Diagnostic.Native

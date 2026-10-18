@@ -9,6 +9,13 @@ aliases: [Backend Emit Tests]
 
 # Backend Emit Tests
 
+## Explicit frame emission (#499)
+
+Run lowerFrames after structured Core inspection, then handle emitProgram's
+Either result as located native refusal data. Hygiene checks require anonymous
+frame slot access instead of legacy pudu_v C locals. Resolved Grill Log: inspect
+the representation delta while preserving arithmetic/site assertions unchanged.
+
 ## Purpose and interface
 
 `backendEmitProperties` pins the two promises of native compilation that are
@@ -109,8 +116,9 @@ Resolved Grill Log: boundary and failure matrices execute real native binaries; 
 
 ## Deferred literal no-loss guard (#498)
 
-Add checked block/local positive-2^63 programs to refusalCases and require
-located E6001 at the literal's own span. Existing integer success/refusal
+The interim partition added block/local positive-2^63 located refusals.
+Revision 4 removes those entries in favor of successful native tests in
+[[Backend Deferred Integer Programs]]. Existing integer success/refusal
 matrices protect immediate negative minimum and nonliteral negation overflow.
 
 Resolved Grill Log: the source must pass ordinary checking before native refusal
@@ -123,3 +131,11 @@ policy, require one E6001 at helper and stop before the dependent call. Rename
 the property to state that contract. The representation/unsupported-construct
 assertions stay exact, including source positions; this is an inspected native
 diagnostic recovery change, not a Pudu execution or checker change.
+
+## Exact integer carrier integration (#498)
+
+Remove the two interim deferred block/local E6001 entries because their
+successful native behavior is now exercised in the deferred corpus. Preserve
+other representation refusals and exact failed-block diagnostic recovery.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.

@@ -9,6 +9,13 @@ aliases: [Backend Native Tests, Native Conformance Tests]
 
 # Backend Native Tests
 
+## Explicit frame emission (#499)
+
+Compile checked Core through lowerFrames and emitProgram's typed result before
+invoking the toolchain. The unchanged observable conformance assertions include
+the wide recursion regression. Resolved Grill Log: faults fail the test before
+compiling, with no recursive-emitter fallback or relaxed oracle comparison.
+
 ## Purpose and interface
 
 `backendNativeProperties` holds native execution to the tree interpreter, byte
@@ -92,3 +99,11 @@ Register integer success/refusal groups through the existing conformance functio
 Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.
 
 The integer success harness accepts expected stdout and requires the interpreted stdout/stderr/status to equal it before differential comparison. Expected values use independent mathematical formulas in the corpus, not production integer kernels. Resolved Grill Log: two matching wrong results must still fail the gate.
+
+## Exact integer entry status (#498)
+
+Add an accepted deferred positive-2^63 entry result to statusPrograms; tree and
+native must both clamp it to 255 with no extra value output. The integer corpus
+also tests helper returns and local/branch/loop propagation of this value.
+Resolved Grill Log: an internal carrier sign bit cannot reinterpret positive
+2^63 as a negative exit result. Preserve reportResult's actual value semantics.

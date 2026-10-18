@@ -195,3 +195,13 @@ Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kin
 Add CoreComplement and binary CoreBitAnd/Or/Xor, CoreShiftLeft/Right, CoreWrapAdd/Subtract/Multiply, CoreSaturateAdd/Subtract/Multiply. All operate on platform Int; shifts carry the whole-operation span and can refuse E7004. Preserve the existing Bool logical operators as distinct forms.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Exact native integer values (#498)
+
+CoreIntegerLiteral retains its mathematical Integer payload and canonical kind;
+it is not a signed C bit pattern. Accepted deferred platform Int magnitudes
+through positive 2^63 now survive blocks/locals/calls. [[Backend Integer Value]]
+implements their private carrier; operation policies still check/wrap/clamp at
+the interpreter's boundaries. No Core type vocabulary or source kind changes.
+Resolved Grill Log: carry exact values through Core and keep target encoding
+in the backend, rather than narrowing a literal while constructing the IR.

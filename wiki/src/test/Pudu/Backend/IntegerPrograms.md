@@ -38,3 +38,12 @@ programs catch missing prerequisites and unused static functions.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Emission Coverage]] · [[Native C11 Backend Delivery]]
+
+## Exact integer carrier integration (#498)
+
+Append the dedicated DeferredPrograms success/refusal lists to the existing
+integer groups. Expected output remains independent of production runtime
+helpers; unchanged ordinary matrices and isolated-helper checks protect the
+revision-4 ABI alongside the new admitted intermediates.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.

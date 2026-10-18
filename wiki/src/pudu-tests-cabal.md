@@ -8,6 +8,16 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register Cli.MemorySpec and Backend.FrameRuntimeSpec with the existing IO/process
+test dependencies. Resolved Grill Log (#499): controlled host exhaustion and
+actual generated allocator lifecycle tests compile in the ordinary test suite.
+
+Register Pudu.Backend.FrameEmitSpec explicitly. Resolved Grill Log (#499):
+compile step bodies with the existing process/temp-directory test dependencies.
+
+Register Pudu.Backend.FrameSpec explicitly using existing dependencies. Resolved
+Grill Log (#499): pure frame transformation tests compile in the ordinary suite.
+
 Register [[Eval Loop Step Tests]] explicitly. Resolved Grill Log: the internal
 channel's typed refusal/transfer and cleanup semantics execute in the full suite
 without adding dependencies or relying only on successful kernel values.
@@ -133,3 +143,11 @@ Register and run [[Native Solved Types Tests]] alongside backend properties. Res
 Register Pudu.Backend.IntegerPrograms explicitly in other-modules beside existing native corpora, with no new dependency.
 
 Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.
+
+## Exact integer carrier integration (#498)
+
+Register Pudu.Backend.DeferredPrograms explicitly. Existing native property
+groups execute its success and refusal lists through the same real compiler,
+interpreter/native and mathematical expected-output harness.
+
+Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.

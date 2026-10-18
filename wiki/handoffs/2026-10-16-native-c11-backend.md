@@ -1,11 +1,23 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 498
+issue: 499
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
 # Native C11 Backend Delivery
+
+## Current continuation — 2026-10-18
+
+[[Native Frame Pressure Repair]] now has a validated local revision-5 exact
+integer/frame integration: all 19 clean gates, 669 groups, production native
+AddressSanitizer/UBSan checks against the tree evaluator, controlled allocation
+cleanup and real CLI host-memory checks pass. README coverage is 4/14 areas,
+28%. Independent reviews, PR partitioning, platform evidence and full emission
+coverage remain pending. No subagents execute. Exact next action: resolve #497
+canonical fixed signed-width admission against the new carrier before source
+changes, then continue the full coverage ledger rather than treating this
+scalar/function repair as completion.
 
 Issue #486 delivered milestone 1 (PR #487, stacked on #485 until it merges).
 Issue #488 continues the same backend with milestone 2: user-defined
@@ -499,3 +511,57 @@ and affected ABI consumer mirror contracts, then implement the revision-4 exact
 carrier in [[Exact Native Integer Carriers]]. Keep issue #498 and the full
 100% C11-emission goal open until accepted intermediate programs execute with
 complete observable parity.
+
+## #498 exact-carrier implementation ownership
+
+Delivery Owner → Language Architect → Backend Engineer owns Runtime and its
+Integer catalogue/value/arithmetic/bits modules, Emit/Support, Lower.Body,
+manifest registration and the integer/deferred corpora plus EmitSpec. Branch
+feature/498-exact-int-carrier is stacked on 83f6c6cb. Complete mirrored contracts
+and resolved Grill Logs precede source changes. Prototype evidence supports
+unsigned sign/magnitude arithmetic; production conformance still must pass.
+Preserve unrelated dist-ticky and every earlier feature. No agents activated;
+independent architecture/implementation/wiki review remains pending before
+promotion. Exact next action: implement revision 4 and deferred native cases.
+
+### #498 measured layout correction
+
+The first production magnitude/sign implementation passed focused ordinary and
+extended integer cases. A runtime-kernel benchmark against 83f6c6cb measured
+wrapping LCG at 5.6x the old runtime cost, so validation session 72309 was
+explicitly stopped (owned process tree, terminal 143) before changing layout.
+Its log is /tmp/pudu-498-exact-gates-before-layout-correction.log. This was a
+measured correction, not a failed/expired observation or a claimed passing gate.
+A bits/actual-sign prototype plus guarded canonical 64-bit addition passed the
+same 37,980 independent mathematical/failure cases under C11/UBSan. Wrapping
+LCG median ratio was 1.005; checked alternating sum ratio 1.237 on this machine.
+The cost and guard are resolved in [[Exact Native Integer Carriers]]. Exact
+semantics remain the hard requirement; benchmark samples are not whole-program
+or cross-platform guarantees. Next validation must use the corrected layout.
+
+## #499 promotion block and exact next action
+
+The revision-4 integer integration remains uncommitted in
+feature/499-native-frame-pressure. Its final corrected bits/sign layout passed
+all 19 clean gates and 656 groups before adding the missing frame-pressure case;
+logs /tmp/pudu-498-final-gates.log and the directory in
+/tmp/pudu-498-final-gate-log-root. Eight final CLI source forms agree in tree,
+compiled and native execution, including positive-boundary exit status 255.
+The production helper probe passes 37,980 independent C11/UBSan results and
+failure kinds. Measured runtime-kernel ratios: wrapping 1.008 and checked sum
+1.240 versus 83f6c6cb on this host; no general performance guarantee is claimed.
+
+The pressure audit then found native SIGSEGV before E7002 with 96 live integer
+parameters. Both tree/compiled paths give E7002. The permanent test-only failing
+regression is committed as 32b231cc; the focused current integration test exits 1
+in /tmp/pudu-499-regression.log. Do not claim the current suite is green or
+commit/promote the ABI integration until #499 is repaired. Prior gate success
+did not cover this failure. No subagents were executed.
+
+[[Native Frame Pressure Repair]] is the focused active handoff.
+[[Native Execution Frames]] resolves pure control/continuation requirements;
+allocation failure policy still needs explicit resolution. Exact next action:
+publish complete Core frame-IR and structured-Core-to-continuation mirrors with
+resolved Grill Logs, then implement that pure transformation and its tests.
+Resolve runtime allocation/cleanup vocabulary before implementing frame storage.
+The full 100% goal remains active; signed-width issue #497 follows this repair.

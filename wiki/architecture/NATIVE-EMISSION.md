@@ -13,8 +13,8 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 
 | Area | State | Next obligation |
 | --- | --- | --- |
-| Platform Int/Bool, checked arithmetic, if/while, printing | Partial (#498) | Ordinary scalar paths pass; exact deferred out-of-range literal intermediates remain |
-| Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
+| Platform Int/Bool, checked arithmetic, if/while, printing | Implemented (#498) | Preserve exact deferred magnitudes, arithmetic policies, control and output evidence |
+| Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial | Int status/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
@@ -128,13 +128,18 @@ required together. A passing operator slice does not complete numeric families.
 
 ## Deferred out-of-range literal intermediates (#498)
 
-The checker currently admits some positive 2^63 literals through a block or
-inferred local whose later negation selects Int. The interpreter retains the
-mathematical magnitude until use. The current native int64_t intermediate can
-narrow before that use and is not conformant. #495 fixes the direct immediate
-negative-minimum spelling only. #498 now refuses nonrepresentable literal intermediates before Core construction;
-an exact representation contract remains open. The temporary E6001 guard is not
-full coverage, so the scalar area is Partial.
-This gap remains open alongside other numeric representations.
+The exact carrier now preserves accepted positive 2^63 intermediates through
+blocks, locals, calls, mutation, branches, loop slots and entry reporting.
+Independent mathematical cases and tree/compiled/native probes pass. The #499
+wide-recursion crash discovered during integration is repaired by explicit
+heap frames and iterative dispatch in [[Native Execution Frames]]. All 19 clean
+gates and 669 test groups now pass. A separate native sanitizer run against the
+tree evaluator passes 20 groups, including the permanent pressure case; controlled
+allocation/cleanup tests and real CLI parity checks also pass. The ledger now
+counts 4/14 complete areas (28%). This is still far from full language coverage.
 
-[[Exact Native Integer Carriers]] resolves the local exact-carrier design for #498; production implementation and independent review remain pending.
+[[Exact Native Integer Carriers]] and [[Native Frame Pressure Repair]] record
+the contracts and local evidence. Independent implementation/architecture/wiki
+review, other supported platforms and reviewable PR partitioning remain pending
+before promotion. Subsequent numeric work begins with canonical fixed signed
+widths (#497), retaining the full unsigned/large/float/Decimal obligations.

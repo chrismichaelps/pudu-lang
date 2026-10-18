@@ -253,8 +253,8 @@ lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreE
 lowerExpression state (Located spanValue expression) = case expression of
   LiteralExpression literal -> case literal of
     ResolvedInteger PlatformSigned number
-      | integerKindFits PlatformSigned number -> value (CoreIntegerLiteral PlatformSigned number) intType
-      | otherwise -> halt spanValue "an Int literal outside the native carrier range" state
+      | integerKindFits PlatformSigned number || integerKindFits PlatformSigned (negate number) -> value (CoreIntegerLiteral PlatformSigned number) intType
+      | otherwise -> halt spanValue "an Int literal outside the exact native carrier range" state
     ResolvedInteger kind _ ->
       halt spanValue ("the " <> coreTypeName (CoreIntegerType kind) <> " type") state
     IntegerValue _ -> halt spanValue "an unresolved integer literal" state
@@ -302,8 +302,11 @@ lowerExpression state (Located spanValue expression) = case expression of
         Just target -> case ensureSignature target state of
           (after, Nothing) -> refused after
           (after, Just signature) -> case lowerArguments after [] arguments of
-            (final, Just coreArguments) ->
-              typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
+            (final, Just coreArguments)
+              | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
+                  typed final (CoreBlockValue (CoreBlock
+                    [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
+              | otherwise -> typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
             (final, Nothing) -> refused final
   CallExpression (Located _ MemberExpression{}) _ -> halt spanValue "method calls" state
   CallExpression{} -> halt spanValue "this call" state

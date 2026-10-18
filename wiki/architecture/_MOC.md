@@ -62,3 +62,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Emission Coverage]] — implemented native surfaces and remaining completion obligations.
 
 - [[Exact Native Integer Carriers]] — preserve accepted deferred magnitudes without lossy C narrowing (#498).
+
+- [[Native Execution Frames]] — explicit continuations and frame ownership for recursion-depth parity (#499).

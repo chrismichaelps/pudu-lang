@@ -7,21 +7,23 @@ aliases: [Exact Native Integer Carriers]
 
 ## Status and observed requirement
 
-Resolved local design for issue #498; production implementation and independent
-architecture/implementation/wiki review remain pending. This page does not claim
+The exact carrier is implemented and validated locally in the uncommitted #498
+integration. Promotion is blocked by #499 frame pressure; independent
+architecture/implementation/wiki review remains pending. This page does not claim
 completed emission coverage. [[Native Emission Coverage]] remains authoritative.
 
 The existing checker accepts a positive 2^63 literal through some blocks and
 inferred locals when a later negation settles its constraint. The interpreter
 retains that mathematical value until use. An int64_t carrier cannot preserve
-it. The temporary native refusal prevents narrowing, but successful execution
-of these accepted programs is still required. Changing their checker/interpreter
+it. The interim native refusal prevented narrowing; the exact carrier now executes
+these accepted cases with verified observable parity. Changing their checker/interpreter
 meaning to fit the backend is outside this repair.
 
 ## Representation and phase boundary
 
-Use an internal C value containing uint64_t magnitude and a negative flag.
-Canonical zero has magnitude zero and a clear flag. The carrier retains positive
+Use an internal C value containing uint64_t unsigned bits and an actual-negative
+flag. Derive magnitude by unsigned subtraction from zero when negative.
+Canonical zero has zero bits and a clear flag. The carrier retains positive
 2^63 as distinct from negative 2^63. Normal platform Int values keep their
 existing mathematical meaning and target width. Internal carrier size is not
 Pudu's declared type width or a public FFI layout promise.
@@ -39,6 +41,28 @@ interpreter checks; locals, branches, parameters and returns preserve values
 without inserting a new runtime bound check. This distinction is observable
 for the accepted deferred literal. Preserve canonical IntegerKind throughout
 Core, source provenance and diagnostic-site construction.
+
+## Measured storage refinement
+
+An initial magnitude/sign layout passed value checks but a local wrapping LCG
+kernel was about 5.6 times slower than revision 3 because each step converted
+magnitudes to bits and back. Store unsigned bits plus the actual-negative flag
+instead. Wrapping operations then retain their input/output word directly.
+The flag still distinguishes positive 2^63 from MIN even though their words
+match. Masked negative narrow-kind results sign-extend their word explicitly.
+Comparison of same-sign values orders unsigned words directly.
+
+For canonical signed 64-bit addition, guard that both actual-negative flags
+match their words' high bits. Only then use the unsigned two's-complement signed
+overflow predicate and return a canonical word/high-bit pair. Noncanonical
+positive-boundary inputs and other kind widths use the exact magnitude kernel.
+Checked/clamped result settlement decodes its proven in-range word at the kind,
+which preserves value and makes the canonical result invariant explicit.
+
+The revised local prototype kept wrapping throughput near revision 3 and a
+checked alternating-sum kernel was about 24% slower (one machine, medians after
+warmup). These are runtime-kernel measurements, not whole-application or
+cross-platform guarantees. Record this remaining cost before promotion.
 
 ## Arithmetic algorithms
 
@@ -135,3 +159,11 @@ before promotion to identify the cost of the internal ABI change.
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Emission Coverage]] · [[Native C11 Backend Delivery]]
+
+## Call-frame integration constraint
+
+The exact ABI exposes a source-dependent C stack failure with 96 live integer
+parameters: both evaluators report E7002 but native execution signals. The new
+permanent regression fails as expected. [[Native Execution Frames]] and #499
+block promotion; integer value correctness and the earlier green gates do not
+prove complete function/depth coverage.
