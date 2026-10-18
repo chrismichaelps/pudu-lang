@@ -33,7 +33,7 @@ settlement retains overflow sign until the declared bound policy is applied.
 Bit conversion decodes the declared kind, while comparison reads mathematical
 values before wrapping. Negative and oversized shifts retain distinct failure
 sites. [[Exact Native Integer Carriers]] specifies the complete algorithms and
-phase contract. The runtime revision is 4; an internal carrier is not a public
+phase contract. The current frame runtime revision is 5; an internal carrier is not a public
 Pudu type-width/FFI layout promise.
 
 ## Resolved Grill Log
@@ -50,3 +50,11 @@ Pudu type-width/FFI layout promise.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Emission Coverage]] · [[Native C11 Backend Delivery]]
+
+## Wide runtime selection (#504)
+
+Append Word128, Wide.Value, Wide.Operations and Wide.Display catalogues after
+narrow integer parts; combine their explicit dependency functions with the old
+scalar table. fail now owns site/colored/cleanup. Resolved Grill Log: real
+minimal runtime roots must compile without stubs, omitted prerequisites or
+unused static functions; no source admission or existing frame ABI change.

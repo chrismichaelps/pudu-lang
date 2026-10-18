@@ -5,15 +5,22 @@ import Data.Text (Text)
 import Pudu.Backend.Runtime.Integer.Value (valueRuntimeParts)
 import Pudu.Backend.Runtime.Integer.Arithmetic (arithmeticRuntimeParts)
 import Pudu.Backend.Runtime.Integer.Bits (bitRuntimeParts)
+import Pudu.Backend.Runtime.Integer.Word128 (word128RuntimeParts, word128RuntimeDependencies)
+import Pudu.Backend.Runtime.Integer.Wide.Value (wideValueRuntimeParts, wideValueRuntimeDependencies)
+import Pudu.Backend.Runtime.Integer.Wide.Operations (wideOperationRuntimeParts, wideOperationRuntimeDependencies)
+import Pudu.Backend.Runtime.Integer.Wide.Display (wideDisplayRuntimeParts, wideDisplayRuntimeDependencies)
 
 integerRuntimeParts :: [(Text, [Text])]
 integerRuntimeParts = valueRuntimeParts <> arithmeticRuntimeParts <> bitRuntimeParts
+  <> word128RuntimeParts <> wideValueRuntimeParts <> wideOperationRuntimeParts <> wideDisplayRuntimeParts
 
 integerRuntimeDependencies :: Text -> [Text]
 integerRuntimeDependencies part = maybe [] id (lookup part dependencies)
+  <> word128RuntimeDependencies part <> wideValueRuntimeDependencies part
+  <> wideOperationRuntimeDependencies part <> wideDisplayRuntimeDependencies part
  where
   dependencies =
-    [ ("fail", ["cleanup"])
+    [ ("fail", ["site", "colored", "cleanup"])
     , ("memory_failure", ["cleanup"])
     , ("magnitude", [])
     , ("make", [])

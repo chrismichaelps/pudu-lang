@@ -245,3 +245,5 @@ tags: [moc, module]
 - [[Backend Wide Integer Values]] · [[Native Wide Value Tests]] — exact signs and selectable dependencies (#502).
 
 - [[Backend Wide Operations]] · [[Native Wide Operation Tests]] — planned typed primitive implementation (#503).
+
+- [[Backend Wide Integer Display]] · [[Native Wide Runtime Tests]] — actual wide runtime integration (#504).

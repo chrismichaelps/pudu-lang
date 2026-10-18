@@ -173,3 +173,8 @@ Resolved Grill Log: helper-selection and exact-sign checks must execute without 
 
 Register [[Native Wide Operation Tests]] with existing test dependencies, plus a generated C setjmp failure fixture.
 Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.
+
+## Wide runtime integration (#504)
+
+Register [[Native Wide Runtime Tests]] with existing test dependencies.
+Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.

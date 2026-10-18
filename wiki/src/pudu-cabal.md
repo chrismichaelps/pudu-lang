@@ -367,3 +367,8 @@ Resolved Grill Log: helper-selection and exact-sign checks must execute without 
 
 Register [[Backend Wide Operations]] using Text only, without selecting it for ordinary production emission before integration.
 Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.
+
+## Wide runtime integration (#504)
+
+Register [[Backend Wide Integer Display]] with existing Text dependency.
+Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.

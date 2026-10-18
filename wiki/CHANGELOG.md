@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Wide runtime integration (#504)
+
+- A real closed-output pipe probe finds a pre-existing SIGPIPE divergence; both evaluators continue but native dies by signal. Scalar coverage is temporarily Partial pending shared startup repair.
+- [[Backend Wide Integer Display]] adds exact full-width decimal output/status. [[Backend Runtime Integer]] publishes all wide catalogues and makes the actual fail renderer own site/colour/cleanup prerequisites. [[Native Wide Runtime Tests]] passes 75 output/status values, transient zero, 24 minimal helper roots and real E7005 output/diagnostic/status; Clang/GCC 15, ASan/UBSan and all 19 clean gates/676 groups pass; wide frame/source admission remains pending.
+
 ## 2026-10-18 — Wide operations (#503)
 
 - [[Backend Wide Operations]] implements checked/wrapping/saturating arithmetic, remainder/refusal routing and bitwise/shift behavior. [[Native Wide Operation Tests]] passes 6,412 mathematical/refusal rows and 22 minimal helper selections. Clang/GCC 15, ASan/UBSan and all 19 clean gates/674 groups pass. Independent review and additional platforms remain required; source admission is still pending.

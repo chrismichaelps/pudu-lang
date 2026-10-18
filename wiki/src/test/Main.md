@@ -138,3 +138,8 @@ Resolved Grill Log: helper-selection and exact-sign checks must execute without 
 
 Execute and aggregate [[Native Wide Operation Tests]] beside the wide value/raw word groups.
 Resolved Grill Log: execute independent mathematical/refusal and minimal-closure evidence; source admission remains a later obligation.
+
+## Wide runtime integration (#504)
+
+Execute and aggregate [[Native Wide Runtime Tests]] beside wide primitive/value groups.
+Resolved Grill Log: actual production runtime selection/output/failure evidence must execute before wide-frame/source admission.
