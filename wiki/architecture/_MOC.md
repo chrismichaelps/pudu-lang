@@ -60,3 +60,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Scoped Import Design]] — build-time lexical import proposal and resolved qualifier prerequisite.
 
 - [[Native Emission Coverage]] — implemented native surfaces and remaining completion obligations.
+
+- [[Exact Native Integer Carriers]] — preserve accepted deferred magnitudes without lossy C narrowing (#498).

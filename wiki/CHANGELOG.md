@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Refuse lossy native literal intermediates (#498 partition)
+
+- [[Compiler Lower Body]] checks platform Int literal carrier bounds before Core construction. Checked positive-2^63 block/local intermediates now receive located E6001 instead of silently narrowing into a wrong native value. Immediate negative-minimum literals remain admitted by [[Compiler Lower Scalar]].
+- Exact successful intermediate representation remains open in #498. The discovered gap changes the scalar coverage area to Partial: generated README progress is 3/14 complete (21%), with no partial credit. Optimized GHC 9.14.1 -Werror compilation, all 656 property groups, focused code/span recovery checks, real CLI output-preservation checks and the five progress tests pass. [[Exact Native Integer Carriers]] records a prototype-backed local design for successful representation; production integration and independent review remain pending.
+
 ## 2026-10-17 — Portable platform Int operators (#495)
 
 - [[Compiler Lower Scalar]] and [[Pudu Core]] represent bitwise/complement, checked shifts, wrapping and saturating Int arithmetic. [[Backend Runtime Integer]] uses unsigned bit patterns, explicit sign filling and checked bounds; [[Backend Emit]] preserves ordered operand temporaries and diagnostic sites.

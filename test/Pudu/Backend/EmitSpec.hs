@@ -68,7 +68,7 @@ backendEmitProperties =
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
   , ("unsupported constructs refuse with E6001 at their own span", testRefusals)
-  , ("function values and indirect calls refuse at their own spans", testLocalFunctionRefusal)
+  , ("function values refuse before dependent indirect calls", testLocalFunctionRefusal)
   , ("emission is deterministic", testDeterminism)
   , ("sites carry the checked-arithmetic text verbatim", testSiteText)
   , ("one site per checked operation", testSiteCount)
@@ -261,6 +261,8 @@ testReachableFunctions = do
 refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("pending narrow integer bitwise", statementProgram "1i8 & 2i8", "1i8")
+  , ("deferred block magnitude", statementProgram "return -{ 9223372036854775808 }", "9223372036854775808")
+  , ("deferred local magnitude", statementProgram "let value = 9223372036854775808\n  return -value", "9223372036854775808")
   , ("pending narrow integer complement", statementProgram "~1i8", "1i8")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
@@ -352,9 +354,9 @@ testLocalFunctionRefusal = do
     (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample "indirect call unexpectedly lowered" False
       LowerRefused refusals -> conjoin
-        [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001", "E6001"]
+        [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001"]
         , map (offsetPosition source . spanStart . diagnosticSpan) refusals
-            === map (markerPosition source) ["helper\n", "chosen()"]
+            === map (markerPosition source) ["helper\n"]
         ]
     _ -> counterexample ("indirect-call fixture: " <> show (compileDiagnostics result)) False
 

@@ -172,3 +172,35 @@ Resolved Grill Log: unit has one value but its operands still execute. Reject sk
 Delegate unary/binary operations to Compiler Lower Scalar, importing eagerType for call propagation. Keep scopes, calls, unit/display carrier guards and syntax dispatch here. Extraction prevents the body from exceeding 500 lines.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Deferred Int literal carrier admission (#498, hardening partition)
+
+A ResolvedInteger PlatformSigned literal reaches Core only if its mathematical
+value fits integerKindFits PlatformSigned. Otherwise halt at the literal's
+complete source span with E6001 for an Int literal outside the native carrier
+range. The scalar lowerer's immediate pure negative-literal normalization runs
+before operand lowering, so the negative minimum spelling stays admitted.
+Blocks, inferred locals and other paths cannot silently narrow a positive 2^63
+intermediate. This is a temporary explicit coverage boundary; #498 remains open
+until those accepted programs execute natively with exact interpreter behavior.
+
+Resolved Grill Log: test the carrier bound before constructing Core, never
+truncate or change checker/interpreter semantics. Preserve successful minimum
+literal emission and runtime E7005 when a minimum value is negated via a
+parameter. Do not label a refusal as completed native support.
+
+### Failed-block diagnostic containment
+
+foldStatements returns a stopped flag and ends that block after the first
+statement whose lowering produces Nothing. lowerBlock skips its trailing
+expression after that failure and always pops the scope. When a block is used
+as an expression, compare refusal counts across lowerBlock; if new refusals
+were added, propagate Nothing instead of presenting the recovery block as a
+real unit value to unary/binary consumers. This prevents a refused literal from
+causing a fabricated unit-operator or unknown-local refusal. Other functions
+and independent admitted blocks retain ordinary worklist validation.
+
+Resolved Grill Log: recovery IR is never a successful value. Stop within the
+failed lexical scope, preserve the original located refusal, and test block
+and local cases independently rather than weakening the exact-one diagnostic
+assertion. This changes native diagnostic recovery only, not Pudu execution.

@@ -13,7 +13,7 @@
 # Pudu
 
 <!-- native-progress:start -->
-**C11 emission progress:** [█████░░░░░░░░░░░░░░░] **28%** (4/14 coverage areas complete)
+**C11 emission progress:** [████░░░░░░░░░░░░░░░░] **21%** (3/14 coverage areas complete)
 
 Counts completed areas in the [native coverage ledger](wiki/architecture/NATIVE-EMISSION.md). Partial areas count as incomplete; this is not a percentage of language constructs. Updated automatically after merges into `dev`.
 <!-- native-progress:end -->

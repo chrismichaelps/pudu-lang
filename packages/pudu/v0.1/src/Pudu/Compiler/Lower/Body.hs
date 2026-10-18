@@ -17,7 +17,7 @@ import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
   , Function (..), FunctionBody (..), Literal (..), Located (..), Statement (..) )
-import Pudu.IntegerLiteral (IntegerKind (..))
+import Pudu.IntegerLiteral (IntegerKind (..), integerKindFits)
 
 {-| The entry carries Int or unit; a body that never returns uses the unit
     ABI. Print's Result carrier must not escape through the entry result. -}
@@ -91,8 +91,9 @@ lowerBlock state (Located _ block) =
   (popped, CoreBlock{coreBlockStatements = statements <> resultStatements, coreBlockResult = coreResult}, blockType (statements <> resultStatements) coreResult)
   where
     pushed = state{lowerScopes = [] : lowerScopes state}
-    (afterStatements, statements) = foldStatements pushed (blockStatements block)
+    (afterStatements, statements, stopped) = foldStatements pushed (blockStatements block)
     (afterResult, resultStatements, coreResult, _) = case blockResult block of
+      _ | stopped -> (afterStatements, [], Nothing, CoreUnitType)
       Nothing -> (afterStatements, [], Nothing, blockType statements Nothing)
       Just located -> lowerBlockResult afterStatements located
     popped = afterResult{lowerScopes = drop 1 (lowerScopes afterResult)}
@@ -124,13 +125,13 @@ lowerBlockResult state located@(Located expressionSpan expression) = case expres
     (after, Just (coreExpression, coreType)) -> (after, [], Just coreExpression, coreType)
     (after, Nothing) -> (after, [], Nothing, CoreUnitType)
 
-foldStatements :: LowerState -> [Located Statement] -> (LowerState, [CoreStatement])
-foldStatements state located = (finalState, reverse collected)
+foldStatements :: LowerState -> [Located Statement] -> (LowerState, [CoreStatement], Bool)
+foldStatements state = go state []
   where
-    (finalState, collected) = foldl' step (state, []) located
-    step (current, acc) one = case lowerStatement current one of
-      (after, Just statement) -> (after, statement : acc)
-      (after, Nothing) -> (after, acc)
+    go current collected [] = (current, reverse collected, False)
+    go current collected (one : rest) = case lowerStatement current one of
+      (after, Just statement) -> go after (statement : collected) rest
+      (after, Nothing) -> (after, reverse collected, True)
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
@@ -251,8 +252,9 @@ allowedResultType declared operand = case declared of
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
   LiteralExpression literal -> case literal of
-    ResolvedInteger PlatformSigned number ->
-      value (CoreIntegerLiteral PlatformSigned number) intType
+    ResolvedInteger PlatformSigned number
+      | integerKindFits PlatformSigned number -> value (CoreIntegerLiteral PlatformSigned number) intType
+      | otherwise -> halt spanValue "an Int literal outside the native carrier range" state
     ResolvedInteger kind _ ->
       halt spanValue ("the " <> coreTypeName (CoreIntegerType kind) <> " type") state
     IntegerValue _ -> halt spanValue "an unresolved integer literal" state
@@ -323,7 +325,10 @@ lowerExpression state (Located spanValue expression) = case expression of
   RecordUpdateExpression{} -> halt spanValue "record updates" state
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block
-     in typed after (CoreBlockValue coreBlock) resultType
+        refusalCount = length . contextRefusals . lowerContext
+     in if refusalCount after > refusalCount state
+          then refused after
+          else typed after (CoreBlockValue coreBlock) resultType
   IfExpression condition thenBlock (Just elseExpression) ->
     case lowerExpression state condition of
       (afterCondition, Just (coreCondition, conditionType))
