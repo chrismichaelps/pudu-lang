@@ -76,6 +76,7 @@ test-suite pudu-test
     Pudu.Backend.WideValueSpec
     Pudu.Backend.WideOperationsSpec
     Pudu.Backend.WideRuntimeSpec
+    Pudu.Backend.BrokenPipeSpec
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms

@@ -247,3 +247,5 @@ tags: [moc, module]
 - [[Backend Wide Operations]] · [[Native Wide Operation Tests]] — planned typed primitive implementation (#503).
 
 - [[Backend Wide Integer Display]] · [[Native Wide Runtime Tests]] — actual wide runtime integration (#504).
+
+- [[Native Broken Pipe Tests]] — closed-output continuation and later failure (#505).

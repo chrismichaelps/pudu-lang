@@ -147,3 +147,9 @@ successful native behavior is now exercised in the deferred corpus. Preserve
 other representation refusals and exact failed-block diagnostic recovery.
 
 Resolved Grill Log: implement [[Exact Native Integer Carriers]] without changing the oracle. Preserve positive boundary values, exact diagnostic provenance, Never transfers, and warning-free helper selection. The internal carrier is not a public type-layout promise; full native coverage remains open.
+
+## Signal header hygiene (#505)
+
+Allow the standard C signal.h header required by process IO policy. Resolved
+Grill Log: this is an inspected standard-header addition; preserve the closed
+include whitelist and all extension/source-identifier/preprocessor checks.

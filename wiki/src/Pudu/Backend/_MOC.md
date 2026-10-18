@@ -57,3 +57,5 @@ aliases: [Backend Module Map]
 - [[Backend Wide Operations]] · [[Native Wide Operation Tests]] — planned typed primitive implementation (#503).
 
 - [[Backend Wide Integer Display]] · [[Native Wide Runtime Tests]] — actual wide runtime integration (#504).
+
+- [[Native Broken Pipe Tests]] — actual emitted startup under default SIGPIPE (#505).

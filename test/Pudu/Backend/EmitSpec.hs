@@ -488,6 +488,7 @@ testHygiene = do
   allowedIncludes =
     [ "#include <inttypes.h>"
     , "#include <stdint.h>"
+    , "#include <signal.h>"
     , "#include <stdio.h>"
     , "#include <stdlib.h>"
     , "#include <string.h>"

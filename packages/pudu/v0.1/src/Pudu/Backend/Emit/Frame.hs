@@ -31,7 +31,7 @@ emitFrameProgram version sources source = do
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     _ -> Left (FrameFault Nothing "an unrepresented frame entry result")
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
-  let base = ["prelude", "integer_value", "site", "colored", "cleanup", "fail", "memory_failure"]
+  let base = ["prelude", "process_io", "integer_value", "site", "colored", "cleanup", "fail", "memory_failure"]
       entryNeeds = case frameFunctionResult entry of CoreIntegerType _ -> ["status"]; _ -> []
       selected = foldl' visit Set.empty (Set.toList roots <> base <> entryNeeds)
       runtime = concat [runtimePartLines part <> [""] | part <- runtimeParts, Set.member (runtimePartName part) selected]
@@ -41,7 +41,7 @@ emitFrameProgram version sources source = do
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes
     <> renderSites (reverse (emitSites emitted)) <> reverse (emitOutput emitted)
-    <> metadata <> frameEngine <> ["int main(void) {"] <> ending <> ["}"])
+    <> metadata <> frameEngine <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
     visit found part
       | Set.member part found = found

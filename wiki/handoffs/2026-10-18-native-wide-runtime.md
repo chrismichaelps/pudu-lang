@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: HANDED_OFF
 issue: 504
 aliases: [Native Wide Runtime Delivery]
 ---
@@ -28,8 +28,8 @@ ledger is temporarily Partial; shared startup repair precedes wide admission.
 Test Engineer → Delivery Owner: 75 output/status values plus negative zero,
 24 actual roots and real E7005 bytes/status pass under Clang/GCC 15 and
 ASan/UBSan. All 19 clean gates pass (676 groups); ~/.codex/tmp/pudu-504/validation/.
-Exact next action: execute ready #505's red closed-pipe regression and repair
-process startup before wide frame/source admission. Reviews/platforms remain pending.
+Exact next action: continue [[Native Closed Pipe Delivery]] before wide
+frame/source admission. Reviews/platforms remain pending.
 
 ## Referenced by
 

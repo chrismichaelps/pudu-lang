@@ -33,7 +33,7 @@ settlement retains overflow sign until the declared bound policy is applied.
 Bit conversion decodes the declared kind, while comparison reads mathematical
 values before wrapping. Negative and oversized shifts retain distinct failure
 sites. [[Exact Native Integer Carriers]] specifies the complete algorithms and
-phase contract. The current frame runtime revision is 5; an internal carrier is not a public
+phase contract. The current runtime revision is 6; an internal carrier is not a public
 Pudu type-width/FFI layout promise.
 
 ## Resolved Grill Log
@@ -58,3 +58,9 @@ narrow integer parts; combine their explicit dependency functions with the old
 scalar table. fail now owns site/colored/cleanup. Resolved Grill Log: real
 minimal runtime roots must compile without stubs, omitted prerequisites or
 unused static functions; no source admission or existing frame ABI change.
+
+## Fatal IO dependency (#505)
+
+fail and memory_failure also own error_io and process_io, including the
+post-diagnostic restoration needed for exit-time stdout flushing. Resolved Grill Log: real minimal
+roots must include fatal-signal preparation without an unused startup helper.

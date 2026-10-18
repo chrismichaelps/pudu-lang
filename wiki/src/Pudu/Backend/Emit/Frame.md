@@ -31,3 +31,10 @@ come from actual emitted functions. No frontend/compiler import or inference.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]
+
+## Closed-pipe startup (#505)
+
+Select process_io and call pudu_prepare_io at the start of C main, before frame
+allocation for every entry-result kind. Resolved Grill Log: startup policy must
+not depend on whether entry returns Int, unit or Never, and must preserve later
+source execution after ignored print errors. [[Native Closed Pipe Semantics]].
