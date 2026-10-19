@@ -164,3 +164,9 @@ The Float32/Float64 parameter and floating-binding refusal fixtures now
 compile, so they become Decimal parameter, Char parameter and decimal binding
 cases with the same marker-span checks. Float success coverage lives in
 [[Backend Float Programs]].
+
+## Shadowed display refusal (#513)
+
+A module `fn display(value: Int) -> Str` is resolved as the program's own
+function, so lowering refuses its `Str` return type at that span instead of
+printing the builtin rendering.

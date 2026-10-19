@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-19 — Native calls respect shadowed builtins (#513)
+
+- [[Compiler Lower Body]] resolves a bare call as local, then module function, then prelude `print`/`display`, as the interpreter does. A module `fn display` was previously replaced by the builtin rendering in native builds.
+
 ## 2026-10-19 — Native Float32/Float64 programs (#512)
 
 - Float32/Float64 programs compile natively: [[Pudu Core]] carries parsed binary64 bits, frames hold them in a floating cell, and every arithmetic operation rounds (and narrows for Float32) through the validated helpers. Unsupported float operators keep the evaluator's E7001 wording after their operands; Float and Bool entry results print and exit zero like `pudu run`. [[Backend Float Programs]] matches independent IEEE answers and the interpreter; all native groups pass under Clang and GCC 15, float groups under Clang ASan/UBSan. Unused direct-emitter helpers left over from before frames are removed from [[Backend Emit Support]]. All 20 clean gates/691 groups pass. Runtime revision 8; progress stays 4/14 (28%).

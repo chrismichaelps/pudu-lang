@@ -206,3 +206,5 @@ tags: [moc, handoff]
 - [[Native Floating Runtime Delivery]] — actual output/dependency integration (#511).
 
 - [[Native Floating Source Delivery]] — Float32/Float64 source admission and Bool/Float entries (#512).
+
+- [[Native Builtin Shadowing Repair]] — native calls respect shadowed print/display (#513).

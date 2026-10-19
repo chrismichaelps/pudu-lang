@@ -10,7 +10,20 @@ import Pudu.Comptime.Limits (callDepthLimit)
 
 functionSuccessPrograms :: [(String, Text)]
 functionSuccessPrograms =
-  [ ("Boolean ordering matches comparisonOnly", program
+  [ ("a module print shadows the builtin", program
+      [ "fn print(value: Int) -> Int { value + 1 }"
+      , "fn main() -> Int {"
+      , "  let shifted = print(41)"
+      , "  return shifted + print(1)"
+      , "}"
+      ])
+  , ("a module display shadows the builtin", program
+      [ "fn display(value: Bool) -> Int { if value { 1 } else { 2 } }"
+      , "fn main() -> Int {"
+      , "  return display(true) + display(false) * 10"
+      , "}"
+      ])
+  , ("Boolean ordering matches comparisonOnly", program
       [ "fn main() -> Int {"
       , "  if !(false < true) || false > true || !(false <= false) || !(true >= false) { return 99 }"
       , "  print(display(false <= true))"
