@@ -25,3 +25,9 @@ live. Output must still equal the expected answer.
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]
+
+## Method programs (#516)
+
+The counted run also covers [[Backend Text Method Programs]], so views that
+retain their source and the text built by repeat, reverse, escapeHtml and
+replace are all released.

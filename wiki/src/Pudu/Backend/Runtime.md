@@ -234,3 +234,7 @@ The cell ABI gained a floating member, so `runtimeRevision` moves from 7 to 8.
 ## Runtime revision 9 (#515)
 
 Text cells and the frame text metadata change the ABI, so the revision is 9.
+
+## Text methods (#516)
+
+[[Native Text Methods]] parts follow the text parts in the catalogue.

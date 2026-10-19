@@ -60,3 +60,9 @@ integers and Bool, so no new instruction or terminator is needed.
 `FrameTextLiteral !Text`, `FrameDisplay !FrameSlot` and `FrameShow !FrameSlot`
 produce text. Concatenation and comparison use `FrameBinary` on text slots.
 Every text-producing value is a fresh reference; a store owns it.
+
+## Text methods (#516)
+
+`FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]` computes a
+method from already-evaluated slots. A method that can fail carries its
+failure sites in the emitted call, like checked arithmetic.

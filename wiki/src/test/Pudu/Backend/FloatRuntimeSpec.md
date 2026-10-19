@@ -50,3 +50,7 @@ full clean gates. Fixed returned properties are not repeated independent IO.
 
 The integer-compatibility check skips text parts as well as floating ones,
 since [[Native Text Runtime]] adds its own dependencies to the facade.
+
+## Text method catalogue (#516)
+
+The compatibility check also skips [[Native Text Methods]] parts.

@@ -13,6 +13,7 @@ import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
   , bindLocal, halt, lookupLocal, refuse, refused )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
+import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
@@ -307,7 +308,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> rendered CoreDisplay
     | name == "show" -> rendered CoreShow
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
-  CallExpression (Located _ MemberExpression{}) _ -> halt spanValue "method calls" state
+  CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments ->
+    lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression{} -> halt spanValue "this call" state
   MemberExpression{} -> halt spanValue "member access" state
   IndexExpression{} -> halt spanValue "indexing" state

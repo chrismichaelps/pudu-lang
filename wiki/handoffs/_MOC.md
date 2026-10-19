@@ -210,3 +210,5 @@ tags: [moc, handoff]
 - [[Native Builtin Shadowing Repair]] — native calls respect shadowed print/display (#513).
 
 - [[Native Owned Text Delivery]] — owned Str values through native frames (#515).
+
+- [[Native Text Method Delivery]] — Str methods with Int/Bool/Str results (#516).

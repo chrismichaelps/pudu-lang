@@ -21,6 +21,7 @@ module Pudu.Core
   , CoreParameter (..)
   , CoreStatement (..)
   , CoreStatementShape (..)
+  , CoreTextMethodName (..)
   , CoreType (..)
   , coreTypeName
   ) where
@@ -131,6 +132,8 @@ data CoreExpressionShape
   | CoreDisplay !CoreExpression
   {-| `renderValue` text: Str gains quotes and escapes, scalars read as display. -}
   | CoreShow !CoreExpression
+  {-| A built-in Str method; the arguments run before the receiver. -}
+  | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
@@ -139,6 +142,25 @@ data CoreExpressionShape
   | CoreIfValue !CoreExpression !CoreBlock !CoreExpression
   | CoreWhileValue !CoreLoopId !CoreExpression !CoreBlock
   | CoreLoopValue !CoreLoopId !CoreBlock
+  deriving stock (Eq, Show)
+
+{-| The Str methods native implements, named as the evaluator names them. -}
+data CoreTextMethodName
+  = TextLength
+  | TextIsEmpty
+  | TextContains
+  | TextStartsWith
+  | TextEndsWith
+  | TextIndexOf
+  | TextSpanOf
+  | TextSpanNotOf
+  | TextDrop
+  | TextTake
+  | TextSlice
+  | TextRepeat
+  | TextReverse
+  | TextEscapeHtml
+  | TextReplace
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from

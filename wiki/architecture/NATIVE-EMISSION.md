@@ -19,7 +19,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
-| Text and bytes | Partial (#515) | Owned Str values, literals, concatenation, comparison, display/show, interpolation, printing and Str entries match the interpreter; Str methods, Char, Bytes and print Result remain |
+| Text and bytes | Partial (#515, #516) | Owned Str values, operators, rendering, printing, entries and the Int/Bool/Str-result methods match the interpreter; trim/case mapping, Char, Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
@@ -220,3 +220,14 @@ evaluator's argument-before-receiver order (#514). Evidence:
 [[Backend Text Programs]] against answers and the interpreter, and
 [[Backend Text Leak Tests]] with counted heap blocks. Runtime revision 9.
 Progress stays 4/14 (28%).
+
+## Str methods (#516)
+
+[[Compiler Lower Text]] admits length, isEmpty, contains, startsWith,
+endsWith, indexOf, spanOf, spanNotOf, drop, take, slice, repeat, reverse,
+escapeHtml and replace on Str receivers, evaluating arguments before the
+receiver as the evaluator does (#514). [[Native Text Methods]] implements
+them by scalar; drop/take/slice return views that retain the source, and
+E7004 refusals carry the evaluator's messages. Evidence: [[Backend Text
+Method Programs]] against hand-written answers and the interpreter, with
+counted-leak runs. Progress stays 4/14 (28%).

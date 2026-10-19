@@ -2,7 +2,7 @@
     byte-safe strings, and interpreter-compatible diagnostic sites. -}
 module Pudu.Backend.Emit.State
   ( EmitState (..), emptyEmitState, line, freshTemp, textOfInt
-  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, renderSites, cString, cStringBytes
+  , shiftSites, overflowSite, divideByZeroSite, callDepthSite, operatorFailureSite, failureSite, renderSites, cString, cStringBytes
   ) where
 
 import qualified Data.ByteString as ByteString
@@ -128,6 +128,10 @@ callDepthSite state spanValue =
 
 operatorFailureSite :: EmitState -> Span -> Text -> (EmitState, Int)
 operatorFailureSite state spanValue message = siteAt state spanValue operatorCode message Nothing
+
+{-| A refusal whose code and message are known when the C is written. -}
+failureSite :: EmitState -> Span -> Text -> Text -> (EmitState, Int)
+failureSite state spanValue code message = siteAt state spanValue code message Nothing
 
 renderSites :: [Site] -> [Text]
 renderSites [] = []

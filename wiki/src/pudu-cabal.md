@@ -411,3 +411,7 @@ without changing source admission or the represented runtime ABI.
 ## Text runtime module (#515)
 
 Register Pudu.Backend.Runtime.Text in exposed-modules beside the other runtime catalogues; no new dependency.
+
+## Text method modules (#516)
+
+Register Pudu.Compiler.Lower.Text and Pudu.Backend.Runtime.Text.Methods in exposed-modules; no new dependency.

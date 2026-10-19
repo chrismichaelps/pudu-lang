@@ -235,3 +235,10 @@ retired.
 Resolved Grill Log: text joins Core as a type rather than a new family of
 nodes, the same way floats reused the operator vocabulary. _Rejected:_
 separate concatenation and comparison constructors.
+
+## Text methods (#516)
+
+`CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]` carries
+the receiver and its arguments. Arguments are evaluated before the receiver,
+matching `evaluateCall` (#514). The name type is closed: only the methods
+native implements exist.

@@ -58,3 +58,9 @@ round-after-every-operation rule and blocks contraction across operations.
 `cellMember` answers `text`. Reads retain; literals use static bytes with no
 owner; concatenation, display and show return new references. Comparisons go
 through `pudu_text_compare`, which orders by bytes like Data.Text.
+
+## Text methods (#516)
+
+`FrameTextMethod` calls the matching [[Native Text Methods]] helper. Counting
+methods return a `pudu_int`, predicates an `int`, text methods a new
+reference. drop, take and repeat receive their E7004 sites.
