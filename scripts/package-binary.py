@@ -26,6 +26,17 @@ def strip(executable, parser):
   subprocess.run([tool, *flags, str(executable)], check=True)
 
 
+def copy_notices(package, stage, parser):
+  """Keep package-owned notices beside the distributed compiler."""
+  for name in ("LICENSE", "THIRD_PARTY_NOTICES"):
+    source = package / name
+    if name != "LICENSE" and not source.exists() and not source.is_symlink():
+      continue
+    if source.is_symlink() or not source.is_file():
+      parser.error(f"package notice must be a package-owned regular file: {name}")
+    shutil.copyfile(source, stage / name)
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--binary", required=True)
@@ -90,7 +101,7 @@ def main():
       target = stage / "lib" / "pudu" / source.relative_to(package / "lib")
       target.parent.mkdir(parents=True, exist_ok=True)
       shutil.copyfile(source, target)
-    shutil.copyfile(package / "LICENSE", stage / "LICENSE")
+    copy_notices(package, stage, parser)
     metadata = {
       "name": "pudu",
       "version": version,

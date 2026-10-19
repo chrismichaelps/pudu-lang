@@ -7,6 +7,7 @@ import io
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -61,6 +62,44 @@ class PackageBinaryStrip(unittest.TestCase):
          self.assertRaises(subprocess.CalledProcessError) as caught:
       package_binary.strip(Path("stage/bin/pudu"), argparse.ArgumentParser())
     self.assertIs(caught.exception, failure)
+
+
+class PackageNotices(unittest.TestCase):
+  def test_optional_notices_preserve_bytes_and_old_package_layout(self):
+    with tempfile.TemporaryDirectory() as scratch:
+      package = Path(scratch) / "package"
+      stage = Path(scratch) / "stage"
+      package.mkdir()
+      stage.mkdir()
+      (package / "LICENSE").write_bytes(b"project license\n")
+      package_binary.copy_notices(package, stage, argparse.ArgumentParser())
+      self.assertEqual((stage / "LICENSE").read_bytes(), b"project license\n")
+      self.assertFalse((stage / "THIRD_PARTY_NOTICES").exists())
+      notice = b"upstream copyright\nconditions\ndisclaimer\n"
+      (package / "THIRD_PARTY_NOTICES").write_bytes(notice)
+      package_binary.copy_notices(package, stage, argparse.ArgumentParser())
+      self.assertEqual((stage / "THIRD_PARTY_NOTICES").read_bytes(), notice)
+
+  def test_notices_refuse_symlinks_and_nonregular_inputs(self):
+    with tempfile.TemporaryDirectory() as scratch:
+      root = Path(scratch)
+      stage = root / "stage"
+      stage.mkdir()
+      for name in ("LICENSE", "THIRD_PARTY_NOTICES"):
+        for kind in ("link", "directory"):
+          package = root / f"{name}-{kind}"
+          package.mkdir()
+          if name != "LICENSE":
+            (package / "LICENSE").write_text("project license\n")
+          source = package / name
+          if kind == "link":
+            source.symlink_to(root / "outside")
+          else:
+            source.mkdir()
+          with redirect_stderr(io.StringIO()) as errors, self.assertRaises(SystemExit) as failure:
+            package_binary.copy_notices(package, stage, argparse.ArgumentParser(prog="package-binary"))
+          self.assertEqual(failure.exception.code, 2)
+          self.assertIn(f"package notice must be a package-owned regular file: {name}", errors.getvalue())
 
 
 if __name__ == "__main__":

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Floating notice packaging (#509, first partition)
+
+- [[Native Floating Notices]] retains upstream attribution/terms in source metadata and archives. [[Package Binary Tests]] covers exact copies, older-package absence and symlink/nonregular refusal, and now runs in CI/release/local gates. Seven focused tests and prototype source/binary archive, checksum/signature, extracted compiler/native UInt128 and SQLite checks pass. Exact formatter delivery and clean final-stack validation remain required; this partition does not admit floating source.
+
 ## 2026-10-18 — Floating formatter scratch (#508)
 
 - [[Native Floating Point]] anchors exact future output to the locked GHC digit/layout policy. [[Native Floating Natural Kernel]] adds checked 1280-bit scratch with atomic failures and alias-safe operations; [[Native Floating Natural Tests]] passes 6,780 independent Integer rows and seven minimal helper roots under Clang/GCC 15 and ASan/UBSan. All 19 clean gates/680 groups pass. This is neither Pudu BigInt nor admitted floating source; progress stays 4/14 (28%).

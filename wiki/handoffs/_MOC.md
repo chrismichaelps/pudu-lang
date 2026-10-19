@@ -196,3 +196,5 @@ tags: [moc, handoff]
 - [[Native Wide Source Delivery]] — source admission after wide-frame validation (#507).
 
 - [[Native Floating Natural Delivery]] — checked formatter scratch (#508).
+
+- [[Native Floating Notice Delivery]] — archive/notice partition (#509).

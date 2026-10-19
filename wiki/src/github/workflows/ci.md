@@ -29,3 +29,11 @@ their existing obligations. The application graph model tests and actual library
 [[Derive Index Output Gate]] runs against the built executable after documentation output checks, exercising root visibility, structured metadata, standard strategies and failure output.
 
 Resolved Grill Log: command serialization is verified through the actual executable rather than only encoder properties.
+
+## Archive notice verification (#509)
+
+Run [[Package Binary Tests]] alongside the release-decision tests in local
+gates, continuous verification and the release plan job. Preserve existing
+checks and ordering. Resolved Grill Log: required archive notice/strip policy
+must not depend on a manual-only test; this introduces no publication trigger
+or compiler semantic change.

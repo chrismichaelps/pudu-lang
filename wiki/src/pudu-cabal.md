@@ -379,3 +379,10 @@ Register [[Native Floating Natural Kernel]] and [[Native Floating Natural Tests]
 as appropriate to production/test components, using existing dependencies.
 Resolved Grill Log: execute exact C11 helper evidence without admitting Float
 source, changing the active runtime ABI or adding a native dependency.
+
+## Third-party notice metadata (#509)
+
+Declare [[Native Floating Notices]] alongside LICENSE through license-files.
+Preserve the project license; source archives retain the complete upstream
+attribution/terms. Resolved Grill Log: notice delivery precedes the adapted
+formatter partition and adds no native dependency or source admission.
