@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Floating values and arithmetic (#510)
+
+- [[Native Floating Values]] preserves raw transport, per-operation rounding, unordered predicates and target NaN propagation without source admission. [[Native Floating Value Tests]] exercises 54,344 operand/width rows, all 15 helper roots and unsafe-policy/ABI refusals. Locked runtime normalization avoids a reproduced GHC constant-folding discrepancy; a NaN-only noncommutative path repairs observed Clang/GCC payload reordering. Clang/GCC 15 at -O2/-O0 and ASan/UBSan pass, as do all 20 clean gates/685 groups and 351 strict frame translations; completed-area progress stays 4/14 (28%).
+
 ## 2026-10-18 — Exact binary64 text (#509, formatter partition)
 
 - [[Native Binary64 Formatter]] preserves locked GHC digit/layout decisions for 63,661 unique raw encodings, with boundary canaries, exact notices and three minimal roots. Clang/GCC 15 and ASan/UBSan pass; real source/binary notices, checksum/signature and extracted compiler/native/SQLite checks pass. All 20 clean gates/682 groups and 351 strict C11 body translations pass. Floating arithmetic/Core/frame/source admission remains open, with progress unchanged at 4/14 (28%).

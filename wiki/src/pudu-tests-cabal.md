@@ -204,3 +204,10 @@ in the appropriate production/test components with existing dependencies.
 Production license-files includes [[Native Floating Notices]] alongside LICENSE.
 Resolved Grill Log: preserve the project license and upstream attribution,
 without source admission, runtime file lookup or a new native dependency.
+
+## Floating values (#510)
+
+Register [[Native Floating Values]] and [[Native Floating Value Tests]] in their
+production/test components using existing dependencies. Resolved Grill Log:
+raw-bit arithmetic evidence precedes source admission; runtime selection and
+ABI revision remain unchanged in this prerequisite.

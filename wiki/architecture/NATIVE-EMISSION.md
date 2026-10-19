@@ -181,3 +181,8 @@ unique encodings and exact minimal helper closures under Clang/GCC/sanitizers
 (#509, all 20 clean gates/682 groups pass). Source/binary archives retain the adapted
 code's notices. This raw-bit helper performs no IO and does not admit floating
 source; typed arithmetic and Core/frame/source integration remain required.
+
+[[Native Floating Values]] adds bit transport and Double-first arithmetic with
+54,344 raw-result/predicate rows (#510, all 20 clean gates/685 groups pass). It remains a helper
+prerequisite: Core/frame/source admission, entry reporting, target conformance
+and full numeric-family coverage remain required. Progress stays 4/14 (28%).

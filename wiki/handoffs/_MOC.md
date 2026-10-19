@@ -200,3 +200,5 @@ tags: [moc, handoff]
 - [[Native Floating Notice Delivery]] — archive/notice partition (#509).
 
 - [[Native Binary64 Formatter Delivery]] — exact raw-bit formatter and distribution notices (#509).
+
+- [[Native Floating Value Delivery]] — floating runtime prerequisite (#510).

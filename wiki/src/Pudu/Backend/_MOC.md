@@ -65,3 +65,5 @@ aliases: [Backend Module Map]
 - [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — exact formatting prerequisite (#508).
 
 - [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] — exact decimal text (#509).
+
+- [[Native Floating Values]] · [[Native Floating Value Tests]] — exact bit transport and arithmetic (#510).

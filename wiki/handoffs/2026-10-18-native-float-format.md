@@ -52,3 +52,6 @@ No subagents; independent review/platform gates remain open.
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Notices]]
+
+Successor [[Native Floating Value Delivery]] owns ready issue #510 and the
+active arithmetic prerequisite; preserve the full source-integration obligation.
