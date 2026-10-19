@@ -150,8 +150,8 @@ widths (#497), retaining the full unsigned/large/float/Decimal obligations.
 [[Backend Word128 Kernel]], [[Backend Wide Integer Values]] and
 [[Backend Wide Operations]] have independent executed corpora (#501–#503).
 [[Native Wide Runtime Integration]] adds full-width output/status and actual
-runtime dependency selection (#504, locally validated). Wide frame integration
-and full source admission/parity remain pending. These prerequisites do not
+runtime dependency selection (#504, locally validated). [[Native Wide Frame Bridge]] integrates the frame ABI (#506, all 19 clean gates/678 groups pass);
+full source admission/parity remains pending. These prerequisites do not
 change the completed-area count.
 
 ## Closed-output parity finding

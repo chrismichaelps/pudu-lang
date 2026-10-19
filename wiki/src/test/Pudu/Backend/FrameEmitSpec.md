@@ -10,7 +10,7 @@ aliases: [Native Frame Body Tests]
 
 Export frameEmitProperties. Check generated call suspension and malformed slots,
 then compile actual emitted step bodies for checked native function, integer and
-loop corpora with cc -std=c11 -pedantic -Wall -Wextra -Werror. A minimal type-only
+loop corpora with cc -std=c11 -pedantic -Wall -Wextra -Werror. The production type-only
 frame ABI and externally reachable dispatch wrapper make every generated body
 compiled and referenced. Compile objects only: no allocator or runtime dispatcher
 is implemented by this harness. Missing cc is visibly reported as a skip.
@@ -35,3 +35,7 @@ Text/Never and negative-identity slots.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]] · [[Repository Test Runner]]
+
+## Wide frame bridge (#506)
+
+Use production frameTypes and frameUsesWideCells instead of a duplicated narrow-only test ABI. Select wide_value when the production layout requires it. Replace the unsupported manual 128-bit descriptor with 256-bit metadata. Resolved Grill Log: retain located refusal coverage and compile only the helpers emitted bodies require. Public source admission remains a later slice. [[Native Wide Frame Bridge]].

@@ -33,7 +33,7 @@ settlement retains overflow sign until the declared bound policy is applied.
 Bit conversion decodes the declared kind, while comparison reads mathematical
 values before wrapping. Negative and oversized shifts retain distinct failure
 sites. [[Exact Native Integer Carriers]] specifies the complete algorithms and
-phase contract. The current runtime revision is 6; an internal carrier is not a public
+phase contract. The current runtime revision is 7; an internal carrier is not a public
 Pudu type-width/FFI layout promise.
 
 ## Resolved Grill Log

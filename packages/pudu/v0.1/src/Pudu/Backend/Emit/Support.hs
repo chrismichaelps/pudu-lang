@@ -3,7 +3,7 @@
 module Pudu.Backend.Emit.Support
   ( runtimeNeeds, entryResultType, functionPrototype, wrapperFor, functionSymbol
   , functionSymbolByName, wrapperSymbol, returnTypeFor, integerKindOfExpression
-  , zeroValue, integerKindText, integerLiteralText, declaration, declarationFor, localSymbol, comment
+  , isWideInteger, integerHelper, zeroValue, integerKindText, integerLiteralText, declaration, declarationFor, localSymbol, comment
   ) where
 
 import Data.Char (ord)
@@ -26,7 +26,7 @@ import Pudu.IntegerLiteral (IntegerKind (..), integerKindBounds, integerKindWidt
 runtimeNeeds :: CoreModule -> Set.Set Text
 runtimeNeeds coreModule = closeNeeds (foldl' needFunction base (coreModuleFunctions coreModule))
  where
-  base = Set.fromList (["prelude", "integer_value"] <> ["status" | isInteger (entryResultType coreModule)])
+  base = Set.fromList (["prelude", "integer_value"] <> [integerHelper (entryResultType coreModule) "status" | isInteger (entryResultType coreModule)])
   isInteger coreType = case coreType of
     CoreIntegerType _ -> True
     _ -> False
@@ -39,7 +39,13 @@ closeNeeds initial = foldl' visit Set.empty (Set.toList initial)
     | otherwise = foldl' visit (Set.insert part found) (integerRuntimeDependencies part)
 
 needFunction :: Set.Set Text -> CoreFunction -> Set.Set Text
-needFunction needs function = needBlock needs (coreFunctionBody function)
+needFunction needs function = needBlock typed (coreFunctionBody function)
+ where
+  typed = foldl' needType needs (coreFunctionResult function : map (coreLocalType . coreParameterLocal) (coreFunctionParameters function))
+
+needType :: Set.Set Text -> CoreType -> Set.Set Text
+needType needs (CoreIntegerType kind) | isWideInteger kind = Set.insert "wide_value" needs
+needType needs _ = needs
 
 needBlock :: Set.Set Text -> CoreBlock -> Set.Set Text
 needBlock needs block =
@@ -50,7 +56,7 @@ needBlock needs block =
 
 needStatement :: Set.Set Text -> CoreStatement -> Set.Set Text
 needStatement needs statement = case coreStatementShape statement of
-  CoreDeclare _ expression -> needExpression needs expression
+  CoreDeclare local expression -> needExpression (needType needs (coreLocalType local)) expression
   CoreAssign _ expression -> needExpression needs expression
   CoreEvaluate expression -> needExpression needs expression
   CoreIf condition thenBlock elseExpression ->
@@ -66,32 +72,32 @@ needStatement needs statement = case coreStatementShape statement of
     Just expression -> needExpression needs expression
 
 needExpression :: Set.Set Text -> CoreExpression -> Set.Set Text
-needExpression needs expression = case coreExpressionShape expression of
+needExpression initial expression = case coreExpressionShape expression of
   CoreIntegerLiteral _ _ -> needs
   CoreBoolLiteral _ -> needs
   CoreTextLiteral _ -> needs
   CoreReadLocal _ -> needs
-  CoreNegate operand -> needExpression (checked "neg" needs) operand
-  CoreComplement operand -> needExpression (bits "bit_not" needs) operand
+  CoreNegate operand -> needExpression (checked (helper "neg") needs) operand
+  CoreComplement operand -> needExpression (bits (helper "bit_not") needs) operand
   CoreNot operand -> needExpression needs operand
   CoreBinary operator left right ->
     let withOperator = case operator of
-          CoreAdd -> checked "add" needs
-          CoreSubtract -> checked "sub" needs
-          CoreMultiply -> checked "mul" needs
-          CoreDivide -> checked "div" needs
-          CoreRemainder -> checked "rem" needs
-          CoreBitAnd -> bits "bit_and" needs
-          CoreBitOr -> bits "bit_or" needs
-          CoreBitXor -> bits "bit_xor" needs
-          CoreShiftLeft -> bits "shift_left" (checked "shift_left" needs)
-          CoreShiftRight -> bits "shift_right" (checked "shift_right" needs)
-          CoreWrapAdd -> bits "wrap_add" needs
-          CoreWrapSubtract -> bits "wrap_sub" needs
-          CoreWrapMultiply -> bits "wrap_mul" needs
-          CoreSaturateAdd -> Set.insert "sat_add" needs
-          CoreSaturateSubtract -> Set.insert "sat_sub" needs
-          CoreSaturateMultiply -> Set.insert "sat_mul" needs
+          CoreAdd -> checked (helper "add") needs
+          CoreSubtract -> checked (helper "sub") needs
+          CoreMultiply -> checked (helper "mul") needs
+          CoreDivide -> checked (helper "div") needs
+          CoreRemainder -> checked (helper "rem") needs
+          CoreBitAnd -> bits (helper "bit_and") needs
+          CoreBitOr -> bits (helper "bit_or") needs
+          CoreBitXor -> bits (helper "bit_xor") needs
+          CoreShiftLeft -> bits (helper "shift_left") (checked (helper "shift_left") needs)
+          CoreShiftRight -> bits (helper "shift_right") (checked (helper "shift_right") needs)
+          CoreWrapAdd -> bits (helper "wrap_add") needs
+          CoreWrapSubtract -> bits (helper "wrap_sub") needs
+          CoreWrapMultiply -> bits (helper "wrap_mul") needs
+          CoreSaturateAdd -> Set.insert (helper "sat_add") needs
+          CoreSaturateSubtract -> Set.insert (helper "sat_sub") needs
+          CoreSaturateMultiply -> Set.insert (helper "sat_mul") needs
           CoreLess -> comparisonNeeds
           CoreLessOrEqual -> comparisonNeeds
           CoreGreater -> comparisonNeeds
@@ -100,7 +106,7 @@ needExpression needs expression = case coreExpressionShape expression of
           CoreNotEqual -> comparisonNeeds
           _ -> needs
         comparisonNeeds = case coreExpressionType left of
-          CoreIntegerType _ -> Set.insert "compare" needs
+          CoreIntegerType _ -> Set.insert (integerHelper (coreExpressionType left) "compare") needs
           _ -> needs
      in needExpression (needExpression withOperator left) right
   CoreDisplay operand -> needExpression needs operand
@@ -113,6 +119,9 @@ needExpression needs expression = case coreExpressionShape expression of
   CoreLoopValue _ body -> needBlock needs body
   CoreIfValue condition thenBlock elseExpression ->
     needExpression (needBlock (needExpression needs condition) thenBlock) elseExpression
+ where
+  needs = needType initial (coreExpressionType expression)
+  helper = integerHelper (coreExpressionType expression)
 
 bits :: Text -> Set.Set Text -> Set.Set Text
 bits = Set.insert
@@ -131,7 +140,7 @@ printerFor argument = case coreExpressionShape argument of
   CoreDisplay inner -> case coreExpressionType inner of
     CoreBoolType -> "print_bool"
     CoreUnitType -> "print_str"
-    _ -> "print_int"
+    _ -> integerHelper (coreExpressionType inner) "print_int"
   _ -> "print_str"
 
 {-| The prototype of a carried function, so a body can call a function defined
@@ -193,7 +202,7 @@ wrapperSymbol name = "pudu_call_" <> sanitize name
 
 returnTypeFor :: CoreType -> Text
 returnTypeFor coreType = case coreType of
-  CoreIntegerType _ -> "pudu_int"
+  CoreIntegerType kind -> if isWideInteger kind then "pudu_wide_int" else "pudu_int"
   CoreBoolType -> "int"
   _ -> "void"
 
@@ -205,23 +214,39 @@ integerKindOfExpression expression = case coreExpressionType expression of
   CoreIntegerType kind -> kind
   _ -> PlatformSigned
 
+isWideInteger :: IntegerKind -> Bool
+isWideInteger kind = integerKindWidth kind == Just 128
+
+integerHelper :: CoreType -> Text -> Text
+integerHelper (CoreIntegerType kind) name | isWideInteger kind = "wide_" <> name
+integerHelper _ name = name
+
 zeroValue :: CoreType -> Text
-zeroValue (CoreIntegerType _) = "(pudu_int){UINT64_C(0), 0}"
+zeroValue (CoreIntegerType kind) = integerLiteralText kind 0
 zeroValue _ = "0"
 
 integerKindText :: IntegerKind -> Maybe Text
-integerKindText kind = case (integerKindBounds kind, integerKindWidth kind) of
-  (Just (low, high), Just width) | width > 0 && width <= 64 ->
-    Just ("(pudu_int_kind){UINT64_C(" <> textOfInteger high <> "), UINT64_C("
-      <> textOfInteger (negate low) <> "), " <> textOfInt width <> ", "
-      <> (if integerKindSigned kind then "1" else "0") <> "}")
-  _ -> Nothing
+integerKindText kind
+  | isWideInteger kind = Just ("(pudu_wide_kind){" <> (if integerKindSigned kind then "1" else "0") <> "}")
+  | otherwise = case (integerKindBounds kind, integerKindWidth kind) of
+      (Just (low, high), Just width) | width > 0 && width <= 64 ->
+        Just ("(pudu_int_kind){UINT64_C(" <> textOfInteger high <> "), UINT64_C("
+          <> textOfInteger (negate low) <> "), " <> textOfInt width <> ", "
+          <> (if integerKindSigned kind then "1" else "0") <> "}")
+      _ -> Nothing
 
 integerLiteralText :: IntegerKind -> Integer -> Text
-integerLiteralText _ number =
-  "(pudu_int){" <> (if number < 0 then "UINT64_C(0) - " else "")
-    <> "UINT64_C(" <> textOfInteger (abs number) <> "), "
-    <> (if number < 0 then "1" else "0") <> "}"
+integerLiteralText kind number
+  | isWideInteger kind =
+      let wordBits = number `mod` (2^(128::Int))
+          base = 2^(64::Int)
+       in "(pudu_wide_int){{UINT64_C(" <> textOfInteger (wordBits `mod` base)
+            <> "), UINT64_C(" <> textOfInteger (wordBits `div` base) <> ")}, "
+            <> (if number < 0 then "1" else "0") <> "}"
+  | otherwise =
+      "(pudu_int){" <> (if number < 0 then "UINT64_C(0) - " else "")
+        <> "UINT64_C(" <> textOfInteger (abs number) <> "), "
+        <> (if number < 0 then "1" else "0") <> "}"
 
 textOfInteger :: Integer -> Text
 textOfInteger = Text.pack . show
@@ -231,7 +256,7 @@ declaration local = declarationFor (coreLocalType local) (localSymbol local)
 
 declarationFor :: CoreType -> Text -> Text
 declarationFor coreType name = case coreType of
-  CoreIntegerType _ -> "pudu_int " <> name
+  CoreIntegerType _ -> returnTypeFor coreType <> " " <> name
   CoreBoolType -> "int " <> name
   CoreTextType -> "const char *" <> name
   CoreUnitType -> "int " <> name

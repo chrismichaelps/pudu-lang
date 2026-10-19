@@ -5,9 +5,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 
-frameTypes :: [Text]
-frameTypes =
-  [ "typedef union { pudu_int integer; int scalar; } pudu_cell;"
+frameTypes :: Bool -> [Text]
+frameTypes wide =
+  [ "typedef union { pudu_int integer; int scalar; "
+      <> (if wide then "pudu_wide_int wide; " else "") <> "} pudu_cell;"
   , "typedef struct pudu_frame {"
   , "  size_t pc; pudu_cell *slots; pudu_cell *arguments;"
   , "  struct pudu_frame *parent; size_t function; size_t destination; int has_destination;"

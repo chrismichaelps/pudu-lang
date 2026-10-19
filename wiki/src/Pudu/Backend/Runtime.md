@@ -215,3 +215,7 @@ Contract: [[Native Closed Pipe Semantics]].
 Scalar refusal sites and their strings are static emitted data, so pre-report
 frame cleanup preserves message storage. Future owned error payloads must be
 transferred to a surviving error owner before unwinding frames.
+
+## Wide frame bridge (#506)
+
+Revision 7 records the optional wide frame ABI described by [[Native Wide Frame Bridge]]. Preserve the revision-6 process IO policy. Resolved Grill Log: changing frame payload representation requires an artifact revision; helper-only prerequisites did not admit source kinds.

@@ -36,3 +36,7 @@ Only emitted values select helper roots; caller closes dependencies transitively
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]
+
+## Wide frame bridge (#506)
+
+Use wide cells for 128-bit kinds and typed helper names for operations and selected roots. Comparisons choose the left integer operand kind, because their result is Bool. Shift counts remain platform Int cells. Resolved Grill Log: do not prefix comparison helpers twice, narrow deferred boundaries, or change eager operand snapshots. [[Native Wide Frame Bridge]].

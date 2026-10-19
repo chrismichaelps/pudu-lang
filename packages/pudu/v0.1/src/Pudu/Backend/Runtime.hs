@@ -32,7 +32,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "6"
+runtimeRevision = "7"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 

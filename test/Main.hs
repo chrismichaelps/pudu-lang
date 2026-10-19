@@ -34,6 +34,7 @@ import Pudu.Backend.Word128Spec (word128Properties)
 import Pudu.Backend.WideValueSpec (wideValueProperties)
 import Pudu.Backend.WideOperationsSpec (wideOperationProperties)
 import Pudu.Backend.WideRuntimeSpec (wideRuntimeProperties)
+import Pudu.Backend.WideFrameSpec (wideFrameProperties)
 import Pudu.Backend.BrokenPipeSpec (brokenPipeProperties)
 import Pudu.Cli.MemorySpec (memoryProperties)
 import Pudu.Backend.EmitSpec (backendEmitProperties)
@@ -129,7 +130,7 @@ main = do
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) (programProperties <> authenticationProperties)
   persistOutcomes <- traverse (uncurry check) persistProperties
-  backendOutcomes <- traverse (uncurry check) (memoryProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
+  backendOutcomes <- traverse (uncurry check) (memoryProperties <> wideFrameProperties <> brokenPipeProperties <> wideRuntimeProperties <> wideOperationProperties <> wideValueProperties <> word128Properties <> frameRuntimeProperties <> frameEmitProperties <> frameProperties <> lowerTypesProperties <> backendEmitProperties <> backendNativeProperties <> backendToolchainProperties)
   literalsOutcomes <- traverse (uncurry check) literalsProperties
   initOutcomes <- traverse (uncurry check) initProperties
   packageOutcomes <- traverse (uncurry check) packageProperties

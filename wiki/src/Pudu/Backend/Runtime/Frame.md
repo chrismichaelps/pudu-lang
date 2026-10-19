@@ -8,7 +8,7 @@ aliases: [Backend Frame Runtime]
 
 ## Purpose and interface
 
-Export frameTypes and frameEngine as embedded C11 line lists. Types define
+Export frameTypes :: Bool -> [Text] and frameEngine :: [Text] as embedded C11. Types define
 pudu_cell, pudu_frame, pudu_step and pudu_function. A frame owns a flexible
 array of typed cells, split into slots and argument scratch; links point to
 its live parent. The descriptor holds counts, parameter slot indices, entry
@@ -47,3 +47,7 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]
+
+## Wide frame bridge (#506)
+
+Export frameTypes :: Bool -> [Text]. Add pudu_wide_int wide to pudu_cell only when the flag is true; narrow-only cells retain their exact layout. Keep frameEngine allocation, copies, cleanup and iterative dispatch unchanged. Resolved Grill Log: whole-cell copies preserve both wide words and sign, with no new ownership or C recursion. [[Native Wide Frame Bridge]].

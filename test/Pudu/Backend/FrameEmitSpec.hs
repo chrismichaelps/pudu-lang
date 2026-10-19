@@ -6,6 +6,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
+import Pudu.Backend.Emit.Frame (frameUsesWideCells)
+import Pudu.Backend.Runtime.Frame (frameTypes)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Value (frameValue, slotText)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
@@ -51,7 +53,7 @@ testSlots = do
     [ rejected (slot (-1) CoreBoolType), rejected (slot 0 CoreTextType)
     , rejected (slot 0 CoreNeverType)
     , slotText (slot 3 CoreUnitType) === Right "frame->slots[3].scalar"
-    , let kind = CoreIntegerType (SignedKind 128)
+    , let kind = CoreIntegerType (SignedKind 256)
        in case frameValue (emptyEmitState [source])
             (FrameValue at kind (FrameUnary FrameNegate (slot 0 kind))) of
             Left failure -> frameFaultSpan failure === Just at
@@ -82,9 +84,9 @@ testBodies = do
               Left failure -> pure (counterexample (name <> ": " <> show failure) (False === True))
               Right (emitted, roots) -> do
                 let cpath = root </> "frames.c"
-                    selected = close (Set.union roots (Set.fromList ["prelude", "integer_value", "site"]))
+                    selected = close (Set.union roots (Set.fromList (["prelude", "integer_value", "site"] <> ["wide_value" | frameUsesWideCells frames])))
                     runtime = concat [runtimePartLines part | part <- runtimeParts, Set.member (runtimePartName part) selected]
-                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> abi
+                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames)
                       <> reverse (emitOutput emitted) <> dispatch (length (frameModuleFunctions frames)) (Set.member "fail" selected)
                 TextIO.writeFile cpath (Text.unlines generated)
                 (status, output, errors) <- readProcessWithExitCode cc
@@ -119,15 +121,6 @@ testCalls = do
         Left failure -> counterexample (show failure) (False === True)
       other -> counterexample (show other) (False === True)
     _ -> counterexample (show (compileDiagnostics checked)) (False === True)
-
-abi :: [Text]
-abi =
-  [ "typedef union { pudu_int integer; int scalar; } pudu_cell;"
-  , "typedef struct { size_t pc; pudu_cell *slots; pudu_cell *arguments; } pudu_frame;"
-  , "enum { PUDU_CALL, PUDU_RETURN, PUDU_INVALID };"
-  , "typedef struct { int kind; size_t function; size_t argument_count;"
-  , "  int has_destination; size_t destination; pudu_cell result; const pudu_site *call_site; } pudu_step;"
-  ]
 
 dispatch :: Int -> Bool -> [Text]
 dispatch count hasFailure =

@@ -249,3 +249,5 @@ tags: [moc, module]
 - [[Backend Wide Integer Display]] · [[Native Wide Runtime Tests]] — actual wide runtime integration (#504).
 
 - [[Native Broken Pipe Tests]] — closed-output continuation and later failure (#505).
+
+- [[Native Wide Frame Tests]] — executed wide frame/cleanup contract (#506).
