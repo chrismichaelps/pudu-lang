@@ -10,7 +10,7 @@ import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
-import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
+import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
   ( FrameBlock (..), FrameFault (..), FrameFunction (..), FrameLabel (..)
@@ -48,7 +48,7 @@ emitFrameProgram version sources source = do
   where
     visit found part
       | Set.member part found = found
-      | otherwise = foldl' visit (Set.insert part found) (integerRuntimeDependencies part)
+      | otherwise = foldl' visit (Set.insert part found) (runtimeDependencies part)
     parameterArray (identity, function) = case frameFunctionParameters function of
       [] -> []
       parameters -> ["static const size_t pudu_parameters_" <> textOfInt identity <> "[] = {"

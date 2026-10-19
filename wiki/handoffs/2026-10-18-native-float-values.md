@@ -60,3 +60,6 @@ is claimed here. Independent review and other supported platforms remain open.
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Native Floating Values]] · [[Native Floating Value Tests]]
+
+Successor [[Native Floating Runtime Delivery]] owns ready issue #511 and the
+actual runtime/output integration; source/Core/frame obligations remain open.

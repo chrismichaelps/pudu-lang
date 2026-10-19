@@ -84,3 +84,9 @@ The descriptor projection supports bounded widths 1..64 and the separate 128-bit
 ## Wide frame bridge (#506)
 
 Export isWideInteger and integerHelper. Width 128 selects wide_ helpers, pudu_wide_int declarations/results and typed zeros; descriptors use pudu_wide_kind. Literals carry both unsigned words of the value modulo 2^128 and an independent actual-negative flag. Runtime selection includes wide type-only declarations even for literal/read-only values, and uses the operand kind for Bool comparisons. Resolved Grill Log: retain the narrow path byte spelling, reject other widths, never narrow sign/high words, and keep legacy runtimeNeeds accurate. [[Native Wide Frame Bridge]].
+
+## General runtime prerequisites (#511)
+
+Use [[Native Runtime Dependencies]] for the existing cycle-safe closure walk.
+No selection/representation policy changes here yet. Resolved Grill Log: retain
+integer behavior while enabling actual floating prerequisites in later emission.

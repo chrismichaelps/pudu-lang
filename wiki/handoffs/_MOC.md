@@ -202,3 +202,5 @@ tags: [moc, handoff]
 - [[Native Binary64 Formatter Delivery]] — exact raw-bit formatter and distribution notices (#509).
 
 - [[Native Floating Value Delivery]] — floating runtime prerequisite (#510).
+
+- [[Native Floating Runtime Delivery]] — actual output/dependency integration (#511).

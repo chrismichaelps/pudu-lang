@@ -91,3 +91,11 @@ proof of the required observable behavior. Helper tests do not admit source.
 Resolved Grill Log: retain the evaluator's width/rounding policy and actual
 predicates; require target evidence before broadening admission. Do not reset
 floating state or silently rewrite NaNs to make a corpus pass.
+
+## Runtime publication (#511)
+
+[[Native Floating Runtime]] publishes validated helpers and one-write/one-flush
+exact output through [[Native Runtime Dependencies]]. Preserve ignored print
+failure continuation and fatal diagnostic process policy. Raw bits need no
+host floating assertions. Resolved Grill Log: actual catalogue integration
+precedes Core/frame/source admission and does not complete numeric coverage.

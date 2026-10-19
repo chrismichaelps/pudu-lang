@@ -7,7 +7,9 @@ import Data.Text (Text)
 floatValueRuntimeParts :: [(Text, [Text])]
 floatValueRuntimeParts =
   [ ("float_target",
-      [ "#if defined(__FAST_MATH__) || (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ != 0)"
+      [ "#include <float.h>"
+      , "#include <limits.h>"
+      , "#if defined(__FAST_MATH__) || (defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ != 0)"
       , "#error Pudu floating runtime requires precise IEEE arithmetic"
       , "#endif"
       , "_Static_assert(CHAR_BIT == 8 && sizeof(double) == 8 && sizeof(float) == 4, \"Pudu floating runtime requires binary32/binary64 storage\");"

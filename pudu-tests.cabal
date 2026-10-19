@@ -78,6 +78,7 @@ test-suite pudu-test
     Pudu.Backend.WideRuntimeSpec
     Pudu.Backend.FloatFormatSpec
     Pudu.Backend.FloatValueSpec
+    Pudu.Backend.FloatRuntimeSpec
     Pudu.Backend.FloatNaturalSpec
     Pudu.Backend.WideFrameSpec
     Pudu.Backend.BrokenPipeSpec
