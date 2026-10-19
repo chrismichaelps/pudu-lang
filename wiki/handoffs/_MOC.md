@@ -192,3 +192,5 @@ tags: [moc, handoff]
 - [[Native Closed Pipe Delivery]] — active P1 output/startup repair (#505).
 
 - [[Native Wide Frame Delivery]] — 128-bit frame bridge after process-policy repair (#506).
+
+- [[Native Wide Source Delivery]] — source admission after wide-frame validation (#507).

@@ -6,10 +6,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 
 signedSuccessPrograms :: [(String, Text, Text)]
-signedSuccessPrograms = concatMap successes [8, 16, 32, 64]
+signedSuccessPrograms = concatMap successes [8, 16, 32, 64, 128]
 
 signedRefusalPrograms :: [(String, Text)]
-signedRefusalPrograms = concatMap failures [8, 16, 32, 64]
+signedRefusalPrograms = concatMap failures [8, 16, 32, 64, 128]
 
 successes :: Int -> [(String, Text, Text)]
 successes width =
@@ -55,6 +55,41 @@ successes width =
       ], Text.unlines (map number [negate low, low, negate low, negate low, negate low, low,
            high, low, high, negate low `quot` 2, low]))
   ]
+  <> if width /= 128 then [] else
+    [ ("signed wide mixed recursion and snapshots", program
+        [ "type Wide = Int128"
+        , "fn held(value: Wide, marker: ()) -> Wide { value }"
+        , "fn recur(value: Wide, depth: Int) -> Wide {"
+        , "  if depth == 0 { return value }", "  recur(value, depth - 1)", "}"
+        , "fn unsigned(value: UInt128) -> UInt128 { value }"
+        , "fn main() -> Int {", "  var value: Wide = " <> number low
+        , "  let old = held(value, { value = " <> number high <> "\n print(\"mark\")\n () })"
+        , "  print(display(old))", "  print(display(value))"
+        , "  let selected = loop { if value > 0 { break recur(old, 40) }\n continue }"
+        , "  print(display(selected))"
+        , "  print(display(if false { return 0 } else { selected }))"
+        , "  print(display(if true { selected }))"
+        , "  print(display(unsigned(340282366920938463463374607431768211455u128)))"
+        , "  return 0", "}"
+        ], Text.unlines ["mark", number low, number high, number low, number low, "()", number (2^(128::Int)-1)])
+    , ("signed wide deferred cross-word policies", program
+        [ "fn pass(value: Int128) -> Int128 { value }", "fn main() -> Int {"
+        , "  var value = " <> number (negate low), "  let minimum: Int128 = -value"
+        , "  print(display(pass(value)))", "  print(display(minimum))"
+        , "  print(display(value >> 0))", "  print(display(value >> 64))"
+        , "  print(display(minimum >> 64))", "  print(display(minimum % -1i128))"
+        , "  print(display(minimum &- 1i128))", "  print(display(minimum -| 1i128))"
+        , "  print(display(340282366920938463463374607431768211455u128 >> 127))"
+        , "  print(display(value - value))", "  print(display(value / -1i128))"
+        , "  print(display(value % " <> literal width high <> "))"
+        , "  print(display(value * 0))", "  print(display(~value))"
+        , "  print(display(value > minimum))", "  print(display(value == minimum))"
+        , "  return 0", "}"
+        ], Text.unlines (map number [negate low, low, low, negate low `quot` 2^(64::Int), low `quot` 2^(64::Int),
+              0, high, low, 1, 0, low, 1, 0, high] <> ["true", "false"]))
+    , ("signed wide discarded local in unit entry", program
+        [ "fn main() -> () {", "  let value: Int128 = " <> number high, "  ()", "}" ], "")
+    ]
   where
     kind = typeName width
     (low, high) = bounds width
@@ -123,6 +158,11 @@ failures width =
       , "  let minimum: " <> kind <> " = -value"
       , "  print(display(minimum))", "  print(\"before\")"
       , "  print(display(checked(value)))", "  return 0", "}"
+      ])]
+  <> if width /= 128 then [] else
+    [("signed wide recursion depth", program
+      [ "fn recurse(value: Int128) -> Int128 { recurse(value) }"
+      , "fn main() -> Int { print(\"before\")\n print(display(recurse(" <> literal width high <> ")))\n return 0 }"
       ])]
   where
     kind = typeName width

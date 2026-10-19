@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Wide source admission (#507)
+
+- [[Native Wide Source Admission]] enables canonical Int128/UInt128 through existing settled facts. Independent source matrices cover eight wide success programs/969 expected output lines and 24 failure programs, including mixed-width snapshots, cross-word deferred policies, recursive depth and unit entries. Both evaluators match native execution; 45 real CLI executions and four byte-identical static E3018 refusals pass. GCC 15 and ASan/UBSan source matrices also pass; all 19 clean gates/678 groups and 351 strict C11 body translations pass; numeric families remain Partial and progress stays 4/14 (28%).
+
 ## 2026-10-18 — Wide frame bridge (#506)
 
 - [[Native Wide Frame Bridge]] connects exact 128-bit literals, descriptors, helper selection, printing and status to optional wide frame cells. Narrow-only layout stays unchanged; runtime revision is 7. [[Native Wide Frame Tests]] adds 23 actual Core/frame programs and counted normal/error cleanup. Clang/GCC 15, ASan/UBSan, 319 strict body translations and all 19 clean gates/678 groups pass. Public source admission, independent reviews and additional platforms remain pending; completed-area progress stays 4/14 (28%).

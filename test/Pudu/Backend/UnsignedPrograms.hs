@@ -9,7 +9,7 @@ import Numeric (showHex, showOct)
 type Family = (Text, Int, Text)
 
 families :: [Family]
-families = ("UInt", 64, "") : [("UInt" <> number width, fromInteger width, "u" <> number width) | width <- [8, 16, 32, 64]]
+families = ("UInt", 64, "") : [("UInt" <> number width, fromInteger width, "u" <> number width) | width <- [8, 16, 32, 64, 128]]
 
 unsignedSuccessPrograms :: [(String, Text, Text)]
 unsignedSuccessPrograms = concatMap successes families

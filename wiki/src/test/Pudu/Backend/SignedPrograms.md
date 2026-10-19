@@ -13,7 +13,7 @@ boundary. Source values remain exact until those operations apply their policy.
 ## Purpose and interface
 
 Export signedSuccessPrograms (label, source, independent stdout) and
-signedRefusalPrograms (label, checked source). For each width 8/16/32/64, generate
+signedRefusalPrograms (label, checked source). For each width 8/16/32/64/128, generate
 matrices covering checked arithmetic, wrapping/saturation, bitwise, unary,
 comparison and asymmetric shifts. Mathematical expectations use arbitrary
 Integer arithmetic and explicit modular intervals, not production helpers.
@@ -36,3 +36,7 @@ nonliteral negation and invalid shift counts with observable output prefixes.
 ## Referenced by
 
 [[src/_MOC]] · [[Native Signed Integer Delivery]]
+
+## Wide source admission (#507)
+
+Extend success/refusal matrices through width 128. Add wide-only source regressions for mixed signed/unsigned/narrow calls, recursive returns, argument snapshots, unit joins and loop transfers with independent expected stdout. Resolved Grill Log: preserve deferred positive 2^127, exact mathematical expectations and all smaller widths; source behavior must agree with both evaluators and actual native execution. [[Native Wide Source Admission]].

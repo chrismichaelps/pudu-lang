@@ -78,3 +78,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Closed Pipe Semantics]] — P1 native process/output parity (#505).
 
 - [[Native Wide Frame Bridge]] — exact 128-bit execution-frame integration (#506).
+
+- [[Native Wide Source Admission]] — canonical Int128/UInt128 source conformance (#507).

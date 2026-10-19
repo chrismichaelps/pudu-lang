@@ -266,8 +266,8 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("pending 128-bit integer bitwise", statementProgram "1i128 & 2i128", "1i128")
-  , ("pending 128-bit unsigned complement", statementProgram "~1u128", "1u128")
+  [ ("BigInt parameter", helperProgram "fn helper(value: BigInt) -> Int { return 1 }" "helper(1)", "BigInt")
+  , ("Float32 parameter", helperProgram "fn helper(value: Float32) -> Int { return 1 }" "helper(1.0f32)", "Float32")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
   , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
@@ -276,7 +276,7 @@ refusalCases =
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
-  , ("128-bit unsigned parameter", helperProgram "fn helper(value: UInt128) -> Int { return 1 }" "helper(1u128)", "UInt128")
+  , ("Float64 parameter", helperProgram "fn helper(value: Float64) -> Int { return 1 }" "helper(1.0f64)", "Float64")
   , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("trailing print result", Text.unlines

@@ -13,14 +13,14 @@ aliases: [Compiler Lower Types]
 
 ## Unsigned admission
 
-Extend nativeIntegerKind to PlatformUnsigned and UnsignedKind 8/16/32/64.
+Extend nativeIntegerKind to PlatformUnsigned and UnsignedKind 8/16/32/64/128.
 The existing canonical identity guard and nativeScalarType propagate admission
 through every scalar consumer. Resolved Grill Log: preserve UInt versus UInt64
-and reject same-spelling user-owned identities, 128-bit types and generic shapes.
+and reject same-spelling user-owned identities and generic shapes.
 
 ## Fixed signed admission (#497)
 
-Export nativeIntegerKind (PlatformSigned or SignedKind 8/16/32/64) and
+Export nativeIntegerKind (PlatformSigned or SignedKind 8/16/32/64/128) and
 nativeScalarType (those integers, Bool, Unit; not Never/Text). formedCoreType
 matches NominalId Nothing with no arguments before integerKindOf, preserving
 canonical identity rather than display spelling. Resolved Grill Log: aliases
@@ -48,7 +48,7 @@ use authored offsets, approximate spans, declaration spelling or another source'
 facts. Generated source identity remains part of the lookup key. Function names
 are scoped to the single checked module; module linking remains a separate slice.
 
-Project canonical compiler-wired Int/UInt and their fixed 8/16/32/64-bit families,
+Project canonical compiler-wired Int/UInt and their fixed 8/16/32/64/128-bit families,
 Bool identities, UnitTypeValue and
 NeverType into their existing Core representations. Recognize canonical Str as
 CoreTextType for admission diagnostics and existing literal/display effects;
@@ -90,3 +90,7 @@ Consumed by [[Compiler Lower]], [[Compiler Lower State]],
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]
+
+## Wide source admission (#507)
+
+Admit SignedKind 128 and UnsignedKind 128 through the existing whitelist after #506 validation. Preserve canonical NominalId Nothing with no arguments, settled facts, platform/fixed identity and all other refusals. Resolved Grill Log: no spelling-based matching, re-inference, interpreter change or additional numeric-family admission. [[Native Wide Source Admission]].

@@ -18,7 +18,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial | Admitted integer statuses/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
-| Complete numeric families | Partial (#495, #497, #500) | Unsigned through 64-bit admission is validated; Int128, UInt128, BigInt, floats and Decimal remain |
+| Complete numeric families | Partial (#495, #497, #500, #507) | Int128/UInt128 source admission is validated; BigInt, floats and Decimal remain |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
@@ -151,7 +151,7 @@ widths (#497), retaining the full unsigned/large/float/Decimal obligations.
 [[Backend Wide Operations]] have independent executed corpora (#501–#503).
 [[Native Wide Runtime Integration]] adds full-width output/status and actual
 runtime dependency selection (#504, locally validated). [[Native Wide Frame Bridge]] integrates the frame ABI (#506, all 19 clean gates/678 groups pass);
-full source admission/parity remains pending. These prerequisites do not
+[[Native Wide Source Admission]] adds checked source conformance #507, all 19 clean gates/678 groups pass. These prerequisites do not
 change the completed-area count.
 
 ## Closed-output parity finding
