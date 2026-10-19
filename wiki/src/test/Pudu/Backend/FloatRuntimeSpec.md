@@ -45,3 +45,8 @@ full clean gates. Fixed returned properties are not repeated independent IO.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]
+
+## Text catalogue (#515)
+
+The integer-compatibility check skips text parts as well as floating ones,
+since [[Native Text Runtime]] adds its own dependencies to the facade.

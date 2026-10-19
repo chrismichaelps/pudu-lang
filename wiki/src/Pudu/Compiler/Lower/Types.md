@@ -105,3 +105,9 @@ bindings and loop break values without further changes.
 
 Resolved Grill Log: accept only the settled canonical names the checker
 publishes. _Rejected:_ matching the alias spelling as a second route.
+
+## Native value types (#515)
+
+`nativeValueType` is `nativeScalarType` plus `CoreTextType`. Signatures,
+bindings, breaks and display operands admit value types; places that still
+need a scalar (conditions, integer operators) keep `nativeScalarType`.

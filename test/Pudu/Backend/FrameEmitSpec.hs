@@ -6,7 +6,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
-import Pudu.Backend.Emit.Frame (frameUsesWideCells)
+import Pudu.Backend.Emit.Frame (frameUsesText, frameUsesWideCells)
 import Pudu.Backend.Runtime.Frame (frameTypes)
 import Pudu.Backend.Emit.Frame.Body (emitFrameBodies)
 import Pudu.Backend.Emit.Frame.Value (frameValue, slotText)
@@ -14,7 +14,7 @@ import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, tex
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
-import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
+import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
 import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
@@ -50,7 +50,7 @@ testSlots = do
         Left failure -> frameFaultSpan failure === Just at
         Right text -> counterexample (Text.unpack text) (False === True)
   pure $ conjoin
-    [ rejected (slot (-1) CoreBoolType), rejected (slot 0 CoreTextType)
+    [ rejected (slot (-1) CoreBoolType), slotText (slot 0 CoreTextType) === Right "frame->slots[0].text"
     , rejected (slot 0 CoreNeverType)
     , slotText (slot 3 CoreUnitType) === Right "frame->slots[3].scalar"
     , let kind = CoreIntegerType (SignedKind 256)
@@ -84,9 +84,9 @@ testBodies = do
               Left failure -> pure (counterexample (name <> ": " <> show failure) (False === True))
               Right (emitted, roots) -> do
                 let cpath = root </> "frames.c"
-                    selected = close (Set.union roots (Set.fromList (["prelude", "integer_value", "site"] <> ["wide_value" | frameUsesWideCells frames])))
+                    selected = close (Set.union roots (Set.fromList (["prelude", "integer_value", "site"] <> ["wide_value" | frameUsesWideCells frames] <> ["text" | frameUsesText frames])))
                     runtime = concat [runtimePartLines part | part <- runtimeParts, Set.member (runtimePartName part) selected]
-                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames)
+                    generated = runtime <> renderSites (reverse (emitSites emitted)) <> frameTypes (frameUsesWideCells frames) (frameUsesText frames)
                       <> reverse (emitOutput emitted) <> dispatch (length (frameModuleFunctions frames)) (Set.member "fail" selected)
                 TextIO.writeFile cpath (Text.unlines generated)
                 (status, output, errors) <- readProcessWithExitCode cc
@@ -98,7 +98,7 @@ testBodies = do
     close = foldl' visit Set.empty . Set.toList
     visit found part
       | Set.member part found = found
-      | otherwise = foldl' visit (Set.insert part found) (integerRuntimeDependencies part)
+      | otherwise = foldl' visit (Set.insert part found) (runtimeDependencies part)
 
 testCalls :: IO Property
 testCalls = do

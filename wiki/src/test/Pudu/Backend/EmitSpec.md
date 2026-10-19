@@ -170,3 +170,11 @@ cases with the same marker-span checks. Float success coverage lives in
 A module `fn display(value: Int) -> Str` is resolved as the program's own
 function, so lowering refuses its `Str` return type at that span instead of
 printing the builtin rendering.
+
+## Str admitted (#515)
+
+Str parameter, result and binding refusal fixtures become BigInt result, Char
+result and character-literal cases. The unreachable-function fixtures switch
+from Str to Char so they still prove unreached declarations never lower. The
+#513 shadowed `display` returning Str now compiles and moves to
+[[Backend Text Programs]].

@@ -5,7 +5,7 @@ module Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Pudu.Compiler.Lower.Scalar (lowerUnary, lowerBinary, eagerType)
-import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeScalarType)
+import Pudu.Compiler.Lower.Types (typeForSpan, nativeIntegerKind, nativeValueType)
 import Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
   , printValued, expressionIsPrintValued )
@@ -21,9 +21,9 @@ import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer, Bool, float or unit; a body that never returns
-    uses the unit ABI. Integers become the exit status and Bool/float values are printed,
-    the same split `pudu run` makes. Print's Result carrier must not escape through the
+{-| The entry carries an admitted integer, Bool, float, Str or unit; a body that never
+    returns uses the unit ABI. Integers become the exit status and every other value is
+    printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
     entry result. -}
 lowerEntryBody :: Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBody located state
@@ -38,6 +38,7 @@ lowerEntryBody located state
                 kind@(CoreIntegerType integerKind) | nativeIntegerKind integerKind -> built after coreBlock kind
                 kind@(CoreFloatType _) -> built after coreBlock kind
                 CoreBoolType -> built after coreBlock CoreBoolType
+                CoreTextType -> built after coreBlock CoreTextType
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -150,7 +151,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
           , let solved = typeForSpan (contextTypes (lowerContext state)) (locatedSpan value)
           , solved == Nothing || (coreType /= CoreNeverType && solved /= Just coreType) ->
               halt declarationSpan "a binding without matching solved native type facts" after
-          | nativeScalarType coreType || coreType == CoreNeverType ->
+          | nativeValueType coreType || coreType == CoreNeverType ->
               let (withLocal, local) = bindLocal after name coreType
                in ( withLocal
                   , Just
@@ -256,7 +257,7 @@ allowedResultType declared operand = case declared of
   Nothing -> case operand of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
-    _ -> operand `elem` [CoreBoolType, CoreUnitType, CoreNeverType]
+    _ -> operand `elem` [CoreBoolType, CoreTextType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
@@ -298,27 +299,13 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
           (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
-          (after, Just (coreArgument, CoreTextType))
-            | printableArgument coreArgument ->
-                typed after (CorePrint coreArgument) CoreUnitType
-            | otherwise ->
-                halt spanValue "a print argument other than a text literal or a display" after
+          (after, Just (coreArgument, CoreTextType)) -> typed after (CorePrint coreArgument) CoreUnitType
           (after, Just (_, coreType)) ->
             halt spanValue ("printing a " <> coreTypeName coreType <> " value") after
           (after, Nothing) -> refused after
         _ -> halt spanValue "a call to print with this many arguments" state
-    | name == "display" -> case arguments of
-        [argument] -> case lowerExpression state argument of
-          (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
-          (after, Just (coreArgument, _))
-            | expressionIsPrintValued coreArgument -> halt spanValue "display of a Result[(), Str] value" after
-          (after, Just (coreArgument, operandType))
-            | nativeScalarType operandType ->
-                typed after (CoreDisplay coreArgument) CoreTextType
-            | otherwise ->
-                halt spanValue ("display of a " <> coreTypeName operandType <> " value") after
-          (after, Nothing) -> refused after
-        _ -> halt spanValue "a call to display with this many arguments" state
+    | name == "display" -> rendered CoreDisplay
+    | name == "show" -> rendered CoreShow
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located _ MemberExpression{}) _ -> halt spanValue "method calls" state
   CallExpression{} -> halt spanValue "this call" state
@@ -375,6 +362,18 @@ lowerExpression state (Located spanValue expression) = case expression of
   ComptimeForExpression{} -> halt spanValue "comptime for" state
   InvalidExpression -> halt spanValue "this expression" state
   where
+    rendered shape = case expression of
+      CallExpression (Located _ (NameExpression (name :| []))) [argument] -> case lowerExpression state argument of
+        (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
+        (after, Just (coreArgument, _))
+          | expressionIsPrintValued coreArgument -> halt spanValue (name <> " of a Result[(), Str] value") after
+        (after, Just (coreArgument, operandType))
+          | nativeValueType operandType -> typed after (shape coreArgument) CoreTextType
+          | otherwise -> halt spanValue (name <> " of a " <> coreTypeName operandType <> " value") after
+        (after, Nothing) -> refused after
+      CallExpression (Located _ (NameExpression (name :| []))) _ ->
+        halt spanValue ("a call to " <> name <> " with this many arguments") state
+      _ -> halt spanValue "this call" state
     typed after shape coreType = (after, Just (CoreExpression spanValue coreType shape, coreType))
     value shape coreType = (state, Just (CoreExpression spanValue coreType shape, coreType))
 
@@ -393,12 +392,3 @@ lowerExpression state (Located spanValue expression) = case expression of
         }
       where
         context = lowerContext current
-
-{-| A print argument the emitter can fuse: the argument is always `Str`
-    because the checker gives `print` a `Str` argument, so only a text
-    literal or a `display` of a supported value can stand there. -}
-printableArgument :: CoreExpression -> Bool
-printableArgument (CoreExpression _ _ shape) = case shape of
-  CoreTextLiteral _ -> True
-  CoreDisplay _ -> True
-  _ -> False

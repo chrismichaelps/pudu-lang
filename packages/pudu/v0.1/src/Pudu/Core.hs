@@ -111,9 +111,8 @@ data CoreExpression = CoreExpression
 
 {-| @Core.ExpressionShape — the expression forms the native subset carries.
 
-    `CoreTextLiteral` and `CoreDisplay` have type `CoreTextType`: a text value
-    is legal only as a `CorePrint` argument or as a discarded statement
-    effect; lowering enforces that, so the emitter may rely on it.
+    `CoreTextLiteral`, `CoreDisplay` and `CoreShow` have type `CoreTextType`,
+    an ordinary value type; `CoreAdd` of two texts concatenates.
     `CoreIfValue` requires an else branch by construction. `CoreCall` names
     its callee and carries its arguments in source order, which is the
     evaluator's evaluation order; C does not guarantee one, so the emitter
@@ -130,6 +129,8 @@ data CoreExpressionShape
   | CoreNot !CoreExpression
   | CoreBinary !CoreBinaryOperator !CoreExpression !CoreExpression
   | CoreDisplay !CoreExpression
+  {-| `renderValue` text: Str gains quotes and escapes, scalars read as display. -}
+  | CoreShow !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}

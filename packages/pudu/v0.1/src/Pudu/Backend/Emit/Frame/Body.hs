@@ -45,7 +45,13 @@ instruction (state, needs) operation = case operation of
   FrameStore target value -> do
     destination <- slotText target
     (after, expression, selected) <- frameValue state value
-    pure (line after ("      " <> destination <> " = " <> expression <> ";"), Set.union needs selected)
+    let stored
+          -- The new text is built before the old one goes, since it may read it.
+          | frameSlotType target == CoreTextType =
+              "      { pudu_text pudu_next = " <> expression <> "; pudu_text_release(" <> destination
+                <> "); " <> destination <> " = pudu_next; }"
+          | otherwise = "      " <> destination <> " = " <> expression <> ";"
+    pure (line after stored, Set.union needs selected)
   FramePrintLiteral _ text -> printed "print_str" (cString text <> ", " <> textOfInt (cStringBytes text))
   FramePrintUnit _ -> printed "print_str" "\"()\", 2"
   FramePrintSlot at slot -> do
@@ -54,6 +60,7 @@ instruction (state, needs) operation = case operation of
       CoreIntegerType _ -> printed (integerHelper (frameSlotType slot) "print_int") value
       CoreFloatType _ -> printed "print_float" value
       CoreBoolType -> printed "print_bool" value
+      CoreTextType -> printed "print_text" value
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")
   where
@@ -91,7 +98,9 @@ terminator identities function (state, needs) ending = case ending of
         Nothing -> Left (FrameFault Nothing "an unrepresented frame return type")
         Just member -> do
           expression <- maybe (Right (zeroValue resultType)) slotText payload
-          pure (", .result = {." <> member <> " = " <> expression <> "}")
+          -- The frame releases its slots after this, so a returned text keeps its own reference.
+          let returned = if resultType == CoreTextType then "pudu_text_retain(" <> expression <> ")" else expression
+          pure (", .result = {." <> member <> " = " <> returned <> "}")
     pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> value <> "};"), needs)
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message

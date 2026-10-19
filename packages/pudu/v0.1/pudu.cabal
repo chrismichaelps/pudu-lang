@@ -105,6 +105,7 @@ library
     Pudu.Backend.Runtime.Integer.Wide.Display
     Pudu.Backend.Runtime.Integer.Arithmetic
     Pudu.Backend.Runtime.Integer.Bits
+    Pudu.Backend.Runtime.Text
     Pudu.Backend.Toolchain
     Pudu.Compiler
     Pudu.Compiler.Constants

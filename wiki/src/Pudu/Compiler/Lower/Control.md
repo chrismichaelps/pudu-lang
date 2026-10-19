@@ -78,3 +78,7 @@ A divergent block's unreachable trailing print does not produce a value.
 CoreComplement is a represented unary scalar; expressionIsPrintValued keeps its existing total default and never invents a print carrier. No source change unless exhaustive compiler matching requires one.
 
 Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.
+
+## Text breaks (#515)
+
+A break operand may carry any native value type, Str included.

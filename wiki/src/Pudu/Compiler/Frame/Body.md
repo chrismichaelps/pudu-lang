@@ -51,3 +51,10 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 `CoreFloatLiteral` saves a `FrameFloatLiteral`; float result slots exist for
 calls, branches and loops like other scalars. Print of a floating display
 emits `FramePrintSlot` on the float slot.
+
+## Text values (#515)
+
+Text literals now produce a slot when used as values; `lowerPrint` keeps the
+literal and scalar-display fusions and otherwise prints a text slot.
+`CoreDisplay` of a scalar saves `FrameDisplay`, of Str reads the operand;
+`CoreShow` saves `FrameShow`.

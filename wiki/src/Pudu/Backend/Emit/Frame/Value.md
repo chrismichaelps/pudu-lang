@@ -52,3 +52,9 @@ them.
 
 Resolved Grill Log: one helper call per Pudu operation keeps the evaluator's
 round-after-every-operation rule and blocks contraction across operations.
+
+## Text operations (#515)
+
+`cellMember` answers `text`. Reads retain; literals use static bytes with no
+owner; concatenation, display and show return new references. Comparisons go
+through `pudu_text_compare`, which orders by bytes like Data.Text.

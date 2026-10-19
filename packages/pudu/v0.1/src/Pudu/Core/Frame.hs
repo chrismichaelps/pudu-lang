@@ -75,6 +75,9 @@ data FrameValueShape
   = FrameIntegerLiteral !IntegerKind !Integer
   | FrameFloatLiteral !FloatWidth !Word64
   | FrameBoolLiteral !Bool
+  | FrameTextLiteral !Text
+  | FrameDisplay !FrameSlot
+  | FrameShow !FrameSlot
   | FrameUnitLiteral
   | FrameRead !FrameSlot
   | FrameUnary !FrameUnaryOperator !FrameSlot

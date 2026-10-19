@@ -39,3 +39,9 @@ Text/Never and negative-identity slots.
 ## Wide frame bridge (#506)
 
 Use production frameTypes and frameUsesWideCells instead of a duplicated narrow-only test ABI. Select wide_value when the production layout requires it. Replace the unsupported manual 128-bit descriptor with 256-bit metadata. Resolved Grill Log: retain located refusal coverage and compile only the helpers emitted bodies require. Public source admission remains a later slice. [[Native Wide Frame Bridge]].
+
+## Text slots (#515)
+
+A text slot now spells `frame->slots[i].text` instead of refusing. The strict
+translation check selects the text part and cell member when a program has
+text, and closes dependencies through [[Native Runtime Dependencies]].

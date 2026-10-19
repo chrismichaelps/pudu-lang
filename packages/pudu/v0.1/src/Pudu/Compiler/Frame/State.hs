@@ -67,7 +67,6 @@ fault at message = Build $ \_ -> Left (FrameFault at message)
 
 freshSlot :: Span -> Text -> CoreType -> Build FrameSlot
 freshSlot at name kind = case kind of
-  CoreTextType -> fault (Just at) "a materialized text value in scalar frame IR"
   CoreNeverType -> fault (Just at) "a payload slot for Never"
   _ -> do
     state <- getState

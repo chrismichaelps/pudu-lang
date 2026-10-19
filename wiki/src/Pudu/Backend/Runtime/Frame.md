@@ -57,3 +57,11 @@ Export frameTypes :: Bool -> [Text]. Add pudu_wide_int wide to pudu_cell only wh
 `pudu_cell` gains `uint64_t floating`. The union is still the larger of its
 members, so the narrow-layout check stays meaningful only for programs
 without wide integers; floats keep the narrow cell at eight bytes.
+
+## Text-aware frames (#515)
+
+`frameTypes` adds `pudu_text text` to the cell only for programs with text.
+`pudu_function` gains `texts`, `text_count` and `text_result`. A new frame
+retains the text it receives; freeing a frame, on return or unwind, releases
+its text slots; a returned text replaces (and releases) the destination's old
+value, or is released when the call has no destination.

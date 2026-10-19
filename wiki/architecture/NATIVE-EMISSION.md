@@ -19,7 +19,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
-| Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
+| Text and bytes | Partial (#515) | Owned Str values, literals, concatenation, comparison, display/show, interpolation, printing and Str entries match the interpreter; Str methods, Char, Bytes and print Result remain |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
@@ -207,3 +207,16 @@ groups pass Clang ASan/UBSan (GCC's UBSan runtime is not installed on this
 host); CLI parity holds for open and closed stdout under both compilers.
 Runtime revision is 8. Progress stays 4/14 (28%): BigInt, Decimal and the
 print Result entry keep their rows partial.
+
+## Owned text (#515)
+
+[[Native Text Runtime]] carries Str as a view over static or refcounted bytes.
+Stores build the new value before releasing the old, callee frames retain
+their text arguments, returned text hands its reference to the destination,
+and frames release their text slots on return and unwind. Text operators,
+display/show and Str entry rendering follow `textOperation`, `callDisplay`,
+`callShow` and `reportResult`. Method calls are next and must keep the
+evaluator's argument-before-receiver order (#514). Evidence:
+[[Backend Text Programs]] against answers and the interpreter, and
+[[Backend Text Leak Tests]] with counted heap blocks. Runtime revision 9.
+Progress stays 4/14 (28%).

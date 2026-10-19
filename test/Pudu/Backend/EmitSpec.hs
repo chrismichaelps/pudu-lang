@@ -223,7 +223,7 @@ testEntryOnly = do
       , "  return 0"
       , "}"
       , ""
-      , "fn other(value: Str) -> Str {"
+      , "fn other(value: Char) -> Char {"
       , "  return value"
       , "}"
       ]
@@ -243,7 +243,7 @@ testReachableFunctions = do
   compiled <- compileAndLower $ Text.unlines
     [ "module Reachable"
     , "fn second(flag: Bool) -> Bool { return !flag }"
-    , "fn unused(value: Str) -> Str { return value }"
+    , "fn unused(value: Char) -> Char { return value }"
     , "fn main() -> Int { return first(9, second(false)) }"
     , "fn first(value: Int, flag: Bool) -> Int {"
     , "  if second(flag) { return 0 }"
@@ -275,13 +275,10 @@ refusalCases =
   , ("unresolved inferred result", helperProgram "fn helper(value: Int) { return }" "{ helper(1)\n 0 }", "helper(value")
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
-  , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
+  , ("BigInt result", helperProgram "fn helper() -> BigInt { return 1 }" "{ helper()\n  0 }", "BigInt")
   , ("Char parameter", helperProgram "fn helper(value: Char) -> Int { return 1 }" "helper('x')", "Char")
-  , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
+  , ("Char result", helperProgram "fn helper() -> Char { return 'x' }" "{ helper()\n  0 }", "Char")
   , ("call to entry", statementProgram "main()", "main()\n")
-  , ("module display returning Str", Text.unlines
-      [ "module Refuse", "", "fn display(value: Int) -> Str { \"mine\" }", ""
-      , "fn main() -> Int {", "  print(display(5))", "  return 0", "}" ], "Str {")
   , ("trailing print result", Text.unlines
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
@@ -289,7 +286,7 @@ refusalCases =
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
-  , ("bindings of type Str", bindingProgram "var greeting = \"hello\"", "var greeting")
+  , ("character literals", bindingProgram "var letter = 'a'", "'a'")
   , ("match expressions", bindingProgram "var chosen = match 1 { case _ => 0 }", "match")
   , ("borrows", Text.unlines
       [ "module Refuse"

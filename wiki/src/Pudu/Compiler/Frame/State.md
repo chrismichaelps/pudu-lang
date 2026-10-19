@@ -45,3 +45,7 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 ## Floating slots (#512)
 
 `freshSlot` accepts `CoreFloatType`; only text and Never stay unrepresented.
+
+## Text slots (#515)
+
+`freshSlot` accepts `CoreTextType`; only Never has no slot.

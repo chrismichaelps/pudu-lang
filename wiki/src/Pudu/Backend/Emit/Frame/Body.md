@@ -50,3 +50,10 @@ Select wide_print_int for a 128-bit print slot through integerHelper; returns us
 
 `FramePrintSlot` on a float slot calls `pudu_print_float` and selects
 `print_float`. Returns write the `floating` cell member.
+
+## Text stores (#515)
+
+A store into a text slot computes the new reference, releases the old one and
+then assigns, so `s = s + t` reads `s` before letting it go. A text return
+retains the slot it returns, because the frame releases its slots afterwards.
+Printing a text slot calls `pudu_print_text`.

@@ -94,3 +94,10 @@ a Int`, and `~` uses `cannot apply ~ to a float`. `runtimeKind` answers
 Resolved Grill Log: dispatch mirrors `combine`/`floatOperation` exactly;
 mixed-width float pairs never reach lowering because the checker rejects them,
 and if one did it would refuse rather than compare numerically.
+
+## Text operators (#515)
+
+Two Str operands admit `+` (Str) and the six comparisons (Bool), as
+`textOperation` does. Any other accepted operator on two Str values traps
+with `unsupported operator X`; mixed operands and unary operators on Str trap
+with `cannot apply`, naming the operand kind `string` as `valueKind` does.

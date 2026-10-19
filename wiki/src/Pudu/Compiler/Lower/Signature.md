@@ -70,3 +70,7 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 Admit settled CoreUnitType parameters alongside Int/Bool through canonical UnitTypeValue projection. Keep the parameter slot and ordinary source arity; aliases use the same formed identity. Defaults, generic and unsupported signatures remain refused.
 
 Resolved Grill Log: preserve the single unit inhabitant and every effect without allocating a new representation. Reject void-valued C initializers, Result erasure and omitted argument evaluation. Nonempty tuples remain pending; #493 implements unit display/equality.
+
+## Text signatures (#515)
+
+Parameters and results admit `nativeValueType`, so Str crosses calls.

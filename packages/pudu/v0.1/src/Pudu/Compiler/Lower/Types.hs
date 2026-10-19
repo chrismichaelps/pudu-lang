@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
   ( LowerTypes, nativeTypes, lookupScheme, typeForSpan, formedCoreType
-  , nativeIntegerKind, nativeScalarType ) where
+  , nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -53,3 +53,8 @@ nativeScalarType (CoreFloatType _) = True
 nativeScalarType CoreBoolType = True
 nativeScalarType CoreUnitType = True
 nativeScalarType _ = False
+
+{-| What a native slot can hold: the scalars plus owned text. -}
+nativeValueType :: CoreType -> Bool
+nativeValueType CoreTextType = True
+nativeValueType other = nativeScalarType other

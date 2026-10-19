@@ -54,3 +54,9 @@ operators apply to floating slots; the slot type picks the helper.
 
 Resolved Grill Log: floating values are scalars in the frame ABI like
 integers and Bool, so no new instruction or terminator is needed.
+
+## Text values (#515)
+
+`FrameTextLiteral !Text`, `FrameDisplay !FrameSlot` and `FrameShow !FrameSlot`
+produce text. Concatenation and comparison use `FrameBinary` on text slots.
+Every text-producing value is a fresh reference; a store owns it.
