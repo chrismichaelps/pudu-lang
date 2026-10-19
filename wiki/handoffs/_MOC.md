@@ -194,3 +194,5 @@ tags: [moc, handoff]
 - [[Native Wide Frame Delivery]] — 128-bit frame bridge after process-policy repair (#506).
 
 - [[Native Wide Source Delivery]] — source admission after wide-frame validation (#507).
+
+- [[Native Floating Natural Delivery]] — checked formatter scratch (#508).

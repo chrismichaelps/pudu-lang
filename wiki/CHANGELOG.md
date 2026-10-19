@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Floating formatter scratch (#508)
+
+- [[Native Floating Point]] anchors exact future output to the locked GHC digit/layout policy. [[Native Floating Natural Kernel]] adds checked 1280-bit scratch with atomic failures and alias-safe operations; [[Native Floating Natural Tests]] passes 6,780 independent Integer rows and seven minimal helper roots under Clang/GCC 15 and ASan/UBSan. All 19 clean gates/680 groups pass. This is neither Pudu BigInt nor admitted floating source; progress stays 4/14 (28%).
+
 ## 2026-10-18 — Wide source admission (#507)
 
 - [[Native Wide Source Admission]] enables canonical Int128/UInt128 through existing settled facts. Independent source matrices cover eight wide success programs/969 expected output lines and 24 failure programs, including mixed-width snapshots, cross-word deferred policies, recursive depth and unit entries. Both evaluators match native execution; 45 real CLI executions and four byte-identical static E3018 refusals pass. GCC 15 and ASan/UBSan source matrices also pass; all 19 clean gates/678 groups and 351 strict C11 body translations pass; numeric families remain Partial and progress stays 4/14 (28%).
