@@ -63,3 +63,5 @@ aliases: [Backend Module Map]
 - [[Native Wide Frame Tests]] — exact wide frame execution (#506).
 
 - [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — exact formatting prerequisite (#508).
+
+- [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] — exact decimal text (#509).

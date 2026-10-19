@@ -254,4 +254,4 @@ tags: [moc, module]
 
 - [[Native Floating Natural Kernel]] · [[Native Floating Natural Tests]] — bounded formatter arithmetic (#508).
 
-- [[Native Floating Notices]] — upstream formatter notice artifact (#509).
+- [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Notices]].

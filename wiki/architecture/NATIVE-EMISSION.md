@@ -175,3 +175,9 @@ rows and seven minimal roots passing both C compilers/sanitizers; all 19 clean
 gates/680 groups pass. Exact
 formatting, typed arithmetic and source integration remain pending; this is
 not BigInt support and does not change completed-area counts.
+
+[[Native Binary64 Formatter]] now matches locked GHC show bytes across 63,661
+unique encodings and exact minimal helper closures under Clang/GCC/sanitizers
+(#509, all 20 clean gates/682 groups pass). Source/binary archives retain the adapted
+code's notices. This raw-bit helper performs no IO and does not admit floating
+source; typed arithmetic and Core/frame/source integration remain required.

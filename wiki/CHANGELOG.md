@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Exact binary64 text (#509, formatter partition)
+
+- [[Native Binary64 Formatter]] preserves locked GHC digit/layout decisions for 63,661 unique raw encodings, with boundary canaries, exact notices and three minimal roots. Clang/GCC 15 and ASan/UBSan pass; real source/binary notices, checksum/signature and extracted compiler/native/SQLite checks pass. All 20 clean gates/682 groups and 351 strict C11 body translations pass. Floating arithmetic/Core/frame/source admission remains open, with progress unchanged at 4/14 (28%).
+
 ## 2026-10-18 — Floating notice packaging (#509, first partition)
 
 - [[Native Floating Notices]] retains upstream attribution/terms in source metadata and archives. [[Package Binary Tests]] covers exact copies, older-package absence and symlink/nonregular refusal, and now runs in CI/release/local gates. Seven focused tests and prototype source/binary archive, checksum/signature, extracted compiler/native UInt128 and SQLite checks pass. Exact formatter delivery and clean final-stack validation remain required; this partition does not admit floating source.

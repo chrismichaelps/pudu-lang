@@ -198,3 +198,5 @@ tags: [moc, handoff]
 - [[Native Floating Natural Delivery]] — checked formatter scratch (#508).
 
 - [[Native Floating Notice Delivery]] — archive/notice partition (#509).
+
+- [[Native Binary64 Formatter Delivery]] — exact raw-bit formatter and distribution notices (#509).

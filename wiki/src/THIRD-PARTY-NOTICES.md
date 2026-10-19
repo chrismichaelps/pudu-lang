@@ -13,12 +13,13 @@ in Cabal license-files so source archives retain it. [[Package Binary]] copies
 it when present, rejecting unowned/nonregular notice inputs; older packages
 without it retain their existing layout.
 
-The following formatter partition must embed the same notice in adapted C
-without runtime file lookup and verify equality against this artifact. This
-notice/packaging partition prepares that boundary; it does not admit floating
-source or claim formatter completion. Resolved Grill Log: preserving the
-mathematical algorithm does not remove its upstream notice terms.
+The formatter embeds the same notice in adapted C without runtime file lookup.
+[[Native Binary64 Formatter Tests]] rejects drift from this artifact. Real
+source/binary archives retain exact bytes, with extracted compiler/native and
+SQLite checks passing. This does not admit floating source or complete numeric
+coverage. Resolved Grill Log: retain upstream terms independently of project
+licensing and preserve their artifact/emitted-source equality.
 
 ## Referenced by
 
-[[Native Floating Point]] · [[Package Binary]] · [[Package Binary Tests]] · [[Native Floating Notice Delivery]]
+[[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Point]] · [[Package Binary]] · [[Package Binary Tests]] · [[Native Floating Notice Delivery]]
