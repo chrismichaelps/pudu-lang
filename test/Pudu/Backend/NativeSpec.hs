@@ -18,6 +18,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Compiler.Frame (lowerFrames)
+import Pudu.Backend.FloatPrograms (floatSuccessPrograms, floatRefusalPrograms)
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -87,6 +88,8 @@ backendNativeProperties =
   [ ("native execution matches the interpreter on success programs", testSuccessConformance)
   , ("native integer operators match mathematical and interpreter results", testIntegerConformance)
   , ("native integer failures retain exact interpreter refusals", testIntegerRefusals)
+  , ("native floats match IEEE answers and the interpreter", testFloatConformance)
+  , ("native float operator failures retain interpreter refusals", testFloatRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)
@@ -235,6 +238,14 @@ testIntegerConformance :: IO Property
 testIntegerConformance = conjoin <$> mapM run integerSuccessPrograms
  where
   run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testFloatConformance :: IO Property
+testFloatConformance = conjoin <$> mapM run floatSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testFloatRefusals :: IO Property
+testFloatRefusals = conjoin <$> mapM (uncurry conformance) floatRefusalPrograms
 
 testIntegerRefusals :: IO Property
 testIntegerRefusals = conjoin <$> mapM (uncurry conformance) integerRefusalPrograms

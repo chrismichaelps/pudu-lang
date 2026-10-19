@@ -218,3 +218,7 @@ Register [[Native Floating Runtime]], [[Native Runtime Dependencies]] and
 [[Native Floating Runtime Tests]] in the appropriate components with existing
 dependencies. Resolved Grill Log: execute actual catalogue/output evidence
 without changing source admission or the represented runtime ABI.
+
+## Float programs (#512)
+
+Register Pudu.Backend.FloatPrograms in other-modules beside the integer corpora; no new dependency.

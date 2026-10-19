@@ -41,3 +41,7 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]
+
+## Floating slots (#512)
+
+`freshSlot` accepts `CoreFloatType`; only text and Never stay unrepresented.

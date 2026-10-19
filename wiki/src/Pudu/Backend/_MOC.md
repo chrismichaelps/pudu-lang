@@ -47,6 +47,7 @@ aliases: [Backend Module Map]
 - [[Backend Control Programs]] — differential loop-control, divergence and transfer cases (#489).
 
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — defined C11 bit patterns, wrapping, saturation and checked shifts.
+- [[Backend Float Programs]] — native Float32/Float64 source conformance.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

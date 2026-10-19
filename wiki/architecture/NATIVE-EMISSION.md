@@ -17,14 +17,14 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
-| Entry result reporting | Partial | Admitted integer statuses/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
-| Complete numeric families | Partial (#495, #497, #500, #507) | Int128/UInt128 source admission is validated; BigInt, floats and Decimal remain |
+| Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
+| Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
-| Accepted operations with runtime refusals | Partial (#494) | Represented Unit/Bool operators now retain E7001; remaining runtime types/operators still need equivalent coverage |
+| Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
@@ -191,3 +191,19 @@ and full numeric-family coverage remain required. Progress stays 4/14 (28%).
 and exact output (#511, all 20 clean gates/689 groups pass). Closed-pipe and counted IO
 checks pass both compilers/sanitizers. Core/frame/source transport remains open;
 this prerequisite does not change the completed-area count.
+
+## Floating source admission (#512)
+
+Float32/Float64 values now pass through Core, frames and C as raw binary64
+encodings in a `floating` cell. Literals carry the bits FloatLiteral parsed;
+each `+ - * /` is one helper call that rounds, and narrows for Float32, before
+the next operation; comparisons use the IEEE predicates; negation flips the
+sign bit, NaN included. Other accepted operators trap with the evaluator's
+E7001 wording after their operands run. Float and Bool entry results print
+their value and exit zero, and stay silent on a closed pipe, as `pudu run`
+does. Evidence: the float corpus matches independent IEEE answers and the
+interpreter; all 42 native groups pass under Clang and GCC 15; the float
+groups pass Clang ASan/UBSan (GCC's UBSan runtime is not installed on this
+host); CLI parity holds for open and closed stdout under both compilers.
+Runtime revision is 8. Progress stays 4/14 (28%): BigInt, Decimal and the
+print Result entry keep their rows partial.

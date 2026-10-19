@@ -45,3 +45,12 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]
+
+## Floating cells (#512)
+
+`FrameFloatLiteral !FloatWidth !Word64` stores an encoding into a slot whose
+type is `CoreFloatType`. Unary negation and the existing binary scalar
+operators apply to floating slots; the slot type picks the helper.
+
+Resolved Grill Log: floating values are scalars in the frame ABI like
+integers and Bool, so no new instruction or terminator is needed.

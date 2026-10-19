@@ -136,7 +136,7 @@ coreTypeName :: CoreType -> Text
 
 ## Dependencies and consumers
 
-Requires [[Source]] spans and [[Integer Literal]] kinds only. Consumed by
+Requires [[Source]] spans, [[Integer Literal]] kinds and [[Float Literal]] widths only. Consumed by
 [[Compiler Lower]] (produces it) and [[Backend Emit]] (consumes it). It
 imports no compiler, evaluator, or frontend module; the backend boundary of
 [[ADR-0002-compiler-pipeline]] passes through it.
@@ -205,3 +205,19 @@ implements their private carrier; operation policies still check/wrap/clamp at
 the interpreter's boundaries. No Core type vocabulary or source kind changes.
 Resolved Grill Log: carry exact values through Core and keep target encoding
 in the backend, rather than narrowing a literal while constructing the IR.
+
+## Floating values (#512)
+
+Add `CoreFloatType !FloatWidth` and `CoreFloatLiteral !FloatWidth !Word64`.
+The payload is the binary64 encoding [[Float Literal]] produced while parsing,
+already narrowed through binary32 for `f32`, so nothing downstream reads
+decimal text again. `coreTypeName` answers `Float32`/`Float64`. Arithmetic
+reuses `CoreAdd`/`CoreSubtract`/`CoreMultiply`/`CoreDivide`, comparisons reuse
+the six ordering/equality operators and negation reuses `CoreNegate`; the
+operand type selects the floating helper, as it already selects the integer
+kind. No new operator vocabulary.
+
+Resolved Grill Log: carry bits rather than `Double` so Core equality is
+bit equality (NaN payloads and signed zero stay distinct) and so the C side
+writes a hexadecimal constant instead of a second decimal conversion.
+_Rejected:_ a `Double` payload, and separate floating operator constructors.

@@ -26,6 +26,8 @@ module Pudu.Core
   ) where
 
 import Data.Text (Text)
+import Data.Word (Word64)
+import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
 import Pudu.Source (Span)
 
@@ -118,6 +120,8 @@ data CoreExpression = CoreExpression
     sequences the arguments itself. -}
 data CoreExpressionShape
   = CoreIntegerLiteral !IntegerKind !Integer
+  {-| The binary64 encoding the literal parsed to; Float32 is already narrowed. -}
+  | CoreFloatLiteral !FloatWidth !Word64
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
   | CoreReadLocal !CoreLocal
@@ -169,6 +173,7 @@ data CoreBinaryOperator
     surface Result must never escape as a Core unit value. -}
 data CoreType
   = CoreIntegerType !IntegerKind
+  | CoreFloatType !FloatWidth
   | CoreBoolType
   | CoreTextType
   | CoreUnitType
@@ -178,6 +183,7 @@ data CoreType
 coreTypeName :: CoreType -> Text
 coreTypeName coreType = case coreType of
   CoreIntegerType kind -> integerKindName kind
+  CoreFloatType width -> floatWidthType width
   CoreBoolType -> "Bool"
   CoreTextType -> "Str"
   CoreUnitType -> "Unit"

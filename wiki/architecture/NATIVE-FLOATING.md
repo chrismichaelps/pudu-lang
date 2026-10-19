@@ -99,3 +99,16 @@ exact output through [[Native Runtime Dependencies]]. Preserve ignored print
 failure continuation and fatal diagnostic process policy. Raw bits need no
 host floating assertions. Resolved Grill Log: actual catalogue integration
 precedes Core/frame/source admission and does not complete numeric coverage.
+
+## Source admission (#512)
+
+[[Pudu Core]] carries `CoreFloatType`/`CoreFloatLiteral` bits,
+[[Compiler Lower Types]] forms the canonical widths, and the scalar lowering
+admits the operators `floatOperation` implements while trapping the rest with
+its wording. Frames hold the bits in a `floating` cell and the emitter calls
+the #510 helpers once per operation. Entry floats print through
+`pudu_print_float` and exit zero. [[Backend Float Programs]] holds the source
+evidence.
+
+Resolved Grill Log: no second literal conversion, no fused or reassociated
+arithmetic, and no integer comparator for floats.

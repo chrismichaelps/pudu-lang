@@ -237,6 +237,7 @@ tags: [moc, module]
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
 
 - [[Backend Runtime Integer]] · [[Backend Integer Programs]] — portable platform Int operations and independent mathematical/differential evidence.
+- [[Backend Float Programs]] — Float32/Float64 source programs with IEEE answers and interpreter refusals.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

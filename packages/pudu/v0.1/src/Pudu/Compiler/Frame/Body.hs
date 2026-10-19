@@ -59,6 +59,7 @@ lowerStatement (CoreStatement at shape) = case shape of
 lowerExpression :: CoreExpression -> Build Flow
 lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreIntegerLiteral integerKind number -> value (FrameIntegerLiteral integerKind number)
+  CoreFloatLiteral width bits -> value (FrameFloatLiteral width bits)
   CoreBoolLiteral boolean -> value (FrameBoolLiteral boolean)
   CoreTextLiteral _ -> pure (Completed Nothing)
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
@@ -175,6 +176,7 @@ effects (expression : rest) = do
 resultSlot :: Span -> CoreType -> Build (Maybe FrameSlot)
 resultSlot at kind = case kind of
   CoreIntegerType _ -> Just <$> freshSlot at "$result" kind
+  CoreFloatType _ -> Just <$> freshSlot at "$result" kind
   CoreBoolType -> Just <$> freshSlot at "$result" kind
   CoreUnitType -> pure Nothing
   CoreNeverType -> pure Nothing

@@ -94,3 +94,14 @@ Consumed by [[Compiler Lower]], [[Compiler Lower State]],
 ## Wide source admission (#507)
 
 Admit SignedKind 128 and UnsignedKind 128 through the existing whitelist after #506 validation. Preserve canonical NominalId Nothing with no arguments, settled facts, platform/fixed identity and all other refusals. Resolved Grill Log: no spelling-based matching, re-inference, interpreter change or additional numeric-family admission. [[Native Wide Source Admission]].
+
+## Floating forms (#512)
+
+`formedCoreType` maps the canonical builtin nominals `Float32` and `Float64`
+to `CoreFloatType`; the `Float` alias already resolves to `Float64` during
+type formation, so an unresolved alias name is not accepted here.
+`nativeScalarType` admits both widths, which opens parameters, results,
+bindings and loop break values without further changes.
+
+Resolved Grill Log: accept only the settled canonical names the checker
+publishes. _Rejected:_ matching the alias spelling as a second route.

@@ -7,6 +7,8 @@ module Pudu.Core.Frame
   ) where
 
 import Data.Text (Text)
+import Data.Word (Word64)
+import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Core (CoreBinaryOperator (..), CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
@@ -71,6 +73,7 @@ data FrameValue = FrameValue
 
 data FrameValueShape
   = FrameIntegerLiteral !IntegerKind !Integer
+  | FrameFloatLiteral !FloatWidth !Word64
   | FrameBoolLiteral !Bool
   | FrameUnitLiteral
   | FrameRead !FrameSlot

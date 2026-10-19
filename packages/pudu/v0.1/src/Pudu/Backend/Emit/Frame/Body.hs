@@ -52,6 +52,7 @@ instruction (state, needs) operation = case operation of
     value <- slotText slot
     case frameSlotType slot of
       CoreIntegerType _ -> printed (integerHelper (frameSlotType slot) "print_int") value
+      CoreFloatType _ -> printed "print_float" value
       CoreBoolType -> printed "print_bool" value
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")

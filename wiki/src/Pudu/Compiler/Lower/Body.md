@@ -224,3 +224,15 @@ parameter and keeps a callee used only by that impossible call out of emission.
 The ordinary signature checks before arguments remain unchanged.
 Resolved Grill Log: Never carries no C argument value. Sequence its effects,
 then preserve the transfer; do not invent a numeric payload or unused wrapper.
+
+## Floating literals and entry results (#512)
+
+A `FloatValue` literal goes through `parseFloatLiteral` and lowers to
+`CoreFloatLiteral` with `castDoubleToWord64` of the parsed value. A literal the
+checker accepted always parses and fits; anything else refuses. The entry now
+also admits `Bool` and either float width as its result: `pudu run` renders
+those values followed by a newline and exits 0, unlike integer statuses.
+
+Resolved Grill Log: entry rendering follows `reportResult`, not the integer
+status path. A print-valued entry (`Result[(), Str]`) still refuses; its
+failure text needs its own slice.

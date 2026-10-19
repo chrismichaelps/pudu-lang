@@ -12,15 +12,20 @@ tags: [module, backend, codegen]
 
 ## Purpose
 
-Own pure runtime-part selection, function signatures and wrappers, and C scalar/name spelling.
+Own the integer spelling the frame emitter shares: helper names for wide kinds,
+C descriptors for an integer kind, exact integer literals and zero values.
 
 ## Interface
 
-Exports runtimeNeeds, entryResultType, functionPrototype, wrapperFor, functionSymbol, functionSymbolByName, wrapperSymbol, returnTypeFor, integerKindOfExpression, integerLiteralText, declaration, declarationFor, localSymbol, and comment.
+Exports isWideInteger, integerHelper, zeroValue, integerKindText and
+integerLiteralText.
 
 ## Algorithm and invariants
 
-The runtime walk unions every operation requirement. All reachable non-entry functions receive wrappers; reachability guarantees each is called. Names encode every Unicode scalar as hexadecimal followed by an underscore, providing an injective ASCII spelling even for underscores and non-ASCII names. Integer constants preserve exact sign and magnitude through UINT64_C compound literals. Wrappers check depth before the call and restore it after every normal result.
+Integer constants preserve exact sign and magnitude through UINT64_C compound
+literals; wide values split into two 64-bit words plus a sign flag. A kind
+without a 1..64-bit width and bounds has no narrow descriptor, and callers
+refuse rather than guess one.
 
 ## Negative logic
 
@@ -29,7 +34,7 @@ Only lowered Core IR reaches this boundary. Source text never becomes executable
 
 ## Dependencies and consumers
 
-Uses [[Pudu Core]], [[Integer Literal]], and [[Backend Emit State]]. Consumed by [[Backend Emit]].
+Uses [[Pudu Core]], [[Integer Literal]], and [[Backend Emit State]]. Consumed by [[Backend Frame Program]], [[Backend Frame Bodies]] and [[Backend Frame Values]].
 
 ## Grill Log
 
@@ -90,3 +95,13 @@ Export isWideInteger and integerHelper. Width 128 selects wide_ helpers, pudu_wi
 Use [[Native Runtime Dependencies]] for the existing cycle-safe closure walk.
 No selection/representation policy changes here yet. Resolved Grill Log: retain
 integer behavior while enabling actual floating prerequisites in later emission.
+
+## Unused direct-emitter helpers removed (#512)
+
+runtimeNeeds, entryResultType, prototypes, depth wrappers, function and local
+symbols, declarations and comments belonged to the emitter that frames
+replaced; nothing imported them. They are deleted rather than extended with
+floating cases. The earlier sections record their history.
+
+Resolved Grill Log: keep only what the frame emitter calls. _Rejected:_
+growing dead code so a pattern match stays total.

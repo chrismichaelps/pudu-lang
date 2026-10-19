@@ -17,10 +17,14 @@ import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
   , Function (..), FunctionBody (..), Literal (..), Located (..), Statement (..) )
+import GHC.Float (castDoubleToWord64)
+import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer or unit; a body that never returns uses the unit
-    ABI. Print's Result carrier must not escape through the entry result. -}
+{-| The entry carries an admitted integer, Bool, float or unit; a body that never returns
+    uses the unit ABI. Integers become the exit status and Bool/float values are printed,
+    the same split `pudu run` makes. Print's Result carrier must not escape through the
+    entry result. -}
 lowerEntryBody :: Located Function -> LowerState -> (LowerState, Maybe CoreFunction)
 lowerEntryBody located state
   | not (null (functionParameters function)) =
@@ -32,6 +36,8 @@ lowerEntryBody located state
           let (after, coreBlock, resultType) = lowerBlock state block
            in case maybe resultType id (lowerFunctionResult after) of
                 kind@(CoreIntegerType integerKind) | nativeIntegerKind integerKind -> built after coreBlock kind
+                kind@(CoreFloatType _) -> built after coreBlock kind
+                CoreBoolType -> built after coreBlock CoreBoolType
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -249,7 +255,8 @@ allowedResultType declared operand = case declared of
   Just expected -> operand == expected || operand == CoreNeverType
   Nothing -> case operand of
     CoreIntegerType kind -> nativeIntegerKind kind
-    _ -> operand `elem` [CoreUnitType, CoreNeverType]
+    CoreFloatType _ -> True
+    _ -> operand `elem` [CoreBoolType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
@@ -264,7 +271,10 @@ lowerExpression state (Located spanValue expression) = case expression of
     BoolValue flag -> value (CoreBoolLiteral flag) CoreBoolType
     StringValue text -> value (CoreTextLiteral text) CoreTextType
     CharValue _ -> halt spanValue "character literals" state
-    FloatValue _ -> halt spanValue "floating-point values" state
+    FloatValue text -> case parseFloatLiteral text of
+      Just ParsedFloat{parsedFloatValue, parsedFloatWidth, parsedFloatFits = True} ->
+        value (CoreFloatLiteral parsedFloatWidth (castDoubleToWord64 parsedFloatValue)) (CoreFloatType parsedFloatWidth)
+      _ -> halt spanValue "a floating literal outside its width" state
     DecimalValue _ -> halt spanValue "decimal values" state
     NullValue -> halt spanValue "null" state
   NameExpression (name :| []) -> case lookupLocal state name of

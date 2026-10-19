@@ -40,3 +40,15 @@ Only emitted values select helper roots; caller closes dependencies transitively
 ## Wide frame bridge (#506)
 
 Use wide cells for 128-bit kinds and typed helper names for operations and selected roots. Comparisons choose the left integer operand kind, because their result is Bool. Shift counts remain platform Int cells. Resolved Grill Log: do not prefix comparison helpers twice, narrow deferred boundaries, or change eager operand snapshots. [[Native Wide Frame Bridge]].
+
+## Floating operations (#512)
+
+`cellMember` answers `floating` for both widths. Literals are written as
+`UINT64_C(0x...)`. Negation is `pudu_float_neg`; `+ - * /` call
+`pudu_float_add/sub/mul/div(left, right, narrow)` with `narrow` 1 for
+Float32; comparisons call `pudu_float_eq/ne/lt/le/gt/ge`. Integer-only
+operators on a float slot are a frame fault, since lowering never produces
+them.
+
+Resolved Grill Log: one helper call per Pudu operation keeps the evaluator's
+round-after-every-operation rule and blocks contraction across operations.
