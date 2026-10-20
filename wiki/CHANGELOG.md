@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Total float order for keys and aggregates (#522)
+
+- NaN now equals NaN and sorts after every number in `compareValues`. A NaN tuple member no longer makes a tuple both less and greater than another, and a map keyed by such tuples keeps one entry per key. Scalar float operators keep their IEEE answers. [[Eval Float Order Tests]]; see [[architecture/SEMANTICS]].
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
