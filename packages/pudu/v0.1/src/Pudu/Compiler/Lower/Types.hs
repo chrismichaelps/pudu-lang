@@ -37,6 +37,9 @@ formedCoreType value
   | value == stringType = Just CoreTextType
   | value == charType = Just CoreCharType
   | otherwise = case value of
+      TupleTypeValue members@(_ : _ : _) -> do
+        formed <- traverse formedCoreType members
+        if all nativeValueType formed then Just (CoreTupleType formed) else Nothing
       UnitTypeValue -> Just CoreUnitType
       NeverType -> Just CoreNeverType
       _ -> Nothing
@@ -56,7 +59,8 @@ nativeScalarType CoreCharType = True
 nativeScalarType CoreUnitType = True
 nativeScalarType _ = False
 
-{-| What a native slot can hold: the scalars plus owned text. -}
+{-| What a native slot can hold: the scalars plus owned text and tuples. -}
 nativeValueType :: CoreType -> Bool
 nativeValueType CoreTextType = True
+nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValueType members
 nativeValueType other = nativeScalarType other

@@ -25,6 +25,7 @@ module Pudu.Backend.Runtime
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeParts)
 import Pudu.Backend.Runtime.Char (charRuntimeParts)
 import Pudu.Backend.Runtime.Float (floatRuntimeParts)
 import Pudu.Backend.Runtime.Integer (integerRuntimeParts)
@@ -37,7 +38,7 @@ import Pudu.Diagnostic.Host (memoryFailureMessage)
 {-| The runtime contract revision baked into every generated program's header
     comment. It changes only when the runtime's behaviour or interface does. -}
 runtimeRevision :: Text
-runtimeRevision = "10"
+runtimeRevision = "11"
 
 {-| @Backend.Runtime.Part — one named, self-contained piece of the runtime.
 
@@ -63,7 +64,7 @@ runtimeParts =
   , RuntimePart "fail" failLines
   , RuntimePart "memory_failure" memoryFailureLines
   , RuntimePart "call_depth" callDepthLines
-  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> charRuntimeParts) <>
+  ] <> map (uncurry RuntimePart) (integerRuntimeParts <> floatRuntimeParts <> textRuntimeParts <> textMethodRuntimeParts <> textCaseRuntimeParts <> charRuntimeParts <> aggregateRuntimeParts) <>
   [ RuntimePart "print_int" printIntLines
   , RuntimePart "print_bool" printBoolLines
   , RuntimePart "print_str" printStrLines

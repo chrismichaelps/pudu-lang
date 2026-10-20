@@ -62,3 +62,9 @@ Printing a text slot calls `pudu_print_text`.
 
 `FramePrintSlot` on a Char slot (the fused `print(display(c))`) calls
 `pudu_print_char`.
+
+## Owned stores and returns (#521)
+
+A store into any owned slot (text or tuple) builds the new value, releases the
+old one and assigns. Returns retain owned results. Printing a tuple slot shows,
+prints and releases the text.

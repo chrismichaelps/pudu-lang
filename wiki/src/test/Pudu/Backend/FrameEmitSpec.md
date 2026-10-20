@@ -45,3 +45,7 @@ Use production frameTypes and frameUsesWideCells instead of a duplicated narrow-
 A text slot now spells `frame->slots[i].text` instead of refusing. The strict
 translation check selects the text part and cell member when a program has
 text, and closes dependencies through [[Native Runtime Dependencies]].
+
+## Box flag (#521)
+
+The body check passes `False` for boxes: its programs hold no tuples.

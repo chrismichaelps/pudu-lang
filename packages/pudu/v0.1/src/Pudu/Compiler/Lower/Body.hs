@@ -14,6 +14,7 @@ import Pudu.Compiler.Lower.State
   , bindLocal, halt, lookupLocal, refuse, refused )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
+import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
@@ -22,7 +23,7 @@ import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer, Bool, float, Str, Char or unit; a body that never
+{-| The entry carries an admitted integer, Bool, float, Str, Char, tuple or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
     printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
     entry result. -}
@@ -41,6 +42,7 @@ lowerEntryBody located state
                 CoreBoolType -> built after coreBlock CoreBoolType
                 CoreTextType -> built after coreBlock CoreTextType
                 CoreCharType -> built after coreBlock CoreCharType
+                kind@(CoreTupleType _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -138,9 +140,15 @@ foldStatements :: LowerState -> [Located Statement] -> (LowerState, [CoreStateme
 foldStatements state = go state []
   where
     go current collected [] = (current, reverse collected, False)
-    go current collected (one : rest) = case lowerStatement current one of
-      (after, Just statement) -> go after (statement : collected) rest
-      (after, Nothing) -> (after, reverse collected, True)
+    go current collected (one@(Located statementSpan statement) : rest) = case statement of
+      LetPatternStatement kind pattern annotation subject
+        | kind == CompileTime -> (refuse statementSpan "comptime bindings" current, reverse collected, True)
+        | otherwise -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
+            (after, Just statements) -> go after (reverse statements <> collected) rest
+            (after, Nothing) -> (after, reverse collected, True)
+      _ -> case lowerStatement current one of
+        (after, Just lowered) -> go after (lowered : collected) rest
+        (after, Nothing) -> (after, reverse collected, True)
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
@@ -259,6 +267,7 @@ allowedResultType declared operand = case declared of
   Nothing -> case operand of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
+    CoreTupleType _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -313,11 +322,12 @@ lowerExpression state (Located spanValue expression) = case expression of
     lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression{} -> halt spanValue "this call" state
   MemberExpression{} -> halt spanValue "member access" state
-  IndexExpression{} -> halt spanValue "indexing" state
+  IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression{} -> halt spanValue "the try operator" state
   AwaitExpression{} -> halt spanValue "await" state
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
+  TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
   TupleExpression{} -> halt spanValue "tuples" state
   ArrayExpression{} -> halt spanValue "arrays" state
   SetExpression{} -> halt spanValue "sets" state

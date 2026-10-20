@@ -105,3 +105,7 @@ floating cases. The earlier sections record their history.
 
 Resolved Grill Log: keep only what the frame emitter calls. _Rejected:_
 growing dead code so a pattern match stays total.
+
+## Tuples (#521)
+
+`zeroValue` answers `NULL` for a tuple box.

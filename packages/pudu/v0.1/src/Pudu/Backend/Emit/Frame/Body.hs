@@ -7,6 +7,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import Pudu.Backend.Emit.Aggregate (cType, ownedType, released, retained, tupleHelper, tupleNeed)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
   ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textOfInt )
@@ -45,11 +46,12 @@ instruction (state, needs) operation = case operation of
   FrameStore target value -> do
     destination <- slotText target
     (after, expression, selected) <- frameValue state value
-    let stored
-          -- The new text is built before the old one goes, since it may read it.
-          | frameSlotType target == CoreTextType =
-              "      { pudu_text pudu_next = " <> expression <> "; pudu_text_release(" <> destination
-                <> "); " <> destination <> " = pudu_next; }"
+    let kind = frameSlotType target
+        stored
+          -- The new value is built before the old one goes, since it may read it.
+          | ownedType kind =
+              "      { " <> cType kind <> " pudu_next = " <> expression <> "; " <> released kind destination
+                <> " " <> destination <> " = pudu_next; }"
           | otherwise = "      " <> destination <> " = " <> expression <> ";"
     pure (line after stored, Set.union needs selected)
   FramePrintLiteral _ text -> printed "print_str" (cString text <> ", " <> textOfInt (cStringBytes text))
@@ -62,6 +64,10 @@ instruction (state, needs) operation = case operation of
       CoreBoolType -> printed "print_bool" value
       CoreTextType -> printed "print_text" value
       CoreCharType -> printed "print_char" value
+      kind@(CoreTupleType _) -> Right
+        ( line state ("      { pudu_text pudu_shown = " <> tupleHelper "show" kind <> "(" <> value
+            <> "); pudu_print_text(pudu_shown); pudu_text_release(pudu_shown); }")
+        , Set.union needs (Set.fromList [tupleNeed "show" kind, "print_text"]) )
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")
   where
@@ -92,17 +98,18 @@ terminator identities function (state, needs) ending = case ending of
             <> foldMap id target <> ", .call_site = &pudu_sites[" <> textOfInt index <> "]};"
       pure (line afterResume result, Set.union needs (Set.fromList ["site", "colored", "fail"]))
   FrameReturn _ payload -> do
-    value <- case frameFunctionResult function of
-      CoreUnitType -> Right ""
-      CoreNeverType -> Right ""
+    result <- case frameFunctionResult function of
+      CoreUnitType -> Right Nothing
+      CoreNeverType -> Right Nothing
       resultType -> case cellMember resultType of
         Nothing -> Left (FrameFault Nothing "an unrepresented frame return type")
         Just member -> do
           expression <- maybe (Right (zeroValue resultType)) slotText payload
-          -- The frame releases its slots after this, so a returned text keeps its own reference.
-          let returned = if resultType == CoreTextType then "pudu_text_retain(" <> expression <> ")" else expression
-          pure (", .result = {." <> member <> " = " <> returned <> "}")
-    pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> value <> "};"), needs)
+          -- The frame releases its slots after this, so the result keeps its own reference.
+          let (returned, wanted) = retained resultType expression
+          pure (Just (", .result = {." <> member <> " = " <> returned <> "}", wanted))
+    let (field, extra) = maybe ("", []) id result
+    pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> field <> "};"), Set.union needs (Set.fromList extra))
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message
      in pure (linesInto after

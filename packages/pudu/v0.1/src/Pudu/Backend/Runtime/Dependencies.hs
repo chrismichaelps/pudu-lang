@@ -2,6 +2,7 @@
 module Pudu.Backend.Runtime.Dependencies (runtimeDependencies) where
 
 import Data.Text (Text)
+import Pudu.Backend.Runtime.Aggregate (aggregateRuntimeDependencies)
 import Pudu.Backend.Runtime.Char (charRuntimeDependencies)
 import Pudu.Backend.Runtime.Float (floatRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
@@ -13,3 +14,4 @@ runtimeDependencies :: Text -> [Text]
 runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name
   <> textRuntimeDependencies name <> textMethodRuntimeDependencies name
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
+  <> aggregateRuntimeDependencies name

@@ -242,6 +242,7 @@ tags: [moc, module]
 - [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 - [[Native Text Case]] · [[Backend Text Case Tests]] — trim and case mapping from the linked Data.Text.
 - [[Native Char Runtime]] · [[Backend Char Programs]] — Char values, code, toText and charAt.
+- [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — boxed tuples.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

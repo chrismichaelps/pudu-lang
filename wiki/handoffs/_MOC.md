@@ -216,3 +216,5 @@ tags: [moc, handoff]
 - [[Native Text Case Delivery]] — native trim and case mapping (#517).
 
 - [[Native Char Delivery]] — native Char values and charAt (#518).
+
+- [[Native Tuple Delivery]] — boxed native tuples (#521).

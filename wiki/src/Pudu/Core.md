@@ -253,3 +253,9 @@ native implements exist.
 `CoreCharCode !CoreExpression` is `c.code()`, and `TextCharAt` is
 `Str.charAt`, which answers Char. `c.toText()` needs no node: it is
 `CoreDisplay`, exactly as `CharToText` and `callDisplay` agree.
+
+## Tuples (#521)
+
+`CoreTupleType ![CoreType]` has at least two members. `CoreTuple` carries the
+members in source order and `CoreTupleIndex !Int` a position the checker has
+bounded.

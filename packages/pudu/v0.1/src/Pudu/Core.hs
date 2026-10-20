@@ -27,6 +27,7 @@ module Pudu.Core
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth, floatWidthType)
 import Pudu.IntegerLiteral (IntegerKind, integerKindName)
@@ -137,6 +138,10 @@ data CoreExpressionShape
   | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
   {-| `c.code()`: the scalar as an Int. -}
   | CoreCharCode !CoreExpression
+  {-| Members in source order, which is the order they run. -}
+  | CoreTuple ![CoreExpression]
+  {-| A literal position the checker has already bounded. -}
+  | CoreTupleIndex !Int !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
@@ -199,7 +204,7 @@ data CoreBinaryOperator
   | CoreOr
   deriving stock (Eq, Show)
 
-{-| Scalar runtime types and divergence. CorePrint is effect-only; its
+{-| Runtime types and divergence. CorePrint is effect-only; its
     surface Result must never escape as a Core unit value. -}
 data CoreType
   = CoreIntegerType !IntegerKind
@@ -207,6 +212,7 @@ data CoreType
   | CoreBoolType
   | CoreTextType
   | CoreCharType
+  | CoreTupleType ![CoreType]
   | CoreUnitType
   | CoreNeverType
   deriving stock (Eq, Show)
@@ -218,5 +224,6 @@ coreTypeName coreType = case coreType of
   CoreBoolType -> "Bool"
   CoreTextType -> "Str"
   CoreCharType -> "Char"
+  CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

@@ -20,7 +20,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
-| Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
+| Records, tuples, sums and collections | Partial (#521) | Tuples are boxed, refcounted values with construction, positions, let patterns, equality, ordering and rendering; records, sums, Option/Result and collections remain |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
@@ -250,3 +250,14 @@ E7001 wording after their operands run. [[Native Char Runtime]] holds the
 helpers; [[Backend Char Programs]] checks hand-written answers, the
 interpreter's refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
 Runtime revision 10. `charFromCode` waits on Option. Progress stays 4/14 (28%).
+
+## Tuples (#521)
+
+[[Native Aggregate Emission]] represents a tuple as a refcounted `pudu_box`
+of cells with per-type make, drop, show, equal and compare helpers, written
+only when used. Frames now track every owned slot (text or box) with a kind,
+so retain on entry, release on return and unwind, and destination
+replacement share one path. Ordering applies compareValues through base's Ord
+defaults, which matters for NaN members. [[Backend Tuple Programs]] holds
+answers, refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+Runtime revision 11. Progress stays 4/14 (28%).

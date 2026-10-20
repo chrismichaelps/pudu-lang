@@ -238,3 +238,7 @@ Register Pudu.Backend.TextCaseSpec in other-modules.
 ## Char programs (#518)
 
 Register Pudu.Backend.CharPrograms in other-modules.
+
+## Tuple programs (#521)
+
+Register Pudu.Backend.TuplePrograms in other-modules.

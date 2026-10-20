@@ -75,3 +75,15 @@ The three methods call `pudu_text_trim`, `pudu_text_to_upper` and `pudu_text_to_
 hex, comparisons are plain C comparisons, `code` is `pudu_make(c, 0)`.
 Display calls `pudu_char_text`, show calls `pudu_char_show`, and charAt calls
 `pudu_text_char_at` with its E7004 site.
+
+## Tuples (#521)
+
+`cellMember` answers `box`. Reads of any owned slot go through `retained`.
+Construction, indexing, show and equality call [[Native Aggregate Emission]]
+helpers. Ordering follows base's Ord defaults over compareValues, which are
+written with `<=`: `x < y` is `compare y x > 0`, `x <= y` is
+`compare x y <= 0`, `x > y` is `compare x y > 0`, `x >= y` is
+`compare y x <= 0`. That is what makes `<` and `>` both true for a NaN member,
+exactly as the interpreter answers. Resolved Grill Log: the obvious
+`compare x y < 0` disagrees with the interpreter whenever compare is not
+antisymmetric.

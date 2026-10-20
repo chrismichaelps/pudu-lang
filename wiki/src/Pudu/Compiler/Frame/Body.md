@@ -68,3 +68,8 @@ saves one `FrameTextMethod` value.
 
 Char literals and `CoreCharCode` save one value each; a Char call or branch
 result gets a result slot like any scalar.
+
+## Tuples (#521)
+
+`CoreTuple` lowers its members as operands and saves one `FrameTuple`;
+`CoreTupleIndex` saves `FrameTupleIndex`; tuple results get a result slot.

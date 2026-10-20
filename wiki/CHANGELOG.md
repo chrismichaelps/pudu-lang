@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Native tuples (#521)
+
+- Tuples compile natively as refcounted boxes: literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).
+
 ## 2026-10-20 — Native Char values (#518)
 
 - Char literals, comparisons, display/show, `code`, `toText`, `Str.charAt` and Char entry results compile natively through [[Native Char Runtime]]; [[Backend Char Programs]] holds them to hand-written answers and the interpreter's refusals. The #517 catalogue check now skips the case parts, which the clean gate caught. Progress stays 4/14 (28%).

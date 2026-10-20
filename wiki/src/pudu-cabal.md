@@ -423,3 +423,8 @@ Register Pudu.Backend.Runtime.Text.Case in exposed-modules.
 ## Char runtime (#518)
 
 Register Pudu.Backend.Runtime.Char in exposed-modules.
+
+## Tuple modules (#521)
+
+Register Pudu.Backend.Emit.Aggregate, Pudu.Backend.Runtime.Aggregate and
+Pudu.Compiler.Lower.Tuple in exposed-modules.

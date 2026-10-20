@@ -70,3 +70,12 @@ value, or is released when the call has no destination.
 
 `pudu_cell` gains `uint32_t character`, always present. It is narrower than
 `pudu_int`, so no layout grows.
+
+## Owned cells (#521)
+
+`frameTypes` takes a third flag for boxes: it forward-declares `pudu_box`,
+adds `pudu_box *box` to the cell, and writes the box struct, `pudu_box_new`
+and `pudu_box_retain`. `pudu_owned` pairs a slot with its kind, and
+`pudu_function` carries `owned_count`, `owned` and `result_kind`. The engine
+retains entering arguments, releases owned slots when a frame ends, and drops
+a replaced destination or a discarded result through `pudu_drop_cell`.

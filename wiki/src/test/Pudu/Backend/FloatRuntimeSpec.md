@@ -62,3 +62,7 @@ The compatibility check also skips [[Native Text Case]] parts.
 ## Char catalogue (#518)
 
 The compatibility check also skips [[Native Char Runtime]] parts.
+
+## Aggregate catalogue (#521)
+
+The compatibility check also skips [[Native Aggregate Runtime]] parts.

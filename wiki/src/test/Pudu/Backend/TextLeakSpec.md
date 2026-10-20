@@ -36,3 +36,8 @@ replace are all released.
 
 The counted run also covers [[Backend Char Programs]], so the text that
 display, show and toText build from a Char is released.
+
+## Tuple programs (#521)
+
+The counted run also covers [[Backend Tuple Programs]], so boxes and the text
+they hold are released.

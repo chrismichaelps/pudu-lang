@@ -72,3 +72,9 @@ failure sites in the emitted call, like checked arithmetic.
 `FrameCharLiteral !Char` and `FrameCharCode !FrameSlot` are the only new
 shapes. Comparisons, display, show and charAt reuse `FrameBinary`,
 `FrameDisplay`, `FrameShow` and `FrameTextMethod` on Char slots.
+
+## Tuples (#521)
+
+`FrameTuple ![FrameSlot]` builds a tuple from evaluated slots and
+`FrameTupleIndex !Int !FrameSlot` reads one member. Comparisons and
+rendering reuse `FrameBinary`, `FrameShow` and `FrameDisplay`.

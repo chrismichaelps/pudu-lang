@@ -117,3 +117,9 @@ need a scalar (conditions, integer operators) keep `nativeScalarType`.
 `formedCoreType` maps the builtin `Char` nominal to `CoreCharType`, and
 `nativeScalarType` admits it, which opens bindings, parameters, results,
 loop values and the entry result.
+
+## Tuples (#521)
+
+`formedCoreType` maps a tuple of two or more native value types to
+`CoreTupleType`; `nativeValueType` admits it. Tuples are values, not scalars,
+so they never become conditions or integer operands.

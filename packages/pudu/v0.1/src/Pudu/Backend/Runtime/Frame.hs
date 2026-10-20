@@ -1,17 +1,37 @@
-{-| @Pudu.Backend.Runtime.Frame — heap-owned scalar frames and iterative calls. -}
+{-| @Pudu.Backend.Runtime.Frame — heap-owned frames, owned cells and iterative calls. -}
 module Pudu.Backend.Runtime.Frame (frameTypes, frameEngine) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Comptime.Limits (callDepthLimit)
 
-{-| The cell union only carries the wide and text members a program needs, so a
-    plain integer program keeps the narrow layout. -}
-frameTypes :: Bool -> Bool -> [Text]
-frameTypes wide text =
+{-| The cell union only carries the wide, text and box members a program
+    needs, so a plain integer program keeps the narrow layout. -}
+frameTypes :: Bool -> Bool -> Bool -> [Text]
+frameTypes wide text boxes =
+  [ "typedef struct pudu_box pudu_box;" | boxes ] <>
   [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; "
       <> (if wide then "pudu_wide_int wide; " else "")
-      <> (if text then "pudu_text text; " else "") <> "} pudu_cell;"
+      <> (if text then "pudu_text text; " else "")
+      <> (if boxes then "pudu_box *box; " else "") <> "} pudu_cell;"
+  ] <> (if boxes then
+  [ "/* An aggregate: a reference count and its members. */"
+  , "struct pudu_box { size_t count; pudu_cell fields[]; };"
+  , "static pudu_box *pudu_box_new(size_t members) {"
+  , "  pudu_box *box;"
+  , "  if (members > (SIZE_MAX - sizeof(pudu_box)) / sizeof(pudu_cell)) pudu_memory_failure();"
+  , "  box = malloc(sizeof(pudu_box) + members * sizeof(pudu_cell));"
+  , "  if (box == NULL) pudu_memory_failure();"
+  , "  box->count = 1;"
+  , "  return box;"
+  , "}"
+  , "static inline pudu_box *pudu_box_retain(pudu_box *box) {"
+  , "  if (box != NULL) box->count += 1;"
+  , "  return box;"
+  , "}"
+  ] else []) <>
+  [ "/* A slot whose value the frame holds a reference to, and which kind it is. */"
+  , "typedef struct { size_t slot; unsigned kind; } pudu_owned;"
   , "typedef struct pudu_frame {"
   , "  size_t pc; pudu_cell *slots; pudu_cell *arguments;"
   , "  struct pudu_frame *parent; size_t function; size_t destination; int has_destination;"
@@ -25,19 +45,22 @@ frameTypes wide text =
   , "typedef struct {"
   , "  size_t slots; size_t arguments; size_t pc; size_t parameter_count;"
   , "  const size_t *parameters; pudu_step (*body)(pudu_frame *);"
-  , "  size_t text_count; const size_t *texts; int text_result;"
+  , "  size_t owned_count; const pudu_owned *owned; unsigned result_kind;"
   , "} pudu_function;"
   ]
 
+{-| With owned slots, `pudu_drop_cell` and `pudu_retain_cell` must already be
+    written; [[Native Aggregate Emission]] writes them. -}
 frameEngine :: Bool -> [Text]
-frameEngine text =
+frameEngine owned =
   [ "static pudu_frame *pudu_active_frame = NULL;"
   , "static size_t pudu_frame_depth = 0;"
-  , "/* A frame owns the text in its slots; letting it go releases them. */"
+  , "/* A frame owns the references in its slots; letting it go releases them. */"
   , "static void pudu_free_frame(pudu_frame *frame) {"
-  ] <> (if text then
+  ] <> (if owned then
   [ "  const pudu_function *definition = &pudu_functions[frame->function];"
-  , "  for (size_t i = 0; i < definition->text_count; ++i) pudu_text_release(frame->slots[definition->texts[i]].text);"
+  , "  for (size_t i = 0; i < definition->owned_count; ++i)"
+  , "    pudu_drop_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
   ] else []) <>
   [ "  free(frame);"
   , "}"
@@ -76,9 +99,10 @@ frameEngine text =
   , "    if (definition->parameters[i] >= definition->slots) { free(frame); pudu_invalid_frame(); }"
   , "    frame->slots[definition->parameters[i]] = arguments[i];"
   , "  }"
-  ] <> (if text then
+  ] <> (if owned then
   [ "  /* Only parameters are set yet, so this retains exactly the arguments. */"
-  , "  for (size_t i = 0; i < definition->text_count; ++i) (void)pudu_text_retain(frame->slots[definition->texts[i]].text);"
+  , "  for (size_t i = 0; i < definition->owned_count; ++i)"
+  , "    pudu_retain_cell(frame->slots[definition->owned[i].slot], definition->owned[i].kind);"
   ] else []) <>
   [ "  return frame;"
   , "}"
@@ -100,11 +124,12 @@ frameEngine text =
   , "      pudu_frame_depth += 1;"
   , "    } else if (step.kind == PUDU_RETURN) {"
   , "      pudu_frame *parent = frame->parent;"
-  ] <> (if text then
-  [ "      /* A returned text arrives retained; the destination's old text goes. */"
-  , "      if (pudu_functions[frame->function].text_result && parent != NULL) {"
-  , "        if (parent->has_destination) pudu_text_release(parent->slots[parent->destination].text);"
-  , "        else pudu_text_release(step.result.text);"
+  ] <> (if owned then
+  [ "      /* A returned reference arrives retained; the destination's old value goes. */"
+  , "      if (pudu_functions[frame->function].result_kind != 0 && parent != NULL) {"
+  , "        unsigned kind = pudu_functions[frame->function].result_kind;"
+  , "        if (parent->has_destination) pudu_drop_cell(parent->slots[parent->destination], kind);"
+  , "        else pudu_drop_cell(step.result, kind);"
   , "      }"
   ] else []) <>
   [ "      if (parent != NULL && parent->has_destination) parent->slots[parent->destination] = step.result;"
