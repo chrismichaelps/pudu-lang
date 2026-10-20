@@ -13,15 +13,15 @@ Frame/Value,Frame/Body,Support}.hs, Backend/Runtime{,/Frame,/Dependencies,
 /Aggregate}.hs, TuplePrograms.hs, NativeSpec, TextLeakSpec, FrameEmitSpec,
 FloatRuntimeSpec, both cabal files and mirrors.
 
-Finding: tuple ordering with a NaN member contradicts itself in the
-interpreter (#522, fixed on its own branch). Native matches the current
-interpreter here and moves to the total order once #522 is merged in.
+Finding: tuple ordering with a NaN member contradicted itself in the
+interpreter (#522, fixed on its own branch). #519 and #522 are merged into
+this stack and native follows the total order through `pudu_float_order`.
 
 Evidence: all 81 backend groups pass; the tuple and leak groups pass under
 GCC 15 and Clang ASan/UBSan.
 
-Exact next action: merge #519 and #522 into this stack, move native float
-member ordering to the total order, then run the clean gates.
+Exact next action: run the clean gates, then native records (which need
+#519's declared order, now in this stack).
 
 ## Referenced by
 

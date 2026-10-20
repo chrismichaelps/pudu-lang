@@ -16,7 +16,7 @@ Tests]] and, for successes, [[Backend Text Leak Tests]].
 
 Rendering with quoted Str/Char members, nesting, unit, narrow and 128-bit
 integers and floats; elementwise equality with NaN and signed zeros;
-compareValues ordering including the NaN cases where `<` and `>` both hold;
+compareValues ordering including NaN members under the total order of #522;
 positions; let patterns with nesting, wildcards and a swap; tuples through
 calls, branches, loops, `break` values and mutation; member order and a Never
 member; tuple entry results. Refusals: arithmetic and negation on tuples,
@@ -24,8 +24,8 @@ after their operands run.
 
 ## Grill Log
 
-- **Q:** Where do the NaN answers come from? **A:** From the interpreter, and
-  they are what base's Ord defaults give; see [[Backend Frame Values]].
+- **Q:** Where do the NaN answers come from? **A:** From the total order #522
+  defines: NaN equals NaN and sorts after every number.
 
 ## Referenced by
 

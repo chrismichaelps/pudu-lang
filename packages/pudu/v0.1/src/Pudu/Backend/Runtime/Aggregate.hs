@@ -29,8 +29,18 @@ aggregateRuntimeParts =
       , "  return joined;"
       , "}"
       ])
+  , ("float_order",
+      [ "/* compareFloat: NaN equals NaN and sorts after every number. */"
+      , "static int pudu_float_order(uint64_t a, uint64_t b) {"
+      , "  int left = (a & UINT64_C(0x7FFFFFFFFFFFFFFF)) > UINT64_C(0x7FF0000000000000);"
+      , "  int right = (b & UINT64_C(0x7FFFFFFFFFFFFFFF)) > UINT64_C(0x7FF0000000000000);"
+      , "  if (left || right) return left - right;"
+      , "  return pudu_float_lt(a, b) ? -1 : pudu_float_eq(a, b) ? 0 : 1;"
+      , "}"
+      ])
   ]
 
 aggregateRuntimeDependencies :: Text -> [Text]
 aggregateRuntimeDependencies name = maybe [] id (lookup name
-  [ ("text_join", ["text_allocate"]) ])
+  [ ("text_join", ["text_allocate"])
+  , ("float_order", ["float_lt", "float_eq"]) ])

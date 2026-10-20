@@ -83,7 +83,8 @@ Construction, indexing, show and equality call [[Native Aggregate Emission]]
 helpers. Ordering follows base's Ord defaults over compareValues, which are
 written with `<=`: `x < y` is `compare y x > 0`, `x <= y` is
 `compare x y <= 0`, `x > y` is `compare x y > 0`, `x >= y` is
-`compare y x <= 0`. That is what makes `<` and `>` both true for a NaN member,
-exactly as the interpreter answers. Resolved Grill Log: the obvious
-`compare x y < 0` disagrees with the interpreter whenever compare is not
-antisymmetric.
+`compare y x <= 0`. With the total order of #522 these equal the obvious
+forms, but they stay written as base defines them so native follows the
+interpreter even if a member order is ever not antisymmetric again. Resolved
+Grill Log: before #522 a NaN member made `<` and `>` both true, and the
+swapped forms are what matched it.

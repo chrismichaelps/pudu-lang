@@ -162,12 +162,12 @@ memberEqual kind a b = case kind of
   CoreTupleType _ -> (tupleHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [tupleNeed "equal" kind])
   _ -> (a <> " == " <> b, [])
 
-{-| compareValues on two members as -1, 0 or 1. A float that is neither less
-    nor equal is greater, which is where NaN lands. -}
+{-| compareValues on two members as -1, 0 or 1. Floats use its total order:
+    NaN equals NaN and sorts after every number. -}
 memberCompare :: CoreType -> Text -> Text -> (Text, [Text])
 memberCompare kind a b = case kind of
   CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ")", [helper])
-  CoreFloatType _ -> ("pudu_float_lt(" <> a <> ", " <> b <> ") ? -1 : pudu_float_eq(" <> a <> ", " <> b <> ") ? 0 : 1", ["float_lt", "float_eq"])
+  CoreFloatType _ -> ("pudu_float_order(" <> a <> ", " <> b <> ")", ["float_order"])
   CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ")", ["text_compare"])
   CoreTupleType _ -> (tupleHelper "compare" kind <> "(" <> a <> ", " <> b <> ")", [tupleNeed "compare" kind])
   CoreUnitType -> ("0", [])

@@ -40,9 +40,10 @@ order; frame metadata and `pudu_drop_cell`/`pudu_retain_cell` use them.
 - **Q:** Why a box per tuple rather than flattening members into slots? **A:**
   Tuples nest, cross calls in one cell, and sit inside other aggregates;
   records, sums and Option/Result will share the box.
-- **Q:** Why does compare answer GT for NaN? **A:** compareValues does
-  (Haskell `compare` on Double); the emitter then applies base's Ord defaults,
-  see [[Backend Frame Values]].
+- **Q:** How do float members compare? **A:** Through `pudu_float_order`,
+  compareValues' total order since #522: NaN equals NaN and sorts after every
+  number, signed zeros equal. Before #522 the interpreter's NaN order
+  contradicted itself; native matched it until the repair landed.
 
 ## Referenced by
 

@@ -24,7 +24,7 @@ tupleSuccessPrograms =
       , "(\"\\u{1f600}\", 0) > (\"\\u{ffff}\", 0)", "(-1, 0) < (0, 0)"
       , "(0.0 / 0.0, 1) < (1.0, 1)", "(1.0, 1) < (0.0 / 0.0, 1)" ]
       [ "true", "false", "true", "true", "true", "true", "true"
-      , "true", "true", "false", "false", "false", "true", "true", "true", "true", "true" ]
+      , "false", "false", "true", "true", "false", "true", "true", "true", "false", "true" ]
   , printing "positions"
       [ "(1, \"two\", 'c')[1]", "((1, 2), 3)[0][1]", "(true, ())[0]", "(\"a\", (\"b\", \"c\"))[1][0]" ]
       [ "two", "2", "true", "b" ]

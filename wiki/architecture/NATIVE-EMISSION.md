@@ -257,7 +257,7 @@ Runtime revision 10. `charFromCode` waits on Option. Progress stays 4/14 (28%).
 of cells with per-type make, drop, show, equal and compare helpers, written
 only when used. Frames now track every owned slot (text or box) with a kind,
 so retain on entry, release on return and unwind, and destination
-replacement share one path. Ordering applies compareValues through base's Ord
-defaults, which matters for NaN members. [[Backend Tuple Programs]] holds
+replacement share one path. Ordering applies compareValues, with the total
+float order of #522, through base's Ord defaults. [[Backend Tuple Programs]] holds
 answers, refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
 Runtime revision 11. Progress stays 4/14 (28%).
