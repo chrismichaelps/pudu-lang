@@ -220,3 +220,10 @@ All keys/kinds/counts and public Map operations retain the existing contract.
 
 Resolved Grill Log: let generic pure storage own series proof and sparse overrides;
 Value only projects ordered entries. No evaluator proof, mutation or eager view.
+
+## Total float order (#522)
+
+`compareValues` orders floats through `compareFloat`: NaN equals NaN and sorts
+after every number, also against an Int. `compare` on Double answers GT both
+ways for NaN, which broke the documented total order. Value's Eq is
+unchanged, so `(nan, 1) == (nan, 1)` stays false.

@@ -395,9 +395,9 @@ instance Ord OrdValue where
 compareValues :: Value -> Value -> Ordering
 compareValues left right = case (left, right) of
   (IntValue _ a, IntValue _ b) -> compare a b
-  (FloatValue _ a, FloatValue _ b) -> compare a b
-  (IntValue _ a, FloatValue _ b) -> compare (fromIntegral a) b
-  (FloatValue _ a, IntValue _ b) -> compare a (fromIntegral b)
+  (FloatValue _ a, FloatValue _ b) -> compareFloat a b
+  (IntValue _ a, FloatValue _ b) -> compareFloat (fromIntegral a) b
+  (FloatValue _ a, IntValue _ b) -> compareFloat a (fromIntegral b)
   {-| Two decimals compare as the numbers they are, not as the digits they
       store, so `1.50d` and `1.5d` are equal even though only one of them
       renders with a trailing zero. A number whose `==` depended on how it was
@@ -432,6 +432,17 @@ compareValues left right = case (left, right) of
   (VariantValue nameA a, VariantValue nameB b) ->
     compare nameA nameB <> compareLists a b
   _ -> compare (shapeRank left) (shapeRank right)
+
+{-| `compare` on Double answers GT both ways when either side is NaN, which
+    is no order at all: a key could be both before and after itself. Here NaN
+    equals NaN and sorts after every number; `-0.0` and `0.0` stay equal. The
+    float operators keep IEEE answers; this is only the key and aggregate order. -}
+compareFloat :: Double -> Double -> Ordering
+compareFloat a b = case (isNaN a, isNaN b) of
+  (True, True) -> EQ
+  (True, False) -> GT
+  (False, True) -> LT
+  (False, False) -> compare a b
 
 compareIndexed :: [(Int, Value)] -> [(Int, Value)] -> Ordering
 compareIndexed [] [] = EQ
