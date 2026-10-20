@@ -194,3 +194,5 @@ frame properties.
 Register textCaseProperties from [[Backend Text Case Tests]].
 
 Register [[Eval Record Order Tests]] in the evaluation group (#519).
+
+Register [[Eval Float Order Tests]] in the evaluation group (#522).

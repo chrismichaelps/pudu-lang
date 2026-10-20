@@ -220,3 +220,5 @@ tags: [moc, handoff]
 - [[Native Tuple Delivery]] — boxed native tuples (#521).
 
 - [[Record Field Order Repair]] — records hold their declared field order (#519).
+
+- [[Total Float Order Repair]] — NaN keeps the value order total (#522).
