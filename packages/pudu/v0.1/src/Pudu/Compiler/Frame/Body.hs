@@ -66,8 +66,39 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreCharCode operand -> rendered FrameCharCode operand
   CoreTuple members -> do
     operands <- lowerOperands members
-    maybe (pure Stopped) (value . FrameTuple) operands
-  CoreTupleIndex position operand -> rendered (FrameTupleIndex position) operand
+    maybe (pure Stopped) (value . FrameAggregate) operands
+  CoreTupleIndex position operand -> rendered (FrameMember position) operand
+  CoreRecord written -> do
+    operands <- lowerOperands (map snd written)
+    case (operands, kind) of
+      (Nothing, _) -> pure Stopped
+      (Just slots, CoreRecordType _ declared) -> do
+        -- Written order ran; the record holds declaration order.
+        let byName = zip (map fst written) slots
+        case traverse (\(name, _) -> lookup name byName) declared of
+          Just ordered -> value (FrameAggregate ordered)
+          Nothing -> fault (Just at) "a record literal without every declared field"
+      _ -> fault (Just at) "a record literal without a record type"
+  CoreRecordUpdate base written -> do
+    held <- lowerScalar base
+    case (held, kind) of
+      (Stopped, _) -> pure Stopped
+      (Completed (Just source), CoreRecordType _ declared) -> do
+        operands <- lowerOperands (map snd written)
+        case operands of
+          Nothing -> pure Stopped
+          Just slots -> do
+            let byName = zip (map fst written) slots
+            members <- traverse (\(position, (name, fieldKind)) -> case lookup name byName of
+                Just slot -> pure slot
+                Nothing -> saveValue (FrameValue at fieldKind (FrameMember position source)))
+              (zip [0 ..] declared)
+            value (FrameAggregate members)
+      _ -> fault (Just at) "a record update without a record base"
+  CoreField name operand -> case coreExpressionType operand of
+    CoreRecordType _ declared | Just position <- lookup name (zip (map fst declared) [0 ..]) ->
+      rendered (FrameMember position) operand
+    _ -> fault (Just at) "a field read outside a record"
   CoreReadLocal local -> readLocal at local >>= value . FrameRead
   CoreNegate operand -> unary FrameNegate operand
   CoreComplement operand -> unary FrameComplement operand
@@ -202,6 +233,7 @@ resultSlot at kind = case kind of
   CoreTextType -> Just <$> freshSlot at "$result" kind
   CoreCharType -> Just <$> freshSlot at "$result" kind
   CoreTupleType _ -> Just <$> freshSlot at "$result" kind
+  CoreRecordType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of

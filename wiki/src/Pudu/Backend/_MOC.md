@@ -53,6 +53,7 @@ aliases: [Backend Module Map]
 - [[Native Text Case]] · [[Backend Text Case Tests]] — native trim and case mapping.
 - [[Native Char Runtime]] · [[Backend Char Programs]] — native Char values and charAt.
 - [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — native tuples.
+- [[Compiler Lower Record]] · [[Backend Record Programs]] — native records.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

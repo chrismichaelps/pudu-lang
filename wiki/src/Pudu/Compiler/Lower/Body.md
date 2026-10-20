@@ -274,3 +274,9 @@ non-unit value.
 Tuple literals and indexing delegate to [[Compiler Lower Tuple]], and so does
 a `let` pattern, which may lower to several statements; `foldStatements`
 splices them in. A tuple entry result is shown and exits 0.
+
+## Records (#521)
+
+Record literals, updates, field reads and field-path assignment (statement or
+trailing position) delegate to [[Compiler Lower Record]]. A record entry
+result is shown and exits 0.

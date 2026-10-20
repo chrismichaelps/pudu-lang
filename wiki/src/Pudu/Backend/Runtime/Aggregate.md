@@ -25,3 +25,8 @@ after every number; otherwise IEEE less/equal on the raw binary64 bits.
 ## Referenced by
 
 [[Native Aggregate Emission]] · [[src/_MOC]]
+
+## Labels (#521)
+
+`pudu_text_join` takes an optional label per part, written before it; records
+pass `"x: "`, tuples pass NULL.

@@ -15,7 +15,7 @@ tags: [changelog]
 
 ## 2026-10-20 — Native tuples (#521)
 
-- Tuples compile natively as refcounted boxes: literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).
+- Tuples and the root module's non-generic records compile natively as refcounted boxes (records add field reads, updates, field assignment and `let {..}` patterns): literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).
 
 ## 2026-10-20 — Native Char values (#518)
 

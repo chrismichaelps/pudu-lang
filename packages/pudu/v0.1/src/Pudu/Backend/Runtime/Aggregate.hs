@@ -6,13 +6,14 @@ import Data.Text (Text)
 aggregateRuntimeParts :: [(Text, [Text])]
 aggregateRuntimeParts =
   [ ("text_join",
-      [ "/* open, the parts separated by \", \", then close. Takes the parts' references. */"
-      , "static pudu_text pudu_text_join(const char *open, pudu_text *parts, size_t count, const char *close) {"
+      [ "/* open, the parts separated by \", \" and each after its label, then close."
+      , "   labels may be NULL. Takes the parts' references. */"
+      , "static pudu_text pudu_text_join(const char *open, const char *const *labels, pudu_text *parts, size_t count, const char *close) {"
       , "  size_t opening = strlen(open), closing = strlen(close), length = opening + closing;"
       , "  unsigned char *bytes;"
       , "  pudu_text joined;"
       , "  for (size_t i = 0; i < count; ++i) {"
-      , "    size_t extra = parts[i].length + (i == 0 ? 0 : 2);"
+      , "    size_t extra = parts[i].length + (i == 0 ? 0 : 2) + (labels == NULL ? 0 : strlen(labels[i]));"
       , "    if (length > SIZE_MAX - extra) pudu_memory_failure();"
       , "    length += extra;"
       , "  }"
@@ -21,6 +22,7 @@ aggregateRuntimeParts =
       , "  bytes += opening;"
       , "  for (size_t i = 0; i < count; ++i) {"
       , "    if (i != 0) { *bytes++ = ','; *bytes++ = ' '; }"
+      , "    if (labels != NULL) { size_t label = strlen(labels[i]); memcpy(bytes, labels[i], label); bytes += label; }"
       , "    if (parts[i].length != 0) memcpy(bytes, parts[i].bytes, parts[i].length);"
       , "    bytes += parts[i].length;"
       , "    pudu_text_release(parts[i]);"

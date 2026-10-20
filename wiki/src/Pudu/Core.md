@@ -259,3 +259,9 @@ native implements exist.
 `CoreTupleType ![CoreType]` has at least two members. `CoreTuple` carries the
 members in source order and `CoreTupleIndex !Int` a position the checker has
 bounded.
+
+## Records (#521)
+
+`CoreRecordType !Text ![(Text, CoreType)]` names a root-module record and its
+fields in declaration order. `CoreRecord` carries fields as written,
+`CoreRecordUpdate` a base and written fields, `CoreField` one field read.

@@ -127,6 +127,7 @@ library
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
+    Pudu.Compiler.Lower.Record
     Pudu.Compiler.Lower.Text
     Pudu.Compiler.Lower.Tuple
     Pudu.Compiler.Lower.Signature

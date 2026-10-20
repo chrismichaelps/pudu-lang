@@ -428,3 +428,5 @@ Register Pudu.Backend.Runtime.Char in exposed-modules.
 
 Register Pudu.Backend.Emit.Aggregate, Pudu.Backend.Runtime.Aggregate and
 Pudu.Compiler.Lower.Tuple in exposed-modules.
+
+Register Pudu.Compiler.Lower.Record in exposed-modules (#521).

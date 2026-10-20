@@ -88,3 +88,9 @@ forms, but they stay written as base defines them so native follows the
 interpreter even if a member order is ever not antisymmetric again. Resolved
 Grill Log: before #522 a NaN member made `<` and `>` both true, and the
 swapped forms are what matched it.
+
+## Records (#521)
+
+`cellMember` now delegates to [[Native Aggregate Emission]]'s `cellName`.
+Rendering, show and equality use `isAggregate`, so records take the tuple
+paths.

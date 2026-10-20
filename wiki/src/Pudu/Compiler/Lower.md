@@ -182,3 +182,8 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 ## Unit scalar admission (#492)
 
 Unit literals lower as empty Core blocks and settled unit parameters retain the existing scalar sentinel slot. Argument emission executes effects before binding zero; no Result carrier is erased. General tuples remain pending; unit display/equality are implemented by #493. Resolved Grill Log: empty tuple syntax is the single unit inhabitant, not an owned aggregate.
+
+## Record layouts (#521)
+
+`lowerProgram` adds the root module's own records from `declaredRecords` to
+the facts before lowering.

@@ -48,3 +48,10 @@ order; frame metadata and `pudu_drop_cell`/`pudu_retain_cell` use them.
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]
+
+## Records (#521)
+
+Records share the box and the helpers; their mangled name is `R_Name`.
+`show` writes `Name{x: a, y: b}` through `pudu_text_join`'s labels. Records
+never need `compare`. Zero-member aggregates get `void` parameter lists and
+no parts array.

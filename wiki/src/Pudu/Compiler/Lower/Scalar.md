@@ -113,3 +113,9 @@ operators trap with `cannot apply X to a char`, the kind `valueKind` names.
 Two tuples of one type admit `==`, `!=` and the four orderings, as `combine`
 does. Other operators trap with `cannot apply X to a tuple and a tuple`, and
 unary operators with `cannot apply X to a tuple`.
+
+## Record operators (#521)
+
+Two records of one type admit `==` and `!=`. Other operators, ordering
+included, trap with `cannot apply X to a Name and a Name`, naming the record
+as `valueKind` does; unary operators with `cannot apply X to a Name`.

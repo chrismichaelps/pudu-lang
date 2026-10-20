@@ -7,7 +7,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Backend.Emit.Aggregate (cType, ownedType, released, retained, tupleHelper, tupleNeed)
+import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cType, isAggregate, ownedType, released, retained)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
   ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textOfInt )
@@ -64,10 +64,10 @@ instruction (state, needs) operation = case operation of
       CoreBoolType -> printed "print_bool" value
       CoreTextType -> printed "print_text" value
       CoreCharType -> printed "print_char" value
-      kind@(CoreTupleType _) -> Right
-        ( line state ("      { pudu_text pudu_shown = " <> tupleHelper "show" kind <> "(" <> value
+      kind | isAggregate kind -> Right
+        ( line state ("      { pudu_text pudu_shown = " <> aggregateHelper "show" kind <> "(" <> value
             <> "); pudu_print_text(pudu_shown); pudu_text_release(pudu_shown); }")
-        , Set.union needs (Set.fromList [tupleNeed "show" kind, "print_text"]) )
+        , Set.union needs (Set.fromList [aggregateNeed "show" kind, "print_text"]) )
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")
   where

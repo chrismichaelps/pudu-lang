@@ -29,3 +29,9 @@ Export lowerTuple, lowerTupleIndex and lowerTuplePattern.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Tuple Delivery]] · [[src/_MOC]]
+
+## Record patterns (#521)
+
+`let {at: {x}, n: (_, last)} = subject` binds through field reads; `{x}` is
+`{x: x}`. Named record patterns are refutable in `let`, so the checker never
+hands them here.

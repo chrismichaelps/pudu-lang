@@ -142,6 +142,12 @@ data CoreExpressionShape
   | CoreTuple ![CoreExpression]
   {-| A literal position the checker has already bounded. -}
   | CoreTupleIndex !Int !CoreExpression
+  {-| Fields as written, which is the order they run; the record holds them
+      in declaration order. -}
+  | CoreRecord ![(Text, CoreExpression)]
+  {-| `base` with the written fields replaced; base runs first. -}
+  | CoreRecordUpdate !CoreExpression ![(Text, CoreExpression)]
+  | CoreField !Text !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
@@ -213,6 +219,8 @@ data CoreType
   | CoreTextType
   | CoreCharType
   | CoreTupleType ![CoreType]
+  {-| A record of the root module: its name and its fields in declaration order. -}
+  | CoreRecordType !Text ![(Text, CoreType)]
   | CoreUnitType
   | CoreNeverType
   deriving stock (Eq, Show)
@@ -225,5 +233,6 @@ coreTypeName coreType = case coreType of
   CoreTextType -> "Str"
   CoreCharType -> "Char"
   CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
+  CoreRecordType name _ -> name
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

@@ -8,6 +8,7 @@ import Pudu.Backend.Emit (emitProgram)
 import Pudu.Backend.TextMethodPrograms (textMethodSuccessPrograms)
 import Pudu.Backend.CharPrograms (charSuccessPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms)
+import Pudu.Backend.RecordPrograms (recordSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
@@ -33,7 +34,7 @@ testLeaks = do
   case compiler of
     Nothing -> pure (counterexample "text leak checks require a C11 compiler" (False === True))
     Just cc -> withSystemTempDirectory "pudu-text-leaks" $ \root -> do
-      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms)
+      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms)
       putStrLn ("[text leaks] executed " <> show (length outcomes) <> " counted programs")
       pure (conjoin outcomes)
  where

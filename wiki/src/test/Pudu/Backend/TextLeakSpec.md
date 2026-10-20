@@ -41,3 +41,7 @@ display, show and toText build from a Char is released.
 
 The counted run also covers [[Backend Tuple Programs]], so boxes and the text
 they hold are released.
+
+## Record programs (#521)
+
+The counted run also covers [[Backend Record Programs]].

@@ -123,3 +123,10 @@ loop values and the entry result.
 `formedCoreType` maps a tuple of two or more native value types to
 `CoreTupleType`; `nativeValueType` admits it. Tuples are values, not scalars,
 so they never become conditions or integer operands.
+
+## Records (#521)
+
+`LowerTypes` carries the root module's records by nominal identity, set by
+`withRecords`. `formedCoreTypeIn` maps a parameterless record to
+`CoreRecordType` with each field formed the same way, refusing a record
+reached from inside itself. `formedCoreType` stays builtin-only.

@@ -29,7 +29,7 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind || tupleType kind
+        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind || tupleType kind || recordType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -98,6 +98,10 @@ tupleType :: CoreType -> Bool
 tupleType (CoreTupleType _) = True
 tupleType _ = False
 
+recordType :: CoreType -> Bool
+recordType (CoreRecordType _ _) = True
+recordType _ = False
+
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
 settled state syntax core =
   typeForSpan (contextTypes (lowerContext state)) (locatedSpan syntax) == Just (coreExpressionType core)
@@ -109,6 +113,7 @@ runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
 runtimeKind CoreCharType = "char"
 runtimeKind (CoreTupleType _) = "tuple"
+runtimeKind (CoreRecordType name _) = name
 runtimeKind kind = coreTypeName kind
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))

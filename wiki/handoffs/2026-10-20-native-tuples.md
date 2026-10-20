@@ -20,8 +20,13 @@ this stack and native follows the total order through `pudu_float_order`.
 Evidence: all 81 backend groups pass; the tuple and leak groups pass under
 GCC 15 and Clang ASan/UBSan.
 
-Exact next action: run the clean gates, then native records (which need
-#519's declared order, now in this stack).
+Records landed in the same issue: they share the box, and their layout comes
+from `declaredRecords`. All 83 backend groups pass; tuple, record and leak
+groups pass under GCC 15 and Clang ASan/UBSan.
+
+Exact next action: run the clean gates on this commit, then sums and
+Option/Result (a new issue), which unlock print Result, charFromCode and the
+Option-result Str methods.
 
 ## Referenced by
 

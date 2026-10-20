@@ -1,5 +1,5 @@
-{-| @Pudu.Compiler.Lower.Tuple — tuple literals, literal positions and
-    tuple patterns in `let`. -}
+{-| @Pudu.Compiler.Lower.Tuple — tuple literals, literal positions, and
+    tuple and record patterns in `let`. -}
 module Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern) where
 
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
@@ -7,7 +7,7 @@ import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal,
 import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Expression (..), Literal (..), Located (..), Pattern (..), TypeSyntax )
+  ( Expression (..), FieldPattern (..), Literal (..), Located (..), Pattern (..), TypeSyntax )
 import Pudu.Source (Span)
 
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -85,4 +85,17 @@ lowerTuplePattern lower state at pattern annotation subject = case lower state s
            in case bindings state' projected member of
                 (next, Just declared) -> foldMembers next (declared : collected) rest
                 (next, Nothing) -> (next, Nothing)
+    (RecordPattern _ fields _, CoreRecordType _ declared) -> foldFields current [] fields
+      where
+        -- `{x}` binds x; `{x: inner}` matches inner against the field.
+        foldFields state' collected [] = (state', Just (concat (reverse collected)))
+        foldFields state' collected (Located fieldSpan (FieldPattern (Located nameSpan name) inner) : rest) =
+          case lookup name declared of
+            Nothing -> halt fieldSpan ("the field '" <> name <> "'") state'
+            Just kind ->
+              let projected = CoreExpression fieldSpan kind (CoreField name source)
+                  pattern' = maybe (Located nameSpan (BindingPattern (Located nameSpan name))) id inner
+               in case bindings state' projected pattern' of
+                    (next, Just declared') -> foldFields next (declared' : collected) rest
+                    (next, Nothing) -> (next, Nothing)
     _ -> halt patternSpan "this pattern in a let binding" current

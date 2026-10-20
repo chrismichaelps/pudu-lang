@@ -78,3 +78,9 @@ shapes. Comparisons, display, show and charAt reuse `FrameBinary`,
 `FrameTuple ![FrameSlot]` builds a tuple from evaluated slots and
 `FrameTupleIndex !Int !FrameSlot` reads one member. Comparisons and
 rendering reuse `FrameBinary`, `FrameShow` and `FrameDisplay`.
+
+## Aggregates (#521)
+
+`FrameTuple` and `FrameTupleIndex` are renamed `FrameAggregate` and
+`FrameMember`: tuples and records share one boxed layout, members in
+declaration order.

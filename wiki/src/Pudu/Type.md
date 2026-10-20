@@ -115,3 +115,9 @@ Exact `typeAt` queries use the full span; offset query complexity stays unchange
 - **Q:** Collapse generated types into the hover map? **A:** No. _Rationale:_ a
   template position has different types in different instantiations. _Rejected:_
   last expansion wins or a linear rescan on every tooling query.
+
+## Declared records (#521)
+
+`declaredRecords` runs the checker's own `collectDeclared` over a module and
+returns each record's type parameters and fields in declaration order. The
+native lowerer lays records out from it instead of reading type syntax.

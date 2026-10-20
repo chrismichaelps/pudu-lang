@@ -77,3 +77,7 @@ Metadata lists every owned slot with its kind (`pudu_owned`), and
 text and wide members are selected when a slot holds the type directly or
 inside a tuple. A tuple entry result is shown, printed, and both references
 released.
+
+## Record entry results (#521)
+
+A record entry is shown, printed and released like a tuple entry.
