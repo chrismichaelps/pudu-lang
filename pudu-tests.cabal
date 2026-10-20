@@ -87,6 +87,7 @@ test-suite pudu-test
     Pudu.Compiler.Program.Eval.RuntimeSpec
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.FloatOrderSpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec

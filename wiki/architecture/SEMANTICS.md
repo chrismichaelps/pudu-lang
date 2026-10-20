@@ -183,6 +183,7 @@ drop p:                     Available → Moved
 - Wrapping and saturating operators are separate typed operations and cannot be introduced by optimization.
 - Shifts require a non-negative count smaller than the bit width in checked form; library operations provide masked variants explicitly.
 - Floating point follows the declared target IEEE behavior. Reassociation, contraction, and fast-math transformations require an explicit future compilation mode and cannot be default.
+- Float operators (`<`, `==`, ...) answer as IEEE does. The order that sorts keys and compares aggregates is total: NaN equals NaN and sorts after every number, and `-0.0` equals `0.0`.
 - `Decimal` has no semantics until its precision/rounding ADR is accepted; it is reserved but rejected by semantic analysis meanwhile.
 
 ## Async and Cancellation Semantics
@@ -266,6 +267,10 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **1.0.0-draft clarification · 2026-10-20:** The value order behind keys and aggregate
+  comparison is total over floats: NaN equals NaN and sorts after every number (#522). Before,
+  a NaN member made a tuple both less and greater than another, and a map could hold one key
+  twice. Float operators are unchanged.
 - **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
   missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
   `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple
