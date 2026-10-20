@@ -178,3 +178,8 @@ zero/one/two/three-argument sequencing once and invoke its consumer directly;
 larger arities retain the general ordered list path. Record field construction
 uses the same consumer boundary. Resolved Grill Log: eliminate intermediate
 argument-result wrappers, preserving complete evaluation before parameter writes.
+
+## Declared field order (#519)
+
+A closed-region record literal reorders its fields from the Env it runs in,
+like the other evaluators.

@@ -12,7 +12,9 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Env
-  ( Evaluator
+  ( declaredFieldOrder
+  , inDeclaredOrder
+  , Evaluator
   , Unwind (..)
   , abortAt
   , bind
@@ -195,7 +197,10 @@ compileExpression walker located@(Located spanValue expression) = case expressio
   RecordExpression path fields -> do
     codes <- mapM (compileFieldInit walker spanValue) fields
     let owner = lastPathSegment path
-    pure (RecordValue owner <$> sequence codes)
+    pure $ do
+      values <- sequence codes
+      declared <- declaredFieldOrder owner
+      pure (RecordValue owner (inDeclaredOrder declared values))
   MatchExpression scrutinee arms -> do
     subject <- compileExpression walker scrutinee
     compiled <- mapM (compileArm walker) arms

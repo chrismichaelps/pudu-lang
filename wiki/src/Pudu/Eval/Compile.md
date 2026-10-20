@@ -73,3 +73,9 @@ MultiMap wrapper selection. Previously the direct-call branch accepted only
 call setup despite being known module functions. Flatten member chains only for
 lookup, and admit their direct path only when the MultiMap wrapper proof succeeds.
 Other member calls retain their established dispatch.
+
+## Declared field order (#519)
+
+Compiled record literals look up the declared order when they run, not when
+they compile, so a body compiled before every declaration is installed still
+builds records in declaration order.

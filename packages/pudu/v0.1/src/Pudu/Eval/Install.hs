@@ -23,6 +23,7 @@ import Pudu.Eval.Env
   ( Evaluator (..)
   , bind
   , recordVariantOwner
+  , recordFieldOrder
   , bindMethod
   , markModuleScope
   )
@@ -49,7 +50,9 @@ import Pudu.Frontend.Syntax.Tree
   , TypeDeclarationValue (..)
   , TypeSyntax (..)
   , TypeDefinition (..)
+  , FieldDeclaration (..)
   , Variant (..)
+  , VariantPayload (..)
   )
 
 {-| @Eval.Install.Evaluate — evaluating an expression.
@@ -365,9 +368,14 @@ installVariants typeText (Located _ definition) = case definition of
     let entries = map variantEntry variants
     mapM_ (uncurry bind) entries
     mapM_ (\(name, _) -> recordVariantOwner name typeText) entries
+    sequence_
+      [ recordFieldOrder (locatedValue (variantName variant)) (fieldNames fields)
+      | Located _ variant <- variants, RecordPayload fields <- [variantPayload variant] ]
     bind typeText (RecordValue typeText entries)
+  RecordDefinition fields -> recordFieldOrder typeText (fieldNames fields)
   _ -> pure ()
  where
+  fieldNames fields = [locatedValue (fieldName field) | Located _ field <- fields]
   variantEntry (Located _ variant) =
     let name = locatedValue (variantName variant)
      in (name, VariantValue name [])
