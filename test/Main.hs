@@ -5,6 +5,7 @@ import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DecimalLiteralSpec (decimalProperties)
+import Pudu.Eval.RecordOrderSpec (recordOrderProperties)
 import Pudu.VersionSpec (versionProperties)
 import Pudu.Derive.RecordSpec (recordResidualProperties)
 import Pudu.Derive.CatalogueSpec (catalogueProperties)
@@ -138,7 +139,7 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) (resolveProperties <> reflectionProperties <> qualifierProperties <> qualifiedShadowProperties)
-  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties)
+  evalOutcomes <- traverse (uncurry check) (evalProperties <> mutexProperties <> recordOrderProperties)
   typeOutcomes <- traverse (uncurry check) typeProperties
   importTypeOutcomes <- traverse (uncurry check) importTypeProperties
   interfaceOutcomes <- traverse (uncurry check) interfaceProperties

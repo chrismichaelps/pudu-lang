@@ -99,7 +99,7 @@ Supporting judgements:
 
 - Evaluation is strict and left-to-right.
 - In `f(a, b)`, evaluate `f`, then `a`, then `b`, then call.
-- Record and collection elements evaluate in source order.
+- Record and collection elements evaluate in source order. A record value holds its fields in declaration order, so the order a literal writes them in changes when each runs but never equality or rendering.
 - A set literal evaluates every written member in source order, then constructs the existing ordered `Set` value. Duplicate members collapse only after their expressions have run, so duplication never removes an effect or changes failure order. Iteration and rendering remain key-ordered.
 - Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
@@ -266,6 +266,10 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **1.0.0-draft clarification · 2026-10-20:** A record literal's written field order no longer
+  leaks into the value: fields still run in written order, then the record holds them in
+  declaration order, so `Point{y: 2, x: 1} == Point{x: 1, y: 2}` and both render as declared
+  (#519). Programs that wrote fields in declaration order are unaffected.
 - **1.0.0-draft · 2026-09-19:** Corrected open-range extent semantics: `length()` on a range
   missing either end reports `E7004` instead of returning zero, while `isBounded()`, `isEmpty()`, and
   `contains()` retain distinct, consistent meanings. The evaluator also no longer admits a tuple

@@ -218,3 +218,9 @@ Assignment resolves its place through [[Eval Place]] — root and index keys fir
 
 Function literals initialize the internal MultiMap proof cache to Nothing.
 Resolved Grill Log: literal capture and body evaluation remain unchanged.
+
+## Declared field order (#519)
+
+A record literal evaluates its fields as written, then stores them in the order
+[[Eval Env]] has for its type. Resolved Grill Log: reordering the syntax instead
+would move effects; reordering after evaluation keeps them where they were.

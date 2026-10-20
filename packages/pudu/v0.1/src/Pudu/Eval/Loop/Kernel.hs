@@ -11,7 +11,7 @@ import GHC.IOArray (IOArray, newIOArray, unsafeReadIOArray, unsafeWriteIOArray)
 import Pudu.Comptime.Limits (iterationLimit)
 import Pudu.Eval.Env
   ( Env (..), Eval (..), Evaluator (..), abortAt, callLimit, descend, expectBool, integerKindAt
-  , lookupLocal, lookupModule, lookupName, tally, updateExisting )
+  , inDeclaredOrder, lookupLocal, lookupModule, lookupName, tally, updateExisting )
 import Pudu.Eval.Frame (frameLookup)
 import Pudu.Eval.Loop.Step (Step, finallyStep, liftStep, runStep, stopStep)
 import Pudu.Eval.Match (integerLiteralValue, literalValue)
@@ -174,7 +174,8 @@ planExpression region layout (Located spanValue expression) = case expression of
       let owner = foldl (\_ name -> name) first rest
           labels = map fst named
           build = withArguments (map snd named)
-            (\_ _ values -> pure (RecordValue owner (zip labels values)))
+            (\_ env values -> pure (RecordValue owner
+              (inDeclaredOrder (Map.lookup owner (envRecordFields env)) (zip labels values))))
       pure (joined build (map snd named))
   BlockExpression block -> planBlock region layout block
   IfExpression condition thenBlock elseBranch -> do

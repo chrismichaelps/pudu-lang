@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Records hold their declared field order (#519)
+
+- A record literal written out of declaration order no longer compares unequal to, or renders differently from, the same value written in order. Fields still evaluate as written; the tree walker, compiled bodies and loop kernel all store them in declaration order. [[Eval Record Order Tests]] covers each path. See [[architecture/SEMANTICS]].
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

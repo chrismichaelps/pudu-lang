@@ -109,3 +109,5 @@ Register Qualified Shadow Spec with the existing test dependencies. Resolved Gri
 Register [[Mutex Admission Spec]] explicitly with existing dependencies. Resolved Grill Log (#476): the controlled native family and real public fixture run in the complete suite.
 
 Register [[Database Challenge Spec]] explicitly with existing dependencies. Resolved Grill Log: complete-suite execution and focused execution use the same real challenge admission assertions.
+
+Register Pudu.Eval.RecordOrderSpec in other-modules (#519).
