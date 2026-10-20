@@ -54,3 +54,7 @@ since [[Native Text Runtime]] adds its own dependencies to the facade.
 ## Text method catalogue (#516)
 
 The compatibility check also skips [[Native Text Methods]] parts.
+
+## Case catalogue (#517)
+
+The compatibility check also skips [[Native Text Case]] parts.

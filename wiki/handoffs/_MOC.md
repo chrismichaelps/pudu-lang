@@ -212,3 +212,5 @@ tags: [moc, handoff]
 - [[Native Owned Text Delivery]] — owned Str values through native frames (#515).
 
 - [[Native Text Method Delivery]] — Str methods with Int/Bool/Str results (#516).
+
+- [[Native Text Case Delivery]] — native trim and case mapping (#517).

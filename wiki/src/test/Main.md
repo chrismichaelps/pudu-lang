@@ -188,3 +188,7 @@ without changing source admission or the represented runtime ABI.
 
 Register textLeakProperties from [[Backend Text Leak Tests]] beside the wide
 frame properties.
+
+## Text case registration (#517)
+
+Register textCaseProperties from [[Backend Text Case Tests]].

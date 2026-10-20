@@ -161,6 +161,9 @@ data CoreTextMethodName
   | TextReverse
   | TextEscapeHtml
   | TextReplace
+  | TextTrim
+  | TextToUpper
+  | TextToLower
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from

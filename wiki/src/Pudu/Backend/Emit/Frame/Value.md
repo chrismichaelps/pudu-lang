@@ -64,3 +64,7 @@ through `pudu_text_compare`, which orders by bytes like Data.Text.
 `FrameTextMethod` calls the matching [[Native Text Methods]] helper. Counting
 methods return a `pudu_int`, predicates an `int`, text methods a new
 reference. drop, take and repeat receive their E7004 sites.
+
+## Trim and case mapping (#517)
+
+The three methods call `pudu_text_trim`, `pudu_text_to_upper` and `pudu_text_to_lower`.

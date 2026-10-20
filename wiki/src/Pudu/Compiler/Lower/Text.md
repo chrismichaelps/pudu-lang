@@ -41,3 +41,7 @@ Str receiver. Methods outside the table refuse; nothing falls back.
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Text Methods]] · [[src/_MOC]]
+
+## Trim and case mapping (#517)
+
+`trim`, `toUpper` and `toLower` take no arguments and answer Str; [[Native Text Case]] implements them.

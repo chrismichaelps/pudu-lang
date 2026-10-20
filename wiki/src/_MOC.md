@@ -240,6 +240,7 @@ tags: [moc, module]
 - [[Backend Float Programs]] — Float32/Float64 source programs with IEEE answers and interpreter refusals.
 - [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned Str values, conformance and counted leaks.
 - [[Compiler Lower Text]] · [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
+- [[Native Text Case]] · [[Backend Text Case Tests]] — trim and case mapping from the linked Data.Text.
 
 - [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] · [[Backend Deferred Integer Programs]] — exact integer carriers and deferred-value conformance.
 

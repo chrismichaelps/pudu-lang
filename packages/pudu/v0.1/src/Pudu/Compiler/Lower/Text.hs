@@ -67,4 +67,7 @@ methods =
   , ("reverse", (TextReverse, [], CoreTextType))
   , ("escapeHtml", (TextEscapeHtml, [], CoreTextType))
   , ("replace", (TextReplace, [CoreTextType, CoreTextType], CoreTextType))
+  , ("trim", (TextTrim, [], CoreTextType))
+  , ("toUpper", (TextToUpper, [], CoreTextType))
+  , ("toLower", (TextToLower, [], CoreTextType))
   ]

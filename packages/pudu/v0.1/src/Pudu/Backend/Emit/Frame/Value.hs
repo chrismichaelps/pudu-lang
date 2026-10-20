@@ -69,6 +69,9 @@ frameValue state value = case frameValueShape value of
       TextReverse -> simple "text_reverse"
       TextEscapeHtml -> simple "text_escape_html"
       TextReplace -> simple "text_replace"
+      TextTrim -> simple "text_trim"
+      TextToUpper -> simple "text_to_upper"
+      TextToLower -> simple "text_to_lower"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | otherwise -> rendered slot
