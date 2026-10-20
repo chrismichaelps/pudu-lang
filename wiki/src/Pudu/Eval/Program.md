@@ -147,3 +147,8 @@ folding reuses it. Constructor arrays, selected constants and calls retain canon
 Resolved Grill Log: builtins reside in their own frame before aliases are installed. Loading the
 root's declarations must not reinstall them over selected imports with names such as `show` or
 `Some`; folding uses `loadModuleDeclarations`, matching runtime root loading.
+
+## Record field order (#519)
+
+Reloading declarations for an interactive block clears the record field-order
+table with the variant owners.

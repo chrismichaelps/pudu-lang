@@ -40,6 +40,9 @@ module Pudu.Eval.Env
   , withIntegerKinds
   , recordVariantOwner
   , variantOwner
+  , recordFieldOrder
+  , declaredFieldOrder
+  , inDeclaredOrder
   , performEffect
   , withoutEffects
   , expectBool
@@ -94,6 +97,11 @@ data Env = Env
   { envFrames :: ![Frame]
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
+  {-| Each record type's fields, and each record-payload variant's, in the
+      order the declaration lists them. A record value holds its fields in
+      this order whatever order the literal wrote them in, so equality,
+      ordering and rendering see one shape per value. -}
+  , envRecordFields :: !(Map Text [Text])
   , envIntegerKinds :: !(Map Span Text)
   {-| Where to tally the work, when someone asked to see it.
 
@@ -323,6 +331,7 @@ emptyEnv handles children sockets secured concurrent desktop audioStreams foreig
     { envFrames = [MapFrame Map.empty]
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
+    , envRecordFields = Map.empty
     , envIntegerKinds = Map.empty
     , envTally = Nothing
     , envModuleDepth = 0
@@ -597,6 +606,27 @@ withIntegerKinds kinds =
 integerKindAt :: Span -> Evaluator (Maybe Text)
 integerKindAt spanValue =
   Evaluator $ \env -> pure (Done (Map.lookup spanValue (envIntegerKinds env)) env)
+
+recordFieldOrder :: Text -> [Text] -> Evaluator ()
+recordFieldOrder owner fields =
+  Evaluator $ \env ->
+    pure (Done () env{envRecordFields = Map.insert owner fields (envRecordFields env)})
+
+declaredFieldOrder :: Text -> Evaluator (Maybe [Text])
+declaredFieldOrder owner =
+  Evaluator $ \env -> pure (Done (Map.lookup owner (envRecordFields env)) env)
+
+{-| Written fields rearranged into the declared order. Evaluation already
+    happened in written order; only the stored order changes. Fields that are
+    not exactly the declared set are left alone, since then the name found
+    belongs to some other type. -}
+inDeclaredOrder :: Maybe [Text] -> [(Text, Value)] -> [(Text, Value)]
+inDeclaredOrder declared fields = case declared of
+  Just order
+    | map fst fields /= order
+    , length order == length fields
+    , Just arranged <- traverse (\name -> (,) name <$> lookup name fields) order -> arranged
+  _ -> fields
 
 {-| The sum a variant belongs to, when the variant is one. -}
 variantOwner :: Text -> Evaluator (Maybe Text)

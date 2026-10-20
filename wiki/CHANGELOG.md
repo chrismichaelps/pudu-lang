@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-20 — Records hold their declared field order (#519)
+
+- A record literal written out of declaration order no longer compares unequal to, or renders differently from, the same value written in order. Fields still evaluate as written; the tree walker, compiled bodies and loop kernel all store them in declaration order. [[Eval Record Order Tests]] covers each path. See [[architecture/SEMANTICS]].
+
 ## 2026-10-20 — Native tuples (#521)
 
 - Tuples compile natively as refcounted boxes: literals, positions, `let` tuple patterns, equality, ordering, `show`/`display` and tuple entry results match the interpreter, including its NaN ordering. Frames track text and boxes through one owned-slot list. [[Native Aggregate Emission]], [[Backend Tuple Programs]]. Progress stays 4/14 (28%).

@@ -119,6 +119,7 @@ test-suite pudu-test
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
     Pudu.Eval.IfUnitSpec
+    Pudu.Eval.RecordOrderSpec
     Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec

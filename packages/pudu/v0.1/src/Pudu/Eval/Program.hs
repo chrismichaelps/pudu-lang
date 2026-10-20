@@ -204,7 +204,8 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
   unless reuseDeclarations $ do
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
-      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+      { envFrames = [MapFrame Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty
+      , envRecordFields = Map.empty })
     builtins <- linkDependencies dependencies
     pushFrame builtins
     pushFrame Map.empty

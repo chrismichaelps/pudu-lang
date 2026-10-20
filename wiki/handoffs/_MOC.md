@@ -218,3 +218,5 @@ tags: [moc, handoff]
 - [[Native Char Delivery]] — native Char values and charAt (#518).
 
 - [[Native Tuple Delivery]] — boxed native tuples (#521).
+
+- [[Record Field Order Repair]] — records hold their declared field order (#519).

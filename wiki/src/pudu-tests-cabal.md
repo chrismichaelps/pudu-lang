@@ -242,3 +242,5 @@ Register Pudu.Backend.CharPrograms in other-modules.
 ## Tuple programs (#521)
 
 Register Pudu.Backend.TuplePrograms in other-modules.
+
+Register Pudu.Eval.RecordOrderSpec in other-modules (#519).

@@ -198,6 +198,7 @@ tags: [moc, module]
 
 - [[Eval Loop Kernel]] — complete pure regions, ordered indexing and closed module functions.
 - [[Eval Loop Step]] · [[Eval Loop Step Tests]] — shared region execution without boxed intermediate result wrappers.
+- [[Eval Record Order Tests]] — records hold their declared field order in every evaluator.
 - [[Eval Value]] · [[Eval MultiMap]] · [[Eval Operator Access]] · [[Eval Data Tests]] — compact persistent occurrence entries, exact integer index bounds and runtime compatibility evidence.
 
 - [[UsesMultiMapNumeric]] — numeric index and native-loop semantic compatibility.

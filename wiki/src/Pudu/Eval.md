@@ -230,3 +230,8 @@ and source spans. An `if` with `else` still yields its selected branch value.
 Resolved Grill Log: discard the successful block value through evaluator
 sequencing, as the existing no-else `if let` path does. Do not skip the final
 expression, catch a control transfer, or erase a diagnostic to manufacture unit.
+## Declared field order (#519)
+
+A record literal evaluates its fields as written, then stores them in the order
+[[Eval Env]] has for its type. Resolved Grill Log: reordering the syntax instead
+would move effects; reordering after evaluation keeps them where they were.
