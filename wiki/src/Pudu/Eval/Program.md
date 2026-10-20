@@ -147,3 +147,10 @@ folding reuses it. Constructor arrays, selected constants and calls retain canon
 Resolved Grill Log: builtins reside in their own frame before aliases are installed. Loading the
 root's declarations must not reinstall them over selected imports with names such as `show` or
 `Some`; folding uses `loadModuleDeclarations`, matching runtime root loading.
+
+## Entry call span (#524)
+
+The entry is called with its own name's span. Before, it was called with no
+span, so an entry that takes parameters had its arity refusal fall through
+`fallbackDiagnostic Nothing` and the process died on `error`; under
+`pudu test` that ended the whole run. Now it is E7003 at the entry's name.

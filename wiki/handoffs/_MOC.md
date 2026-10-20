@@ -172,3 +172,5 @@ tags: [moc, handoff]
 - [[Database Authentication Delivery]] — finite Database challenge work and typed refusals.
 
 - [[Graph Integration Delivery]] — preserve both Database safeguards and exact graph output (#478).
+
+- [[Entry Call Span Repair]] — an entry with parameters is a diagnostic (#524).
