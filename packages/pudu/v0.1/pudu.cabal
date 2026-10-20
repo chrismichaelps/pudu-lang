@@ -91,6 +91,7 @@ library
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
+    Pudu.Backend.Runtime.Char
     Pudu.Backend.Runtime.Dependencies
     Pudu.Backend.Runtime.Float
     Pudu.Backend.Runtime.Frame

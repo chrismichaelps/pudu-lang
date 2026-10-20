@@ -61,6 +61,7 @@ instruction (state, needs) operation = case operation of
       CoreFloatType _ -> printed "print_float" value
       CoreBoolType -> printed "print_bool" value
       CoreTextType -> printed "print_text" value
+      CoreCharType -> printed "print_char" value
       CoreUnitType -> printed "print_str" "\"()\", 2"
       _ -> Left (FrameFault (Just at) "an unrepresented frame print value")
   where

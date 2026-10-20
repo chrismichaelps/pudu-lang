@@ -22,7 +22,7 @@ import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer, Bool, float, Str or unit; a body that never
+{-| The entry carries an admitted integer, Bool, float, Str, Char or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
     printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
     entry result. -}
@@ -40,6 +40,7 @@ lowerEntryBody located state
                 kind@(CoreFloatType _) -> built after coreBlock kind
                 CoreBoolType -> built after coreBlock CoreBoolType
                 CoreTextType -> built after coreBlock CoreTextType
+                CoreCharType -> built after coreBlock CoreCharType
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -258,7 +259,7 @@ allowedResultType declared operand = case declared of
   Nothing -> case operand of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
-    _ -> operand `elem` [CoreBoolType, CoreTextType, CoreUnitType, CoreNeverType]
+    _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerExpression state (Located spanValue expression) = case expression of
@@ -272,7 +273,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     IntegerValue _ -> halt spanValue "an unresolved integer literal" state
     BoolValue flag -> value (CoreBoolLiteral flag) CoreBoolType
     StringValue text -> value (CoreTextLiteral text) CoreTextType
-    CharValue _ -> halt spanValue "character literals" state
+    CharValue character -> value (CoreCharLiteral character) CoreCharType
     FloatValue text -> case parseFloatLiteral text of
       Just ParsedFloat{parsedFloatValue, parsedFloatWidth, parsedFloatFits = True} ->
         value (CoreFloatLiteral parsedFloatWidth (castDoubleToWord64 parsedFloatValue)) (CoreFloatType parsedFloatWidth)

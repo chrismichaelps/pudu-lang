@@ -49,3 +49,8 @@ rules, because text 2.1.4 has none for these functions.
 ## Referenced by
 
 [[Native Text Methods]] · [[Compiler Lower Text]] · [[src/_MOC]]
+
+## Encoding prerequisites (#518)
+
+`text_encode` needs only the prelude, so a program that prints a Char
+without building text does not select the text part.

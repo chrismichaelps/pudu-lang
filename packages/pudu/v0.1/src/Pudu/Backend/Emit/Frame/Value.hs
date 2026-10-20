@@ -21,6 +21,7 @@ cellMember (CoreIntegerType kind) = Just (if isWideInteger kind then "wide" else
 cellMember (CoreFloatType _) = Just "floating"
 cellMember CoreBoolType = Just "scalar"
 cellMember CoreTextType = Just "text"
+cellMember CoreCharType = Just "character"
 cellMember CoreUnitType = Just "scalar"
 cellMember _ = Nothing
 
@@ -38,6 +39,8 @@ frameValue state value = case frameValueShape value of
   FrameUnitLiteral -> done state "0" []
   FrameTextLiteral text ->
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
+  FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
+  FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
   FrameRead slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
     | otherwise -> slotText slot >>= \text -> done state text []
@@ -72,8 +75,10 @@ frameValue state value = case frameValueShape value of
       TextTrim -> simple "text_trim"
       TextToUpper -> simple "text_to_upper"
       TextToLower -> simple "text_to_lower"
+      TextCharAt -> counted "text_char_at" "index out of range"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
+    | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]
     | otherwise -> rendered slot
   FrameBinary scalar left right
     | frameSlotType left == CoreTextType -> do
@@ -142,6 +147,7 @@ frameValue state value = case frameValueShape value of
             let helper = integerHelper (frameSlotType left) "compare"
              in done state (call helper [lhs, rhs] <> " " <> symbol <> " 0") [helper]
           CoreBoolType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
+          CoreCharType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           CoreUnitType -> done state (lhs <> " " <> symbol <> " " <> rhs) []
           _ -> refused "an unrepresented comparison operand"
     case coreScalarOperator scalar of
@@ -196,6 +202,7 @@ frameValue state value = case frameValueShape value of
         CoreBoolType -> plain ("(" <> text <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))") ["text_literal"]
         CoreUnitType -> plain "pudu_text_literal(\"()\", 2)" ["text_literal"]
         CoreTextType -> plain ("pudu_text_retain(" <> text <> ")") ["text_retain"]
+        CoreCharType -> plain ("pudu_char_text(" <> text <> ")") ["char_text"]
         _ -> refused "a rendered value without a native representation"
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
     call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"

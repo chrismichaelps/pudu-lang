@@ -234,3 +234,7 @@ Register Pudu.Backend.TextMethodPrograms in other-modules.
 ## Text case tests (#517)
 
 Register Pudu.Backend.TextCaseSpec in other-modules.
+
+## Char programs (#518)
+
+Register Pudu.Backend.CharPrograms in other-modules.

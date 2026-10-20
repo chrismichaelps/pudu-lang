@@ -101,3 +101,9 @@ Two Str operands admit `+` (Str) and the six comparisons (Bool), as
 `textOperation` does. Any other accepted operator on two Str values traps
 with `unsupported operator X`; mixed operands and unary operators on Str trap
 with `cannot apply`, naming the operand kind `string` as `valueKind` does.
+
+## Char operators (#518)
+
+Two Char operands admit the six comparisons, as `comparisonOnly` does. Any
+other operator on two Chars traps with `unsupported operator X`; unary
+operators trap with `cannot apply X to a char`, the kind `valueKind` names.

@@ -29,7 +29,7 @@ lowerUnary lower state at operator operand
         | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType] || floatType kind
+        | kind `elem` [CoreUnitType, CoreBoolType, CoreTextType, CoreCharType] || floatType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -57,7 +57,7 @@ lowerBinary lower state at left operator right
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType) ->
               let message
-                    | leftType == rightType && (leftType `elem` [CoreBoolType, CoreTextType] || floatType leftType) = unsupportedOperatorMessage operator
+                    | leftType == rightType && (leftType `elem` [CoreBoolType, CoreTextType, CoreCharType] || floatType leftType) = unsupportedOperatorMessage operator
                     | otherwise = cannotApplyBinaryMessage operator (runtimeKind leftType) (runtimeKind rightType)
                in failure after at message [coreLeft, coreRight]
           | otherwise -> halt at ("the operator '" <> operator <> "' outside the native scalar subset") after
@@ -71,7 +71,7 @@ represented operator left right
   | integerType left, Just operation <- lookup operator arithmetic = Just (operation, left)
   | floatType left, Just operation <- lookup operator floating = Just (operation, left)
   | left == CoreTextType, operator == "+" = Just (CoreAdd, CoreTextType)
-  | integerType left || floatType left || left `elem` [CoreBoolType, CoreTextType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
+  | integerType left || floatType left || left `elem` [CoreBoolType, CoreTextType, CoreCharType], Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
   | nativeValueType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
@@ -103,6 +103,7 @@ runtimeKind CoreUnitType = "unit"
 runtimeKind CoreBoolType = "bool"
 runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
+runtimeKind CoreCharType = "char"
 runtimeKind kind = coreTypeName kind
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))

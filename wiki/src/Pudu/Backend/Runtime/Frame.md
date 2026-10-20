@@ -65,3 +65,8 @@ without wide integers; floats keep the narrow cell at eight bytes.
 retains the text it receives; freeing a frame, on return or unwind, releases
 its text slots; a returned text replaces (and releases) the destination's old
 value, or is released when the call has no destination.
+
+## Char cell member (#518)
+
+`pudu_cell` gains `uint32_t character`, always present. It is narrower than
+`pudu_int`, so no layout grows.

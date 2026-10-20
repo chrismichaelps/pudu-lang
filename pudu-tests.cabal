@@ -87,6 +87,7 @@ test-suite pudu-test
     Pudu.Backend.FunctionPrograms
     Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms
+    Pudu.Backend.CharPrograms
     Pudu.Backend.TextCaseSpec
     Pudu.Backend.TextLeakSpec
     Pudu.Backend.TextMethodPrograms

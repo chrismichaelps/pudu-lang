@@ -38,6 +38,11 @@ emitFrameProgram version sources source = do
       , "  pudu_text_release(pudu_shown);"
       , "  pudu_text_release(pudu_entry);"
       , "  return 0;" ]
+    CoreCharType -> Right
+      [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
+      , "  pudu_print_text(pudu_shown);"
+      , "  pudu_text_release(pudu_shown);"
+      , "  return 0;" ]
     CoreUnitType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
     CoreNeverType -> Right ["  (void)pudu_run_frames(" <> textOfInt entryId <> ");", "  return 0;"]
   (emitted, roots) <- emitFrameBodies (emptyEmitState sources) source
@@ -50,6 +55,7 @@ emitFrameProgram version sources source = do
         CoreFloatType _ -> ["print_float"]
         CoreBoolType -> ["print_bool"]
         CoreTextType -> ["text_show", "print_text"]
+        CoreCharType -> ["char_show", "print_text"]
         _ -> []
       selected = foldl' visit Set.empty (Set.toList roots <> base <> entryNeeds)
       runtime = concat [runtimePartLines part <> [""] | part <- runtimeParts, Set.member (runtimePartName part) selected]

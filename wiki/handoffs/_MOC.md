@@ -214,3 +214,5 @@ tags: [moc, handoff]
 - [[Native Text Method Delivery]] — Str methods with Int/Bool/Str results (#516).
 
 - [[Native Text Case Delivery]] — native trim and case mapping (#517).
+
+- [[Native Char Delivery]] — native Char values and charAt (#518).

@@ -1,4 +1,4 @@
-{-| @Pudu.Compiler.Lower.Text — built-in Str methods on a lowered receiver. -}
+{-| @Pudu.Compiler.Lower.Text — built-in Str and Char methods on a lowered receiver. -}
 module Pudu.Compiler.Lower.Text (lowerTextMethod) where
 
 import Data.Text (Text)
@@ -46,6 +46,12 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
         (next, Just (core, _))
           | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] method argument" next
           | otherwise -> effects next (core : done) rest
+  (after, Just (coreReceiver, CoreCharType)) -> case (member, arguments) of
+    -- Char answers these two before any impl, as readCharMember does.
+    ("code", []) -> built after (CoreCharCode coreReceiver) intType
+    ("toText", []) -> built after (CoreDisplay coreReceiver) CoreTextType
+    _ | member `elem` ["code", "toText"] -> halt at ("a call to " <> member <> " with this many arguments") after
+      | otherwise -> halt at ("the Char method '" <> member <> "'") after
   (after, Just (_, kind)) -> halt at ("methods on " <> coreTypeName kind) after
  where
   built current shape kind = (current, Just (CoreExpression at kind shape, kind))
@@ -70,4 +76,5 @@ methods =
   , ("trim", (TextTrim, [], CoreTextType))
   , ("toUpper", (TextToUpper, [], CoreTextType))
   , ("toLower", (TextToLower, [], CoreTextType))
+  , ("charAt", (TextCharAt, [intType], CoreCharType))
   ]

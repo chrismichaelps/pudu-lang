@@ -12,7 +12,7 @@ import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, Signe
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo, typeAt)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme, Type (..), boolType, stringType )
+  ( NominalId (..), Scheme, Type (..), boolType, charType, stringType )
 
 {-| Facts from one checked module; complete spans retain generated identity. -}
 data LowerTypes = LowerTypes !TypeInfo !(Map Text Scheme)
@@ -35,6 +35,7 @@ formedCoreType value
   | NominalType (NominalId Nothing "Float32") [] <- value = Just (CoreFloatType Float32Width)
   | value == boolType = Just CoreBoolType
   | value == stringType = Just CoreTextType
+  | value == charType = Just CoreCharType
   | otherwise = case value of
       UnitTypeValue -> Just CoreUnitType
       NeverType -> Just CoreNeverType
@@ -51,6 +52,7 @@ nativeScalarType :: CoreType -> Bool
 nativeScalarType (CoreIntegerType kind) = nativeIntegerKind kind
 nativeScalarType (CoreFloatType _) = True
 nativeScalarType CoreBoolType = True
+nativeScalarType CoreCharType = True
 nativeScalarType CoreUnitType = True
 nativeScalarType _ = False
 

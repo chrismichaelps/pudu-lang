@@ -68,3 +68,10 @@ reference. drop, take and repeat receive their E7004 sites.
 ## Trim and case mapping (#517)
 
 The three methods call `pudu_text_trim`, `pudu_text_to_upper` and `pudu_text_to_lower`.
+
+## Char values (#518)
+
+`cellMember` answers `character` (a `uint32_t`). Literals are the scalar in
+hex, comparisons are plain C comparisons, `code` is `pudu_make(c, 0)`.
+Display calls `pudu_char_text`, show calls `pudu_char_show`, and charAt calls
+`pudu_text_char_at` with its E7004 site.

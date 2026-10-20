@@ -124,6 +124,7 @@ data CoreExpressionShape
   | CoreFloatLiteral !FloatWidth !Word64
   | CoreBoolLiteral !Bool
   | CoreTextLiteral !Text
+  | CoreCharLiteral !Char
   | CoreReadLocal !CoreLocal
   | CoreNegate !CoreExpression
   | CoreComplement !CoreExpression
@@ -134,6 +135,8 @@ data CoreExpressionShape
   | CoreShow !CoreExpression
   {-| A built-in Str method; the arguments run before the receiver. -}
   | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
+  {-| `c.code()`: the scalar as an Int. -}
+  | CoreCharCode !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
@@ -164,6 +167,7 @@ data CoreTextMethodName
   | TextTrim
   | TextToUpper
   | TextToLower
+  | TextCharAt
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
@@ -202,6 +206,7 @@ data CoreType
   | CoreFloatType !FloatWidth
   | CoreBoolType
   | CoreTextType
+  | CoreCharType
   | CoreUnitType
   | CoreNeverType
   deriving stock (Eq, Show)
@@ -212,5 +217,6 @@ coreTypeName coreType = case coreType of
   CoreFloatType width -> floatWidthType width
   CoreBoolType -> "Bool"
   CoreTextType -> "Str"
+  CoreCharType -> "Char"
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

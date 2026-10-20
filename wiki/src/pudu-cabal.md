@@ -419,3 +419,7 @@ Register Pudu.Compiler.Lower.Text and Pudu.Backend.Runtime.Text.Methods in expos
 ## Case module (#517)
 
 Register Pudu.Backend.Runtime.Text.Case in exposed-modules.
+
+## Char runtime (#518)
+
+Register Pudu.Backend.Runtime.Char in exposed-modules.

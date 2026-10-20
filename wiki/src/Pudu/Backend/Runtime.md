@@ -242,3 +242,8 @@ Text cells and the frame text metadata change the ABI, so the revision is 9.
 ## Case mapping (#517)
 
 [[Native Text Case]] parts follow the text method parts.
+
+## Runtime revision 10 (#518)
+
+The cell gains a `character` member, so the revision is 10. [[Native Char
+Runtime]] parts follow the case parts.

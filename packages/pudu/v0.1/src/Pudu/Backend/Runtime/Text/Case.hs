@@ -95,7 +95,7 @@ textCaseRuntimeParts =
 
 textCaseRuntimeDependencies :: Text -> [Text]
 textCaseRuntimeDependencies name = maybe [] id (lookup name
-  [ ("text_encode", ["text"])
+  [ ("text_encode", [])
   , ("text_case_map", ["text_decode", "text_encode", "text_allocate"])
   , ("text_to_upper", ["text_case_map"])
   , ("text_to_lower", ["text_case_map"])
