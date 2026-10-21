@@ -1,0 +1,32 @@
+module Main
+
+import Lib {Loud}
+
+type Bell = { n: Int }
+
+type Name = { text: Str }
+
+fn shout(text: Str) -> Str { "the importer's shout" }
+
+impl Loud[Int] for Bell {
+  fn word(self: &Self) -> Int { self.n }
+}
+
+/// An implementation may still override a default it imports.
+impl Loud[Str] for Name {
+  fn word(self: &Self) -> Str { self.text }
+  fn twice(self: &Self) -> (Str, Str) { (self.text, "overridden") }
+}
+
+export fn main() -> Int {
+  let bell = Bell{n: 4}
+  let name = Name{text: "pudu"}
+  var held = 0
+  if bell.loudly(|n| n.toText()) == "4!" { held = held + 1 }
+  if Loud.loudly(&bell, |n| (n * 2).toText()) == "8!" { held = held + 1 }
+  if bell.wrapped().held == 4 { held = held + 1 }
+  if bell.twice() == (4, 4) { held = held + 1 }
+  if name.loudly(|text| text) == "pudu!" { held = held + 1 }
+  if name.twice() == ("pudu", "overridden") { held = held + 1 }
+  held
+}
