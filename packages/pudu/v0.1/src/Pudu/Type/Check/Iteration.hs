@@ -58,13 +58,21 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
   TupleTypeValue (first : rest) -> do
     mapM_ (unify spanValue first) rest
     pure first
+  {-| A parameter is walked through what its bounds provide. -}
+  receiver@(RigidType name) -> do
+    walked <- sequenceItem receiver
+    case walked of
+      Just item -> pure item
+      Nothing -> do
+        report "E3030" spanValue ("a " <> name <> " cannot be iterated")
+          (Just ("bound " <> name <> " by Std.Iter.Sequence, which provides begin and advance"))
+        pure ErrorType
   NominalType owner arguments -> do
     let receiver = NominalType owner arguments
-        receiverReference = ReferenceTypeValue False receiver
-    begun <- instantiateMethod receiver "begin"
-    stepped <- instantiateMethod receiver "advance"
-    case (begun, stepped) of
-      (Nothing, Nothing) -> do
+    walked <- sequenceItem receiver
+    case walked of
+      Just item -> pure item
+      Nothing -> do
         {-| A sum walks the payload the matched variant carries, which is what
             makes an `Option` a sequence of nought or one. Every variant's
             payload must agree, because one binder cannot hold two types. -}
@@ -91,8 +99,26 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
                   )
               )
             pure ErrorType
-      (Just ErrorType, _) -> pure ErrorType
-      (_, Just ErrorType) -> pure ErrorType
+  other -> do
+    report "E3030" spanValue ("a " <> renderType other <> " cannot be iterated")
+      (Just "iterate an array, a string, a map, a set, or a type implementing Std.Iter.Sequence")
+    pure ErrorType
+ where
+  instantiateMethod receiver name = do
+    found <- methodScheme spanValue receiver name
+    mapM (instantiate spanValue) found
+
+  {-| The item `begin` and `advance` produce for this receiver, or nothing when
+      it has neither. Both present but not forming one sequence is reported
+      here. -}
+  sequenceItem receiver = do
+    begun <- instantiateMethod receiver "begin"
+    stepped <- instantiateMethod receiver "advance"
+    let receiverReference = ReferenceTypeValue False receiver
+    case (begun, stepped) of
+      (Nothing, Nothing) -> pure Nothing
+      (Just ErrorType, _) -> pure (Just ErrorType)
+      (_, Just ErrorType) -> pure (Just ErrorType)
       ( Just (FunctionTypeValue False [beginReceiver] beginState)
         , Just
             ( FunctionTypeValue False [advanceReceiver, advanceState]
@@ -103,24 +129,16 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
           _ <- unify spanValue receiverReference advanceReceiver
           _ <- unify spanValue beginState advanceState
           _ <- unify spanValue beginState nextState
-          zonk item
+          Just <$> zonk item
       _ -> do
         report "E3030" spanValue
-          (nominalName owner <> " does not provide one coherent sequence")
+          (renderType receiver <> " does not provide one coherent sequence")
           ( Just
               ( "begin must take &Self and answer State; advance must take "
                   <> "&Self and State and answer Option[(State, Item)]"
               )
           )
-        pure ErrorType
-  other -> do
-    report "E3030" spanValue ("a " <> renderType other <> " cannot be iterated")
-      (Just "iterate an array, a string, a map, a set, or a type implementing Std.Iter.Sequence")
-    pure ErrorType
- where
-  instantiateMethod receiver name = do
-    found <- methodScheme spanValue receiver name
-    mapM (instantiate spanValue) found
+        pure (Just ErrorType)
 
 throughReference :: Type -> Type
 throughReference typeValue = case typeValue of

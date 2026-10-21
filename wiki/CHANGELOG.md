@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Standard library views and a chainable Iter (#527)
+
+- [[Std Iter]]: adapters and terminals are default members of `Sequence`, so `source.map(f).filter(g).take(3).toArray()` reads in order for every implementor; adds `takeWhile`, `dropWhile`, `stride`, `chain`, `enumerate`, `fold`, `any`, `all`, `find`, `first` and `last`. Each source item is produced once; terminals walk with `for`.
+- [[Std Span]], [[Std MdSpan]] and [[Std StringView]] add non-owning views of arrays, multidimensional arrays and UTF-8 text; [[Std Memory]] adds offset allocators (arena and pool).
+- [[Eval TextView]] adds the byte-addressed text primitives behind `Std.StringView`, checked against a byte-level model.
+- [[Type Check Iteration]] lets `for` iterate a type parameter through its `Sequence` bound.
+
 ## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
 
 - [[Type Check Method]] gives an inherited default its trait member's declared scheme, substituted at the implementation, so an imported default keeps the trait module's names; [[Type Check]] hands local implementations every imported trait and declares trait members first.

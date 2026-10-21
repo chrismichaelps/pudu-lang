@@ -1,0 +1,319 @@
+module Std.MdSpan
+
+import Std.Iter {Sequence}
+
+/// Which positions of one dimension a slice keeps.
+///
+/// - `All` keeps the whole dimension.
+/// - `At(index)` keeps one position and drops the dimension, so the result has
+///   one dimension fewer.
+/// - `Within(first, last)` keeps the positions from `first` up to but not
+///   including `last`.
+/// - `Every{first, last, step}` keeps every `step`th position from `first` up to
+///   but not including `last`.
+///
+/// ## Examples
+///
+/// ```
+/// let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+/// grid.slice([MdSpan.At(1), MdSpan.All]) ?   // the row [4, 5, 6]
+/// ```
+export type Slice =
+  | All
+  | At(Int)
+  | Within(Int, Int)
+  | Every{first: Int, last: Int, step: Int}
+
+/// A multidimensional view of an array, read in place.
+///
+/// Position `[i0, i1, ...]` is the array item at `offset + i0 * strides[0] +
+/// i1 * strides[1] + ...`. Slicing makes a new view over the same array by
+/// changing the offset, extents and strides; nothing is copied until `toArray`.
+///
+/// ## Examples
+///
+/// ```
+/// let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+/// grid.get2(1, 2)  // Some(6)
+/// grid.extent(1)   // Some(3)
+/// ```
+export type MdSpan[T] = { source: Array[T], offset: Int, extents: Array[Int], strides: Array[Int] }
+
+/// A view whose last dimension is contiguous, the layout of nested arrays laid
+/// end to end. `None` when an extent is negative or the array is too short.
+///
+/// ## Examples
+///
+/// ```
+/// MdSpan.rowMajor([1, 2, 3, 4], [2, 2])  // Some(2 by 2 view)
+/// MdSpan.rowMajor([1, 2, 3], [2, 2])     // None
+/// ```
+export fn rowMajor[T](values: Array[T], extents: Array[Int]) -> Option[MdSpan[T]] {
+  var strides = []
+  var step = 1
+  var dimension = extents.length() - 1
+  while dimension >= 0 {
+    strides = strides.insert(0, step)
+    step = step * extents[dimension]
+    dimension = dimension - 1
+  }
+  strided(values, 0, extents, strides)
+}
+
+/// A view whose first dimension is contiguous. `None` when an extent is
+/// negative or the array is too short.
+///
+/// ## Examples
+///
+/// ```
+/// let grid = MdSpan.columnMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+/// grid.get2(1, 0)  // Some(2)
+/// ```
+export fn columnMajor[T](values: Array[T], extents: Array[Int]) -> Option[MdSpan[T]] {
+  var strides = []
+  var step = 1
+  for extent in extents {
+    strides = strides.push(step)
+    step = step * extent
+  }
+  strided(values, 0, extents, strides)
+}
+
+/// A view with an explicit layout. `None` unless there is one stride per
+/// extent, every extent and stride is at least nought, and every position the
+/// view can name is inside the array.
+///
+/// ## Examples
+///
+/// ```
+/// let diagonal = MdSpan.strided([1, 0, 0, 1], 0, [2], [3]) ?
+/// diagonal.toArray()  // [1, 1]
+/// ```
+export fn strided[T](values: Array[T], offset: Int, extents: Array[Int], strides: Array[Int]) -> Option[MdSpan[T]] {
+  if offset < 0 || extents.length() != strides.length() {
+    return None
+  }
+  var reach = offset
+  var empty = false
+  var dimension = 0
+  while dimension < extents.length() {
+    let extent = extents[dimension]
+    let stride = strides[dimension]
+    if extent < 0 || stride < 0 {
+      return None
+    }
+    if extent == 0 { empty = true } else { reach = reach + (extent - 1) * stride }
+    dimension = dimension + 1
+  }
+  if empty || reach < values.length() {
+    Some(MdSpan{source: values, offset: offset, extents: extents, strides: strides})
+  } else {
+    None
+  }
+}
+
+/// Reading and slicing a multidimensional view.
+export trait Grid[T] {
+  /// How many dimensions the view has.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4], [2, 2]) ?).rank()  // 2
+  /// ```
+  fn rank(self: &Self) -> Int
+
+  /// How many positions dimension `dimension` has, or `None` past the rank.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?).extent(0)  // Some(2)
+  /// ```
+  fn extent(self: &Self, dimension: Int) -> Option[Int]
+
+  /// How many items the view holds: the product of its extents.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?).size()  // 6
+  /// ```
+  fn size(self: &Self) -> Int
+
+  /// The item at one position per dimension, or `None` when the position has
+  /// the wrong length or falls outside an extent.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?).get([1, 0])  // Some(4)
+  /// ```
+  fn get(self: &Self, indices: Array[Int]) -> Option[T]
+
+  /// The item at `[row, column]` of a two-dimensional view.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4], [2, 2]) ?).get2(0, 1)  // Some(2)
+  /// ```
+  fn get2(self: &Self, row: Int, column: Int) -> Option[T]
+
+  /// The item at `[i, j, k]` of a three-dimensional view.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (MdSpan.rowMajor([1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2]) ?).get3(1, 0, 1)  // Some(6)
+  /// ```
+  fn get3(self: &Self, i: Int, j: Int, k: Int) -> Option[T]
+
+  /// A view of the positions each slice keeps, one slice per dimension, or
+  /// `None` when there are not exactly `rank` slices or one names a position
+  /// outside its dimension. Every `At` drops its dimension.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  /// (grid.slice([MdSpan.All, MdSpan.At(1)]) ?).toArray()  // [2, 5]
+  /// ```
+  fn slice(self: &Self, slices: Array[Slice]) -> Option[MdSpan[T]]
+}
+
+/// The array position of an in-range multidimensional position.
+fn positionOf(offset: Int, strides: &Array[Int], indices: &Array[Int]) -> Int {
+  var position = offset
+  var dimension = 0
+  while dimension < indices.length() {
+    position = position + indices[dimension] * strides[dimension]
+    dimension = dimension + 1
+  }
+  position
+}
+
+/// The array position of the view's `ordinal`th item in row-major order.
+fn positionAt(offset: Int, extents: &Array[Int], strides: &Array[Int], ordinal: Int) -> Int {
+  var position = offset
+  var remaining = ordinal
+  var dimension = extents.length() - 1
+  while dimension >= 0 {
+    let extent = extents[dimension]
+    position = position + (remaining % extent) * strides[dimension]
+    remaining = remaining / extent
+    dimension = dimension - 1
+  }
+  position
+}
+
+impl [T] Grid[T] for MdSpan[T] {
+  fn rank(self: &Self) -> Int { self.extents.length() }
+
+  fn extent(self: &Self, dimension: Int) -> Option[Int] {
+    if dimension < 0 || dimension >= self.extents.length() { None } else { Some(self.extents[dimension]) }
+  }
+
+  fn size(self: &Self) -> Int {
+    var total = 1
+    for extent in self.extents { total = total * extent }
+    total
+  }
+
+  fn get(self: &Self, indices: Array[Int]) -> Option[T] {
+    if indices.length() != self.extents.length() {
+      return None
+    }
+    var dimension = 0
+    while dimension < indices.length() {
+      let index = indices[dimension]
+      if index < 0 || index >= self.extents[dimension] {
+        return None
+      }
+      dimension = dimension + 1
+    }
+    Some(self.source[positionOf(self.offset, &self.strides, &indices)])
+  }
+
+  fn get2(self: &Self, row: Int, column: Int) -> Option[T] {
+    if self.extents.length() != 2
+      || row < 0 || row >= self.extents[0]
+      || column < 0 || column >= self.extents[1] {
+      None
+    } else {
+      Some(self.source[self.offset + row * self.strides[0] + column * self.strides[1]])
+    }
+  }
+
+  fn get3(self: &Self, i: Int, j: Int, k: Int) -> Option[T] {
+    if self.extents.length() != 3
+      || i < 0 || i >= self.extents[0]
+      || j < 0 || j >= self.extents[1]
+      || k < 0 || k >= self.extents[2] {
+      None
+    } else {
+      Some(self.source[self.offset + i * self.strides[0] + j * self.strides[1] + k * self.strides[2]])
+    }
+  }
+
+  fn slice(self: &Self, slices: Array[Slice]) -> Option[MdSpan[T]] {
+    if slices.length() != self.extents.length() {
+      return None
+    }
+    var offset = self.offset
+    var extents = []
+    var strides = []
+    var dimension = 0
+    while dimension < slices.length() {
+      let extent = self.extents[dimension]
+      let stride = self.strides[dimension]
+      match slices[dimension] {
+        case All => {
+          extents = extents.push(extent)
+          strides = strides.push(stride)
+        }
+        case At(index) => {
+          if index < 0 || index >= extent {
+            return None
+          }
+          offset = offset + index * stride
+        }
+        case Within(first, last) => {
+          if first < 0 || first > last || last > extent {
+            return None
+          }
+          offset = offset + first * stride
+          extents = extents.push(last - first)
+          strides = strides.push(stride)
+        }
+        case Every{first, last, step} => {
+          if first < 0 || first > last || last > extent || step < 1 {
+            return None
+          }
+          offset = offset + first * stride
+          extents = extents.push((last - first + step - 1) / step)
+          strides = strides.push(stride * step)
+        }
+      }
+      dimension = dimension + 1
+    }
+    Some(MdSpan{source: self.source, offset: offset, extents: extents, strides: strides})
+  }
+}
+
+/// A view walks its items in row-major order: the last dimension fastest.
+impl [T] Sequence[Int, T] for MdSpan[T] {
+  fn begin(self: &Self) -> Int { 0 }
+
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.size() {
+      Some((state + 1, self.source[positionAt(self.offset, &self.extents, &self.strides, state)]))
+    } else {
+      None
+    }
+  }
+
+  fn count(self: &Self) -> Int { self.size() }
+
+  fn isEmpty(self: &Self) -> Bool { self.size() == 0 }
+}

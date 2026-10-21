@@ -46,6 +46,7 @@ preludeValueNames =
   , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sha3_256Of", "sha3_512Of", "blake2b256Of", "blake2b512Of", "checksumOf", "hmacSha512Of", "constantTimeEqual", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
   , "audioToneBytes", "audioRampBytes"
   , "bufferAlloc", "bufferReadU64", "bufferWriteU64", "bufferScanU64", "bufferCopy", "bufferSize"
+  , "textByteSize", "textByteSlice", "textByteFind", "textByteFindLast", "textScalarAt"
   , "bufferReadI64", "bufferWriteI64", "bufferReadF64", "bufferWriteF64", "bufferReadU32", "bufferWriteU32"
   , "bufferFill", "bufferCompare"
   , "columnSumU64", "columnMinU64", "columnMaxU64", "columnFilterGtU64", "columnProjectU64"

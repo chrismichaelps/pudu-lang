@@ -340,6 +340,7 @@ library
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable
     Pudu.Eval.SwissTable
+    Pudu.Eval.TextView
     Pudu.Runtime.Column
     Pudu.Runtime.Column.Index
     Pudu.Eval.Column

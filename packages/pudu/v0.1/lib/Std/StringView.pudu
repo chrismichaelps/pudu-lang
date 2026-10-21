@@ -1,0 +1,289 @@
+module Std.StringView
+
+import Std.Iter {Sequence}
+
+/// A view of UTF-8 text, addressed in bytes.
+///
+/// `Str` methods count in scalars, which is what text means to a reader, and
+/// reaching the hundredth scalar walks the ninety-nine before it. A view counts
+/// in bytes instead: its size and every slice of it take the same time however
+/// long the text is, and a slice shares the bytes of the text it came from
+/// rather than copying them.
+///
+/// A byte offset is only a place to cut when it starts a scalar or ends the
+/// text. Every operation that takes an offset answers `None` for one that falls
+/// inside a scalar, rather than moving it.
+///
+/// ## Examples
+///
+/// ```
+/// let line = StringView.of("key=value")
+/// let at = line.find("=", 0) ?          // 3
+/// (line.substr(0, at) ?).toText()       // "key"
+/// (line.removePrefix(at + 1) ?).toText() // "value"
+/// ```
+export type StringView = { text: Str }
+
+/// A view of the whole of `text`.
+///
+/// ## Examples
+///
+/// ```
+/// StringView.of("héllo").size()  // 6
+/// ```
+export fn of(text: Str) -> StringView { StringView{text: text} }
+
+/// Reading and narrowing a view.
+export trait View {
+  /// The view's length in bytes.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("née").size()  // 4
+  /// ```
+  fn size(self: &Self) -> Int
+
+  /// Whether the view holds no bytes.
+  fn isEmpty(self: &Self) -> Bool
+
+  /// The viewed text, sharing its bytes.
+  fn toText(self: &Self) -> Str
+
+  /// `count` bytes from byte `start`, the count clamped to the end of the
+  /// view. `None` when `start` is past the end or either end of the slice
+  /// falls inside a scalar.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (StringView.of("hello").substr(1, 3) ?).toText()  // "ell"
+  /// StringView.of("é").substr(1, 1)                    // None
+  /// ```
+  fn substr(self: &Self, start: Int, count: Int) -> Option[StringView]
+
+  /// The view without its first `count` bytes.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (StringView.of("prefix:rest").removePrefix(7) ?).toText()  // "rest"
+  /// ```
+  fn removePrefix(self: &Self, count: Int) -> Option[StringView]
+
+  /// The view without its last `count` bytes.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// (StringView.of("file.txt").removeSuffix(4) ?).toText()  // "file"
+  /// ```
+  fn removeSuffix(self: &Self, count: Int) -> Option[StringView]
+
+  /// Whether the view begins with `prefix`.
+  fn startsWith(self: &Self, prefix: Str) -> Bool
+
+  /// Whether the view ends with `suffix`.
+  fn endsWith(self: &Self, suffix: Str) -> Bool
+
+  /// Whether `needle` occurs anywhere in the view.
+  fn contains(self: &Self, needle: Str) -> Bool
+
+  /// The byte offset of the first `needle` at or after byte `from`, or `None`.
+  /// An empty needle is found at `from`.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("a,b,c").find(",", 2)  // Some(3)
+  /// ```
+  fn find(self: &Self, needle: Str, from: Int) -> Option[Int]
+
+  /// The byte offset of the last `needle`, overlapping ones included, or
+  /// `None`. An empty needle is found at the end.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("aaa").findLast("aa")  // Some(1)
+  /// ```
+  fn findLast(self: &Self, needle: Str) -> Option[Int]
+
+  /// The scalar starting at byte `offset` and how many bytes encode it, or
+  /// `None` past the end or inside a scalar.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("añb").scalarAt(1)  // Some(('ñ', 2))
+  /// ```
+  fn scalarAt(self: &Self, offset: Int) -> Option[(Char, Int)]
+
+  /// The first scalar, or `None` for an empty view.
+  fn front(self: &Self) -> Option[Char]
+
+  /// The last scalar, or `None` for an empty view.
+  fn back(self: &Self) -> Option[Char]
+
+  /// The view with leading and trailing whitespace removed, as `Str.trim`
+  /// decides whitespace.
+  fn trim(self: &Self) -> StringView
+
+  /// The parts before and after the first `separator`, or `None` when the view
+  /// does not contain it.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// let parts = StringView.of("k=v=w").splitOnce("=") ?
+  /// parts[0].toText() + "|" + parts[1].toText()  // "k|v=w"
+  /// ```
+  fn splitOnce(self: &Self, separator: Str) -> Option[(StringView, StringView)]
+
+  /// The view's scalars, in order, without copying the text.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("añ").scalars().toArray()  // ['a', 'ñ']
+  /// ```
+  fn scalars(self: &Self) -> Scalars
+
+  /// The pieces between occurrences of `separator`, produced as the walk asks
+  /// for them. An empty separator yields the whole view as one piece.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// StringView.of("a,,b").split(",").map(|piece| piece.toText()).toArray()  // ["a", "", "b"]
+  /// ```
+  fn split(self: &Self, separator: Str) -> Pieces
+}
+
+impl View for StringView {
+  fn size(self: &Self) -> Int { textByteSize(self.text) }
+
+  fn isEmpty(self: &Self) -> Bool { textByteSize(self.text) == 0 }
+
+  fn toText(self: &Self) -> Str { self.text }
+
+  fn substr(self: &Self, start: Int, count: Int) -> Option[StringView] {
+    let size = textByteSize(self.text)
+    if start < 0 || start > size || count < 0 {
+      return None
+    }
+    let end = if count > size - start { size } else { start + count }
+    let text = textByteSlice(self.text, start, end) ?
+    Some(StringView{text: text})
+  }
+
+  fn removePrefix(self: &Self, count: Int) -> Option[StringView] {
+    let size = textByteSize(self.text)
+    if count < 0 || count > size {
+      return None
+    }
+    let text = textByteSlice(self.text, count, size) ?
+    Some(StringView{text: text})
+  }
+
+  fn removeSuffix(self: &Self, count: Int) -> Option[StringView] {
+    let size = textByteSize(self.text)
+    if count < 0 || count > size {
+      return None
+    }
+    let text = textByteSlice(self.text, 0, size - count) ?
+    Some(StringView{text: text})
+  }
+
+  fn startsWith(self: &Self, prefix: Str) -> Bool { self.text.startsWith(prefix) }
+
+  fn endsWith(self: &Self, suffix: Str) -> Bool { self.text.endsWith(suffix) }
+
+  fn contains(self: &Self, needle: Str) -> Bool { self.text.contains(needle) }
+
+  fn find(self: &Self, needle: Str, from: Int) -> Option[Int] { textByteFind(self.text, needle, from) }
+
+  fn findLast(self: &Self, needle: Str) -> Option[Int] { textByteFindLast(self.text, needle) }
+
+  fn scalarAt(self: &Self, offset: Int) -> Option[(Char, Int)] { textScalarAt(self.text, offset) }
+
+  fn front(self: &Self) -> Option[Char] {
+    let (scalar, _) = textScalarAt(self.text, 0) ?
+    Some(scalar)
+  }
+
+  /// A scalar is at most four bytes, so the last one starts within the last
+  /// four.
+  fn back(self: &Self) -> Option[Char] {
+    let size = textByteSize(self.text)
+    var start = size - 1
+    while start >= 0 && start >= size - 4 {
+      if let Some((scalar, _)) = textScalarAt(self.text, start) {
+        return Some(scalar)
+      }
+      start = start - 1
+    }
+    None
+  }
+
+  fn trim(self: &Self) -> StringView { StringView{text: self.text.trim()} }
+
+  fn splitOnce(self: &Self, separator: Str) -> Option[(StringView, StringView)] {
+    let at = textByteFind(self.text, separator, 0) ?
+    let before = textByteSlice(self.text, 0, at) ?
+    let after = textByteSlice(self.text, at + textByteSize(separator), textByteSize(self.text)) ?
+    Some((StringView{text: before}, StringView{text: after}))
+  }
+
+  fn scalars(self: &Self) -> Scalars { Scalars{text: self.text} }
+
+  fn split(self: &Self, separator: Str) -> Pieces { Pieces{text: self.text, separator: separator} }
+}
+
+/// The scalars of a view, walked by byte offset.
+///
+/// ## Examples
+///
+/// ```
+/// StringView.of("héllo").scalars().count()  // 5
+/// ```
+export type Scalars = { text: Str }
+
+impl Sequence[Int, Char] for Scalars {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, Char)] {
+    let (scalar, width) = textScalarAt(self.text, state) ?
+    Some((state + width, scalar))
+  }
+}
+
+/// The pieces of a view between occurrences of a separator.
+///
+/// The state is the byte offset where the next piece starts, or `None` once
+/// the last piece has been produced.
+///
+/// ## Examples
+///
+/// ```
+/// StringView.of("x y").split(" ").count()  // 2
+/// ```
+export type Pieces = { text: Str, separator: Str }
+
+impl Sequence[Option[Int], StringView] for Pieces {
+  fn begin(self: &Self) -> Option[Int] { Some(0) }
+  fn advance(self: &Self, state: Option[Int]) -> Option[(Option[Int], StringView)] {
+    let start = state ?
+    let size = textByteSize(self.text)
+    let width = textByteSize(self.separator)
+    match if width == 0 { None } else { textByteFind(self.text, self.separator, start) } {
+      case Some(at) => {
+        let piece = textByteSlice(self.text, start, at) ?
+        Some((Some(at + width), StringView{text: piece}))
+      }
+      case None => {
+        let piece = textByteSlice(self.text, start, size) ?
+        Some((None, StringView{text: piece}))
+      }
+    }
+  }
+}

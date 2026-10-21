@@ -37,6 +37,9 @@ iterationElement :: Span -> Type -> Checker Type
   refusing early would reject a program that is fine.
 - References are followed before the shape is read, so iterating a borrow binds what iterating the
   value would.
+- A type parameter is iterated through its bounds: `Self` inside `Sequence`, or `Q` in
+  `fn f[S, T, Q: Sequence[S, T]](q: &Q)`, binds the item its bound's `advance` answers. A parameter
+  has no variants, so there is no payload fallback.
 
 ### Linkage
 
@@ -52,6 +55,15 @@ look for the `Sequence` implementation's `advance` and read the item out of its 
 
 - No expression checking; the iterated expression's type arrives already inferred.
 - No reporting on an unresolved type.
+
+## Grill Log
+
+- **Q:** May a `for` iterate a type parameter? **A:** Yes, when its bounds provide `begin` and
+  `advance`; the element type is read from the bound's `advance` exactly as from a nominal type's,
+  and the evaluator walks the concrete value the parameter stands for. One without those members is
+  `E3030` naming the bound to add. `Std.Iter`'s terminals walk `*self` this way, which resolves the
+  two methods once per walk rather than once per item (#527). _Rejected:_ leaving generic code to
+  spell the `begin`/`advance` loop by hand, which costs a method dispatch on every step.
 
 ## Referenced by
 

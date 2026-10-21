@@ -32,6 +32,7 @@ import qualified Pudu.Eval.Json as Json
 import Pudu.Eval.MultiMap (callMultiMapAdd, callMultiMapContains)
 import qualified Pudu.Eval.Xml as Xml
 import qualified Pudu.Eval.SwissTable as Swiss
+import qualified Pudu.Eval.TextView as TextView
 import qualified Pudu.Runtime.Word as Word
 
 import Pudu.Eval.Builtin.Array (Apply, callArrayMethod)
@@ -226,6 +227,11 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (BufferScanU64Builtin, values) -> Buffer.callBufferScanU64 spanValue values
   (BufferCopyBuiltin, values) -> Buffer.callBufferCopy spanValue values
   (BufferSizeBuiltin, values) -> Buffer.callBufferSize spanValue values
+  (TextByteSizeBuiltin, values) -> TextView.callTextByteSize spanValue values
+  (TextByteSliceBuiltin, values) -> TextView.callTextByteSlice spanValue values
+  (TextByteFindBuiltin, values) -> TextView.callTextByteFind spanValue values
+  (TextByteFindLastBuiltin, values) -> TextView.callTextByteFindLast spanValue values
+  (TextScalarAtBuiltin, values) -> TextView.callTextScalarAt spanValue values
   (SwissTableEmptyBuiltin, values) -> Swiss.callSwissTableEmpty spanValue values
   (SwissTableLookupBuiltin, values) -> Swiss.callSwissTableLookup spanValue values
   (SwissTableInsertBuiltin, values) -> Swiss.callSwissTableInsert spanValue values
@@ -305,6 +311,11 @@ isHashingBuiltin builtin = case builtin of
   BufferScanU64Builtin -> True
   BufferCopyBuiltin -> True
   BufferSizeBuiltin -> True
+  TextByteSizeBuiltin -> True
+  TextByteSliceBuiltin -> True
+  TextByteFindBuiltin -> True
+  TextByteFindLastBuiltin -> True
+  TextScalarAtBuiltin -> True
   SwissTableEmptyBuiltin -> True
   SwissTableLookupBuiltin -> True
   SwissTableInsertBuiltin -> True
