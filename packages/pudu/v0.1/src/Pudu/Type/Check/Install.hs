@@ -96,7 +96,7 @@ installWanted
   :: DeclaredTypes
   -> Set.Set NominalId
   -> Set.Set Text
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Tree.Trait
   -> Set.Set (NominalId, Text)
   -> TypeInterface
   -> Checker ()
