@@ -63,6 +63,8 @@ typeArgumentName :: Located TypeSyntax -> Text
 
 ## Grill Log
 
+- **Q:** What does `Range.length(&span)` select when a module declares its own `Range`? **A:** `typeOwners` decides from the receiver: a record or variant means the declared type (`@Range`), any other value the built-in. A call with no receiver, such as a static member reached through a witness, tries the declared key first and then the built-in (#529).
+
 - **Q:** Why extract path resolution into `Pudu.Eval.Call.Path`?
   **A:** `Pudu.Eval.Call` was 563 lines. Moving AST path navigation, longest-prefix searching, and callee qualification into a dedicated submodule leaves `Call.hs` focused on function application, scope joining, and thread invocation (< 400 lines).
 - **Q:** Why restrict `qualifiedParts` to uppercase identifiers?
@@ -119,3 +121,7 @@ witnessed method selection to [[Eval Type Witness]], preserving re-exports.
 Marked witness members normalize canonical provider keys through lookupMethod;
 unmarked legacy paths keep lookupName. Resolved Grill Log: use checked head
 matching instead of zipping owner arguments, with no duplicate path/field logic.
+
+## Declared owners named like built-ins (#529)
+
+A declared type whose name a built-in value also answers to is keyed by [[Eval Declared Owner]]: `@Name` for its methods, records, sums, witnesses and qualified calls, the bare name for built-in values.

@@ -234,6 +234,7 @@ library
     Pudu.Eval.Verify
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
+    Pudu.Eval.DeclaredOwner
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Frozen

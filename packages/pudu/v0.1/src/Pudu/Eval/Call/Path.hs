@@ -25,6 +25,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
+import Pudu.Eval.DeclaredOwner (declaredOwner)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
 import Pudu.Eval.Operator (readMember)
 import Pudu.Eval.Value (Value (..))
@@ -49,7 +50,7 @@ qualifiedCallee (Located at expression) values = case qualifiedParts expression 
     direct <- case local of
       Just witness@TypeWitnessValue{} -> witnessMethod at witness method
       Just _ -> pure Nothing
-      Nothing -> lookupName (first <> "." <> method)
+      Nothing -> firstBound (\owner -> lookupName (owner <> "." <> method)) (typeOwners first values)
     case direct of
       Just found -> pure (Just found)
       Nothing | not (qualifies local) -> pure Nothing
@@ -58,6 +59,21 @@ qualifiedCallee (Located at expression) values = case qualifiedParts expression 
           owners <- receiverOwners receiver
           firstBound (\owner -> lookupName (first <> "." <> owner <> "." <> method)) owners
         [] -> pure Nothing
+
+{-| The method-key owners a written type name may stand for.
+
+    A name a built-in value also answers to is the declared type's when the
+    receiver is a record or a sum, and the built-in's otherwise. With no
+    receiver to tell, the declared type's key is tried first. -}
+typeOwners :: Text -> [Value] -> [Text]
+typeOwners name values
+  | declaredOwner name == name = [name]
+  | otherwise = case values of
+      RecordValue{} : _ -> [declaredOwner name]
+      SumValue{} : _ -> [declaredOwner name]
+      NamedSumValue{} : _ -> [declaredOwner name]
+      _ : _ -> [name]
+      [] -> [declaredOwner name, name]
 
 {-| A qualified callee reaches the parser as a member access on a bare name, so
     `A.label` and a two-segment path are the same selection written twice.

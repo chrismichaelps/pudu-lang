@@ -34,6 +34,7 @@ import Pudu.Eval.Env
 import Pudu.Eval.Keyed (mapEntries, setMembers)
 import Pudu.Eval.Loop.Kernel (pureLoop)
 import Pudu.Eval.Match (matchPattern)
+import Pudu.Eval.DeclaredOwner (declaredOwner)
 import Pudu.Eval.Operator (nominalNameOf)
 import Pudu.Eval.Range (rangeElements)
 import Pudu.Eval.Render (valueKind)
@@ -330,13 +331,14 @@ data LoopTransfer
     Ownerless host values and legacy named payloads retain registry fallback. -}
 receiverOwners :: Value -> Evaluator [Text]
 receiverOwners value = case value of
-  SumValue owner _ _ | owner /= "" -> pure [owner]
-  NamedSumValue owner _ _ -> pure [owner]
+  SumValue owner _ _ | owner /= "" -> pure [declaredOwner owner]
+  NamedSumValue owner _ _ -> pure [declaredOwner owner]
   _ -> case receiverOwner value of
     Nothing -> pure []
     Just owner -> do
       declaring <- variantOwner owner
-      pure (owner : maybe [] pure declaring)
+      let owners = owner : maybe [] pure declaring
+      pure (maybe (map declaredOwner owners) (const owners) (nominalNameOf value))
 
 {-| The first of these names that binds something. -}
 

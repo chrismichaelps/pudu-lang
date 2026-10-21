@@ -1057,6 +1057,10 @@ Walking/falling, support queries and native engine throughput remain open.
 - [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
 - [[Type Check Inherit]] renames a default's own parameters apart from the implementation's, so `map[B]` on an `impl [S, A, B, Q] ... for Mapped[Q, A, B]` keeps two distinct `B`s.
 - The trait table carries whole `Trait` declarations through [[Type Check]], [[Type Check Install]], [[Type Check Derive]] and the interface graph.
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
 
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
