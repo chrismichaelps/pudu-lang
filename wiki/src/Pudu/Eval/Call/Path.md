@@ -63,6 +63,8 @@ typeArgumentName :: Located TypeSyntax -> Text
 
 ## Grill Log
 
+- **Q:** What does `Range.length(&span)` select when a module declares its own `Range`? **A:** `typeOwners` decides from the receiver: a record or variant means the declared type (`@Range`), any other value the built-in. A call with no receiver, such as a static member reached through a witness, tries the declared key first and then the built-in (#529).
+
 - **Q:** Why extract path resolution into `Pudu.Eval.Call.Path`?
   **A:** `Pudu.Eval.Call` was 563 lines. Moving AST path navigation, longest-prefix searching, and callee qualification into a dedicated submodule leaves `Call.hs` focused on function application, scope joining, and thread invocation (< 400 lines).
 - **Q:** Why restrict `qualifiedParts` to uppercase identifiers?

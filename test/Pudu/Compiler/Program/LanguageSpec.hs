@@ -1,6 +1,7 @@
 {-| @Test.Compiler.Program.LanguageSpec — function literals, ranges, slices, and destructuring bindings -}
 module Pudu.Compiler.Program.LanguageSpec
-  ( testCapturedScope
+  ( testBuiltinOwnerNames
+  , testCapturedScope
   , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
@@ -82,6 +83,14 @@ testRangesAndSlices = do
     narrowing, and a narrowing is only safe if nothing it drops was reachable,
     which is what the fixture checks: every way a literal reaches a name, asked
     after the literal has been carried away from where it was written. -}
+{-| A type declared under a built-in type's name keeps its own methods, and the
+    built-in values keep theirs: by method call, by type- and trait-qualified
+    call, through a generic witness, and for a variant named like one. -}
+testBuiltinOwnerNames :: IO Property
+testBuiltinOwnerNames = do
+  answer <- runEntry (fixture "BuiltinOwnerNames")
+  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "8"))
+
 testCapturedScope :: IO Property
 testCapturedScope = do
   answer <- runEntry (fixture "Captures")

@@ -1,0 +1,58 @@
+module BuiltinOwnerNames
+
+/// Types declared under the names of built-in types. Each keeps its own
+/// methods, and the built-in values keep theirs.
+
+type Array = { held: Int }
+
+type Range = { low: Int }
+
+type Token =
+  | Str(Str)
+  | Num(Int)
+
+trait Measured {
+  fn length(self: &Self) -> Int
+  fn toArray(self: &Self) -> Int
+}
+
+trait Made {
+  fn made() -> Self
+}
+
+impl Measured for Array {
+  fn length(self: &Self) -> Int { 99 }
+  fn toArray(self: &Self) -> Int { self.held }
+}
+
+impl Measured for Range {
+  fn length(self: &Self) -> Int { 50 }
+  fn toArray(self: &Self) -> Int { self.low * 2 }
+}
+
+impl Measured for Token {
+  fn length(self: &Self) -> Int { 40 }
+  fn toArray(self: &Self) -> Int { 0 }
+}
+
+impl Made for Range {
+  fn made() -> Self { Range{low: 9} }
+}
+
+fn build[T: Made]() -> T { T.made() }
+
+export fn main() -> Int {
+  var held = 0
+  if [1, 2, 3].length() == 3 { held = held + 1 }
+  if (0..4).toArray().length() == 4 { held = held + 1 }
+  if "abc".length() == 3 { held = held + 1 }
+  let own = Array{held: 6}
+  if own.length() == 99 && own.toArray() == 6 { held = held + 1 }
+  let span = Range{low: 2}
+  if span.length() == 50 && span.toArray() == 4 { held = held + 1 }
+  if Range.length(&span) == 50 && Measured.length(&span) == 50 { held = held + 1 }
+  if Str("x").length() == 40 && Num(1).length() == 40 { held = held + 1 }
+  let made: Range = build()
+  if made.low == 9 && Range.made().low == 9 { held = held + 1 }
+  held
+}
