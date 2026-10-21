@@ -261,7 +261,12 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.LruCache` | 22 | a map with a capacity, discarding what has gone longest unused |
 | `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
-| `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
+| `Std.Iter` | 31 | `Sequence` with chainable default adapters (map, filter, take, drop, takeWhile, dropWhile, stride, chain, enumerate, zip) and terminals, plus ranges and collection walks |
+| `Std.Index` | 2 | `Index` and `IndexMut`, the protocol `[]` uses for a type that is not built in |
+| `Std.Span` | 4 | a non-owning window onto an array, narrowed and walked in place |
+| `Std.MdSpan` | 6 | a non-owning multidimensional array view: layouts, multi-index reads, slicing |
+| `Std.StringView` | 5 | a byte-addressed UTF-8 view with constant-time size and slicing |
+| `Std.Memory` | 9 | offset allocators: the `Resource` protocol, a monotonic arena, a block pool |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |

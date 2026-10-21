@@ -389,6 +389,7 @@ walkExpression (Located spanValue expression) = case expression of
   CallExpression callee arguments -> walkExpression callee >> mapM_ walkExpression arguments
   MemberExpression target _ -> walkMemberTarget target
   IndexExpression target index -> walkExpression target >> walkExpression index
+  MultiIndexExpression target indices -> walkExpression target >> mapM_ walkExpression indices
   RangeExpression lower _ upper -> mapM_ walkExpression lower >> mapM_ walkExpression upper
   TryExpression target -> walkExpression target
   AwaitExpression target -> walkExpression target

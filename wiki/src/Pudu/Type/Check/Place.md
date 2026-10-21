@@ -66,3 +66,7 @@ Resolved Grill Log: the rules sit in one module rather than beside each expressi
 place model has one statement; the expression checker only calls in. Comparing argument types before
 unification is what separates a parameter declared `&mut` from a type variable that would be
 instantiated to one.
+## Grill Log
+
+- **Q:** Is an element read through `[]` on a type implementing `Std.Index` a place? **A:** Only as a whole assignment target, through `setIndex` ([[Type Check Subscript]]), and only when its target may be written. A field of it, or a loan of it, is `E3096`, because `index` answered a copy (#534).
+

@@ -11,6 +11,7 @@ module Pudu.Type.Check
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
+import Data.List (partition)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
@@ -34,6 +35,7 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , CheckerProducts (..)
+  , SubscriptKey
   , DeclaredTypes (..)
   , bindName
   , finalizeIntegerLiterals
@@ -112,7 +114,7 @@ import Pudu.Type.Value
   , restrictedBy
   , Type (..)
   )
-import Pudu.Type.Interface.Graph (ImportTypes (..), emptyImportTypes, graphInstalled)
+import Pudu.Type.Interface.Graph (ImportTypes (..), consumerDefaults, consumerTraits, emptyImportTypes, graphInstalled)
 import Pudu.Foreign.Crossing (RecordLayouts, recordLayouts)
 import Pudu.Type.Check.Foreign (checkForeign, declareForeign)
 import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
@@ -126,7 +128,7 @@ checkModule = checkModuleWith emptyImportTypes
     already knows; see [[Check Place]]. -}
 checkModuleWith :: ImportTypes -> Set Span -> Module -> ([(Span, Type)], [Diagnostic])
 checkModuleWith imported writable moduleValue =
-  let (types, schemes, kinds, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
+  let (types, schemes, kinds, _, _, _, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -139,7 +141,8 @@ checkModuleDetailed
   :: ImportTypes
   -> Set Span
   -> Module
-  -> ([(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])], [Diagnostic])
+  -> ( [(Span, Type)], [(Text, Scheme)], [(Span, Text)], [(NominalId, Text, Scheme, Span)], [(Span, [Type])]
+     , [(Span, SubscriptKey)], [Diagnostic] )
 checkModuleDetailed imported writable moduleValue =
   let products = runChecker (setWritableNames writable >> checkUnit WholeModule imported moduleValue)
    in ( producedTypes products
@@ -147,6 +150,7 @@ checkModuleDetailed imported writable moduleValue =
       , producedIntegerKinds products
       , producedMethods products
       , producedSelections products
+      , producedSubscripts products
       , producedDiagnostics products
       )
 
@@ -182,9 +186,12 @@ checkUnit scope imported moduleValue = do
       were installed once for the whole graph; this module starts from them. -}
   installNames (graphInstalled (importedGraph imported))
   declareImportedTypes declared imported
-  let traits = traitTable declared (moduleDeclarations moduleValue)
+  let traits = traitTable declared (moduleDeclarations moduleValue) <> consumerTraits imported
+      defaults = consumerDefaults imported
   let layouts = recordLayouts (moduleDeclarations moduleValue)
-  mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
+  {-| Trait members first: an implementation inherits a default by taking the
+      scheme its member was declared with, wherever the two are written. -}
+  mapM_ (declareSignature declared layouts traits defaults) (traitsFirst (moduleDeclarations moduleValue))
   when (scope == WholeModule) (checkCoherence (moduleDeclarations moduleValue))
   checkDeriveContracts declared imported moduleValue
   {-| A function literal's unwritten parameter types are settled once the
@@ -206,20 +213,29 @@ checkUnit scope imported moduleValue = do
     BindingDeclaration _ _ name _ _ -> Set.member (locatedSpan name) inferred
     _ -> False
 
+traitsFirst :: [Located Declaration] -> [Located Declaration]
+traitsFirst declarations = traits <> others
+ where
+  (traits, others) = partition isTrait declarations
+  isTrait (Located _ declaration) = case declaration of
+    TraitDeclaration _ -> True
+    _ -> False
+
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature
   :: DeclaredTypes
   -> RecordLayouts
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Trait
+  -> Set.Set (NominalId, Text)
   -> Located Declaration
   -> Checker ()
-declareSignature declared layouts traits (Located _ declaration) = case declaration of
+declareSignature declared layouts traits defaults (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name annotation _ -> do
     formed <- formOptionalType declared [] annotation
     bindName (locatedValue name) (monotype formed)
   FunctionDeclaration value -> declareFunction declared value
   TypeDeclaration value -> declareConstructors declared value
-  ImplDeclaration value -> declareMethods declared traits value
+  ImplDeclaration value -> declareMethods declared traits defaults value
   TraitDeclaration value -> declareTraitMembers declared value
   ForeignDeclaration value -> declareForeign declared layouts value
   _ -> pure ()

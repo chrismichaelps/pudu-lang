@@ -162,8 +162,21 @@ testPostfixForms = do
   propagation <- parse "read()?"
   awaiting <- parse "fetch().await"
   chained <- parse "rows[i].value?.await"
+  multi <- parse "grid[i, j + 1]"
+  twice <- parse "grid[i][j]"
+  wide <- parse "t[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]"
+  tupleKey <- parse "grid[(i, j)]"
+  nested <- parse "m[a[0], b[1, 2]][3]"
+  trailing <- codes <$> parse "xs[0,]"
   pure $ conjoin
     [ validShape index === "a[0]"
+    , counterexample "several indices are one indexing" (validShape multi === "grid[i,(j+1)]")
+    , counterexample "and differ from indexing twice" (validShape twice === "grid[i][j]")
+    , counterexample "any number of indices parses"
+        (validShape wide === "t[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]")
+    , counterexample "a parenthesized tuple is one index" (validShape tupleKey === "grid[(i,j)]")
+    , counterexample "indices nest and chain" (validShape nested === "m[a[0],b[1,2]][3]")
+    , counterexample "a comma must be followed by an index" (trailing === ["E1040"])
     , validShape propagation === "read()?"
     , validShape awaiting === "fetch().await"
     , validShape chained === "rows[i].value?.await"

@@ -223,6 +223,17 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [bytesType])))
   bindName "bufferSize"
     (monotype (FunctionTypeValue False [bytesType] integerType))
+  bindName "textByteSize"
+    (monotype (FunctionTypeValue False [stringType] integerType))
+  bindName "textByteSlice"
+    (monotype (FunctionTypeValue False [stringType, integerType, integerType] (NominalType "Option" [stringType])))
+  bindName "textByteFind"
+    (monotype (FunctionTypeValue False [stringType, stringType, integerType] (NominalType "Option" [integerType])))
+  bindName "textByteFindLast"
+    (monotype (FunctionTypeValue False [stringType, stringType] (NominalType "Option" [integerType])))
+  bindName "textScalarAt"
+    (monotype (FunctionTypeValue False [stringType, integerType]
+      (NominalType "Option" [TupleTypeValue [charType, integerType]])))
   bindName "bufferReadI64"
     (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "Int64" []])))
   bindName "bufferWriteI64"

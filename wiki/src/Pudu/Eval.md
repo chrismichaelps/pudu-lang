@@ -149,6 +149,8 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 
 ## Grill Log
 
+- **Q:** Can a `MultiIndexExpression` reach the evaluator? **A:** Not from a checked module, which the rewrite has turned into a call; one that does is refused with `E7001`, as are the compiled evaluator's (#534).
+
 - **Q:** Why not keep a very large bound instead of removing it while running? **A:** Because any constant is wrong for some input. _Rationale:_ the bound exists to stop the compiler hanging, and nothing about running a program needs it; picking a bigger number only moves the size of file that fails. _Rejected:_ raising the limit; making it a flag, which asks every reader to know a number that should not exist.
 - **Q:** Why does the evaluator need a variant-to-type map when the checker does not? **A:** Because a runtime value has lost its type. _Rationale:_ the checker holds `List` and looks up `List.begin` directly; the evaluator holds a `Cons` and nothing in the value says which sum it came from, so the declaration has to leave that behind at install time. _Rejected:_ tagging every value with its owning type, which costs every value for a lookup few need.
 - **Q:** Should the evaluator wait for the type checker? **A:** No. _Rationale:_ an interactive session that cannot produce a value teaches nothing about the language, and every rule the evaluator applies here is one typing will later refine rather than contradict. _Rejected:_ a checking-only session; a stub evaluator returning placeholders.

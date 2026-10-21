@@ -138,6 +138,7 @@ expression home depth (Located at value) = case value of
   CallExpression callee arguments -> operand callee <> "(" <> commaSeparated (map recurse arguments) <> ")"
   MemberExpression target member -> operand target <> "." <> locatedValue member
   IndexExpression target index -> operand target <> "[" <> recurse index <> "]"
+  MultiIndexExpression target indices -> operand target <> "[" <> Text.intercalate ", " (map recurse indices) <> "]"
   RangeExpression from inclusive to ->
     maybe "" operand from <> (if inclusive then "..=" else "..") <> maybe "" operand to
   TryExpression held -> operand held <> "?"
@@ -206,6 +207,7 @@ atomic value = case value of
   CallExpression {} -> True
   MemberExpression {} -> True
   IndexExpression {} -> True
+  MultiIndexExpression {} -> True
   TryExpression _ -> True
   AwaitExpression _ -> True
   TupleExpression _ -> True

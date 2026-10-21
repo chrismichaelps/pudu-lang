@@ -79,6 +79,8 @@ answers with.
 
 ## Grill Log
 
+- **Q:** Which owners does a receiver look under? **A:** A record or variant looks under `declaredOwner` of its own name and, for a variant, of its sum's; a built-in value under `nominalNameOf`. A variant named like a built-in type (`Str(Str)`) therefore never reaches the built-in `Str`'s implementations (#529).
+
 - **Q:** Why does `receiverOwners` answer with two names rather than one?
   **A:** Because a value has lost its type. _Rationale:_ the checker holds
   `List` and looks up `List.begin` directly; the evaluator holds a `Cons` and

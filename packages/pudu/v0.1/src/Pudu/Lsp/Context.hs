@@ -348,6 +348,7 @@ expressionContext offset parameters located@(Located _ expression)
       CallExpression callee arguments -> firstOf (inner callee : map inner arguments)
       MemberExpression receiver _ -> inner receiver
       IndexExpression receiver index -> firstOf [inner receiver, inner index]
+      MultiIndexExpression receiver indices -> firstOf (map inner (receiver : indices))
       RangeExpression from _ to -> firstOf [from >>= inner, to >>= inner]
       TryExpression value -> inner value
       AwaitExpression value -> inner value

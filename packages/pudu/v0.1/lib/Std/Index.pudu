@@ -1,0 +1,57 @@
+module Std.Index
+
+/// A type that `[]` can read.
+///
+/// `value[i]` and `value[i, j, ...]` call `index` once with a key built from
+/// the indices. When `K` is `Array[I]`, the key is the array of the indices,
+/// however many there are; that form is for a container whose number of
+/// dimensions is only known when it runs. Otherwise one index is the key
+/// itself, and several are a tuple of exactly that many members.
+/// `value[i][j]` is different: it indexes `value` and then indexes the result.
+///
+/// The member is reached by `[]` wherever the implementing type is, without
+/// importing this trait.
+///
+/// ## Examples
+///
+/// ```
+/// type Grid = { columns: Int, mut cells: Array[Int] }
+///
+/// impl Index[(Int, Int), Int] for Grid {
+///   fn index(self: &Self, key: (Int, Int)) -> Int {
+///     let (row, column) = key
+///     self.cells[row * self.columns + column]
+///   }
+/// }
+///
+/// let grid = Grid{columns: 2, cells: [1, 2, 3, 4]}
+/// grid[1, 0]  // 3
+/// ```
+export trait Index[K, V] {
+  fn index(self: &Self, key: K) -> V
+}
+
+/// A type that `[]` can write.
+///
+/// `value[key] = item` calls `setIndex` with the key and the item, after the
+/// target, every index and the item have run in that order. The key is built
+/// as it is for `Index`. The whole element is replaced: an element read through
+/// `[]` is a value, so a field of it cannot be assigned in place.
+///
+/// ## Examples
+///
+/// ```
+/// impl IndexMut[(Int, Int), Int] for Grid {
+///   fn setIndex(self: &mut Self, key: (Int, Int), value: Int) -> () {
+///     let (row, column) = key
+///     self.cells[row * self.columns + column] = value
+///   }
+/// }
+///
+/// var grid = Grid{columns: 2, cells: [1, 2, 3, 4]}
+/// grid[0, 1] = 9
+/// grid.cells  // [1, 9, 3, 4]
+/// ```
+export trait IndexMut[K, V] {
+  fn setIndex(self: &mut Self, key: K, value: V) -> ()
+}

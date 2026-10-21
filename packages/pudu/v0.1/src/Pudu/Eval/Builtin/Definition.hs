@@ -174,6 +174,16 @@ data Builtin
   | BufferScanU64Builtin
   | BufferCopyBuiltin
   | BufferSizeBuiltin
+  | TextByteSizeBuiltin
+  | TextByteSliceBuiltin
+  | TextByteFindBuiltin
+  | TextByteFindLastBuiltin
+  | TextScalarAtBuiltin
+  {-| `#index`: `[]` on a type implementing `Std.Index`, after checking
+      rewrote it into a call. -}
+  | IndexOperatorBuiltin
+  {-| `#setIndex`: assignment through `[]` on such a type. -}
+  | SetIndexOperatorBuiltin
   | SwissTableEmptyBuiltin
   | SwissTableLookupBuiltin
   | SwissTableInsertBuiltin
@@ -395,6 +405,13 @@ builtinName value = case value of
   BufferScanU64Builtin -> "bufferScanU64"
   BufferCopyBuiltin -> "bufferCopy"
   BufferSizeBuiltin -> "bufferSize"
+  TextByteSizeBuiltin -> "textByteSize"
+  TextByteSliceBuiltin -> "textByteSlice"
+  TextByteFindBuiltin -> "textByteFind"
+  TextByteFindLastBuiltin -> "textByteFindLast"
+  TextScalarAtBuiltin -> "textScalarAt"
+  IndexOperatorBuiltin -> "#index"
+  SetIndexOperatorBuiltin -> "#setIndex"
   SwissTableEmptyBuiltin -> "swissTableEmpty"
   SwissTableLookupBuiltin -> "swissTableLookup"
   SwissTableInsertBuiltin -> "swissTableInsert"

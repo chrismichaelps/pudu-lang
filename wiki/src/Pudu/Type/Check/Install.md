@@ -27,7 +27,7 @@ interfaceScope :: DeclaredTypes -> Map Text NominalId -> TypeInterface -> Declar
 installShared :: DeclaredTypes -> TypeInterface -> Checker ()
 installWanted
   :: DeclaredTypes -> Set NominalId -> Set Text
-  -> Map NominalId [Located Function] -> Set (NominalId, Text)
+  -> Map NominalId Trait -> Set (NominalId, Text)
   -> TypeInterface -> Checker ()
 ```
 

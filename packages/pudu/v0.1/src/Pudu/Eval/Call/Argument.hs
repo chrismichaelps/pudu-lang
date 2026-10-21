@@ -45,6 +45,7 @@ receiverOf needs target
 chosenByElement :: Expression -> Bool
 chosenByElement expression = case expression of
   IndexExpression _ _ -> True
+  MultiIndexExpression _ _ -> True
   MemberExpression inner _ -> chosenByElement (locatedValue inner)
   UnaryExpression "*" operand -> chosenByElement (locatedValue operand)
   _ -> False

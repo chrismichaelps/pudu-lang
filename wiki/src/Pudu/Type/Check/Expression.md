@@ -98,6 +98,8 @@ through the record.
 
 ## Grill Log
 
+- **Q:** Which `[]` goes through `index`? **A:** One whose target's settled type is a declared type or a type parameter ([[Type Check Subscript]]); built-in targets keep their rules, and several indices on one are `E3094` (#534).
+
 - **Q:** Why a record rather than moving blocks here too? **A:** Because that
   trades one module over the limit for another. _Rationale:_ statements, blocks,
   and pushed-down checking are about six hundred lines together with expressions,

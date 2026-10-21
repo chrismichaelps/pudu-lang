@@ -58,6 +58,8 @@ builtinName :: Builtin -> Text
 
 ## Grill Log
 
+- **Q:** Why are `IndexOperatorBuiltin` and `SetIndexOperatorBuiltin` builtins? **A:** They are the targets of the `[]` rewrite and need the call's context to call a program's method, so dispatch handles them directly rather than through the generic route (#534).
+
 - **Q:** Why split definitions instead of granting [[Eval Value]] a size exception? **A:** The
   builtin tags and name table form a complete, dependency-light seam and account for enough code to
   return `Value.hs` below 500 lines. _Rationale:_ callers retain source compatibility through

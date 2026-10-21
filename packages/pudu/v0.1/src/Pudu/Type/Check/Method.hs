@@ -21,8 +21,8 @@ module Pudu.Type.Check.Method
   ) where
 
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -38,6 +38,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
+import Pudu.Type.Check.Inherit (inheritedMembers, renameApart, selfArguments)
 import Pudu.Type.Check.Prelude (declareBuiltinConstructors, effectSignatures)
 import Pudu.Type.Env
   ( noteStaticTrait
@@ -66,7 +67,7 @@ import Pudu.Type.Marker (isMarkerTrait)
 import Pudu.Type.Proof (TraitProof (..), implementsTrait, inferBound)
 import Pudu.Type.Substitute (substituteRigid)
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Formation (declaredParameterType, formBoundFor, formOptionalType, formType)
+import Pudu.Type.Formation (declaredParameterType, formBoundFor, formOptionalType, formTraitReference, formType)
 import Pudu.Type.Value
   ( NominalId (..)
   , Scheme (..)
@@ -78,12 +79,12 @@ import Pudu.Type.Value
   , renderType
   )
 
-{-| Trait members by trait name, so an implementation can inherit the defaults
+{-| Traits by name, so an implementation can inherit the defaults
     it does not override. -}
-traitTable :: DeclaredTypes -> [Located Declaration] -> Map.Map NominalId [Located Function]
+traitTable :: DeclaredTypes -> [Located Declaration] -> Map.Map NominalId Trait
 traitTable declared declarations =
   Map.fromList
-    [ (identity (locatedValue (traitName value)), traitMembers value)
+    [ (identity (locatedValue (traitName value)), value)
     | Located _ (TraitDeclaration value) <- declarations
     ]
  where
@@ -135,66 +136,94 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
     type finds them, and so one method may call another. -}
-declareMethods :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Impl -> Checker ()
-declareMethods = declareMethodsWith Nothing
-
-declareInterfaceMethods
+declareMethods
   :: DeclaredTypes
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Trait
   -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareInterfaceMethods declared traits defaults =
-  declareMethodsWith (Just defaults) declared traits
+declareMethods = declareMethodsWith False
 
-declareMethodsWith
-  :: Maybe (Set (NominalId, Text))
-  -> DeclaredTypes
-  -> Map.Map NominalId [Located Function]
+declareInterfaceMethods
+  :: DeclaredTypes
+  -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareMethodsWith defaults declared traits value = do
+declareInterfaceMethods = declareMethodsWith True
+
+{-| `traits` holds every trait an implementation here may name, its own module's
+    and the ones it imports; `defaults` names the imported members that carry a
+    body the interface stripped. -}
+declareMethodsWith
+  :: Bool
+  -> DeclaredTypes
+  -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
+  -> Impl
+  -> Checker ()
+declareMethodsWith rejectCollision declared traits defaults value = do
   target <- formType (implAliases declared value) [] (implTarget value)
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
-      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
-      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
-
-{-| A trait member that carries a body is a default: an implementation that does
-    not override it still has it. -}
-inheritedDefaults
-  :: Maybe (Set (NominalId, Text))
-  -> DeclaredTypes
-  -> Map.Map NominalId [Located Function]
-  -> Impl
-  -> [Located Function]
-inheritedDefaults defaults declared traits value = case implTraitName declared value of
-  Nothing -> []
-  Just traitText ->
-    [ member
-    | member@(Located _ method) <- maybe [] id (Map.lookup traitText traits)
-    , isDefault traitText method
-    , locatedValue (functionName method) `notElem` provided
-    ]
- where
-  provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
-  isDefault traitIdentity method = case defaults of
-    Nothing -> functionBody method /= Nothing
-    Just known -> Set.member (traitIdentity, locatedValue (functionName method)) known
+      mapM_ (declareMethod rejectCollision declared value owner Nothing) (implFunctions value)
+      case implTraitName declared value >>= \identity -> fmap ((,) identity) (Map.lookup identity traits) of
+        Nothing -> pure ()
+        Just (identity, trait) -> do
+          formed <- formTraitReference declared (implRigid value) (implTrait value)
+          let arguments = case formed of
+                NominalType _ held -> held
+                _ -> []
+              replacements =
+                ("Self", NominalType owner (selfArguments (map fst (implRigid value)) value))
+                  : zip (map fst (traitRigid trait)) arguments
+          mapM_
+            (declareMethod rejectCollision declared value owner (Just (identity, replacements)))
+            (inheritedMembers defaults identity trait value)
 
 implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
 implTraitName declared value = case locatedValue (implTrait value) of
   Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
   _ -> Nothing
 
-declareMethod :: Bool -> DeclaredTypes -> Impl -> NominalId -> Located Function -> Checker ()
-declareMethod rejectCollision declared value owner (Located methodSpan method) = do
-  let rigid = implRigid value <> functionRigid method
-      aliases = implAliases declared value
+{-| Declare one method of an implementation's target.
+
+    An inherited default takes the scheme its trait member was given, formed
+    once in the trait module's own names with `Self` and the trait's parameters
+    rigid, and replaces each of those by what this implementation gives it, all
+    at once: `twice` from `trait Holds[T]` is `(Int, Int)` on an
+    `impl Holds[Int]`. -}
+declareMethod
+  :: Bool
+  -> DeclaredTypes
+  -> Impl
+  -> NominalId
+  -> Maybe (NominalId, [(Text, Type)])
+  -> Located Function
+  -> Checker ()
+declareMethod rejectCollision declared value owner inherited (Located methodSpan method) = do
+  let aliases = implAliases declared value
       key = methodKey owner (locatedValue (functionName method))
-  inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
-  result <- formOptionalType aliases rigid (functionReturn method)
+  (rigid, bounds, signature) <- case inherited of
+    Nothing -> do
+      let rigid = implRigid value <> functionRigid method
+      inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
+      result <- formOptionalType aliases rigid (functionReturn method)
+      pure (rigid, declareBoundsWith aliases (implRigid value) method, FunctionTypeValue (functionAsync method) inputs result)
+    Just (trait, replacements) -> do
+      declaredScheme <- lookupName (methodKey trait (locatedValue (functionName method)))
+      let ownNames = map fst (functionRigid method)
+          (own, renamed) = renameApart (map fst (implRigid value)) (functionRigid method)
+          replace = substituteRigid (replacements <> renamed)
+          renamedTo name = fromMaybe name (lookup name (zip ownNames (map fst own)))
+      pure $ case declaredScheme of
+        Just declaredAs ->
+          ( implRigid value <> own
+          , [(renamedTo name, map replace held) | (name, held) <- schemeBounds declaredAs, name `elem` ownNames]
+          , replace (schemeType declaredAs)
+          )
+        Nothing -> (implRigid value, [], ErrorType)
   existing <- lookupName key
   importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
   provider <- methodProvider key
@@ -202,9 +231,7 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
       localCollision =
         not rejectCollision
           && maybe False (\earlier -> Just earlier /= providing) provider
-  let scheme =
-        polytype rigid (implBounds declared value <> declareBoundsWith aliases (implRigid value) method)
-          (FunctionTypeValue (functionAsync method) inputs result)
+  let scheme = polytype rigid (implBounds declared value <> bounds) signature
   if importedCollision
     then do
       report "E3013" methodSpan
@@ -229,38 +256,8 @@ implAliases declared value = case implTargetName declared value of
   Just name ->
     declared
       { declaredAliases =
-          Map.insert "Self" ([], NominalType name (selfArguments value)) (declaredAliases declared)
+          Map.insert "Self" ([], NominalType name (selfArguments (map fst (implRigid value)) value)) (declaredAliases declared)
       }
-
-{-| The arguments `Self` carries inside an implementation.
-
-    For `impl[T] Holds[T] for Boxed[T]`, `Self` is `Boxed[T]` with the impl's
-    own `T` — not a bare `Boxed`. Aliasing it without its arguments made the
-    type's parameter and the implementation's parameter two different rigid
-    types that happened to share a name, so `self.value` had a type the method's
-    declared result could not match and the checker reported `expected T, found
-    T` about them.
-
-    An argument naming one of the implementation's parameters becomes that rigid
-    parameter; anything else is formed as it was written, which is what makes
-    `impl Sequence[Int, Int] for Range` and the generic form agree. -}
-selfArguments :: Impl -> [Type]
-selfArguments value = case locatedValue (implTarget value) of
-  Tree.NamedType _ arguments ->
-    map (argumentType (map fst (implRigid value)) . locatedValue) arguments
-  _ -> []
-
-argumentType :: [Text] -> Tree.TypeSyntax -> Type
-argumentType parameters syntax = case syntax of
-  Tree.NamedType path []
-    | segment `elem` parameters -> RigidType segment
-    | otherwise -> NominalType (NominalId Nothing segment) []
-   where
-    segment = moduleNameText path
-  Tree.NamedType path arguments ->
-    NominalType (NominalId Nothing (moduleNameText path))
-      (map (argumentType parameters . locatedValue) arguments)
-  _ -> ErrorType
 
 {-| The nominal type an implementation is for.
 

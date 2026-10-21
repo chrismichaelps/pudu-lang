@@ -1099,7 +1099,7 @@ elementType spanValue position targetType = do
     TupleTypeValue members -> tupleMemberType spanValue position members
     _ -> do
       report "E3006" spanValue ("a " <> renderType resolved <> " cannot be indexed")
-        (Just "index a string, an array, or a tuple")
+        (Just "index a string, an array, or a tuple, or implement Std.Index.Index for this type")
       pure ErrorType
 
 {-| A parameter bounded by a trait with a static member may be called through

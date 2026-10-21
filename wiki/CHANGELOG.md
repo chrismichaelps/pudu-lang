@@ -5,6 +5,35 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Indexing with any number of indices (#534)
+
+- [[grammar/pudu]]: `a[i, j, ...]` is one indexing with any number of indices, distinct from `a[i][j]`; built-in types take one (`E3094`).
+- [[Std Index]] adds `Index` and `IndexMut`; [[Type Check Subscript]] types `[]` through them with tuple or array keys (`E3095`–`E3097`), and [[Compiler Literals]] rewrites it into calls that keep the order target, indices, value.
+- [[Std Span]] and [[Std MdSpan]] implement `Index`; the collections guide documents the feature.
+
+## 2026-10-21 — Standard library views and a chainable Iter (#527)
+
+- [[Std Iter]]: adapters and terminals are default members of `Sequence`, so `source.map(f).filter(g).take(3).toArray()` reads in order for every implementor; adds `takeWhile`, `dropWhile`, `stride`, `chain`, `enumerate`, `fold`, `any`, `all`, `find`, `first` and `last`. Each source item is produced once; terminals walk with `for`.
+- [[Std Span]], [[Std MdSpan]] and [[Std StringView]] add non-owning views of arrays, multidimensional arrays and UTF-8 text; [[Std Memory]] adds offset allocators (arena and pool).
+- [[Eval TextView]] adds the byte-addressed text primitives behind `Std.StringView`, checked against a byte-level model.
+- [[Type Check Iteration]] lets `for` iterate a type parameter through its `Sequence` bound.
+
+## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
+
+- [[Type Check Method]] gives an inherited default its trait member's declared scheme, substituted at the implementation, so an imported default keeps the trait module's names; [[Type Check]] hands local implementations every imported trait and declares trait members first.
+- [[Eval Install]] publishes each module's trait defaults under `#Trait.member`, scoped to that module, and an importing implementation inherits those closures.
+
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
+
+## 2026-10-21 — Generic trait defaults take the implementation's arguments (#528)
+
+- [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
+- [[Type Check Inherit]] renames a default's own parameters apart from the implementation's, so `map[B]` on an `impl [S, A, B, Q] ... for Mapped[Q, A, B]` keeps two distinct `B`s.
+- The trait table carries whole `Trait` declarations through [[Type Check]], [[Type Check Install]], [[Type Check Derive]] and the interface graph.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

@@ -110,6 +110,8 @@ Allocation now doubles with the module count (x2.0 per doubling, from x3.0–x3.
 
 ## Grill Log
 
+- **Q:** Must a module import `Std.Index` to write `grid[i, j]`? **A:** No; `operatorTraits` adds `Std.Index.Index` and `Std.Index.IndexMut` to every module's visible traits, because operator syntax cannot depend on an import. No other trait is visible this way (#534).
+
 - **Q:** Share raw checker state across consumers? **A:** No; share only closed products — formed
   declarations and a snapshot of installed schemes whose next-variable counter is carried forward.
   _Rejected:_ sharing substitutions or live checker states.

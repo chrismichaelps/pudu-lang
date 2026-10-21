@@ -280,6 +280,10 @@ evaluateHere (Located spanValue expression) = case expression of
     container <- evaluate target
     key <- evaluate index
     readIndex (locatedSpan index) container key
+  {-| Checking rewrites every accepted multi-index into a call, so one that
+      reaches here was never checked. -}
+  MultiIndexExpression _ _ ->
+    abortAt (Just spanValue) "E7001" "this indexing was not checked" Nothing
   TryExpression target -> do
     value <- evaluate target
     unwrapTry spanValue value

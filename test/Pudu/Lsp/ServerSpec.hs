@@ -55,6 +55,7 @@ serverProperties =
   , ("the module catalog names every module under a root", testModuleCatalog)
   , ("pattern completion survives a match the checker rejects", testPatternCompletionRejected)
   , ("completion offers only the bindings in scope at the cursor", testLexicalScopeCompletion)
+  , ("hover and completion work inside every index of a multidimensional index", testMultiIndexTooling)
   , ("field completion reads the receiver's canonical record", testRecordFieldCompletion)
   , ("method completion follows the checker's method rules", testMethodCompletion)
   , ("module qualifiers are the ones the imports bind", testImportQualifiers)
@@ -1165,3 +1166,29 @@ testFraming =
       first : _ -> Just first
       [] -> Nothing
     Text.stripPrefix "Content-Length: " header
+
+testMultiIndexTooling :: IO Property
+testMultiIndexTooling = do
+  documents <- opened $ Text.unlines
+    [ "module Demo"                                                         -- 0
+    , "trait Index[K, V] { fn index(self: &Self, key: K) -> V }"           -- 1
+    , "type Grid = { cells: Array[Int] }"                                  -- 2
+    , "impl Index[(Int, Int), Int] for Grid {"                             -- 3
+    , "  fn index(self: &Self, key: (Int, Int)) -> Int { self.cells[key[0] + key[1]] }" -- 4
+    , "}"                                                                  -- 5
+    , "fn main(grid: Grid, row: Int, column: Int) -> Int {"                -- 6
+    , "  grid[row, column]"                                                -- 7
+    , "}"                                                                  -- 8
+    ]
+  let hoverAt line character =
+        request "textDocument/hover" (atPosition line character) documents
+          >>= lookupField "contents" >>= lookupField "value" >>= textOf
+      labels = completionLabels (request "textDocument/completion" (atPosition 7 13) documents)
+  pure $ conjoin
+    [ counterexample "the second index is hovered as itself"
+        (property (maybe False (Text.isInfixOf "column") (hoverAt 7 14)))
+    , counterexample "and so is the first"
+        (property (maybe False (Text.isInfixOf "row") (hoverAt 7 8)))
+    , counterexample "completion inside an index offers the bindings in scope"
+        (property (all (`elem` labels) ["row", "column", "grid"]))
+    ]

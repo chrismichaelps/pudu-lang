@@ -104,6 +104,7 @@ shape (Located _ expression) = case expression of
     "fn(" <> Text.intercalate "," (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ")"
   MemberExpression target member -> shape target <> "." <> locatedValue member
   IndexExpression target index -> shape target <> "[" <> shape index <> "]"
+  MultiIndexExpression target indices -> shape target <> "[" <> Text.intercalate "," (map shape indices) <> "]"
   RangeExpression lower inclusive upper ->
     "(" <> foldMap shape lower <> (if inclusive then "..=" else "..")
       <> foldMap shape upper <> ")"

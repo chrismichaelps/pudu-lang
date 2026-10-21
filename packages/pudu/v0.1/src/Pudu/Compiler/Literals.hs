@@ -12,7 +12,14 @@
 
     A reference that chose types for parameters bounded by a trait with a
     static member is rewritten to apply them explicitly, in the declaration's
-    parameter order, so the call carries the selection erasure would lose. -}
+    parameter order, so the call carries the selection erasure would lose.
+
+    `[]` on a type implementing `Std.Index` becomes a call: `value[i, j]` is
+    `#index(value, (i, j))` and `value[i, j] = item` is
+    `#setIndex(&mut value, (i, j), item)`, with the key a tuple or an array as
+    checking decided. Arguments run in order, so the target, each index and the
+    item run in the order they were written, once each. `#` cannot begin a
+    written name, so nothing a program declares can stand in for these. -}
 module Pudu.Compiler.Literals
   ( resolveOwnerSelections
   , resolveLiterals
@@ -33,23 +40,25 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
 import Pudu.IntegerLiteral (IntegerKind, parseIntegerLiteral)
-import Pudu.Source (Span)
+import Pudu.Source (Span, mergeSpans)
+import Pudu.Type (SubscriptKey (..))
 import Pudu.Type.Value (Type (..), nominalKey)
 
 {-| The module with every integer literal in expression position resolved to
     the kind checking gave its span. -}
-resolveLiterals :: Map Span Text -> Map Span [Type] -> Module -> Module
-resolveLiterals kinds selections = walk (Facts kinds selections False)
+resolveLiterals :: Map Span Text -> Map Span [Type] -> Map Span SubscriptKey -> Module -> Module
+resolveLiterals kinds selections subscripts = walk (Facts kinds selections subscripts False)
 
 {-| Lower only generated owner annotations into printable ordinary applications. -}
 resolveOwnerSelections :: Map Span [Type] -> Module -> Module
 resolveOwnerSelections selections
   | Map.null selections = id
-  | otherwise = walk (Facts Map.empty selections True)
+  | otherwise = walk (Facts Map.empty selections Map.empty True)
 
 data Facts = Facts
   { factKinds :: !(Map Span Text)
   , factSelections :: !(Map Span [Type])
+  , factSubscripts :: !(Map Span SubscriptKey)
   , factOwnersOnly :: !Bool
   }
 
@@ -129,12 +138,45 @@ instance (GWalk f, GWalk g) => GWalk (f :*: g) where
 instance (Walk a, Typeable a) => Walk (Located a) where
   walk kinds (Located spanValue value) = case eqT :: Maybe (a :~: Expression) of
     Just Refl
+      | not (factOwnersOnly kinds), Just call <- subscriptCall kinds spanValue value ->
+          Located spanValue call
       | not (factOwnersOnly kinds), LiteralExpression literal <- value ->
           Located spanValue (LiteralExpression (resolveOne (factKinds kinds) spanValue literal))
       | not (factOwnersOnly kinds) || hasSelectedOwner value
       , Just chosen <- Map.lookup spanValue (factSelections kinds) ->
           Located spanValue (select spanValue chosen (walk kinds value))
     _ -> Located spanValue (walk kinds value)
+
+{-| Indexing or assignment through `[]` on a type implementing `Std.Index`, as
+    the call it stands for. -}
+subscriptCall :: Facts -> Span -> Expression -> Maybe Expression
+subscriptCall facts spanValue value = case value of
+  IndexExpression target index -> do
+    shape <- shapeAt spanValue
+    pure (call "#index" [recurse target, keyOf shape [index]])
+  MultiIndexExpression target indices -> do
+    shape <- shapeAt spanValue
+    pure (call "#index" [recurse target, keyOf shape indices])
+  BinaryExpression (Located leftSpan left) "=" item -> do
+    shape <- shapeAt leftSpan
+    (target, key) <- case (shape, left) of
+      (_, IndexExpression target index) -> Just (target, keyOf shape [index])
+      (_, MultiIndexExpression target indices) -> Just (target, keyOf shape indices)
+      _ -> Nothing
+    pure (call "#setIndex"
+      [Located (locatedSpan target) (UnaryExpression "&mut" (recurse target)), key, recurse item])
+  _ -> Nothing
+ where
+  shapeAt at = Map.lookup at (factSubscripts facts)
+  recurse = walk facts
+  call name arguments = CallExpression (Located spanValue (NameExpression (name :| []))) arguments
+  keyOf shape indices = case (shape, indices) of
+    (SubscriptSingle, [index]) -> recurse index
+    (SubscriptArray, _) -> Located (keySpan indices) (ArrayExpression (map recurse indices))
+    _ -> Located (keySpan indices) (TupleExpression (map recurse indices))
+  keySpan indices = case indices of
+    first : _ -> foldr (\(Located at _) merged -> maybe merged id (mergeSpans at merged)) (locatedSpan first) indices
+    [] -> spanValue
 
 instance Walk a => Walk (Maybe a) where
   walk kinds = fmap (walk kinds)

@@ -213,6 +213,12 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth target
           <*> expandExpression macros depth index
       )
+  MultiIndexExpression target indices ->
+    rebuild
+      ( MultiIndexExpression
+          <$> expandExpression macros depth target
+          <*> traverse (expandExpression macros depth) indices
+      )
   RangeExpression lower inclusive upper ->
     rebuild
       ( RangeExpression

@@ -172,6 +172,7 @@ expressionWork expression = case expression of
   CallExpression callee arguments -> ExpressionWork callee : map ExpressionWork arguments
   MemberExpression receiver _ -> [ExpressionWork receiver]
   IndexExpression receiver index -> [ExpressionWork receiver, ExpressionWork index]
+  MultiIndexExpression receiver indices -> map ExpressionWork (receiver : indices)
   RangeExpression lower _ upper -> map ExpressionWork (maybeToList lower <> maybeToList upper)
   TryExpression operand -> [ExpressionWork operand]
   AwaitExpression operand -> [ExpressionWork operand]

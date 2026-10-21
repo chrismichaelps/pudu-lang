@@ -96,6 +96,7 @@ fromExpression (Located _ expression) = case expression of
   CallExpression callee arguments -> fromExpression callee <> concatMap fromExpression arguments
   MemberExpression target _ -> fromExpression target
   IndexExpression target index -> fromExpression target <> fromExpression index
+  MultiIndexExpression target indices -> foldMap fromExpression (target : indices)
   RangeExpression lower _ upper -> foldMap fromExpression lower <> foldMap fromExpression upper
   TryExpression target -> fromExpression target
   AwaitExpression target -> fromExpression target

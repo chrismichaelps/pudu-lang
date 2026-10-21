@@ -1,0 +1,165 @@
+module Std.Span
+
+import Std.Index {Index}
+import Std.Iter {Sequence}
+
+/// A window onto a stretch of an array: `extent` items starting at `offset`,
+/// read in place.
+///
+/// Narrowing a span makes a new window over the same array; nothing is copied
+/// until `toArray`. Reading an item by position walks the array's index once,
+/// as indexing the array itself does.
+///
+/// Every narrowing clamps to what the span holds, so a chain of them always
+/// answers a span and never fails part way.
+///
+/// ## Examples
+///
+/// ```
+/// let middle = Span.of([1, 2, 3, 4, 5]).subspan(1, 3)
+/// middle.toArray()  // [2, 3, 4]
+/// middle.size()     // 3
+/// ```
+export type Span[T] = { source: Array[T], offset: Int, extent: Int }
+
+/// A span over every item of an array.
+///
+/// ## Examples
+///
+/// ```
+/// Span.of(["a", "b"]).size()  // 2
+/// ```
+export fn of[T](values: Array[T]) -> Span[T] {
+  Span{source: values, offset: 0, extent: values.length()}
+}
+
+/// A span of `extent` items starting at `offset`, or `None` when that stretch
+/// is not inside the array.
+///
+/// ## Examples
+///
+/// ```
+/// Span.within([1, 2, 3], 1, 2)  // Some(span of [2, 3])
+/// Span.within([1, 2, 3], 2, 5)  // None
+/// ```
+export fn within[T](values: Array[T], offset: Int, extent: Int) -> Option[Span[T]] {
+  if offset < 0 || extent < 0 || offset + extent > values.length() {
+    None
+  } else {
+    Some(Span{source: values, offset: offset, extent: extent})
+  }
+}
+
+/// Reading and narrowing a span.
+export trait Window[T] {
+  /// How many items the span holds.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Span.of([4, 5, 6]).size()  // 3
+  /// ```
+  fn size(self: &Self) -> Int
+
+  /// The item at `index`, counting from the span's start, or `None` outside it.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Span.of([4, 5, 6]).subspan(1, 2).get(0)  // Some(5)
+  /// Span.of([4, 5, 6]).get(3)                // None
+  /// ```
+  fn get(self: &Self, index: Int) -> Option[T]
+
+  /// The first `count` items, or all of them when there are fewer.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Span.of([1, 2, 3]).prefix(2).toArray()  // [1, 2]
+  /// ```
+  fn prefix(self: &Self, count: Int) -> Span[T]
+
+  /// The last `count` items, or all of them when there are fewer.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Span.of([1, 2, 3]).suffix(2).toArray()  // [2, 3]
+  /// ```
+  fn suffix(self: &Self, count: Int) -> Span[T]
+
+  /// `count` items starting at `offset`, both clamped to the span.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Span.of([1, 2, 3, 4]).subspan(1, 2).toArray()   // [2, 3]
+  /// Span.of([1, 2, 3, 4]).subspan(3, 10).toArray()  // [4]
+  /// ```
+  fn subspan(self: &Self, offset: Int, count: Int) -> Span[T]
+}
+
+/// A count clamped to `0..=limit`.
+fn clamped(count: Int, limit: Int) -> Int {
+  if count < 0 { 0 } else { if count > limit { limit } else { count } }
+}
+
+impl [T] Window[T] for Span[T] {
+  fn size(self: &Self) -> Int { self.extent }
+
+  fn get(self: &Self, index: Int) -> Option[T] {
+    if index < 0 || index >= self.extent { None } else { Some(self.source[self.offset + index]) }
+  }
+
+  fn prefix(self: &Self, count: Int) -> Span[T] {
+    Span{..*self, extent: clamped(count, self.extent)}
+  }
+
+  fn suffix(self: &Self, count: Int) -> Span[T] {
+    let kept = clamped(count, self.extent)
+    Span{..*self, offset: self.offset + self.extent - kept, extent: kept}
+  }
+
+  fn subspan(self: &Self, offset: Int, count: Int) -> Span[T] {
+    let start = clamped(offset, self.extent)
+    Span{..*self, offset: self.offset + start, extent: clamped(count, self.extent - start)}
+  }
+}
+
+/// `span[i]` reads the item at `i`, counting from the span's start. A position
+/// outside the span panics rather than reaching the rest of the array.
+///
+/// ## Examples
+///
+/// ```
+/// Span.of([4, 5, 6]).subspan(1, 2)[0]  // 5
+/// ```
+impl [T] Index[Int, T] for Span[T] {
+  fn index(self: &Self, key: Int) -> T {
+    if key < 0 || key >= self.extent {
+      panic("index " + key.toText() + " is outside a span of " + self.extent.toText())
+    }
+    self.source[self.offset + key]
+  }
+}
+
+/// A span walks its items in order. The terminals that a span answers without
+/// walking — its count, its ends, and a copy of its items — are its own.
+impl [T] Sequence[Int, T] for Span[T] {
+  fn begin(self: &Self) -> Int { 0 }
+
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.extent { Some((state + 1, self.source[self.offset + state])) } else { None }
+  }
+
+  fn toArray(self: &Self) -> Array[T] { self.source.slice(self.offset, self.offset + self.extent) }
+
+  fn count(self: &Self) -> Int { self.extent }
+
+  fn isEmpty(self: &Self) -> Bool { self.extent == 0 }
+
+  fn first(self: &Self) -> Option[T] { self.get(0) }
+
+  fn last(self: &Self) -> Option[T] { self.get(self.extent - 1) }
+}

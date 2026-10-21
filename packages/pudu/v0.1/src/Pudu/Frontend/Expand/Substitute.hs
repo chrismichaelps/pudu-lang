@@ -74,6 +74,7 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
     at (LambdaExpression (substituteFunction bindings identifier renames callSpan function))
   MemberExpression target member -> at (MemberExpression (recurse target) member)
   IndexExpression target index -> at (IndexExpression (recurse target) (recurse index))
+  MultiIndexExpression target indices -> at (MultiIndexExpression (recurse target) (map recurse indices))
   RangeExpression lower inclusive upper ->
     at (RangeExpression (fmap recurse lower) inclusive (fmap recurse upper))
   TryExpression target -> at (TryExpression (recurse target))

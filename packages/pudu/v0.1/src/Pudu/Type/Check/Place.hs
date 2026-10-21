@@ -62,6 +62,7 @@ import Pudu.Type.Env
   , report
   , takeUnwrittenParameters
   )
+import Pudu.Type.Check.Subscript (copiedElement, indexedByMember, readThroughIndex, subscriptAssignment)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value (NominalId (..), Type (..), renderType)
 
@@ -89,8 +90,9 @@ admitLending = mapM_ admit
 checkLent :: Span -> Located Expression -> Checker ()
 checkLent spanValue operand = do
   admitted <- isLentArgument spanValue
+  throughMember <- readThroughIndex operand
   if admitted
-    then () <$ writable Replacing operand
+    then () <$ (if throughMember then copiedElement spanValue else writable Replacing operand)
     else
       report "E3081" spanValue "&mut lends a place only to the call it is an argument of"
         ( Just
@@ -286,23 +288,8 @@ writable access (Located spanValue expression) = case expression of
       Indexing by a range names a stretch, which is a value the slice built
       rather than a place the original holds — writing to it would change
       something nothing else can see. -}
-  IndexExpression target index -> do
-    indexType <- recordedType index
-    case indexType of
-      Just (NominalType "Range" _) ->
-        notAPlace spanValue "a slice is not a place that can be written"
-          ( Just
-              ( "a slice is a new value, not part of the one it came from; "
-                  <> "assign the elements, or build the sequence you want"
-              )
-          )
-      _ -> do
-        base <- recordedType target
-        case base of
-          Just (ReferenceTypeValue False _) -> refuseShared spanValue
-          Just (ReferenceTypeValue True inner) -> elementOf target inner
-          Just held -> elementOf target held
-          Nothing -> pure False
+  IndexExpression target index -> indexed target [index] (recordedType index >>= builtinElement target)
+  MultiIndexExpression target indices -> indexed target indices (pure False)
   UnaryExpression "*" operand -> do
     held <- recordedType operand
     case held of
@@ -320,6 +307,29 @@ writable access (Located spanValue expression) = case expression of
   fieldOf target owner field = do
     rooted <- writable Inside target
     if rooted then mutableField spanValue owner field else pure False
+  -- Through `index`, the whole element may be replaced by `setIndex`; a part
+  -- of it is a part of a copy.
+  indexed target indices builtin = do
+    base <- recordedType target
+    case (maybe False indexedByMember base, access) of
+      (False, _) -> builtin
+      (True, Inside) -> copiedElement spanValue
+      (True, Replacing) -> writable Inside target <* subscriptAssignment spanValue (Located spanValue expression) target indices
+  builtinElement target indexType = case indexType of
+    Just (NominalType "Range" _) ->
+      notAPlace spanValue "a slice is not a place that can be written"
+        ( Just
+            ( "a slice is a new value, not part of the one it came from; "
+                <> "assign the elements, or build the sequence you want"
+            )
+        )
+    _ -> do
+      base <- recordedType target
+      case base of
+        Just (ReferenceTypeValue False _) -> refuseShared spanValue
+        Just (ReferenceTypeValue True inner) -> elementOf target inner
+        Just held -> elementOf target held
+        Nothing -> pure False
   elementOf target held = case held of
     NominalType "Array" [_] -> writable Inside target
     NominalType "Str" [] ->
@@ -466,6 +476,7 @@ pathOf (Located _ expression) = case expression of
   NameExpression (root :| fields) -> Just (root, map FieldStep fields)
   MemberExpression target (Located _ field) -> extend (FieldStep field) <$> pathOf target
   IndexExpression target _ -> extend ElementStep <$> pathOf target
+  MultiIndexExpression target _ -> extend ElementStep <$> pathOf target
   UnaryExpression "*" operand -> pathOf operand
   UnaryExpression "&mut" operand -> pathOf operand
   _ -> Nothing

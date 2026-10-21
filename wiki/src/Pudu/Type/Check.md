@@ -167,6 +167,8 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Grill Log
 
+- **Q:** Which traits may a local implementation inherit defaults from? **A:** Its own module's and every imported one, and trait members are declared before the module's other signatures, because an inherited default takes its member's declared scheme (#530).
+
 - **Q:** Discard the expression types derive-definition checking computes? **A:** Not for tooling.
   _Rationale:_ a template's metadata (`field : Field[T, F]`) is typed only there; its generated
   copies carry generated spans and request-specific types. `checkDeriveDefinitionTypes` runs the

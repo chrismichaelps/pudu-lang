@@ -95,6 +95,7 @@ fromExpression (Located _ expression) = case expression of
     fromExpression target <> maybe Set.empty pathKeys (flatten expression)
       <> Set.singleton (locatedValue member)
   IndexExpression target index -> fromExpression target <> fromExpression index
+  MultiIndexExpression target indices -> foldMap fromExpression (target : indices)
   RangeExpression lower _ upper -> foldMap fromExpression lower <> foldMap fromExpression upper
   TryExpression target -> fromExpression target
   AwaitExpression target -> fromExpression target

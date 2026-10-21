@@ -8,6 +8,8 @@ module Pudu.Type.Check.TraitSpec
   , testCoherence
   , testQualifiedMethods
   , testGenericTraits
+  , testGenericTraitDefaults
+  , testIndexing
   ) where
 
 import Data.Text (Text)
@@ -34,6 +36,7 @@ traitProperties =
   , ("coherence rejects duplicate and orphan implementations", testCoherence)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
+  , ("a generic trait's default takes the implementation's arguments", testGenericTraitDefaults)
   ]
 
 traitProgram :: [Text]
@@ -475,4 +478,129 @@ testGenericTraits = do
     , "type Box = { v: Int }"
     , "trait Holds[T] { fn get(self: &Self) -> T }"
     , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+testGenericTraitDefaults :: IO Property
+testGenericTraitDefaults = do
+  methodCall <- codes (holds <> ["fn run(b: Box) -> (Int, Int) { b.twice() }"])
+  qualifiedCall <- codes (holds <> ["fn run(b: Box) -> (Int, Int) { Holds.twice(&b) }"])
+  wrongResult <- codes (holds <> ["fn run(b: Box) -> (Str, Str) { b.twice() }"])
+  sharedName <- codes
+    [ "module M"
+    , "type Wrap[T] = { v: Array[T] }"
+    , "trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
+    , "impl [T] Holds[Array[T]] for Wrap[T] { fn get(self: &Self) -> Array[T] { self.v } }"
+    , "fn run(w: Wrap[Int]) -> (Array[Int], Array[Int]) { w.twice() }"
+    ]
+  chained <- codes
+    [ "module M"
+    , "trait Seq[S, T] {"
+    , "  fn begin(self: &Self) -> S"
+    , "  fn advance(self: &Self, state: S) -> Option[(S, T)]"
+    , "  fn map[B](self: &Self, f: fn(T) -> B) -> Mapped[Self, T, B] { Mapped{source: *self, transform: f} }"
+    , "}"
+    , "type Items[T] = { values: Array[T] }"
+    , "impl [T] Seq[Int, T] for Items[T] {"
+    , "  fn begin(self: &Self) -> Int { 0 }"
+    , "  fn advance(self: &Self, state: Int) -> Option[(Int, T)] { None }"
+    , "}"
+    , "type Mapped[Q, A, B] = { source: Q, transform: fn(A) -> B }"
+    , "impl [S, A, B, Q: Seq[S, A]] Seq[S, B] for Mapped[Q, A, B] {"
+    , "  fn begin(self: &Self) -> S { self.source.begin() }"
+    , "  fn advance(self: &Self, state: S) -> Option[(S, B)] { None }"
+    , "}"
+    , "fn run() -> Option[(Int, Str)] {"
+    , "  Items{values: [1, 2]}.map(|n| n * 2).map(|n| n.toText()).advance(0)"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "method syntax gives the default the implementation's argument"
+        (methodCall === [])
+    , counterexample "so does the trait-qualified form" (qualifiedCall === [])
+    , counterexample "and the default's result is still checked, once per member"
+        (wrongResult === ["E3001", "E3001"])
+    , counterexample "an implementation parameter named like the trait's stays its own"
+        (sharedName === [])
+    , counterexample "a default returning a type built from Self chains" (chained === [])
+    ]
+ where
+  holds =
+    [ "module M"
+    , "type Box = { v: Int }"
+    , "trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+testIndexing :: IO Property
+testIndexing = do
+  let program body = codes (header <> body)
+  readsBoth <- program ["fn run(g: Grid) -> Int { g[0, 1] + g[(1, 0)] }"]
+  writes <- program ["fn run() -> Int {", "  var g = Grid{columns: 1, cells: [1]}", "  g[0, 0] = 2", "  g[0, 0]", "}"]
+  generic <- program ["fn first[T: Index[(Int, Int), Int]](g: &T) -> Int { g[0, 0] }"]
+  arrayKey <- program ["fn run(r: Ranked) -> Int { r[1] + r[1, 2] + r[1, 2, 3, 4, 5, 6, 7, 8] }"]
+  builtinArray <- program ["fn run(xs: Array[Array[Int]]) -> Int { xs[0, 1] }"]
+  builtinText <- program ["fn run(t: Str) -> Char { t[0, 1] }"]
+  chained <- program ["fn run(xs: Array[Array[Int]]) -> Int { xs[0][1] }"]
+  tooMany <- program ["fn run(g: Grid) -> Int { g[0, 0, 0] }"]
+  wrongIndex <- program ["fn run(g: Grid) -> Int { g[0, true] }"]
+  wrongResult <- program ["fn run(g: Grid) -> Str { g[0, 0] }"]
+  readOnly <- program ["fn run() -> Int {", "  var r = Ranked{base: 0}", "  r[0] = 1", "  0", "}"]
+  intoCopy <- program
+    [ "type Cell = { mut x: Int }"
+    , "type Row = { mut cells: Array[Cell] }"
+    , "impl Index[Int, Cell] for Row { fn index(self: &Self, key: Int) -> Cell { self.cells[key] } }"
+    , "impl IndexMut[Int, Cell] for Row {"
+    , "  fn setIndex(self: &mut Self, key: Int, value: Cell) -> () { self.cells[key] = value }"
+    , "}"
+    , "fn bump(c: &mut Cell) -> () { c.x = c.x + 1 }"
+    , "fn run() -> Int {"
+    , "  var row = Row{cells: [Cell{x: 1}]}"
+    , "  row[0].x = 5"
+    , "  bump(&mut row[0])"
+    , "  row[0] = Cell{x: 2}"
+    , "  row[0].x"
+    , "}"
+    ]
+  immutable <- program ["fn run() -> Int {", "  let g = Grid{columns: 1, cells: [1]}", "  g[0, 0] = 2", "  0", "}"]
+  notIndexable <- codes ["module M", "type Plain = { v: Int }", "fn run(p: Plain) -> Int { p[0] }"]
+  pure $ conjoin
+    [ counterexample "a tuple key takes as many indices as it has members" (readsBoth === [])
+    , counterexample "setIndex assigns through []" (writes === [])
+    , counterexample "a bounded parameter is indexed through its bound" (generic === [])
+    , counterexample "an array key takes any number of indices, one included" (arrayKey === [])
+    , counterexample "a built-in array takes one index" (builtinArray === ["E3094"])
+    , counterexample "and so does text" (builtinText === ["E3094"])
+    , counterexample "indexing twice is still indexing twice" (chained === [])
+    , counterexample "a tuple key fixes the count" (tooMany === ["E3095"])
+    , counterexample "each index is checked against its member" (wrongIndex === ["E3001"])
+    , counterexample "the result is index's result" (wrongResult === ["E3001"])
+    , counterexample "assignment needs setIndex" (readOnly === ["E3097"])
+    , counterexample "a part of an element read through [] is a copy" (intoCopy === ["E3096", "E3096"])
+    , counterexample "the target of an assignment must be writable" (immutable === ["E3078"])
+    , counterexample "a type without index cannot be indexed" (notIndexable === ["E3006"])
+    ]
+ where
+  header =
+    [ "module M"
+    , "trait Index[K, V] { fn index(self: &Self, key: K) -> V }"
+    , "trait IndexMut[K, V] { fn setIndex(self: &mut Self, key: K, value: V) -> () }"
+    , "type Grid = { columns: Int, mut cells: Array[Int] }"
+    , "impl Index[(Int, Int), Int] for Grid {"
+    , "  fn index(self: &Self, key: (Int, Int)) -> Int { self.cells[key[0] * self.columns + key[1]] }"
+    , "}"
+    , "impl IndexMut[(Int, Int), Int] for Grid {"
+    , "  fn setIndex(self: &mut Self, key: (Int, Int), value: Int) -> () {"
+    , "    self.cells[key[0] * self.columns + key[1]] = value"
+    , "  }"
+    , "}"
+    , "type Ranked = { base: Int }"
+    , "impl Index[Array[Int], Int] for Ranked {"
+    , "  fn index(self: &Self, key: Array[Int]) -> Int { self.base + key.length() }"
+    , "}"
     ]
