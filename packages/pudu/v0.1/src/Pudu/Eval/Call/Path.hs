@@ -24,7 +24,7 @@ import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
-import Pudu.Eval.Operator (readMember)
+import Pudu.Eval.Operator (declaredOwner, readMember)
 import Pudu.Eval.Value (Closure (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
@@ -48,7 +48,7 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
     direct <- case local of
       Just witness@TypeWitnessValue{} -> witnessMethod witness method
       Just _ -> pure Nothing
-      Nothing -> lookupName (first <> "." <> method)
+      Nothing -> firstBound (\owner -> lookupName (owner <> "." <> method)) (typeOwners first values)
     case direct of
       Just found -> pure (Just found)
       Nothing | not (qualifies local) -> pure Nothing
@@ -196,11 +196,25 @@ typeArgumentName located = case locatedValue located of
 witnessMethod :: Value -> Text -> Evaluator (Maybe Value)
 witnessMethod witness member = case witness of
   TypeWitnessValue owner arguments -> do
-    found <- lookupName (owner <> "." <> member)
+    found <- firstBound (\key -> lookupName (key <> "." <> member)) (typeOwners owner [])
     pure $ case found of
       Just (FunctionValue closure) -> Just (FunctionValue (selectTypes arguments closure))
       other -> other
   _ -> pure Nothing
+
+{-| The method-key owners a written type name may stand for.
+
+    A name a built-in value also answers to is the declared type's when the
+    receiver is a record or a variant, and the built-in's otherwise. With no
+    receiver to tell, the declared type's key is tried first. -}
+typeOwners :: Text -> [Value] -> [Text]
+typeOwners name values
+  | declaredOwner name == name = [name]
+  | otherwise = case values of
+      RecordValue{} : _ -> [declaredOwner name]
+      VariantValue{} : _ -> [declaredOwner name]
+      _ : _ -> [name]
+      [] -> [declaredOwner name, name]
 
 {-| Bind chosen types to a closure's type parameters in declaration order;
     an installed method's parameters begin with its implementation's. -}

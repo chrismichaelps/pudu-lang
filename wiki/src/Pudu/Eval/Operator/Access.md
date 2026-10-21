@@ -54,6 +54,8 @@ unwrapTry :: Span -> Value -> Evaluator Value
 
 ## Grill Log
 
+- **Q:** A program declares `type Array` or `type Range`; whose methods does a built-in array or range reach? **A:** Only the built-in type's. `builtinValueOwners` lists every name `nominalNameOf` gives a built-in value, and `declaredOwner` keys a declared type of that name as `@Name`. Record and variant receivers read their methods under `declaredOwner`, built-in values under the bare name, so neither reaches the other's (#529). _Rejected:_ trying the declared key and then the built-in one for every receiver, which lets `[1, 2, 3].length()` run a declared `Array`'s `length`.
+
 - **Q:** Narrow a scalar index before checking the upper bound? **A:** No; test
   the mathematical index against the lifted host length first. _Rationale:_ an
   out-of-host-range integer can wrap into a small or negative Int. Only a proven

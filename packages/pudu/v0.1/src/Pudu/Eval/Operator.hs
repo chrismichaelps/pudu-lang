@@ -4,6 +4,7 @@ module Pudu.Eval.Operator
   , builtinMethodNamesFor
   , checkedResult
   , combine
+  , declaredOwner
   , nominalNameOf
   , readIndex
   , readMember
@@ -28,6 +29,7 @@ import Pudu.Eval.Env (Evaluator, abortAt)
 import Pudu.Eval.Order (OrdValue (..), comparableValue)
 import Pudu.Eval.Operator.Access
   ( builtinMethodNamesFor
+  , declaredOwner
   , nominalNameOf
   , readIndex
   , readMember
