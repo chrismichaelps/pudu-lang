@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Match — `match`: the subject, then each arm's
     pattern, guard and body in a scope of its own. -}
-module Pudu.Compiler.Lower.Match (lowerMatch) where
+module Pudu.Compiler.Lower.Match (lowerMatch, ifLetArms, whileLetLoop) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -11,7 +11,8 @@ import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal,
 import Pudu.Compiler.Lower.Types (recordFields, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..) )
+  ( Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
+  , Statement (..) )
 import Pudu.IntegerLiteral (ParsedInteger (..), integerKindBounds, integerKindFits, parseIntegerLiteral)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Source (Span)
@@ -56,6 +57,26 @@ lowerMatch lower discarded state at subject arms = case lower state subject of
           | guardKind `elem` [CoreBoolType, CoreNeverType] -> (next, Just coreGuard)
           | otherwise -> halt (locatedSpan test) ("a guard of type " <> coreTypeName guardKind) next
         (next, Nothing) -> refused next
+
+{-| `if let` as match arms: the pattern takes the block, anything else takes
+    the `else` branch or unit. -}
+ifLetArms :: Span -> Located Pattern -> Located Block -> Maybe (Located Expression) -> [Located MatchArm]
+ifLetArms at pattern' taken otherwise' =
+  [ Located at (MatchArm pattern' Nothing (Located (locatedSpan taken) (BlockExpression taken)))
+  , Located at (MatchArm (Located at WildcardPattern) Nothing (maybe (Located at (TupleExpression [])) id otherwise'))
+  ]
+
+{-| `while let` as a `loop` whose body matches the subject afresh each turn
+    and breaks on the first value the pattern refuses. -}
+whileLetLoop :: Span -> Maybe (Located Text) -> Located Pattern -> Located Expression -> Located Block -> Located Expression
+whileLetLoop at label pattern' subject body =
+  let stop = Located at (BlockExpression (Located at (Block [Located at (BreakStatement Nothing Nothing)] Nothing)))
+      arms =
+        [ Located at (MatchArm pattern' Nothing (Located (locatedSpan body) (BlockExpression body)))
+        , Located at (MatchArm (Located at WildcardPattern) Nothing stop)
+        ]
+      turn = Located at (ExpressionStatement (Located at (MatchExpression subject arms)))
+   in Located at (LoopExpression label (Located at (Block [turn] Nothing)))
 
 {-| A pattern against a value of the given type. Names already bound by an
     earlier alternative of the same pattern reuse their locals. -}

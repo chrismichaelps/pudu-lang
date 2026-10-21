@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Native if let and while let (#540)
+
+- [[Compiler Lower Match]] lowers `if let` as a match with a wildcard fallback and `while let` as a labelled `loop` around one; [[Compiler Lower Body]] routes both there.
+- [[Backend Sum Programs]] adds chains, value-less and valued forms, subject side effects, nested labelled loops and overflow refusals.
+
 ## 2026-10-21 — Native programs across modules (#539)
 
 - [[Compiler Lower]] lowers every module of the compiled program with its own checked facts; functions are keyed `Module.function` and a written callee resolves through [[Compiler Lower State]] as the evaluator links imports.

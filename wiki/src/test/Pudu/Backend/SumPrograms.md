@@ -19,11 +19,16 @@ nested Option and Result payloads; equality by variant then payload, NaN
 payloads included; `match` with ordered arms, guards, bindings, literal,
 range, tuple, constructor, record and alternative patterns; Option and Result
 through calls, loops and nested patterns; payload order and a Never payload;
-sums through mutation and loop values; sum entry results. Refusals: ordering,
-subtraction and addition on sums, each naming the held variants after the
-operands ran.
+sums through mutation and loop values; sum entry results; `if let` chains,
+valued and value-less, with the subject run once; `while let` reading its
+subject each turn, with `continue`, a labelled `break` out of a nested loop and
+its unit value. Refusals: ordering, subtraction and addition on sums, each
+naming the held variants after the operands ran; overflows inside an `if let`
+body and a `while let` subject.
 
 ## Grill Log
+
+- **Q:** Why do the `if let` and `while let` programs trace their subjects? **A:** Because lowering through a match must still read the subject exactly once per `if let` and once per `while let` turn; a print in the subject makes a second read visible (#540).
 
 - **Q:** Why no refusal for a match no arm accepts? **A:** Checking requires
   every match to cover its subject, so E7011 cannot be reached from a checked
