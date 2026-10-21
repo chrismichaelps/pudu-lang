@@ -202,19 +202,21 @@ witnessMethod witness member = case witness of
       other -> other
   _ -> pure Nothing
 
-{-| The method-key owners a written type name may stand for.
+{-| The method-key owners a written type name may stand for, in the order to
+    try them.
 
-    A name a built-in value also answers to is the declared type's when the
-    receiver is a record or a variant, and the built-in's otherwise. With no
-    receiver to tell, the declared type's key is tried first. -}
+    A name a built-in value also answers to may be a declared type's or the
+    built-in's. A first argument that is a record or a variant tries the
+    declared type first; anything else tries the built-in first. Both stay
+    candidates, because the first argument of a static member such as
+    `Int.decode(json)` is not a receiver and says nothing about the owner. -}
 typeOwners :: Text -> [Value] -> [Text]
 typeOwners name values
   | declaredOwner name == name = [name]
   | otherwise = case values of
-      RecordValue{} : _ -> [declaredOwner name]
-      VariantValue{} : _ -> [declaredOwner name]
-      _ : _ -> [name]
-      [] -> [declaredOwner name, name]
+      RecordValue{} : _ -> [declaredOwner name, name]
+      VariantValue{} : _ -> [declaredOwner name, name]
+      _ -> [name, declaredOwner name]
 
 {-| Bind chosen types to a closure's type parameters in declaration order;
     an installed method's parameters begin with its implementation's. -}

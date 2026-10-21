@@ -90,7 +90,7 @@ testRangesAndSlices = do
 testBuiltinOwnerNames :: IO Property
 testBuiltinOwnerNames = do
   answer <- runEntry (fixture "BuiltinOwnerNames")
-  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "8"))
+  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "9"))
 
 {-| An implementation inherits the defaults of a trait it imports, typed at its
     own arguments, run in the trait module's scope, and still overridable. -}
