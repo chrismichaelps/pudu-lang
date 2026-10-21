@@ -18,6 +18,7 @@ importTypeProperties =
   [ ("imported functions retain their ABI types", testImportedFunction)
   , ("trait selection controls imported methods", testTraitSelection)
   , ("imported defaults survive body stripping", testImportedDefault)
+  , ("an imported generic trait's default takes the implementation's arguments", testImportedGenericDefault)
   , ("imported and local methods diagnose ambiguity", testMixedAmbiguity)
   , ("same-spelling nominal mismatches name both modules", testQualifiedMismatch)
   ]
@@ -43,6 +44,26 @@ testTraitSelection = do
 testImportedDefault :: IO Property
 testImportedDefault =
   (=== []) <$> checked [defaultLibrary] (consumer "User, Show" [runShow])
+
+testImportedGenericDefault :: IO Property
+testImportedGenericDefault = do
+  accepted <- checked [library] (consumer "Box, Holds" ["fn run(b: Box) -> (Int, Int) { b.twice() }"])
+  rejected <- checked [library] (consumer "Box, Holds" ["fn run(b: Box) -> (Str, Str) { b.twice() }"])
+  pure $ conjoin
+    [ counterexample "the default is typed at the implementation's argument" (accepted === [])
+    , counterexample "and is still checked against it, once per member"
+        (rejected === ["E3001", "E3001"])
+    ]
+ where
+  library = Text.unlines
+    [ "module Library"
+    , "export type Box = { v: Int }"
+    , "export trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
 
 testMixedAmbiguity :: IO Property
 testMixedAmbiguity = do

@@ -39,8 +39,8 @@ checkDeriveContracts declared imported moduleValue = do
   defaults = Set.unions (map interfaceDefaults (importedInterfaces imported))
     <> Set.fromList
       [(owner, locatedValue (functionName member))
-      | (owner, members) <- Map.toList (traitTable declared local)
-      , Located _ member <- members, functionBody member /= Nothing]
+      | (owner, trait) <- Map.toList (traitTable declared local)
+      , Located _ member <- traitMembers trait, functionBody member /= Nothing]
   checkOne seen (Located _ (DeriveDeclaration value)) = do
     let target = locatedValue (deriveParameter value)
     head' <- formTraitReference declared [(target, 0)] (deriveTrait value)

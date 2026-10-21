@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Generic trait defaults take the implementation's arguments (#528)
+
+- [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
+- [[Type Check Inherit]] renames a default's own parameters apart from the implementation's, so `map[B]` on an `impl [S, A, B, Q] ... for Mapped[Q, A, B]` keeps two distinct `B`s.
+- The trait table carries whole `Trait` declarations through [[Type Check]], [[Type Check Install]], [[Type Check Derive]] and the interface graph.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

@@ -210,7 +210,7 @@ checkUnit scope imported moduleValue = do
 declareSignature
   :: DeclaredTypes
   -> RecordLayouts
-  -> Map.Map NominalId [Located Function]
+  -> Map.Map NominalId Trait
   -> Located Declaration
   -> Checker ()
 declareSignature declared layouts traits (Located _ declaration) = case declaration of
