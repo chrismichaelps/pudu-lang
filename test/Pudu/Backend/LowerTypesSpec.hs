@@ -5,7 +5,7 @@ import qualified Data.Text as Text
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import Pudu.Compiler (CompileResult (..), runCompile)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan)
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
@@ -81,17 +81,17 @@ testMissing = do
   checked <- runCompile source
   pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
     (False, Just parsed) -> conjoin
-      [ case lowerProgram "main" Nothing parsed of
+      [ case lowerModule "main" Nothing parsed of
           LowerRefused [diagnostic] -> conjoin
             [ diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
             , diagnosticSpan diagnostic === moduleSpan parsed
             ]
           other -> counterexample (show other) (False === True)
-      , case lowerProgram "main"
+      , case lowerModule "main"
           (nativeTypes (Just (TypeInfo Map.empty Map.empty)) (compileSchemes checked)) parsed of
           LowerRefused [diagnostic] -> diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
           other -> counterexample (show other) (False === True)
-      , case lowerProgram "main" (nativeTypes (compileTypes checked) []) parsed of
+      , case lowerModule "main" (nativeTypes (compileTypes checked) []) parsed of
           LowerRefused [diagnostic] -> diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
           other -> counterexample (show other) (False === True)
       ]
@@ -109,7 +109,7 @@ testTraps = conjoin <$> mapM check
     source <- newSource (SourceName "Main.pudu") ("module Main\nfn main() { " <> expression <> " }\n")
     checked <- runCompile source
     pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
-      (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+      (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
         Lowered core | [entry] <- coreModuleFunctions core
           , Just result <- coreBlockResult (coreFunctionBody entry)
           , CoreOperatorFailure message operands <- coreExpressionShape result ->
@@ -129,7 +129,7 @@ testTrapFacts = do
   source <- newSource (SourceName "Main.pudu") "module Main\nfn main() { () + () }\n"
   checked <- runCompile source
   pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
-    (False, Just parsed) -> case lowerProgram "main"
+    (False, Just parsed) -> case lowerModule "main"
         (nativeTypes (Just (TypeInfo Map.empty Map.empty)) (compileSchemes checked)) parsed of
       LowerRefused [diagnostic] -> diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
       other -> counterexample (show other) (False === True)

@@ -49,6 +49,8 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 
 ## Grill Log
 
+- **Q:** How is a written callee resolved? **A:** `resolveFunction`, in the current module, the way the evaluator links imports: the module's own function, a selectively imported name, or `Qualifier.name` through an import without a list, the qualifier being its alias or its path's last segment (#539).
+
 - **Q:** Why extract this responsibility? **A:** State ownership and signature admission are stable boundaries independent of mutually recursive expression/block traversal. Each remains reviewable below 500 lines. _Rejected:_ an oversized body module or a circular expression split.
 - **Q:** Can refactoring alter accepted semantics? **A:** No; only explicit corrections preventing invalid Core returns and Result erasure are permitted. Signature refusals and scope resolution retain their source provenance. _Rejected:_ backend inference or approximation.
 

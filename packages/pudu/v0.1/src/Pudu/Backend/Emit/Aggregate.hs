@@ -22,7 +22,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
-import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName)
+import Pudu.Core (CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.FloatLiteral (floatWidthType)
@@ -66,9 +66,14 @@ mangle kind = case kind of
   CoreIntegerType integer -> integerKindName integer
   CoreFloatType width -> floatWidthType width
   CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"
-  CoreRecordType name -> "R_" <> name
-  CoreSumType name arguments -> "S" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (name : map mangle arguments) <> "_E"
+  CoreRecordType name -> "R_" <> mangleKey name
+  CoreSumType name arguments -> "S" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (mangleKey name : map mangle arguments) <> "_E"
   other -> coreTypeName other
+
+{-| A canonical key as a C identifier part: each segment after its length, so
+    `A.B_C` and `A_B.C` cannot meet. -}
+mangleKey :: Text -> Text
+mangleKey key = Text.concat [Text.pack (show (Text.length segment)) <> segment | segment <- Text.splitOn "." key]
 
 aggregateHelper :: Text -> CoreType -> Text
 aggregateHelper operation kind = "pudu_agg_" <> operation <> "_" <> mangle kind
@@ -150,7 +155,7 @@ aggregateSection layouts tuples needs = (concat prototypes <> concat chosen, run
 helpers :: Layouts -> CoreType -> [(Text, ([Text], [Text]))]
 helpers layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> helpersOf kind (zip (map (Text.pack . show) [0 :: Int ..]) members) Nothing
-  (CoreRecordType name, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just name)
+  (CoreRecordType name, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
   (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
   _ -> []
 

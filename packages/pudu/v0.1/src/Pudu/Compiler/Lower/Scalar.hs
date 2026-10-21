@@ -123,7 +123,7 @@ runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
 runtimeKind CoreCharType = "char"
 runtimeKind (CoreTupleType _) = "tuple"
-runtimeKind (CoreRecordType name) = name
+runtimeKind (CoreRecordType name) = displayName name
 runtimeKind kind = coreTypeName kind
 
 sumType :: CoreType -> Bool

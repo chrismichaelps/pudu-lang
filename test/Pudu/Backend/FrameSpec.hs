@@ -8,7 +8,7 @@ import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPr
 import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Core
   ( CoreBinaryOperator (..), CoreBlock (..), CoreExpression (..)
@@ -198,7 +198,7 @@ testCorpus = conjoin <$> traverse check sources
       source <- newSource (SourceName "Main.pudu") text
       checked <- runCompile source
       pure $ counterexample name $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
-        (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+        (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
           Lowered core -> case lowerFrames core of
             Right lowered -> closedTargets lowered
             Left failure -> counterexample (show failure) (False === True)

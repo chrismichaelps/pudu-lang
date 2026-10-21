@@ -25,6 +25,7 @@ import Pudu.Backend.CharPrograms (charSuccessPrograms, charRefusalPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms, tupleRefusalPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms, recordRefusalPrograms)
 import Pudu.Backend.SumPrograms (sumSuccessPrograms, sumRefusalPrograms)
+import Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms, textRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
@@ -33,8 +34,7 @@ import Pudu.Backend.Toolchain
   , compileNative
   )
 import Pudu.Compiler (CompileResult (..))
-import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerProgram, programNativeModules)
 import Pudu.Compiler.Program
   ( ProgramResult
   , compileProgram
@@ -108,6 +108,8 @@ backendNativeProperties =
   , ("native record failures retain interpreter refusals", testRecordRefusals)
   , ("native sums and match match hand-written answers and the interpreter", testSumConformance)
   , ("native sum and match failures retain interpreter refusals", testSumRefusals)
+  , ("native programs of several modules match hand-written answers and the interpreter", testModuleConformance)
+  , ("native failures inside imported modules retain interpreter refusals", testModuleRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)
@@ -288,6 +290,14 @@ testTupleConformance = conjoin <$> mapM run tupleSuccessPrograms
 testTupleRefusals :: IO Property
 testTupleRefusals = conjoin <$> mapM (uncurry conformance) tupleRefusalPrograms
 
+testModuleConformance :: IO Property
+testModuleConformance = conjoin <$> mapM run modulePrograms
+ where
+  run (label, modules, source, expected) = conformanceWith modules (Just (expected, "", 0)) label source
+
+testModuleRefusals :: IO Property
+testModuleRefusals = conjoin <$> mapM (\(label, modules, source) -> conformanceWith modules Nothing label source) moduleRefusalPrograms
+
 testSumConformance :: IO Property
 testSumConformance = conjoin <$> mapM run sumSuccessPrograms
  where
@@ -332,8 +342,14 @@ conformance :: String -> Text -> IO Property
 conformance = conformanceExpecting Nothing
 
 conformanceExpecting :: Maybe (Text, Text, Int) -> String -> Text -> IO Property
-conformanceExpecting expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+conformanceExpecting expected label programText = conformanceWith [] expected label programText
+
+{-| A program of several modules: each `(file, text)` is written beside
+    `Main.pudu`, which is the root. -}
+conformanceWith :: [(FilePath, Text)] -> Maybe (Text, Text, Int) -> String -> Text -> IO Property
+conformanceWith modules expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
   let path = root </> "Main.pudu"
+  mapM_ (\(file, text) -> TextIO.writeFile (root </> file) text) modules
   TextIO.writeFile path programText
   available <- compilerAvailable
   if not available
@@ -443,9 +459,9 @@ captureStdout directory action = do
       pure (value, captured)
 
 buildAndRun :: FilePath -> ProgramResult -> IO (Either String (Text, Text, Int, Text))
-buildAndRun root program = case rootCompileResult program >>= compileModule of
+buildAndRun root program = case programNativeModules program of
   Nothing -> pure (Left "the program did not compile")
-  Just parsed -> case lowerProgram "main" (rootCompileResult program >>= \result -> nativeTypes (compileTypes result) (compileSchemes result)) parsed of
+  Just modules -> case lowerProgram "main" modules of
     LowerRefused refusals ->
       pure (Left ("lowering refused: " <> show (map diagnosticMessage refusals)))
     Lowered core -> case lowerFrames core >>= emitProgram versionText (programSources program) of

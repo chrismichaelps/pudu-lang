@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.Control
   , printValued, expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, lookupLocal, refuse, refused )
+  , bindLocal, halt, inModule, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
@@ -319,16 +319,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located _ (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> halt spanValue "a call through a local value" state
-    | name == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
-    | Just target <- lookup name (contextTable (lowerContext state)) -> case ensureSignature target state of
-        (after, Nothing) -> refused after
-        (after, Just signature) -> case lowerArguments after [] arguments of
-          (final, Just coreArguments)
-            | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
-                typed final (CoreBlockValue (CoreBlock
-                  [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
-            | otherwise -> typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
-          (final, Nothing) -> refused final
+    | Just key <- resolveFunction state [name] -> callFunction key arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
@@ -341,10 +332,15 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> rendered CoreDisplay
     | name == "show" -> rendered CoreShow
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
+  CallExpression (Located _ (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
+    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> callFunction key arguments
+    | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
+    | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located _ (NameExpression (first :| rest@(_ : _)))) arguments
+    | Just key <- resolveFunction state (first : rest) -> callFunction key arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression{} -> halt spanValue "this call" state
@@ -430,6 +426,27 @@ lowerExpression state (Located spanValue expression) = case expression of
           | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
           | otherwise -> lowerArguments after (core : collected) rest
         (after, Nothing) -> (after, Nothing)
+
+    -- A call to a function of any module: its signature is admitted under
+    -- that module's facts, then the arguments run here, in the caller's.
+    callFunction key arguments = case lookup key (contextTable (lowerContext state)) of
+      Nothing -> halt spanValue "this call" state
+      Just (owner, target)
+        | key == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
+        | otherwise ->
+            let caller = contextModule (lowerContext state)
+                (admitted, signature) = ensureSignature key target (inModule owner state)
+                back = inModule caller admitted
+             in case signature of
+                  Nothing -> refused back
+                  Just found -> case lowerArguments back [] arguments of
+                    (final, Just coreArguments)
+                      | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
+                          typed final (CoreBlockValue (CoreBlock
+                            [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
+                      | otherwise ->
+                          typed (recordCall key final) (CoreCall key coreArguments) (eagerType (signatureResult found) coreArguments)
+                    (final, Nothing) -> refused final
 
     recordCall name current =
       current

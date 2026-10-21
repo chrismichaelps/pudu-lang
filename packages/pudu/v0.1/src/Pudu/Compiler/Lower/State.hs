@@ -1,7 +1,8 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), LoopFrame (..)
+  ( CoreSignature (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
+  , resolveFunction, inModule, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -9,7 +10,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Types (LowerTypes)
+import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes)
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
@@ -24,12 +25,29 @@ import Pudu.Source (Span)
 data LowerContext = LowerContext
   { contextTypes :: !LowerTypes
   , contextEntry :: !Text
-  , contextTable :: [(Text, Located Function)]
+  {-| Every module's functions by canonical name (`Module.function`), each
+      beside the module it belongs to. -}
+  , contextTable :: [(Text, (Text, Located Function))]
+  , contextModules :: !(Map Text ModuleScope)
+  {-| The module whose function is being lowered; names resolve in it. -}
+  , contextModule :: !Text
   , contextSignatures :: !(Map Text (Maybe CoreSignature))
   , contextQueue :: ![Text]
   , contextVisited :: !(Set Text)
   , contextRefusals :: ![Diagnostic]
   , contextFunctions :: ![CoreFunction]
+  }
+
+{-| What one module's names mean: its checked facts, the functions it
+    declares, the names it imports selectively, and the qualifiers it reaches
+    other modules through. -}
+data ModuleScope = ModuleScope
+  { scopeTypes :: !LowerTypes
+  , scopeFunctions :: !(Set Text)
+  {-| A selectively imported name and the module it comes from. -}
+  , scopeSelected :: !(Map Text Text)
+  {-| A qualifier (an alias, or the module path's last segment) and its module. -}
+  , scopeQualifiers :: !(Map Text Text)
   }
 
 {-| @Compiler.Lower.State — one function's lowering state on top of the
@@ -61,12 +79,14 @@ data CoreSignature = CoreSignature
   }
   deriving stock (Eq, Show)
 
-emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext
-emptyContext entryName types table =
+emptyContext :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))] -> LowerContext
+emptyContext root entryName modules table =
   LowerContext
-    { contextTypes = types
+    { contextTypes = maybe emptyTypes scopeTypes (Map.lookup root modules)
     , contextEntry = entryName
     , contextTable = table
+    , contextModules = modules
+    , contextModule = root
     , contextSignatures = Map.empty
     , contextQueue = []
     , contextVisited = Set.empty
@@ -109,6 +129,39 @@ refused state = (state, Nothing)
     already collected. -}
 halt :: Span -> Text -> LowerState -> (LowerState, Maybe a)
 halt spanValue construct state = (refuse spanValue construct state, Nothing)
+
+{-| The canonical function a written callee names in the current module, as
+    the evaluator links it: the module's own function, a selectively imported
+    one, or `Qualifier.name` through an import without a list. -}
+resolveFunction :: LowerState -> [Text] -> Maybe Text
+resolveFunction state segments = do
+  let context = lowerContext state
+      current = contextModule context
+  scope <- Map.lookup current (contextModules context)
+  target <- case segments of
+    [name]
+      | Set.member name (scopeFunctions scope) -> Just (current <> "." <> name)
+      | otherwise -> (<> ("." <> name)) <$> Map.lookup name (scopeSelected scope)
+    [qualifier, name] -> (<> ("." <> name)) <$> Map.lookup qualifier (scopeQualifiers scope)
+    _ -> Nothing
+  _ <- lookup target (contextTable context)
+  pure target
+
+{-| Whether a name is a module qualifier in the current module and not a local. -}
+isModuleQualifier :: LowerState -> Text -> Bool
+isModuleQualifier state name =
+  lookupLocal state name == Nothing
+    && maybe False (Map.member name . scopeQualifiers) (Map.lookup (contextModule context) (contextModules context))
+ where
+  context = lowerContext state
+
+{-| Lower in another module: its facts and its names. -}
+inModule :: Text -> LowerState -> LowerState
+inModule name state = case Map.lookup name (contextModules context) of
+  Just scope -> state{lowerContext = context{contextModule = name, contextTypes = scopeTypes scope}}
+  Nothing -> state
+ where
+  context = lowerContext state
 
 lookupLocal :: LowerState -> Text -> Maybe CoreLocal
 lookupLocal state name =

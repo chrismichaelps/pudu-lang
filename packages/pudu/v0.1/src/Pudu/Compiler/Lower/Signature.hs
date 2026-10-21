@@ -12,9 +12,11 @@ import Pudu.Frontend.Syntax
   ( Function (..), FunctionBody (..), Located (..), Parameter (..) )
 import Pudu.Source (Span)
 
-{-| Admit each reachable monomorphic signature once, including refusals. -}
-ensureSignature :: Located Function -> LowerState -> (LowerState, Maybe CoreSignature)
-ensureSignature located state = case Map.lookup name (contextSignatures context) of
+{-| Admit each reachable monomorphic signature once, including refusals,
+    memoized by the function's canonical name. The scheme is read from the
+    current module's facts, so the caller enters the function's module first. -}
+ensureSignature :: Text -> Located Function -> LowerState -> (LowerState, Maybe CoreSignature)
+ensureSignature key located state = case Map.lookup key (contextSignatures context) of
   Just memo -> (state, memo)
   Nothing -> case functionLevelRefusal function of
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
@@ -43,7 +45,7 @@ ensureSignature located state = case Map.lookup name (contextSignatures context)
       ( after
           { lowerContext =
               (lowerContext after)
-                { contextSignatures = Map.insert name memo (contextSignatures context) }
+                { contextSignatures = Map.insert key memo (contextSignatures context) }
           }
       , memo
       )

@@ -22,7 +22,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
 | Pattern matching and iteration | Partial (#525) | `match` lowers every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `for`, ranges as values and the iterator protocol remain |
-| Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
+| Modules and constants | Partial (#539) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; module constants and folded values remain |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
@@ -286,3 +286,16 @@ sum's type argument left unconstrained by checking (the error type of `Ok(1)`)
 takes a unit layout, which no value can observe. [[Backend Sum Programs]]
 holds hand-written answers and the interpreter's refusals; they pass under
 Clang, GCC 15 and Clang ASan/UBSan, and the counted-leak run includes them.
+
+## Modules (#539)
+
+[[Compiler Lower]] lowers every module of the compiled program, each with its
+own checked facts, from the root's entry. Functions are keyed `Module.function`;
+a written callee resolves in its module as the evaluator links imports.
+Records and sums are named by canonical identity and rendered by their written
+name. [[Backend Module Programs]] covers every import form, a module that
+imports another, two modules' types of one name, and a failure inside an
+imported function. A run over every fixture with `main` moved from 3 to 14
+programs whose output matches the interpreter byte for byte, with none
+differing; the refusals left are led by collection and function types,
+generics, `unsafe` blocks and arrays.

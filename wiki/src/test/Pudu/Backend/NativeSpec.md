@@ -90,10 +90,14 @@ coordinator.
 - **Q:** How is milestone #488 protected against C evaluation-order drift? **A:** Pure checks assert reachable function signatures and refusal spans; execution checks compare nested calls, mutable operand snapshots, short-circuit effects, recursion, and depth-bound diagnostics against the interpreter.
 - **Q:** May unsupported signatures pass because they are uncalled? **A:** Yes; reachability is the contract. A reachable unsupported signature refuses at its own construct, and an unreachable one never enters Core.
 
+## Grill Log
+
+- **Q:** How are programs of several modules tested? **A:** `conformanceWith` writes each module beside `Main.pudu`, and every program, one module or many, is built through whole-program lowering (#539).
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Toolchain]] ·
-[[Backend Emit]] · [[Backend Runtime]] · [[Backend Emit Tests]]
+[[Backend Emit]] · [[Backend Runtime]] · [[Backend Emit Tests]] · [[Backend Module Programs]]
 
 
 ## Solved native type inputs (#491)

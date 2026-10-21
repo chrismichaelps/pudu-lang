@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Native programs across modules (#539)
+
+- [[Compiler Lower]] lowers every module of the compiled program with its own checked facts; functions are keyed `Module.function` and a written callee resolves through [[Compiler Lower State]] as the evaluator links imports.
+- [[Compiler Lower Types]] names records and sums by canonical identity, [[Core Module]] renders them by `displayName`, and [[Native Aggregate Emission]] mangles keys segment by segment.
+- [[Backend Module Programs]] covers selective, aliased and transitive imports, same-named types in two modules, and a failure inside an imported function.
+
 ## 2026-10-21 — Native sums, Option, Result and match (#525)
 
 - [[Native Emission Coverage]]: sums of the root module and the built-in Option and Result are boxed values whose first cell is the variant tag; `match` lowers every pattern form in order through [[Compiler Lower Match]] and [[Compiler Frame Match]].
