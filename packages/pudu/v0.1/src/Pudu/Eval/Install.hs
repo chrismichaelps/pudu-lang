@@ -13,6 +13,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
@@ -26,6 +27,7 @@ import Pudu.Eval.Env
   , bindMethod
   , markModuleScope
   )
+import Pudu.Eval.Operator (declaredOwner)
 import Pudu.Eval.Value
   ( Builtin (..)
   , builtinName
@@ -77,7 +79,8 @@ loadModuleDeclarationsWith :: Evaluate -> Map Text Value -> [Located Declaration
 loadModuleDeclarationsWith evaluateWith folded declarations = do
   let traits = traitTable declarations
       layouts = recordLayouts declarations
-  mapM_ (installDeclaration traits layouts) declarations
+      declared = Set.fromList [locatedValue (typeName value) | Located _ (TypeDeclaration value) <- declarations]
+  mapM_ (installDeclaration traits layouts declared) declarations
   markModuleScope
   mapM_ (initializeDeclaration evaluateWith folded) declarations
 
@@ -197,14 +200,14 @@ installBuiltinConstructors = do
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration
-  :: Map Text [Located Function] -> RecordLayouts -> Located Declaration -> Evaluator ()
-installDeclaration traits layouts (Located _ declaration) = case declaration of
+  :: Map Text [Located Function] -> RecordLayouts -> Set Text -> Located Declaration -> Evaluator ()
+installDeclaration traits layouts declared (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
       (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing [] Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
-  ImplDeclaration value -> installMethods traits value
+  ImplDeclaration value -> installMethods traits declared value
   ForeignDeclaration value -> mapM_ (installForeign layouts value) (foreignFunctions value)
   _ -> pure ()
 
@@ -314,14 +317,19 @@ releaseSymbolsOf library =
     ]
 
 {-| An implementation's functions are installed under a key naming the type they
-    implement for, so a member access on a value of that type finds them. -}
-installMethods :: Map Text [Located Function] -> Impl -> Evaluator ()
-installMethods traits value = case targetNameOf (implTarget value) of
+    implement for, so a member access on a value of that type finds them. A
+    type this module declares is keyed by `declaredOwner`, which keeps a
+    declared `Range` apart from the built-in one. -}
+installMethods :: Map Text [Located Function] -> Set Text -> Impl -> Evaluator ()
+installMethods traits declared value = case ownerKey <$> targetNameOf (implTarget value) of
   Nothing -> pure ()
   Just owner -> do
     mapM_ (installMethod owner) (implFunctions value)
     mapM_ (installMethod owner) (inheritedDefaults traits value)
  where
+  ownerKey name
+    | Set.member name declared = declaredOwner name
+    | otherwise = name
   -- The implementation's own parameters lead the method's, the order a
   -- static selection lists the types it chose for them.
   installMethod owner (Located _ method) = do

@@ -63,6 +63,8 @@ typeArgumentName :: Located TypeSyntax -> Text
 
 ## Grill Log
 
+- **Q:** What does `Range.length(&span)` select when a module declares its own `Range`? **A:** `typeOwners` orders the two keys by the first argument: a record or variant tries the declared type (`@Range`) first, anything else the built-in first, and both stay candidates. A static member's first argument is not a receiver — `Int.decode(json)` is called with a JSON value — so excluding a key by it sent derived decoders to `@Int` and reported `undefined name Int` (#529).
+
 - **Q:** Why extract path resolution into `Pudu.Eval.Call.Path`?
   **A:** `Pudu.Eval.Call` was 563 lines. Moving AST path navigation, longest-prefix searching, and callee qualification into a dedicated submodule leaves `Call.hs` focused on function application, scope joining, and thread invocation (< 400 lines).
 - **Q:** Why restrict `qualifiedParts` to uppercase identifiers?

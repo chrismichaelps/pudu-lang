@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

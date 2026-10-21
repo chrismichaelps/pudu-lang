@@ -2,6 +2,7 @@
 module Pudu.Eval.Operator.Access
   ( arrayMethods
   , builtinMethodNamesFor
+  , declaredOwner
   , mapMethods
   , nominalNameOf
   , readArrayMember
@@ -19,6 +20,8 @@ module Pudu.Eval.Operator.Access
 
 import qualified Data.ByteString as ByteString
 import qualified Data.Sequence as Seq
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -98,7 +101,7 @@ readMember spanValue value member = case value of
   RangeValue{} -> readKeyedMember spanValue value member rangeMethods RangeMethodValue "Range"
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
-    Nothing -> readMethod spanValue value owner member
+    Nothing -> readMethodAmong spanValue value [declaredOwner owner] owner member
   {-| A member on a variant is looked for on the sum that owns it before the
       variant itself. An implementation is written for the type — `impl Named
       for Option[Int]` — and the value in hand is one of its variants, so
@@ -109,7 +112,8 @@ readMember spanValue value member = case value of
     | name == member -> pure value
     | otherwise -> do
         owner <- variantOwner name
-        readMethodAmong spanValue value (maybe [name] (\found -> [found, name]) owner) name member
+        readMethodAmong spanValue value
+          (map declaredOwner (maybe [name] (\found -> [found, name]) owner)) name member
   {-| A scalar has no fields, but it may have methods: an `impl Ord for Int`
       is a method on every integer. The nominal name a method is keyed by comes
       from the value's own type, which is why an integer had to start carrying
@@ -284,6 +288,27 @@ nominalNameOf value = case value of
   SetValue _ -> Just "Set"
   TupleValue _ -> Nothing
   _ -> Nothing
+
+{-| Every name `nominalNameOf` gives a built-in value.
+
+    A program may declare a record or sum under one of these names. Its methods
+    are then keyed by `declaredOwner`, and its values look there, so a built-in
+    array never runs a method written for a declared `Array` and a declared
+    `Array` never runs one written for the built-in. -}
+builtinValueOwners :: Set Text
+builtinValueOwners = Set.fromList
+  [ "Int", "Int8", "Int16", "Int32", "Int64", "Int128"
+  , "UInt", "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "BigInt"
+  , "Float32", "Float64", "Decimal", "Str", "Bytes", "Buckets", "Char", "Bool", "()"
+  , "Array", "Range", "Map", "Set"
+  ]
+
+{-| The method-key owner for a declared type's name. `@` cannot begin a
+    written name, so the key never meets a built-in owner. -}
+declaredOwner :: Text -> Text
+declaredOwner name
+  | Set.member name builtinValueOwners = "@" <> name
+  | otherwise = name
 
 {-| Look for a member under each name in turn, reporting against the first —
     the type the reader wrote — rather than against whichever was tried last. -}
