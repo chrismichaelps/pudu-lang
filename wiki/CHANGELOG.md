@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Qualified variants are typed as their sum (#536)
+
+- [[Type Check]] and [[Type Check Install]] bind each variant under its type's canonical key, and [[Type Check Rule]] looks a qualified member up there, so `Shape.Circle(3)` and `Shape.Dot` are `Shape` rather than an error type accepted anywhere.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.
