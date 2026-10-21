@@ -20,6 +20,7 @@ A non-owning multidimensional view of an `Array[T]`, with layouts, multi-index r
 - `MdSpan[T] = { source, offset, extents, strides }`; `rowMajor`, `columnMajor` and `strided` constructors answer `Option`.
 - `Slice = All | At(Int) | Within(Int, Int) | Every{first, last, step}`.
 - `Grid[T]`: `rank`, `extent(dimension) -> Option[Int]`, `size`, `get(indices)`, `get2`, `get3`, `slice(slices) -> Option[MdSpan[T]]`.
+- `Index[Array[Int], T]` ([[Std Index]]): `view[i, j, ...]` at any rank, panicking for a position of the wrong length or outside an extent.
 - `Sequence[Int, T]` in row-major order of the view, overriding `count` and `isEmpty`.
 
 ## Invariants

@@ -257,6 +257,7 @@ expression depth context original@(Located at value) = do
             _ -> refuse at "a static trait call needs a nominal type"
     MemberExpression receiver member -> MemberExpression <$> recurse receiver <*> retag member >>= out
     IndexExpression target index -> IndexExpression <$> recurse target <*> recurse index >>= out
+    MultiIndexExpression target indices -> MultiIndexExpression <$> recurse target <*> traverse recurse indices >>= out
     RangeExpression from inclusive to -> RangeExpression <$> mapM recurse from <*> pure inclusive <*> mapM recurse to >>= out
     TryExpression held -> do
       held' <- recurse held

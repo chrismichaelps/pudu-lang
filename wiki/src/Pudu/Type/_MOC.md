@@ -45,6 +45,7 @@ tags: [moc, module]
 - [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.
 - [[Type Check Iteration]] — what a `for` loop's binder takes, from the value beside it.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
+- [[Type Check Subscript]] — `[]` through `Std.Index`, key shapes, and the refusal of several indices on a built-in.
 - [[Type Check Inherit]] — which defaults an implementation inherits, `Self`'s arguments, and renaming a default's parameters apart.
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
 - [[Type Check Prelude]] — wired-in constructors and the signatures of runtime-provided effects.

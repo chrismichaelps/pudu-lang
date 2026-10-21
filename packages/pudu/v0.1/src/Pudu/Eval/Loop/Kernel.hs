@@ -350,6 +350,7 @@ readsOf (Located _ expression) = case expression of
   BinaryExpression left _ right -> readsOf left <> readsOf right
   CallExpression _ arguments -> Set.unions (map readsOf arguments)
   IndexExpression target index -> readsOf target <> readsOf index
+  MultiIndexExpression target indices -> foldMap readsOf (target : indices)
   BlockExpression block -> readsOfBlock block
   IfExpression condition thenBlock elseBranch -> readsOf condition <> readsOfBlock thenBlock <> maybe Set.empty readsOf elseBranch
   _ -> Set.empty

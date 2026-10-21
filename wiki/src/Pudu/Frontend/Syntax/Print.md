@@ -31,6 +31,8 @@ qualification.
 
 ## Grill Log
 
+- **Q:** How is a multidimensional index printed? **A:** As written, `target[i, j]`, with one space after each comma; it binds as a postfix form, like a single index (#534).
+
 - **Q:** Track precedence to omit parentheses? **A:** No; redundant
   parentheses never change meaning and the printer stays total.
 - **Q:** Print checker selections? **A:** No; nobody wrote them.

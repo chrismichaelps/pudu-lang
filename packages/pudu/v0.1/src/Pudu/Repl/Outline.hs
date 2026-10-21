@@ -85,6 +85,8 @@ outlineExpression (Located _ expression) = case expression of
   MemberExpression target member -> outlineExpression target <> "." <> locatedValue member
   IndexExpression target index ->
     outlineExpression target <> "[" <> outlineExpression index <> "]"
+  MultiIndexExpression target indices ->
+    outlineExpression target <> "[" <> Text.intercalate ", " (map outlineExpression indices) <> "]"
   RangeExpression lower inclusive upper ->
     foldMap outlineExpression lower
       <> (if inclusive then "..=" else "..")

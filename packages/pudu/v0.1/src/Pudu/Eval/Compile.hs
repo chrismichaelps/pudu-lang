@@ -156,6 +156,8 @@ compileExpression walker located@(Located spanValue expression) = case expressio
       case linked of
         Just value -> pure value
         Nothing -> inner >>= \value -> readMember spanValue value (locatedValue member)
+  MultiIndexExpression _ _ ->
+    pure (abortAt (Just spanValue) "E7001" "this indexing was not checked" Nothing)
   IndexExpression target index -> do
     container <- compileExpression walker target
     key <- compileExpression walker index

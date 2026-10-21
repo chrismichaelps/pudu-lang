@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Indexing with any number of indices (#534)
+
+- [[grammar/pudu]]: `a[i, j, ...]` is one indexing with any number of indices, distinct from `a[i][j]`; built-in types take one (`E3094`).
+- [[Std Index]] adds `Index` and `IndexMut`; [[Type Check Subscript]] types `[]` through them with tuple or array keys (`E3095`–`E3097`), and [[Compiler Literals]] rewrites it into calls that keep the order target, indices, value.
+- [[Std Span]] and [[Std MdSpan]] implement `Index`; the collections guide documents the feature.
+
 ## 2026-10-21 — Standard library views and a chainable Iter (#527)
 
 - [[Std Iter]]: adapters and terminals are default members of `Sequence`, so `source.map(f).filter(g).take(3).toArray()` reads in order for every implementor; adds `takeWhile`, `dropWhile`, `stride`, `chain`, `enumerate`, `fold`, `any`, `all`, `find`, `first` and `last`. Each source item is produced once; terminals walk with `for`.

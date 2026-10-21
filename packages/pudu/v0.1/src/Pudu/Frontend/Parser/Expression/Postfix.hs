@@ -72,10 +72,13 @@ parsePostfixStep parsers blockParser expression kind await
       typed <- bracketOpensTypeArguments
       if typed then parseTypeArguments parsers blockParser expression else do
         _ <- advanceToken
-        index <- withRecords (expressionOf parsers blockParser)
+        first <- withRecords (expressionOf parsers blockParser)
+        rest <- parseIndexTail parsers blockParser []
         closing <- expectSymbol "]" "to close the index expression"
-        let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
-              (IndexExpression expression index)
+        let shape = case rest of
+              [] -> IndexExpression expression first
+              _ -> MultiIndexExpression expression (first : rest)
+            indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing)) shape
         parsePostfix parsers blockParser indexed
   | isSymbol "(" kind = do
       _ <- advanceToken
@@ -156,6 +159,24 @@ parseTypeArgumentList reversed = do
       case separator of
         Just _ -> parseTypeArgumentList extended
         Nothing -> pure (reverse extended)
+
+{-| The indices after the first, each introduced by a comma. A comma must be
+    followed by an index: `a[i,]` would leave unclear whether one index or a
+    one-member key was meant. -}
+parseIndexTail :: ExpressionParsers -> BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseIndexTail parsers blockParser reversed = do
+  comma <- matchSymbol ","
+  case comma of
+    Nothing -> pure (reverse reversed)
+    Just _ -> do
+      bounded <- withRecursionBudget $ do
+        before <- peekToken
+        next <- withRecords (expressionOf parsers blockParser)
+        after <- peekToken
+        if before == after
+          then pure (reverse reversed)
+          else parseIndexTail parsers blockParser (next : reversed)
+      pure (maybe (reverse reversed) id bounded)
 
 isPostfixStart :: TokenKind -> Bool
 isPostfixStart kind =

@@ -194,6 +194,21 @@ callMemberSelecting select needs spanValue memberSpan lent implemented receiver 
       _ -> readMember memberSpan receiver member
     dispatchCall needs spanValue lent calleeVal values
 
+{-| `[]` on a type implementing `Std.Index`: the receiver's own `index` or
+    `setIndex`, called as a qualified call is, with the receiver as its first
+    argument. The receiver of `setIndex` arrives lent, so its change is written
+    back to the place it came from. -}
+callIndexMember :: CallNeeds -> Span -> Lent -> Text -> [Value] -> Evaluator Value
+callIndexMember needs spanValue lent member values = case values of
+  receiver : _ -> do
+    owners <- receiverOwners receiver
+    found <- firstBound (\owner -> lookupMethod (owner <> "." <> member)) owners
+    case found of
+      Just (FunctionValue closure) -> callClosureLending needs closure values lent (Just spanValue)
+      _ -> abortAt (Just spanValue) "E7001"
+        ("a " <> valueKind receiver <> " has no " <> member <> " for []") Nothing
+  [] -> abortAt (Just spanValue) "E7003" ("[] needs a value to call " <> member <> " on") Nothing
+
 {-| Apply an evaluated callee to evaluated arguments. -}
 dispatchCall :: CallNeeds -> Span -> Lent -> Value -> [Value] -> Evaluator Value
 dispatchCall needs spanValue lent target values =
@@ -202,6 +217,8 @@ dispatchCall needs spanValue lent target values =
     ForeignValue binding -> callForeign spanValue binding values
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
+    BuiltinValue IndexOperatorBuiltin -> callIndexMember needs spanValue lent "index" values
+    BuiltinValue SetIndexOperatorBuiltin -> callIndexMember needs spanValue lent "setIndex" values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values

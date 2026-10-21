@@ -2,6 +2,7 @@
 module Pudu.Type
   ( ModuleTypes (..)
   , Scheme (..)
+  , SubscriptKey (..)
   , Type (..)
   , TypeInfo (..)
   , checkTypes
@@ -27,6 +28,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Source (Span, sameSpanSource, spanEnd, spanOrigin, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
+import Pudu.Type.Env (SubscriptKey (..))
 import Pudu.Type.Interface.Graph (ImportTypes)
 import Pudu.Type.Value (NominalId, Scheme (..), Type (..), renderType)
 import Data.Text (Text)
@@ -70,18 +72,21 @@ data ModuleTypes = ModuleTypes
   {-| The types chosen for parameters bounded by a trait with a static
       member, by the span of the reference that chose them. -}
   , moduleSelections :: !(Map.Map Span [Type])
+  {-| How each `[]` on a type implementing `Std.Index` builds its key. -}
+  , moduleSubscripts :: !(Map.Map Span SubscriptKey)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Set Span -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported writable moduleValue =
-  let (entries, schemes, kinds, methods, selections, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
+  let (entries, schemes, kinds, methods, selections, subscripts, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = typeInfoFor moduleValue entries
           , moduleSchemes = schemes
           , moduleIntegerKinds = Map.fromList kinds
           , moduleMethods = methods
           , moduleSelections = Map.fromList selections
+          , moduleSubscripts = Map.fromList subscripts
           }
       , diagnostics
       )

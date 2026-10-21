@@ -173,6 +173,8 @@ installBuiltinConstructors = do
   bind "textByteFind" (BuiltinValue TextByteFindBuiltin)
   bind "textByteFindLast" (BuiltinValue TextByteFindLastBuiltin)
   bind "textScalarAt" (BuiltinValue TextScalarAtBuiltin)
+  bind "#index" (BuiltinValue IndexOperatorBuiltin)
+  bind "#setIndex" (BuiltinValue SetIndexOperatorBuiltin)
   bind "swissTableEmpty" (BuiltinValue SwissTableEmptyBuiltin)
   bind "swissTableLookup" (BuiltinValue SwissTableLookupBuiltin)
   bind "swissTableInsert" (BuiltinValue SwissTableInsertBuiltin)

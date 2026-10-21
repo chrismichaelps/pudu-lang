@@ -59,6 +59,8 @@ module Pudu.Type.Env
   , takeUnwrittenParameters
   , recordExpression
   , recordSelection
+  , recordSubscript
+  , SubscriptKey (..)
   , noteStaticTrait
   , isStaticTrait
   , report
@@ -256,7 +258,16 @@ data CheckerState = CheckerState
   {-| Instantiations of parameters bounded by a static trait, by the span of
       the reference that instantiated them, in the scheme's parameter order. -}
   , stateSelectionsRev :: ![(Span, [Type])]
+  {-| How each `[]` on a type implementing `Std.Index` builds its key, by the
+      span of the indexing expression. -}
+  , stateSubscriptsRev :: ![(Span, SubscriptKey)]
   }
+
+{-| How an indexing expression on a type implementing `Std.Index` passes its
+    indices: the one index as the key, all of them as a tuple, or all of them
+    as an array. Built-in indexing records nothing. -}
+data SubscriptKey = SubscriptSingle | SubscriptTuple | SubscriptArray
+  deriving stock (Eq, Show)
 
 type SpanKey = Span
 
@@ -286,6 +297,7 @@ data CheckerProducts = CheckerProducts
   , producedIntegerKinds :: ![(Span, Text)]
   {-| Every recorded static selection with inference settled. -}
   , producedSelections :: ![(Span, [Type])]
+  , producedSubscripts :: ![(Span, SubscriptKey)]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -326,6 +338,7 @@ runChecker (Checker action) = case action initialState of
     , stateIntegerKinds = kinds
     , stateDeclaredMethodsRev = methods
     , stateSelectionsRev = selections
+    , stateSubscriptsRev = subscripts
     }) -> CheckerProducts
       { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
       , producedSchemes = finalSchemes substitution frames
@@ -333,6 +346,7 @@ runChecker (Checker action) = case action initialState of
       , producedIntegerKinds = reverse kinds
       , producedMethods = reverse methods
       , producedSelections = reverse (map (fmap (map (resolveFinal substitution))) selections)
+      , producedSubscripts = reverse subscripts
       }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -380,6 +394,7 @@ initialState =
     , stateDeclaredMethodKeys = Set.empty
     , stateStaticTraits = Set.empty
     , stateSelectionsRev = []
+    , stateSubscriptsRev = []
     }
 
 {-| What installing a graph's interfaces left in the checker: the names it
@@ -520,6 +535,10 @@ isStaticTrait owner = Checker $ \state -> (Set.member owner (stateStaticTraits s
 recordSelection :: Span -> [Type] -> Checker ()
 recordSelection spanValue chosen =
   Checker $ \state -> ((), state{stateSelectionsRev = (spanValue, chosen) : stateSelectionsRev state})
+
+recordSubscript :: Span -> SubscriptKey -> Checker ()
+recordSubscript spanValue key =
+  Checker $ \state -> ((), state{stateSubscriptsRev = (spanValue, key) : stateSubscriptsRev state})
 
 recordIntegerKind :: Span -> Text -> Checker ()
 recordIntegerKind spanValue name =

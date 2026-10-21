@@ -229,6 +229,8 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 
 ## Grill Log
 
+- **Q:** Give `IndexExpression` a list of indices? **A:** No; a separate `MultiIndexExpression` holds two or more, so every existing single-index path is untouched and the two operations stay distinct nodes (#534).
+
 - **Q:** Why does the tree hold a `ResolvedInteger` the parser never builds? **A:** [[Compiler Literals]]
   writes it into the module the evaluator runs, once checking has fixed each literal's kind, so an
   evaluation reads a number instead of parsing text. Tooling reads the parser's tree, which never

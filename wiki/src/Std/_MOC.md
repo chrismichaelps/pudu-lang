@@ -160,6 +160,7 @@ tags: [moc, module, stdlib]
 - [[Std Span]] — non-owning window onto an array, narrowed and walked in place.
 - [[Std MdSpan]] — non-owning multidimensional array view with layouts and slicing.
 - [[Std StringView]] — byte-addressed UTF-8 view with constant-time size and slicing.
+- [[Std Index]] — the `[]` protocol: `Index` and `IndexMut`, with tuple or array keys for several indices.
 - [[Std Memory]] — offset allocators: the `Resource` protocol, a monotonic arena and a block pool.
 - [[Std Option]] — optional-value combinators, conversions, and collection helpers.
 - [[Std Text Parse]] — positioned parser combinators and numeric/text readers.

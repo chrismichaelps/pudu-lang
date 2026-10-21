@@ -1,5 +1,6 @@
 module Std.Span
 
+import Std.Index {Index}
 import Std.Iter {Sequence}
 
 /// A window onto a stretch of an array: `extent` items starting at `offset`,
@@ -123,6 +124,23 @@ impl [T] Window[T] for Span[T] {
   fn subspan(self: &Self, offset: Int, count: Int) -> Span[T] {
     let start = clamped(offset, self.extent)
     Span{..*self, offset: self.offset + start, extent: clamped(count, self.extent - start)}
+  }
+}
+
+/// `span[i]` reads the item at `i`, counting from the span's start. A position
+/// outside the span panics rather than reaching the rest of the array.
+///
+/// ## Examples
+///
+/// ```
+/// Span.of([4, 5, 6]).subspan(1, 2)[0]  // 5
+/// ```
+impl [T] Index[Int, T] for Span[T] {
+  fn index(self: &Self, key: Int) -> T {
+    if key < 0 || key >= self.extent {
+      panic("index " + key.toText() + " is outside a span of " + self.extent.toText())
+    }
+    self.source[self.offset + key]
   }
 }
 

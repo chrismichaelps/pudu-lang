@@ -34,6 +34,7 @@ import Pudu.Compiler.Program.LanguageSpec
   ( testBuiltinOwnerNames
   , testCapturedScope
   , testImportedDefaults
+  , testMultiIndex
   , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
@@ -78,6 +79,7 @@ programProperties = reflectionProgramProperties <>
   , ("a function literal keeps reaching what it mentions", testCapturedScope)
   , ("a type named like a built-in keeps its methods apart from the built-in's", testBuiltinOwnerNames)
   , ("an implementation inherits the defaults of a trait it imports", testImportedDefaults)
+  , ("indexing takes any number of indices through Std.Index", testMultiIndex)
   , ("ranges, slices, and destructuring refuse what they cannot mean", testLanguageRefusals)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("linking publishes what a module declared, not what it imported", testLinkedNames)

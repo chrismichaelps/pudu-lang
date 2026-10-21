@@ -48,6 +48,7 @@ import Pudu.Type.Check.Reflection
   ( checkBuildCall, checkSequenceElement, fieldCallee, reflectedParameters )
 import Pudu.Type.Check.Bound (checkBounds)
 import Pudu.Type.Check.Iteration (iterationElement)
+import Pudu.Type.Check.Subscript (builtinMultiIndex, indexedByMember, subscriptType)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
   , dottedName
@@ -200,12 +201,22 @@ inferExpression around declared rigid spanValue expression = case expression of
   IndexExpression target index -> do
     targetType <- checkExpression around declared rigid target
     indexType <- checkExpression around declared rigid index
+    resolvedTarget <- zonk targetType
     resolvedIndex <- zonk indexType
-    case resolvedIndex of
-      NominalType "Range" _ -> sliceType spanValue targetType
-      _ -> do
-        _ <- unify (locatedSpan index) integerType indexType
-        elementType spanValue (literalIndex index) targetType
+    if indexedByMember resolvedTarget
+      then subscriptType spanValue resolvedTarget [(locatedSpan index, indexType)]
+      else case resolvedIndex of
+        NominalType "Range" _ -> sliceType spanValue targetType
+        _ -> do
+          _ <- unify (locatedSpan index) integerType indexType
+          elementType spanValue (literalIndex index) targetType
+  MultiIndexExpression target indices -> do
+    targetType <- checkExpression around declared rigid target
+    indexTypes <- mapM (checkExpression around declared rigid) indices
+    resolvedTarget <- zonk targetType
+    if indexedByMember resolvedTarget
+      then subscriptType spanValue resolvedTarget (zip (map locatedSpan indices) indexTypes)
+      else builtinMultiIndex spanValue resolvedTarget (length indices)
   TryExpression target -> do
     checkpoint <- integerLiteralCheckpoint
     targetType <- checkExpression around declared rigid target

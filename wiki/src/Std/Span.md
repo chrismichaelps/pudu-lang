@@ -19,6 +19,7 @@ A non-owning window onto a stretch of an `Array[T]`: read, narrowed and walked i
 
 - `Span[T] = { source, offset, extent }`, `of(values)`, `within(values, offset, extent) -> Option[Span[T]]`.
 - `Window[T]`: `size`, `get(index) -> Option[T]`, `prefix(count)`, `suffix(count)`, `subspan(offset, count)`.
+- `Index[Int, T]` ([[Std Index]]): `span[i]` reads in place and panics outside the span, never reaching the rest of the array.
 - `Sequence[Int, T]`, overriding `toArray` (one structural slice), `count`, `isEmpty`, `first` and `last`, which a span answers without walking.
 
 ## Invariants

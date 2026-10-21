@@ -3,6 +3,7 @@ module Pudu.Compiler.Program.LanguageSpec
   ( testBuiltinOwnerNames
   , testCapturedScope
   , testImportedDefaults
+  , testMultiIndex
   , testDestructuringBindings
   , testFunctionLiterals
   , testLanguageRefusals
@@ -98,6 +99,14 @@ testImportedDefaults :: IO Property
 testImportedDefaults = do
   answer <- runEntry "test-fixtures/importeddefaults/Main.pudu"
   pure (counterexample "every imported default answers for the importing type" (answer === Just "6"))
+
+{-| `[]` with any number of indices on types implementing `Std.Index`: reads,
+    writes, evaluation order, tuple and array keys, generics, views, and the
+    difference from indexing twice. -}
+testMultiIndex :: IO Property
+testMultiIndex = do
+  answer <- runEntry (fixture "MultiIndex")
+  pure (counterexample "every multidimensional indexing check holds" (answer === Just "10"))
 
 testCapturedScope :: IO Property
 testCapturedScope = do

@@ -88,6 +88,8 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 
 ## Grill Log
 
+- **Q:** Where do subscript shapes travel? **A:** In `moduleSubscripts`, beside `moduleSelections`, to [[Compiler Literals]] (#534).
+
 - **Q:** Build the expression map while admitting every `ModuleTypes` result?
   **A:** Defer only this derived lookup product until a consumer asks for it.
   _Rationale:_ phase attribution measures 87.5 MB for this unused map on an

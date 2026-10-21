@@ -67,6 +67,8 @@ capability record's expression parser, with records reinstated inside the parent
 
 ## Grill Log
 
+- **Q:** How are several indices parsed? **A:** `[` takes one index and then any number of `, index`; with more than one the node is `MultiIndexExpression`, so `a[i]` keeps its node and `a[i][j]` stays two nodes. A comma must be followed by an index: `a[i,]` would leave unclear whether one index or a one-member key was meant (#534).
+
 - **Q:** Why must a type argument's bracket be followed by `(`? **A:** Because indexing is the
   commoner reading. _Rationale:_ `values[index]` and `name[Type](x)` open identically, and without
   the second half of the test every index on a generic-looking name would be a parse error.

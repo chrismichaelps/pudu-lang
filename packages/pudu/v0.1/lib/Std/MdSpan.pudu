@@ -1,5 +1,6 @@
 module Std.MdSpan
 
+import Std.Index {Index}
 import Std.Iter {Sequence}
 
 /// Which positions of one dimension a slice keeps.
@@ -298,6 +299,25 @@ impl [T] Grid[T] for MdSpan[T] {
       dimension = dimension + 1
     }
     Some(MdSpan{source: self.source, offset: offset, extents: extents, strides: strides})
+  }
+}
+
+/// `view[i, j, ...]` reads the item at one position per dimension, however many
+/// dimensions the view has. A position of the wrong length, or one outside an
+/// extent, panics.
+///
+/// ## Examples
+///
+/// ```
+/// let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+/// grid[1, 2]  // 6
+/// ```
+impl [T] Index[Array[Int], T] for MdSpan[T] {
+  fn index(self: &Self, key: Array[Int]) -> T {
+    match self.get(key) {
+      case Some(item) => item
+      case None => panic("position " + key.toText() + " is outside a view of extents " + self.extents.toText())
+    }
   }
 }
 

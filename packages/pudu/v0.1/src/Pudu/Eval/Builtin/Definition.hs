@@ -179,6 +179,11 @@ data Builtin
   | TextByteFindBuiltin
   | TextByteFindLastBuiltin
   | TextScalarAtBuiltin
+  {-| `#index`: `[]` on a type implementing `Std.Index`, after checking
+      rewrote it into a call. -}
+  | IndexOperatorBuiltin
+  {-| `#setIndex`: assignment through `[]` on such a type. -}
+  | SetIndexOperatorBuiltin
   | SwissTableEmptyBuiltin
   | SwissTableLookupBuiltin
   | SwissTableInsertBuiltin
@@ -405,6 +410,8 @@ builtinName value = case value of
   TextByteFindBuiltin -> "textByteFind"
   TextByteFindLastBuiltin -> "textByteFindLast"
   TextScalarAtBuiltin -> "textScalarAt"
+  IndexOperatorBuiltin -> "#index"
+  SetIndexOperatorBuiltin -> "#setIndex"
   SwissTableEmptyBuiltin -> "swissTableEmpty"
   SwissTableLookupBuiltin -> "swissTableLookup"
   SwissTableInsertBuiltin -> "swissTableInsert"

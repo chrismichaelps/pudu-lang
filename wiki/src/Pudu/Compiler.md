@@ -132,6 +132,8 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
 
 ## Grill Log
 
+- **Q:** Does the rewrite of `[]` change what tools read? **A:** No; only the evaluated module carries it. `compileSyntax` keeps `value[i, j]` as written (#534).
+
 - **Q:** Should a shallow orchestrator exist? **A:** Yes as the stable public composition point, but do not add service abstractions around it. _Rationale:_ later phases need one boundary and tools must not orchestrate independently. _Rejected:_ every caller directly chaining phases; framework-style pipeline objects.
 - **Q:** Parse after lexical errors? **A:** Yes, because invalid tokens preserve progress. _Rationale:_ multiple actionable diagnostics improve tooling. _Rejected:_ fail-fast on first phase.
 - **Q:** Return recovered AST with errors? **A:** Keep it internal; public compilable module is `Nothing`, while future tooling API may expose an explicitly recovered tree. _Rationale:_ prevent accidental compilation of poison nodes. _Rejected:_ treating recovery AST as valid.

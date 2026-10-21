@@ -1,0 +1,147 @@
+module MultiIndex
+
+import Std.Index {Index, IndexMut}
+import Std.MdSpan as MdSpan
+import Std.Span as Span
+import Std.Sync as Sync
+
+/// A matrix indexed by a row and a column.
+type Grid = { columns: Int, mut cells: Array[Int] }
+
+impl Index[(Int, Int), Int] for Grid {
+  fn index(self: &Self, key: (Int, Int)) -> Int {
+    let (row, column) = key
+    self.cells[row * self.columns + column]
+  }
+}
+
+impl IndexMut[(Int, Int), Int] for Grid {
+  fn setIndex(self: &mut Self, key: (Int, Int), value: Int) -> () {
+    let (row, column) = key
+    self.cells[row * self.columns + column] = value
+  }
+}
+
+/// A table whose two indices have different types.
+type Table = { names: Array[Str], rows: Array[Array[Int]] }
+
+impl Index[(Str, Int), Int] for Table {
+  fn index(self: &Self, key: (Str, Int)) -> Int {
+    let (name, row) = key
+    var column = 0
+    while self.names[column] != name { column = column + 1 }
+    self.rows[row][column]
+  }
+}
+
+/// Twelve indices: the language sets no limit on how many.
+type Wide = { base: Int }
+
+impl Index[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int), Int] for Wide {
+  fn index(self: &Self, key: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)) -> Int {
+    self.base + key[0] + key[11]
+  }
+}
+
+/// Indices kept in an array, for any number of them.
+type Sum = { offset: Int }
+
+impl Index[Array[Int], Int] for Sum {
+  fn index(self: &Self, key: Array[Int]) -> Int {
+    var total = self.offset
+    for value in key { total = total + value }
+    total
+  }
+}
+
+const FOLDED: Int = Sum{offset: 1}[2, 3, 4]
+
+fn grid() -> Grid { Grid{columns: 2, cells: [1, 2, 3, 4]} }
+
+fn firstCell[T: Index[(Int, Int), Int]](cells: &T) -> Int { cells[0, 0] }
+
+fn reads() -> Bool {
+  let cells = grid()
+  cells[0, 0] == 1 && cells[1, 0] == 3 && cells[1, 1] == 4 && cells[(0, 1)] == 2
+}
+
+fn writes() -> Bool {
+  var cells = grid()
+  cells[0, 1] = 9
+  cells[1, 1] = cells[0, 1] + cells[1, 0]
+  cells.cells == [1, 9, 3, 12]
+}
+
+/// The target, then every index left to right, then the assigned value, each
+/// once.
+fn evaluationOrder() -> Bool {
+  let seen = Sync.cell("")
+  let note = |label: Str, value: Int| -> Int {
+    let before = Sync.get(&seen)
+    let _ = Sync.set(&seen, (match before { case Ok(text) => text case Err(_) => "" }) + label)
+    value
+  }
+  var cells = grid()
+  let read = cells[note("i", 1), note("j", 0)]
+  cells[note("r", 0), note("c", 0)] = note("v", 5)
+  let order = Sync.get(&seen)
+  read == 3 && cells.cells[0] == 5 && order == Ok("ijrcv")
+}
+
+fn mixedKeys() -> Bool {
+  let table = Table{names: ["a", "b"], rows: [[1, 2], [3, 4]]}
+  table["b", 1] == 4 && table["a", 0] == 1
+}
+
+fn arrayKeys() -> Bool {
+  let sum = Sum{offset: 100}
+  sum[1] == 101 && sum[1, 2] == 103 && sum[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] == 155 && FOLDED == 10
+}
+
+fn manyIndices() -> Bool {
+  Wide{base: 100}[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] == 113
+}
+
+/// `a[i][j]` indexes twice; `a[i, j]` indexes once with two indices.
+fn chainedIsDifferent() -> Bool {
+  let nested = [[1, 2], [3, 4]]
+  let tables = [grid(), Grid{columns: 1, cells: [7, 8]}]
+  nested[1][0] == 3 && tables[1][1, 0] == 8 && tables[0][1, 1] == 4
+}
+
+fn throughGenerics() -> Bool { firstCell(&grid()) == 1 }
+
+fn views() -> Bool {
+  let span = Span.of([4, 5, 6]).subspan(1, 2)
+  let cube = MdSpan.rowMajor([1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2])
+  span[0] == 5 && span[1] == 6 && match cube {
+    case Some(view) => view[1, 0, 1] == 6 && view[0, 1, 0] == 3
+    case None => false
+  }
+}
+
+fn nestedIndices() -> Bool {
+  let cells = grid()
+  let positions = [0, 1]
+  cells[positions[1], cells[0, 1] - 2] == 3
+}
+
+export fn main() -> Int {
+  let checks = [
+    reads(),
+    writes(),
+    evaluationOrder(),
+    mixedKeys(),
+    arrayKeys(),
+    manyIndices(),
+    chainedIsDifferent(),
+    throughGenerics(),
+    views(),
+    nestedIndices(),
+  ]
+  var held = 0
+  for passed in checks {
+    if passed { held = held + 1 }
+  }
+  held
+}

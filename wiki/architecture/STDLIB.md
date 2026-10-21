@@ -262,6 +262,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Iter` | 31 | `Sequence` with chainable default adapters (map, filter, take, drop, takeWhile, dropWhile, stride, chain, enumerate, zip) and terminals, plus ranges and collection walks |
+| `Std.Index` | 2 | `Index` and `IndexMut`, the protocol `[]` uses for a type that is not built in |
 | `Std.Span` | 4 | a non-owning window onto an array, narrowed and walked in place |
 | `Std.MdSpan` | 6 | a non-owning multidimensional array view: layouts, multi-index reads, slicing |
 | `Std.StringView` | 5 | a byte-addressed UTF-8 view with constant-time size and slicing |

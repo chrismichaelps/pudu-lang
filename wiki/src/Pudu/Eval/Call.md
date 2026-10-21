@@ -83,6 +83,8 @@ constructor.
 
 ## Grill Log
 
+- **Q:** How do `#index` and `#setIndex` run? **A:** `callIndexMember` finds the receiver's own `index` or `setIndex` by its method owners and calls it as a qualified call is, receiver first; `#setIndex` receives the receiver lent, so `setIndex`'s change is written back to the place (#534).
+
 - **Q:** Why do `callClosure`, `awaitTask`, and `scopeTo` also exist in
   [[Evaluator]]? **A:** Because a caller that only wants to run something should
   not have to know there is a record. _Rationale:_ [[Eval Program]] and the loop

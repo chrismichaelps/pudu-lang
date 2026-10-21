@@ -30,6 +30,8 @@ See [[Compiler Pipeline]] · [[architecture/PERFORMANCE]] · [[Eval Match]].
 
 ## Grill Log
 
+- **Q:** Where does `[]` on a type implementing `Std.Index` become a call? **A:** Here, from the key shapes checking recorded: `value[i, j]` becomes `#index(value, key)` and `value[i, j] = item` becomes `#setIndex(&mut value, key, item)`, with the key the single index, a tuple or an array. Arguments run in order, preserving target, indices, item, and every evaluator, the loop kernel and constant folding see an ordinary call. `#` cannot begin a written name (#534).
+
 - **Q:** Why resolve literals ahead of evaluation? **A:** Measured: evaluating an integer literal
   parsed its text (suffix, radix, an `Integer` multiply and add per digit) and looked its kind up in a
   `Map Span`, every time. On a counting loop that was 42% of the time and 31% of the allocation

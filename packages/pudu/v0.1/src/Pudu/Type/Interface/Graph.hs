@@ -18,6 +18,7 @@ module Pudu.Type.Interface.Graph
   ) where
 
 import Control.Monad (foldM)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -26,7 +27,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Import (..)
@@ -239,7 +240,7 @@ importsFor graph consumer =
     { importedInterfaces = Map.elems (Map.delete owner (graphInterfaces graph))
     , importedNames = Map.unions (map pieceNames pieces)
     , importedValues = Map.unions (map pieceValues pieces)
-    , importedTraits = Set.unions (map pieceTraits pieces)
+    , importedTraits = Set.unions (map pieceTraits pieces) <> operatorTraits
     , importedQualifiers = Set.unions (map pieceQualifiers pieces)
     , importedModules = Set.fromList [interfaceModule found | (_, found) <- reached]
     , importedGraph = graph
@@ -253,6 +254,15 @@ importsFor graph consumer =
     | Located _ value <- moduleImports consumer
     , Just found <- [Map.lookup (locatedValue (importModule value)) (graphInterfaces graph)]
     ]
+
+{-| Traits whose members an operator reaches: `[]` calls `index` and `setIndex`.
+    They are visible in every module, because writing `grid[i, j]` cannot
+    depend on having imported the trait that gives it a meaning. -}
+operatorTraits :: Set NominalId
+operatorTraits = Set.fromList
+  [ canonicalNominal (ModuleName ("Std" :| ["Index"])) name
+  | name <- ["Index", "IndexMut"]
+  ]
 
 data ImportTypes = ImportTypes
   {-| Every interface in the graph but the consumer's, in module-name order. -}

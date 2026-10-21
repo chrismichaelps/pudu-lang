@@ -46,6 +46,7 @@ emptySets located@(Located _ expression) = case expression of
   CallExpression callee arguments -> descend (callee : arguments)
   MemberExpression target _ -> descend [target]
   IndexExpression target index -> descend [target, index]
+  MultiIndexExpression target indices -> descend (target : indices)
   RangeExpression lower _ upper -> descend (maybe [] pure lower <> maybe [] pure upper)
   TryExpression target -> descend [target]
   AwaitExpression target -> descend [target]

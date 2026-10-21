@@ -9,6 +9,7 @@ module Pudu.Type.Check.TraitSpec
   , testQualifiedMethods
   , testGenericTraits
   , testGenericTraitDefaults
+  , testIndexing
   ) where
 
 import Data.Text (Text)
@@ -534,4 +535,72 @@ testGenericTraitDefaults = do
     , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
     , "}"
     , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+testIndexing :: IO Property
+testIndexing = do
+  let program body = codes (header <> body)
+  readsBoth <- program ["fn run(g: Grid) -> Int { g[0, 1] + g[(1, 0)] }"]
+  writes <- program ["fn run() -> Int {", "  var g = Grid{columns: 1, cells: [1]}", "  g[0, 0] = 2", "  g[0, 0]", "}"]
+  generic <- program ["fn first[T: Index[(Int, Int), Int]](g: &T) -> Int { g[0, 0] }"]
+  arrayKey <- program ["fn run(r: Ranked) -> Int { r[1] + r[1, 2] + r[1, 2, 3, 4, 5, 6, 7, 8] }"]
+  builtinArray <- program ["fn run(xs: Array[Array[Int]]) -> Int { xs[0, 1] }"]
+  builtinText <- program ["fn run(t: Str) -> Char { t[0, 1] }"]
+  chained <- program ["fn run(xs: Array[Array[Int]]) -> Int { xs[0][1] }"]
+  tooMany <- program ["fn run(g: Grid) -> Int { g[0, 0, 0] }"]
+  wrongIndex <- program ["fn run(g: Grid) -> Int { g[0, true] }"]
+  wrongResult <- program ["fn run(g: Grid) -> Str { g[0, 0] }"]
+  readOnly <- program ["fn run() -> Int {", "  var r = Ranked{base: 0}", "  r[0] = 1", "  0", "}"]
+  intoCopy <- program
+    [ "type Cell = { mut x: Int }"
+    , "type Row = { mut cells: Array[Cell] }"
+    , "impl Index[Int, Cell] for Row { fn index(self: &Self, key: Int) -> Cell { self.cells[key] } }"
+    , "impl IndexMut[Int, Cell] for Row {"
+    , "  fn setIndex(self: &mut Self, key: Int, value: Cell) -> () { self.cells[key] = value }"
+    , "}"
+    , "fn bump(c: &mut Cell) -> () { c.x = c.x + 1 }"
+    , "fn run() -> Int {"
+    , "  var row = Row{cells: [Cell{x: 1}]}"
+    , "  row[0].x = 5"
+    , "  bump(&mut row[0])"
+    , "  row[0] = Cell{x: 2}"
+    , "  row[0].x"
+    , "}"
+    ]
+  immutable <- program ["fn run() -> Int {", "  let g = Grid{columns: 1, cells: [1]}", "  g[0, 0] = 2", "  0", "}"]
+  notIndexable <- codes ["module M", "type Plain = { v: Int }", "fn run(p: Plain) -> Int { p[0] }"]
+  pure $ conjoin
+    [ counterexample "a tuple key takes as many indices as it has members" (readsBoth === [])
+    , counterexample "setIndex assigns through []" (writes === [])
+    , counterexample "a bounded parameter is indexed through its bound" (generic === [])
+    , counterexample "an array key takes any number of indices, one included" (arrayKey === [])
+    , counterexample "a built-in array takes one index" (builtinArray === ["E3094"])
+    , counterexample "and so does text" (builtinText === ["E3094"])
+    , counterexample "indexing twice is still indexing twice" (chained === [])
+    , counterexample "a tuple key fixes the count" (tooMany === ["E3095"])
+    , counterexample "each index is checked against its member" (wrongIndex === ["E3001"])
+    , counterexample "the result is index's result" (wrongResult === ["E3001"])
+    , counterexample "assignment needs setIndex" (readOnly === ["E3097"])
+    , counterexample "a part of an element read through [] is a copy" (intoCopy === ["E3096", "E3096"])
+    , counterexample "the target of an assignment must be writable" (immutable === ["E3078"])
+    , counterexample "a type without index cannot be indexed" (notIndexable === ["E3006"])
+    ]
+ where
+  header =
+    [ "module M"
+    , "trait Index[K, V] { fn index(self: &Self, key: K) -> V }"
+    , "trait IndexMut[K, V] { fn setIndex(self: &mut Self, key: K, value: V) -> () }"
+    , "type Grid = { columns: Int, mut cells: Array[Int] }"
+    , "impl Index[(Int, Int), Int] for Grid {"
+    , "  fn index(self: &Self, key: (Int, Int)) -> Int { self.cells[key[0] * self.columns + key[1]] }"
+    , "}"
+    , "impl IndexMut[(Int, Int), Int] for Grid {"
+    , "  fn setIndex(self: &mut Self, key: (Int, Int), value: Int) -> () {"
+    , "    self.cells[key[0] * self.columns + key[1]] = value"
+    , "  }"
+    , "}"
+    , "type Ranked = { base: Int }"
+    , "impl Index[Array[Int], Int] for Ranked {"
+    , "  fn index(self: &Self, key: Array[Int]) -> Int { self.base + key.length() }"
+    , "}"
     ]

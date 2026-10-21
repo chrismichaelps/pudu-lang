@@ -101,6 +101,72 @@ A slice that reaches past the end stops the program, the same way reading a posi
 there does. It is not quietly shortened, because a shorter answer would hide the arithmetic that
 asked for too much.
 
+## Several indices
+
+`value[i, j]` is one indexing with two indices, and it may take any number of them:
+`cube[x, y, z]`, or a dozen. It is not `value[i][j]`, which indexes `value` and then indexes the
+element that came back. The two are different operations and neither is turned into the other.
+
+Built-in arrays, strings and tuples take one index. `grid[0, 1]` on an `Array[Array[Int]]` is
+refused with `E3094`, whose help names `grid[0][1]` for indexing the inner array.
+
+A type joins `[]` by implementing `Std.Index.Index[K, V]`, whose `index(self: &Self, key: K) -> V`
+answers what `value[...]` reads, and `Std.Index.IndexMut[K, V]`, whose
+`setIndex(self: &mut Self, key: K, value: V)` performs `value[...] = item`. These two traits work
+wherever the type is used, without an import. The key holds the indices:
+
+| `K` | `value[i]` | `value[i, j, ...]` |
+| --- | --- | --- |
+| a tuple `(A, B, ...)` | `i` itself, which may be a tuple | a tuple of exactly that many indices |
+| `Array[I]` | `[i]` | the array of every index |
+| anything else | `i` itself | refused with `E3095` |
+
+A tuple lets each position have its own type and fixes how many there are. An array serves a
+container whose number of dimensions is only known when it runs, such as `Std.MdSpan`:
+
+```pudu
+module Grids
+
+import Std.Index {Index, IndexMut}
+import Std.MdSpan as MdSpan
+
+type Grid = { columns: Int, mut cells: Array[Int] }
+
+impl Index[(Int, Int), Int] for Grid {
+  fn index(self: &Self, key: (Int, Int)) -> Int {
+    let (row, column) = key
+    self.cells[row * self.columns + column]
+  }
+}
+
+impl IndexMut[(Int, Int), Int] for Grid {
+  fn setIndex(self: &mut Self, key: (Int, Int), value: Int) -> () {
+    let (row, column) = key
+    self.cells[row * self.columns + column] = value
+  }
+}
+
+fn main() -> Int {
+  var grid = Grid{columns: 2, cells: [1, 2, 3, 4]}
+  grid[0, 1] = grid[1, 0] + 10
+  let nested = [[1, 2], [3, 4]]
+  let cube = match MdSpan.rowMajor([1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2]) {
+    case Some(view) => view[1, 0, 1]
+    case None => 0
+  }
+  if grid.cells == [1, 13, 3, 4] && nested[1][0] == 3 && cube == 6 { 0 } else { 1 }
+}
+```
+
+The target runs first, then each index from left to right, then the assigned value, each once.
+`index` answers a value, so an element read through `[]` is a copy: `grid[0, 1] = item` replaces
+the whole element through `setIndex`, while assigning a field of it, or lending it with `&mut`, is
+refused with `E3096`. An array's elements stay places as before.
+
+Built-in indexing is unchanged by any of this. On a type of your own, `value[...]` costs one call
+to `index` or `setIndex`, plus building the key: nothing for one index, one tuple or array for
+several.
+
 ## Building an array step by step
 
 A `var` holding an array grows one value at a time:

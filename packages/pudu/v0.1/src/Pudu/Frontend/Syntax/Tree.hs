@@ -474,6 +474,10 @@ data Expression
   | CallExpression !(Located Expression) ![Located Expression]
   | MemberExpression !(Located Expression) !(Located Text)
   | IndexExpression !(Located Expression) !(Located Expression)
+  {-| `a[i, j, ...]`: one indexing operation with two or more indices, as
+      opposed to `a[i][j]`, which indexes twice. The list always holds at
+      least two indices; one index is an `IndexExpression`. -}
+  | MultiIndexExpression !(Located Expression) ![Located Expression]
   {-| `a..b`, `a..=b`, `a..`, `..b`, `..`.
 
       A range is its own node rather than a binary operator on two numbers,
