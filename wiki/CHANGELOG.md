@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
+
 ## 2026-10-21 — Generic trait defaults take the implementation's arguments (#528)
 
 - [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
