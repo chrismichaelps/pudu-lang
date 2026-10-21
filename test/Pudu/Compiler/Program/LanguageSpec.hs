@@ -89,7 +89,7 @@ testRangesAndSlices = do
 testBuiltinOwnerNames :: IO Property
 testBuiltinOwnerNames = do
   answer <- runEntry (fixture "BuiltinOwnerNames")
-  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "8"))
+  pure (counterexample "every built-in and declared owner reaches its own method" (answer === Just "9"))
 
 testCapturedScope :: IO Property
 testCapturedScope = do
