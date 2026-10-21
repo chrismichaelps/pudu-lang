@@ -59,6 +59,10 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 - **Q:** May print's effect-only Unit select a trap? **A:** No; carrier guards and exact scalar facts reject Result erasure. A Never operand may discard completed effects because no operator can consume its values.
 - **Q:** Can a trap precede the second operand? **A:** No; both operands finish first unless an operand transfers or fails. Logical right operands remain guarded.
 
+## Grill Log
+
+- **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreVariantName` (#525).
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

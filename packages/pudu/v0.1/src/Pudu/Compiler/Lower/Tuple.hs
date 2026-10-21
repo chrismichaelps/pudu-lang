@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern
 
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, refused)
-import Pudu.Compiler.Lower.Types (nativeValueType, typeForSpan)
+import Pudu.Compiler.Lower.Types (nativeValueType, recordFields, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( Expression (..), FieldPattern (..), Literal (..), Located (..), Pattern (..), TypeSyntax )
@@ -85,17 +85,19 @@ lowerTuplePattern lower state at pattern annotation subject = case lower state s
            in case bindings state' projected member of
                 (next, Just declared) -> foldMembers next (declared : collected) rest
                 (next, Nothing) -> (next, Nothing)
-    (RecordPattern _ fields _, CoreRecordType _ declared) -> foldFields current [] fields
+    (RecordPattern _ fields _, kind@(CoreRecordType _)) -> case recordFields (contextTypes (lowerContext current)) kind of
+      Just declared -> foldFields declared current [] fields
+      Nothing -> halt patternSpan "this record pattern" current
       where
         -- `{x}` binds x; `{x: inner}` matches inner against the field.
-        foldFields state' collected [] = (state', Just (concat (reverse collected)))
-        foldFields state' collected (Located fieldSpan (FieldPattern (Located nameSpan name) inner) : rest) =
+        foldFields _ state' collected [] = (state', Just (concat (reverse collected)))
+        foldFields declared state' collected (Located fieldSpan (FieldPattern (Located nameSpan name) inner) : rest) =
           case lookup name declared of
             Nothing -> halt fieldSpan ("the field '" <> name <> "'") state'
-            Just kind ->
-              let projected = CoreExpression fieldSpan kind (CoreField name source)
+            Just fieldKind ->
+              let projected = CoreExpression fieldSpan fieldKind (CoreField name source)
                   pattern' = maybe (Located nameSpan (BindingPattern (Located nameSpan name))) id inner
                in case bindings state' projected pattern' of
-                    (next, Just declared') -> foldFields next (declared' : collected) rest
+                    (next, Just declared') -> foldFields declared next (declared' : collected) rest
                     (next, Nothing) -> (next, Nothing)
     _ -> halt patternSpan "this pattern in a let binding" current

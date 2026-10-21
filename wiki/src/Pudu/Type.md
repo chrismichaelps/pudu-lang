@@ -88,6 +88,8 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 
 ## Grill Log
 
+- **Q:** What does `declaredSums` answer? **A:** Each sum the module can name, its own and the built-in Option and Result, with its type parameters and its variants in declaration order, each with payload types and, for a record variant, its field names, for native lowering (#525).
+
 - **Q:** Build the expression map while admitting every `ModuleTypes` result?
   **A:** Defer only this derived lookup product until a consumer asks for it.
   _Rationale:_ phase attribution measures 87.5 MB for this unused map on an

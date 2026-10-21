@@ -143,6 +143,8 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
 
 ## Grill Log
 
+- **Q:** How does Core carry sums? **A:** `CoreSumType name arguments` at concrete arguments, so `Option[Int]` and `Option[Str]` differ, with `CoreConstruct`, `CoreMatch` over `CoreArm`s and `CorePattern`s, `CoreFailText` for a message built at run time, and `CoreVariantName`. Records are named by identity only (`CoreRecordType name`), and every layout lives once in `coreModuleLayouts`, so a recursive sum is a finite type (#525).
+
 - **Q:** Why a new IR instead of emitting C from the checked tree? **A:** The
   tree is a parser artefact: it keeps sugar, patterns, and syntax that the
   backend must never reinterpret, and [[ADR-0002-compiler-pipeline]] fixes

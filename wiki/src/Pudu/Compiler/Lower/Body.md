@@ -86,6 +86,8 @@ Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower 
 
 ## Grill Log
 
+- **Q:** How does the body lowering reach sums? **A:** A name or call is a variant through [[Compiler Lower Sum]], `match` through [[Compiler Lower Match]], and a sum result gets a destination slot like any boxed value (#525).
+
 - **Q:** Why keep blocks and expressions together? **A:** Their mutual recursion
   is one traversal responsibility; state and signature admission are independent
   seams. All three implementation modules remain below 500 lines. _Rejected:_

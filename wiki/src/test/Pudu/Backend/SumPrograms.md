@@ -1,0 +1,36 @@
+---
+type: module
+path: "@root/test/Pudu/Backend/SumPrograms.hs"
+fidelity: Active
+grammar: "[[grammar/haskell]]"
+aliases: [Backend Sum Programs]
+---
+# Backend Sum Programs
+
+## Purpose and interface
+
+Export sumSuccessPrograms and sumRefusalPrograms, run by [[Backend Native
+Tests]] and, for successes, [[Backend Text Leak Tests]].
+
+## Coverage
+
+Rendering of unit, positional and record variants, qualified constructors,
+nested Option and Result payloads; equality by variant then payload, NaN
+payloads included; `match` with ordered arms, guards, bindings, literal,
+range, tuple, constructor, record and alternative patterns; Option and Result
+through calls, loops and nested patterns; payload order and a Never payload;
+sums through mutation and loop values; sum entry results. Refusals: ordering,
+subtraction and addition on sums, each naming the held variants after the
+operands ran.
+
+## Grill Log
+
+- **Q:** Why no refusal for a match no arm accepts? **A:** Checking requires
+  every match to cover its subject, so E7011 cannot be reached from a checked
+  program; both paths keep it only as a guard.
+- **Q:** Why does one program walk a `while` rather than a `for`? **A:** `for`
+  is part of the iteration row and not yet native; the program tests sums.
+
+## Referenced by
+
+[[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

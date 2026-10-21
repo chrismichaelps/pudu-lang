@@ -1,6 +1,7 @@
 {-| @Test.Backend.WideFrameSpec — exact wide values through emitted execution frames. -}
 module Pudu.Backend.WideFrameSpec (wideFrameProperties) where
 
+import qualified Data.Map.Strict as Map
 import Data.Bits ((.&.), (.|.), xor, complement, shiftL, shiftR)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -73,7 +74,7 @@ programs at = snapshots <> operators <> small <> failures
     printed value = statement (CoreEvaluate (CoreExpression at CoreUnitType (CorePrint (display value))))
     binary result op left right = CoreExpression at result (CoreBinary op left right)
     mainFunction result body = CoreFunction "main" [] result body
-    moduleOf functions = CoreModule "Main" "main" functions
+    moduleOf functions = CoreModule "Main" "main" functions Map.empty
     status n = if n == 0 then ExitSuccess else ExitFailure (fromInteger (max 1 (min 255 n)))
     snapshots =
       [ let wide = CoreIntegerType kind

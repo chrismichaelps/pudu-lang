@@ -42,6 +42,8 @@ never mutated after it is filled.
 
 ## Grill Log
 
+- **Q:** Why does `pudu_fail_text` copy the message? **A:** Frame cleanup runs before printing and may release the text the message came from (#525).
+
 - **Q:** Why a view instead of a pointer to one block? **A:** Literals need no
   allocation, and the coming `drop`/`take`/`slice` must share their source the
   way Data.Text slices do, keeping the cost of a scan proportional to what it

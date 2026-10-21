@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cType, isAggregate, ownedType, released, retained)
 import Pudu.Backend.Emit.Frame.Value (cellMember, frameValue, slotText)
 import Pudu.Backend.Emit.State
-  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textOfInt )
+  ( EmitState (..), callDepthSite, cString, cStringBytes, line, operatorFailureSite, textFailureSite, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, zeroValue)
 import Pudu.Core (CoreType (..))
 import Pudu.Core.Frame
@@ -110,6 +110,13 @@ terminator identities function (state, needs) ending = case ending of
           pure (Just (", .result = {." <> member <> " = " <> returned <> "}", wanted))
     let (field, extra) = maybe ("", []) id result
     pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> field <> "};"), Set.union needs (Set.fromList extra))
+  FrameFailText at code help message -> do
+    text <- slotText message
+    let (after, index) = textFailureSite state at code help
+    pure (linesInto after
+      [ "      pudu_fail_text(&pudu_sites[" <> textOfInt index <> "], " <> text <> ");"
+      , "      return (pudu_step){.kind = PUDU_INVALID};" ]
+      , Set.union needs (Set.fromList ["site", "colored", "fail", "fail_text"]))
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message
      in pure (linesInto after

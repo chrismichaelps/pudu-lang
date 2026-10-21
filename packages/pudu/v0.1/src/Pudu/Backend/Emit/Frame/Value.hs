@@ -42,6 +42,20 @@ frameValue state value = case frameValueShape value of
     operands <- traverse slotText members
     let kind = frameValueType value
     plain (aggregateHelper "make" kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed "make" kind]
+  FrameConstruct tag members -> do
+    operands <- traverse slotText members
+    let kind = frameValueType value
+        operation = "make" <> textOfInt tag
+    plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " operands <> ")") [aggregateNeed operation kind]
+  FrameIsVariant tag held -> slotText held >>= \source -> done state ("(" <> source <> "->fields[0].scalar == " <> textOfInt tag <> ")") []
+  FramePayload position held -> do
+    source <- slotText held
+    member <- maybe (refused "a payload member without a native representation") Right (cellMember (frameValueType value))
+    uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameVariantName held -> do
+    source <- slotText held
+    let kind = frameSlotType held
+    plain (aggregateHelper "name" kind <> "(" <> source <> ")") [aggregateNeed "name" kind]
   FrameMember position tuple -> do
     source <- slotText tuple
     member <- maybe (refused "a tuple member without a native representation") Right (cellMember (frameValueType value))

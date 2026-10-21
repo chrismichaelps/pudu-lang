@@ -16,6 +16,11 @@ import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
+import Pudu.Compiler.Lower.Sum (lowerVariant)
+import Pudu.Compiler.Lower.Match (lowerMatch)
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text as Text
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Core
 import Pudu.Frontend.Syntax
   ( BindingKind (..), Block (..), Declaration (..), Expression (..)
@@ -24,7 +29,7 @@ import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
 
-{-| The entry carries an admitted integer, Bool, float, Str, Char, tuple, record or unit; a body that never
+{-| The entry carries an admitted integer, Bool, float, Str, Char, tuple, record, sum or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
     printed as `renderValue` writes it, the same split `pudu run` makes. Print's Result carrier must not escape through the
     entry result. -}
@@ -44,7 +49,8 @@ lowerEntryBody located state
                 CoreTextType -> built after coreBlock CoreTextType
                 CoreCharType -> built after coreBlock CoreCharType
                 kind@(CoreTupleType _) -> built after coreBlock kind
-                kind@(CoreRecordType _ _) -> built after coreBlock kind
+                kind@(CoreRecordType _) -> built after coreBlock kind
+                kind@(CoreSumType _ _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -180,6 +186,10 @@ lowerStatement state (Located statementSpan statement) = case statement of
   DeclarationStatement (Located declarationSpan _) ->
     halt declarationSpan "this declaration" state
   ExpressionStatement locatedExpression -> case locatedValue locatedExpression of
+    -- A match as a statement drops each arm's value, as the evaluator does.
+    MatchExpression subject arms -> case lowerMatch lowerExpression True state (locatedSpan locatedExpression) subject arms of
+      (after, Just (core, _)) -> (after, Just CoreStatement{coreStatementSpan = statementSpan, coreStatementShape = CoreEvaluate core})
+      (after, Nothing) -> refused after
     BinaryExpression target@(Located _ MemberExpression{}) "=" right
       | Just lowered <- lowerFieldAssignment lowerExpression state statementSpan target right -> lowered
     BinaryExpression (Located _ (NameExpression (name :| []))) "=" right
@@ -275,7 +285,8 @@ allowedResultType declared operand = case declared of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
     CoreTupleType _ -> True
-    CoreRecordType _ _ -> True
+    CoreRecordType _ -> True
+    CoreSumType _ _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -299,8 +310,11 @@ lowerExpression state (Located spanValue expression) = case expression of
     NullValue -> halt spanValue "null" state
   NameExpression (name :| []) -> case lookupLocal state name of
     Just local -> value (CoreReadLocal local) (coreLocalType local)
-    Nothing -> halt spanValue ("the value '" <> name <> "'") state
-  NameExpression _ -> halt spanValue "module-qualified names" state
+    Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
+      (lowerVariant lowerExpression state spanValue name [])
+  NameExpression (first :| rest) ->
+    maybe (halt spanValue "module-qualified names" state) id
+      (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located _ (NameExpression (name :| []))) arguments
@@ -315,6 +329,7 @@ lowerExpression state (Located spanValue expression) = case expression of
                   [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
             | otherwise -> typed (recordCall name final) (CoreCall name coreArguments) (eagerType (signatureResult signature) coreArguments)
           (final, Nothing) -> refused final
+    | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
           (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
@@ -326,10 +341,16 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> rendered CoreDisplay
     | name == "show" -> rendered CoreShow
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
-  CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments ->
-    lowerTextMethod lowerExpression state spanValue receiver member arguments
+  CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments
+    | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
+    | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
+  CallExpression (Located _ (NameExpression (first :| rest@(_ : _)))) arguments
+    | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
+    | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression{} -> halt spanValue "this call" state
-  MemberExpression receiver (Located _ member) -> lowerField lowerExpression state spanValue receiver member
+  MemberExpression receiver (Located _ member)
+    | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
+    | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression{} -> halt spanValue "the try operator" state
@@ -344,7 +365,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   ScopeExpression{} -> halt spanValue "scope expressions" state
   LambdaExpression{} -> halt spanValue "lambdas" state
   TypeApplication{} -> halt spanValue "type applications" state
-  RecordExpression _ fields -> lowerRecord lowerExpression state spanValue fields
+  RecordExpression (ModuleName segments) fields -> lowerRecord lowerExpression state spanValue (NonEmpty.last segments) fields
   RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields
   BlockExpression block ->
     let (after, coreBlock, resultType) = lowerBlock state block
@@ -375,7 +396,7 @@ lowerExpression state (Located spanValue expression) = case expression of
       (after, Just _) -> halt spanValue "an if without else outside the native statement form" after
       (after, Nothing) -> refused after
   WhileExpression label condition body -> lowerWhile lowerExpression lowerBlock spanValue label condition body state
-  MatchExpression{} -> halt spanValue "match expressions" state
+  MatchExpression subject arms -> lowerMatch lowerExpression False state spanValue subject arms
   WhileLetExpression{} -> halt spanValue "while let" state
   IfLetExpression{} -> halt spanValue "if let" state
   LoopExpression label body -> lowerLoop lowerBlock spanValue label body state
@@ -397,6 +418,10 @@ lowerExpression state (Located spanValue expression) = case expression of
       _ -> halt spanValue "this call" state
     typed after shape coreType = (after, Just (CoreExpression spanValue coreType shape, coreType))
     value shape coreType = (state, Just (CoreExpression spanValue coreType shape, coreType))
+
+    -- `Shape.Circle(3)`: the receiver names a type, not a local.
+    qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
+    qualifier _ = False
 
     lowerArguments current collected arguments = case arguments of
       [] -> (current, Just (reverse collected))

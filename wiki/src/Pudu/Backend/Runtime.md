@@ -133,6 +133,8 @@ evaluator module — so the depth bound is the evaluator's own.
 
 ## Grill Log
 
+- **Q:** Why `pudu_fail_message`? **A:** A refusal whose text is built at run time is written by length, so a rendered value may hold any byte; `pudu_fail` passes its fixed message through it (#525).
+
 - **Q:** Why embed C text in Haskell rather than keep a `.c` file in the
   package? **A:** A file on disk is a second artefact to locate at run time —
   it breaks for a packaged compiler moved elsewhere, and its path becomes an

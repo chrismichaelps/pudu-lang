@@ -6,7 +6,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, lookupLocal, refused)
-import Pudu.Compiler.Lower.Types (typeForSpan)
+import Pudu.Compiler.Lower.Types (recordFields, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), FieldInit (..), Located (..))
 import Pudu.Source (Span)
@@ -14,15 +14,23 @@ import Pudu.Source (Span)
 type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
 
 {-| The written fields run in written order. The checker has already matched
-    them against the declaration, so the record's type comes from its facts. -}
-lowerRecord :: LowerExpression -> LowerState -> Span -> [Located FieldInit] -> (LowerState, Maybe (CoreExpression, CoreType))
-lowerRecord lower state at fields = case typeForSpan (contextTypes (lowerContext state)) at of
-  Just kind@(CoreRecordType _ _) -> case lowerFields lower state fields of
+    them against the declaration, so the type comes from its facts: a record,
+    or a sum when the name is one of its record variants. -}
+lowerRecord :: LowerExpression -> LowerState -> Span -> Text -> [Located FieldInit] -> (LowerState, Maybe (CoreExpression, CoreType))
+lowerRecord lower state at name fields = case typeForSpan types at of
+  Just kind@(CoreRecordType _) -> built kind CoreRecord
+  Just kind@(CoreSumType _ _)
+    | Just variants <- sumVariants types kind
+    , any (\variant -> coreVariantName variant == name && coreVariantRecord variant) variants ->
+        built kind (CoreConstruct name)
+  _ -> halt at "this record" state
+ where
+  types = contextTypes (lowerContext state)
+  built kind shape = case lowerFields lower state fields of
     (after, Just written)
       | any ((== CoreNeverType) . coreExpressionType . snd) written -> (after, Just (stopped at (map snd written), CoreNeverType))
-      | otherwise -> (after, Just (CoreExpression at kind (CoreRecord written), kind))
+      | otherwise -> (after, Just (CoreExpression at kind (shape written), kind))
     (after, Nothing) -> refused after
-  _ -> halt at "this record" state
 
 {-| The base runs first, then the written fields. -}
 lowerRecordUpdate :: LowerExpression -> LowerState -> Span -> Located Expression -> [Located FieldInit]
@@ -34,15 +42,15 @@ lowerRecordUpdate lower state at source fields = case lower state source of
     (final, Just written)
       | any ((== CoreNeverType) . coreExpressionType) (base : map snd written) ->
           (final, Just (stopped at (base : map snd written), CoreNeverType))
-      | CoreRecordType _ _ <- kind -> (final, Just (CoreExpression at kind (CoreRecordUpdate base written), kind))
+      | CoreRecordType _ <- kind -> (final, Just (CoreExpression at kind (CoreRecordUpdate base written), kind))
       | otherwise -> halt at ("updating a " <> coreTypeName kind <> " value") final
 
 lowerField :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerField lower state at receiver member = case lower state receiver of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, CoreRecordType _ declared)) -> case lookup member declared of
-    Just kind -> (after, Just (CoreExpression at kind (CoreField member core), kind))
+  (after, Just (core, kind@(CoreRecordType _))) -> case recordFields (contextTypes (lowerContext after)) kind >>= lookup member of
+    Just fieldKind -> (after, Just (CoreExpression at fieldKind (CoreField member core), fieldKind))
     Nothing -> halt at ("the member '" <> member <> "'") after
   (after, Just (_, kind)) -> halt at ("member access on " <> coreTypeName kind) after
 
@@ -55,6 +63,22 @@ lowerFieldAssignment :: LowerExpression -> LowerState -> Span -> Located Express
 lowerFieldAssignment lower state at target value = do
   (root, path) <- place (locatedValue target)
   local <- lookupLocal state root
+  let fieldsOf = recordFields (contextTypes (lowerContext state))
+      -- The type at each step of the path, ending with the assigned field's.
+      projections kind steps = case steps of
+        [] -> Just [kind]
+        field : rest -> do
+          next <- fieldsOf kind >>= lookup field
+          (kind :) <$> projections next rest
+      rebuilt held steps replacement = go (CoreExpression at (coreLocalType held) (CoreReadLocal held)) steps
+       where
+        go _ [] = replacement
+        go current (field : rest) =
+          let kind = coreExpressionType current
+              inner = case fieldsOf kind >>= lookup field of
+                Just fieldKind -> CoreExpression at fieldKind (CoreField field current)
+                Nothing -> current
+           in CoreExpression at kind (CoreRecordUpdate current [(field, go inner rest)])
   Just $ case (projections (coreLocalType local) path, lower state value) of
     (_, (after, Nothing)) -> refused after
     (Nothing, (after, _)) -> halt at "this assignment target" after
@@ -74,23 +98,6 @@ lowerFieldAssignment lower state at target value = do
       Just (root, path <> [field])
     NameExpression (name :| []) -> Just (name, [])
     _ -> Nothing
-  -- The type at each step of the path, ending with the assigned field's.
-  projections kind path = case (path, kind) of
-    ([], _) -> Just [kind]
-    (field : rest, CoreRecordType _ declared) -> do
-      next <- lookup field declared
-      (kind :) <$> projections next rest
-    _ -> Nothing
-  rebuilt local path replacement = go (CoreExpression at (coreLocalType local) (CoreReadLocal local)) path
-   where
-    go _ [] = replacement
-    go current (field : rest) =
-      let kind = coreExpressionType current
-          inner = case kind of
-            CoreRecordType _ declared | Just fieldKind <- lookup field declared ->
-              CoreExpression at fieldKind (CoreField field current)
-            _ -> current
-       in CoreExpression at kind (CoreRecordUpdate current [(field, go inner rest)])
 
 lowerFields :: LowerExpression -> LowerState -> [Located FieldInit] -> (LowerState, Maybe [(Text, CoreExpression)])
 lowerFields lower state = go state []

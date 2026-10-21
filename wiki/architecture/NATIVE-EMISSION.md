@@ -17,11 +17,11 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Scalar functions, recursion, call depth | Implemented (#499) | Preserve explicit-frame lifetime, argument ordering, E7002 timing and differential evidence; promotion still requires independent review |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
-| Entry result reporting | Partial (#512) | Integer statuses, unit silence and Bool/Float32/Float64 rendering match `pudu run`; print Result and aggregate value rendering remain |
+| Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
-| Records, tuples, sums and collections | Partial (#521) | Tuples and the root module's non-generic records are boxed, refcounted values with construction, update, field and position reads, field assignment, let patterns, equality, ordering (tuples) and rendering; generic records, sums, Option/Result and collections remain |
-| Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
+| Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
+| Pattern matching and iteration | Partial (#525) | `match` lowers every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `for`, ranges as values and the iterator protocol remain |
 | Modules and constants | Pending | Canonical linkage, qualified identities, checked folds and graph publication |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
@@ -157,7 +157,7 @@ change the completed-area count.
 ## Closed-output parity finding
 
 Before #505, a checked scalar print program with a closed pipe reader exits 0
-with empty stderr in both evaluators, while native exits by SIGPIPE (signal 13). Local evidence: ~/.codex/tmp/pudu-504/pipe-probe.json.
+with empty stderr in both evaluators, while native exits by SIGPIPE (signal 13).
 This contradicted complete output parity. The refined #505 repair now matches
 108 CLI cases, including stderr failures and inherited blocked signals. The clean
 run passed 18 gates and exposed one stale standard-header whitelist assertion;
@@ -270,3 +270,19 @@ type syntax. Literals run fields in written order and store declaration order
 (#519); updates run the base first; field assignment rebuilds the local's
 value as it is after the assigned value ran. [[Backend Record Programs]] holds
 answers, refusals and counted leaks under Clang, GCC 15 and ASan/UBSan.
+
+## Sums and match (#525)
+
+A sum is a `pudu_box` whose first cell is the variant tag, followed by that
+variant's payload in declaration order; the root module's sums and Option and
+Result at concrete arguments share it. [[Compiler Lower Sum]] admits a
+variant only where the checker typed the span as a sum with that variant, so
+`Shape.Circle(3)` resolves exactly as checking did (#536 repaired that
+checking). [[Compiler Lower Match]] and [[Compiler Frame Match]] lower `match`
+into a chain of tag, literal, range and guard tests over one subject slot.
+An operator failure on a sum names the variants it holds at run time
+("cannot apply < to a Some and a None"), built from the shared wording. A
+sum's type argument left unconstrained by checking (the error type of `Ok(1)`)
+takes a unit layout, which no value can observe. [[Backend Sum Programs]]
+holds hand-written answers and the interpreter's refusals; they pass under
+Clang, GCC 15 and Clang ASan/UBSan, and the counted-leak run includes them.

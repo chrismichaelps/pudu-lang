@@ -1,6 +1,7 @@
 {-| @Test.Backend.FrameSpec — continuation and operand-lifetime contracts. -}
 module Pudu.Backend.FrameSpec (frameProperties) where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
@@ -43,7 +44,7 @@ entry :: CoreBlock -> CoreFunction
 entry = CoreFunction "main" [] intType
 
 program :: CoreFunction -> [CoreFunction] -> CoreModule
-program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers)
+program mainFunction helpers = CoreModule "Main" "main" (mainFunction : helpers) Map.empty
 
 site :: IO Span
 site = emptySpan <$> newSource (SourceName "frames.pudu") "frame contracts"
@@ -216,6 +217,7 @@ closedTargets source = conjoin (map check (frameModuleFunctions source))
             FrameCall _ _ _ _ resume -> [resume]
             FrameReturn _ _ -> []
             FrameOperatorFailure _ _ -> []
+            FrameFailText _ _ _ _ -> []
        in counterexample (show function) $ conjoin
             [ counterexample "missing block destination" (all (`Set.member` labels)
                 (frameFunctionEntry function : concatMap (targets . frameBlockTerminator) blocks))

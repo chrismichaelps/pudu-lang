@@ -80,6 +80,8 @@ Consumed by [[Compiler Lower]], [[Compiler Lower State]],
 
 ## Grill Log
 
+- **Q:** What layout does a sum's unconstrained type argument get? **A:** Unit. A variable checking left unconstrained names a payload no value holds, such as the error of `Ok(1)` that is never `Err`, so the representation is unobservable. Elsewhere an unresolved type still refuses (#525).
+
 - **Q:** Reconstruct private signatures from annotations? **A:** No; consume final schemes, which already include inference and aliases. Rejected: a second native inference pass.
 - **Q:** May an offset identify a generated expression? **A:** No; only the complete Span owns the fact. Rejected: authored-offset fallback or nearest-expression lookup.
 - **Q:** Does recognizing Str admit general text ownership? **A:** No; representation admission remains at each existing lowering boundary. Rejected: treating type recognition as completed runtime support.

@@ -121,13 +121,17 @@ library
     Pudu.Compiler.Lower
     Pudu.Compiler.Frame
     Pudu.Compiler.Frame.Body
+    Pudu.Compiler.Frame.Match
     Pudu.Compiler.Frame.State
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
+    Pudu.Compiler.Lower.Layout
+    Pudu.Compiler.Lower.Match
     Pudu.Compiler.Lower.Record
+    Pudu.Compiler.Lower.Sum
     Pudu.Compiler.Lower.Text
     Pudu.Compiler.Lower.Tuple
     Pudu.Compiler.Lower.Signature

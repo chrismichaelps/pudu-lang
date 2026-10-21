@@ -39,6 +39,10 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 [[Pudu Core]] · [[Core Frame IR]] · [[Compiler Frame Lowering]] ·
 [[Compiler Frame State]] · [[Compiler Frame Body]] · [[Native Execution Frames]]
 
+## Grill Log
+
+- **Q:** What does frame lowering pass on? **A:** The Core module's layouts, unchanged, to `frameModuleLayouts` (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

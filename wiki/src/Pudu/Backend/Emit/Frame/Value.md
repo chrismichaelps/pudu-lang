@@ -33,6 +33,10 @@ Only emitted values select helper roots; caller closes dependencies transitively
 
 [[Core Frame IR]] · [[Backend Emit State]] · [[Backend Emit Support]] · [[Backend Frame Bodies]]
 
+## Grill Log
+
+- **Q:** How are tags and payloads read? **A:** `FrameIsVariant` compares the box's first cell with the variant index, `FramePayload` reads a cell after the tag, and `FrameVariantName` answers the held variant's name as text (#525).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]
