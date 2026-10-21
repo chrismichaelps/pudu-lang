@@ -20,14 +20,14 @@ declared on the implementing type.
 ## Interface
 
 ```haskell
-inheritedMembers :: Maybe (Set (NominalId, Text)) -> NominalId -> Trait -> Impl -> [Located Function]
+inheritedMembers :: Set (NominalId, Text) -> NominalId -> Trait -> Impl -> [Located Function]
 renameApart :: [Text] -> [(Text, Int)] -> ([(Text, Int)], [(Text, Type)])
 selfArguments :: [Text] -> Impl -> [Type]
 ```
 
-- `inheritedMembers` answers the trait's members that carry a body (or, for an
-  imported interface whose bodies were stripped, that the interface records as
-  defaults) and that the implementation does not provide itself.
+- `inheritedMembers` answers the trait's members that carry a body, or that an
+  interface records as defaults after stripping their bodies, and that the
+  implementation does not provide itself.
 - `renameApart taken parameters` renames each parameter whose name is in
   `taken` to the first name ending in primes that is not taken, and answers the
   renamed list beside the replacements that perform the renaming.
@@ -37,7 +37,7 @@ selfArguments :: [Text] -> Impl -> [Type]
 
 ## Invariants
 
-- An inherited default is formed in the trait's terms and then substituted:
+- An inherited default takes its trait member's declared scheme and is then substituted:
   `Self` becomes the target, each trait parameter the implementation's argument,
   and each of the method's own parameters that shares a name with one of the
   implementation's becomes its renamed form. The substitution is simultaneous.
