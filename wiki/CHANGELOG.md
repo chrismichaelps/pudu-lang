@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Qualified variants are typed as their sum (#536)
+
+- [[Type Check]] and [[Type Check Install]] bind each variant under its type's canonical key, and [[Type Check Rule]] looks a qualified member up there, so `Shape.Circle(3)` and `Shape.Dot` are `Shape` rather than an error type accepted anywhere.
+
 ## 2026-10-20 — Total float order for keys and aggregates (#522)
 
 - NaN now equals NaN and sorts after every number in `compareValues`. A NaN tuple member no longer makes a tuple both less and greater than another, and a map keyed by such tuples keeps one entry per key. Scalar float operators keep their IEEE answers. [[Eval Float Order Tests]]; see [[architecture/SEMANTICS]].
