@@ -184,7 +184,12 @@ namespaceMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Check
 namespaceMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
-    found <- lookupName (owner <> "." <> member)
+    written <- lookupName (owner <> "." <> member)
+    -- A variant is bound under its type's canonical key; the qualifier is
+    -- only how this module spells that type.
+    found <- case (written, Map.lookup owner (declaredNames declared)) of
+      (Nothing, Just identity) -> lookupName (nominalKey identity <> "." <> member)
+      _ -> pure written
     case found of
       Just scheme -> Just <$> instantiate spanValue scheme
       Nothing -> do
