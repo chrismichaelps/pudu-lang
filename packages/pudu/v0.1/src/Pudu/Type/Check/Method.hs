@@ -139,8 +139,13 @@ declareTraitMember declared owner traitParams bounds (Located _ method) = do
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
     type finds them, and so one method may call another. -}
-declareMethods :: DeclaredTypes -> Map.Map NominalId Trait -> Impl -> Checker ()
-declareMethods = declareMethodsWith Nothing
+declareMethods
+  :: DeclaredTypes
+  -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
+  -> Impl
+  -> Checker ()
+declareMethods = declareMethodsWith False
 
 declareInterfaceMethods
   :: DeclaredTypes
@@ -148,16 +153,19 @@ declareInterfaceMethods
   -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareInterfaceMethods declared traits defaults =
-  declareMethodsWith (Just defaults) declared traits
+declareInterfaceMethods = declareMethodsWith True
 
+{-| `traits` holds every trait an implementation here may name, its own module's
+    and the ones it imports; `defaults` names the imported members that carry a
+    body the interface stripped. -}
 declareMethodsWith
-  :: Maybe (Set (NominalId, Text))
+  :: Bool
   -> DeclaredTypes
   -> Map.Map NominalId Trait
+  -> Set (NominalId, Text)
   -> Impl
   -> Checker ()
-declareMethodsWith defaults declared traits value = do
+declareMethodsWith rejectCollision declared traits defaults value = do
   let trait = formBoundType (implAliases declared value) (implRigid value) (implTrait value)
   case trait of
     NominalType owner arguments -> recordProviderSelection (locatedSpan (implTrait value))
@@ -168,7 +176,7 @@ declareMethodsWith defaults declared traits value = do
     Nothing -> pure ()
     Just owner -> do
       recordImplementationOwner (locatedSpan (implTarget value)) target
-      mapM_ (declareMethod (defaults /= Nothing) declared value owner Nothing) (implFunctions value)
+      mapM_ (declareMethod rejectCollision declared value owner Nothing) (implFunctions value)
       case implTraitName declared value >>= \identity -> fmap ((,) identity) (Map.lookup identity traits) of
         Nothing -> pure ()
         Just (identity, declaredTrait) -> do
@@ -180,7 +188,7 @@ declareMethodsWith defaults declared traits value = do
                 ("Self", NominalType owner (selfArguments (map fst (implRigid value)) value))
                   : zip (map fst (traitRigid declaredTrait)) arguments
           mapM_
-            (declareMethod (defaults /= Nothing) declared value owner (Just (declaredTrait, replacements)))
+            (declareMethod rejectCollision declared value owner (Just (identity, replacements)))
             (inheritedMembers defaults identity declaredTrait value)
 
 implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
@@ -190,41 +198,42 @@ implTraitName declared value = case locatedValue (implTrait value) of
 
 {-| Declare one method of an implementation's target.
 
-    An inherited default is written in the trait's terms. It is formed as the
-    trait member is, with `Self` and the trait's parameters rigid, and each of
-    those is then replaced by what this implementation gives it, all at once:
-    `twice` from `trait Holds[T]` is `(Int, Int)` on an `impl Holds[Int]`. -}
+    An inherited default takes the scheme its trait member was given, formed
+    once in the trait module's own names with `Self` and the trait's parameters
+    rigid, and replaces each of those by what this implementation gives it, all
+    at once: `twice` from `trait Holds[T]` is `(Int, Int)` on an
+    `impl Holds[Int]`. An imported trait's members are formed where it was
+    declared, so its defaults type the same here as there. -}
 declareMethod
   :: Bool
   -> DeclaredTypes
   -> Impl
   -> NominalId
-  -> Maybe (Trait, [(Text, Type)])
+  -> Maybe (NominalId, [(Text, Type)])
   -> Located Function
   -> Checker ()
 declareMethod rejectCollision declared value owner inherited (Located methodSpan method) = do
   let aliases = implAliases declared value
-  (rigid, bounds, inputs, result) <- case inherited of
+  (rigid, bounds, signature) <- case inherited of
     Nothing -> do
       let rigid = implRigid value <> functionRigid method
       inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
       result <- formOptionalType aliases rigid (functionReturn method)
-      pure (rigid, declareBoundsWith aliases (implRigid value) method, inputs, result)
+      pure (rigid, declareBoundsWith aliases (implRigid value) method, FunctionTypeValue (functionAsync method) inputs result)
     Just (trait, replacements) -> do
-      let written = ("Self", 0) : traitRigid trait <> functionRigid method
+      declaredScheme <- lookupName (methodKey trait (locatedValue (functionName method)))
+      let ownNames = map fst (functionRigid method)
           (own, renamed) = renameApart (map fst (implRigid value)) (functionRigid method)
           replace = substituteRigid (replacements <> renamed)
-          ownBounds =
-            [ (fromMaybe name (lookup name (zip (map fst (functionRigid method)) (map fst own))), map replace held)
-            | (name, held) <- declareBoundsWith declared (("Self", 0) : traitRigid trait) method
-            , name `elem` map fst (functionRigid method)
-            ]
-      inputs <- mapM (declaredParameterType declared written) (functionParameters method)
-      result <- formOptionalType declared written (functionReturn method)
-      pure (implRigid value <> own, ownBounds, map replace inputs, replace result)
-  let scheme =
-        polytype rigid (implBounds declared value <> bounds)
-          (FunctionTypeValue (functionAsync method) inputs result)
+          renamedTo name = fromMaybe name (lookup name (zip ownNames (map fst own)))
+      pure $ case declaredScheme of
+        Just declaredAs ->
+          ( implRigid value <> own
+          , [(renamedTo name, map replace held) | (name, held) <- schemeBounds declaredAs, name `elem` ownNames]
+          , replace (schemeType declaredAs)
+          )
+        Nothing -> (implRigid value, [], ErrorType)
+  let scheme = polytype rigid (implBounds declared value <> bounds) signature
   bindMethod (if rejectCollision then InterfaceMethod else SourceMethod)
     MethodBinding
       { bindingOwner = owner

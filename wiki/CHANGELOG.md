@@ -6,6 +6,12 @@ tags: [changelog]
 # Changelog
 
 ## 2026-11-04 — Native members through a type parameter (#819)
+## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
+
+- [[Type Check Method]] gives an inherited default its trait member's declared scheme, substituted at the implementation, so an imported default keeps the trait module's names; [[Type Check]] hands local implementations every imported trait and declares trait members first.
+- [[Eval Install]] publishes each module's trait defaults under `#Trait.member`, scoped to that module, and an importing implementation inherits those closures.
+
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
 
 - [[Compiler Lower Method]] resolves a bound type parameter in qualifier position, so `T.made()` in a generic copy calls the bound type's member natively instead of refusing `T` as a value.
 
