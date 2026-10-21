@@ -1,0 +1,217 @@
+module Std.Memory
+
+/// A stretch handed out by an allocator: `size` units starting at `offset`.
+///
+/// The units and the storage are the caller's. An allocator here keeps account
+/// of which offsets are in use; what lives at them is in an array or a
+/// `Std.Buffer` the caller owns.
+export type Block = { offset: Int, size: Int }
+
+/// An allocator of offsets.
+///
+/// `allocate` answers a block of at least `size` units whose offset is a
+/// multiple of `alignment`, or `None` when it cannot. `release` gives a block
+/// back and answers whether the allocator took it.
+///
+/// ## Examples
+///
+/// ```
+/// fn reserve[R: Memory.Resource](from: &mut R) -> Option[Memory.Block] {
+///   from.allocate(16, 8)
+/// }
+/// ```
+export trait Resource {
+  fn allocate(self: &mut Self, size: Int, alignment: Int) -> Option[Block]
+  fn release(self: &mut Self, block: Block) -> Bool
+}
+
+/// `value` rounded up to the next multiple of `alignment`, or `None` unless
+/// `value` is at least nought and `alignment` is a power of two.
+///
+/// ## Examples
+///
+/// ```
+/// Memory.alignUp(13, 8)  // Some(16)
+/// Memory.alignUp(16, 8)  // Some(16)
+/// Memory.alignUp(13, 6)  // None
+/// ```
+export fn alignUp(value: Int, alignment: Int) -> Option[Int] {
+  if value < 0 || alignment < 1 || (alignment & (alignment - 1)) != 0 {
+    None
+  } else {
+    Some((value + alignment - 1) & ~(alignment - 1))
+  }
+}
+
+/// An allocator that only moves forward.
+///
+/// Each allocation starts where the last one ended, after alignment padding.
+/// Nothing is given back one block at a time; `reset` gives everything back at
+/// once. This is the cheapest allocator there is: one comparison and one
+/// addition per block, and no record of what was handed out.
+///
+/// ## Examples
+///
+/// ```
+/// var scratch = Memory.arena(64)
+/// scratch.allocate(10, 1)  // Some(Block{offset: 0, size: 10})
+/// scratch.allocate(4, 8)   // Some(Block{offset: 16, size: 4})
+/// scratch.used()           // 20
+/// ```
+export type Arena = { capacity: Int, mut used: Int }
+
+/// An arena over `capacity` units. A negative capacity is nought.
+///
+/// ## Examples
+///
+/// ```
+/// Memory.arena(1024).remaining()  // 1024
+/// ```
+export fn arena(capacity: Int) -> Arena {
+  Arena{capacity: if capacity < 0 { 0 } else { capacity }, used: 0}
+}
+
+/// What an arena has handed out and has left.
+export trait Monotonic {
+  /// The units handed out so far, alignment padding included.
+  fn used(self: &Self) -> Int
+
+  /// The units still available before alignment.
+  fn remaining(self: &Self) -> Int
+
+  /// Give back every block at once.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// var scratch = Memory.arena(8)
+  /// scratch.allocate(8, 1)
+  /// scratch.reset()
+  /// scratch.remaining()  // 8
+  /// ```
+  fn reset(self: &mut Self) -> ()
+}
+
+impl Resource for Arena {
+  fn allocate(self: &mut Self, size: Int, alignment: Int) -> Option[Block] {
+    if size < 0 {
+      return None
+    }
+    let start = alignUp(self.used, alignment) ?
+    if start > self.capacity - size {
+      None
+    } else {
+      self.used = start + size
+      Some(Block{offset: start, size: size})
+    }
+  }
+
+  /// An arena gives blocks back only all at once, through `reset`.
+  fn release(self: &mut Self, block: Block) -> Bool { false }
+}
+
+impl Monotonic for Arena {
+  fn used(self: &Self) -> Int { self.used }
+
+  fn remaining(self: &Self) -> Int { self.capacity - self.used }
+
+  fn reset(self: &mut Self) -> () { self.used = 0 }
+}
+
+/// An allocator of equal blocks that takes them back one at a time.
+///
+/// Block `k` starts at offset `k * blockSize`. A released block is reused before
+/// a block that was never handed out, so the blocks in use stay packed toward
+/// the start. Both allocating and releasing are a constant amount of work.
+///
+/// Releasing a block twice, or one the pool never handed out, answers `false`
+/// and changes nothing.
+///
+/// ## Examples
+///
+/// ```
+/// var slots = Memory.pool(32, 4)
+/// let first = slots.allocate(32, 8) ?
+/// slots.release(first)  // true
+/// slots.release(first)  // false
+/// ```
+export type Pool = {
+  blockSize: Int,
+  blocks: Int,
+  mut fresh: Int,
+  mut free: Array[Int],
+  mut held: Array[Bool],
+}
+
+/// A pool of `blocks` blocks of `blockSize` units each. Counts below nought are
+/// nought.
+///
+/// ## Examples
+///
+/// ```
+/// Memory.pool(64, 10).available()  // 10
+/// ```
+export fn pool(blockSize: Int, blocks: Int) -> Pool {
+  let count = if blocks < 0 { 0 } else { blocks }
+  var held = []
+  while held.length() < count { held = held.push(false) }
+  Pool {
+    blockSize: if blockSize < 0 { 0 } else { blockSize },
+    blocks: count,
+    fresh: 0,
+    free: [],
+    held: held,
+  }
+}
+
+/// What a pool holds.
+export trait Pooled {
+  /// How many blocks can still be handed out.
+  fn available(self: &Self) -> Int
+
+  /// How many blocks are handed out now.
+  fn inUse(self: &Self) -> Int
+}
+
+impl Resource for Pool {
+  /// A block of the pool's size, when `size` fits in one and `alignment`
+  /// divides the block size.
+  fn allocate(self: &mut Self, size: Int, alignment: Int) -> Option[Block] {
+    let aligned = alignUp(self.blockSize, alignment) ?
+    if size < 0 || size > self.blockSize || aligned != self.blockSize {
+      return None
+    }
+    let index = if self.free.isEmpty() {
+      if self.fresh >= self.blocks {
+        return None
+      }
+      self.fresh = self.fresh + 1
+      self.fresh - 1
+    } else {
+      let last = self.free[self.free.length() - 1]
+      self.free = self.free.pop()
+      last
+    }
+    self.held[index] = true
+    Some(Block{offset: index * self.blockSize, size: self.blockSize})
+  }
+
+  fn release(self: &mut Self, block: Block) -> Bool {
+    if self.blockSize == 0 || block.size != self.blockSize || block.offset % self.blockSize != 0 {
+      return false
+    }
+    let index = block.offset / self.blockSize
+    if index < 0 || index >= self.fresh || !self.held[index] {
+      return false
+    }
+    self.held[index] = false
+    self.free = self.free.push(index)
+    true
+  }
+}
+
+impl Pooled for Pool {
+  fn available(self: &Self) -> Int { self.blocks - self.fresh + self.free.length() }
+
+  fn inUse(self: &Self) -> Int { self.fresh - self.free.length() }
+}

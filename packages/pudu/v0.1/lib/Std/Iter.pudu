@@ -17,6 +17,20 @@ import Std.Order {Ord}
 /// further ceremony, and a type that is not says so at the `for` rather than
 /// part way through one.
 ///
+/// Implementing `begin` and `advance` is all a type needs: the adapters
+/// (`map`, `filter`, `take`, ...) and terminals (`toArray`, `fold`, `find`, ...)
+/// are default members, so a pipeline reads in the order it runs,
+/// `source.map(f).filter(g).take(3).toArray()`. A stage takes any function: a
+/// named one, an `fn` literal, or a bar literal.
+///
+/// ```
+/// fn square(n: Int) -> Int { n * n }
+///
+/// Iter.range(1, 4).map(square).toArray()                       // [1, 4, 9]
+/// Iter.range(1, 4).map(fn(n: Int) -> Int => n * n).toArray()   // [1, 4, 9]
+/// Iter.range(1, 4).map(|n| n * n).toArray()                    // [1, 4, 9]
+/// ```
+///
 /// ## Examples
 ///
 /// ```
@@ -35,6 +49,239 @@ import Std.Order {Ord}
 export trait Sequence[S, T] {
   fn begin(self: &Self) -> S
   fn advance(self: &Self, state: S) -> Option[(S, T)]
+
+  /// Transform each item as it is produced.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(1, 4).map(|n| n * n).toArray()  // [1, 4, 9]
+  /// ```
+  fn map[B](self: &Self, transform: fn(T) -> B) -> Mapped[Self, T, B] {
+    Mapped{source: *self, transform: transform}
+  }
+
+  /// Keep only the items `keep` accepts.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 10).filter(|n| n % 3 == 0).toArray()  // [0, 3, 6, 9]
+  /// ```
+  fn filter(self: &Self, keep: fn(T) -> Bool) -> Filtered[Self, T] {
+    Filtered{source: *self, keep: keep}
+  }
+
+  /// At most the first `limit` items.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 100).take(3).toArray()  // [0, 1, 2]
+  /// ```
+  fn take(self: &Self, limit: Int) -> Taken[Self, T] {
+    Taken{source: *self, limit: limit}
+  }
+
+  /// Every item after the first `skip`.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 5).drop(3).toArray()  // [3, 4]
+  /// ```
+  fn drop(self: &Self, skip: Int) -> Dropped[Self, T] {
+    Dropped{source: *self, skip: skip}
+  }
+
+  /// The leading items `keep` accepts, ending at the first it refuses.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.items([1, 2, 7, 3]).takeWhile(|n| n < 5).toArray()  // [1, 2]
+  /// ```
+  fn takeWhile(self: &Self, keep: fn(T) -> Bool) -> TakenWhile[Self, T] {
+    TakenWhile{source: *self, keep: keep}
+  }
+
+  /// Every item from the first one `skip` refuses onward.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.items([1, 2, 7, 3]).dropWhile(|n| n < 5).toArray()  // [7, 3]
+  /// ```
+  fn dropWhile(self: &Self, skip: fn(T) -> Bool) -> DroppedWhile[Self, T] {
+    DroppedWhile{source: *self, skip: skip}
+  }
+
+  /// The first item and then every `step`th after it. A `step` below 1 is 1.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 10).stride(4).toArray()  // [0, 4, 8]
+  /// ```
+  fn stride(self: &Self, step: Int) -> Strided[Self, T] {
+    Strided{source: *self, step: step}
+  }
+
+  /// This sequence's items, then `next`'s.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 2).chain(Iter.items([7, 8])).toArray()  // [0, 1, 7, 8]
+  /// ```
+  fn chain[Q](self: &Self, next: Q) -> Chained[Self, Q, T] {
+    Chained{first: *self, second: next}
+  }
+
+  /// Each item paired with its position, counting from nought.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.items(["a", "b"]).enumerate().toArray()  // [(0, "a"), (1, "b")]
+  /// ```
+  fn enumerate(self: &Self) -> Enumerated[Self, T] {
+    Enumerated{source: *self}
+  }
+
+  /// Items of this sequence and `other` in pairs, ending with the shorter.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 9).zip(Iter.items(["a", "b"])).toArray()  // [(0, "a"), (1, "b")]
+  /// ```
+  fn zip[Q, B](self: &Self, other: Q) -> Zipped[Self, Q, T, B] {
+    Zipped{left: *self, right: other}
+  }
+
+  /// Every item, in order, in an array. Do not call it on a sequence that never
+  /// ends.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(1, 4).toArray()  // [1, 2, 3]
+  /// ```
+  fn toArray(self: &Self) -> Array[T] {
+    var out = []
+    for item in *self { out = out.push(item) }
+    out
+  }
+
+  /// How many items the sequence yields. It is walked to its end; nothing is
+  /// kept.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 10).filter(|n| n % 3 == 0).count()  // 4
+  /// ```
+  fn count(self: &Self) -> Int {
+    var total = 0
+    for _ in *self { total = total + 1 }
+    total
+  }
+
+  /// Whether the sequence yields nothing. At most one item is produced.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(3, 3).isEmpty()  // true
+  /// ```
+  fn isEmpty(self: &Self) -> Bool {
+    match self.advance(self.begin()) {
+      case Some(_) => false
+      case None => true
+    }
+  }
+
+  /// Combine the items left to right, starting from `initial`.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(1, 5).fold(0, |total, n| total + n)  // 10
+  /// ```
+  fn fold[A](self: &Self, initial: A, step: fn(A, T) -> A) -> A {
+    var held = initial
+    for item in *self { held = step(held, item) }
+    held
+  }
+
+  /// Whether some item satisfies `test`. Stops at the first that does.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 5).any(|n| n > 3)  // true
+  /// ```
+  fn any(self: &Self, test: fn(T) -> Bool) -> Bool {
+    match self.find(test) {
+      case Some(_) => true
+      case None => false
+    }
+  }
+
+  /// Whether every item satisfies `test`. Stops at the first that does not; an
+  /// empty sequence answers `true`.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 5).all(|n| n < 5)  // true
+  /// ```
+  fn all(self: &Self, test: fn(T) -> Bool) -> Bool {
+    for item in *self {
+      if !test(item) { return false }
+    }
+    true
+  }
+
+  /// The first item satisfying `test`. Stops there.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(0, 10).find(|n| n * n > 20)  // Some(5)
+  /// ```
+  fn find(self: &Self, test: fn(T) -> Bool) -> Option[T] {
+    for item in *self {
+      if test(item) { return Some(item) }
+    }
+    None
+  }
+
+  /// The first item. At most one item is produced.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(4, 9).first()  // Some(4)
+  /// ```
+  fn first(self: &Self) -> Option[T] {
+    let pair = self.advance(self.begin()) ?
+    Some(pair[1])
+  }
+
+  /// The last item. The sequence is walked to its end.
+  ///
+  /// ## Examples
+  ///
+  /// ```
+  /// Iter.range(4, 9).last()  // Some(8)
+  /// ```
+  fn last(self: &Self) -> Option[T] {
+    var held = None
+    for item in *self { held = Some(item) }
+    held
+  }
 }
 
 /// A half-open range of whole numbers, from `first` up to but not including
@@ -217,20 +464,7 @@ impl [T] Sequence[Int, T] for Empty[T] {
 /// ```
 /// Iter.toArray(&Iter.range(1, 4))  // [1, 2, 3]
 /// ```
-export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
-  var out = []
-  var state = Sequence.begin(source)
-  loop {
-    match Sequence.advance(source, state) {
-      case Some(pair) => {
-        state = pair[0]
-        out = out.push(pair[1])
-      }
-      case None => { break }
-    }
-  }
-  out
-}
+export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] { source.toArray() }
 
 /// How many items a sequence yields.
 ///
@@ -241,20 +475,7 @@ export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
 /// ```
 /// Iter.count(&Iter.filter(Iter.range(0, 10), fn(n: Int) -> Bool => n % 3 == 0))  // 4
 /// ```
-export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
-  var total = 0
-  var state = Sequence.begin(source)
-  loop {
-    match Sequence.advance(source, state) {
-      case Some(pair) => {
-        state = pair[0]
-        total = total + 1
-      }
-      case None => { break }
-    }
-  }
-  total
-}
+export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int { source.count() }
 
 /// Whether a sequence yields nothing.
 ///
@@ -266,12 +487,7 @@ export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
 /// Iter.isEmpty(&Iter.range(3, 3))  // true
 /// Iter.isEmpty(&Iter.range(0, 9))  // false
 /// ```
-export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
-  match Sequence.advance(source, Sequence.begin(source)) {
-    case Some(_) => false
-    case None => true
-  }
-}
+export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool { source.isEmpty() }
 
 /// The sum of a sequence's items, or `None` when it has no first value.
 ///
@@ -327,12 +543,11 @@ export fn map[Q, A, B](source: Q, transform: fn(A) -> B) -> Mapped[Q, A, B] {
 }
 
 impl [S, A, B, Q: Sequence[S, A]] Sequence[S, B] for Mapped[Q, A, B] {
-  fn begin(self: &Self) -> S { Sequence.begin(&self.source) }
+  fn begin(self: &Self) -> S { self.source.begin() }
   fn advance(self: &Self, state: S) -> Option[(S, B)] {
-    let source = &self.source
     let transform = self.transform
-    let pair = Sequence.advance(source, state) ?
-    Some((pair[0], transform(pair[1])))
+    let (next, item) = self.source.advance(state) ?
+    Some((next, transform(item)))
   }
 }
 
@@ -360,20 +575,17 @@ export fn filter[Q, T](source: Q, keep: fn(T) -> Bool) -> Filtered[Q, T] {
 }
 
 impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Filtered[Q, T] {
-  fn begin(self: &Self) -> S { Sequence.begin(&self.source) }
+  fn begin(self: &Self) -> S { self.source.begin() }
   /// Walks the source until an item is accepted, so a rejected item costs one
   /// step and no allocation.
   fn advance(self: &Self, state: S) -> Option[(S, T)] {
-    let source = &self.source
     let keep = self.keep
     var current = state
     loop {
-      match Sequence.advance(source, current) {
-        case Some(pair) => {
-          current = pair[0]
-          if keep(pair[1]) {
-            break Some((current, pair[1]))
-          }
+      match self.source.advance(current) {
+        case Some((next, item)) => {
+          if keep(item) { break Some((next, item)) }
+          current = next
         }
         case None => { break None }
       }
@@ -407,13 +619,14 @@ export fn take[Q, T](source: Q, limit: Int) -> Taken[Q, T] {
 }
 
 impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), T] for Taken[Q, T] {
-  fn begin(self: &Self) -> (S, Int) { (Sequence.begin(&self.source), 0) }
+  fn begin(self: &Self) -> (S, Int) { (self.source.begin(), 0) }
   fn advance(self: &Self, state: (S, Int)) -> Option[((S, Int), T)] {
-    if state[1] >= self.limit {
+    let (at, taken) = state
+    if taken >= self.limit {
       None
     } else {
-      let pair = Sequence.advance(&self.source, state[0]) ?
-      Some(((pair[0], state[1] + 1), pair[1]))
+      let (next, item) = self.source.advance(at) ?
+      Some(((next, taken + 1), item))
     }
   }
 }
@@ -445,26 +658,20 @@ impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Dropped[Q, T] {
   /// The skipping happens once, when the walk begins, rather than on every
   /// item.
   fn begin(self: &Self) -> S {
-    let source = &self.source
-    let limit = self.skip
-    var current = Sequence.begin(source)
+    var current = self.source.begin()
     var skipped = 0
-    loop {
-      if skipped >= limit {
-        break current
-      }
-      match Sequence.advance(source, current) {
-        case Some(pair) => {
-          current = pair[0]
+    while skipped < self.skip {
+      match self.source.advance(current) {
+        case Some((next, _)) => {
+          current = next
           skipped = skipped + 1
         }
-        case None => { break current }
+        case None => { return current }
       }
     }
+    current
   }
-  fn advance(self: &Self, state: S) -> Option[(S, T)] {
-    Sequence.advance(&self.source, state)
-  }
+  fn advance(self: &Self, state: S) -> Option[(S, T)] { self.source.advance(state) }
 }
 
 /// A sequence pairing two others item by item.
@@ -490,16 +697,137 @@ export fn zip[P, Q, A, B](left: P, right: Q) -> Zipped[P, Q, A, B] {
 }
 
 impl [S, U, A, B, P: Sequence[S, A], Q: Sequence[U, B]] Sequence[(S, U), (A, B)] for Zipped[P, Q, A, B] {
-  fn begin(self: &Self) -> (S, U) {
-    let left = &self.left
-    let right = &self.right
-    (Sequence.begin(left), Sequence.begin(right))
-  }
+  fn begin(self: &Self) -> (S, U) { (self.left.begin(), self.right.begin()) }
   fn advance(self: &Self, state: (S, U)) -> Option[((S, U), (A, B))] {
-    let left = &self.left
-    let right = &self.right
-    let leftPair = Sequence.advance(left, state[0]) ?
-    let rightPair = Sequence.advance(right, state[1]) ?
-    Some(((leftPair[0], rightPair[0]), (leftPair[1], rightPair[1])))
+    let (leftAt, rightAt) = state
+    let (leftNext, leftItem) = self.left.advance(leftAt) ?
+    let (rightNext, rightItem) = self.right.advance(rightAt) ?
+    Some(((leftNext, rightNext), (leftItem, rightItem)))
+  }
+}
+
+/// The leading items of a sequence that a test accepts.
+///
+/// The walk ends at the first refused item; nothing after it is produced.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.items([2, 4, 5, 6]).takeWhile(|n| n % 2 == 0).toArray()  // [2, 4]
+/// ```
+export type TakenWhile[Q, T] = { source: Q, keep: fn(T) -> Bool }
+
+impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for TakenWhile[Q, T] {
+  fn begin(self: &Self) -> S { self.source.begin() }
+  fn advance(self: &Self, state: S) -> Option[(S, T)] {
+    let keep = self.keep
+    let pair = self.source.advance(state) ?
+    if keep(pair[1]) { Some(pair) } else { None }
+  }
+}
+
+/// A sequence with its leading items that a test accepts left out.
+///
+/// The state carries whether items are still being dropped, so each source item
+/// is produced once even when producing it has effects.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.items([2, 4, 5, 6]).dropWhile(|n| n % 2 == 0).toArray()  // [5, 6]
+/// ```
+export type DroppedWhile[Q, T] = { source: Q, skip: fn(T) -> Bool }
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(S, Bool), T] for DroppedWhile[Q, T] {
+  fn begin(self: &Self) -> (S, Bool) { (self.source.begin(), true) }
+  fn advance(self: &Self, state: (S, Bool)) -> Option[((S, Bool), T)] {
+    let skip = self.skip
+    var current = state[0]
+    var dropping = state[1]
+    loop {
+      match self.source.advance(current) {
+        case Some((next, item)) => {
+          current = next
+          if !dropping || !skip(item) { break Some(((current, false), item)) }
+        }
+        case None => { break None }
+      }
+    }
+  }
+}
+
+/// The first item of a sequence and every `step`th item after it.
+///
+/// The state is `None` once the source has ended, so the source is never asked
+/// for an item past its end.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.range(1, 10).stride(3).toArray()  // [1, 4, 7]
+/// ```
+export type Strided[Q, T] = { source: Q, step: Int }
+
+impl [S, T, Q: Sequence[S, T]] Sequence[Option[S], T] for Strided[Q, T] {
+  fn begin(self: &Self) -> Option[S] { Some(self.source.begin()) }
+  fn advance(self: &Self, state: Option[S]) -> Option[(Option[S], T)] {
+    let start = state ?
+    let pair = self.source.advance(start) ?
+    var at = pair[0]
+    var ended = false
+    var skipped = 1
+    while !ended && skipped < self.step {
+      match self.source.advance(at) {
+        case Some((next, _)) => { at = next }
+        case None => { ended = true }
+      }
+      skipped = skipped + 1
+    }
+    Some((if ended { None } else { Some(at) }, pair[1]))
+  }
+}
+
+/// Where a chained walk is: in the first sequence or in the second.
+export type ChainState[S, U] = InFirst(S) | InSecond(U)
+
+/// The items of one sequence followed by those of another of the same item type.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.items(["a"]).chain(Iter.repeat("b", 2)).toArray()  // ["a", "b", "b"]
+/// ```
+export type Chained[P, Q, T] = { first: P, second: Q }
+
+impl [S, U, T, P: Sequence[S, T], Q: Sequence[U, T]] Sequence[ChainState[S, U], T] for Chained[P, Q, T] {
+  fn begin(self: &Self) -> ChainState[S, U] { InFirst(self.first.begin()) }
+  fn advance(self: &Self, state: ChainState[S, U]) -> Option[(ChainState[S, U], T)] {
+    match state {
+      case InFirst(at) => match self.first.advance(at) {
+        case Some((next, item)) => Some((InFirst(next), item))
+        case None => self.advance(InSecond(self.second.begin()))
+      }
+      case InSecond(at) => {
+        let pair = self.second.advance(at) ?
+        Some((InSecond(pair[0]), pair[1]))
+      }
+    }
+  }
+}
+
+/// A sequence's items, each paired with its position counting from nought.
+///
+/// ## Examples
+///
+/// ```
+/// Iter.range(5, 7).enumerate().toArray()  // [(0, 5), (1, 6)]
+/// ```
+export type Enumerated[Q, T] = { source: Q }
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), (Int, T)] for Enumerated[Q, T] {
+  fn begin(self: &Self) -> (S, Int) { (self.source.begin(), 0) }
+  fn advance(self: &Self, state: (S, Int)) -> Option[((S, Int), (Int, T))] {
+    let pair = self.source.advance(state[0]) ?
+    Some(((pair[0], state[1] + 1), (state[1], pair[1])))
   }
 }

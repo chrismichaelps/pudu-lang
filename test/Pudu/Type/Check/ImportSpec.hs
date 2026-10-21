@@ -18,6 +18,8 @@ importTypeProperties =
   [ ("imported functions retain their ABI types", testImportedFunction)
   , ("trait selection controls imported methods", testTraitSelection)
   , ("imported defaults survive body stripping", testImportedDefault)
+  , ("an imported generic trait's default takes the implementation's arguments", testImportedGenericDefault)
+  , ("a local implementation inherits an imported trait's defaults", testLocalImplImportedDefault)
   , ("imported and local methods diagnose ambiguity", testMixedAmbiguity)
   , ("same-spelling nominal mismatches name both modules", testQualifiedMismatch)
   ]
@@ -43,6 +45,51 @@ testTraitSelection = do
 testImportedDefault :: IO Property
 testImportedDefault =
   (=== []) <$> checked [defaultLibrary] (consumer "User, Show" [runShow])
+
+testImportedGenericDefault :: IO Property
+testImportedGenericDefault = do
+  accepted <- checked [library] (consumer "Box, Holds" ["fn run(b: Box) -> (Int, Int) { b.twice() }"])
+  rejected <- checked [library] (consumer "Box, Holds" ["fn run(b: Box) -> (Str, Str) { b.twice() }"])
+  pure $ conjoin
+    [ counterexample "the default is typed at the implementation's argument" (accepted === [])
+    , counterexample "and is still checked against it, once per member"
+        (rejected === ["E3001", "E3001"])
+    ]
+ where
+  library = Text.unlines
+    [ "module Library"
+    , "export type Box = { v: Int }"
+    , "export trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "}"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+testLocalImplImportedDefault :: IO Property
+testLocalImplImportedDefault = do
+  accepted <- checked [library] (consumer "Holds, Wrapped" (implementation <> ["fn run(b: Box) -> (Int, Int) { b.twice() }"]))
+  wrapped <- checked [library] (consumer "Holds" (implementation <> ["fn run(b: Box) -> Int { b.wrapped().held }"]))
+  rejected <- checked [library] (consumer "Holds" (implementation <> ["fn run(b: Box) -> Str { b.wrapped().held }"]))
+  pure $ conjoin
+    [ counterexample "the imported default is a method of the local type" (accepted === [])
+    , counterexample "its signature keeps the trait module's names" (wrapped === [])
+    , counterexample "and is still checked at the implementation's argument" (rejected === ["E3001"])
+    ]
+ where
+  library = Text.unlines
+    [ "module Library"
+    , "export type Wrapped[T] = { held: T }"
+    , "export trait Holds[T] {"
+    , "  fn get(self: &Self) -> T"
+    , "  fn twice(self: &Self) -> (T, T) { (self.get(), self.get()) }"
+    , "  fn wrapped(self: &Self) -> Wrapped[T] { Wrapped{held: self.get()} }"
+    , "}"
+    ]
+  implementation =
+    [ "type Box = { v: Int }"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
 
 testMixedAmbiguity :: IO Property
 testMixedAmbiguity = do

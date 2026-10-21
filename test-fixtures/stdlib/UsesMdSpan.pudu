@@ -1,0 +1,117 @@
+module UsesMdSpan
+
+import Std.Iter {Sequence}
+import Std.MdSpan {All, At, Every, Grid, Within}
+import Std.MdSpan as MdSpan
+
+fn layouts() -> Option[Bool] {
+  let rows: MdSpan.MdSpan[Int] = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  let columns = MdSpan.columnMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  Some(
+    rows.toArray() == [1, 2, 3, 4, 5, 6]
+      && columns.toArray() == [1, 3, 5, 2, 4, 6]
+      && rows.rank() == 2
+      && rows.size() == 6
+      && rows.extent(1) == Some(3)
+      && rows.extent(2) == None
+      && rows.extent(-1) == None,
+  )
+}
+
+fn reading() -> Option[Bool] {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  let cube = MdSpan.rowMajor([1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2]) ?
+  Some(
+    grid.get2(1, 2) == Some(6)
+      && grid.get([0, 1]) == Some(2)
+      && grid.get([2, 0]) == None
+      && grid.get([0, -1]) == None
+      && grid.get([1]) == None
+      && grid.get2(0, 3) == None
+      && grid.get3(0, 0, 0) == None
+      && cube.get3(1, 0, 1) == Some(6)
+      && cube.get2(0, 0) == None,
+  )
+}
+
+fn slicing() -> Option[Bool] {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  let rowSlices: Array[MdSpan.Slice] = [At(1), All]
+  let row = grid.slice(rowSlices) ?
+  let column = grid.slice([All, At(1)]) ?
+  let even = grid.slice([All, Every{first: 0, last: 3, step: 2}]) ?
+  let corner = grid.slice([Within(1, 2), Within(1, 3)]) ?
+  let nested = (grid.slice([All, Within(1, 3)]) ?).slice([At(0), All]) ?
+  Some(
+    row.toArray() == [4, 5, 6] && row.rank() == 1
+      && column.toArray() == [2, 5]
+      && even.toArray() == [1, 3, 4, 6]
+      && corner.toArray() == [5, 6]
+      && nested.toArray() == [2, 3]
+      && grid.slice([All, Every{first: 1, last: 3, step: 5}]) != None,
+  )
+}
+
+/// Fixing every dimension leaves a view of one item and no dimensions.
+fn rankZero() -> Option[Bool] {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  let point = grid.slice([At(1), At(2)]) ?
+  Some(point.rank() == 0 && point.size() == 1 && point.toArray() == [6] && point.get([]) == Some(6))
+}
+
+fn refusals() -> Bool {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4], [2, 2])
+  MdSpan.rowMajor([1, 2, 3], [2, 2]) == None
+    && MdSpan.rowMajor([1, 2], [-1, 2]) == None
+    && MdSpan.strided([1, 2, 3], 0, [2], [2, 1]) == None
+    && MdSpan.strided([1, 2, 3], 0, [2], [-1]) == None
+    && MdSpan.strided([1, 2, 3], -1, [1], [1]) == None
+    && MdSpan.strided([1, 2, 3], 1, [2], [1]) != None
+    && MdSpan.strided([1, 2, 3], 2, [2], [1]) == None
+    && match grid {
+    case Some(view) => view.slice([At(2), All]) == None
+      && view.slice([All]) == None
+      && view.slice([All, Within(1, 3)]) == None
+      && view.slice([All, Within(2, 1)]) == None
+      && view.slice([All, Every{first: 0, last: 2, step: 0}]) == None
+    case None => false
+  }
+}
+
+/// A view with a zero extent holds nothing, wherever its array ends.
+fn empty() -> Option[Bool] {
+  let nothing = MdSpan.rowMajor([7], [0, 5]) ?
+  let none = MdSpan.rowMajor([], [3, 0]) ?
+  Some(nothing.size() == 0 && nothing.isEmpty() && nothing.toArray() == [] && none.count() == 0)
+}
+
+fn explicitStrides() -> Option[Bool] {
+  let diagonal = MdSpan.strided([1, 0, 0, 1], 0, [2], [3]) ?
+  let repeated = MdSpan.strided([9, 8], 1, [3], [0]) ?
+  Some(diagonal.toArray() == [1, 1] && repeated.toArray() == [8, 8, 8])
+}
+
+fn walking() -> Option[Bool] {
+  let grid = MdSpan.rowMajor([1, 2, 3, 4, 5, 6], [2, 3]) ?
+  var total = 0
+  for value in grid.slice([All, At(2)]) ? { total = total + value }
+  Some(total == 9 && grid.map(|n| n * 10).filter(|n| n > 20).toArray() == [30, 40, 50, 60])
+}
+
+export fn main() -> Int {
+  let checks = [
+    layouts(),
+    reading(),
+    slicing(),
+    rankZero(),
+    Some(refusals()),
+    empty(),
+    explicitStrides(),
+    walking(),
+  ]
+  var held = 0
+  for passed in checks {
+    if passed == Some(true) { held = held + 1 }
+  }
+  held
+}

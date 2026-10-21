@@ -497,8 +497,35 @@ testIterationTypes = do
     , "  for x in d { n = n + x }"
     , "  n }"
     ]
+  let boundedHeader =
+        [ "module M"
+        , "trait Sequence[S, T] {"
+        , "  fn begin(self: &Self) -> S"
+        , "  fn advance(self: &Self, state: S) -> Option[(S, T)]"
+        , "}"
+        ]
+  boundedParameter <- codes (boundedHeader <>
+    [ "fn total[S, Q: Sequence[S, Int]](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + x }"
+    , "  n }"
+    ])
+  boundedWrongUse <- codes (boundedHeader <>
+    [ "fn total[S, Q: Sequence[S, Int]](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + x.length() }"
+    , "  n }"
+    ])
+  unboundedParameter <- codes
+    [ "module M"
+    , "fn total[Q](items: &Q) -> Int { var n = 0"
+    , "  for x in *items { n = n + 1 }"
+    , "  n }"
+    ]
   pure $ conjoin
     [ counterexample "an array yields its element type" (arrayElement === [])
+    , counterexample "a parameter bounded by Sequence yields its bound's item" (boundedParameter === [])
+    , counterexample "and that item is still checked" (boundedWrongUse === ["E3005"])
+    , counterexample "a parameter with no Sequence bound is reported at the for"
+        (unboundedParameter === ["E3030"])
     , counterexample "and a wrong use of it is now caught" (wrongElement === ["E3005"])
     , counterexample "including over a literal, whose element is settled first"
         (wrongElementOfLiteral === ["E3005"])

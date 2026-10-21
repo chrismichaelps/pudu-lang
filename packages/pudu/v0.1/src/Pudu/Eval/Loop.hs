@@ -10,7 +10,6 @@ module Pudu.Eval.Loop
   , evaluateWhile
   , evaluateWhileLet
   , firstBound
-  , receiverOwner
   , receiverOwners
   , sequenceMethods
   ) where
@@ -34,7 +33,7 @@ import Pudu.Eval.Env
 import Pudu.Eval.Keyed (mapEntries, setMembers)
 import Pudu.Eval.Loop.Kernel (pureLoop)
 import Pudu.Eval.Match (matchPattern)
-import Pudu.Eval.Operator (nominalNameOf)
+import Pudu.Eval.Operator (declaredOwner, nominalNameOf)
 import Pudu.Eval.Range (rangeElements)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
@@ -330,13 +329,18 @@ data LoopTransfer
     A value names the variant it is, and an implementation is written for the
     type that declares the variant, so a `Circle` finds `impl Shaped for Round`
     only by asking what `Circle` belongs to. The variant's own name comes first
-    because a record type is its own owner and must not be looked past. -}
+    because a record type is its own owner and must not be looked past. A
+    record or variant is keyed by `declaredOwner`, a built-in value by its
+    `nominalNameOf`. -}
 receiverOwners :: Value -> Evaluator [Text]
-receiverOwners value = case receiverOwner value of
-  Nothing -> pure []
-  Just owner -> do
+receiverOwners value = case value of
+  RecordValue owner _ -> declaredOwners owner
+  VariantValue owner _ -> declaredOwners owner
+  _ -> pure (maybe [] pure (nominalNameOf value))
+ where
+  declaredOwners owner = do
     declaring <- variantOwner owner
-    pure (owner : maybe [] pure declaring)
+    pure (map declaredOwner (owner : maybe [] pure declaring))
 
 {-| The first of these names that binds something. -}
 
@@ -349,17 +353,6 @@ firstBound look names = case names of
     case found of
       Just value -> pure (Just value)
       Nothing -> firstBound look rest
-
-{-| The nominal name a runtime value carries, which is how a trait-qualified
-    call finds the implementation for the receiver it was given. -}
-
-{-| The nominal name a runtime value carries, which is how a trait-qualified
-    call finds the implementation for the receiver it was given. -}
-receiverOwner :: Value -> Maybe Text
-receiverOwner value = case value of
-  RecordValue owner _ -> Just owner
-  VariantValue owner _ -> Just owner
-  _ -> nominalNameOf value
 
 {-| Call a value as a function, whether it is a closure or an array method
     value. This is used by `map`, `filter`, and `reduce` to invoke the

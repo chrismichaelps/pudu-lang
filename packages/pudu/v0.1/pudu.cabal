@@ -273,6 +273,7 @@ library
     Pudu.Type.Check.Derive
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety
+    Pudu.Type.Check.Inherit
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Place
@@ -339,6 +340,7 @@ library
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable
     Pudu.Eval.SwissTable
+    Pudu.Eval.TextView
     Pudu.Runtime.Column
     Pudu.Runtime.Column.Index
     Pudu.Eval.Column
