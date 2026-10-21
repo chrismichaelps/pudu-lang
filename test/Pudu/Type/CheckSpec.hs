@@ -73,6 +73,7 @@ import Pudu.Type.Check.TraitSpec
   , testBounds
   , testCoherence
   , testGenericTraits
+  , testGenericTraitDefaults
   , testQualifiedMethods
   , testTraitDefaultCalls
   , testTraits
@@ -129,6 +130,7 @@ typeProperties =
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
+  , ("a generic trait's default takes the implementation's arguments", testGenericTraitDefaults)
   , ("a type declaration's parameters are instantiated at every use", testGenericTypes)
   , ("a for loop binds at the element type of what it iterates", testIterationTypes)
   , ("a dynamic type accepts any implementation and nothing else", testDynamicTypes)

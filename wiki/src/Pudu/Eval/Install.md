@@ -80,6 +80,10 @@ against it, then evaluate each constant in declaration order.
 
 ## Grill Log
 
+- **Q:** How does an implementation inherit a default from a trait its module imports? **A:** Each module publishes its traits' defaults while it loads, under `#Trait.member` keys (`#` cannot begin a written name). They are scoped to that module like every method it adds, so an inherited body resolves names where the trait was written: `Lib`'s private `shout`, not the importer's. An implementation of a trait its own module declares takes the members directly; otherwise it copies the published closures, scope and all, with its own type parameters leading (#530). Trait names are bare here, as method owners are.
+
+- **Q:** How is an implementation for a type named like a built-in type installed? **A:** When this module declares the type, the methods are bound under `declaredOwner` of its name (`@Range.toArray`); otherwise the name means the built-in type and is bound bare. An implementation written in another module for an imported type of such a name is bound bare, which is a known limit of name-keyed methods (#529).
+
 - **Q:** Look up a release by local name during teardown? **A:** No; resolve its native symbol while
   installing the foreign block. _Rationale:_ `symbol "MemFree"` proves local and native names may
   differ, and cleanup must call the same declaration explicit release calls. _Rejected:_ guessing

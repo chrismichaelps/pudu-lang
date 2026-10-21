@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-21 — Implementations inherit the defaults of traits they import (#530)
+
+- [[Type Check Method]] gives an inherited default its trait member's declared scheme, substituted at the implementation, so an imported default keeps the trait module's names; [[Type Check]] hands local implementations every imported trait and declares trait members first.
+- [[Eval Install]] publishes each module's trait defaults under `#Trait.member`, scoped to that module, and an importing implementation inherits those closures.
+
+## 2026-10-21 — Declared types named like built-ins keep their methods apart (#529)
+
+- [[Eval Operator Access]] keys a declared `Array`, `Range`, `Str` and the other built-in value names as `@Name`, and [[Eval Install]] binds such a module's implementations there, so `[1, 2, 3].length()` stays the built-in length beside a declared `Array`.
+- [[Eval Loop]] and [[Eval Call Path]] look up record, variant, qualified and witness calls under the same keys.
+
+## 2026-10-21 — Generic trait defaults take the implementation's arguments (#528)
+
+- [[Type Check Method]] forms an inherited default in the trait's terms and substitutes `Self` and the trait's parameters with what the implementation gives them, so `b.twice()` on `impl Holds[Int]` is `(Int, Int)` rather than `(T, T)`.
+- [[Type Check Inherit]] renames a default's own parameters apart from the implementation's, so `map[B]` on an `impl [S, A, B, Q] ... for Mapped[Q, A, B]` keeps two distinct `B`s.
+- The trait table carries whole `Trait` declarations through [[Type Check]], [[Type Check Install]], [[Type Check Derive]] and the interface graph.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

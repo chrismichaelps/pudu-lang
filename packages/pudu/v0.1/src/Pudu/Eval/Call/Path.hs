@@ -24,7 +24,7 @@ import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, abortAt, lookupLocal, lookupName)
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Loop (firstBound, receiverOwners)
-import Pudu.Eval.Operator (readMember)
+import Pudu.Eval.Operator (declaredOwner, readMember)
 import Pudu.Eval.Value (Closure (..), Value (..))
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
@@ -48,7 +48,7 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
     direct <- case local of
       Just witness@TypeWitnessValue{} -> witnessMethod witness method
       Just _ -> pure Nothing
-      Nothing -> lookupName (first <> "." <> method)
+      Nothing -> firstBound (\owner -> lookupName (owner <> "." <> method)) (typeOwners first values)
     case direct of
       Just found -> pure (Just found)
       Nothing | not (qualifies local) -> pure Nothing
@@ -196,11 +196,27 @@ typeArgumentName located = case locatedValue located of
 witnessMethod :: Value -> Text -> Evaluator (Maybe Value)
 witnessMethod witness member = case witness of
   TypeWitnessValue owner arguments -> do
-    found <- lookupName (owner <> "." <> member)
+    found <- firstBound (\key -> lookupName (key <> "." <> member)) (typeOwners owner [])
     pure $ case found of
       Just (FunctionValue closure) -> Just (FunctionValue (selectTypes arguments closure))
       other -> other
   _ -> pure Nothing
+
+{-| The method-key owners a written type name may stand for, in the order to
+    try them.
+
+    A name a built-in value also answers to may be a declared type's or the
+    built-in's. A first argument that is a record or a variant tries the
+    declared type first; anything else tries the built-in first. Both stay
+    candidates, because the first argument of a static member such as
+    `Int.decode(json)` is not a receiver and says nothing about the owner. -}
+typeOwners :: Text -> [Value] -> [Text]
+typeOwners name values
+  | declaredOwner name == name = [name]
+  | otherwise = case values of
+      RecordValue{} : _ -> [declaredOwner name, name]
+      VariantValue{} : _ -> [declaredOwner name, name]
+      _ -> [name, declaredOwner name]
 
 {-| Bind chosen types to a closure's type parameters in declaration order;
     an installed method's parameters begin with its implementation's. -}
