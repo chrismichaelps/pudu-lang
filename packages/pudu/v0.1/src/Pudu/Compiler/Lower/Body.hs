@@ -17,7 +17,7 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
-import Pudu.Compiler.Lower.Match (ifLetArms, lowerMatch, whileLetLoop)
+import Pudu.Compiler.Lower.Match (ifLetArms, lowerLetElse, lowerMatch, whileLetLoop)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -158,6 +158,9 @@ foldStatements state = go state []
             (after, Just statements) -> go after (reverse statements <> collected) rest
             (after, Nothing) -> (after, reverse collected, True)
       _ -> case lowerStatement current one of
+        (after, Just lowered)
+          | LetElseStatement{} <- statement, blockType [lowered] Nothing == CoreNeverType ->
+              (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
         (after, Nothing) -> (after, reverse collected, True)
 
@@ -268,7 +271,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
     (after, Nothing) -> refused after
   BreakStatement label operand -> lowerTransfer lowerExpression statementSpan label (Just operand) state
   ContinueStatement label -> lowerTransfer lowerExpression statementSpan label Nothing state
-  LetElseStatement{} -> halt statementSpan "let else" state
+  LetElseStatement pattern' subject fallback -> lowerLetElse lowerExpression state statementSpan pattern' subject fallback
   LetPatternStatement{} -> halt statementSpan "pattern bindings" state
   InvalidStatement -> halt statementSpan "this statement" state
 

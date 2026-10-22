@@ -19,3 +19,5 @@ The mutually recursive tree remains one data-only file; behavior belongs to pars
 ## Referenced by
 
 [[Syntax]] · [[src/Pudu/Frontend/_MOC]]
+
+- [[Syntax Pattern Bindings]] — names introduced by one alternative path (#542).

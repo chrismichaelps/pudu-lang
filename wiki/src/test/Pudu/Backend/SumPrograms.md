@@ -39,3 +39,16 @@ body and a `while let` subject.
 ## Referenced by
 
 [[Backend Native Tests]] · [[Backend Text Leak Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]
+
+## Refutable binding coverage
+
+Resolved Grill Log: add hand-written expected outputs for a subject evaluated
+once, fallback references to shadowed outer names, partial and alternative
+patterns, sequential bindings, and labelled break/continue. Compare fallback
+and subject failures with interpreter diagnostics, including source spans and
+output before failure. Existing native, GCC, sanitizer and counted-allocation
+runners consume these same programs. A failure path must never reach a use of
+a success-only binding.
+
+The subject may itself return before any pattern test; a regression retains
+that return and never attempts to read the unreachable successful binding.

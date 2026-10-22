@@ -39,3 +39,10 @@ Tuple Option products cover all four combinations, grouped wildcard rows, nested
 ## Referenced by
 
 [[Type Exhaust]] · [[Type Check Pattern]] · [[src/Pudu/Type/_MOC]]
+
+## Alternative binding regressions
+
+Resolved Grill Log: exercise valid shared bindings and nested alternatives,
+reject mismatched names with E2019, retain E2001 for duplicates within either
+branch and unresolved constructor diagnostics, and reject incompatible bound
+types with E3001. Compile full programs rather than inspecting helper output.

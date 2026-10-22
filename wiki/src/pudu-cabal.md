@@ -430,3 +430,8 @@ Register Pudu.Backend.Emit.Aggregate, Pudu.Backend.Runtime.Aggregate and
 Pudu.Compiler.Lower.Tuple in exposed-modules.
 
 Register Pudu.Compiler.Lower.Record in exposed-modules (#521).
+
+## Shared pattern binding enumeration
+
+Resolved Grill Log: register [[Syntax Pattern Bindings]] without a new package
+dependency; resolution and typing share syntax enumeration only.

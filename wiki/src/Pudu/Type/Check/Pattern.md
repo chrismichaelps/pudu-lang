@@ -91,3 +91,12 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Alternative binding agreement
+
+Resolved Grill Log: bind the first branch in the enclosing pattern scope and
+check later branches in temporary type frames. Unify every branch's bound
+types with the first branch's types at the later binding location. A name
+shared by alternatives therefore has one type; no last-branch overwrite may
+make an incompatible earlier payload appear well typed. Name-set agreement
+is already enforced by [[Resolve Bindings]], using [[Syntax Pattern Bindings]].

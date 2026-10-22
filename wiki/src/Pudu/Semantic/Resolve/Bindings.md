@@ -61,3 +61,13 @@ Requires [[Syntax Tree]], [[Resolve Context]], [[Symbol Model]] and [[Name Resol
 ## Referenced by
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[Resolve Context]]
+
+## Alternative bindings repair
+
+Resolved Grill Log: the first alternative introduces the bindings used after
+the pattern. Later alternatives resolve and validate their own declarations
+in temporary frames; their names must equal the first branch's set, otherwise
+E2019 reports the alternative and asks for identical names. Duplicate names
+within any one branch still report E2001 with the earlier declaration. Every
+constructor path is resolved, including later alternatives. Temporary frames
+use only the alternative's source extent; no binding escapes from them.

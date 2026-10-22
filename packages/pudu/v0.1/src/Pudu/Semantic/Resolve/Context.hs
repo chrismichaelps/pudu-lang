@@ -5,6 +5,7 @@ module Pudu.Semantic.Resolve.Context
   , declareBuiltin
   , declarePreludeName
   , declareNamed
+  , emit
   , declareModuleQualifier
   , inScope
   , inScopeOver

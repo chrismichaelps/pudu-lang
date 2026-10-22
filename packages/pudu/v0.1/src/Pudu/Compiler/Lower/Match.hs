@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Match — `match`: the subject, then each arm's
     pattern, guard and body in a scope of its own. -}
-module Pudu.Compiler.Lower.Match (lowerMatch, ifLetArms, whileLetLoop) where
+module Pudu.Compiler.Lower.Match (lowerMatch, lowerLetElse, ifLetArms, whileLetLoop) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -57,6 +57,30 @@ lowerMatch lower discarded state at subject arms = case lower state subject of
           | guardKind `elem` [CoreBoolType, CoreNeverType] -> (next, Just coreGuard)
           | otherwise -> halt (locatedSpan test) ("a guard of type " <> coreTypeName guardKind) next
         (next, Nothing) -> refused next
+
+{-| The fallback sees the outer scope; only success publishes the pattern's
+    locals into the enclosing block. Frame matching initializes those locals
+    before its unit arm joins the following statement. -}
+lowerLetElse :: LowerExpression -> LowerState -> Span -> Located Pattern -> Located Expression -> Located Block
+  -> (LowerState, Maybe CoreStatement)
+lowerLetElse lower state at pattern' subject fallback = case lower state subject of
+  (after, Nothing) -> refused after
+  (after, Just (core, CoreNeverType)) -> evaluated after core
+  (after, Just (core, kind))
+    | expressionIsPrintValued core -> halt (locatedSpan subject) "matching a Result[(), Str] value" after
+    | otherwise -> case lower after (Located (locatedSpan fallback) (BlockExpression fallback)) of
+        (afterFallback, Nothing) -> refused afterFallback
+        (afterFallback, Just (otherwise', CoreNeverType)) ->
+          case lowerPattern lower afterFallback kind Map.empty pattern' of
+            (afterPattern, Nothing) -> refused afterPattern
+            (afterPattern, Just (matched, _)) ->
+              let unit = CoreExpression at CoreUnitType (CoreBlockValue (CoreBlock [] Nothing))
+                  arms = [CoreArm (locatedSpan pattern') matched Nothing unit,
+                          CoreArm (locatedSpan fallback) CoreWildcardPattern Nothing otherwise']
+               in evaluated afterPattern (CoreExpression at CoreUnitType (CoreMatch core arms))
+        (afterFallback, Just _) -> halt (locatedSpan fallback) "a let else fallback that does not diverge" afterFallback
+ where
+  evaluated after core = (after, Just (CoreStatement at (CoreEvaluate core)))
 
 {-| `if let` as match arms: the pattern takes the block, anything else takes
     the `else` branch or unit. -}

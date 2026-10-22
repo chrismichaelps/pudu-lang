@@ -33,3 +33,5 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 - [[Module Qualifier Spec]] — namespace/value identity and loaded execution evidence.
 
 - [[Qualified Shadow Spec]] — exact loaded lexical precedence and evaluator agreement.
+
+- [[Syntax Pattern Bindings]] · [[Resolve Bindings]] — shared alternative names and E2019 (#542).

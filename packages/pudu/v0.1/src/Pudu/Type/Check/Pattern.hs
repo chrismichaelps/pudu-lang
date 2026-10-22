@@ -13,6 +13,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Frontend.Syntax.Pattern (patternBindings)
 import Pudu.Frontend.Syntax.Tree (ArrayRest (..), FieldPattern (..), Pattern (..))
 import Pudu.Source (Span)
 import Pudu.Type.Check.Rule (countText, literalType)
@@ -20,6 +21,7 @@ import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , bindName
+  , inTypeScopeWith
   , freshVariable
   , lookupField
   , lookupTypeParams
@@ -187,8 +189,19 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
           else do
             declaredFieldTypes <- recordFieldsFor declared path subjectType
             mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
-  AlternativePattern alternatives ->
-    mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
+  AlternativePattern [] -> pure ()
+  AlternativePattern (first : rest) -> do
+    bindPattern declared rigid first subjectType
+    let names = map locatedValue (patternBindings first)
+    expected <- traverse lookupName names
+    mapM_ (checkAlternative names expected) rest
+   where
+    checkAlternative names expected alternative = do
+      found <- inTypeScopeWith $ do
+        bindPattern declared rigid alternative subjectType
+        traverse lookupName names
+      sequence_ [ () <$ unify (locatedSpan alternative) (schemeType left) (schemeType right)
+                | (Just left, Just right) <- zip expected found ]
   InvalidPattern -> pure ()
 
 {-| A generic sum is instantiated at every pattern, so matching `Wrap(1)` gives

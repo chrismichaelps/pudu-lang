@@ -5,6 +5,26 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-22 — Shared alternative pattern bindings (#542)
+
+Resolution now declares one binding set across alternatives, checks all
+constructor paths and preserves duplicate errors within each branch. E2019
+rejects unequal name sets, and typing checks corresponding payloads at one
+compatible type. [[Syntax Pattern Bindings]] supplies shared enumeration.
+Focused success/failure and exact diagnostic properties pass. All 20 clean
+repository gates pass, including 711 optimized test groups.
+
+## 2026-10-21 — Native refutable bindings (#541)
+
+`let ... else` lowers through CoreMatch while retaining successful bindings
+in the enclosing scope. The fallback is lowered before those names enter
+scope, preserving outer references after partial pattern failure. Added
+hand-written conformance cases and runtime diagnostic comparisons in
+[[Backend Sum Programs]]. Clang, GCC 15, ASan/UBSan and both interpreter
+modes pass; 69 counted programs release every allocation, and all 20 clean
+repository gates pass.
+See [[Native Refutable Binding Delivery]].
+
 ## 2026-10-21 — Native if let and while let (#540)
 
 - [[Compiler Lower Match]] lowers `if let` as a match with a wildcard fallback and `while let` as a labelled `loop` around one; [[Compiler Lower Body]] routes both there.

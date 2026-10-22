@@ -202,6 +202,81 @@ sumSuccessPrograms =
         [ "next 0", "next 1", "next 2", "next 3", "4"
         , "next 0", "next 0", "next 1", "next 2", "next 3", "next 1", "next 0", "next 1", "2"
         , "next 9", "()" ])
+  , ("a transferring let else subject makes its bindings unreachable", program
+      [ "fn early() -> Int {"
+      , "  let Some(value) = { return 7 } else { return 9 }"
+      , "  value"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(display(early()))"
+      , "  return 0"
+      , "}" ]
+    , "7\n")
+  , ("let else retains bindings and evaluates each subject once", program
+      [ "fn traced(n: Int) -> Option[Int] {"
+      , "  print(\"read \" + display(n))"
+      , "  if n > 0 { Some(n) } else { None }"
+      , "}"
+      , "fn pick(n: Int) -> Int {"
+      , "  let Some(first) = traced(n) else { return -1 }"
+      , "  let Some(second) = traced(first + 1) else { return -2 }"
+      , "  print(display(first) + \" \" + display(second))"
+      , "  first + second"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(display(pick(2)))"
+      , "  print(display(pick(0)))"
+      , "  return 0"
+      , "}" ]
+    , "read 2\nread 3\n2 3\n5\nread 0\n-1\n")
+  , ("let else fallback sees outer names after partial pattern failure", program
+      [ "fn choose(flag: Bool) -> Str {"
+      , "  let name = \"outer\""
+      , "  {"
+      , "    let Some((name, true)) = Some((name + \" inner\", flag)) else {"
+      , "      print(name)"
+      , "      return name + \" fallback\""
+      , "    }"
+      , "    name + \" matched\""
+      , "  }"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(choose(true))"
+      , "  print(choose(false))"
+      , "  return 0"
+      , "}" ]
+    , "outer inner matched\nouter\nouter fallback\n")
+  , ("let else alternatives share bindings and record patterns retain fields", program
+      [ "fn pick(n: Int) -> Str {"
+      , "  let Some((value, 1)) | Some((value, 2)) = Some((\"held\", n)) else { return \"miss\" }"
+      , "  let Box{w, h: 3} = Box{w: n, h: 3} else { return \"wrong box\" }"
+      , "  let 1..=2 = w else { return \"wrong range\" }"
+      , "  value + display(w)"
+      , "}"
+      , "fn main() -> Int {"
+      , "  print(pick(1) + \" \" + pick(2) + \" \" + pick(3))"
+      , "  return 0"
+      , "}" ]
+    , "held1 held2 miss\n")
+  , ("let else fallback preserves labelled loop transfers and owned values", program
+      [ "fn main() -> Int {"
+      , "  var turn = 0"
+      , "  let answer = @outer loop {"
+      , "    turn = turn + 1"
+      , "    loop {"
+      , "      let Some(text) = (if turn == 2 { Some(\"kept\") } else { None }) else {"
+      , "        print(\"skip\")"
+      , "        if turn == 3 { break @outer \"done\" }"
+      , "        continue @outer"
+      , "      }"
+      , "      print(text)"
+      , "      continue @outer"
+      , "    }"
+      , "  }"
+      , "  print(answer)"
+      , "  return 0"
+      , "}" ]
+    , "skip\nkept\nskip\ndone\n")
   ] <>
   [ ("sum entry " <> label, program (["fn main() -> " <> kind <> " {", "  " <> body, "}"]), answer <> "\n")
   | (label, kind, body, answer) <-
@@ -231,6 +306,14 @@ sumRefusalPrograms =
       [ "fn main() -> Int {", "  print(\"start\")", "  if let Some(n) = Some(9223372036854775807) { print(display(n + 1)) }", "  return 0", "}" ])
   , ("an overflow in a while let subject", program
       [ "fn main() -> Int {", "  var n = 9223372036854775806", "  while let Some(m) = Some(n + 1) { print(display(m))", "    n = m }", "  return 0", "}" ])
+  , ("an overflow in a let else subject precedes its fallback", program
+      [ "fn main() -> Int {", "  print(\"start\")", "  var n = 9223372036854775807"
+      , "  let Some(value) = Some(n + 1) else { print(\"unreachable fallback\")", "    return 0 }"
+      , "  print(display(value))", "  return 0", "}" ])
+  , ("a let else fallback preserves output and its failure span", program
+      [ "fn main() -> Int {", "  let held: Option[Int] = None", "  var n = 9223372036854775807"
+      , "  let Some(value) = held else { print(\"fallback\")", "    return n + 1 }"
+      , "  print(display(value))", "  return 0", "}" ])
   ]
 
 program :: [Text] -> Text

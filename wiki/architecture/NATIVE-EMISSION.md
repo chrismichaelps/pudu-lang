@@ -21,7 +21,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
-| Pattern matching and iteration | Partial (#525, #540) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else`, `for`, ranges as values and the iterator protocol remain |
+| Pattern matching and iteration | Partial (#525, #540, #541) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for`, ranges as values and the iterator protocol remain |
 | Modules and constants | Partial (#539) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; module constants and folded values remain |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
@@ -309,3 +309,17 @@ refused value. Both inherit every pattern form, scope and refusal of `match`.
 [[Backend Sum Programs]] covers chains, an expression value, a value-less
 `if let`, side-effect order of the subject, labelled and nested loops, and
 overflows inside a body and a subject.
+
+## Refutable let bindings (#541)
+
+[[Compiler Lower Match]] now lowers `let PATTERN = subject else fallback`
+through the existing match/frame path. Success binds into the containing
+block; failure runs the diverging fallback with the original outer scope.
+[[Backend Sum Programs]] adds exactly-once evaluation, sequential bindings,
+partial failure with shadowing, alternative/record/range patterns, labelled
+transfers and exact overflow diagnostics. Clang, GCC 15, ASan/UBSan and both interpreter modes pass the corpus;
+69 counted programs release every allocation. All 20 clean repository gates
+pass, including 711 optimized test groups. The pattern/iteration area remains
+partial because iteration and sequence patterns still need native support.
+
+Delivery and evidence: [[Native Refutable Binding Delivery]].
