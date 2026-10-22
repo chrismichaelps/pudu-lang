@@ -10,10 +10,11 @@ import Pudu.Backend.CharPrograms (charSuccessPrograms)
 import Pudu.Backend.TuplePrograms (tupleSuccessPrograms)
 import Pudu.Backend.RecordPrograms (recordSuccessPrograms)
 import Pudu.Backend.SumPrograms (sumSuccessPrograms)
+import Pudu.Backend.ModulePrograms (constantPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModuleFolded)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Diagnostic (hasErrors)
 import Pudu.Source (SourceName (..), newSource)
@@ -35,7 +36,7 @@ testLeaks = do
   case compiler of
     Nothing -> pure (counterexample "text leak checks require a C11 compiler" (False === True))
     Just cc -> withSystemTempDirectory "pudu-text-leaks" $ \root -> do
-      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms)
+      outcomes <- traverse (check cc root) (textSuccessPrograms <> textMethodSuccessPrograms <> charSuccessPrograms <> tupleSuccessPrograms <> recordSuccessPrograms <> sumSuccessPrograms <> constantPrograms)
       putStrLn ("[text leaks] executed " <> show (length outcomes) <> " counted programs")
       pure (conjoin outcomes)
  where
@@ -43,7 +44,7 @@ testLeaks = do
     source <- newSource (SourceName "Main.pudu") text
     checked <- runCompile source
     case (hasErrors (compileDiagnostics checked), compileModule checked) of
-      (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+      (False, Just parsed) -> case lowerModuleFolded "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) (compileFolded checked) parsed of
         Lowered core -> case lowerFrames core >>= emitProgram "text-leak-test" [source] of
           Left failure -> pure (counterexample (label <> ": " <> show failure) (False === True))
           Right emitted -> do

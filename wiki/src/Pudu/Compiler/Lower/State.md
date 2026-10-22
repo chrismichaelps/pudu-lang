@@ -34,7 +34,7 @@ one source-spanned native diagnostic; `halt` adds it and returns no subtree,
 while `refused` returns no subtree without adding a duplicate diagnostic.
 
 ```haskell
-emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext
+emptyContext :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))] -> LowerContext
 startFunction :: LowerState -> [CoreParameter] -> Maybe CoreType -> LowerState
 halt :: Span -> Text -> LowerState -> (LowerState, Maybe a)
 ```
@@ -75,3 +75,12 @@ results are admitted. Rejected silent Result erasure and source-label C names.
 LowerContext retains contextTypes :: LowerTypes. emptyContext :: Text -> LowerTypes -> [(Text, Located Function)] -> LowerContext. Facts survive every function boundary without rechecking or global state.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+## Folded constant names (#543)
+
+Resolved Grill Log: ModuleScope adds scopeConstants :: Map Text (Maybe Frozen),
+containing only declarations that module owns. lookupConstant resolves a local
+shadow first, then an owned, selected or qualified constant through the same
+module maps as calls, returning Nothing for a nonconstant and Just Nothing for
+a declared constant with no supplied portable fold. Imports never re-export
+another module's constant. [[Compiler Lower Constant]] owns projection.

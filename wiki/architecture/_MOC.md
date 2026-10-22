@@ -84,3 +84,5 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Floating Point]] — exact width, rounding and decimal-output delivery.
 
 - [[Native Binary64 Formatter]] — exact locked GHC decimal text and retained notices (#509).
+
+- [[Native Folded Constants]] — immutable compiler-folded products in native lowering (#543).

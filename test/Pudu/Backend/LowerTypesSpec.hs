@@ -4,11 +4,14 @@ module Pudu.Backend.LowerTypesSpec (lowerTypesProperties) where
 import qualified Data.Text as Text
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
+import GHC.Float (castDoubleToWord64)
 import Pudu.Compiler (CompileResult (..), runCompile)
-import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule, lowerModuleFolded)
 import Pudu.Compiler.Lower.Types (formedCoreType, nativeTypes, typeForSpan)
 import Pudu.Core (CoreType (..), CoreModule (..), CoreFunction (..), CoreBlock (..), CoreExpression (..), CoreExpressionShape (..))
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan, hasErrors)
+import Pudu.Eval.Frozen (thaw)
+import Pudu.Eval.Value (Value (FloatValue))
 import Pudu.Frontend.Syntax (Module (..), ModuleName (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind))
 import Pudu.Source (SourceName (..), emptySpan, generatedSpan, newSource, sourceText, spanStart, spanEnd, unOffset)
@@ -23,7 +26,55 @@ lowerTypesProperties =
   , ("native lowering refuses missing analysis facts", testMissing)
   , ("native operator traps retain exact spans and messages", testTraps)
   , ("native operator traps require settled operand facts", testTrapFacts)
+  , ("native constants require represented folded products at their use", testConstantFacts)
   ]
+
+testConstantFacts :: IO Property
+testConstantFacts = do
+  results <- traverse check [("7", True), ("1.5d", False), ("[1, 2]", False), ("fn() => 1", False)]
+  floating <- traverse checkFloat [("0.1f32", Just 0x3fb99999a0000000), ("-0.0", Just 0x8000000000000000), ("0.0 / 0.0", Nothing)]
+  broken <- newSource (SourceName "Main.pudu") "module Main\nconst BAD = 1 / 0\nfn main() -> Int { 0 }\n" >>= runCompile
+  pure $ conjoin (counterexample "constant failure remains a compile diagnostic"
+    (hasErrors (compileDiagnostics broken) === True) : results <> floating)
+ where
+  checkFloat (initializer, golden) = do
+    source <- newSource (SourceName "Main.pudu")
+      ("module Main\nconst HELD = " <> initializer <> "\nfn main() { HELD }\n")
+    checked <- runCompile source
+    pure $ case (hasErrors (compileDiagnostics checked), compileModule checked, thaw <$> Map.lookup "HELD" (compileFolded checked)) of
+      (False, Just parsed, Just (FloatValue width number)) ->
+        case lowerModuleFolded "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) (compileFolded checked) parsed of
+          Lowered core | [entry] <- coreModuleFunctions core
+            , Just result <- coreBlockResult (coreFunctionBody entry)
+            , CoreFloatLiteral actual bits <- coreExpressionShape result -> conjoin
+                [ actual === width, bits === castDoubleToWord64 number
+                , maybe (True === True) (bits ===) golden ]
+          other -> counterexample (show other) (False === True)
+      _ -> counterexample (show (compileDiagnostics checked)) (False === True)
+  check (initializer, represented) = do
+    source <- newSource (SourceName "Main.pudu")
+      ("module Main\nconst HELD = " <> initializer <> "\nfn main() -> Int {\n  let value = HELD\n  0\n}\n")
+    checked <- runCompile source
+    pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
+      (False, Just parsed) ->
+        let facts = nativeTypes (compileTypes checked) (compileSchemes checked)
+            supplied = lowerModuleFolded "main" facts (compileFolded checked) parsed
+            refusedAtUse result = case result of
+              LowerRefused [diagnostic] -> conjoin
+                [ diagnosticCodeText (diagnosticCode diagnostic) === "E6001"
+                , let at = diagnosticSpan diagnostic in
+                    Text.take (unOffset (spanEnd at) - unOffset (spanStart at))
+                      (Text.drop (unOffset (spanStart at)) (sourceText source)) === "HELD"
+                ]
+              other -> counterexample (show other) (False === True)
+         in conjoin
+              [ refusedAtUse (lowerModule "main" facts parsed)
+              , if represented then case supplied of
+                  Lowered _ -> True === True
+                  other -> counterexample (show other) (False === True)
+                else refusedAtUse supplied
+              ]
+      _ -> counterexample (show (compileDiagnostics checked)) (False === True)
 
 testCanonical :: Property
 testCanonical = conjoin

@@ -1,5 +1,5 @@
 {-| @Test.Backend.ModulePrograms — programs of several modules with hand-written answers. -}
-module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms) where
+module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, constantPrograms) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -46,6 +46,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms] <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program
@@ -91,13 +92,65 @@ modulePrograms =
         , "fn main() -> Point { shift(Point{x: 0, y: 0}, 1) }"
         ]
     , "Point{x: 1, y: 2}\n" )
+  , ( "folded constants keep module identity through selected and transitive imports"
+    , [ ("Config.pudu", Text.unlines
+          [ "module Config", "export type Point = { x: Int, y: Int }"
+          , "export const POINT: Point = Point{y: 4, x: 2}", "export const ANSWER: Int = 21"
+          , "export const TOKEN: Str = \"lib\"", "export fn point() -> Point { POINT }" ])
+      , ("Bridge.pudu", Text.unlines
+          [ "module Bridge", "import Config as C", "export const DOUBLE: Int = C.ANSWER * 2" ]) ]
+    , program
+        [ "import Config {TOKEN}", "import Config as C", "import Bridge as B"
+        , "type Point = { label: Str }", "const POINT = Point{label: \"root\"}"
+        , "const ANSWER = 7", "fn main() -> Int {"
+        , "  print(TOKEN + display(ANSWER) + \" \" + display(C.ANSWER) + \" \" + display(B.DOUBLE))"
+        , "  print(show(POINT) + \" \" + show(C.POINT) + \" \" + show(C.point()))"
+        , "  0", "}" ]
+    , "lib7 21 42\nPoint{label: \"root\"} Point{x: 2, y: 4} Point{x: 2, y: 4}\n" )
+  ]
+
+constantPrograms :: [(String, Text, Text)]
+constantPrograms =
+  [ ("folded numeric constants keep widths and compile-time answers", program
+      [ "comptime fn square(n: Int) -> Int { n * n }"
+      , "type Small = Int8", "const BASE = 7", "const ANSWER = square(BASE)"
+      , "const SMALL: Small = 127i8"
+      , "const WIDE = 340282366920938463463374607431768211455u128"
+      , "const NARROW = 0.1f32", "const ZERO = -0.0", "const NAN = 0.0 / 0.0"
+      , "const UNUSED = [1, 2]", "fn main() -> Int {"
+      , "  print(display(ANSWER) + \" \" + display(SMALL) + \" \" + display(WIDE))"
+      , "  print(display(NARROW) + \" \" + display(ZERO) + \" \" + display(NAN))"
+      , "  print(display(NAN == NAN))", "  0", "}" ]
+    , "49 127 340282366920938463463374607431768211455\n0.10000000149011612 -0.0 NaN\nfalse\n")
+  , ("folded aggregates retain ownership across reads, mutation and transfers", program
+      [ "type Box = { mut text: Str, number: Int }"
+      , "const BOX = Box{number: 3, text: \"original\"}"
+      , "const HELD = Some((BOX, Ok(\"payload\")))"
+      , "const FLAG = true", "const LETTER = 'λ'", "const UNIT = ()"
+      , "fn held() -> Option[(Box, Result[Str, Int])] { return HELD }"
+      , "fn main() -> Int {"
+      , "  var copy = BOX", "  copy.text = \"changed\""
+      , "  print(show(copy) + \" \" + show(BOX))"
+      , "  print(show(held()))", "  var n = 0", "  while n < 2 {"
+      , "    print(show(HELD))", "    n = n + 1", "  }"
+      , "  print(display(FLAG) + \" \" + display(LETTER) + \" \" + display(UNIT))"
+      , "  0", "}" ]
+    , Text.unlines
+        [ "Box{text: \"changed\", number: 3} Box{text: \"original\", number: 3}"
+        , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))"
+        , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))"
+        , "Some((Box{text: \"original\", number: 3}, Ok(\"payload\")))", "true λ ()" ])
   ]
 
 {-| Held to the interpreter's rendered diagnostics: a failure inside an
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
-  [ ( "an overflow inside an imported function"
+  [ ( "a constant read preserves the runtime overflow operation's span"
+    , [], program
+        [ "const MAX = 9223372036854775807", "fn main() -> Int {"
+        , "  print(\"start\")", "  var n = MAX", "  n + 1", "}" ] )
+  , ( "an overflow inside an imported function"
     , [("Arith.pudu", Text.unlines
         [ "module Arith"
         , ""

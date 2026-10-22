@@ -45,3 +45,10 @@ they hold are released.
 ## Record programs (#521)
 
 The counted run also covers [[Backend Record Programs]].
+
+## Folded constants (#543)
+
+Resolved Grill Log: include constantPrograms and use lowerModuleFolded with
+compileFolded from the actual CompileResult. Count every allocation in nested
+frozen text/aggregate construction, repeated reads and transfers; do not
+synthesize constants or add an interpreter fallback to the native leak test.

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-22 — Native folded module constants (#543)
+
+[[Compiler Lower Constant]] consumes actual compiler-folded products with
+solved reference types, preserving exact scalar values and canonical aggregate
+layouts. Module scopes retain declared constants separately from missing or
+nonportable folded products. Added cross-module, numeric and owned-value
+programs plus missing-product/unsupported-type boundary tests.
+All 20 clean gates pass, including 712 optimized groups. Clang, GCC 15,
+ASan/UBSan, both interpreter modes, the real CLI and 71 counted-allocation
+programs agree. See [[Native Folded Constant Delivery]].
+
 ## 2026-10-22 — Shared alternative pattern bindings (#542)
 
 Resolution now declares one binding set across alternatives, checks all
