@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-22 — Shared-reference native contract (#544, design)
+
+[[Native Shared References]] resolves false-only reference carrier projection
+and exact-fact identity lowering, preserving operand evaluation and diagnostic
+provenance. A checked probe agrees in both interpreter modes and demonstrates
+the native parameter refusal. Implementation remains pending under
+[[Native Shared Reference Delivery]]; this is no new coverage claim.
+
 ## 2026-10-22 — Native folded module constants (#543)
 
 [[Compiler Lower Constant]] consumes actual compiler-folded products with
