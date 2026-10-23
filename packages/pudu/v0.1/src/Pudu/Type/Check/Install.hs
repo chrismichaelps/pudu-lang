@@ -32,6 +32,7 @@ import Pudu.Type.Env
   , bindName
   , inheritRestrictions
   , lookupName
+  , preservingName
   , recordComptimeFunction
   , recordUnsafeFunction
   )
@@ -108,7 +109,8 @@ installWanted scope visibleTraits wantedValues traits defaults value = do
   declareOne (Located _ declaration) = case declaration of
     FunctionDeclaration function
       | wanted (locatedValue (functionName function)) ->
-          declareFunction scope function >> publishValue value (locatedValue (functionName function))
+          let name = locatedValue (functionName function)
+           in preservingName name (declareFunction scope function >> publishValue value name)
     ImplDeclaration implementation -> do
       formed <- formTraitReference scope [] (implTrait implementation)
       case formed of
@@ -119,7 +121,7 @@ installWanted scope visibleTraits wantedValues traits defaults value = do
     _ -> pure ()
 
   declareImportedBinding (name, syntax) =
-    when (wanted name) $ do
+    when (wanted name) $ preservingName name $ do
       formed <- formType scope [] syntax
       bindName name (monotype formed)
       publishValue value name

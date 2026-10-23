@@ -20,6 +20,7 @@ module Pudu.Type.Env
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
   , inheritRestrictions
+  , preservingName
   , useCapability
   , useUnsafeRegion
   , CheckerProducts (..)
@@ -1176,6 +1177,37 @@ inheritRestrictions from to =
           Just known -> Map.insert to known (stateComptimeFunctions state)
           Nothing -> stateComptimeFunctions state
      in ((), state{stateUnsafeFunctions = carried, stateComptimeFunctions = folded})
+
+{-| Run an action that binds a name, then give the name back what it meant
+    before: its scheme in the current frame, or its absence, and its
+    restrictions. An imported value is declared under its bare name only long
+    enough to publish it under its qualifier; without the restore that bare
+    binding outlived the import and replaced a prelude value of the same name. -}
+preservingName :: Text -> Checker a -> Checker a
+preservingName name action = do
+  saved <- Checker $ \state ->
+    ( ( case stateFrames state of
+          current : _ -> Map.lookup name current
+          [] -> Nothing
+      , Map.lookup name (stateUnsafeFunctions state)
+      , Map.lookup name (stateComptimeFunctions state)
+      )
+    , state
+    )
+  result <- action
+  Checker $ \state ->
+    let (scheme, capabilities, folds) = saved
+        frames = case stateFrames state of
+          current : rest -> Map.alter (const scheme) name current : rest
+          [] -> []
+     in ( ()
+        , state
+            { stateFrames = frames
+            , stateUnsafeFunctions = Map.alter (const capabilities) name (stateUnsafeFunctions state)
+            , stateComptimeFunctions = Map.alter (const folds) name (stateComptimeFunctions state)
+            }
+        )
+  pure result
 
 {-| Whether this span has already carried a diagnostic of its own.
 

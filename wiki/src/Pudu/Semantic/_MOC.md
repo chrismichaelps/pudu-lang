@@ -33,3 +33,5 @@ Dependency direction: Symbol → Scope → Resolve Context → Resolve, with Pre
 - [[Module Qualifier Spec]] — namespace/value identity and loaded execution evidence.
 
 - [[Qualified Shadow Spec]] — exact loaded lexical precedence and evaluator agreement.
+
+- [[Qualified Import Spec]] — aliased and plain imports bind no bare names; selection does (#545).

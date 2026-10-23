@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-22 — Qualified imports bind no bare names (#545)
+
+- [[Type Check Install]] declares an imported function or annotated constant under its bare name only while publishing it under its qualifier; [[Type Env]] `preservingName` restores the previous binding and its restrictions. `import M as N` and `import M` no longer replace a prelude value such as `show`; `import M {a}` still binds `a` bare.
+- [[Qualified Import Spec]] runs the issue's program and its variants in both evaluators, with and without folded constants, and pins E3003/E3001 for a selected `show(3)`, E2010 for an unselected bare export, and E3023 for a qualified unsafe export. [[Qualified Import Delivery]] records the evidence.
+
 ## 2026-10-09 — Integrated Database graph expectations (#478)
 
 - [[Application Layer Tests]] verifies the combined challenge and capacity boundaries with exact layer diagnostics.

@@ -226,3 +226,13 @@ Do not remove live recorded facts, defer checking itself, or drop editor answers
 ## Lexical member admission (#471)
 
 Expose lookupLocalName over nested name frames only, excluding the final module/interface frame. Reuse the ordered name search without copying maps or exposing state. Local parameters, constants, patterns and captured blocks count; shared bare dependency declarations do not. Resolved Grill Log: a qualified expression cannot consult an export before a nearer local, and hidden graph names cannot impersonate a lexical shadow. The existing state-owner length exception remains bounded to this accessor.
+
+## Scoped bare declaration (#545)
+
+`preservingName name action` runs `action` and then restores what `name` meant before it in the
+current frame — its scheme, or its absence — together with its unsafe capabilities and compile-time
+standing. [[Type Check Install]] declares an imported value under its bare name inside it, so the
+qualified publication is the only binding that remains. Resolved Grill Log: an imported export must
+not replace a prelude or earlier binding the consumer never selected. Restoring only the scheme was
+rejected, because the restrictions are keyed by the same name and an imported `unsafe fn show` would
+otherwise make the prelude `show` unsafe.

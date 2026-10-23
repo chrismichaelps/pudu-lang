@@ -39,6 +39,10 @@ Resolved Grill Log: explicit dual registration and aggregate exit status make ev
 observable to CI.
 - **Q:** Run the library fixtures separately? **A:** No; with every other derive family.
 
+## Qualified import registration (#545)
+
+Register [[Qualified Import Spec]] in the resolution result group and aggregate its outcomes. Resolved Grill Log: focused and complete runs execute the same import-binding and evaluator regressions.
+
 ## Referenced by
 
 [[Pudu Test Cabal Manifest]] · [[architecture/DELIVERY]]

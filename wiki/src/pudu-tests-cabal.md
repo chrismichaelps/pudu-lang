@@ -47,6 +47,10 @@ Separating this package makes the compiler's source distribution self-contained:
   refusal test deliberately creates collisions. _Accepted:_ per-property temporary directories
   deleted after the property completes.
 
+## Qualified import registration (#545)
+
+Register [[Qualified Import Spec]] with the existing test dependencies. Resolved Grill Log: the loaded import-binding evidence compiles and executes in the repository suite without a new dependency.
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,
