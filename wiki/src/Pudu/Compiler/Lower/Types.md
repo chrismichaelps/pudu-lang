@@ -115,6 +115,11 @@ result do; an async one does not.
 
 Resolved Grill Log: `Array[T]` forms when `T` does; its owner key is `Array`.
 
+## Maps and sets (#561)
+
+`Map[K, V]` and `Set[T]` are native when their arguments are, and their
+methods are filed under "Map" and "Set".
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

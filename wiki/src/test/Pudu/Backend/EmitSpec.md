@@ -105,6 +105,11 @@ function's forwarder and a call through the value.
 
 The array refusal case became a set case; sets are still unsupported.
 
+## Refusal cases (#561)
+
+Set literals are native now, so the set case gave way to Bytes construction,
+which still refuses at its call.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·

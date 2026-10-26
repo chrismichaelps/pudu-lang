@@ -67,6 +67,10 @@ the source empty.
 `FrameIntegerFits` and `FrameIntegerConvert` carry the target kind and the
 source slot.
 
+## Maps and sets (#561)
+
+`FrameKeyedMethod` and `FrameComparable` mirror the Core shapes.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

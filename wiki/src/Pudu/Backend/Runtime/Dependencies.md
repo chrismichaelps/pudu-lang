@@ -34,6 +34,10 @@ Resolved Grill Log: includes the array parts' prerequisites.
 Adds [[Native Text Pieces]] and [[Native Text Number]], whose
 `text_parses_int`-style names point at the part that defines them.
 
+## Trees (#561)
+
+Adds [[Native Persistent Trees]].
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]

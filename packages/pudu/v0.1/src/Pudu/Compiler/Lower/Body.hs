@@ -19,6 +19,7 @@ import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
 import Pudu.Compiler.Lower.Convert (lowerConvertInteger)
+import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
@@ -64,6 +65,8 @@ lowerEntryBody located state
                 kind@(CoreSumType _ _) -> built after coreBlock kind
                 kind@(CoreFunctionType _ _) -> built after coreBlock kind
                 kind@(CoreArrayType _) -> built after coreBlock kind
+                kind@(CoreMapType _ _) -> built after coreBlock kind
+                kind@(CoreSetType _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -317,6 +320,8 @@ allowedResultType declared operand = case declared of
     CoreSumType _ _ -> True
     CoreFunctionType _ _ -> True
     CoreArrayType _ -> True
+    CoreMapType _ _ -> True
+    CoreSetType _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -364,6 +369,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "print" -> lowerPrint lowerExpression state spanValue arguments
     | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
     | name == "show" -> lowerRendered lowerExpression state spanValue name CoreShow arguments
+    | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
@@ -371,11 +377,13 @@ lowerExpression state (Located spanValue expression) = case expression of
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
+    | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (MemberExpression receiver (Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
     | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
+    | Just lowered <- lowerKeyedMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
@@ -396,7 +404,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
   TupleExpression{} -> halt spanValue "tuples" state
   ArrayExpression members -> lowerArrayLiteral lowerExpression state spanValue members
-  SetExpression{} -> halt spanValue "sets" state
+  SetExpression members -> lowerSetLiteral lowerExpression state spanValue members
   UnsafeExpression{} -> halt spanValue "unsafe blocks" state
   MacroCall{} -> halt spanValue "macro calls" state
   ScopeExpression{} -> halt spanValue "scope expressions" state

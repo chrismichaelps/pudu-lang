@@ -217,6 +217,12 @@ written help; a slice failure needs it to name the length.
 `CoreIntegerFits` tests whether an integer fits a kind, and
 `CoreIntegerConvert` gives the same value at that kind where it does.
 
+## Maps and sets (#561)
+
+`CoreMapType` and `CoreSetType` name the two collections. `CoreKeyedMethod`
+carries every runtime operation on them, `KeyedFromArray` building one from an
+array, and `CoreComparable` asks `comparableValue`'s question of any value.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

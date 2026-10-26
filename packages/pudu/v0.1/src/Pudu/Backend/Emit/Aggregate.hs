@@ -24,6 +24,7 @@ import Pudu.Backend.Emit.Cell
   ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable
   , memberEqual, memberRender, number, ownedType, released, retained )
 import Pudu.Backend.Emit.Array (arrayHelpers)
+import Pudu.Backend.Emit.Keyed (mapHelpers, setHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
 import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
@@ -49,6 +50,9 @@ aggregateMembers :: Layouts -> CoreType -> [CoreType]
 aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> members
   (CoreArrayType element, _) -> [element]
+  -- entries() answers (key, value) tuples, so a map's helpers need theirs.
+  (CoreMapType key value, _) -> [key, value, CoreTupleType [key, value]]
+  (CoreSetType member, _) -> [member]
   (_, Just (CoreRecordLayout fields)) -> map snd fields
   (_, Just (CoreSumLayout variants)) -> concatMap (map snd . coreVariantFields) variants
   (_, Just (CoreClosureLayout entries)) -> concatMap (closureCaptures . snd) entries
@@ -87,6 +91,8 @@ helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreRecordType name _, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
   (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
   (CoreArrayType element, _) -> arrayHelpers kind element
+  (CoreMapType key value, _) -> mapHelpers kind key value
+  (CoreSetType member, _) -> setHelpers kind member
   (CoreFunctionType _ _, Just (CoreClosureLayout entries)) -> closureHelpers kind
     [(identity, info) | (key, info) <- entries, Just identity <- [Map.lookup key identities]]
   _ -> []
@@ -174,7 +180,8 @@ helpersOf kind labelled recordName =
   , (aggregateNeed "compare" kind, (concat [snd (memberCompare member "" "") | member <- members],
       [ "/* compareValues: the first member that differs decides. */"
       , "static int " <> aggregateHelper "compare" kind <> "(pudu_box *a, pudu_box *b) {"
-      , if null members then "  (void)a; (void)b;" else "  int order;" ]
+      -- Function members never decide an order, so a and b may go unread.
+      , if null members then "  (void)a; (void)b;" else "  int order;\n  (void)a; (void)b;" ]
       <> concat [ [ "  order = " <> fst (memberCompare member (on "a" index member) (on "b" index member)) <> ";"
                   , "  if (order != 0) return order;" ] | (index, member) <- indexed ]
       <> [ "  return 0;", "}" ]))

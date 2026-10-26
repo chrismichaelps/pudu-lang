@@ -153,6 +153,11 @@ checker solved its copy at that span; `convertInteger[T]`, when the name is
 the prelude's, goes to [[Compiler Lower Convert]]. Type arguments only appear
 on names in call position, which the checker enforces.
 
+## Maps and sets (#561)
+
+`mapOf` and `setOf` (when the names are the prelude's), `#{...}` and map and
+set methods go to [[Compiler Lower Keyed]]; an entry may return a map or set.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

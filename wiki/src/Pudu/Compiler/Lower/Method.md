@@ -87,6 +87,11 @@ are already lowered, as `for` does with `begin` and `advance`.
 Resolved Grill Log: an array answers its built-in methods before any
 implementation, as `readArrayMember` does.
 
+## Maps and sets (#561)
+
+Map and set methods answer before any implementation, as `readKeyedMember`
+looks there first.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]

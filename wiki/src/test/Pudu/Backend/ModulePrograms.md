@@ -58,6 +58,10 @@ Includes [[Backend Text Collection Programs]] in both lists.
 
 Includes [[Backend Convert Programs]] in both lists.
 
+## Maps and sets (#561)
+
+Includes [[Backend Keyed Programs]] in both lists.
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

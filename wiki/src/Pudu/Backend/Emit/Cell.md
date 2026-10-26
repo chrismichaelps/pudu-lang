@@ -17,6 +17,10 @@ without a cycle.
 
 - A move: the functions and their output are unchanged.
 
+## Maps and sets (#561)
+
+Both are owned boxes; mangled `MP_K_V_E` and `ST_T_E`.
+
 ## Referenced by
 
 [[Backend Emit Aggregate]] · [[Backend Emit Array]]

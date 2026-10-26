@@ -283,7 +283,7 @@ refusalCases =
       ["module Refuse", "fn main() { print(\"x\") }"], "print(")
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
-  , ("sets", bindingProgram "var items = #{1, 2, 3}", "#{1, 2, 3}")
+  , ("bytes", bindingProgram "var raw = bytesOf([1u8, 2u8])", "bytesOf([1u8, 2u8])")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("charFromCode", bindingProgram "var letter = charFromCode(97)", "charFromCode(97)")

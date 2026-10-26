@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
 import Data.Map.Strict (Map)
-import Pudu.Core (CoreArrayMethodName, CoreBinaryOperator (..), CoreClosureInfo, CoreLayout, CoreTextMethodName, CoreType)
+import Pudu.Core (CoreArrayMethodName, CoreBinaryOperator (..), CoreClosureInfo, CoreKeyedMethodName, CoreLayout, CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
@@ -88,6 +88,8 @@ data FrameValueShape
   | FrameCharLiteral !Char
   | FrameCharCode !FrameSlot
   | FrameIntegerFits !IntegerKind !FrameSlot
+  | FrameKeyedMethod !CoreKeyedMethodName !FrameSlot ![FrameSlot]
+  | FrameComparable !FrameSlot
   | FrameIntegerConvert !IntegerKind !FrameSlot
   | FrameAggregate ![FrameSlot]
   | FrameMember !Int !FrameSlot

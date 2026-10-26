@@ -28,6 +28,7 @@ module Pudu.Core
   , CoreStatementShape (..)
   , CoreTextMethodName (..)
   , CoreArrayMethodName (..)
+  , CoreKeyedMethodName (..)
   , CoreType (..)
   , coreTypeName
   , displayName
@@ -199,6 +200,10 @@ data CoreExpressionShape
   | CoreArray ![CoreExpression]
   {-| A built-in array method; the arguments run before the receiver. -}
   | CoreArrayMethod !CoreArrayMethodName !CoreExpression ![CoreExpression]
+  {-| A map or set operation; the arguments run before the receiver. -}
+  | CoreKeyedMethod !CoreKeyedMethodName !CoreExpression ![CoreExpression]
+  {-| Whether a value can be ordered, as `comparableValue` answers. -}
+  | CoreComparable !CoreExpression
   {-| `array[index]`: the array, then the index. The expression's span is the
       index's, where an index out of range reports. -}
   | CoreIndex !CoreExpression !CoreExpression
@@ -263,6 +268,26 @@ data CoreArrayMethodName
   | ArrayReversed
   deriving stock (Eq, Show)
 
+{-| What the runtime does for maps and sets. `KeyedLookup` reads a value
+    `KeyedContains` has already found; `KeyedFromArray`'s receiver is the array
+    of pairs or members it builds from; a set's `toArray` is `KeyedKeys`. -}
+data CoreKeyedMethodName
+  = KeyedSize
+  | KeyedIsEmpty
+  | KeyedContains
+  | KeyedLookup
+  | KeyedInsert
+  | KeyedRemove
+  | KeyedKeys
+  | KeyedValues
+  | KeyedEntries
+  | KeyedMerge
+  | KeyedUnion
+  | KeyedIntersect
+  | KeyedDifference
+  | KeyedFromArray
+  deriving stock (Eq, Show)
+
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
     source spelling; no operator text survives into the backend. -}
 data CoreBinaryOperator
@@ -308,6 +333,9 @@ data CoreType
   | CoreSumType !Text ![CoreType]
   {-| An array: a box holding a growable buffer of items of one type. -}
   | CoreArrayType !CoreType
+  {-| A map or set: a box holding the root of a shared balanced tree. -}
+  | CoreMapType !CoreType !CoreType
+  | CoreSetType !CoreType
   {-| A function value: a closure box whose first cell names what it runs. -}
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
@@ -327,6 +355,8 @@ coreTypeName coreType = case coreType of
   CoreSumType name [] -> displayName name
   CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreArrayType element -> "Array[" <> coreTypeName element <> "]"
+  CoreMapType key value -> "Map[" <> coreTypeName key <> ", " <> coreTypeName value <> "]"
+  CoreSetType member -> "Set[" <> coreTypeName member <> "]"
   CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

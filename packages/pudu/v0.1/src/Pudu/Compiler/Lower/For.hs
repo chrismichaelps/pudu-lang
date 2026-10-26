@@ -42,6 +42,9 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, _)) -> walkArray after core kind itemKind
       (after, Nothing) -> refused after
+    -- A map walks its entries and a set its members, listed before the body runs.
+    Just keyed@(CoreMapType key value) -> listed keyed KeyedEntries (CoreTupleType [key, value])
+    Just keyed@(CoreSetType member) -> listed keyed KeyedKeys member
     Just kind
       | Just owner <- ownerKeyOf kind
       , Just begin <- Map.lookup (owner, "begin") (contextMethods (lowerContext state))
@@ -53,6 +56,11 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
     Just kind -> halt (locatedSpan iterated) ("a for loop over a " <> coreTypeName kind) state
     Nothing -> halt (locatedSpan iterated) "a for loop over this value" state
  where
+  listed _ name itemKind = case lower state iterated of
+    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+    (after, Just (core, _)) ->
+      walkArray after (expression (CoreArrayType itemKind) (CoreKeyedMethod name core [])) (CoreArrayType itemKind) itemKind
+    (after, Nothing) -> refused after
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate core) | core <- cores] Nothing))
   expression kind shape = CoreExpression at kind shape

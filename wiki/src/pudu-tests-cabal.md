@@ -101,6 +101,10 @@ Register Pudu.Backend.TextCollectionPrograms ([[Backend Text Collection Programs
 
 Register Pudu.Backend.ConvertPrograms ([[Backend Convert Programs]]).
 
+## Keyed corpus (#561)
+
+Register Pudu.Backend.KeyedPrograms ([[Backend Keyed Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

@@ -53,6 +53,11 @@ use.
 [[Native Text Pieces]] is emitted with the array runtime, after the frame
 types, because it builds arrays.
 
+## Maps and sets (#561)
+
+An entry returning a map or set renders it. [[Native Persistent Trees]] is
+emitted after the frame types, with the array runtime.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

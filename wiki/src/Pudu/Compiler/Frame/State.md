@@ -47,6 +47,10 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 Resolved Grill Log: `moveValue` stores an owned value from a temporary nothing
 reads again by moving it, so a buffer built in a loop keeps one owner.
 
+## Maps and sets (#561)
+
+Map and set slots are owned, so stores retain and release them.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

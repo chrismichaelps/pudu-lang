@@ -60,6 +60,11 @@ The source slot's kind and the target pick one of four fit tests and
 conversions in [[Native Integer Conversion]]; narrow to narrow is the same
 value, normalised.
 
+## Maps and sets (#561)
+
+Keyed operations call the receiver type's helpers (the result type's, for
+building from an array); `isEmpty` reads the root's size directly.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

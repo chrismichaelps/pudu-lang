@@ -137,6 +137,11 @@ Register Pudu.Backend.Runtime.Text.Number and Pudu.Backend.Runtime.Text.Pieces.
 
 Register Pudu.Backend.Runtime.Integer.Convert and Pudu.Compiler.Lower.Convert.
 
+## Maps and sets (#561)
+
+Register Pudu.Backend.Emit.Keyed, Pudu.Backend.Runtime.Tree and
+Pudu.Compiler.Lower.Keyed.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver
