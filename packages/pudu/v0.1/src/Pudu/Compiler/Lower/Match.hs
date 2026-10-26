@@ -11,7 +11,7 @@ import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal,
 import Pudu.Compiler.Lower.Types (recordFields, sumVariants)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
+  ( ArrayRest (..), Block (..), Expression (..), FieldPattern (..), Literal (..), Located (..), MatchArm (..), Pattern (..)
   , Statement (..) )
 import Pudu.IntegerLiteral (ParsedInteger (..), integerKindBounds, integerKindFits, parseIntegerLiteral)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
@@ -156,6 +156,22 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields
     _ -> halt at "this record pattern" state
   AlternativePattern alternatives -> alternativesOf state bound [] alternatives
+  ArrayPattern front rest back -> case kind of
+    CoreArrayType element -> case sequenceOf CoreTuplePattern state bound [(element, member) | member <- front] of
+      (afterFront, Just (CoreTuplePattern fronts, withFront)) ->
+        let (afterRest, restPattern, withRest) = case rest of
+              Nothing -> (afterFront, Nothing, withFront)
+              Just (IgnoredRest _) -> (afterFront, Just Nothing, withFront)
+              Just (BoundRest (Located _ name)) -> case Map.lookup name withFront of
+                Just local -> (afterFront, Just (Just local), withFront)
+                Nothing ->
+                  let (next, local) = bindLocal afterFront name kind
+                   in (next, Just (Just local), Map.insert name local withFront)
+         in case lowerSequence afterRest withRest [(element, member) | member <- back] of
+              (afterBack, Just (backs, withBack)) -> done afterBack (CoreArrayPattern fronts restPattern backs) withBack
+              (afterBack, Nothing) -> (afterBack, Nothing)
+      (afterFront, _) -> (afterFront, Nothing)
+    _ -> halt at "a sequence pattern on this value" state
   _ -> halt at "this pattern" state
  where
   types = contextTypes (lowerContext state)
@@ -167,6 +183,9 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
     IntegerValue text -> parsedIntegerValue <$> parseIntegerLiteral text
     _ -> Nothing
   variantOf name = sumVariants types kind >>= find ((== name) . coreVariantName)
+  lowerSequence current names pairs = case sequenceOf CoreTuplePattern current names pairs of
+    (after, Just (CoreTuplePattern members, names')) -> (after, Just (members, names'))
+    (after, _) -> (after, Nothing)
   sequenceOf build current names [] = done current (build []) names
   sequenceOf build current names pairs = go current names [] pairs
    where

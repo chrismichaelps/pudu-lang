@@ -30,6 +30,14 @@ Resolved Grill Log: arm results move into the match's destination. Binding a
 pattern from the subject still copies, because a failed guard tests the subject
 again.
 
+## Sequence patterns (#558)
+
+Resolved Grill Log: the length is tested first, exactly without a rest and
+at least the named count with one, as `matchPattern` does before reading.
+Front items are read by position, back items from the length minus the back
+count, and a bound rest is the slice between them. Pattern matching has no
+effects, so reading the back before binding the rest changes nothing.
+
 ## Referenced by
 
 [[Compiler Frame Lowering]] · [[Compiler Lower Match]] · [[src/_MOC]]

@@ -2,11 +2,14 @@
     methods. The runtime does the ones that only move items; `map`, `filter`
     and `reduce` become loops calling the closure once per item, in order,
     as `callArrayMethod` does. -}
-module Pudu.Compiler.Lower.Array (lowerArrayLiteral, lowerArrayIndex, lowerArrayMethod, takeReceiver) where
+module Pudu.Compiler.Lower.Array
+  ( lowerArrayLiteral, lowerArrayIndex, lowerArrayMethod, takeReceiver, collect, stops, stopped
+  ) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued, popLoop, pushLoop)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
+import Pudu.Compiler.Lower.Sort (sortStatements)
 import Pudu.Compiler.Lower.Types (typeFactAt, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Expression (..), Located (..))
@@ -41,7 +44,8 @@ arrayAt state at members = case typeForSpan (contextTypes (lowerContext state)) 
         Just (CoreArrayType CoreUnitType)
     | otherwise -> Nothing
 
-{-| `array[index]`: the array, then the index. A failure reports at the index. -}
+{-| `array[index]` or `text[index]`: the receiver, then the index. A failure
+    reports at the index. -}
 lowerArrayIndex :: LowerExpression -> LowerState -> Span -> Located Expression -> Located Expression -> Maybe Lowered
 lowerArrayIndex lower state _ receiver key = case typeForSpan (contextTypes (lowerContext state)) (locatedSpan receiver) of
   Just (CoreArrayType element) -> Just $ case collect lower state [receiver, key] of
@@ -51,6 +55,19 @@ lowerArrayIndex lower state _ receiver key = case typeForSpan (contextTypes (low
       | coreExpressionType index == intType ->
           (after, Just (CoreExpression (locatedSpan key) element (CoreIndex array index), element))
     (after, Just _) -> halt (locatedSpan key) "an array index that is not an Int" after
+  -- A Str index is charAt, but the text runs before the index here.
+  Just CoreTextType -> Just $ case collect lower state [receiver, key] of
+    (after, Nothing) -> refused after
+    (after, Just cores@[text, index])
+      | any stops cores -> (after, Just (stopped (locatedSpan key) cores, CoreNeverType))
+      | coreExpressionType index == intType ->
+          let (withText, held) = bindLocal after "" CoreTextType
+              at' = locatedSpan key
+              read' = CoreExpression at' CoreTextType (CoreReadLocal held)
+              charAt = CoreExpression at' CoreCharType (CoreTextMethod TextCharAt read' [index])
+           in (withText, Just (CoreExpression at' CoreCharType (CoreBlockValue (CoreBlock
+                [CoreStatement at' (CoreDeclare held text)] (Just charAt))), CoreCharType))
+    (after, Just _) -> halt (locatedSpan key) "a Str index that is not an Int" after
   _ -> Nothing
 
 {-| A built-in method when the receiver is an array; Nothing otherwise. The
@@ -63,6 +80,7 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
       "map" | Just (CoreArrayType mapped) <- typeForSpan types at -> Just (looped kind element (Just mapped))
       "filter" -> Just (looped kind element Nothing)
       "reduce" -> Just (reduced kind element)
+      "sortBy" -> Just (sorted kind)
       _ -> Just (halt at ("the array method '" <> member <> "'") state)
   _ -> Nothing
  where
@@ -126,6 +144,20 @@ lowerArrayMethod lower state at receiver member arguments = case receiverType of
                 [ statement (CoreDeclare functionLocal function), statement (CoreDeclare accumulatorLocal initial)
                 , statement (CoreDeclare arrayLocal core) ]
            in (body, Just (expression accumulated (CoreBlockValue (CoreBlock (prefix <> loop) (Just (reading accumulatorLocal)))), accumulated))
+      | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
+
+  -- sortBy: the closure and the array run once, then the sort asks the
+  -- closure exactly what `sortWith` asks it.
+  sorted kind = case operands state of
+    (after, Nothing) -> refused after
+    (after, Just (cores, core))
+      | any stops (cores <> [core]) -> (after, Just (stopped at (cores <> [core]), CoreNeverType))
+      | [function] <- cores ->
+          let (withFunction, functionLocal) = hidden after (coreExpressionType function)
+              (withArray, arrayLocal) = hidden withFunction kind
+              (final, statements, result) = sortStatements withArray at arrayLocal functionLocal
+              prefix = [statement (CoreDeclare functionLocal function), statement (CoreDeclare arrayLocal core)]
+           in (final, Just (expression kind (CoreBlockValue (CoreBlock (prefix <> statements) (Just (reading result)))), kind))
       | otherwise -> halt at ("a call to " <> member <> " with these arguments") after
 
   -- One turn per item, reading the length once, as traversing the sequence does.

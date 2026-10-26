@@ -4,7 +4,7 @@ module Pudu.Compiler.Lower.For (lowerFor) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Control (expressionIsPrintValued, popLoop, pushLoop)
+import Pudu.Compiler.Lower.Control (droppedTail, expressionIsPrintValued, popLoop, pushLoop)
 import Pudu.Compiler.Lower.Match (lowerPattern)
 import Pudu.Compiler.Lower.Method (callInstance)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
@@ -70,7 +70,7 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
   element current item = case lowerPattern lower (opened current) (coreLocalType item) Map.empty binder of
     (afterPattern, Nothing) -> (closed afterPattern, Nothing)
     (afterPattern, Just (pattern', _)) ->
-      let (afterBody, coreBody, bodyType) = block afterPattern body
+      let (afterBody, coreBody, bodyType) = block afterPattern (droppedTail body)
           dropped = expression (if bodyType == CoreNeverType then CoreNeverType else CoreUnitType)
             (CoreBlockValue (CoreBlock [statement (CoreEvaluate (expression bodyType (CoreBlockValue coreBody)))] Nothing))
           arms = [CoreArm (locatedSpan binder) pattern' Nothing dropped, CoreArm (locatedSpan binder) CoreWildcardPattern Nothing unit]

@@ -11,6 +11,7 @@ import Pudu.Core
 import Pudu.Core.Frame
   ( FrameLabel, FrameSlot (..), FrameTerminator (..), FrameValue (..)
   , FrameValueShape (..), scalarOperator )
+import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Source (Span)
 
 {-| What the body lowering lends this module. -}
@@ -41,7 +42,7 @@ lowerMatch lowering at kind subject arms = do
       message <- case scalarOperator CoreAdd of
         Just add -> text CoreTextType (FrameBinary add prefix shown)
         Nothing -> fault (Just at) "text concatenation without an operator"
-      finish (FrameFailText at "E7011" (Just "add a case that covers this value") message)
+      finish (FrameFailText at "E7011" (Just "add a case that covers this value") message Nothing)
       pure False
     CoreArm armSpan pattern' guard' body : rest -> do
       next <- freshLabel
@@ -100,6 +101,40 @@ matches lowering at pattern' source failed = case pattern' of
               | (position, ((_, fieldKind), inner)) <- zip [0 ..] (zip (coreVariantFields variant) members)
               , inner /= CoreWildcardPattern ]
       _ -> fault (Just at) "a variant pattern on a value without that variant"
+  -- The length decides first, as `matchPattern` checks it before reading.
+  CoreArrayPattern front rest back -> do
+    element <- case frameSlotType source of
+      CoreArrayType held -> pure held
+      _ -> fault (Just at) "a sequence pattern on a value that is not an array"
+    let named = length front + length back
+        intType = CoreIntegerType PlatformSigned
+        integer number = FrameValue at intType (FrameIntegerLiteral PlatformSigned (toInteger number))
+        arithmetic operator left right = case scalarOperator operator of
+          Just scalar -> saveValue (FrameValue at intType (FrameBinary scalar left right))
+          Nothing -> fault (Just at) "a sequence position without an operator"
+    count <- saveValue (FrameValue at intType (FrameArrayMethod ArrayLengthOf source []))
+    wanted <- saveValue (integer named)
+    test (if rest == Nothing then CoreEqual else CoreGreaterOrEqual) count wanted
+    sequence_
+      [ do
+          position <- saveValue (integer index)
+          member (FrameIndex source position) element inner
+      | (index, inner) <- zip [0 :: Int ..] front, inner /= CoreWildcardPattern ]
+    skipped <- saveValue (integer (length back))
+    start <- arithmetic CoreSubtract count skipped
+    sequence_
+      [ do
+          offset <- saveValue (integer index)
+          position <- arithmetic CoreAdd start offset
+          member (FrameIndex source position) element inner
+      | (index, inner) <- zip [0 :: Int ..] back, inner /= CoreWildcardPattern ]
+    case rest of
+      Just (Just local) -> do
+        from <- saveValue (integer (length front))
+        target <- bound local
+        middle <- saveValue (FrameValue at (frameSlotType source) (FrameArrayMethod ArraySliceOf source [from, start]))
+        storeValue at target (Just middle)
+      _ -> pure ()
   CoreAlternativePattern alternatives -> do
     matched <- freshLabel
     let go [] = finish (FrameJump Nothing failed)

@@ -151,7 +151,7 @@ namedFailure state at render operands =
         (concat [ [expression CoreTextType (CoreTextLiteral text) | not (Text.null text)] <> maybe [] (pure . kindOf) local
                 | (text, local) <- zip pieces (map Just held <> [Nothing]) ] <> [expression CoreTextType (CoreTextLiteral "") | null pieces])
       declares = [CoreStatement (coreExpressionSpan core) (CoreDeclare local core) | (local, core) <- zip held operands]
-   in built after at (CoreBlockValue (CoreBlock declares (Just (expression CoreNeverType (CoreFailText "E7001" Nothing joined))))) CoreNeverType
+   in built after at (CoreBlockValue (CoreBlock declares (Just (expression CoreNeverType (CoreFailText "E7001" Nothing joined Nothing))))) CoreNeverType
  where
   expression = CoreExpression at
   temporary (current, done) core =

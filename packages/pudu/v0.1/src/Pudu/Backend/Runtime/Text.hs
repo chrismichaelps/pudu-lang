@@ -143,6 +143,17 @@ textRuntimeParts =
       , "  pudu_fail_message(site, copy, message.length);"
       , "}"
       ])
+  , ("fail_text_help",
+      [ "/* Same, with help that names something only known now, like a length. */"
+      , "static void pudu_fail_text_help(const pudu_site *site, pudu_text message, pudu_text help) {"
+      , "  size_t total = message.length + help.length;"
+      , "  char *copy = malloc(total == 0 ? 1 : total);"
+      , "  if (copy == NULL) pudu_memory_failure();"
+      , "  if (message.length != 0) memcpy(copy, message.bytes, message.length);"
+      , "  if (help.length != 0) memcpy(copy + message.length, help.bytes, help.length);"
+      , "  pudu_fail_report(site, copy, message.length, copy + message.length, help.length);"
+      , "}"
+      ])
   , ("print_text",
       [ "static inline void pudu_print_text(pudu_text text) {"
       , "  if (text.length != 0) (void)fwrite(text.bytes, 1, text.length, stdout);"
@@ -156,6 +167,7 @@ textRuntimeDependencies :: Text -> [Text]
 textRuntimeDependencies name = maybe [] id (lookup name
   [ ("text_literal", ["text"])
   , ("fail_text", ["fail", "text", "memory_failure"])
+  , ("fail_text_help", ["fail", "text", "memory_failure"])
   , ("text_retain", ["text"])
   , ("text_allocate", ["text", "memory_failure"])
   , ("text_concat", ["text_allocate", "text_retain"])

@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native sortBy, sequence patterns and range slices (#558)
+
+[[Compiler Lower Sort]] lowers `sortBy` to loops asking the comparison the
+evaluator's questions in its order. Sequence patterns, slicing arrays and Str
+by a written range, and Str indexing by Int are native, with `rangeBounds`'
+E7004 text; `CoreFailText` gained computed help so the out-of-bounds help can
+name the length ([[Compiler Lower Slice]]). Loop bodies lower their tail as a
+statement. [[Backend Array Pattern Programs]] passes under Clang, GCC 15,
+ASan/UBSan and the tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native arrays (#556)
 
 [[Native Arrays]] lowers array literals, indexing, `for` and the built-in

@@ -125,6 +125,10 @@ Resolved Grill Log: register [[Compiler Lower Array]], [[Compiler Lower Call]],
 [[Backend Emit Array]], [[Backend Emit Cell]] and [[Backend Runtime Array]]; no
 new dependency.
 
+## Sort and slices (#558)
+
+Register Pudu.Compiler.Lower.Sort and Pudu.Compiler.Lower.Slice.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

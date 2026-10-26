@@ -2,7 +2,7 @@
     Traversal callbacks keep the expression/block recursion owned by Body. -}
 module Pudu.Compiler.Lower.Control
   ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType, pushLoop, popLoop
-  , printValued, expressionIsPrintValued
+  , printValued, expressionIsPrintValued, droppedTail
   ) where
 
 import Data.Text (Text)
@@ -10,7 +10,7 @@ import Pudu.Compiler.Lower.State
   ( LowerState (..), LoopFrame (..), halt, refused )
 import Pudu.Compiler.Lower.Types (nativeValueType)
 import Pudu.Core
-import Pudu.Frontend.Syntax (Block, Expression, Located (..))
+import Pudu.Frontend.Syntax (Block (..), Expression, Located (..), Statement (..))
 import Pudu.Source (Span)
 
 type ExpressionLowerer = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -31,11 +31,19 @@ lowerWhile expression block spanValue label condition body state =
 lowerLoop :: BlockLowerer -> Span -> Maybe (Located Text) -> Located Block -> LowerState -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerLoop block spanValue label body state =
   let (pushed, identity) = pushLoop label state
-      (after, coreBody, _) = block pushed body
+      (after, coreBody, _) = block pushed (droppedTail body)
       resultType = case lowerLoops after of
         frame : _ -> maybe CoreNeverType id (loopBreakType frame)
         [] -> CoreNeverType
    in (popLoop after, Just (CoreExpression spanValue resultType (CoreLoopValue identity coreBody), resultType))
+
+{-| A loop body's value is thrown away each turn, so its tail is just another
+    statement. Lowered that way, a tail like `match ... { case _ => print(..) }`
+    doesn't have to produce print's Result. -}
+droppedTail :: Located Block -> Located Block
+droppedTail (Located at (Block statements (Just tail'))) =
+  Located at (Block (statements <> [Located (locatedSpan tail') (ExpressionStatement tail')]) Nothing)
+droppedTail body = body
 
 pushLoop :: Maybe (Located Text) -> LowerState -> (LowerState, CoreLoopId)
 pushLoop label state =

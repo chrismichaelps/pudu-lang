@@ -89,6 +89,10 @@ Resolved Grill Log: register [[Backend Closure Programs]].
 
 Resolved Grill Log: register [[Backend Array Programs]].
 
+## Array pattern corpus (#558)
+
+Register Pudu.Backend.ArrayPatternPrograms ([[Backend Array Pattern Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

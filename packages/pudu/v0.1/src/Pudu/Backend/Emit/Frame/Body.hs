@@ -134,13 +134,17 @@ terminator identities function (state, needs) ending = case ending of
           pure (Just (", .result = {." <> member <> " = " <> returned <> "}", wanted))
     let (field, extra) = maybe ("", []) id result
     pure (line state ("      return (pudu_step){.kind = PUDU_RETURN" <> field <> "};"), Set.union needs (Set.fromList extra))
-  FrameFailText at code help message -> do
+  FrameFailText at code help message computed -> do
     text <- slotText message
+    helpText <- traverse slotText computed
     let (after, index) = textFailureSite state at code help
+        call = case helpText of
+          Nothing -> "      pudu_fail_text(&pudu_sites[" <> textOfInt index <> "], " <> text <> ");"
+          Just extra -> "      pudu_fail_text_help(&pudu_sites[" <> textOfInt index <> "], " <> text <> ", " <> extra <> ");"
     pure (linesInto after
-      [ "      pudu_fail_text(&pudu_sites[" <> textOfInt index <> "], " <> text <> ");"
+      [ call
       , "      return (pudu_step){.kind = PUDU_INVALID};" ]
-      , Set.union needs (Set.fromList ["site", "colored", "fail", "fail_text"]))
+      , Set.union needs (Set.fromList ["site", "colored", "fail", maybe "fail_text" (const "fail_text_help") helpText]))
   FrameOperatorFailure at message ->
     let (after, index) = operatorFailureSite state at message
      in pure (linesInto after

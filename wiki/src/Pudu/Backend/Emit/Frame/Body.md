@@ -53,6 +53,11 @@ makers.
 Resolved Grill Log: `FrameMove` releases the destination's old value, stores
 the source's and empties the source (an empty text for text).
 
+## Computed help (#558)
+
+A failure with computed help calls `pudu_fail_text_help` instead of
+`pudu_fail_text`.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

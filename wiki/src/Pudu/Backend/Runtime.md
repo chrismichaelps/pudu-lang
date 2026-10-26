@@ -179,6 +179,12 @@ evaluator module — so the depth bound is the evaluator's own.
 
 The runtime revision moves to 12 for the array buffer.
 
+## Failure help (#558)
+
+Resolved Grill Log: `pudu_fail_report` prints a refusal with whatever help it
+is given, and `pudu_fail_message` passes the site's own. The output is the same
+bytes as before for every existing failure.
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Backend Emit]] ·

@@ -138,6 +138,8 @@ library
     Pudu.Compiler.Lower.Lambda
     Pudu.Compiler.Lower.Call
     Pudu.Compiler.Lower.Array
+    Pudu.Compiler.Lower.Sort
+    Pudu.Compiler.Lower.Slice
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

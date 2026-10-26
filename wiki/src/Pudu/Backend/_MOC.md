@@ -33,6 +33,7 @@ aliases: [Backend Module Map]
 - [[Backend For Programs]] — native `for` (#554).
 - [[Backend Closure Programs]] — native closures (#555).
 - [[Backend Emit Array]] · [[Backend Emit Cell]] · [[Backend Runtime Array]] · [[Backend Array Programs]] — native arrays (#556).
+- [[Backend Array Pattern Programs]] — sortBy, sequence patterns and range slices (#558).
 
 ## Referenced by
 

@@ -50,6 +50,14 @@ so the buffer is not shared and the runtime may grow it in place.
 
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Control]] · [[Core IR]]
 
+## sortBy and Str indexing (#558)
+
+Resolved Grill Log: `sortBy` evaluates the closure and then the array into
+hidden locals and hands them to [[Compiler Lower Sort]]. `text[i]` is
+`charAt`, which fails exactly as `readIndex` does, but text methods run their
+arguments first, so the text goes into a local before the index runs.
+`collect`, `stops` and `stopped` are exported for [[Compiler Lower Slice]].
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower For]] · [[Native Arrays]]

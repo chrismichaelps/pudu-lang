@@ -62,6 +62,11 @@ Resolved Grill Log: arrays, their methods and indexing lower like other
 operands; a take reads the local into a fresh slot with a move. Declarations,
 assignments, break values and branch results move out of their temporaries.
 
+## Computed help (#558)
+
+`CoreFailText` lowers its help after its message, so both are evaluated before
+the failure terminator.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

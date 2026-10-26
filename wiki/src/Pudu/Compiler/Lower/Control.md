@@ -62,6 +62,14 @@ or fabricated unit literal. Traversal remains in Body; state remains in State.
 Resolved Grill Log: export `pushLoop` and `popLoop`, so [[Compiler Lower For]]
 opens a loop frame exactly as `loop` and `while` do.
 
+## Loop body tails (#558)
+
+Resolved Grill Log: `droppedTail` turns a loop body's trailing expression into
+a statement before lowering. The body's value is thrown away every turn, so
+this changes nothing the interpreter shows, and a tail like a `match` whose
+arms call `print` no longer has to produce print's Result. `while`, `loop`
+and `for` all use it.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Lower State]] · [[Compiler Lower]] · [[src/Pudu/Compiler/_MOC]]
