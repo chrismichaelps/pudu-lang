@@ -54,6 +54,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - **Chain risk:** none; internal compiler phases remain within bounded subsystems.
 - **Momentum:** depth ↑ · coupling → · debt → (closed lexical vocabulary follows source and diagnostics).
 - **Deepening policy:** SKIP speculative abstraction; deepen only core-path boundaries.
+- [[Native Trait Methods]] — static dispatch of implementation members and defaults (#551).
 
 ## Referenced by
 
@@ -87,4 +88,4 @@ Pudu is a statically typed native systems language for developers who need predi
 
 - [[Native Folded Constants]] — immutable compiler-folded products in native lowering (#543).
 
-- [[Native Shared References]] — resolved prerequisite for native methods (#544; implementation pending).
+- [[Native Shared References]] — borrows as value identity in native code (#544).

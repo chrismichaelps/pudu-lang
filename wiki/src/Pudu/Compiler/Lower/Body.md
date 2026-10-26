@@ -107,6 +107,13 @@ Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower 
   proves arity and argument compatibility; settled schemes provide the
   representation. _Rejected:_ backend inference duplicating the checker.
 
+## Method calls (#551)
+
+Resolved Grill Log: a member call tries [[Compiler Lower Method]] before the
+built-in Str/Char lowering, and `Owner.member(...)` tries the qualified form
+after variants. A call to a module function enters the callee with no
+bindings and restores the caller's afterwards.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

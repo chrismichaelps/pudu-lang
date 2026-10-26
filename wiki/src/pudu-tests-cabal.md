@@ -64,6 +64,11 @@ Separating this package makes the compiler's source distribution self-contained:
   refusal test deliberately creates collisions. _Accepted:_ per-property temporary directories
   deleted after the property completes.
 
+## Method corpus (#551)
+
+Resolved Grill Log: register [[Backend Method Programs]]; existing consumers
+run it.
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

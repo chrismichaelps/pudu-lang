@@ -22,6 +22,11 @@ live. Output must still equal the expected answer.
   leave the counting `malloc` unused; the generated program itself is still
   checked warning-free by the native harness.
 
+## Method lifetimes (#551)
+
+Resolved Grill Log: include methodSuccessPrograms, so argument temporaries and
+receivers holding text or boxes are released.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

@@ -4,8 +4,8 @@ module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal) whe
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), intType, refuse )
-import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType)
+  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
+import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueType, typeBindings)
 import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
@@ -14,7 +14,10 @@ import Pudu.Source (Span)
 
 {-| Admit each reachable monomorphic signature once, including refusals,
     memoized by the function's canonical name. The scheme is read from the
-    current module's facts, so the caller enters the function's module first. -}
+    current module's facts, so the caller enters the function's module first.
+    An instance brings its own scheme; its rigid parameters must all be bound
+    in the current facts, and then its bounds were already proved by checking
+    for the types they are bound to. -}
 ensureSignature :: Text -> Located Function -> LowerState -> (LowerState, Maybe CoreSignature)
 ensureSignature key located state = case Map.lookup key (contextSignatures context) of
   Just memo -> (state, memo)
@@ -22,9 +25,11 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
     Nothing | defaulted : _ <- defaults ->
       memoize (refuse (locatedSpan defaulted) "default parameter values" state) Nothing
-    Nothing -> case lookupScheme (contextTypes context) name of
-      Just Scheme{schemeParams = [], schemeBounds = [], schemeType = FunctionTypeRequiring False inputs required result}
-        | length inputs == length (functionParameters function)
+    Nothing -> case maybe (lookupScheme (contextTypes context) name) (Just . instanceScheme) (Map.lookup key (contextInstances context)) of
+      Just Scheme{schemeParams, schemeBounds, schemeType = FunctionTypeRequiring False inputs required result}
+        | all ((`Map.member` typeBindings (contextTypes context)) . fst) schemeParams
+        , not (null schemeParams) || null schemeBounds
+        , length inputs == length (functionParameters function)
         , requiredCount required == length inputs ->
             let (afterParameters, parameters) = foldl' validateParameter (state, [])
                   (zip3 [0 ..] (map locatedValue (functionParameters function)) inputs)

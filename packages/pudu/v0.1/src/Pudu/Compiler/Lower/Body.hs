@@ -11,9 +11,12 @@ import Pudu.Compiler.Lower.Control
   , printValued, expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, inModule, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction )
+  , bindLocal, halt, inModule, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction, withTypeBindings )
 import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
+import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
+import Pudu.Compiler.Lower.Types (typeBindings)
+import qualified Data.Map.Strict as Map
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -346,9 +349,12 @@ lowerExpression state (Located spanValue expression) = case expression of
   CallExpression (Located _ (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> callFunction key arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
+    | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue owner member arguments -> lowered
+    | Just lowered <- lowerMethodCall lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
+    | Just lowered <- lowerMethodCall lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located _ (NameExpression (first :| rest@(_ : _)))) arguments
     | Just key <- resolveFunction state (first : rest) -> callFunction key arguments
@@ -449,8 +455,8 @@ lowerExpression state (Located spanValue expression) = case expression of
         | key == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
         | otherwise ->
             let caller = contextModule (lowerContext state)
-                (admitted, signature) = ensureSignature key target (inModule owner state)
-                back = inModule caller admitted
+                (admitted, signature) = ensureSignature key target (withTypeBindings Map.empty (inModule owner state))
+                back = withTypeBindings (typeBindings (contextTypes (lowerContext state))) (inModule caller admitted)
              in case signature of
                   Nothing -> refused back
                   Just found -> case lowerArguments back [] arguments of

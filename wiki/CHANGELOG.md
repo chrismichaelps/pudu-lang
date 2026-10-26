@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native trait methods (#551)
+
+[[Compiler Lower Method]] lowers implementation members and inherited trait
+defaults to direct calls chosen by the receiver's checked type, with
+type-qualified and trait-qualified calls and the universal `toText()`.
+Defaults run with `Self` bound through new rigid bindings in [[Compiler Lower
+Types]]. Arguments run before the receiver, as the evaluator does. [[Backend
+Method Programs]] passes under Clang, GCC 15, ASan/UBSan and both interpreter
+modes, with counted cleanup. Found #550: the evaluator files two modules'
+same-named types under one method slot. The callables row is now partial.
+
 ## 2026-10-26 — Native shared references (#544)
 
 [[Compiler Lower Reference]] lowers `&` and `*` of represented values as the

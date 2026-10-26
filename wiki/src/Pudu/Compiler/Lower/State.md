@@ -54,6 +54,13 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 - **Q:** Why extract this responsibility? **A:** State ownership and signature admission are stable boundaries independent of mutually recursive expression/block traversal. Each remains reviewable below 500 lines. _Rejected:_ an oversized body module or a circular expression split.
 - **Q:** Can refactoring alter accepted semantics? **A:** No; only explicit corrections preventing invalid Core returns and Result erasure are permitted. Signature refusals and scope resolution retain their source provenance. _Rejected:_ backend inference or approximation.
 
+## Method instances (#551)
+
+Resolved Grill Log: the context carries `contextInstances` (a body under its
+own key, with its module, declaration, scheme and bindings) and the
+`contextMethods`/`contextTraitMethods` indexes. `inModule` keeps the bindings
+of the body being lowered; `withTypeBindings` sets a callee's own.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

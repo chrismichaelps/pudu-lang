@@ -98,6 +98,11 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
   and the command dispatcher retains another responsibility. _Accepted:_ one focused library module
   consumed by the thin CLI and its tests.
 
+## Method lowering (#551)
+
+Resolved Grill Log: register [[Compiler Lower Method]] with existing
+dependencies only.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

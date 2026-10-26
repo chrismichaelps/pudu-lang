@@ -91,6 +91,14 @@ Consumed by [[Compiler Lower]], [[Compiler Lower State]],
 - **Q:** Should expected static types erase Never control flow? **A:** No; existing structural transfer propagation remains in Core lowering. Rejected: replacing a divergent operand with an inhabited expected value.
 - **Q:** Must interpreter caches retain all analysis facts? **A:** No; this slice uses full-analysis products. Rejected: widening unrelated execution-product caches.
 
+## Rigid bindings and owner keys (#551)
+
+Resolved Grill Log: LowerTypes carries what each rigid parameter stands for
+in the copy of a body being lowered, and formedCoreTypeIn starts from those
+bindings, so a fact naming `Self` forms the owner's type. `ownerKeyOf` gives
+the name a value's methods are filed under: a record or sum key, or a
+builtin's name (`Int`, `Float64`, `Str`, `()` and so on). Tuples have none.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

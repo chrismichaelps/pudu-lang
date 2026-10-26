@@ -1,8 +1,8 @@
 {-| @Pudu.Compiler.Lower.State — program context, lexical scopes and typed refusals. -}
 module Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
+  ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, lookupConstant, inModule, isModuleQualifier
+  , resolveFunction, lookupConstant, inModule, withTypeBindings, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -10,11 +10,12 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes)
+import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, typeBindings, withBindings)
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax (Function, Located)
+import Pudu.Type.Value (Scheme)
 import Pudu.IntegerLiteral (IntegerKind (..))
 import Pudu.Eval.Frozen (Frozen)
 import Pudu.Source (Span)
@@ -30,6 +31,15 @@ data LowerContext = LowerContext
       beside the module it belongs to. -}
   , contextTable :: [(Text, (Text, Located Function))]
   , contextModules :: !(Map Text ModuleScope)
+  {-| Bodies lowered under a key of their own rather than a module's
+      function name: implementation members and trait defaults copied for
+      the type they serve. -}
+  , contextInstances :: !(Map Text Instance)
+  {-| `(owner key, member)` to the instance a method call on that owner runs. -}
+  , contextMethods :: !(Map (Text, Text) Text)
+  {-| `(trait, owner key, member)` for `Trait.member(value)`; the trait by the
+      name it was written under, as the evaluator files it. -}
+  , contextTraitMethods :: !(Map (Text, Text, Text) Text)
   {-| The module whose function is being lowered; names resolve in it. -}
   , contextModule :: !Text
   , contextSignatures :: !(Map Text (Maybe CoreSignature))
@@ -37,6 +47,16 @@ data LowerContext = LowerContext
   , contextVisited :: !(Set Text)
   , contextRefusals :: ![Diagnostic]
   , contextFunctions :: ![CoreFunction]
+  }
+
+{-| One body under its own key: the module its names resolve in, its
+    declaration, the scheme checking gave it, and what each rigid parameter of
+    that scheme stands for in this copy. -}
+data Instance = Instance
+  { instanceModule :: !Text
+  , instanceFunction :: !(Located Function)
+  , instanceScheme :: !Scheme
+  , instanceBindings :: !(Map Text CoreType)
   }
 
 {-| What one module's names mean: its checked facts, the functions it
@@ -81,13 +101,18 @@ data CoreSignature = CoreSignature
   }
   deriving stock (Eq, Show)
 
-emptyContext :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))] -> LowerContext
-emptyContext root entryName modules table =
+emptyContext
+  :: Text -> Text -> Map Text ModuleScope -> [(Text, (Text, Located Function))]
+  -> Map Text Instance -> Map (Text, Text) Text -> Map (Text, Text, Text) Text -> LowerContext
+emptyContext root entryName modules table instances methods traitMethods =
   LowerContext
     { contextTypes = maybe emptyTypes scopeTypes (Map.lookup root modules)
     , contextEntry = entryName
     , contextTable = table
     , contextModules = modules
+    , contextInstances = instances
+    , contextMethods = methods
+    , contextTraitMethods = traitMethods
     , contextModule = root
     , contextSignatures = Map.empty
     , contextQueue = []
@@ -174,11 +199,21 @@ isModuleQualifier state name =
  where
   context = lowerContext state
 
-{-| Lower in another module: its facts and its names. -}
+{-| Lower in another module: its facts and its names. The bindings of the
+    body being lowered come along; a caller entering a callee's own copy sets
+    that copy's bindings with `withTypeBindings`. -}
 inModule :: Text -> LowerState -> LowerState
 inModule name state = case Map.lookup name (contextModules context) of
-  Just scope -> state{lowerContext = context{contextModule = name, contextTypes = scopeTypes scope}}
+  Just scope -> state{lowerContext = context
+    { contextModule = name
+    , contextTypes = withBindings (typeBindings (contextTypes context)) (scopeTypes scope) }}
   Nothing -> state
+ where
+  context = lowerContext state
+
+withTypeBindings :: Map Text CoreType -> LowerState -> LowerState
+withTypeBindings bindings state =
+  state{lowerContext = context{contextTypes = withBindings bindings (contextTypes context)}}
  where
   context = lowerContext state
 

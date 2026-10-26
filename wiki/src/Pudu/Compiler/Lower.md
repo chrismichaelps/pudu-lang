@@ -160,6 +160,13 @@ imports it.
   own reachability: start at the entry, follow calls. _Rejected:_
   validating every declaration up front.
 
+## Methods (#551)
+
+Resolved Grill Log: each NativeModule carries the methods its declarations
+provide. [[Compiler Lower Method]] builds the instance table and indexes from
+them, and the worklist lowers a reachable instance in its module under its
+bindings, the same way it lowers a function.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·
