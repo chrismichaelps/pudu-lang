@@ -99,6 +99,13 @@ bindings, so a fact naming `Self` forms the owner's type. `ownerKeyOf` gives
 the name a value's methods are filed under: a record or sum key, or a
 builtin's name (`Int`, `Float64`, `Str`, `()` and so on). Tuples have none.
 
+## Generic records and raw facts (#552)
+
+Resolved Grill Log: a record forms with its arguments, binding its own
+parameters for its fields, and `layoutOf` reads a record's fields under those
+arguments. `typeFactAt` gives the unformed fact, which is what
+[[Compiler Lower Generic]] matches a scheme against.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

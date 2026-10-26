@@ -11,12 +11,11 @@ import Pudu.Compiler.Lower.Control
   , printValued, expressionIsPrintValued )
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..)
-  , bindLocal, halt, inModule, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction, withTypeBindings )
-import Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal)
+  , bindLocal, halt, isModuleQualifier, lookupLocal, refuse, refused, resolveFunction )
+import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
-import Pudu.Compiler.Lower.Types (typeBindings)
-import qualified Data.Map.Strict as Map
+import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -32,6 +31,7 @@ import Pudu.Frontend.Syntax
 import GHC.Float (castDoubleToWord64)
 import Pudu.FloatLiteral (ParsedFloat (..), parseFloatLiteral)
 import Pudu.IntegerLiteral (integerKindFits)
+import Pudu.Source (Span)
 
 {-| The entry carries an admitted integer, Bool, float, Str, Char, tuple, record, sum or unit; a body that never
     returns uses the unit ABI. Integers become the exit status and every other value is
@@ -53,7 +53,7 @@ lowerEntryBody located state
                 CoreTextType -> built after coreBlock CoreTextType
                 CoreCharType -> built after coreBlock CoreCharType
                 kind@(CoreTupleType _) -> built after coreBlock kind
-                kind@(CoreRecordType _) -> built after coreBlock kind
+                kind@(CoreRecordType _ _) -> built after coreBlock kind
                 kind@(CoreSumType _ _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
@@ -149,7 +149,15 @@ lowerBlockResult state located@(Located expressionSpan expression) = case expres
         (after, Nothing) -> (after, [], Nothing, CoreUnitType)
   _ -> case lowerExpression state located of
     (after, Just (coreExpression, coreType)) -> (after, [], Just coreExpression, coreType)
-    (after, Nothing) -> (after, [], Nothing, CoreUnitType)
+    (after, Nothing) -> (unexplained state expressionSpan after, [], Nothing, CoreUnitType)
+
+{-| Every construct that stops lowering says why. One that stops without a
+    refusal would leave the block short a statement and still compile, so it
+    is refused here instead. -}
+unexplained :: LowerState -> Span -> LowerState -> LowerState
+unexplained before at after
+  | length (contextRefusals (lowerContext after)) > length (contextRefusals (lowerContext before)) = after
+  | otherwise = refuse at "this construct" after
 
 foldStatements :: LowerState -> [Located Statement] -> (LowerState, [CoreStatement], Bool)
 foldStatements state = go state []
@@ -160,13 +168,13 @@ foldStatements state = go state []
         | kind == CompileTime -> (refuse statementSpan "comptime bindings" current, reverse collected, True)
         | otherwise -> case lowerTuplePattern lowerExpression current statementSpan pattern annotation subject of
             (after, Just statements) -> go after (reverse statements <> collected) rest
-            (after, Nothing) -> (after, reverse collected, True)
+            (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
       _ -> case lowerStatement current one of
         (after, Just lowered)
           | LetElseStatement{} <- statement, blockType [lowered] Nothing == CoreNeverType ->
               (after, reverse (lowered : collected), True)
         (after, Just lowered) -> go after (lowered : collected) rest
-        (after, Nothing) -> (after, reverse collected, True)
+        (after, Nothing) -> (unexplained current statementSpan after, reverse collected, True)
 
 lowerStatement :: LowerState -> Located Statement -> (LowerState, Maybe CoreStatement)
 lowerStatement state (Located statementSpan statement) = case statement of
@@ -296,7 +304,7 @@ allowedResultType declared operand = case declared of
     CoreIntegerType kind -> nativeIntegerKind kind
     CoreFloatType _ -> True
     CoreTupleType _ -> True
-    CoreRecordType _ -> True
+    CoreRecordType _ _ -> True
     CoreSumType _ _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
@@ -331,9 +339,9 @@ lowerExpression state (Located spanValue expression) = case expression of
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
-  CallExpression (Located _ (NameExpression (name :| []))) arguments
+  CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> halt spanValue "a call through a local value" state
-    | Just key <- resolveFunction state [name] -> callFunction key arguments
+    | Just key <- resolveFunction state [name] -> callFunction key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name == "print" -> case arguments of
         [argument] -> case lowerExpression state argument of
@@ -346,18 +354,18 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> rendered CoreDisplay
     | name == "show" -> rendered CoreShow
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
-  CallExpression (Located _ (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
-    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> callFunction key arguments
+  CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
+    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> callFunction key callee arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
-    | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue owner member arguments -> lowered
-    | Just lowered <- lowerMethodCall lowerExpression state spanValue receiver member arguments -> lowered
+    | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
+    | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
-  CallExpression (Located _ (MemberExpression receiver (Located _ member))) arguments
+  CallExpression (Located callee (MemberExpression receiver (Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
-    | Just lowered <- lowerMethodCall lowerExpression state spanValue receiver member arguments -> lowered
+    | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
-  CallExpression (Located _ (NameExpression (first :| rest@(_ : _)))) arguments
-    | Just key <- resolveFunction state (first : rest) -> callFunction key arguments
+  CallExpression (Located callee (NameExpression (first :| rest@(_ : _)))) arguments
+    | Just key <- resolveFunction state (first : rest) -> callFunction key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression{} -> halt spanValue "this call" state
@@ -449,23 +457,20 @@ lowerExpression state (Located spanValue expression) = case expression of
 
     -- A call to a function of any module: its signature is admitted under
     -- that module's facts, then the arguments run here, in the caller's.
-    callFunction key arguments = case lookup key (contextTable (lowerContext state)) of
+    callFunction key callee arguments = case lookup key (contextTable (lowerContext state)) of
       Nothing -> halt spanValue "this call" state
-      Just (owner, target)
+      Just entry
         | key == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
         | otherwise ->
-            let caller = contextModule (lowerContext state)
-                (admitted, signature) = ensureSignature key target (withTypeBindings Map.empty (inModule owner state))
-                back = withTypeBindings (typeBindings (contextTypes (lowerContext state))) (inModule caller admitted)
-             in case signature of
-                  Nothing -> refused back
-                  Just found -> case lowerArguments back [] arguments of
+            case admitCallee state key callee entry of
+                  (back, Nothing) -> refused back
+                  (back, Just (target, found)) -> case lowerArguments back [] arguments of
                     (final, Just coreArguments)
                       | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
                           typed final (CoreBlockValue (CoreBlock
                             [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
                       | otherwise ->
-                          typed (recordCall key final) (CoreCall key coreArguments) (eagerType (signatureResult found) coreArguments)
+                          typed (recordCall target final) (CoreCall target coreArguments) (eagerType (signatureResult found) coreArguments)
                     (final, Nothing) -> refused final
 
     recordCall name current =

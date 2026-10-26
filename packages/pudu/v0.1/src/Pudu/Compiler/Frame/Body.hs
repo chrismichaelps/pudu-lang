@@ -271,7 +271,7 @@ resultSlot at kind = case kind of
   CoreTextType -> Just <$> freshSlot at "$result" kind
   CoreCharType -> Just <$> freshSlot at "$result" kind
   CoreTupleType _ -> Just <$> freshSlot at "$result" kind
-  CoreRecordType _ -> Just <$> freshSlot at "$result" kind
+  CoreRecordType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSumType _ _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow

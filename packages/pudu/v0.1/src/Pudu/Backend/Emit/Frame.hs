@@ -42,7 +42,7 @@ emitFrameProgram version sources source = do
       , "  pudu_text_release(pudu_entry);"
       , "  return 0;" ]
     kind@(CoreTupleType _) -> Right (shownBox kind)
-    kind@(CoreRecordType _) -> Right (shownBox kind)
+    kind@(CoreRecordType _ _) -> Right (shownBox kind)
     kind@(CoreSumType _ _) -> Right (shownBox kind)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
@@ -67,7 +67,7 @@ emitFrameProgram version sources source = do
         CoreTextType -> ["text_show", "print_text"]
         CoreCharType -> ["char_show", "print_text"]
         kind@(CoreTupleType _) -> [aggregateNeed "show" kind, "print_text"]
-        kind@(CoreRecordType _) -> [aggregateNeed "show" kind, "print_text"]
+        kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "print_text"]
         _ -> []
       (aggregates, aggregateNeeds) = aggregateSection (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))

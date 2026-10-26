@@ -62,6 +62,12 @@ must all be bound in the current facts; their bounds were proved by checking
 for those types, so bounds are accepted only then. A monomorphic scheme still
 needs no bounds.
 
+## Bound type parameters (#552)
+
+Resolved Grill Log: a function's type parameters and constraints refuse only
+when its type parameters are not all bound, so a specialized copy is admitted
+and the entry and plain functions keep their refusals.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

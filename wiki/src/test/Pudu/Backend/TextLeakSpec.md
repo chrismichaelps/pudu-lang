@@ -27,6 +27,10 @@ live. Output must still equal the expected answer.
 Resolved Grill Log: include methodSuccessPrograms, so argument temporaries and
 receivers holding text or boxes are released.
 
+## Generic lifetimes (#552)
+
+Resolved Grill Log: include genericSuccessPrograms.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

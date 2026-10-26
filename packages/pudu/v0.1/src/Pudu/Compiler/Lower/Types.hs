@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, typeBindings, lookupScheme, typeForSpan, sharedReferenceTarget
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, withBindings, typeBindings, lookupScheme, typeForSpan, typeFactAt, sharedReferenceTarget
   , formedCoreType, formedCoreTypeIn, ownerKeyOf, layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -53,6 +53,10 @@ lookupScheme (LowerTypes _ schemes _ _) name = Map.lookup name schemes
 typeForSpan :: LowerTypes -> Span -> Maybe CoreType
 typeForSpan types@(LowerTypes info _ _ _) at = typeAt info at >>= formedCoreTypeIn types
 
+{-| The fact itself, before forming: what a generic call was instantiated at. -}
+typeFactAt :: LowerTypes -> Span -> Maybe Type
+typeFactAt (LowerTypes info _ _ _) = typeAt info
+
 sharedReferenceTarget :: LowerTypes -> Span -> Maybe CoreType
 sharedReferenceTarget types@(LowerTypes info _ _ _) at = case typeAt info at of
   Just (ReferenceTypeValue False target) -> formedCoreTypeIn types target
@@ -72,7 +76,7 @@ formedCoreTypeIn (LowerTypes _ _ shapes bindings) = formedWith shapes [] binding
     key, a builtin's own name. Tuples have none, so only `toText` answers them. -}
 ownerKeyOf :: CoreType -> Maybe Text
 ownerKeyOf kind = case kind of
-  CoreRecordType key -> Just key
+  CoreRecordType key _ -> Just key
   CoreSumType key _ -> Just key
   CoreIntegerType integerKind -> Just (integerKindName integerKind)
   CoreFloatType Float32Width -> Just "Float32"
@@ -87,12 +91,15 @@ formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreTyp
 formedWith shapes seen parameters value = case value of
   ReferenceTypeValue False target -> formedWith shapes seen parameters target
   RigidType name | Just bound <- Map.lookup name parameters -> Just bound
-  NominalType identity []
-    | Just ([], fields) <- Map.lookup identity (shapeRecords shapes) ->
-        let self = CoreRecordType (nominalKey identity)
-         in if self `elem` seen then Just self else do
-              members <- traverse (formedWith shapes (self : seen) Map.empty . snd) fields
-              if all nativeValueType members then Just self else Nothing
+  NominalType identity arguments
+    | Just (names, fields) <- Map.lookup identity (shapeRecords shapes)
+    , length names == length arguments -> do
+        formedArguments <- traverse (formedWith shapes seen parameters) arguments
+        let self = CoreRecordType (nominalKey identity) formedArguments
+            bound = Map.fromList (zip names formedArguments)
+        if self `elem` seen then Just self else do
+          members <- traverse (formedWith shapes (self : seen) bound . snd) fields
+          if all nativeValueType members then Just self else Nothing
   NominalType identity arguments
     | Just (names, variants) <- Map.lookup identity (shapeSums shapes)
     , length names == length arguments -> do
@@ -127,9 +134,10 @@ sumVariants types kind = case layoutOf types kind of
 {-| How a record or sum named in Core is laid out. -}
 layoutOf :: LowerTypes -> CoreType -> Maybe CoreLayout
 layoutOf (LowerTypes _ _ shapes _) kind = case kind of
-  CoreRecordType name -> do
-    (_, fields) <- named name (shapeRecords shapes)
-    CoreRecordLayout <$> traverse (\(field, fieldType) -> (,) field <$> form Map.empty fieldType) fields
+  CoreRecordType name arguments -> do
+    (names, fields) <- named name (shapeRecords shapes)
+    let bound = Map.fromList (zip names arguments)
+    CoreRecordLayout <$> traverse (\(field, fieldType) -> (,) field <$> form bound fieldType) fields
   CoreSumType name arguments -> do
     (names, variants) <- named name (shapeSums shapes)
     let bound = Map.fromList (zip names arguments)
@@ -181,6 +189,6 @@ nativeScalarType _ = False
 nativeValueType :: CoreType -> Bool
 nativeValueType CoreTextType = True
 nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValueType members
-nativeValueType (CoreRecordType _) = True
+nativeValueType (CoreRecordType _ _) = True
 nativeValueType (CoreSumType _ _) = True
 nativeValueType other = nativeScalarType other

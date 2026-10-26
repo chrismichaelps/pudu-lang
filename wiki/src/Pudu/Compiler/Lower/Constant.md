@@ -47,6 +47,10 @@ resolve aliases again, or change Core/runtime ABI.
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]] ·
 [[Compiler Lower Body]] · [[Native Folded Constants]]
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
 ## Referenced by
 
 [[Native Folded Constants]] · [[Compiler Lower Body]]

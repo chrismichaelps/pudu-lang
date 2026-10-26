@@ -70,6 +70,13 @@ made. Qualified calls pass their arguments as written.
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Compiler Lower Signature]] ·
 [[Compiler Lower Scalar]] · [[Compiler Lower Control]] · [[Core IR]]
 
+## Generic implementations (#552)
+
+Resolved Grill Log: generic implementations join the tables. An instance with
+unbound parameters, or one whose `Self` comes from the call, is specialized at
+each call against the receiver's type followed by the callee's bound inputs
+(qualified calls use the callee's fact as is).
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]

@@ -25,6 +25,10 @@ imported function, reported at that module's source.
 Resolved Grill Log: modulePrograms and moduleRefusalPrograms include
 [[Backend Method Programs]] the same way as the reference corpus.
 
+## Generic corpus (#552)
+
+Resolved Grill Log: both lists include [[Backend Generic Programs]].
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

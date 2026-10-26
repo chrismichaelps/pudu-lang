@@ -61,6 +61,12 @@ own key, with its module, declaration, scheme and bindings) and the
 `contextMethods`/`contextTraitMethods` indexes. `inModule` keeps the bindings
 of the body being lowered; `withTypeBindings` sets a callee's own.
 
+## Self at the call (#552)
+
+Resolved Grill Log: `instanceSelfAtCall` marks an inherited default of a
+generic owner, whose `Self` is the receiver's type and is only known at the
+call.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[Compiler Lower]] · [[Compiler Lower Body]]

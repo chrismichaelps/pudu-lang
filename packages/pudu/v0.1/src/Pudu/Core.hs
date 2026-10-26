@@ -237,8 +237,9 @@ data CoreType
   | CoreTextType
   | CoreCharType
   | CoreTupleType ![CoreType]
-  {-| A record, by its canonical key; its fields are its layout. -}
-  | CoreRecordType !Text
+  {-| A record, by its canonical key and its type arguments; its fields are
+      its layout. Box[Int] and Box[Str] are different layouts. -}
+  | CoreRecordType !Text ![CoreType]
   {-| A sum at concrete type arguments: Option[Int] and Option[Str] differ. -}
   | CoreSumType !Text ![CoreType]
   | CoreUnitType
@@ -253,7 +254,8 @@ coreTypeName coreType = case coreType of
   CoreTextType -> "Str"
   CoreCharType -> "Char"
   CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
-  CoreRecordType name -> displayName name
+  CoreRecordType name [] -> displayName name
+  CoreRecordType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreSumType name [] -> displayName name
   CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreUnitType -> "Unit"

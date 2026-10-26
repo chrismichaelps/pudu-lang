@@ -20,10 +20,10 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
-| Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
+| Records, tuples, sums and collections | Partial (#521, #525, #552) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; collections (Array, Map, Set, Bytes, Range) remain |
 | Pattern matching and iteration | Partial (#525, #540, #541) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for`, ranges as values and the iterator protocol remain |
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
-| Callables and generic code | Partial (#551) | Implementation members, inherited defaults, type- and trait-qualified calls and `toText()` dispatch statically on concrete owners; closures/captures, default parameter values, generic functions, generic implementations and `dynamic` values remain |
+| Callables and generic code | Partial (#551, #552) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and generic implementations dispatch statically, one copy per type list; closures/captures, default parameter values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544) | Shared borrows and dereference of represented values match the interpreter; Result/Option propagation, mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
@@ -352,3 +352,12 @@ bound to the owner. A receiver's checked type picks the method; arguments run
 before the receiver, which is passed first. Str and Char keep their built-in
 members first, and `toText()` falls back to `display`. [[Backend Method
 Programs]] holds the evidence. Generic implementations and `&mut self` refuse.
+
+## Generics (#552)
+
+[[Native Generics]] lowers each generic function, generic implementation and
+generic record once per type list checking instantiated it at. Bounded calls
+inside a copy dispatch to the concrete method. The fixture sweep caught a
+specialization that returned no result without refusing, which compiled two
+Std programs to an empty `main`; lowering now refuses any construct that stops
+without saying why. [[Backend Generic Programs]] holds the evidence.

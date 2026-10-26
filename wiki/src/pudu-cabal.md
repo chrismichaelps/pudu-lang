@@ -103,6 +103,10 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
 Resolved Grill Log: register [[Compiler Lower Method]] with existing
 dependencies only.
 
+## Generic lowering (#552)
+
+Resolved Grill Log: register [[Compiler Lower Generic]]; no new dependency.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

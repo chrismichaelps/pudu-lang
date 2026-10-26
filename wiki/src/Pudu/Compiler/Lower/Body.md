@@ -114,6 +114,13 @@ built-in Str/Char lowering, and `Owner.member(...)` tries the qualified form
 after variants. A call to a module function enters the callee with no
 bindings and restores the caller's afterwards.
 
+## Generic calls and stopping (#552)
+
+Resolved Grill Log: a call passes its callee's span to [[Compiler Lower
+Generic]], which names the function or its copy. A statement or result that
+stops without a recorded refusal is refused as `this construct`, so no
+branch can drop code silently.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

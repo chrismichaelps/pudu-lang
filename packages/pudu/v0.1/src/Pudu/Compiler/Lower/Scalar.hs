@@ -111,7 +111,7 @@ tupleType (CoreTupleType _) = True
 tupleType _ = False
 
 recordType :: CoreType -> Bool
-recordType (CoreRecordType _) = True
+recordType (CoreRecordType _ _) = True
 recordType _ = False
 
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
@@ -125,7 +125,7 @@ runtimeKind (CoreFloatType _) = "float"
 runtimeKind CoreTextType = "string"
 runtimeKind CoreCharType = "char"
 runtimeKind (CoreTupleType _) = "tuple"
-runtimeKind (CoreRecordType name) = displayName name
+runtimeKind (CoreRecordType name _) = displayName name
 runtimeKind kind = coreTypeName kind
 
 sumType :: CoreType -> Bool
