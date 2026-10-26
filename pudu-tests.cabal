@@ -94,6 +94,7 @@ test-suite pudu-test
     Pudu.Backend.ReferencePrograms
     Pudu.Backend.MethodPrograms
     Pudu.Backend.GenericPrograms
+    Pudu.Backend.TryPrograms
     Pudu.Backend.TextCaseSpec
     Pudu.Backend.TuplePrograms
     Pudu.Backend.TextLeakSpec

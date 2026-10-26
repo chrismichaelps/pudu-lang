@@ -31,6 +31,11 @@ receivers holding text or boxes are released.
 
 Resolved Grill Log: include genericSuccessPrograms.
 
+## Try lifetimes (#553)
+
+Resolved Grill Log: include trySuccessPrograms, so rebuilt failures and bound
+payloads are released.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

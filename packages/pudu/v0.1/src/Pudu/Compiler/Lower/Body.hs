@@ -16,6 +16,7 @@ import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -376,7 +377,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key
   RangeExpression{} -> halt spanValue "ranges" state
-  TryExpression{} -> halt spanValue "the try operator" state
+  TryExpression operand -> lowerTry lowerExpression state spanValue operand
   AwaitExpression{} -> halt spanValue "await" state
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
   TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members

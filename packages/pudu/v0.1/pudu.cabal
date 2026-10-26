@@ -130,6 +130,7 @@ library
     Pudu.Compiler.Lower.Reference
     Pudu.Compiler.Lower.Method
     Pudu.Compiler.Lower.Generic
+    Pudu.Compiler.Lower.Try
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

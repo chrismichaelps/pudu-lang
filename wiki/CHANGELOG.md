@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native try operator (#553)
+
+[[Compiler Lower Try]] lowers `?` on Result and Option as the evaluator's
+`unwrapTry`, rebuilding the returned failure at the function's own result
+type. [[Backend Try Programs]] passes under Clang, GCC 15, ASan/UBSan and both
+interpreter modes with counted cleanup. The refusal table caught a first
+version that admitted a `main` ending in `print(...)`.
+
 ## 2026-10-26 — Native generics (#552)
 
 [[Compiler Lower Generic]] specializes generic functions and implementations
