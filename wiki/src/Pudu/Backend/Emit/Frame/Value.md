@@ -65,6 +65,10 @@ value, normalised.
 Keyed operations call the receiver type's helpers (the result type's, for
 building from an array); `isEmpty` reads the root's size directly.
 
+## Char from a code (#562)
+
+`FrameCharOfCode` is the code's magnitude as a `uint32_t`.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

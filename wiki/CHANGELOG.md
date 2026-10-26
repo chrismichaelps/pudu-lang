@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native for over Str, tuples and payloads, and charFromCode (#562)
+
+`for` walks a Str's characters, a tuple's members and a sum's payload when it
+has no sequence of its own, and `charFromCode` answers `Some` only for Unicode
+scalar values ([[Compiler Lower For]], [[Compiler Lower Convert]]). The
+fast-loop property list now also finds properties written through
+`withCompiler`, which surfaced a runtime-table count fixed on #559.
+
 ## 2026-10-26 — Native maps and sets (#561)
 
 [[Native Maps and Sets]] carries `Map` and `Set` as shared persistent trees

@@ -223,6 +223,10 @@ written help; a slice failure needs it to name the length.
 carries every runtime operation on them, `KeyedFromArray` building one from an
 array, and `CoreComparable` asks `comparableValue`'s question of any value.
 
+## Char from a code (#562)
+
+`CoreCharOfCode` reads an Int already known to be a scalar value as a Char.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

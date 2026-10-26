@@ -18,7 +18,7 @@ import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
-import Pudu.Compiler.Lower.Convert (lowerConvertInteger)
+import Pudu.Compiler.Lower.Convert (lowerCharFromCode, lowerConvertInteger)
 import Pudu.Compiler.Lower.Keyed (lowerKeyedBuilder, lowerKeyedMethod, lowerSetLiteral)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
@@ -370,6 +370,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
     | name == "show" -> lowerRendered lowerExpression state spanValue name CoreShow arguments
     | name `elem` ["mapOf", "setOf"] -> lowerKeyedBuilder lowerExpression state spanValue name arguments
+    | name == "charFromCode" -> lowerCharFromCode lowerExpression state spanValue arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
     | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

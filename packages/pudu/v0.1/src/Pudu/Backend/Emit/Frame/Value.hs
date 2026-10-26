@@ -42,6 +42,7 @@ frameValue state value = case frameValueShape value of
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
   FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
   FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
+  FrameCharOfCode slot -> slotText slot >>= \code -> plain ("(uint32_t)pudu_magnitude(" <> code <> ")") ["magnitude"]
   FrameIntegerFits target slot -> do
     source <- slotText slot
     kind <- maybe (refused "a conversion to an unrepresented integer kind") Right (integerKindText target)

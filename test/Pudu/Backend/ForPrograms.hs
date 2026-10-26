@@ -55,6 +55,13 @@ forSuccessPrograms =
       , "  print(first(three) + \" \" + first(none))"
       , "  return 0", "}" ]
     , "t3\nt2\nt1\nt3 empty\n")
+  , ("for over Str, tuples and a sum's payload, and charFromCode", program
+      [ "type Pair = Two(Int, Int) | One(Int) | Zero", "", "fn main() -> Int {"
+      , "  for c in \"héllo\" { print(display(c)) }", "  for n in (1, 2, 3) { print(display(n * 10)) }", "  for v in Some(5) { print(display(v)) }"
+      , "  let none: Option[Int] = None", "  for v in none { print(display(v)) }", "  for p in Two(7, 8) { print(display(p)) }"
+      , "  for p in One(4) { print(display(p)) }", "  print(show(charFromCode(97)) + show(charFromCode(55296)) + show(charFromCode(1114112)) + show(charFromCode(-1)) + show(charFromCode(128512)) + show(charFromCode(0)))", "  return 0"
+      , "}" ]
+    , "h\né\nl\nl\no\n10\n20\n30\n5\n7\n8\n4\nSome('a')NoneNoneNoneSome('😀')Some('\0')\n")
   ]
 
 {-| A failure inside the body reports at its own source. -}

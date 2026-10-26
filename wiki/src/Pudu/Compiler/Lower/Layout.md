@@ -42,6 +42,10 @@ The conversion shapes contribute their operand's locals.
 A map contributes its key, its value and the `(key, value)` tuple its entries
 use; a set its member.
 
+## Char from a code (#562)
+
+`CoreCharOfCode` contributes its operand's locals.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

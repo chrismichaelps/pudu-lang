@@ -8,7 +8,7 @@ import Pudu.Compiler.Lower.Control (droppedTail, expressionIsPrintValued, popLoo
 import Pudu.Compiler.Lower.Match (lowerPattern)
 import Pudu.Compiler.Lower.Method (callInstance)
 import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
-import Pudu.Compiler.Lower.Types (ownerKeyOf, typeForSpan)
+import Pudu.Compiler.Lower.Types (ownerKeyOf, sumVariants, typeForSpan)
 import Pudu.Core
 import Pudu.Frontend.Syntax (Block, Expression (..), Located (..), Pattern)
 import Pudu.IntegerLiteral (IntegerKind (..))
@@ -42,9 +42,13 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, _)) -> walkArray after core kind itemKind
       (after, Nothing) -> refused after
-    -- A map walks its entries and a set its members, listed before the body runs.
-    Just keyed@(CoreMapType key value) -> listed keyed KeyedEntries (CoreTupleType [key, value])
-    Just keyed@(CoreSetType member) -> listed keyed KeyedKeys member
+    -- A map walks its entries, a set its members and a Str its characters,
+    -- listed before the body runs.
+    Just (CoreMapType key value) -> listed (CoreTupleType [key, value]) (simply (CoreTupleType [key, value]) (\core -> CoreKeyedMethod KeyedEntries core []))
+    Just (CoreSetType member) -> listed member (simply member (\core -> CoreKeyedMethod KeyedKeys core []))
+    Just CoreTextType -> listed CoreCharType (simply CoreCharType (\core -> CoreTextMethod TextChars core []))
+    Just kind@(CoreTupleType members@(first : _))
+      | all (== first) members -> listed first (membersOf kind first members)
     Just kind
       | Just owner <- ownerKeyOf kind
       , Just begin <- Map.lookup (owner, "begin") (contextMethods (lowerContext state))
@@ -53,14 +57,38 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
             (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
             (after, Just (core, _)) -> walkSequence after core kind begin advance
             (after, Nothing) -> refused after
+    -- With no sequence of its own, a sum walks the payload of the variant it
+    -- holds, as the evaluator falls back to doing.
+    Just kind@(CoreSumType _ _)
+      | Just variants <- sumVariants (contextTypes (lowerContext state)) kind
+      , (itemKind : others) <- concatMap (map snd . coreVariantFields) variants
+      , all (== itemKind) others -> listed itemKind (payloadsOf itemKind variants)
     Just kind -> halt (locatedSpan iterated) ("a for loop over a " <> coreTypeName kind) state
     Nothing -> halt (locatedSpan iterated) "a for loop over this value" state
  where
-  listed _ name itemKind = case lower state iterated of
+  listed itemKind toArray = case lower state iterated of
     (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
     (after, Just (core, _)) ->
-      walkArray after (expression (CoreArrayType itemKind) (CoreKeyedMethod name core [])) (CoreArrayType itemKind) itemKind
+      let (ready, array) = toArray after core
+       in walkArray ready array (CoreArrayType itemKind) itemKind
     (after, Nothing) -> refused after
+  simply itemKind shape current core = (current, expression (CoreArrayType itemKind) (shape core))
+  -- The tuple runs once into a local; its members are read from there.
+  membersOf kind itemKind members current core =
+    let (withTuple, tupleLocal) = hidden current kind
+        arrayKind = CoreArrayType itemKind
+        held = [expression member (CoreTupleIndex position (reading tupleLocal)) | (position, member) <- zip [0 ..] members]
+     in (withTuple, expression arrayKind (CoreBlockValue (CoreBlock [statement (CoreDeclare tupleLocal core)] (Just (expression arrayKind (CoreArray held))))))
+  -- One arm per variant, each answering its payload as an array.
+  payloadsOf itemKind variants current core =
+    let arrayKind = CoreArrayType itemKind
+        arm (now, done) variant =
+          let fields = coreVariantFields variant
+              (next, locals) = foldl (\(here, bound) _ -> let (after', local) = hidden here itemKind in (after', bound <> [local])) (now, []) fields
+              answer = expression arrayKind (CoreArray (map reading locals))
+           in (next, done <> [CoreArm at (CoreVariantPattern (coreVariantName variant) (map CoreBindPattern locals)) Nothing answer])
+        (final, arms) = foldl arm (current, []) variants
+     in (final, expression arrayKind (CoreMatch core arms))
   stops core = coreExpressionType core == CoreNeverType
   stopped cores = CoreExpression at CoreNeverType (CoreBlockValue (CoreBlock [CoreStatement at (CoreEvaluate core) | core <- cores] Nothing))
   expression kind shape = CoreExpression at kind shape

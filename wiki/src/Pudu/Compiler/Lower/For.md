@@ -63,6 +63,14 @@ The body goes through `droppedTail` from [[Compiler Lower Control]].
 
 A map walks `entries()` and a set `toArray()`, listed before the body runs.
 
+## Str, tuples and payloads (#562)
+
+Resolved Grill Log: a Str walks `chars()`; a tuple runs once into a local and
+walks its members (the checker makes them one type); a sum with no `begin`
+and `advance` walks the payload of the variant it holds, through a match whose
+arms answer arrays, after the sequence protocol was looked for, which is
+`evaluateFor`'s order. Each lists its items before the body runs.
+
 ## Referenced by
 
 [[Compiler Lower Body]]

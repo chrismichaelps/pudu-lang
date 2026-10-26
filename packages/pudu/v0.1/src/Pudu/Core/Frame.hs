@@ -88,6 +88,7 @@ data FrameValueShape
   | FrameCharLiteral !Char
   | FrameCharCode !FrameSlot
   | FrameIntegerFits !IntegerKind !FrameSlot
+  | FrameCharOfCode !FrameSlot
   | FrameKeyedMethod !CoreKeyedMethodName !FrameSlot ![FrameSlot]
   | FrameComparable !FrameSlot
   | FrameIntegerConvert !IntegerKind !FrameSlot

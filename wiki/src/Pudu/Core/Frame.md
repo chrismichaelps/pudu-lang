@@ -71,6 +71,10 @@ source slot.
 
 `FrameKeyedMethod` and `FrameComparable` mirror the Core shapes.
 
+## Char from a code (#562)
+
+`FrameCharOfCode` mirrors `CoreCharOfCode`.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]
