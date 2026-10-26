@@ -57,3 +57,11 @@ Resolved Grill Log (#543): inspect emitted CoreFloatLiteral bits from real
 folded products. Lock Float32 0.1 and negative-zero encodings independently,
 and require NaN bits to equal the actual folded encoding; decimal output alone
 cannot prove NaN payload preservation.
+
+## Shared reference fact boundary (#544)
+
+Resolved Grill Log: verify false-only canonical type projection and exact
+sharedReferenceTarget facts, including a plain Bool fact that must not become
+a reference and a different source span. Compile checked mutable-loan and
+borrowed print-Result programs and require E6001; delete shared expression
+facts to require a located refusal rather than guessed identity lowering.

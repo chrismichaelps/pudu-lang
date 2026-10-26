@@ -134,3 +134,12 @@ so they never become conditions or integer operands.
 `withRecords`. `formedCoreTypeIn` maps a parameterless record to
 `CoreRecordType` with each field formed the same way, refusing a record
 reached from inside itself. `formedCoreType` stays builtin-only.
+
+## Checked shared reference carriers (#544)
+
+Resolved Grill Log: formedCoreTypeIn recursively projects ReferenceTypeValue
+False target to the target's canonical carrier; True remains unrepresented.
+Export sharedReferenceTarget, which requires an actual shared-reference type
+at the exact complete TypeInfo span before projecting its target. Plain erased
+Core types, approximate offsets and missing facts are insufficient evidence.
+No runtime reference tag or mutable writeback is implied.

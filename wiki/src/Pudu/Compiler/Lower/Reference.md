@@ -1,7 +1,7 @@
 ---
 type: module
 path: "@root/src/Pudu/Compiler/Lower/Reference.hs"
-fidelity: Planned
+fidelity: Active
 grammar: "[[grammar/haskell]]"
 aliases: [Compiler Lower Reference]
 ---
@@ -9,8 +9,8 @@ aliases: [Compiler Lower Reference]
 
 ## Purpose and interface
 
-Planned compiler-owned identity lowering under [[Native Shared References]].
-Export lowerReference with the body's expression callback, LowerState, complete
+Identity lowering for `&` and `*` under [[Native Shared References]].
+Exports lowerReference with the body's expression callback, LowerState, complete
 operator Span, operator Text and located operand, returning the ordinary
 LowerState/optional CoreExpression-and-type result.
 

@@ -248,3 +248,10 @@ Register Pudu.Eval.RecordOrderSpec in other-modules (#519).
 Register Pudu.Eval.FloatOrderSpec in other-modules (#522).
 
 Register Pudu.Backend.RecordPrograms in other-modules (#521).
+
+## Shared reference corpus (#544)
+
+Resolved Grill Log: register [[Backend Shared Reference Programs]] explicitly.
+Existing ModulePrograms and TextLeakSpec consumers execute its programs, and
+LowerTypesSpec's runner-consumed list executes reference fact/refusal checks.
+No new dependency or Main coordinator is required.

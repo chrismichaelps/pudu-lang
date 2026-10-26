@@ -3,6 +3,7 @@ module Pudu.Backend.ModulePrograms (modulePrograms, moduleRefusalPrograms, const
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.ReferencePrograms (referenceSuccessPrograms, referenceRefusalPrograms)
 
 geometry :: (FilePath, Text)
 geometry = ("Geometry.pudu", Text.unlines
@@ -46,7 +47,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms] <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms] <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program
@@ -146,6 +147,7 @@ constantPrograms =
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
+  [(label, [], source) | (label, source) <- referenceRefusalPrograms] <>
   [ ( "a constant read preserves the runtime overflow operation's span"
     , [], program
         [ "const MAX = 9223372036854775807", "fn main() -> Int {"

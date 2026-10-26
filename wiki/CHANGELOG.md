@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native shared references (#544)
+
+[[Compiler Lower Reference]] lowers `&` and `*` of represented values as the
+evaluator does, as the value itself, once the checked facts show a shared
+reference at the exact span; [[Compiler Lower Types]] projects `&T` to the
+carrier of `T`. `&mut` and borrowed print results keep refusing. Added
+[[Backend Shared Reference Programs]], counted cleanup and fact/refusal
+boundaries. Clang, GCC 15, ASan/UBSan and both interpreter modes agree. The
+references row is now partial; the area count is unchanged.
+
 ## 2026-10-22 — Shared-reference native contract (#544, design)
 
 [[Native Shared References]] resolves false-only reference carrier projection

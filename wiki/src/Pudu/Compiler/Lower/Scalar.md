@@ -125,3 +125,10 @@ unary operators with `cannot apply X to a tuple`.
 Two records of one type admit `==` and `!=`. Other operators, ordering
 included, trap with `cannot apply X to a Name and a Name`, naming the record
 as `valueKind` does; unary operators with `cannot apply X to a Name`.
+
+## Shared reference dispatch (#544)
+
+Resolved Grill Log: delegate unary & and * to [[Compiler Lower Reference]]
+before the existing arithmetic operator table. Other unary dispatch, eager
+Never rules, print-carrier guards and dynamic operator diagnostics retain
+their contracts. Unary &mut remains refused.

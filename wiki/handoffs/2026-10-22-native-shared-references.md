@@ -1,12 +1,12 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 544
 aliases: [Native Shared Reference Delivery]
 ---
 # Native Shared Reference Delivery
 
-Delivery Owner → Language Architect. Backend implementation is the next role.
+Delivery Owner → Language Architect → Backend Engineer.
 No subagents, per user instruction. Semantic and Forensic Guardian review remain
 promotion requirements; no author self-approval is implied.
 
@@ -37,10 +37,11 @@ True remains unsupported. Add sharedReferenceTarget to inspect exact raw
 reference facts. Reference lowering must preserve Never, reject print's hidden
 Result, evaluate once and retain the operand's original diagnostic span.
 
-Exact next action: finish the existing module/test manifest mirrors, then
-implement the false-only shared type projection and bounded identity lowerer.
-Validate the real corpus and static boundaries before the clean full gates.
-Methods, mutable writeback, generic code and all other emission gaps remain open.
+Done: the false-only type projection and identity lowerer are in, with the
+corpus, counted cleanup and fact/refusal checks passing under Clang, GCC 15,
+ASan/UBSan and both interpreter modes. The stale EmitSpec `&value` refusal now
+uses a `&mut Int` parameter. Methods, mutable writeback, generic code and every
+other emission gap remain open; trait methods are the next slice.
 
 ## Referenced by
 

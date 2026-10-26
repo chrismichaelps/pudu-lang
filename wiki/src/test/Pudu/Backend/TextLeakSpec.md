@@ -52,3 +52,9 @@ Resolved Grill Log: include constantPrograms and use lowerModuleFolded with
 compileFolded from the actual CompileResult. Count every allocation in nested
 frozen text/aggregate construction, repeated reads and transfers; do not
 synthesize constants or add an interpreter fallback to the native leak test.
+
+## Shared reference lifetimes (#544)
+
+Resolved Grill Log: include referenceSuccessPrograms in counted cleanup.
+Existing frame-cell ownership must retain borrowed text and aggregate carriers
+through parameters/results and release every allocation on completion.

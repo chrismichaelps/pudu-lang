@@ -25,7 +25,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
-| Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
+| Errors, references and resources | Partial (#544) | Shared borrows and dereference of represented values match the interpreter; Result/Option propagation, mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
 
 ## Published progress (#496)
@@ -335,3 +335,11 @@ boundary. No runtime initializer is evaluated by lowering. Clang, GCC 15, ASan/U
 allocation programs pass. All 20 clean gates pass, including 712 optimized
 test groups; the real CLI native build also matches both interpreters.
 Evidence is recorded in [[Native Folded Constant Delivery]].
+
+## Shared references (#544)
+
+[[Compiler Lower Reference]] lowers `&` and `*` of represented values to the
+operand itself, as the evaluator's identity operators do, once the exact
+checked facts show a shared reference. `&mut` keeps refusing until calls write
+places back. [[Backend Shared Reference Programs]] covers parameters, results,
+aggregates, transfers, failure provenance and borrows of reassigned variables.

@@ -1,6 +1,6 @@
 ---
 type: architecture
-status: RESOLVED_DESIGN
+status: IMPLEMENTED
 tags: [architecture, backend, references]
 aliases: [Native Shared References]
 ---
@@ -48,6 +48,15 @@ transfers, missing reference facts, mutable-reference refusals, print-carrier
 refusals, exact runtime failures and counted cleanup. Compare hand-written
 answers and tree/compiled/native behavior under Clang, GCC and sanitizers;
 run the complete clean repository gates.
+
+## Delivered (#544)
+
+[[Compiler Lower Reference]] and the reference clause of [[Compiler Lower Types]]
+implement this contract. [[Backend Shared Reference Programs]] passes against
+hand-written answers and both interpreter modes under Clang, GCC 15 and Clang
+ASan/UBSan, and its successes release every counted allocation. The EmitSpec
+refusal case that expected `&value` to refuse now uses a `&mut Int`
+parameter, which still refuses at its type.
 
 ## Resolved Grill Log
 
