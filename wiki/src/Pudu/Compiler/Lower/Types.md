@@ -106,6 +106,11 @@ parameters for its fields, and `layoutOf` reads a record's fields under those
 arguments. `typeFactAt` gives the unformed fact, which is what
 [[Compiler Lower Generic]] matches a scheme against.
 
+## Function types (#555)
+
+Resolved Grill Log: a synchronous function type forms when its inputs and
+result do; an async one does not.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

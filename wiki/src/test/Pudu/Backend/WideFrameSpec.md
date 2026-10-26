@@ -37,6 +37,10 @@ these Core-level tests must never be presented as public-source parity.
 
 [[Backend Frame Program]] · [[Backend Frame Values]] · [[Backend Frame Runtime]] · [[Compiler Frame Lowering]]
 
+## Closures (#555)
+
+Resolved Grill Log: the module literal carries no closures.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Wide Frame Delivery]]

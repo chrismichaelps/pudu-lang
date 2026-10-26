@@ -17,6 +17,7 @@ module Pudu.Core
   , CoreFunction (..)
   , CoreLoopId (..)
   , CoreArm (..)
+  , CoreClosureInfo (..)
   , CoreLayout (..)
   , CoreLocal (..)
   , CoreModule (..)
@@ -48,6 +49,19 @@ data CoreModule = CoreModule
   {-| How each record and sum the functions mention is laid out. Types name
       records and sums only by identity, so recursive ones stay finite. -}
   , coreModuleLayouts :: !(Map CoreType CoreLayout)
+  {-| Every function a closure can run, by its key. -}
+  , coreModuleClosures :: !(Map Text CoreClosureInfo)
+  }
+  deriving stock (Eq, Show)
+
+{-| What a closure over a lifted function holds and how it reads: the types
+    of its captures in cell order, the name `<fn name>` renders, and the place
+    it was written. Two closures are equal when they were written in the same
+    place, as the evaluator's closures are. -}
+data CoreClosureInfo = CoreClosureInfo
+  { closureCaptures :: ![CoreType]
+  , closureDisplayName :: !Text
+  , closureSite :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -168,6 +182,12 @@ data CoreExpressionShape
   | CoreVariantName !CoreExpression
   | CorePrint !CoreExpression
   | CoreCall !Text ![CoreExpression]
+  {-| A closure over the lifted function with this key, holding these values. -}
+  | CoreClosure !Text ![CoreExpression]
+  {-| Capture number i of the closure the operand reads. -}
+  | CoreCapture !Int !CoreExpression
+  {-| A call through a function value: the callee runs, then the arguments. -}
+  | CoreCallValue !CoreExpression ![CoreExpression]
   {-| Operands finish in order before E7001; this expression never returns. -}
   | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
@@ -242,6 +262,8 @@ data CoreType
   | CoreRecordType !Text ![CoreType]
   {-| A sum at concrete type arguments: Option[Int] and Option[Str] differ. -}
   | CoreSumType !Text ![CoreType]
+  {-| A function value: a closure box whose first cell names what it runs. -}
+  | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
   | CoreNeverType
   deriving stock (Eq, Ord, Show)
@@ -258,6 +280,7 @@ coreTypeName coreType = case coreType of
   CoreRecordType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreSumType name [] -> displayName name
   CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
+  CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"
 
@@ -272,6 +295,9 @@ displayName key = case Text.splitOn "." key of
 data CoreLayout
   = CoreRecordLayout ![(Text, CoreType)]
   | CoreSumLayout ![CoreVariant]
+  {-| A function type's closures: every lifted function a value of it can
+      run, by key, with what its box holds. -}
+  | CoreClosureLayout ![(Text, CoreClosureInfo)]
   deriving stock (Eq, Show)
 
 {-| One variant: its name, payload types, and whether the payload is a

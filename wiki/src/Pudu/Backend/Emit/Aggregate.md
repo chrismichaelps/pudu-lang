@@ -55,6 +55,14 @@ Resolved Grill Log: a record with arguments mangles like a sum,
 `R<n>_<key>_<args>_E`; one without keeps `R_<key>`, so existing output is
 unchanged.
 
+## Closures and ordering (#555)
+
+Resolved Grill Log: function types are owned boxes with drop, show, equal,
+compare and one maker per lifted function, switching on cell 0. A
+`comparable` helper per aggregate mirrors `comparableValue`. Record and sum
+members order through their own compare helpers: records field by field, sums
+by variant name and then payload. Before this they compared by pointer.
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

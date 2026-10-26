@@ -43,6 +43,11 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 
 - **Q:** What does frame lowering pass on? **A:** The Core module's layouts, unchanged, to `frameModuleLayouts` (#525).
 
+## Closures (#555)
+
+Resolved Grill Log: closure information passes into the frame module;
+`FrameCallValue` resumes like `FrameCall`.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

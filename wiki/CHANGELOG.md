@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native closures (#555)
+
+[[Compiler Lower Lambda]] lowers lambdas, named functions used as values and
+calls through function values. A closure is a box naming its lifted function,
+with copies of what the lambda mentions. Fixed on the way: tuples holding
+records or sums ordered those members by pointer since #521/#525. They now
+follow `compareValues`, and tuples holding functions fail ordering as
+`comparableValue` decides. [[Backend Closure Programs]] passes under Clang,
+GCC 15, ASan/UBSan and both interpreter modes with counted cleanup.
+
 ## 2026-10-26 — Native for loops (#554)
 
 [[Compiler Lower For]] lowers `for` over written ranges and sequence types,

@@ -10,6 +10,8 @@
 -}
 module Pudu.Backend.EmitSpec (backendEmitProperties) where
 
+import Data.List (isInfixOf)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Backend.Emit (emitProgram)
@@ -72,7 +74,7 @@ backendEmitProperties =
   , ("unreachable helpers are omitted", testEntryOnly)
   , ("transitively reachable typed functions lower once", testReachableFunctions)
   , ("unsupported constructs refuse with E6001 at their own span", testRefusals)
-  , ("function values refuse before dependent indirect calls", testLocalFunctionRefusal)
+  , ("function values lower to closures and indirect calls", testLocalFunctionValue)
   , ("emission is deterministic", testDeterminism)
   , ("sites carry the checked-arithmetic text verbatim", testSiteText)
   , ("one site per checked operation", testSiteCount)
@@ -311,10 +313,10 @@ refusalCases =
       [ "module Refuse"
       , "fn keep[T](value: T) -> Int { 1 }"
       , "fn main() -> Int {"
-      , "  let kept = keep(fn(n: Int) -> Int => n)"
+      , "  let kept = keep(1.5d)"
       , "  return kept"
       , "}"
-      ], "keep(fn")
+      ], "keep(1.5d)")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""
@@ -365,8 +367,8 @@ refusalOutcome (label, sourceText', marker) = do
             _ -> counterexample (label <> ": expected exactly one refusal") False
         ]
 
-testLocalFunctionRefusal :: IO Property
-testLocalFunctionRefusal = do
+testLocalFunctionValue :: IO Property
+testLocalFunctionValue = do
   source <- newSource (SourceName "indirect.pudu") $ Text.unlines
     [ "module Indirect", "fn helper() -> Int { return 1 }"
     , "fn main() -> Int {", "  let chosen = helper", "  return chosen()", "}"
@@ -374,12 +376,11 @@ testLocalFunctionRefusal = do
   result <- runCompile source
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
-      Lowered _ -> counterexample "indirect call unexpectedly lowered" False
-      LowerRefused refusals -> conjoin
-        [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001"]
-        , map (offsetPosition source . spanStart . diagnosticSpan) refusals
-            === map (markerPosition source) ["helper\n"]
+      Lowered core -> conjoin
+        [ counterexample "no forwarder for helper" (Map.member "Indirect.helper#value" (coreModuleClosures core))
+        , counterexample "no call through the value" ("CoreCallValue" `isInfixOf` show (coreModuleFunctions core))
         ]
+      LowerRefused refusals -> counterexample ("refused: " <> show (map diagnosticMessage refusals)) False
     _ -> counterexample ("indirect-call fixture: " <> show (compileDiagnostics result)) False
 
 markerPosition :: Source -> Text -> Maybe Position

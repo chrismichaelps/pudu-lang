@@ -38,6 +38,11 @@ Uses [[Source]], [[Diagnostic Render]], [[Diagnostic Arithmetic]], [[Diagnostic 
 - **Q:** Why extract this responsibility? **A:** It has a stable pure interface and keeps the emitter below 500 lines. The split preserves output ordering and diagnostic geometry. Rejected: a single growing emitter.
 - **Q:** May extraction change semantics? **A:** No; eager evaluation is sequenced by the emitter, while this module supplies representation and assembly primitives. Rejected: backend inference.
 
+## Function numbers (#555)
+
+Resolved Grill Log: `emitFunctionIds` maps a function key to its frame-table
+number.
+
 ## Referenced by
 
 [[Backend Emit]] · [[src/Pudu/Backend/_MOC]]

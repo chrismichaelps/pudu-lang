@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
 import Data.Map.Strict (Map)
-import Pudu.Core (CoreBinaryOperator (..), CoreLayout, CoreTextMethodName, CoreType)
+import Pudu.Core (CoreBinaryOperator (..), CoreClosureInfo, CoreLayout, CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
@@ -30,6 +30,7 @@ data FrameModule = FrameModule
   , frameModuleEntry :: !Text
   , frameModuleFunctions :: ![FrameFunction]
   , frameModuleLayouts :: !(Map CoreType CoreLayout)
+  , frameModuleClosures :: !(Map Text CoreClosureInfo)
   }
   deriving stock (Eq, Show)
 
@@ -62,6 +63,8 @@ data FrameTerminator
   = FrameJump !(Maybe Span) !FrameLabel
   | FrameBranch !Span !FrameSlot !FrameLabel !FrameLabel
   | FrameCall !Span !Text ![FrameSlot] !(Maybe FrameSlot) !FrameLabel
+  {-| A call through the closure in the first slot, which is also its first argument. -}
+  | FrameCallValue !Span !FrameSlot ![FrameSlot] !(Maybe FrameSlot) !FrameLabel
   | FrameReturn !(Maybe Span) !(Maybe FrameSlot)
   | FrameOperatorFailure !Span !Text
   {-| A diagnostic with this code and help whose message is the text in the slot. -}
@@ -96,6 +99,10 @@ data FrameValueShape
   | FrameShow !FrameSlot
   | FrameTextMethod !CoreTextMethodName !FrameSlot ![FrameSlot]
   | FrameUnitLiteral
+  {-| A closure over the named lifted function, holding these values. -}
+  | FrameClosure !Text ![FrameSlot]
+  {-| Capture number i of the closure in the slot. -}
+  | FrameCapture !Int !FrameSlot
   | FrameRead !FrameSlot
   | FrameUnary !FrameUnaryOperator !FrameSlot
   | FrameBinary !FrameScalarOperator !FrameSlot !FrameSlot

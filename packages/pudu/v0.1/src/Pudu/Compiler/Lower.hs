@@ -192,6 +192,7 @@ lowerProgram entryName programModules@(rootModule : _)
               , lowerScopes = []
               , lowerFunctionResult = Nothing
               , lowerDeclaredResult = Nothing
+              , lowerCurrentKey = entryKey
               }
           (afterEntry, entryFunction) = lowerEntryBody entry
             ((startFunction initial [] Nothing){lowerDeclaredResult = declaredEntryResult entry})
@@ -208,7 +209,7 @@ lowerProgram entryName programModules@(rootModule : _)
       | otherwise = case target state name of
           Nothing -> state
           Just (owner, function, bindings) ->
-            case ensureSignature name function (startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing) of
+            case ensureSignature name function ((startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing){lowerCurrentKey = name}) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
                 case lowerFunctionBody
@@ -255,7 +256,8 @@ lowerProgram entryName programModules@(rootModule : _)
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
               , coreModuleEntry = entryKey
               , coreModuleFunctions = functions
-              , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) functions
+              , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) (contextClosures (lowerContext state)) functions
+              , coreModuleClosures = contextClosures (lowerContext state)
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals

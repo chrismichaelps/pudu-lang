@@ -18,6 +18,7 @@ import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Generic (admitCallee)
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
+import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
@@ -57,6 +58,7 @@ lowerEntryBody located state
                 kind@(CoreTupleType _) -> built after coreBlock kind
                 kind@(CoreRecordType _ _) -> built after coreBlock kind
                 kind@(CoreSumType _ _) -> built after coreBlock kind
+                kind@(CoreFunctionType _ _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -308,6 +310,7 @@ allowedResultType declared operand = case declared of
     CoreTupleType _ -> True
     CoreRecordType _ _ -> True
     CoreSumType _ _ -> True
+    CoreFunctionType _ _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -332,6 +335,8 @@ lowerExpression state (Located spanValue expression) = case expression of
   NameExpression (name :| []) -> case lookupLocal state name of
     Just local -> value (CoreReadLocal local) (coreLocalType local)
     Nothing | Just lowered <- lowerConstant state spanValue [name] -> lowered
+    Nothing | Just key <- resolveFunction state [name], Just entry <- lookup key (contextTable (lowerContext state)) ->
+      lowerFunctionValue state spanValue key entry
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
       (lowerVariant lowerExpression state spanValue name [])
   NameExpression (first :| rest) ->
@@ -342,7 +347,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located callee (NameExpression (name :| []))) arguments
-    | Just _ <- lookupLocal state name -> halt spanValue "a call through a local value" state
+    | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> callFunction key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
     | name == "print" -> case arguments of
@@ -370,7 +375,7 @@ lowerExpression state (Located spanValue expression) = case expression of
     | Just key <- resolveFunction state (first : rest) -> callFunction key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
-  CallExpression{} -> halt spanValue "this call" state
+  CallExpression callee arguments -> lowerValueCall lowerExpression state spanValue callee arguments
   MemberExpression receiver (Located _ member)
     | Located _ (NameExpression (owner :| [])) <- receiver
     , Just lowered <- lowerConstant state spanValue [owner, member] -> lowered
@@ -388,7 +393,7 @@ lowerExpression state (Located spanValue expression) = case expression of
   UnsafeExpression{} -> halt spanValue "unsafe blocks" state
   MacroCall{} -> halt spanValue "macro calls" state
   ScopeExpression{} -> halt spanValue "scope expressions" state
-  LambdaExpression{} -> halt spanValue "lambdas" state
+  LambdaExpression function -> lowerLambda lowerExpression lowerBlock state spanValue function
   TypeApplication{} -> halt spanValue "type applications" state
   RecordExpression (ModuleName segments) fields -> lowerRecord lowerExpression state spanValue (NonEmpty.last segments) fields
   RecordUpdateExpression _ source fields -> lowerRecordUpdate lowerExpression state spanValue source fields

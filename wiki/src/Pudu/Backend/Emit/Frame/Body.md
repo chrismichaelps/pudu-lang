@@ -42,6 +42,12 @@ uses existing byte lengths and shared helpers. All fault cases return data.
 
 - **Q:** How is `FrameFailText` emitted? **A:** As `pudu_fail_text` with a site that keeps the code, help and place, and the message slot's text (#525).
 
+## Calls through values (#555)
+
+Resolved Grill Log: the step's callee is the closure's cell 0 and the closure
+is argument 0. The function-number table goes into the emit state for closure
+makers.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

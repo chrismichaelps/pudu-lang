@@ -132,6 +132,7 @@ library
     Pudu.Compiler.Lower.Generic
     Pudu.Compiler.Lower.Try
     Pudu.Compiler.Lower.For
+    Pudu.Compiler.Lower.Lambda
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

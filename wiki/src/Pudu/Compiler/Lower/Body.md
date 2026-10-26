@@ -129,6 +129,12 @@ Resolved Grill Log: `TryExpression` lowers through [[Compiler Lower Try]].
 
 Resolved Grill Log: `ForExpression` lowers through [[Compiler Lower For]].
 
+## Function values (#555)
+
+Resolved Grill Log: lambdas, named functions used as values and calls through
+locals or any other function-typed callee go to [[Compiler Lower Lambda]]. An
+entry may return a function value.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

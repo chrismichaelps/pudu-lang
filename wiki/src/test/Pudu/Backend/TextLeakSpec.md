@@ -41,6 +41,10 @@ payloads are released.
 Resolved Grill Log: include forSuccessPrograms, so sequence values and states
 are released.
 
+## Closures (#555)
+
+Resolved Grill Log: include closureSuccessPrograms, so closures and their captures are released.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]
