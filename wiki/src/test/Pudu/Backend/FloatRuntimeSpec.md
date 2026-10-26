@@ -42,6 +42,11 @@ full clean gates. Fixed returned properties are not repeated independent IO.
 
 [[Native Floating Runtime]] · [[Native Runtime Dependencies]] · [[Backend Runtime]] · [[Pudu Test Cabal Manifest]] · [[Repository Test Runner]]
 
+## Text number parts (#559)
+
+The runtime-selection property counts [[Native Text Number]] among the text
+tables, whose parts take their prerequisites from their own dependency lists.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]
