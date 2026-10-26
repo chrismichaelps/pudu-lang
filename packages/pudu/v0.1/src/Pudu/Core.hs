@@ -230,6 +230,15 @@ data CoreTextMethodName
   | TextToUpper
   | TextToLower
   | TextCharAt
+  | TextSplit
+  | TextLines
+  | TextChars
+  {-| `toInt` and `toFloat` come apart into a test and a read, so lowering
+      can build the Option itself. -}
+  | TextParsesInt
+  | TextIntOf
+  | TextParsesFloat
+  | TextFloatOf
   deriving stock (Eq, Show)
 
 {-| The array methods native implements in the runtime, named as the

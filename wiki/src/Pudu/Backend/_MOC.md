@@ -58,6 +58,7 @@ aliases: [Backend Module Map]
 - [[Native Text Runtime]] · [[Backend Text Programs]] · [[Backend Text Leak Tests]] — owned native text.
 - [[Native Text Methods]] · [[Backend Text Method Programs]] — native Str methods.
 - [[Native Text Case]] · [[Backend Text Case Tests]] — native trim and case mapping.
+- [[Native Text Pieces]] · [[Native Text Number]] · [[Backend Text Collection Programs]] — Str methods answering arrays and options (#559).
 - [[Native Char Runtime]] · [[Backend Char Programs]] — native Char values and charAt.
 - [[Native Aggregate Emission]] · [[Native Aggregate Runtime]] · [[Compiler Lower Tuple]] · [[Backend Tuple Programs]] — native tuples.
 - [[Compiler Lower Record]] · [[Backend Record Programs]] — native records.

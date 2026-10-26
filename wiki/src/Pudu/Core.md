@@ -206,6 +206,12 @@ Resolved Grill Log: `CoreArrayPattern` holds front patterns, an optional rest
 optional fourth operand, help text computed at run time, which replaces the
 written help; a slice failure needs it to name the length.
 
+## Str methods with collection results (#559)
+
+`TextSplit`, `TextLines` and `TextChars` answer arrays. `TextParsesInt`,
+`TextIntOf`, `TextParsesFloat` and `TextFloatOf` are the halves of `toInt` and
+`toFloat`.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

@@ -10,9 +10,12 @@ import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
 import Pudu.Backend.Runtime.Text (textRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Case (textCaseRuntimeDependencies)
 import Pudu.Backend.Runtime.Text.Methods (textMethodRuntimeDependencies)
+import Pudu.Backend.Runtime.Text.Number (textNumberRuntimeDependencies)
+import Pudu.Backend.Runtime.Text.Pieces (textPieceRuntimeDependencies)
 
 runtimeDependencies :: Text -> [Text]
 runtimeDependencies name = integerRuntimeDependencies name <> floatRuntimeDependencies name
   <> textRuntimeDependencies name <> textMethodRuntimeDependencies name
   <> textCaseRuntimeDependencies name <> charRuntimeDependencies name
   <> aggregateRuntimeDependencies name <> arrayRuntimeDependencies name
+  <> textNumberRuntimeDependencies name <> textPieceRuntimeDependencies name

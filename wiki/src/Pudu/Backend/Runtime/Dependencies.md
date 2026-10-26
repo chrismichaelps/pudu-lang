@@ -29,6 +29,11 @@ parts and callers perform their existing cycle-safe visited-set closure.
 
 Resolved Grill Log: includes the array parts' prerequisites.
 
+## Text pieces and numbers (#559)
+
+Adds [[Native Text Pieces]] and [[Native Text Number]], whose
+`text_parses_int`-style names point at the part that defines them.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]

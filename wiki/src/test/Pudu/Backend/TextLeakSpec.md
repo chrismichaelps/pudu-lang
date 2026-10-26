@@ -54,6 +54,11 @@ buffers are all released.
 
 Counts cleanup for [[Backend Array Pattern Programs]] too.
 
+## Text collections (#559)
+
+Counts cleanup for [[Backend Text Collection Programs]], arrays of views
+included.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

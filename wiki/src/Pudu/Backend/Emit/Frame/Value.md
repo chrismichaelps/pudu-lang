@@ -50,6 +50,10 @@ Resolved Grill Log: literals pass their cells to the type's maker; `get` and
 indexing fail with E7004 at their own sites; other methods call the type's
 helpers or the runtime.
 
+## Str methods with collection results (#559)
+
+The new text methods are plain runtime calls named after their parts.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

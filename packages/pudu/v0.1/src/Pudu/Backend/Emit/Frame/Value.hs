@@ -142,6 +142,13 @@ frameValue state value = case frameValueShape value of
       TextToUpper -> simple "text_to_upper"
       TextToLower -> simple "text_to_lower"
       TextCharAt -> counted "text_char_at" "index out of range"
+      TextSplit -> simple "text_split"
+      TextLines -> simple "text_lines"
+      TextChars -> simple "text_chars"
+      TextParsesInt -> simple "text_parses_int"
+      TextIntOf -> simple "text_int_of"
+      TextParsesFloat -> simple "text_parses_float"
+      TextFloatOf -> simple "text_float_of"
   FrameShow slot
     | frameSlotType slot == CoreTextType -> slotText slot >>= \text -> plain ("pudu_text_show(" <> text <> ")") ["text_show"]
     | frameSlotType slot == CoreCharType -> slotText slot >>= \scalar -> plain ("pudu_char_show(" <> scalar <> ")") ["char_show"]

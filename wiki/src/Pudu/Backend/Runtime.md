@@ -185,6 +185,10 @@ Resolved Grill Log: `pudu_fail_report` prints a refusal with whatever help it
 is given, and `pudu_fail_message` passes the site's own. The output is the same
 bytes as before for every existing failure.
 
+## Text numbers (#559)
+
+[[Native Text Number]]'s parts join the runtime list after text case mapping.
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Backend Emit]] ·

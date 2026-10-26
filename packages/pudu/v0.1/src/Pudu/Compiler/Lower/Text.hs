@@ -3,8 +3,10 @@ module Pudu.Compiler.Lower.Text (lowerTextMethod) where
 
 import Data.Text (Text)
 import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
-import Pudu.Compiler.Lower.State (LowerState, halt, intType, refused)
+import Pudu.Compiler.Lower.State (LowerContext (..), LowerState (..), bindLocal, halt, intType, refused)
+import Pudu.Compiler.Lower.Types (typeForSpan)
 import Pudu.Core
+import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.Frontend.Syntax (Expression, Located (..))
 import Pudu.Source (Span)
 
@@ -16,7 +18,9 @@ lowerTextMethod :: LowerExpression -> LowerState -> Span -> Located Expression -
   -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerTextMethod lower state at receiver member arguments = case lower state receiver of
   (after, Nothing) -> refused after
-  (after, Just (coreReceiver, CoreTextType)) -> case lookup member methods of
+  (after, Just (coreReceiver, CoreTextType))
+    | null arguments, Just reading <- lookup member parsers -> parsed after coreReceiver reading
+    | otherwise -> case lookup member methods of
     Nothing -> halt at ("the Str method '" <> member <> "'") after
     Just (name, parameters, result) -> collect after [] (zip parameters arguments)
       where
@@ -56,6 +60,25 @@ lowerTextMethod lower state at receiver member arguments = case lower state rece
  where
   built current shape kind = (current, Just (CoreExpression at kind shape, kind))
 
+  -- toInt/toFloat: the text goes into a local, then a test picks Some(read)
+  -- or None, using the Option the checker gave the call.
+  parsed current coreReceiver (test, readName, valueType) = case typeForSpan (contextTypes (lowerContext current)) at of
+    Just kind@(CoreSumType _ _) ->
+      let (withHeld, held) = bindLocal current "" CoreTextType
+          expression shape' kind' = CoreExpression at kind' shape'
+          text' = expression (CoreReadLocal held) CoreTextType
+          some = expression (CoreConstruct "Some" [("0", expression (CoreTextMethod readName text' []) valueType)]) kind
+          none = expression (CoreConstruct "None" []) kind
+          choice = expression (CoreIfValue (expression (CoreTextMethod test text' []) CoreBoolType) (CoreBlock [] (Just some)) none) kind
+       in built withHeld (CoreBlockValue (CoreBlock [CoreStatement at (CoreDeclare held coreReceiver)] (Just choice))) kind
+    _ -> halt at ("an Option result of " <> member <> " without a native form") current
+
+parsers :: [(Text, (CoreTextMethodName, CoreTextMethodName, CoreType))]
+parsers =
+  [ ("toInt", (TextParsesInt, TextIntOf, intType))
+  , ("toFloat", (TextParsesFloat, TextFloatOf, CoreFloatType Float64Width))
+  ]
+
 methods :: [(Text, (CoreTextMethodName, [CoreType], CoreType))]
 methods =
   [ ("length", (TextLength, [], intType))
@@ -77,4 +100,7 @@ methods =
   , ("toUpper", (TextToUpper, [], CoreTextType))
   , ("toLower", (TextToLower, [], CoreTextType))
   , ("charAt", (TextCharAt, [intType], CoreCharType))
+  , ("split", (TextSplit, [CoreTextType], CoreArrayType CoreTextType))
+  , ("lines", (TextLines, [], CoreArrayType CoreTextType))
+  , ("chars", (TextChars, [], CoreArrayType CoreCharType))
   ]
