@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native arrays (#556)
+
+[[Native Arrays]] lowers array literals, indexing, `for` and the built-in
+methods with `Eval.Array`'s edge cases; `map`, `filter` and `reduce` become
+loops. Updates that replace their own variable take it, and stores move out of
+dead temporaries, so a uniquely held buffer grows in place. A million pushes run
+in about 0.3s natively. Moved [[Backend Emit Cell]] out of [[Backend Emit
+Aggregate]] and [[Compiler Lower Call]] out of [[Compiler Lower Body]]. Filed
+#557. [[Backend Array Programs]] passes under Clang, GCC 15, ASan/UBSan and
+both interpreter modes with counted cleanup.
+
 ## 2026-10-26 — Native closures (#555)
 
 [[Compiler Lower Lambda]] lowers lambdas, named functions used as values and

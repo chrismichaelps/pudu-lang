@@ -20,70 +20,13 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Backend.Emit.Cell
+  ( aggregateHelper, aggregateNeed, cType, cellName, isAggregate, memberCompare, memberComparable
+  , memberEqual, memberRender, number, ownedType, released, retained )
+import Pudu.Backend.Emit.Array (arrayHelpers)
 import Pudu.Backend.Emit.State (cString, cStringBytes)
-import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
-import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), coreTypeName, displayName)
+import Pudu.Core (CoreClosureInfo (..), CoreLayout (..), CoreType (..), CoreVariant (..), displayName)
 import Pudu.Core.Frame (FrameFunction (..), FrameModule (..), FrameSlot (..))
-import Pudu.IntegerLiteral (integerKindName)
-import Pudu.FloatLiteral (floatWidthType)
-
-{-| Values a slot holds a reference to: the frame retains and releases them. -}
-ownedType :: CoreType -> Bool
-ownedType CoreTextType = True
-ownedType (CoreTupleType _) = True
-ownedType (CoreRecordType _ _) = True
-ownedType (CoreSumType _ _) = True
-ownedType (CoreFunctionType _ _) = True
-ownedType _ = False
-
-cType :: CoreType -> Text
-cType kind = case kind of
-  CoreIntegerType integer | isWideInteger integer -> "pudu_wide_int"
-  CoreIntegerType _ -> "pudu_int"
-  CoreFloatType _ -> "uint64_t"
-  CoreCharType -> "uint32_t"
-  CoreTextType -> "pudu_text"
-  CoreTupleType _ -> "pudu_box *"
-  CoreRecordType _ _ -> "pudu_box *"
-  CoreSumType _ _ -> "pudu_box *"
-  CoreFunctionType _ _ -> "pudu_box *"
-  _ -> "int"
-
-{-| A new reference to the value an expression reads, and what it needs. -}
-retained :: CoreType -> Text -> (Text, [Text])
-retained kind expression = case kind of
-  CoreTextType -> ("pudu_text_retain(" <> expression <> ")", ["text_retain"])
-  _ | isAggregate kind -> ("pudu_box_retain(" <> expression <> ")", [])
-  _ -> (expression, [])
-
-{-| A statement letting one reference go. -}
-released :: CoreType -> Text -> Text
-released kind expression = case kind of
-  CoreTextType -> "pudu_text_release(" <> expression <> ");"
-  _ | isAggregate kind -> aggregateHelper "drop" kind <> "(" <> expression <> ");"
-  _ -> ""
-
-mangle :: CoreType -> Text
-mangle kind = case kind of
-  CoreIntegerType integer -> integerKindName integer
-  CoreFloatType width -> floatWidthType width
-  CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"
-  CoreRecordType name [] -> "R_" <> mangleKey name
-  CoreRecordType name arguments -> "R" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (mangleKey name : map mangle arguments) <> "_E"
-  CoreSumType name arguments -> "S" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (mangleKey name : map mangle arguments) <> "_E"
-  CoreFunctionType inputs result -> "F" <> Text.pack (show (length inputs)) <> "_" <> Text.intercalate "_" (map mangle (inputs <> [result])) <> "_E"
-  other -> coreTypeName other
-
-{-| A canonical key as a C identifier part: each segment after its length, so
-    `A.B_C` and `A_B.C` cannot meet. -}
-mangleKey :: Text -> Text
-mangleKey key = Text.concat [Text.pack (show (Text.length segment)) <> segment | segment <- Text.splitOn "." key]
-
-aggregateHelper :: Text -> CoreType -> Text
-aggregateHelper operation kind = "pudu_agg_" <> operation <> "_" <> mangle kind
-
-aggregateNeed :: Text -> CoreType -> Text
-aggregateNeed operation kind = "agg_" <> operation <> ":" <> mangle kind
 
 type Layouts = Map CoreType CoreLayout
 
@@ -101,18 +44,11 @@ aggregateTypes source = reverse (foldl collect [] slotTypes)
     | kind `elem` found || not (isAggregate kind) = found
     | otherwise = foldl collect (kind : found) (aggregateMembers layouts kind)
 
-isAggregate :: CoreType -> Bool
-isAggregate kind = case kind of
-  CoreTupleType _ -> True
-  CoreRecordType _ _ -> True
-  CoreSumType _ _ -> True
-  CoreFunctionType _ _ -> True
-  _ -> False
-
 {-| Everything a value of the type can hold, every variant's payload for a sum. -}
 aggregateMembers :: Layouts -> CoreType -> [CoreType]
 aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> members
+  (CoreArrayType element, _) -> [element]
   (_, Just (CoreRecordLayout fields)) -> map snd fields
   (_, Just (CoreSumLayout variants)) -> concatMap (map snd . coreVariantFields) variants
   (_, Just (CoreClosureLayout entries)) -> concatMap (closureCaptures . snd) entries
@@ -122,19 +58,6 @@ aggregateMembers layouts kind = case (kind, Map.lookup kind layouts) of
     aggregate type in `aggregateTypes` order. -}
 ownedKinds :: [CoreType] -> [(CoreType, Int)]
 ownedKinds tuples = (CoreTextType, 1) : zip tuples [2 ..]
-
-{-| A member rendered as `renderValue` writes it inside an aggregate. -}
-memberRender :: CoreType -> Text -> (Text, [Text])
-memberRender kind expression = case kind of
-  CoreIntegerType integer
-    | isWideInteger integer -> ("pudu_text_display_wide(" <> expression <> ")", ["text_display_wide"])
-    | otherwise -> ("pudu_text_display_int(" <> expression <> ")", ["text_display_int"])
-  CoreFloatType _ -> ("pudu_text_display_float(" <> expression <> ")", ["text_display_float"])
-  CoreBoolType -> ("(" <> expression <> " ? pudu_text_literal(\"true\", 4) : pudu_text_literal(\"false\", 5))", ["text_literal"])
-  CoreUnitType -> ("pudu_text_literal(\"()\", 2)", ["text_literal"])
-  CoreCharType -> ("pudu_char_show(" <> expression <> ")", ["char_show"])
-  CoreTextType -> ("pudu_text_show(" <> expression <> ")", ["text_show"])
-  _ -> (aggregateHelper "show" kind <> "(" <> expression <> ")", [aggregateNeed "show" kind])
 
 {-| The helpers the needs name, their own needs included, in an order where
     each comes after what it calls; and the runtime parts they use. Drop
@@ -163,6 +86,7 @@ helpers identities layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> helpersOf kind (zip (map (Text.pack . show) [0 :: Int ..]) members) Nothing
   (CoreRecordType name _, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
   (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
+  (CoreArrayType element, _) -> arrayHelpers kind element
   (CoreFunctionType _ _, Just (CoreClosureLayout entries)) -> closureHelpers kind
     [(identity, info) | (key, info) <- entries, Just identity <- [Map.lookup key identities]]
   _ -> []
@@ -267,48 +191,6 @@ helpersOf kind labelled recordName =
     Nothing -> ("\"(\"", "NULL", ")")
   field index member = on "box" index member
   on box index member = box <> "->fields[" <> number index <> "]." <> cellName member
-
-{-| `==` on two members, as Value's Eq instance has it. -}
-memberEqual :: CoreType -> Text -> Text -> (Text, [Text])
-memberEqual kind a b = case kind of
-  CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ") == 0", [helper])
-  CoreFloatType _ -> ("pudu_float_eq(" <> a <> ", " <> b <> ")", ["float_eq"])
-  CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ") == 0", ["text_compare"])
-  _ | isAggregate kind -> (aggregateHelper "equal" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "equal" kind])
-  _ -> (a <> " == " <> b, [])
-
-{-| compareValues on two members as -1, 0 or 1. Floats use its total order:
-    NaN equals NaN and sorts after every number. -}
-memberCompare :: CoreType -> Text -> Text -> (Text, [Text])
-memberCompare kind a b = case kind of
-  CoreIntegerType _ -> let helper = integerHelper kind "compare" in ("pudu_" <> helper <> "(" <> a <> ", " <> b <> ")", [helper])
-  CoreFloatType _ -> ("pudu_float_order(" <> a <> ", " <> b <> ")", ["float_order"])
-  CoreTextType -> ("pudu_text_compare(" <> a <> ", " <> b <> ")", ["text_compare"])
-  CoreUnitType -> ("0", [])
-  -- compareValues ranks two functions alike, so they never decide an order.
-  CoreFunctionType _ _ -> ("0", [])
-  _ | isAggregate kind -> (aggregateHelper "compare" kind <> "(" <> a <> ", " <> b <> ")", [aggregateNeed "compare" kind])
-  _ -> ("(" <> a <> " > " <> b <> ") - (" <> a <> " < " <> b <> ")", [])
-
-{-| Whether a member can be ordered, as comparableValue answers: a function
-    cannot, and an aggregate can when everything it holds can. -}
-memberComparable :: CoreType -> Text -> (Text, [Text])
-memberComparable kind expression
-  | isAggregate kind = (aggregateHelper "comparable" kind <> "(" <> expression <> ")", [aggregateNeed "comparable" kind])
-  | otherwise = ("1", [])
-
-cellName :: CoreType -> Text
-cellName kind = case kind of
-  CoreIntegerType integer | isWideInteger integer -> "wide"
-  CoreIntegerType _ -> "integer"
-  CoreFloatType _ -> "floating"
-  CoreCharType -> "character"
-  CoreTextType -> "text"
-  _ | isAggregate kind -> "box"
-  _ -> "scalar"
-
-number :: Int -> Text
-number = Text.pack . show
 
 {-| Sums: cell 0 is the variant index, the payload follows. Each variant gets
     its own make; drop, show and equal switch on the index. -}

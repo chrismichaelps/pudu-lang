@@ -42,6 +42,12 @@ Resolved Grill Log: closure helpers learn each function's frame-table number.
 An entry returning a function prints `<fn name>`, and argument space counts a
 call through a value's closure.
 
+## Arrays (#556)
+
+Resolved Grill Log: the array runtime parts are written after the frame types;
+an entry returning an array prints it; text inside an array counts as text
+use.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

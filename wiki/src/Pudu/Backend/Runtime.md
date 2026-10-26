@@ -175,6 +175,10 @@ evaluator module — so the depth bound is the evaluator's own.
   is generated text anyway, so baking the one constant costs nothing.
   _Rejected:_ a `#define` in the prelude and a literal here.
 
+## Revision 12 (#556)
+
+The runtime revision moves to 12 for the array buffer.
+
 ## Referenced by
 
 [[src/Pudu/Backend/_MOC]] · [[src/Pudu/_MOC]] · [[Backend Emit]] ·

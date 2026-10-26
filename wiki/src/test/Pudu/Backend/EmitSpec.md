@@ -38,7 +38,7 @@ code — [[Backend Native Tests]] owns execution.
   locals, statement shapes, and call shapes, and only functions reachable from
   the entry are carried — a declaration the entry cannot reach does not block
   the build and does not refuse, because the interpreter never runs it; each
-  unsupported construct (a module without `main`, arrays, ownership-bearing break values,
+  unsupported construct (a module without `main`, sets, ownership-bearing break values,
   floats, `Str` locals, mutable borrows, matches, calls to the entry, parameters of unsupported types, default parameter values, unresolved inferred
   results, expression-bodied non-entry functions, and trailing or explicitly
   returned print results) lowers to a refusal whose
@@ -100,6 +100,10 @@ module's methods are visible to them.
 The indirect-call case now checks the opposite of what it used to: a named
 function bound to a local and called through it lowers to a closure over the
 function's forwarder and a call through the value.
+
+## Arrays lower (#556)
+
+The array refusal case became a set case; sets are still unsupported.
 
 ## Referenced by
 

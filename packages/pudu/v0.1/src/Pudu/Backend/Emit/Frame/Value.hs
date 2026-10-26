@@ -12,12 +12,15 @@ import Pudu.Backend.Emit.State
 import Pudu.Backend.Emit.Aggregate (aggregateHelper, aggregateNeed, cellName, isAggregate, memberComparable, retained)
 import Pudu.Diagnostic.Evaluation (cannotApplyBinaryMessage)
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
-import Pudu.Core (CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
+import Pudu.Core (CoreArrayMethodName (..), CoreBinaryOperator (..), CoreTextMethodName (..), CoreType (..))
 import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
 import Pudu.FloatLiteral (FloatWidth (..))
+
+slotNumber :: FrameSlot -> Text
+slotNumber slot = case frameSlotId slot of FrameSlotId identity -> textOfInt identity
 
 cellMember :: CoreType -> Maybe Text
 cellMember CoreNeverType = Nothing
@@ -73,6 +76,40 @@ frameValue state value = case frameValueShape value of
     source <- slotText closure
     member <- maybe (refused "a capture without a native representation") Right (cellMember (frameValueType value))
     uncurry plain (retained (frameValueType value) (source <> "->fields[" <> textOfInt (position + 1) <> "]." <> member))
+  FrameArray members -> do
+    let kind = frameValueType value
+        cells = Text.intercalate ", " ["frame->slots[" <> slotNumber member <> "]" | member <- members]
+        listed = if null members then "NULL" else "(const pudu_cell[]){" <> cells <> "}"
+    plain (aggregateHelper "make" kind <> "(" <> textOfInt (length members) <> ", " <> listed <> ")") [aggregateNeed "make" kind]
+  FrameIndex array index -> do
+    source <- slotText array
+    position <- slotText index
+    let kind = frameSlotType array
+        (after, number) = failureSite state at "E7004" "index out of range"
+    Right (after, aggregateHelper "get" kind <> "(" <> source <> ", " <> position <> ", &pudu_sites[" <> textOfInt number <> "])"
+      , Set.fromList [aggregateNeed "get" kind])
+  FrameArrayMethod name receiver arguments -> do
+    target <- slotText receiver
+    operands <- traverse slotText arguments
+    let kind = frameSlotType receiver
+        helper operation = plain (aggregateHelper operation kind <> "(" <> Text.intercalate ", " (target : operands) <> ")") [aggregateNeed operation kind]
+    case name of
+      ArrayLengthOf -> plain ("pudu_array_size(" <> target <> ")") ["array_size"]
+      ArrayIsEmptyOf -> plain ("(pudu_array_length(" <> target <> ") == 0)") ["array"]
+      ArrayGetAt ->
+        let (after, number) = failureSite state at "E7004" "index out of range"
+         in Right (after, aggregateHelper "get" kind <> "(" <> Text.intercalate ", " (target : operands) <> ", &pudu_sites[" <> textOfInt number <> "])"
+              , Set.fromList [aggregateNeed "get" kind])
+      ArrayIndexOfValue -> helper "index_of"
+      ArrayContainsValue -> helper "contains"
+      ArrayPushValue -> helper "push"
+      ArrayPopLast -> helper "pop"
+      ArrayInsertAt -> helper "insert"
+      ArrayRemoveAt -> helper "remove"
+      ArraySliceOf -> helper "slice"
+      ArrayConcatWith -> helper "concat"
+      ArrayReversed -> helper "reverse"
+      ArrayJoinWith -> plain ("pudu_array_join(" <> Text.intercalate ", " (target : operands) <> ")") ["array_join"]
   FrameDisplay slot -> rendered slot
   FrameTextMethod name receiver arguments -> do
     target <- slotText receiver

@@ -135,6 +135,12 @@ Resolved Grill Log: lambdas, named functions used as values and calls through
 locals or any other function-typed callee go to [[Compiler Lower Lambda]]. An
 entry may return a function value.
 
+## Arrays (#556)
+
+Resolved Grill Log: literals, indexing and array methods go to [[Compiler
+Lower Array]], and assignments pass through `takeReceiver`. Direct calls and
+`print`/`display`/`show` moved to [[Compiler Lower Call]].
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

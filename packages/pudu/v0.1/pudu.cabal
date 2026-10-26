@@ -88,11 +88,14 @@ library
     Pudu.Cache.Persist
     Pudu.Backend.Emit
     Pudu.Backend.Emit.Aggregate
+    Pudu.Backend.Emit.Cell
+    Pudu.Backend.Emit.Array
     Pudu.Backend.Emit.Frame
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
     Pudu.Backend.Runtime.Aggregate
+    Pudu.Backend.Runtime.Array
     Pudu.Backend.Runtime.Char
     Pudu.Backend.Runtime.Dependencies
     Pudu.Backend.Runtime.Float
@@ -133,6 +136,8 @@ library
     Pudu.Compiler.Lower.Try
     Pudu.Compiler.Lower.For
     Pudu.Compiler.Lower.Lambda
+    Pudu.Compiler.Lower.Call
+    Pudu.Compiler.Lower.Array
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

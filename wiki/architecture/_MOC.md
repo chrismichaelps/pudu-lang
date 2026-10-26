@@ -57,6 +57,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[Native Trait Methods]] — static dispatch of implementation members and defaults (#551).
 - [[Native Generics]] — one copy per type list (#552).
 - [[Native Closures]] — function values as boxes (#555).
+- [[Native Arrays]] — arrays as owned growable buffers (#556).
 
 ## Referenced by
 

@@ -2,7 +2,7 @@
 module Pudu.Compiler.Frame.State
   ( Build, BuildState (..), Flow (..), LoopTarget (..), runBuild, initialState
   , getState, modifyState, fault, freshSlot, bindLocal, readLocal, emit, finish
-  , freshLabel, begin, isOpen, withLoop, findLoop, saveValue, storeValue
+  , freshLabel, begin, isOpen, withLoop, findLoop, saveValue, storeValue, moveValue
   ) where
 
 import Data.Map.Strict (Map)
@@ -153,6 +153,25 @@ saveValue value = do
   slot <- freshSlot (frameValueSpan value) "$value" (frameValueType value)
   emit (FrameStore slot value)
   pure slot
+
+{-| Store a value the source slot holds and nothing reads again: an owned
+    value moves rather than gaining a second reference, so a buffer built in
+    a loop stays uniquely held. -}
+moveValue :: Span -> FrameSlot -> Maybe FrameSlot -> Build ()
+moveValue at target payload = case payload of
+  Just source
+    | frameSlotType source == frameSlotType target, ownedKind (frameSlotType target) ->
+        emit (FrameMove target source)
+  _ -> storeValue at target payload
+ where
+  ownedKind kind = case kind of
+    CoreTextType -> True
+    CoreTupleType _ -> True
+    CoreRecordType _ _ -> True
+    CoreSumType _ _ -> True
+    CoreFunctionType _ _ -> True
+    CoreArrayType _ -> True
+    _ -> False
 
 storeValue :: Span -> FrameSlot -> Maybe FrameSlot -> Build ()
 storeValue at target payload = case payload of

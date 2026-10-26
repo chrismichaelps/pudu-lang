@@ -44,6 +44,12 @@ cells after cell 0, and tuple ordering checks both operands are comparable,
 failing with the evaluator's `cannot apply < to a tuple and a tuple`
 otherwise.
 
+## Arrays (#556)
+
+Resolved Grill Log: literals pass their cells to the type's maker; `get` and
+indexing fail with E7004 at their own sites; other methods call the type's
+helpers or the runtime.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]

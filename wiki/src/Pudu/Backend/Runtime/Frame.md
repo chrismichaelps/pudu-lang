@@ -44,6 +44,11 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 
 [[Backend Runtime]] · [[Backend Frame Bodies]] · [[Native Execution Frames]]
 
+## Item buffers (#556)
+
+Resolved Grill Log: the cell union gains `pudu_items *items` wherever boxes
+exist.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

@@ -41,6 +41,10 @@ Resolved Grill Log: both lists include [[Backend For Programs]].
 
 Resolved Grill Log: both lists include [[Backend Closure Programs]].
 
+## Array corpus (#556)
+
+Resolved Grill Log: both lists include [[Backend Array Programs]].
+
 ## Referenced by
 
 [[Backend Native Tests]] · [[Native Emission Coverage]] · [[src/_MOC]]

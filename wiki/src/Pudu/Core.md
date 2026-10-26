@@ -193,6 +193,12 @@ arguments). `CoreClosureLayout` lists a function type's lifted functions, and
 `coreModuleClosures` says what each closure holds, how it renders and where it
 was written.
 
+## Arrays (#556)
+
+Resolved Grill Log: `CoreArrayType`, `CoreArray`, `CoreArrayMethod` (arguments
+before the receiver), `CoreIndex` (its span is the index's) and
+`CoreTakeLocal`, a last read that leaves the local empty.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

@@ -82,6 +82,11 @@ each call against the receiver's type followed by the callee's bound inputs
 Resolved Grill Log: `callInstance` calls a method instance with operands that
 are already lowered, as `for` does with `begin` and `advance`.
 
+## Array built-ins first (#556)
+
+Resolved Grill Log: an array answers its built-in methods before any
+implementation, as `readArrayMember` does.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]

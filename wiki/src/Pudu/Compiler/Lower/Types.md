@@ -111,6 +111,10 @@ arguments. `typeFactAt` gives the unformed fact, which is what
 Resolved Grill Log: a synchronous function type forms when its inputs and
 result do; an async one does not.
 
+## Arrays (#556)
+
+Resolved Grill Log: `Array[T]` forms when `T` does; its owner key is `Array`.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Signature]] · [[Native Emission Coverage]]

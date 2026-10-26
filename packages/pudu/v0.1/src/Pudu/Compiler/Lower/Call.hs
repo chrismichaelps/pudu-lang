@@ -1,0 +1,66 @@
+{-| @Pudu.Compiler.Lower.Call — direct calls to module functions and the
+    builtins `print`, `display` and `show`. -}
+module Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered) where
+
+import Data.Text (Text)
+import Pudu.Compiler.Lower.Control (expressionIsPrintValued)
+import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Scalar (eagerType)
+import Pudu.Compiler.Lower.State (CoreSignature (..), LowerContext (..), LowerState (..), halt, refused)
+import Pudu.Compiler.Lower.Types (nativeValueType)
+import Pudu.Core
+import Pudu.Frontend.Syntax (Expression, Located (..))
+import Pudu.Source (Span)
+
+type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
+type Lowered = (LowerState, Maybe (CoreExpression, CoreType))
+
+{-| A call to a function of any module: its signature is admitted under that
+    module's facts, then the arguments run here, in the caller's. -}
+lowerFunctionCall :: LowerExpression -> LowerState -> Span -> Text -> Span -> [Located Expression] -> Lowered
+lowerFunctionCall lower state at key callee arguments = case lookup key (contextTable (lowerContext state)) of
+  Nothing -> halt at "this call" state
+  Just entry
+    | key == contextEntry (lowerContext state) -> halt at "a call to the entry function" state
+    | otherwise -> case admitCallee state key callee entry of
+        (back, Nothing) -> refused back
+        (back, Just (target, found)) -> case collect back [] arguments of
+          (final, Just cores)
+            | any ((== CoreNeverType) . coreExpressionType) cores ->
+                typed final (CoreBlockValue (CoreBlock
+                  [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- cores] Nothing)) CoreNeverType
+            | otherwise ->
+                let queued = final{lowerContext = (lowerContext final){contextQueue = target : contextQueue (lowerContext final)}}
+                 in typed queued (CoreCall target cores) (eagerType (signatureResult found) cores)
+          (final, Nothing) -> refused final
+ where
+  typed after shape kind = (after, Just (CoreExpression at kind shape, kind))
+  collect current done [] = (current, Just (reverse done))
+  collect current done (argument : rest) = case lower current argument of
+    (after, Just (core, _))
+      | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
+      | otherwise -> collect after (core : done) rest
+    (after, Nothing) -> (after, Nothing)
+
+{-| `print(text)`; its Result is effect-only in Core. -}
+lowerPrint :: LowerExpression -> LowerState -> Span -> [Located Expression] -> Lowered
+lowerPrint lower state at arguments = case arguments of
+  [argument] -> case lower state argument of
+    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+    (after, Just (core, CoreTextType)) -> (after, Just (CoreExpression at CoreUnitType (CorePrint core), CoreUnitType))
+    (after, Just (_, kind)) -> halt at ("printing a " <> coreTypeName kind <> " value") after
+    (after, Nothing) -> refused after
+  _ -> halt at "a call to print with this many arguments" state
+
+{-| `display(value)` or `show(value)` as text. -}
+lowerRendered :: LowerExpression -> LowerState -> Span -> Text -> (CoreExpression -> CoreExpressionShape) -> [Located Expression] -> Lowered
+lowerRendered lower state at name shape arguments = case arguments of
+  [argument] -> case lower state argument of
+    (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+    (after, Just (core, _))
+      | expressionIsPrintValued core -> halt at (name <> " of a Result[(), Str] value") after
+    (after, Just (core, kind))
+      | nativeValueType kind -> (after, Just (CoreExpression at CoreTextType (shape core), CoreTextType))
+      | otherwise -> halt at (name <> " of a " <> coreTypeName kind <> " value") after
+    (after, Nothing) -> refused after
+  _ -> halt at ("a call to " <> name <> " with this many arguments") state
