@@ -133,6 +133,10 @@ Register Pudu.Compiler.Lower.Sort and Pudu.Compiler.Lower.Slice.
 
 Register Pudu.Backend.Runtime.Text.Number and Pudu.Backend.Runtime.Text.Pieces.
 
+## Conversion (#560)
+
+Register Pudu.Backend.Runtime.Integer.Convert and Pudu.Compiler.Lower.Convert.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

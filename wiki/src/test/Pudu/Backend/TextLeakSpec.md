@@ -59,6 +59,10 @@ Counts cleanup for [[Backend Array Pattern Programs]] too.
 Counts cleanup for [[Backend Text Collection Programs]], arrays of views
 included.
 
+## Conversions (#560)
+
+Counts cleanup for [[Backend Convert Programs]].
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

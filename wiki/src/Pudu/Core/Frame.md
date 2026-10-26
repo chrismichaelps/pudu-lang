@@ -62,6 +62,11 @@ the source empty.
 
 `FrameFailText` carries an optional slot of help text computed at run time.
 
+## Integer conversion (#560)
+
+`FrameIntegerFits` and `FrameIntegerConvert` carry the target kind and the
+source slot.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

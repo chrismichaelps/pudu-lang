@@ -18,6 +18,7 @@ import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
 import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
 import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Slice (lowerRangeIndex)
+import Pudu.Compiler.Lower.Convert (lowerConvertInteger)
 import Control.Applicative ((<|>))
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
@@ -351,6 +352,11 @@ lowerExpression state (Located spanValue expression) = case expression of
         (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
+  -- The checker has already solved a type application's copy at this call.
+  CallExpression (Located _ (TypeApplication (Located _ (NameExpression ("convertInteger" :| []))) _)) arguments
+    | Nothing <- lookupLocal state "convertInteger"
+    , Nothing <- resolveFunction state ["convertInteger"] -> lowerConvertInteger lowerExpression state spanValue arguments
+  CallExpression (Located _ (TypeApplication inner _)) arguments -> lowerExpression state (Located spanValue (CallExpression inner arguments))
   CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
     | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments

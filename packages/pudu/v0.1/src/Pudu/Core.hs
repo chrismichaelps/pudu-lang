@@ -162,6 +162,10 @@ data CoreExpressionShape
   | CoreTextMethod !CoreTextMethodName !CoreExpression ![CoreExpression]
   {-| `c.code()`: the scalar as an Int. -}
   | CoreCharCode !CoreExpression
+  {-| Whether an integer lies inside the kind's bounds. -}
+  | CoreIntegerFits !IntegerKind !CoreExpression
+  {-| The same integer at the kind; only built where it fits. -}
+  | CoreIntegerConvert !IntegerKind !CoreExpression
   {-| Members in source order, which is the order they run. -}
   | CoreTuple ![CoreExpression]
   {-| A literal position the checker has already bounded. -}

@@ -212,6 +212,11 @@ written help; a slice failure needs it to name the length.
 `TextIntOf`, `TextParsesFloat` and `TextFloatOf` are the halves of `toInt` and
 `toFloat`.
 
+## Integer conversion (#560)
+
+`CoreIntegerFits` tests whether an integer fits a kind, and
+`CoreIntegerConvert` gives the same value at that kind where it does.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

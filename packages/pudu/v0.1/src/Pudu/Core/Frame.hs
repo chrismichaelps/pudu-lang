@@ -87,6 +87,8 @@ data FrameValueShape
   | FrameTextLiteral !Text
   | FrameCharLiteral !Char
   | FrameCharCode !FrameSlot
+  | FrameIntegerFits !IntegerKind !FrameSlot
+  | FrameIntegerConvert !IntegerKind !FrameSlot
   | FrameAggregate ![FrameSlot]
   | FrameMember !Int !FrameSlot
   {-| A sum value: the variant's index and its payload in declaration order. -}

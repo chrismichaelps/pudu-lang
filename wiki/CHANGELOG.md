@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native type applications and convertInteger (#560)
+
+Calls with written type arguments lower as the call they wrap, and
+`convertInteger` moves between every pair of integer kinds, 128-bit ones
+included, answering `None` outside the target's bounds
+([[Compiler Lower Convert]], [[Native Integer Conversion]]).
+[[Backend Convert Programs]] passes under Clang, GCC 15, ASan/UBSan and the
+tree evaluator with counted cleanup.
+
 ## 2026-10-26 — Native Str methods with array and option results (#559)
 
 `split`, `lines` and `chars` answer arrays of views into the receiver

@@ -67,6 +67,8 @@ expression (CoreExpression _ kind shape) = kind : case shape of
   CoreShow operand -> expression operand
   CoreTextMethod _ receiver arguments -> concatMap expression (receiver : arguments)
   CoreCharCode operand -> expression operand
+  CoreIntegerFits _ operand -> expression operand
+  CoreIntegerConvert _ operand -> expression operand
   CoreTuple members -> concatMap expression members
   CoreTupleIndex _ operand -> expression operand
   CoreRecord fields -> concatMap (expression . snd) fields

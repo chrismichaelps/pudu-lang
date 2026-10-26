@@ -97,6 +97,10 @@ Register Pudu.Backend.ArrayPatternPrograms ([[Backend Array Pattern Programs]]).
 
 Register Pudu.Backend.TextCollectionPrograms ([[Backend Text Collection Programs]]).
 
+## Convert corpus (#560)
+
+Register Pudu.Backend.ConvertPrograms ([[Backend Convert Programs]]).
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

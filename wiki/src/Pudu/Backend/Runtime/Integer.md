@@ -47,6 +47,11 @@ Pudu type-width/FFI layout promise.
 [[Backend Integer Value]] · [[Backend Integer Arithmetic]] · [[Backend Integer Bits]] ·
 [[Backend Runtime]] · [[Backend Emit Support]] · [[Exact Native Integer Carriers]]
 
+## Conversion (#560)
+
+[[Native Integer Conversion]] joins the integer parts after the wide ones it
+uses.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Emission Coverage]] · [[Native C11 Backend Delivery]]

@@ -12,6 +12,7 @@ import Pudu.Backend.ClosurePrograms (closureSuccessPrograms, closureRefusalProgr
 import Pudu.Backend.ArrayPrograms (arraySuccessPrograms, arrayRefusalPrograms)
 import Pudu.Backend.ArrayPatternPrograms (arrayPatternSuccessPrograms, arrayPatternRefusalPrograms)
 import Pudu.Backend.TextCollectionPrograms (textCollectionSuccessPrograms, textCollectionRefusalPrograms)
+import Pudu.Backend.ConvertPrograms (convertSuccessPrograms, convertRefusalPrograms)
 
 geometry :: (FilePath, Text)
 geometry = ("Geometry.pudu", Text.unlines
@@ -55,7 +56,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms] <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms <> arrayPatternSuccessPrograms <> textCollectionSuccessPrograms <> convertSuccessPrograms] <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program
@@ -155,7 +156,7 @@ constantPrograms =
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
-  [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms] <>
+  [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms <> arrayPatternRefusalPrograms <> textCollectionRefusalPrograms <> convertRefusalPrograms] <>
   [ ( "a constant read preserves the runtime overflow operation's span"
     , [], program
         [ "const MAX = 9223372036854775807", "fn main() -> Int {"

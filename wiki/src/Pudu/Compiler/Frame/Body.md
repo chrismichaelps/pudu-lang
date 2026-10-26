@@ -67,6 +67,10 @@ assignments, break values and branch results move out of their temporaries.
 `CoreFailText` lowers its help after its message, so both are evaluated before
 the failure terminator.
 
+## Integer conversion (#560)
+
+The conversion shapes lower their operand, then become one frame value.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

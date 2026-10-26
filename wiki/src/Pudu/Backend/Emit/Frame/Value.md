@@ -54,6 +54,12 @@ helpers or the runtime.
 
 The new text methods are plain runtime calls named after their parts.
 
+## Integer conversion (#560)
+
+The source slot's kind and the target pick one of four fit tests and
+conversions in [[Native Integer Conversion]]; narrow to narrow is the same
+value, normalised.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Execution Frames]]
