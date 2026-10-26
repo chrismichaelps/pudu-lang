@@ -36,6 +36,11 @@ Resolved Grill Log: include genericSuccessPrograms.
 Resolved Grill Log: include trySuccessPrograms, so rebuilt failures and bound
 payloads are released.
 
+## For lifetimes (#554)
+
+Resolved Grill Log: include forSuccessPrograms, so sequence values and states
+are released.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

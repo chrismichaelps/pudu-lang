@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Method — implementation members and trait defaults
     as ordinary native calls, selected by the receiver's checked type. -}
-module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerQualifiedMethod) where
+module Pudu.Compiler.Lower.Method (methodTables, lowerMethodCall, lowerQualifiedMethod, callInstance) where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -183,6 +183,10 @@ invoke state at key instantiated cores = case Map.lookup key (contextInstances c
   fixed found = case cores of
     receiver : _ | instanceSelfAtCall found -> Map.insert "Self" (coreExpressionType receiver) (instanceBindings found)
     _ -> instanceBindings found
+
+{-| A call to a method instance with lowered operands, receiver first. -}
+callInstance :: LowerState -> Span -> Text -> Maybe Type -> [CoreExpression] -> Lowered
+callInstance = invoke
 
 lowerAll :: LowerExpression -> LowerState -> [Located Expression] -> (LowerState, Maybe [CoreExpression])
 lowerAll lower = go []

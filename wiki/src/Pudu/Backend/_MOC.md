@@ -30,6 +30,7 @@ aliases: [Backend Module Map]
 - [[Backend Method Programs]] — native method dispatch and order (#551).
 - [[Backend Generic Programs]] — native generics (#552).
 - [[Backend Try Programs]] — native `?` (#553).
+- [[Backend For Programs]] — native `for` (#554).
 
 ## Referenced by
 

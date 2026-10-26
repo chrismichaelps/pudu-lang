@@ -1,7 +1,7 @@
 {-| @Pudu.Compiler.Lower.Control — numeric lexical loop targets and Never joins.
     Traversal callbacks keep the expression/block recursion owned by Body. -}
 module Pudu.Compiler.Lower.Control
-  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType
+  ( lowerWhile, lowerLoop, lowerTransfer, blockType, joinType, pushLoop, popLoop
   , printValued, expressionIsPrintValued
   ) where
 

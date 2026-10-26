@@ -77,6 +77,11 @@ unbound parameters, or one whose `Self` comes from the call, is specialized at
 each call against the receiver's type followed by the callee's bound inputs
 (qualified calls use the callee's fact as is).
 
+## Calls from lowering (#554)
+
+Resolved Grill Log: `callInstance` calls a method instance with operands that
+are already lowered, as `for` does with `begin` and `advance`.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Compiler Lower Body]] · [[Native Trait Methods]]
