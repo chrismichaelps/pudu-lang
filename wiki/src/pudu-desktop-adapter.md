@@ -46,6 +46,18 @@ the process and filesystem implementations.
   same contract with frame-pacing and percentile gates. _Rejected:_ coupling the application API to
   the first accelerated backend.
 
+## Game input records (#673)
+
+Besides the interface records, the adapter writes a layout-independent channel for games:
+`keydown\t<code>\t<repeat>` and `keyup\t<code>` with W3C UI Events `KeyboardEvent.code` names
+from a complete table of macOS virtual key codes (modifier transitions come from flag changes,
+told left from right by device-dependent bits); `hover\t<x>\t<y>` for pointer motion with or
+without a button (the window accepts mouse-moved events); and `button\t<n>\t<down|up>\t<x>\t<y>`
+with 0 primary, 1 secondary, 2 middle. Existing records are unchanged, and `Std.Ui` decoding
+already skips records it does not know. Grill Log — **Q:** Reuse the interface key names? **A:**
+No; they are intents (`activate`, `dismiss`), not keys, and depend on modifiers. Physical codes
+make bindings mean the same key on every layout.
+
 ## Referenced by
 
 [[Eval Desktop]] · [[Native Application UI]] · [[Pudu Desktop Access]] · [[Pudu Desktop Host]] · [[Pudu Desktop Menu]]

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Game Input Delivery]] — issue #673 key release, physical codes, hover and buttons.
+
 - [[Ark World Delivery]] — issue #672 handles, profiling and archetype World on lanes.
 
 - [[Monotonic Nanosecond Delivery]] — issue #670 nanosecond monotonic clock.

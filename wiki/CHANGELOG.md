@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Game input records from the desktop adapter (#673)
+
+- [[pudu-desktop-adapter]] reports key down/up by physical code, pointer hover and every mouse
+  button; [[Game Input Delivery]] records evidence.
+
 ## 2026-10-27 — Ark Core and archetype World (#672)
 
 - [[Ark Handle]] and [[Ark Profile]] add generational handles and nanosecond scopes.
