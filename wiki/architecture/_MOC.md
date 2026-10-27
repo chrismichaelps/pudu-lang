@@ -6,6 +6,8 @@ tags: [moc, architecture]
 
 # Architecture Map
 
+- [[Native Signed Integers]] — canonical fixed signed-width admission and exact semantics (#497).
+
 ## Purpose
 
 Pudu is a statically typed native systems language for developers who need predictable performance and explicit control without unchecked memory access in ordinary code.

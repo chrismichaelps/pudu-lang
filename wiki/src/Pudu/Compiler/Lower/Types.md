@@ -11,6 +11,14 @@ aliases: [Compiler Lower Types]
 
 # Compiler Lower Types
 
+## Fixed signed admission (#497)
+
+Export nativeIntegerKind (PlatformSigned or SignedKind 8/16/32/64) and
+nativeScalarType (those integers, Bool, Unit; not Never/Text). formedCoreType
+matches NominalId Nothing with no arguments before integerKindOf, preserving
+canonical identity rather than display spelling. Resolved Grill Log: aliases
+are already expanded, Int64 stays distinct from Int and user-owned Int8 refuses.
+
 ## Purpose and interface
 
 Retain the checker's settled expression types and module schemes for native
@@ -33,7 +41,7 @@ use authored offsets, approximate spans, declaration spelling or another source'
 facts. Generated source identity remains part of the lookup key. Function names
 are scoped to the single checked module; module linking remains a separate slice.
 
-Project canonical compiler-wired Int and Bool identities, UnitTypeValue and
+Project canonical compiler-wired Int, Int8/16/32/64 and Bool identities, UnitTypeValue and
 NeverType into their existing Core representations. Recognize canonical Str as
 CoreTextType for admission diagnostics and existing literal/display effects;
 recognition does not admit owned text locals or results. Aliases have already

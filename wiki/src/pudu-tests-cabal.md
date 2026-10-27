@@ -8,6 +8,10 @@ aliases: [Pudu Test Cabal Manifest]
 
 # Pudu Test Cabal Manifest
 
+Register Backend.SignedPrograms with existing dependencies. Resolved Grill Log
+(#497): all signed matrices enter the ordinary native, mathematical and frame
+compilation corpora without a second test runner or new package.
+
 Register Cli.MemorySpec and Backend.FrameRuntimeSpec with the existing IO/process
 test dependencies. Resolved Grill Log (#499): controlled host exhaustion and
 actual generated allocator lifecycle tests compile in the ordinary test suite.

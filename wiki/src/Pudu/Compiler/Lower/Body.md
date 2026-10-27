@@ -11,6 +11,15 @@ aliases: [Compiler Lower Body, Native Body Lowering]
 
 # Compiler Lower Body
 
+## Fixed signed admission (#497)
+
+Use canonical admission predicates for literals, locals and display. A literal
+or its negation must fit its admitted kind; retain its exact Integer payload.
+Entries and explicit entry returns admit any supported integer kind, preserving
+the existing IntValue status policy. Bool entry reporting remains pending.
+Resolved Grill Log: preserve annotation fact checks, print Result guards, Never
+and scopes; no narrowing at transfers, calls or stored values.
+
 ## Purpose and interface
 
 Lower the reachable function bodies selected by [[Compiler Lower]]. Exports
@@ -27,26 +36,26 @@ lowerFunctionBody :: Located Function -> CoreSignature -> LowerState -> (LowerSt
 
 - Entry functions have no parameters and obey shared function admission. Their
   result comes from the trailing body expression or observed explicit returns,
-  and must be Int, unit, or Never; a Never-only entry uses the unit ABI. A resultless outer block cannot erase an explicit
-  Int return. Non-entry functions retain their settled validated signature result.
+  and must be an admitted integer, unit, or Never; a Never-only entry uses the unit ABI. A resultless outer block cannot erase an explicit
+  integer return. Non-entry functions retain their settled validated signature result.
 - Blocks push a lexical scope, lower statements left to right, lower their
   trailing expression and pop the scope. Locals resolve nearest-first and are
   numbered independently per function. Assignments become CoreAssign and yield
-  unit; declarations carry Int, Bool, unit, or Never. An explicit annotation
+  unit; declarations carry admitted integers, Bool, unit, or Never. An explicit annotation
   requires an exact initializer fact matching the structural Core type, with
   represented facts preserving structural Never.
 - Return operands must match the declared non-entry result, or Int/unit for
-  the entry. The first explicit entry return records its type. Bare returns
+  the entry (including fixed signed integers). The first explicit entry return records its type. Bare returns
   carry no Core operand. The checker already proves return agreement.
 - Print's internal Core unit representation is effect-only. An entry's
   recursively print-valued final expression and every explicit print-valued
   return refuse E6001: print's actual Result[(), Str] must never escape as
   unit. This includes nested blocks and conditional branches. Discarded print
   statements and discarded print-valued branches retain their effects.
-- Supported values are platform Int, Bool, literal text and display of
-  Int/Bool/unit. Print accepts literal text or display; text locals and function
+- Supported values are platform/fixed signed integers, Bool, literal text and display of
+  admitted integers/Bool/unit. Print accepts literal text or display; text locals and function
   results remain outside the subset. A discarded text/display expression can
-  still lower. Integer syntax must already be ResolvedInteger PlatformSigned;
+  still lower. Integer syntax must already carry a supported ResolvedInteger kind;
   unresolved integers and other numeric kinds refuse. Arithmetic, comparisons,
   equality and short-circuit booleans retain source spans.
 - Statement if lowers with explicit blocks; an if without else in value position

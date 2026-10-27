@@ -9,6 +9,12 @@ aliases: [Backend Native Tests, Native Conformance Tests]
 
 # Backend Native Tests
 
+Extend entry-status cases for fixed signed results, including negative minimum,
+positive 127 and values clamped to 255. Resolved Grill Log (#497): compare actual
+native status/output with the existing IntValue CLI policy for every admitted kind.
+Rename the integer property labels to cover both platform and fixed signed kinds;
+the corpus and oracle assertions remain shared.
+
 ## Explicit frame emission (#499)
 
 Compile checked Core through lowerFrames and emitProgram's typed result before
