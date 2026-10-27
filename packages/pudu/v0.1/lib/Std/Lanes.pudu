@@ -188,3 +188,9 @@ export fn affine3(matrix: &Array[Float64], xs: &Lanes, ys: &Lanes, zs: &Lanes) -
   let (rx, ry, rz) = lanesAffine3(*matrix, xs.bytes, ys.bytes, zs.bytes) ?
   Some((Lanes{bytes: rx}, Lanes{bytes: ry}, Lanes{bytes: rz}))
 }
+
+/// Index pairs (i, j), i < j, of axis-aligned boxes that overlap or touch, flattened and in
+/// ascending order. None when counts differ, a bound is NaN or a minimum exceeds its maximum.
+export fn overlapPairs(minX: &Lanes, maxX: &Lanes, minY: &Lanes, maxY: &Lanes, minZ: &Lanes, maxZ: &Lanes) -> Option[Array[Int]] {
+  lanesOverlapPairs(minX.bytes, maxX.bytes, minY.bytes, maxY.bytes, minZ.bytes, maxZ.bytes)
+}

@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Native broadphase (#682)
+
+- [[Runtime Broadphase]] finds overlapping box pairs by sort and sweep; [[Overlap Pairs Fixture]]
+  matches a brute-force reference in [[Lanes Gate]].
+
 ## 2026-10-27 — World hierarchy and events (#681)
 
 - [[Ark Hierarchy]] propagates world transforms one lane batch per depth level;

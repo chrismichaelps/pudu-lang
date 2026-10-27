@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[Broadphase Delivery]] — issue #682 native overlap pairs of axis-aligned boxes.
+
 - [[Lambda Option Try Delivery]] — issue #678 `?` on Option in unannotated lambdas.
 
 - [[Raster Delivery]] — issue #676 native depth-tested triangle rasterization.

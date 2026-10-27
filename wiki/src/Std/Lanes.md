@@ -17,7 +17,8 @@ an edit, not a loop primitive), `slice`, `concat`, `gather`, `scatter`. Arithmet
 native pass: `add`, `subtract`, `multiply`, `divide`, `minimum`, `maximum` (elementwise,
 `Option` on length mismatch), `addScalar`, `scale`, `clamp`, `axpy(y, a, x)`, `fma(a, b, c)`,
 `abs`, `negate`, `sqrt`, `floor`. Reductions: `sum`, `dot`, `smallest`, `largest`. Geometry:
-`affine3(matrix, xs, ys, zs)` with a 12-entry column-major matrix. Host byte order; use
+`affine3(matrix, xs, ys, zs)` with a 12-entry column-major matrix. Collision: `overlapPairs(minX, maxX, minY, maxY, minZ,
+maxZ)` from [[Runtime Broadphase]]. Host byte order; use
 [[Std Buffer]] to serialize portably.
 
 ## Grill Log
