@@ -323,3 +323,9 @@ Resolved Grill Log: consume canonical settled checker facts; preserve structural
 Register Pudu.Compiler.Lower.Scalar explicitly with existing dependencies; no implicit module discovery or new package.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Register Backend.Runtime.Integer with existing dependencies. Register the native integer-program corpus in the test manifest; no new package.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

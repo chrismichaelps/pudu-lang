@@ -260,8 +260,8 @@ testReachableFunctions = do
     construct", not as a hand-counted column. -}
 refusalCases :: [(String, Text, Text)]
 refusalCases =
-  [ ("pending integer bitwise", statementProgram "1 & 2", "1 & 2")
-  , ("pending integer complement", statementProgram "~1", "~1")
+  [ ("pending narrow integer bitwise", statementProgram "1i8 & 2i8", "1i8")
+  , ("pending narrow integer complement", statementProgram "~1i8", "1i8")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
   , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")

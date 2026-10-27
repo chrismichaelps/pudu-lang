@@ -84,3 +84,11 @@ coordinator.
 Construct native facts from the root CompileResult used for the checked tree. Existing differential harness also executes inferred/aliased scalar signatures and annotated mutable locals, checking stdout, stderr, status and warning-free C.
 
 Resolved Grill Log: consume canonical settled checker facts; preserve structural Never, print carrier refusals and existing runtime representations. Rejected: re-inference, display-name ABI selection, offset-only identity or silent fallback.
+
+## Platform Int operators (#495)
+
+Register integer success/refusal groups through the existing conformance function: actual tree evaluation versus compiled C stdout/stderr/status and zero warnings. Keep these groups distinct for focused runs.
+
+Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.
+
+The integer success harness accepts expected stdout and requires the interpreted stdout/stderr/status to equal it before differential comparison. Expected values use independent mathematical formulas in the corpus, not production integer kernels. Resolved Grill Log: two matching wrong results must still fail the gate.

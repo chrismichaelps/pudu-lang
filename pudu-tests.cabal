@@ -71,6 +71,7 @@ test-suite pudu-test
     Pudu.Backend.LowerTypesSpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
+    Pudu.Backend.IntegerPrograms
     Pudu.Backend.ControlPrograms
     Pudu.Backend.ToolchainSpec
     Pudu.Lsp.SchedulerSpec

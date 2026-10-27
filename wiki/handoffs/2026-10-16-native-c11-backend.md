@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: ACTIVE
-issue: 496
+issue: 495
 aliases: [Native C11 Backend Delivery]
 tags: [handoff, backend, native, c11]
 ---
@@ -371,3 +371,67 @@ Native #494 is committed as 7d95fd54 with all 19 clean gates and 654 property
 groups passing. Independent review remains pending; no agents activated.
 Exact next action: resolve issue #495's Core/runtime/diagnostic mirrors before
 implementing the remaining platform Int operators.
+
+## #495 resolved operator implementation handoff
+
+Delivery Owner → Language Architect → Backend Engineer owns Core, Lower/Scalar,
+Backend Runtime/Integer, Runtime catalogue, Emit/State/Support, Diagnostic
+Arithmetic, the behavior-preserving Eval/Operator diagnostic refactor, manifests
+and integer differential corpus/tests. Branch feature/495-native-int-operators
+is stacked on 6bb9ecbf (#496) and 7d95fd54 (#494). Preserve dist-ticky.
+All affected mirrors and the new integer-runtime contract have resolved Grill
+Logs before source changes. The conversion and sign/overflow algorithms are
+specified in Backend Runtime Integer. No subagents activated; independent
+implementation/architecture/wiki review remains pending before promotion.
+Exact next action: implement the resolved platform Int Core/runtime contract
+and interpreter differential boundary/diagnostic evidence.
+
+### #495 focused evidence
+
+Optimized GHC 9.14.1 -Werror build passes after removing the obsolete evaluator
+kind-name import. All 24 integer success programs pass independent mathematical
+stdout expectations plus interpreter/native parity and warning-free C checks.
+All 13 refusal programs pass, including count extrema, ordered effects, an
+operand failure before the shift, macro provenance, Unicode/tabs and nonliteral
+minimum negation. Focused logs: /tmp/pudu-495-integer.log (success matrix) and
+/tmp/pudu-495-shifts.log (final refusal run). The earlier refusal run correctly
+exposed minimum-literal narrowing; immediate checked literal negation is fixed.
+A temporary direct runtime harness passed 67,342 independent Python mathematical
+results under strict C11 -Wall -Wextra -Werror -pedantic and UBSan, seed 495;
+/tmp/pudu-495-runtime-check.py retains the reproducible local probe.
+
+An initial unannotated minimum local followed by negation is rejected by the
+existing checker with E3018. The final runtime-overflow regression uses a solved
+Int parameter so it exercises accepted source; no checker behavior was changed.
+Clean complete repository gates are running with captured outputs under the
+path in /tmp/pudu-495-gate-log-root and aggregate /tmp/pudu-495-gates.log.
+Next issue #497 records canonical fixed signed-width admission and declared
+bounds. Exact next action remains finish #495 validation before that source work.
+
+### Additional parity audit #498
+
+Real CLI probes accepted `return -{ 9223372036854775808 }` and an inferred
+positive-magnitude local later negated. Tree evaluation returns Int minimum;
+native currently narrows the intermediate and emits E7005. This is distinct
+from #495's repaired immediate literal spelling. Issue #498 preserves the
+full successful-native acceptance requirement, with a no-loss E6001 guard as
+an intermediate hardening partition only. Exact next action after #495 gates
+and commit: resolve/implement that guard, keeping #498 open until exact native
+representation matches accepted intermediate behavior. Then resume #497's
+signed-width family admission. No full Int/numeric/native completion is claimed.
+
+### #495 final validation and delivery
+
+All 19 clean repository gates pass, including fresh optimized GHC 9.14.1
+-Werror compilation and all 656 property groups. Aggregate:
+/tmp/pudu-495-gates.log; individual outputs are under the directory recorded
+in /tmp/pudu-495-gate-log-root. The original clean-build commands/checks were
+preserved in a temporary captured copy; no check or threshold was weakened.
+Real CLI tree/compiled/native boundary values and shift failure agree on status
+and combined stdout/stderr byte order. Current production/test sources stay
+below 500 lines. The issue diff needs runtime/diagnostic versus admission/test
+PR partitions before promotion if it exceeds the 600-line review boundary.
+Independent implementation, architecture and wiki reviews remain pending;
+no remote/Linux validation, PR, push, merge or subagent work is claimed.
+Full emission is incomplete. Exact next action: resolve and implement #498's
+no-loss literal admission guard, keeping its successful representation work open.

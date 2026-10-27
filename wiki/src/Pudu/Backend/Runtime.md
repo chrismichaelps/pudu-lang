@@ -22,7 +22,7 @@ the C standard library, or a network fetch.
 ```haskell
 data RuntimePart = RuntimePart
   { runtimePartName :: !Text
-  , runtimePartLines :: !Text
+  , runtimePartLines :: ![Text]
   }
 runtimeParts :: [RuntimePart]
   -- prelude, site, colored, fail, call_depth, add, sub, mul, div, rem, neg,
@@ -168,3 +168,9 @@ evaluator module — so the depth bound is the evaluator's own.
 ## Strict C11 terminal detection
 
 Use the standard output descriptor `1` with `isatty`/`_isatty`, avoiding `fileno` whose POSIX declaration is hidden by strict C11 on glibc. Resolved Grill Log: terminal detection has no stream mutation and needs no feature-test macro or compiler extension.
+
+## Platform Int operators (#495)
+
+Catalogue [[Backend Runtime Integer]] parts after existing checked arithmetic and before printers; revision becomes 3 for the added helper ABI. RuntimePart still owns the part wrapper; the Integer module exports name/line pairs to avoid a module cycle.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

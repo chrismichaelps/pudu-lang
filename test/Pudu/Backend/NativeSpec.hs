@@ -17,6 +17,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Backend.ControlPrograms (controlSuccessPrograms, controlRefusalPrograms)
 import Pudu.Backend.Emit (emitProgram)
+import Pudu.Backend.IntegerPrograms (integerSuccessPrograms, integerRefusalPrograms)
 import Pudu.Backend.FunctionPrograms (functionSuccessPrograms, functionRefusalPrograms)
 import Pudu.Backend.Toolchain
   ( ToolchainFailure (..)
@@ -83,6 +84,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 backendNativeProperties :: [(String, IO Property)]
 backendNativeProperties =
   [ ("native execution matches the interpreter on success programs", testSuccessConformance)
+  , ("native platform Int operators match mathematical and interpreter results", testIntegerConformance)
+  , ("native platform Int shifts retain exact interpreter refusals", testIntegerRefusals)
   , ("native functions match the interpreter on ordering and recursion", testFunctionConformance)
   , ("native function failures match interpreter diagnostics", testFunctionRefusals)
   , ("native scalar loop control matches the interpreter", testControlConformance)
@@ -206,6 +209,14 @@ testFunctionConformance = conjoin <$> mapM (uncurry conformance) functionSuccess
 testFunctionRefusals :: IO Property
 testFunctionRefusals = conjoin <$> mapM (uncurry conformance) functionRefusalPrograms
 
+testIntegerConformance :: IO Property
+testIntegerConformance = conjoin <$> mapM run integerSuccessPrograms
+ where
+  run (label, source, expected) = conformanceExpecting (Just (expected, "", 0)) label source
+
+testIntegerRefusals :: IO Property
+testIntegerRefusals = conjoin <$> mapM (uncurry conformance) integerRefusalPrograms
+
 testStatusConformance :: IO Property
 testStatusConformance = do
   outcomes <- mapM (uncurry conformance) statusPrograms
@@ -219,7 +230,10 @@ testRefusalConformance = do
 {-| Write the program as an ordinary file whose name matches its module, run it
     both ways, and hold the two runs to each other. -}
 conformance :: String -> Text -> IO Property
-conformance label programText = withSystemTempDirectory "pudu-native" $ \root -> do
+conformance = conformanceExpecting Nothing
+
+conformanceExpecting :: Maybe (Text, Text, Int) -> String -> Text -> IO Property
+conformanceExpecting expected label programText = withSystemTempDirectory "pudu-native" $ \root -> do
   let path = root </> "Main.pudu"
   TextIO.writeFile path programText
   available <- compilerAvailable
@@ -236,7 +250,7 @@ conformance label programText = withSystemTempDirectory "pudu-native" $ \root ->
           native <- buildAndRun root program
           case native of
             Left problem -> pure (counterexample (label <> ": native: " <> problem) False)
-            Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin
+            Right (nativeOut, nativeErr, nativeStatus, warnings) -> pure $ conjoin $
               [ counterexample (label <> ": stdout differs; interpreter=" <> show interpOut <> " native=" <> show nativeOut)
                   (nativeOut === interpOut)
               , counterexample (label <> ": stderr differs; interpreter=" <> show interpErr <> " native=" <> show nativeErr)
@@ -245,7 +259,9 @@ conformance label programText = withSystemTempDirectory "pudu-native" $ \root ->
                   (nativeStatus === interpStatus)
               , counterexample (label <> ": the generated C drew compiler warnings: " <> Text.unpack warnings)
                   (warnings === Text.empty)
-              ]
+              ] <> maybe []
+                (\answer -> [counterexample (label <> ": mathematical result differs")
+                  ((interpOut, interpErr, interpStatus) === answer)]) expected
 
 {-| The interpreter side, mirroring the `pudu` executable's run path: standard
     output captured from the evaluator itself, diagnostics rendered with the

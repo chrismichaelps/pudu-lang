@@ -65,6 +65,7 @@ needExpression needs expression = case coreExpressionShape expression of
   CoreTextLiteral _ -> needs
   CoreReadLocal _ -> needs
   CoreNegate operand -> needExpression (checked "neg" needs) operand
+  CoreComplement operand -> needExpression (bits "bit_not" needs) operand
   CoreNot operand -> needExpression needs operand
   CoreBinary operator left right ->
     let withOperator = case operator of
@@ -73,6 +74,17 @@ needExpression needs expression = case coreExpressionShape expression of
           CoreMultiply -> checked "mul" needs
           CoreDivide -> checked "div" needs
           CoreRemainder -> checked "rem" needs
+          CoreBitAnd -> bits "bit_and" needs
+          CoreBitOr -> bits "bit_or" needs
+          CoreBitXor -> bits "bit_xor" needs
+          CoreShiftLeft -> bits "shift_left" (checked "shift_left" needs)
+          CoreShiftRight -> bits "shift_right" (checked "shift_right" needs)
+          CoreWrapAdd -> bits "wrap_add" needs
+          CoreWrapSubtract -> bits "wrap_sub" needs
+          CoreWrapMultiply -> bits "wrap_mul" needs
+          CoreSaturateAdd -> Set.insert "sat_add" needs
+          CoreSaturateSubtract -> Set.insert "sat_sub" needs
+          CoreSaturateMultiply -> Set.insert "sat_mul" needs
           _ -> needs
      in needExpression (needExpression withOperator left) right
   CoreDisplay operand -> needExpression needs operand
@@ -85,6 +97,9 @@ needExpression needs expression = case coreExpressionShape expression of
   CoreLoopValue _ body -> needBlock needs body
   CoreIfValue condition thenBlock elseExpression ->
     needExpression (needBlock (needExpression needs condition) thenBlock) elseExpression
+
+bits :: Text -> Set.Set Text -> Set.Set Text
+bits part = Set.insert "from_bits" . Set.insert part
 
 {-| A checked operation's helper, the site record it points at, and the
     refusal renderer it calls. -}

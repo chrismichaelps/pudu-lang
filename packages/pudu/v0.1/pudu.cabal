@@ -90,6 +90,7 @@ library
     Pudu.Backend.Emit.State
     Pudu.Backend.Emit.Support
     Pudu.Backend.Runtime
+    Pudu.Backend.Runtime.Integer
     Pudu.Backend.Toolchain
     Pudu.Compiler
     Pudu.Compiler.Constants

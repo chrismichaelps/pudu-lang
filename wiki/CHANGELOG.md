@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-17 — Portable platform Int operators (#495)
+
+- [[Compiler Lower Scalar]] and [[Pudu Core]] represent bitwise/complement, checked shifts, wrapping and saturating Int arithmetic. [[Backend Runtime Integer]] uses unsigned bit patterns, explicit sign filling and checked bounds; [[Backend Emit]] preserves ordered operand temporaries and diagnostic sites.
+- Shared shift diagnostics preserve existing interpreter text. All 19 clean GHC 9.14.1 repository gates pass, including 656 property groups; real CLI tree/compiled/native values and merged output ordering agree. A strict C11 UBSan probe passed 67,342 independent mathematical results. Deferred out-of-range intermediates remain tracked in #498. Full numeric families and independent review remain pending.
+
 ## 2026-10-17 — Auditable native progress publishing (#496)
 
 - [[Repository README]] shows a generated 20-cell C11 emission bar and completed/total coverage areas, currently 4/14 (28%). Partial work counts zero; this is an area measure, not a language-construct percentage.

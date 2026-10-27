@@ -247,6 +247,9 @@ emitExpression state expression = case coreExpressionShape expression of
      in (afterSite, "pudu_neg(" <> operandText <> ", &pudu_sites[" <> textOfInt index <> "])")
    where
     kindOf = integerKindOfExpression expression
+  CoreComplement operand ->
+    let (afterOperand, operandText) = emitExpression state operand
+     in (afterOperand, "pudu_bit_not(" <> operandText <> ")")
   CoreNot operand ->
     let (afterOperand, operandText) = emitExpression state operand
      in (afterOperand, "(!(" <> operandText <> "))")
@@ -381,6 +384,17 @@ emitBinary state expression operator left right = case operator of
         (afterRight, rightText) = emitValue afterLeft right
         (afterZero, zeroIndex) = divideByZeroSite afterRight (coreExpressionSpan expression)
      in (afterZero, "pudu_rem(" <> leftText <> ", " <> rightText <> ", &pudu_sites[" <> textOfInt zeroIndex <> "])")
+  CoreBitAnd -> binaryCall "pudu_bit_and"
+  CoreBitOr -> binaryCall "pudu_bit_or"
+  CoreBitXor -> binaryCall "pudu_bit_xor"
+  CoreShiftLeft -> shiftCall "pudu_shift_left"
+  CoreShiftRight -> shiftCall "pudu_shift_right"
+  CoreWrapAdd -> binaryCall "pudu_wrap_add"
+  CoreWrapSubtract -> binaryCall "pudu_wrap_sub"
+  CoreWrapMultiply -> binaryCall "pudu_wrap_mul"
+  CoreSaturateAdd -> binaryCall "pudu_sat_add"
+  CoreSaturateSubtract -> binaryCall "pudu_sat_sub"
+  CoreSaturateMultiply -> binaryCall "pudu_sat_mul"
   CoreLess -> comparison "<"
   CoreLessOrEqual -> comparison "<="
   CoreGreater -> comparison ">"
@@ -396,6 +410,16 @@ emitBinary state expression operator left right = case operator of
         (afterRight, rightText) = emitValue afterLeft right
         (afterSite, index) = overflowSite afterRight (coreExpressionSpan expression) kindOf operation
      in (afterSite, helper <> "(" <> leftText <> ", " <> rightText <> ", &pudu_sites[" <> textOfInt index <> "])")
+  binaryCall helper =
+    let (afterLeft, leftText) = emitValue state left
+        (afterRight, rightText) = emitValue afterLeft right
+     in (afterRight, helper <> "(" <> leftText <> ", " <> rightText <> ")")
+  shiftCall helper =
+    let (afterLeft, leftText) = emitValue state left
+        (afterRight, rightText) = emitValue afterLeft right
+        (afterSites, negative, wide) = shiftSites afterRight (coreExpressionSpan expression) kindOf
+     in (afterSites, helper <> "(" <> leftText <> ", " <> rightText
+          <> ", &pudu_sites[" <> textOfInt negative <> "], &pudu_sites[" <> textOfInt wide <> "])")
   logical skipWhenTrue =
     let (afterLeft, temp) = emitValue state left
         guardText = if skipWhenTrue then "!" <> temp else temp

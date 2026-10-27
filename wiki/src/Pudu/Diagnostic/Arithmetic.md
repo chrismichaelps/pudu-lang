@@ -82,3 +82,9 @@ and, through the emitted site table, [[Backend Runtime]].
 [[src/Pudu/_MOC]] · [[Eval Operator]] ·
 [[Eval Loop Unboxed]] · [[Compiler Lower]] · [[Backend Emit]] ·
 [[Diagnostic Model]]
+
+## Platform Int operators (#495)
+
+Export shiftCode, negativeShiftMessage, negativeShiftHelp, wideShiftMessage :: IntegerKind -> Text and wideShiftHelp. Preserve exact existing interpreter E7004 text; messages carry no spans or rendering.
+
+Resolved Grill Log: use defined unsigned bit patterns, validate counts before shifts, and prove signed arithmetic bounds before evaluation. The actual interpreter determines results, effect order and exact diagnostic vocabulary. No syntax or type-inference change.

@@ -16,9 +16,9 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Platform Int/Bool, checked arithmetic, if/while, printing | Implemented | Preserve differential evidence |
 | Scalar functions, recursion, call depth | Implemented (#488, #491) | Preserve inferred/aliased signature facts, argument ordering and diagnostics |
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
-| Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display and equality; invalid unit operations remain a runtime-refusal obligation |
+| Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial | Int status/unit silence work; Bool and other value-result rendering still need native admission and CLI parity |
-| Complete numeric families | Pending | Widths, floats, Decimal, wrapping/saturation, bitwise rules |
+| Complete numeric families | Partial (#495) | Platform Int bitwise, shifts, wrapping and saturation are represented; other widths, UInt, BigInt, floats and Decimal remain |
 | Text and bytes | Pending | Owned representation, UTF-8, allocation, comparisons and IO failures |
 | Records, tuples, sums and collections | Pending | Layout, construction/update, access, equality, allocation and destruction |
 | Pattern matching and iteration | Pending | Exhaustive ordered decisions, guards, bindings, ranges and iterator protocol |
@@ -103,10 +103,35 @@ Resolved Grill Log: never put a void C call in an argument initializer or erase 
 
 ## Unit operations (#493)
 
-Lower display(unit), unit equality and inequality through the existing Core/display model. Freeze every eager unit operand through its effects and an integer-zero temporary. Inline display evaluates its operand once and prints exactly the two UTF-8 bytes (). Select the string runtime printer. Unit arithmetic/ordering remain explicit E6001 boundaries until the interpreter E7001 runtime refusal is represented; accepting those as integer operations would change behavior. No owned text representation is implied.
+Lower display(unit), unit equality and inequality through the existing Core/display model. Freeze every eager unit operand through its effects and an integer-zero temporary. Inline display evaluates its operand once and prints exactly the two UTF-8 bytes (). Select the string runtime printer. #494 represents the interpreter E7001 runtime refusals for Unit arithmetic/ordering; treating those operations as integer arithmetic would change behavior. No owned text representation is implied.
 
 Resolved Grill Log: effects precede constant unit representation, including calls, transfers and failures; both operands execute left to right. No syntax/checker change or Result erasure.
 
 ## Explicit operator runtime failures (#494)
 
 CoreOperatorFailure carries the original operation span, ordered operands and shared E7001 message. Compiler Lower Scalar owns normal operator classification and exact fact admission. Bool ordering is valid; unit ordering/arithmetic and invalid Bool operations trap only after operand effects. Shared diagnostic factories preserve generic cannot-apply versus comparisonOnly unsupported-operator wording. Never operands preserve transfer without fabricating a trap; print Result guards remain. Valid unimplemented Int/owned operations retain explicit coverage boundaries. Resolved Grill Log: actual interpreter dispatch is authoritative, with no native arithmetic approximation or second inference pass.
+
+## Platform Int operators (#495)
+
+[[Backend Runtime Integer]] defines all platform Int bitwise, complement, shift,
+wrapping and saturation operations in portable C11. Conversion from high unsigned
+bit patterns avoids implementation-defined signed narrowing. Right shift fills
+sign bits explicitly; shifts validate counts before shifting and preserve distinct
+negative/width E7004 diagnostics through [[Diagnostic Arithmetic]]. Saturation
+checks safe bounds before signed operations. [[Backend Integer Programs]] supplies
+boundary and seeded full-width mathematical expectations in addition to actual
+interpreter/native comparison. The target remains the existing explicit 64-bit
+model; other integer families and numeric types remain coverage obligations.
+
+Resolved Grill Log: portable defined arithmetic and exact observable parity are
+required together. A passing operator slice does not complete numeric families.
+
+## Deferred out-of-range literal intermediates (#498)
+
+The checker currently admits some positive 2^63 literals through a block or
+inferred local whose later negation selects Int. The interpreter retains the
+mathematical magnitude until use. The current native int64_t intermediate can
+narrow before that use and is not conformant. #495 fixes the direct immediate
+negative-minimum spelling only. #498 owns a no-loss admission guard followed by
+an exact representation contract; a temporary E6001 guard is not full coverage.
+This gap remains open alongside other numeric representations.

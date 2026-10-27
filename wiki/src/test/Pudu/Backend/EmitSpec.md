@@ -100,3 +100,9 @@ Resolved Grill Log: unit has one value but its operands still execute. Reject sk
 Previously refused unit arithmetic/ordering now lower to explicit runtime traps; remove only those obsolete refusal entries. Preserve direct/nested print Result display/equality refusals and unsupported owned/numeric cases.
 
 Resolved Grill Log: reproduce actual interpreter dispatch, canonical settled kinds, operand order and diagnostic spans; never classify print Result as unit or implement invalid operations as integer arithmetic. No syntax/inference change.
+
+## Platform Int operators (#495)
+
+Remove only obsolete platform Int bitwise/complement E6001 cases; replace with width-bearing Int8 cases so unsupported widths remain refused.
+
+Resolved Grill Log: boundary and failure matrices execute real native binaries; fixed repeated properties are not described as randomized sampling. Keep full numeric-family coverage pending.
