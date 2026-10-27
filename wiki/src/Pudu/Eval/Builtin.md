@@ -233,3 +233,5 @@ ordinary call semantics.
 Resolved Grill Log: use explicit primitives rather than recognizing a library function
 by name. Preserve persistence, key representatives, duplicate counts, checked Int
 overflow, and E7008 for unorderable keys or values. Do not scan complete maps on every add.
+
+panic's code and help come from Pudu.Diagnostic.Evaluation. (#633)

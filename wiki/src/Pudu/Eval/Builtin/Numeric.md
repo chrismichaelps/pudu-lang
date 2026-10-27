@@ -48,3 +48,5 @@ callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 ## Grill Log
 
 - **Q:** Why group decimals, integer conversion, and character conversions into `Numeric`? **A:** These operations form the language's scalar representation and conversion boundary (~115 lines) operating between host numeric primitives, bit-widths, and Unicode codepoints.
+
+The untyped convertInteger refusal reads its wording from Pudu.Diagnostic.Evaluation. (#633)

@@ -30,3 +30,5 @@ Checking does not type panic (#634), so `panic(5)` and `panic()` reach
 lowering. They run their arguments, then refuse E7007 "panic" with help
 "panic takes one string argument", directly or through a value
 (wrongPanicBody), as the interpreter does.
+
+Wording comes from Pudu.Diagnostic.Evaluation. (#633)

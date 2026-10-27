@@ -21,6 +21,7 @@ import Pudu.DecimalLiteral
   , decimalToInteger
   , parseDecimalText
   )
+import Pudu.Diagnostic.Evaluation (builtinArgumentCode, convertIntegerTargetHelp, convertIntegerTargetMessage)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
@@ -53,8 +54,8 @@ callConvertInteger spanValue names arguments = case (names, arguments) of
         (target <> " is not an integer type")
         (Just "convert to one of the integer types, such as UInt8 or Int64")
   ([], _) ->
-    abortAt (Just spanValue) "E7012" "convertInteger needs the type to convert to"
-      (Just "write it as a type argument, as in convertInteger[UInt8](value)")
+    abortAt (Just spanValue) builtinArgumentCode convertIntegerTargetMessage
+      (Just convertIntegerTargetHelp)
   (_, [other]) ->
     abortAt (Just spanValue) "E7012"
       ("convertInteger moves between integers, not from a " <> valueKind other)
