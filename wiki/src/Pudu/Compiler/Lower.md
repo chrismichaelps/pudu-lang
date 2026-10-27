@@ -13,7 +13,7 @@ aliases: [Compiler Lower, Native Lowering]
 
 ## Purpose and interface
 
-Lower the checked root module of a compiled program into [[Core IR]], or
+Lower the checked modules of a compiled program from its root into [[Core IR]], or
 refuse — never guess. This is the one gate between the full language and the
 native subset: everything the emitter can represent is lowered exactly, and
 everything else becomes a typed `E6001` refusal carrying the construct's own
@@ -27,7 +27,10 @@ owns callable signature admission.
 
 ```haskell
 data LowerResult = Lowered !CoreModule | LowerRefused ![Diagnostic]
-lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult
+lowerProgram :: Text -> [NativeModule] -> LowerResult
+lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
+lowerModuleFolded :: Text -> Maybe LowerTypes -> Map Text Frozen -> Module -> LowerResult
+programNativeModules :: ProgramResult -> Maybe [NativeModule]
 ```
 
 The entry name (`"main"`) is a parameter, not a constant: the caller owns the
@@ -191,3 +194,13 @@ Unit literals lower as empty Core blocks and settled unit parameters retain the 
 
 `lowerProgram` adds the root module's own records from `declaredRecords` to
 the facts before lowering.
+
+## Folded constants (#543)
+
+Resolved Grill Log: NativeModule adds nativeModuleConstants :: Map Text Frozen
+from the same successful CompileResult. programNativeModules supplies
+compileFolded for every module. lowerModuleFolded accepts real supplied
+products; the compatibility lowerModule passes an empty product map and
+refuses reached constants rather than re-evaluating their syntax. ModuleScope
+records each declared constant with its optional frozen value, so nonportable
+and missing products stay distinct from undeclared names. No ABI change.

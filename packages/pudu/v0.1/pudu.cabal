@@ -126,6 +126,7 @@ library
     Pudu.Backend.Emit.Frame.Value
     Pudu.Backend.Emit.Frame.Body
     Pudu.Compiler.Lower.Body
+    Pudu.Compiler.Lower.Constant
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

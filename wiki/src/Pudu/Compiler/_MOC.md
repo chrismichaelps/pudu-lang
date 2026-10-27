@@ -55,3 +55,5 @@ Dependency direction: Library → Program. Only [[Compiler Program]] reads files
 - [[Native Solved Types Tests]] — canonical representation and fact identity regressions.
 
 - [[Compiler Lower Scalar]] — represented operators and ordered runtime failures (#494).
+
+- [[Compiler Lower Constant]] — typed projection of compiler-folded constants (#543).

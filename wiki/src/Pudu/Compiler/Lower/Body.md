@@ -298,3 +298,10 @@ Resolved Grill Log (#541): when a let-else subject itself is Never, retain its
 transfer and stop lowering the unreachable suffix of that block. No pattern
 binding exists on that path, so resolving a later source read into an
 uninitialized Core local would fabricate a refusal after a completed transfer.
+
+## Folded constant references (#543)
+
+Resolved Grill Log: after local reads and before variant fallback, delegate
+names and module-qualified members to [[Compiler Lower Constant]]. A member
+on a local value remains an ordinary field read. Calls keep function dispatch;
+constants are values and never turn into functions merely by matching a name.

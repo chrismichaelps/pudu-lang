@@ -78,3 +78,5 @@ aliases: [Backend Module Map]
 - [[Native Floating Runtime]] · [[Native Runtime Dependencies]] · [[Native Floating Runtime Tests]] — actual catalogue integration (#511).
 
 - [[Compiler Lower Match]] · [[Native Refutable Binding Delivery]] — enclosing-scope refutable bindings (#541).
+
+- [[Compiler Lower Constant]] · [[Native Folded Constants]] — represented folded-data emission (#543).

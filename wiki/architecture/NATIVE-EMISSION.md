@@ -22,7 +22,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525) | Tuples, the root module's non-generic records, its sums and the built-in Option/Result at concrete arguments are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; generic records and collections remain |
 | Pattern matching and iteration | Partial (#525, #540, #541) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for`, ranges as values and the iterator protocol remain |
-| Modules and constants | Partial (#539) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; module constants and folded values remain |
+| Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
 | Callables and generic code | Pending | Closures/captures, defaults, monomorphization and trait dispatch |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Pending | Result/Option propagation, borrows, moves, drop and all unwind paths |
@@ -323,3 +323,15 @@ pass, including 711 optimized test groups. The pattern/iteration area remains
 partial because iteration and sequence patterns still need native support.
 
 Delivery and evidence: [[Native Refutable Binding Delivery]].
+
+## Module folded values (#543)
+
+[[Native Folded Constants]] passes the compiler's existing immutable products
+into native module scopes. [[Compiler Lower Constant]] preserves represented
+scalars and aggregates against the solved canonical type at each reference;
+missing products and unsupported families retain located E6001 refusals.
+[[Backend Module Programs]] and [[Native Solved Types Tests]] cover the new
+boundary. No runtime initializer is evaluated by lowering. Clang, GCC 15, ASan/UBSan, both interpreter modes and 71 counted
+allocation programs pass. All 20 clean gates pass, including 712 optimized
+test groups; the real CLI native build also matches both interpreters.
+Evidence is recorded in [[Native Folded Constant Delivery]].

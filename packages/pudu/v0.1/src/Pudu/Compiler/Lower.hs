@@ -15,6 +15,7 @@ module Pudu.Compiler.Lower
   ( LowerResult (..)
   , NativeModule (..)
   , lowerModule
+  , lowerModuleFolded
   , lowerProgram
   , programNativeModules
   ) where
@@ -24,6 +25,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 
 import qualified Data.Map.Strict as Map
+import Pudu.Eval.Frozen (Frozen)
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, nativeTypes, withShapes)
@@ -60,6 +62,7 @@ data NativeModule = NativeModule
   { nativeModuleName :: !Text
   , nativeModuleSyntax :: !Module
   , nativeModuleTypes :: !(Maybe LowerTypes)
+  , nativeModuleConstants :: !(Map.Map Text Frozen)
   }
 
 {-| Every module of a compiled program as native lowering reads it, the root
@@ -78,12 +81,17 @@ programNativeModules program = do
         , Just syntax <- [compileModule result]
         ]
  where
-  native name syntax result = NativeModule name syntax (nativeTypes (compileTypes result) (compileSchemes result))
+  native name syntax result = NativeModule name syntax (nativeTypes (compileTypes result) (compileSchemes result)) (compileFolded result)
 
 {-| Lower a program of one module. -}
 lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
-lowerModule entryName types parsed =
-  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types]
+lowerModule entryName types = lowerModuleFolded entryName types Map.empty
+
+{-| Supply the immutable products of the same checked compilation; lowering
+    never evaluates a constant initializer itself. -}
+lowerModuleFolded :: Text -> Maybe LowerTypes -> Map.Map Text Frozen -> Module -> LowerResult
+lowerModuleFolded entryName types constants parsed =
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types constants]
 
 {-| Lower the root module's entry function and every function reachable from
     it, in whichever module each is declared. The root comes first. -}
@@ -145,6 +153,9 @@ lowerProgram entryName programModules@(rootModule : _)
         , ModuleScope
             { scopeTypes = maybe emptyTypes (withShapes records sums) (nativeModuleTypes native)
             , scopeFunctions = Set.fromList (map fst (functionsOf native))
+            , scopeConstants = Map.fromList
+                [ (locatedValue name, Map.lookup (locatedValue name) (nativeModuleConstants native))
+                | Located _ (BindingDeclaration _ _ name _ _) <- moduleDeclarations (nativeModuleSyntax native) ]
             , scopeSelected = Map.fromList
                 [ (locatedValue item, moduleNameText (locatedValue (importModule value)))
                 | Located _ value <- moduleImports (nativeModuleSyntax native)

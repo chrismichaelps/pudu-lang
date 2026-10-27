@@ -17,6 +17,7 @@ import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Tuple (lowerTuple, lowerTupleIndex, lowerTuplePattern)
 import Pudu.Compiler.Lower.Record (lowerField, lowerFieldAssignment, lowerRecord, lowerRecordUpdate)
 import Pudu.Compiler.Lower.Sum (lowerVariant)
+import Pudu.Compiler.Lower.Constant (lowerConstant)
 import Pudu.Compiler.Lower.Match (ifLetArms, lowerLetElse, lowerMatch, whileLetLoop)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
@@ -317,11 +318,14 @@ lowerExpression state (Located spanValue expression) = case expression of
     NullValue -> halt spanValue "null" state
   NameExpression (name :| []) -> case lookupLocal state name of
     Just local -> value (CoreReadLocal local) (coreLocalType local)
+    Nothing | Just lowered <- lowerConstant state spanValue [name] -> lowered
     Nothing -> maybe (halt spanValue ("the value '" <> name <> "'") state) id
       (lowerVariant lowerExpression state spanValue name [])
   NameExpression (first :| rest) ->
-    maybe (halt spanValue "module-qualified names" state) id
-      (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
+    case lowerConstant state spanValue (first : rest) of
+      Just lowered -> lowered
+      Nothing -> maybe (halt spanValue "module-qualified names" state) id
+        (lowerVariant lowerExpression state spanValue (last (first : rest)) [])
   UnaryExpression operator operand -> lowerUnary lowerExpression state spanValue operator operand
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located _ (NameExpression (name :| []))) arguments
@@ -352,6 +356,8 @@ lowerExpression state (Located spanValue expression) = case expression of
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression{} -> halt spanValue "this call" state
   MemberExpression receiver (Located _ member)
+    | Located _ (NameExpression (owner :| [])) <- receiver
+    , Just lowered <- lowerConstant state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
   IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key

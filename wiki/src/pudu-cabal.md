@@ -435,3 +435,8 @@ Register Pudu.Compiler.Lower.Record in exposed-modules (#521).
 
 Resolved Grill Log: register [[Syntax Pattern Bindings]] without a new package
 dependency; resolution and typing share syntax enumeration only.
+
+## Folded constant projection (#543)
+
+Resolved Grill Log: register [[Compiler Lower Constant]] using existing
+compiler, evaluator-value, text and containers modules, with no new dependency.

@@ -2,7 +2,7 @@
 module Pudu.Compiler.Lower.State
   ( CoreSignature (..), LowerContext (..), LowerState (..), LoopFrame (..), ModuleScope (..)
   , emptyContext, startFunction, refuse, refused, halt, lookupLocal, bindLocal, intType
-  , resolveFunction, inModule, isModuleQualifier
+  , resolveFunction, lookupConstant, inModule, isModuleQualifier
   ) where
 
 import Data.Map.Strict (Map)
@@ -16,6 +16,7 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Frontend.Syntax (Function, Located)
 import Pudu.IntegerLiteral (IntegerKind (..))
+import Pudu.Eval.Frozen (Frozen)
 import Pudu.Source (Span)
 
 {-| @Compiler.Lower.Context — program-global lowering state: the entry name,
@@ -44,6 +45,7 @@ data LowerContext = LowerContext
 data ModuleScope = ModuleScope
   { scopeTypes :: !LowerTypes
   , scopeFunctions :: !(Set Text)
+  , scopeConstants :: !(Map Text (Maybe Frozen))
   {-| A selectively imported name and the module it comes from. -}
   , scopeSelected :: !(Map Text Text)
   {-| A qualifier (an alias, or the module path's last segment) and its module. -}
@@ -146,6 +148,23 @@ resolveFunction state segments = do
     _ -> Nothing
   _ <- lookup target (contextTable context)
   pure target
+
+{-| Nothing is a nonconstant; Just Nothing is a declared constant whose
+    portable folded product was not supplied. Imported names never re-export. -}
+lookupConstant :: LowerState -> [Text] -> Maybe (Maybe Frozen)
+lookupConstant state segments = do
+  let context = lowerContext state
+      current = contextModule context
+  scope <- Map.lookup current (contextModules context)
+  (owner, name) <- case segments of
+    [name] | lookupLocal state name == Nothing ->
+      if Map.member name (scopeConstants scope) then Just (current, name)
+      else (\owner -> (owner, name)) <$> Map.lookup name (scopeSelected scope)
+    [qualifier, name] | lookupLocal state qualifier == Nothing ->
+      (\owner -> (owner, name)) <$> Map.lookup qualifier (scopeQualifiers scope)
+    _ -> Nothing
+  target <- Map.lookup owner (contextModules context)
+  Map.lookup name (scopeConstants target)
 
 {-| Whether a name is a module qualifier in the current module and not a local. -}
 isModuleQualifier :: LowerState -> Text -> Bool

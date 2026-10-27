@@ -44,3 +44,16 @@ Assert explicit Never-typed CoreOperatorFailure nodes, whole-operation spans, or
 ## Wide source admission (#507)
 
 Require canonical Int128/UInt128 projections while rejecting user-owned identical spellings and applied primitive forms. Preserve missing-analysis and exact span identity tests. Resolved Grill Log: admission must not weaken nominal identity or reuse facts from another source. [[Native Wide Source Admission]].
+
+## Folded data boundary (#543)
+
+Resolved Grill Log: compile ordinary constants, then distinguish real supplied
+folded products from deliberately missing products. Assert E6001 at the exact
+constant use for unavailable products and unsupported kinds, and retain
+compile-time initializer failures before lowering. Register the property in
+this runner-consumed list; no test coordinator change is needed.
+
+Resolved Grill Log (#543): inspect emitted CoreFloatLiteral bits from real
+folded products. Lock Float32 0.1 and negative-zero encodings independently,
+and require NaN bits to equal the actual folded encoding; decimal output alone
+cannot prove NaN payload preservation.
