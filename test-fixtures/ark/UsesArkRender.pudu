@@ -1,0 +1,119 @@
+module UsesArkRender
+
+import Std.Lanes as Lanes
+import Std.Math.Float as Float
+import Ark.Math.Camera as Camera
+import Ark.Math.Color as Color
+import Ark.Math.Matrix as M
+import Ark.Math.Quat as Q
+import Ark.Math as V
+import Ark.Render.Device as Device
+import Ark.Render.Graph as Graph
+import Ark.Render.Mesh as Mesh
+import Ark.Render.Pipeline as Pipeline
+
+fn require(condition: Bool, name: Str) {
+  if !condition { panic(name) }
+}
+
+fn pixel(surface: &Device.Target, x: Int, y: Int) -> (UInt8, UInt8, UInt8, UInt8) {
+  let at = (y * surface.width + x) * 4
+  let color = Device.pixels(surface)
+  (octet(&color, at), octet(&color, at + 1), octet(&color, at + 2), octet(&color, at + 3))
+}
+
+fn octet(color: &Bytes, at: Int) -> UInt8 {
+  match color.at(at) {
+    case Some(value) => value
+    case None => panic("pixel outside the target")
+  }
+}
+
+fn camera() -> M.Mat4 {
+  let Some(view) = Camera.lookAt(V.vec3(0.0, 0.0, 3.0), V.vec3(0.0, 0.0, 0.0), V.vec3(0.0, 1.0, 0.0)) else { panic("view") }
+  let Some(projection) = Camera.perspective(Float.pi() / 3.0, 1.0, 0.1, 100.0) else { panic("projection") }
+  M.multiply4(projection, view)
+}
+
+fn meshes() {
+  require(Mesh.triangleCount(&Mesh.cube(Color.opaque(1.0, 0.0, 0.0))) == 12, "cube triangles")
+  require(Mesh.triangleCount(&Mesh.plane(Color.opaque(1.0, 0.0, 0.0))) == 2, "plane triangles")
+  require(Mesh.triangleCount(&Mesh.pyramid(Color.opaque(1.0, 0.0, 0.0))) == 6, "pyramid triangles")
+  let Some(made) = Mesh.primitive("pyramid", Color.opaque(0.0, 1.0, 0.0)) else { panic("factory") }
+  require(Mesh.triangleCount(&made) == 6 && Mesh.primitive("teapot", Color.opaque(0.0, 0.0, 0.0)) == None, "factory table")
+  let plane = Mesh.plane(Color.opaque(1.0, 1.0, 1.0))
+  require(Lanes.toArray(&plane.ny) == [1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "plane faces up")
+  require(Mesh.fromTriangles(&[V.vec3(0.0, 0.0, 0.0), V.vec3(1.0, 0.0, 0.0)], Color.opaque(1.0, 1.0, 1.0)) == None, "partial triangle")
+  require(Mesh.fromTriangles(&[V.vec3(0.0, 0.0, 0.0), V.vec3(1.0, 0.0, 0.0), V.vec3(2.0, 0.0, 0.0)], Color.opaque(1.0, 1.0, 1.0)) == None, "degenerate triangle")
+  let both = Mesh.merge(&plane, &Mesh.cube(Color.opaque(1.0, 1.0, 1.0)))
+  require(Mesh.triangleCount(&both) == 14, "merge")
+}
+
+fn scene() {
+  let Some(sun) = Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), 0.2) else { panic("light") }
+  require(Pipeline.light(V.vec3(0.0, 0.0, 0.0), Color.opaque(1.0, 1.0, 1.0), 0.2) == None, "zero light")
+  require(Pipeline.light(V.vec3(0.0, 0.0, 1.0), Color.opaque(1.0, 1.0, 1.0), 1.5) == None, "ambient range")
+  let Some(blank) = Device.target(64, 64) else { panic("target") }
+  require(Device.target(0, 4) == None, "empty target")
+  let Some(cleared) = Device.clear(blank, Color.opaque(0.0, 0.0, 1.0)) else { panic("clear") }
+  require(pixel(&cleared, 0, 0) == (0u8, 0u8, 255u8, 255u8), "clear color")
+  let red = Mesh.cube(Color.opaque(1.0, 0.0, 0.0))
+  let model = M.identity4()
+  let viewProjection = camera()
+  let Some(batch) = Pipeline.project(&red, &model, &viewProjection, &sun, 64, 64) else { panic("project") }
+  let Some(drawn) = Device.draw(cleared, &batch, Device.CullBack) else { panic("draw") }
+  require(pixel(&drawn, 32, 32) == (255u8, 0u8, 0u8, 255u8), "front face fully lit at the center")
+  require(pixel(&drawn, 1, 1) == (0u8, 0u8, 255u8, 255u8), "background outside the cube")
+  let Some(depthLanes) = Lanes.get(&drawn.depth, 32 * 64 + 32) else { panic("depth") }
+  require(depthLanes > 0.0 && depthLanes < 1.0, "depth written")
+  let turned = Q.toMat4(Q.rotationY(Float.pi() / 2.0))
+  let Some(side) = Pipeline.project(&red, &turned, &viewProjection, &sun, 64, 64) else { panic("turned") }
+  let Some(sideways) = Device.draw(cleared, &side, Device.CullBack) else { panic("draw turned") }
+  require(pixel(&sideways, 32, 32) == (255u8, 0u8, 0u8, 255u8), "rotated cube still covers the center")
+  let tilted = Q.toMat4(Q.rotationX(Float.pi() / 3.0))
+  let Some(slanted) = Pipeline.project(&Mesh.plane(Color.opaque(1.0, 1.0, 1.0)), &tilted, &viewProjection, &sun, 64, 64) else { panic("slanted") }
+  let Some(dim) = Device.draw(cleared, &slanted, Device.CullNone) else { panic("draw dim") }
+  let (r, _, _, _) = pixel(&dim, 32, 32)
+  require(r > 200u8 && r < 230u8, "lambert shading of a slanted face")
+  let behind = M.translation(V.vec3(0.0, 0.0, 10.0))
+  let Some(hidden) = Pipeline.project(&red, &behind, &viewProjection, &sun, 64, 64) else { panic("behind") }
+  let Some(nothing) = Device.draw(cleared, &hidden, Device.CullNone) else { panic("draw behind") }
+  require(pixel(&nothing, 32, 32) == (0u8, 0u8, 255u8, 255u8), "geometry behind the camera is skipped")
+  let near = M.translation(V.vec3(0.0, 0.0, 1.0))
+  let Some(front) = Pipeline.project(&Mesh.cube(Color.opaque(0.0, 1.0, 0.0)), &near, &viewProjection, &sun, 64, 64) else { panic("near") }
+  let combined = Pipeline.concat(&batch, &front)
+  let Some(layered) = Device.draw(cleared, &combined, Device.CullBack) else { panic("draw layered") }
+  require(pixel(&layered, 32, 32) == (0u8, 255u8, 0u8, 255u8), "nearer cube wins in one draw")
+  let image = Device.snapshotPpm(&layered)
+  require(image.length() == 13 + 64 * 64 * 3, "ppm snapshot size")
+}
+
+fn graphs() {
+  let paint: fn(Device.Target) -> Option[Device.Target] = |surface| Device.clear(surface, Color.opaque(1.0, 0.0, 0.0))
+  let keep: fn(Device.Target) -> Option[Device.Target] = |surface| Some(surface)
+  var frame = Graph.graph()
+  frame = Graph.add(frame, Graph.pass("shadows", &[], &["shadowMap"], keep))
+  frame = Graph.add(frame, Graph.pass("scene", &["shadowMap"], &["color", "depth"], paint))
+  frame = Graph.add(frame, Graph.pass("debug", &["depth"], &["overlay"], keep))
+  frame = Graph.add(frame, Graph.pass("post", &["color"], &["final"], keep))
+  require(Graph.compile(&frame) == Err(Graph.NothingExported), "nothing exported")
+  let exported = Graph.exported(frame, "final")
+  let Ok(compiled) = Graph.compile(&exported) else { panic("compile") }
+  require(Graph.order(&compiled) == ["shadows", "scene", "post"], "unused pass culled")
+  require(compiled.lifetimes.length() == 4 && compiled.lifetimes[0] == Graph.Lifetime{resource: "shadowMap", first: 0, last: 1}, "lifetimes")
+  let Some(start) = Device.target(2, 2) else { panic("target") }
+  let Some(ran) = Graph.execute(&compiled, start) else { panic("execute") }
+  require(pixel(&ran, 0, 0) == (255u8, 0u8, 0u8, 255u8), "passes ran")
+  let duplicate = Graph.exported(Graph.add(exported, Graph.pass("post", &[], &["x"], keep)), "x")
+  require(Graph.compile(&duplicate) == Err(Graph.DuplicatePass("post")), "duplicate pass")
+  let early = Graph.exported(Graph.add(Graph.graph(), Graph.pass("lonely", &["missing"], &["out"], keep)), "out")
+  require(Graph.compile(&early) == Err(Graph.ReadBeforeWrite("lonely", "missing")), "read before write")
+}
+
+export fn main() -> Int {
+  meshes()
+  scene()
+  graphs()
+  print("ark render: ok")
+  0
+}

@@ -1,0 +1,66 @@
+module Ark.Render.Device
+
+import Std.Lanes as Lanes
+import Ark.Math.Color as Color
+
+/// An RGBA8 color buffer and a Float64 depth lane of width x height, rows top to bottom.
+export type Target = { width: Int, height: Int, color: Bytes, depth: Lanes.Lanes }
+
+/// Screen-space vertices, three per triangle: pixel x/y, depth in [0, 1] and linear r/g/b.
+export type ScreenBatch = { xs: Lanes.Lanes, ys: Lanes.Lanes, zs: Lanes.Lanes, rs: Lanes.Lanes, gs: Lanes.Lanes, bs: Lanes.Lanes }
+
+/// Which faces a draw keeps; front faces wind counter-clockwise in device coordinates.
+export type Cull = CullNone | CullBack
+
+/// A target cleared to transparent black at the farthest depth, or None for an empty size.
+export fn target(width: Int, height: Int) -> Option[Target] {
+  if width <= 0 || height <= 0 { return None }
+  clear(Target{width, height, color: bytesOf([]), depth: Lanes.fromArray(&[])}, Color.rgba(0.0, 0.0, 0.0, 0.0))
+}
+
+/// Fill the color buffer with one color and reset every depth to 1.
+export fn clear(surface: Target, fill: Color.Rgba) -> Option[Target] {
+  let area = surface.width * surface.height
+  let color = rasterFill(area, fill.r, fill.g, fill.b, fill.a) ?
+  let depth = Lanes.filled(area, 1.0) ?
+  Some(Target{..surface, color, depth})
+}
+
+/// Rasterize a batch in one native call; None when the batch lanes disagree.
+export fn draw(surface: Target, batch: &ScreenBatch, cull: Cull) -> Option[Target] {
+  let mode = match cull {
+    case CullNone => 0
+    case CullBack => 1
+  }
+  let (color, depth) = rasterTriangles(
+    surface.color,
+    Lanes.toBytes(&surface.depth),
+    surface.width,
+    mode,
+    Lanes.toBytes(&batch.xs),
+    Lanes.toBytes(&batch.ys),
+    Lanes.toBytes(&batch.zs),
+    Lanes.toBytes(&batch.rs),
+    Lanes.toBytes(&batch.gs),
+    Lanes.toBytes(&batch.bs),
+  ) ?
+  let lanes = Lanes.fromBytes(depth) ?
+  Some(Target{..surface, color, depth: lanes})
+}
+
+/// The RGBA8 color buffer.
+export fn pixels(surface: &Target) -> Bytes {
+  surface.color
+}
+
+/// The color buffer as a binary PPM image, alpha dropped, for offscreen inspection.
+export fn snapshotPpm(surface: &Target) -> Bytes {
+  var octets: Array[UInt8] = ("P6\n" + show(surface.width) + " " + show(surface.height) + "\n255\n").toBytes().toArray()
+  let rgba = surface.color.toArray()
+  var at = 0
+  while at < rgba.length() {
+    octets = octets.push(rgba[at]).push(rgba[at + 1]).push(rgba[at + 2])
+    at = at + 4
+  }
+  bytesOf(octets)
+}

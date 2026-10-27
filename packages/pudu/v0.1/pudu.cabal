@@ -22,6 +22,7 @@ data-files:         lib/Std/*.pudu
                     lib/Ark/Core/*.pudu
                     lib/Ark/World/*.pudu
                     lib/Ark/Platform/*.pudu
+                    lib/Ark/Render/*.pudu
                     lib/Std/App/*.pudu
                     lib/Std/Audio/*.pudu
                     lib/Std/Archive/*.pudu

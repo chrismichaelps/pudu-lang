@@ -7,16 +7,15 @@ tags: [handoff, ark]
 # Ark Engine Next
 
 Engine branch feature/660-ark-matrix (draft PR #667) now carries Math (#660, #666), lanes
-(#668), the nanosecond clock (#670), Core handles/profiling and the archetype World (#672),
-adapter game input (#673) and Platform (#675). Layer gate: 17 engine modules, no findings.
-Dependency PRs awaiting review: #663, #664 (with #665), #669, #671, #674.
+(#668), rasterization (#676), the nanosecond clock (#670), Core and World (#672), adapter game
+input (#673), Platform (#675) and Render with the window demo (#680). Layer gate: 21 engine
+modules, no findings. Dependency PRs awaiting review: #663, #664, #669, #671, #674, #677, #679.
 
 Standing rule: any kind discriminator is built through a const factory table.
 
-Exact next action: a software render device for Ark.Render — a native rasterization kernel
-family (cleared color/depth targets, depth-tested triangle fill from transformed lanes) behind a
-`RenderDevice` boundary, with frame-graph passes, culling and vertex transforms in Pudu, then a
-window demo presenting frames through [[Ark Window]].
+Exact next action: World transform hierarchy and events, then perspective-correct interpolation
+and near-plane clipping in the pipeline, then Ark.Physics (rigid bodies on lane columns with a
+broadphase over [[Ark Geometry]]).
 
 ## Referenced by
 

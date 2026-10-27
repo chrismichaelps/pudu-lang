@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-27 — Ark Render and the spinning cubes demo (#680)
+
+- [[Ark Render Device]], [[Ark Mesh]] (factory-built primitives), [[Ark Render Pipeline]] and
+  [[Ark Frame Graph]] render lit scenes through the native rasterizer.
+- [[Spinning Cubes Demo]] runs in a window; [[Ark Render Gate]] checks an offscreen snapshot in CI.
+
 ## 2026-10-27 — `?` on Option inside unannotated lambdas (#678)
 
 - [[Type Check Rule]] takes an unsolved result's carrier from an operand already typed `Option`;
