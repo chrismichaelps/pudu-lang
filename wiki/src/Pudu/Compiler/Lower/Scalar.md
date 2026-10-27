@@ -80,3 +80,17 @@ fit retain the checked helper with their declared kind's bounds.
 Resolved Grill Log: fold only pure immediate canonical integer literals whose
 negated result fits the existing kind bounds. Preserve runtime overflow for
 negating the minimum value read from a local/function or outer negation.
+
+## Floating operators (#512)
+
+Equal-width float operands admit `+ - * /` (result the same width) and the
+six comparisons (Bool). Unary `-` lowers to `CoreNegate`. Every other operator
+the checker accepts traps after its operands with the evaluator's wording:
+float/float uses `unsupported operator X` (the evaluator's `comparisonOnly`
+path), mixed shapes such as `float << Int` use `cannot apply X to a float and
+a Int`, and `~` uses `cannot apply ~ to a float`. `runtimeKind` answers
+`float` for both widths, as `valueKind` does.
+
+Resolved Grill Log: dispatch mirrors `combine`/`floatOperation` exactly;
+mixed-width float pairs never reach lowering because the checker rejects them,
+and if one did it would refuse rather than compare numerically.

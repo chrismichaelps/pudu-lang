@@ -51,3 +51,9 @@ This scalar allocator cannot claim owned-value drop or concurrency coverage.
 ## Wide frame bridge (#506)
 
 Export frameTypes :: Bool -> [Text]. Add pudu_wide_int wide to pudu_cell only when the flag is true; narrow-only cells retain their exact layout. Keep frameEngine allocation, copies, cleanup and iterative dispatch unchanged. Resolved Grill Log: whole-cell copies preserve both wide words and sign, with no new ownership or C recursion. [[Native Wide Frame Bridge]].
+
+## Floating cell member (#512)
+
+`pudu_cell` gains `uint64_t floating`. The union is still the larger of its
+members, so the narrow-layout check stays meaningful only for programs
+without wide integers; floats keep the narrow cell at eight bytes.

@@ -48,3 +48,10 @@ Export frameUsesWideCells :: FrameModule -> Bool, inspecting every function resu
 Use [[Native Runtime Dependencies]] in the existing visited-set traversal.
 Frame layout, entry behavior and selected roots remain unchanged. Resolved Grill
 Log: share the production dependency contract without premature float admission.
+
+## Rendered entry results (#512)
+
+A Bool entry prints `true`/`false` with a newline and returns 0; a float entry
+prints through `pudu_print_float` and returns 0. Both mirror `reportResult`,
+including its silence when stdout is a closed pipe. Floating cells select
+`float_target` with their arithmetic helpers only.

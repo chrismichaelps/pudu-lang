@@ -157,3 +157,10 @@ include whitelist and all extension/source-identifier/preprocessor checks.
 ## Wide source admission (#507)
 
 Replace the newly admitted 128-bit refusal fixtures with reachable, ordinarily checked BigInt/Float32/Float64 parameter cases and exact marker spans. Preserve all remaining unsupported-construct and hygiene checks. Resolved Grill Log: success coverage moves to real source execution; do not remove negative representation coverage. [[Native Wide Source Admission]].
+
+## Floats admitted (#512)
+
+The Float32/Float64 parameter and floating-binding refusal fixtures now
+compile, so they become Decimal parameter, Char parameter and decimal binding
+cases with the same marker-span checks. Float success coverage lives in
+[[Backend Float Programs]].

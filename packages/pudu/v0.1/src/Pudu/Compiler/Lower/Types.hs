@@ -7,6 +7,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Core (CoreType (..))
+import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, SignedKind, UnsignedKind), integerKindOf)
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo, typeAt)
@@ -30,6 +31,8 @@ formedCoreType value
   | NominalType (NominalId Nothing name) [] <- value
   , Just kind <- integerKindOf name
   , nativeIntegerKind kind = Just (CoreIntegerType kind)
+  | NominalType (NominalId Nothing "Float64") [] <- value = Just (CoreFloatType Float64Width)
+  | NominalType (NominalId Nothing "Float32") [] <- value = Just (CoreFloatType Float32Width)
   | value == boolType = Just CoreBoolType
   | value == stringType = Just CoreTextType
   | otherwise = case value of
@@ -46,6 +49,7 @@ nativeIntegerKind _ = False
 
 nativeScalarType :: CoreType -> Bool
 nativeScalarType (CoreIntegerType kind) = nativeIntegerKind kind
+nativeScalarType (CoreFloatType _) = True
 nativeScalarType CoreBoolType = True
 nativeScalarType CoreUnitType = True
 nativeScalarType _ = False

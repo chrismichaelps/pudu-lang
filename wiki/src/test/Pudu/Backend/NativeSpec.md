@@ -121,3 +121,9 @@ Resolved Grill Log: an internal carrier sign bit cannot reinterpret positive
 ## Wide source admission (#507)
 
 Extend entry status sources for Int128/UInt128 extrema, high unsigned values, 0/1/255/256 and deferred positive 2^127. Reuse the exact stdout/stderr/status oracle with both evaluator modes and mathematical integer matrices. Resolved Grill Log: no signed narrowing or extra entry-result rendering, no relaxed diagnostic comparison and no test module above 500 lines. [[Native Wide Source Admission]].
+
+## Float conformance (#512)
+
+Two groups run [[Backend Float Programs]]: success programs against their IEEE
+answers and the interpreter, refusals against the interpreter's rendered
+diagnostics.

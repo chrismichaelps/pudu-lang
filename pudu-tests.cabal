@@ -85,6 +85,7 @@ test-suite pudu-test
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
+    Pudu.Backend.FloatPrograms
     Pudu.Backend.IntegerPrograms
     Pudu.Backend.SignedPrograms
     Pudu.Backend.UnsignedPrograms

@@ -45,3 +45,9 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]
+
+## Floating values (#512)
+
+`CoreFloatLiteral` saves a `FrameFloatLiteral`; float result slots exist for
+calls, branches and loops like other scalars. Print of a floating display
+emits `FramePrintSlot` on the float slot.

@@ -26,10 +26,10 @@ lowerUnary lower state at operator operand
       (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
       (after, Just (core, kind))
         | expressionIsPrintValued core -> halt at "an operator on a Result[(), Str] value" after
-        | operator == "-", integerType kind -> built after at (CoreNegate core) kind
+        | operator == "-", integerType kind || floatType kind -> built after at (CoreNegate core) kind
         | operator == "~", integerType kind -> built after at (CoreComplement core) kind
         | operator == "!", kind == CoreBoolType -> built after at (CoreNot core) CoreBoolType
-        | kind `elem` [CoreUnitType, CoreBoolType]
+        | kind `elem` [CoreUnitType, CoreBoolType] || floatType kind
         , settled after operand core ->
             failure after at (cannotApplyUnaryMessage operator (runtimeKind kind)) [core]
         | otherwise -> halt at ("the operator '" <> operator <> "' on a " <> coreTypeName kind <> " value") after
@@ -57,7 +57,7 @@ lowerBinary lower state at left operator right
           , settled after left coreLeft && settled after right coreRight
           , not (integerType leftType && integerType rightType) ->
               let message
-                    | leftType == CoreBoolType && rightType == CoreBoolType = unsupportedOperatorMessage operator
+                    | leftType == rightType && (leftType == CoreBoolType || floatType leftType) = unsupportedOperatorMessage operator
                     | otherwise = cannotApplyBinaryMessage operator (runtimeKind leftType) (runtimeKind rightType)
                in failure after at message [coreLeft, coreRight]
           | otherwise -> halt at ("the operator '" <> operator <> "' outside the native scalar subset") after
@@ -69,7 +69,8 @@ represented operator left right
   | integerType left, right == intType, Just operation <- lookup operator shifts = Just (operation, left)
   | left /= right = Nothing
   | integerType left, Just operation <- lookup operator arithmetic = Just (operation, left)
-  | integerType left || left == CoreBoolType, Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
+  | floatType left, Just operation <- lookup operator floating = Just (operation, left)
+  | integerType left || floatType left || left == CoreBoolType, Just operation <- lookup operator ordering = Just (operation, CoreBoolType)
   | nativeScalarType left, Just operation <- lookup operator equality = Just (operation, CoreBoolType)
   | otherwise = Nothing
  where
@@ -79,6 +80,7 @@ represented operator left right
     , ("&+", CoreWrapAdd), ("&-", CoreWrapSubtract), ("&*", CoreWrapMultiply)
     , ("+|", CoreSaturateAdd), ("-|", CoreSaturateSubtract), ("*|", CoreSaturateMultiply)
     ]
+  floating = [("+", CoreAdd), ("-", CoreSubtract), ("*", CoreMultiply), ("/", CoreDivide)]
   shifts = [("<<", CoreShiftLeft), (">>", CoreShiftRight)]
   ordering = [("<", CoreLess), ("<=", CoreLessOrEqual), (">", CoreGreater), (">=", CoreGreaterOrEqual)]
   equality = [("==", CoreEqual), ("!=", CoreNotEqual)]
@@ -87,6 +89,10 @@ integerType :: CoreType -> Bool
 integerType (CoreIntegerType kind) = nativeIntegerKind kind
 integerType _ = False
 
+floatType :: CoreType -> Bool
+floatType (CoreFloatType _) = True
+floatType _ = False
+
 settled :: LowerState -> Located Expression -> CoreExpression -> Bool
 settled state syntax core =
   typeForSpan (contextTypes (lowerContext state)) (locatedSpan syntax) == Just (coreExpressionType core)
@@ -94,6 +100,7 @@ settled state syntax core =
 runtimeKind :: CoreType -> Text
 runtimeKind CoreUnitType = "unit"
 runtimeKind CoreBoolType = "bool"
+runtimeKind (CoreFloatType _) = "float"
 runtimeKind kind = coreTypeName kind
 
 failure :: LowerState -> Span -> Text -> [CoreExpression] -> (LowerState, Maybe (CoreExpression, CoreType))

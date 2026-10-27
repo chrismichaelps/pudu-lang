@@ -45,3 +45,8 @@ uses existing byte lengths and shared helpers. All fault cases return data.
 ## Wide frame bridge (#506)
 
 Select wide_print_int for a 128-bit print slot through integerHelper; returns use the result type cell member and typed zero. Resolved Grill Log: calls copy complete saved cells, with unchanged suspension, ordering and cleanup contracts. [[Native Wide Frame Bridge]].
+
+## Floating prints (#512)
+
+`FramePrintSlot` on a float slot calls `pudu_print_float` and selects
+`print_float`. Returns write the `floating` cell member.

@@ -226,3 +226,7 @@ Revision 7 records the optional wide frame ABI described by [[Native Wide Frame 
 Append [[Native Floating Runtime]] parts after integer parts; retain existing
 printer/process behavior and revision 7. Resolved Grill Log: additive helper
 publication precedes Core/frame/source admission and no represented ABI changes.
+
+## Runtime revision 8 (#512)
+
+The cell ABI gained a floating member, so `runtimeRevision` moves from 7 to 8.

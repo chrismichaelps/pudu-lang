@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-19 — Native Float32/Float64 programs (#512)
+
+- Float32/Float64 programs compile natively: [[Pudu Core]] carries parsed binary64 bits, frames hold them in a floating cell, and every arithmetic operation rounds (and narrows for Float32) through the validated helpers. Unsupported float operators keep the evaluator's E7001 wording after their operands; Float and Bool entry results print and exit zero like `pudu run`. [[Backend Float Programs]] matches independent IEEE answers and the interpreter; all native groups pass under Clang and GCC 15, float groups under Clang ASan/UBSan. Unused direct-emitter helpers left over from before frames are removed from [[Backend Emit Support]]. All 20 clean gates/691 groups pass. Runtime revision 8; progress stays 4/14 (28%).
+
 ## 2026-10-18 — Selected floating runtime and output (#511)
 
 - [[Native Floating Runtime]] publishes exact buffered floating output; [[Native Runtime Dependencies]] serves both runtime selectors while preserving integer compatibility. [[Native Floating Runtime Tests]] passes 1,042 raw output encodings, 19 minimal roots, six counted IO outcomes and 18 closed-pipe cases under Clang/GCC/ASan/UBSan. All 20 clean gates/689 groups pass. Source admission and the Core/frame bridge remain open; progress stays 4/14 (28%).

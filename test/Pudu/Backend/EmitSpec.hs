@@ -267,7 +267,7 @@ testReachableFunctions = do
 refusalCases :: [(String, Text, Text)]
 refusalCases =
   [ ("BigInt parameter", helperProgram "fn helper(value: BigInt) -> Int { return 1 }" "helper(1)", "BigInt")
-  , ("Float32 parameter", helperProgram "fn helper(value: Float32) -> Int { return 1 }" "helper(1.0f32)", "Float32")
+  , ("Decimal parameter", helperProgram "fn helper(value: Decimal) -> Int { return 1 }" "helper(1.5d)", "Decimal")
   , ("unary print Result", statementProgram "-print(\"x\")", "-print")
   , ("display of print Result", statementProgram "print(display(print(\"x\")))", "display(print")
   , ("nested print Result display", statementProgram "print(display({ print(\"x\") }))", "display({")
@@ -276,7 +276,7 @@ refusalCases =
   , ("default parameter", helperProgram "fn helper(value: Int = 7) -> Int { return value }" "helper(1)", "7")
   , ("expression body", helperProgram "fn helper(value: Int) -> Int = value" "helper(1)", "value\n")
   , ("text parameter", helperProgram "fn helper(value: Str) -> Int { return 1 }" "helper(\"x\")", "Str")
-  , ("Float64 parameter", helperProgram "fn helper(value: Float64) -> Int { return 1 }" "helper(1.0f64)", "Float64")
+  , ("Char parameter", helperProgram "fn helper(value: Char) -> Int { return 1 }" "helper('x')", "Char")
   , ("text result", helperProgram "fn helper() -> Str { return \"x\" }" "{ helper()\n  0 }", "Str")
   , ("call to entry", statementProgram "main()", "main()\n")
   , ("trailing print result", Text.unlines
@@ -284,7 +284,7 @@ refusalCases =
   , ("explicit print result", Text.unlines
       ["module Refuse", "fn main() { return print(\"x\") }"], "print(")
   , ("arrays", bindingProgram "var items = [1, 2, 3]", "[1, 2, 3]")
-  , ("floating-point values", bindingProgram "var ratio = 1.5", "1.5")
+  , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
   , ("bindings of type Str", bindingProgram "var greeting = \"hello\"", "var greeting")
   , ("match expressions", bindingProgram "var chosen = match 1 { case _ => 0 }", "match")

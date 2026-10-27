@@ -5,6 +5,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Numeric (showHex)
 import Pudu.Backend.Emit.State
   ( EmitState, divideByZeroSite, overflowSite, shiftSites, textOfInt )
 import Pudu.Backend.Emit.Support (integerHelper, integerKindText, integerLiteralText, isWideInteger)
@@ -13,9 +14,11 @@ import Pudu.Core.Frame
   ( FrameFault (..), FrameSlot (..), FrameSlotId (..), FrameUnaryOperator (..)
   , FrameValue (..), FrameValueShape (..), coreScalarOperator )
 import Pudu.Diagnostic.Arithmetic (CheckedOperation (..))
+import Pudu.FloatLiteral (FloatWidth (..))
 
 cellMember :: CoreType -> Maybe Text
 cellMember (CoreIntegerType kind) = Just (if isWideInteger kind then "wide" else "integer")
+cellMember (CoreFloatType _) = Just "floating"
 cellMember CoreBoolType = Just "scalar"
 cellMember CoreUnitType = Just "scalar"
 cellMember _ = Nothing
@@ -29,9 +32,33 @@ slotText slot = case (frameSlotId slot, cellMember (frameSlotType slot)) of
 frameValue :: EmitState -> FrameValue -> Either FrameFault (EmitState, Text, Set Text)
 frameValue state value = case frameValueShape value of
   FrameIntegerLiteral kind number -> done state (integerLiteralText kind number) []
+  FrameFloatLiteral _ bits -> Right (state, "UINT64_C(0x" <> Text.pack (showHex bits "") <> ")", Set.empty)
   FrameBoolLiteral flag -> done state (if flag then "1" else "0") []
   FrameUnitLiteral -> done state "0" []
   FrameRead slot -> slotText slot >>= \text -> done state text []
+  FrameUnary FrameNegate operand
+    | CoreFloatType _ <- frameSlotType operand -> do
+        text <- slotText operand
+        floating ("pudu_float_neg(" <> text <> ")") "float_neg"
+  FrameBinary scalar left right
+    | CoreFloatType width <- frameSlotType left -> do
+        lhs <- slotText left
+        rhs <- slotText right
+        let narrow = if width == Float32Width then "1" else "0"
+            arithmetic helper = floating ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ", " <> narrow <> ")") helper
+            predicate helper = floating ("pudu_" <> helper <> "(" <> lhs <> ", " <> rhs <> ")") helper
+        case coreScalarOperator scalar of
+          CoreAdd -> arithmetic "float_add"
+          CoreSubtract -> arithmetic "float_sub"
+          CoreMultiply -> arithmetic "float_mul"
+          CoreDivide -> arithmetic "float_div"
+          CoreEqual -> predicate "float_eq"
+          CoreNotEqual -> predicate "float_ne"
+          CoreLess -> predicate "float_lt"
+          CoreLessOrEqual -> predicate "float_le"
+          CoreGreater -> predicate "float_gt"
+          CoreGreaterOrEqual -> predicate "float_ge"
+          _ -> refused "an operator floating frames do not carry"
   FrameUnary operator operand -> do
     text <- slotText operand
     case operator of
@@ -104,6 +131,7 @@ frameValue state value = case frameValueShape value of
         Just descriptor -> Right (kind, descriptor)
         Nothing -> refused "an unrepresented frame integer descriptor"
       _ -> refused "an integer frame operation without an integer result"
+    floating text helper = Right (state, text, Set.singleton helper)
     done after text needs = Right (after, text, Set.fromList (map (integerHelper (frameValueType value)) needs))
     call helper arguments = "pudu_" <> integerHelper (frameValueType value) helper <> "(" <> Text.intercalate ", " arguments <> ")"
     site index = "&pudu_sites[" <> textOfInt index <> "]"
