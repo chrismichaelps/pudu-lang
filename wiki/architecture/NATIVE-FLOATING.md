@@ -73,3 +73,21 @@ validation remain promotion requirements; do not execute subagents.
 ## Referenced by
 
 [[architecture/_MOC]] · [[Native Floating Natural Delivery]]
+
+## Arithmetic target contract (#510)
+
+[[Native Floating Values]] preserves explicit uint64_t encodings through memcpy
+and performs one volatile Double operation before optional volatile Float32
+normalization. Exact raw-result/predicate comparison is required, including
+NaN payloads and a noncontracted multiply/add chain. Explicit representation
+assertions and rejection of unsafe optimization do not substitute for target
+conformance. Foreign environment mutation remains a later adapter obligation.
+
+Compiler references: [GCC floating implementation](https://gcc.gnu.org/onlinedocs/gcc/Floating-point-implementation.html)
+and [Clang floating controls](https://clang.llvm.org/docs/UsersManual.html#controlling-floating-point-behavior).
+These document target/optimization variation; no optional macro is treated as
+proof of the required observable behavior. Helper tests do not admit source.
+
+Resolved Grill Log: retain the evaluator's width/rounding policy and actual
+predicates; require target evidence before broadening admission. Do not reset
+floating state or silently rewrite NaNs to make a corpus pass.
