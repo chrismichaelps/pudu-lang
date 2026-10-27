@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-26 — Native generics (#552)
+
+[[Compiler Lower Generic]] specializes generic functions and implementations
+per type list, read from the instantiation checking recorded at each callee;
+bounded calls dispatch statically and generic records carry their arguments in
+Core. Found by the fixture sweep: a failed specialization returned no result
+without refusing, so two Std programs built to an empty `main`. It refuses
+now, and [[Compiler Lower Body]] refuses any construct that stops silently.
+[[Backend Generic Programs]] passes under Clang, GCC 15, ASan/UBSan and both
+interpreter modes, with counted cleanup.
+
 ## 2026-10-26 — Native trait methods (#551)
 
 [[Compiler Lower Method]] lowers implementation members and inherited trait

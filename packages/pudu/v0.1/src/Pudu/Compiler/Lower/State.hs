@@ -57,6 +57,9 @@ data Instance = Instance
   , instanceFunction :: !(Located Function)
   , instanceScheme :: !Scheme
   , instanceBindings :: !(Map Text CoreType)
+  {-| An inherited default of a generic owner: `Self` is the receiver's type,
+      known only at the call. -}
+  , instanceSelfAtCall :: !Bool
   }
 
 {-| What one module's names mean: its checked facts, the functions it

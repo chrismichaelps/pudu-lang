@@ -167,6 +167,11 @@ provide. [[Compiler Lower Method]] builds the instance table and indexes from
 them, and the worklist lowers a reachable instance in its module under its
 bindings, the same way it lowers a function.
 
+## Registered copies (#552)
+
+Resolved Grill Log: the worklist finds a key in the function table or in the
+instances registered so far, which include copies made while lowering callers.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Core IR]] · [[Pudu Core]] ·

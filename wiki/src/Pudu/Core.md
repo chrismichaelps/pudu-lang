@@ -178,6 +178,12 @@ imports no compiler, evaluator, or frontend module; the backend boundary of
   caller's decision it already is in lowering and evaluation. _Rejected:_ a
   literal entry symbol in [[Backend Emit]].
 
+## Generic records (#552)
+
+Resolved Grill Log: `CoreRecordType` carries the record's type arguments,
+as `CoreSumType` does. `Box[Int]` and `Box[Str]` are different types with
+different layouts; `coreTypeName` writes the arguments after the name.
+
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Core IR]] · [[Compiler Lower]] ·

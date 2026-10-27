@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: ACTIVE
+status: COMPLETE
 issue: 551
 aliases: [Native Trait Method Delivery]
 ---

@@ -42,7 +42,7 @@ project types at kind value = CoreExpression at kind <$> shape
     (CoreUnitType, UnitValue) -> Just (CoreBlockValue (CoreBlock [] Nothing))
     (CoreTupleType kinds, TupleValue members)
       | length kinds == length members -> CoreTuple <$> sequence (zipWith member kinds members)
-    (CoreRecordType name, RecordValue actual fields)
+    (CoreRecordType name _, RecordValue actual fields)
       | displayName name == actual
       , Just declared <- recordFields types kind
       , length declared == length fields

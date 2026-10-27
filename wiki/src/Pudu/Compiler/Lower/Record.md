@@ -35,6 +35,10 @@ layout; [[Compiler Lower Types]] forms them from [[Type Boundary]]'s
 - **Q:** Why read the local after the value? **A:** Probed: `p.x = { p =
   Point{x: 10, y: 20}; 7 }` stores `Point{x: 7, y: 20}` in both evaluators.
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/_MOC]]

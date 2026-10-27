@@ -33,6 +33,10 @@ in a scope of its own, as `CoreMatch`.
 - **Q:** What when arms disagree on type? **A:** The checker already joined
   them; a disagreement here is a native boundary and refuses with E6001.
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Compiler Frame Match]] · [[src/_MOC]]

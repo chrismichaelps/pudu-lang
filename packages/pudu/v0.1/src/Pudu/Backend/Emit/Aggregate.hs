@@ -31,7 +31,7 @@ import Pudu.FloatLiteral (floatWidthType)
 ownedType :: CoreType -> Bool
 ownedType CoreTextType = True
 ownedType (CoreTupleType _) = True
-ownedType (CoreRecordType _) = True
+ownedType (CoreRecordType _ _) = True
 ownedType (CoreSumType _ _) = True
 ownedType _ = False
 
@@ -43,7 +43,7 @@ cType kind = case kind of
   CoreCharType -> "uint32_t"
   CoreTextType -> "pudu_text"
   CoreTupleType _ -> "pudu_box *"
-  CoreRecordType _ -> "pudu_box *"
+  CoreRecordType _ _ -> "pudu_box *"
   CoreSumType _ _ -> "pudu_box *"
   _ -> "int"
 
@@ -66,7 +66,8 @@ mangle kind = case kind of
   CoreIntegerType integer -> integerKindName integer
   CoreFloatType width -> floatWidthType width
   CoreTupleType members -> "T" <> Text.pack (show (length members)) <> "_" <> Text.intercalate "_" (map mangle members) <> "_E"
-  CoreRecordType name -> "R_" <> mangleKey name
+  CoreRecordType name [] -> "R_" <> mangleKey name
+  CoreRecordType name arguments -> "R" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (mangleKey name : map mangle arguments) <> "_E"
   CoreSumType name arguments -> "S" <> Text.pack (show (length arguments)) <> "_" <> Text.intercalate "_" (mangleKey name : map mangle arguments) <> "_E"
   other -> coreTypeName other
 
@@ -100,7 +101,7 @@ aggregateTypes source = reverse (foldl collect [] slotTypes)
 isAggregate :: CoreType -> Bool
 isAggregate kind = case kind of
   CoreTupleType _ -> True
-  CoreRecordType _ -> True
+  CoreRecordType _ _ -> True
   CoreSumType _ _ -> True
   _ -> False
 
@@ -155,7 +156,7 @@ aggregateSection layouts tuples needs = (concat prototypes <> concat chosen, run
 helpers :: Layouts -> CoreType -> [(Text, ([Text], [Text]))]
 helpers layouts kind = case (kind, Map.lookup kind layouts) of
   (CoreTupleType members, _) -> helpersOf kind (zip (map (Text.pack . show) [0 :: Int ..]) members) Nothing
-  (CoreRecordType name, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
+  (CoreRecordType name _, Just (CoreRecordLayout fields)) -> helpersOf kind fields (Just (displayName name))
   (CoreSumType _ _, Just (CoreSumLayout variants)) -> sumHelpers kind variants
   _ -> []
 

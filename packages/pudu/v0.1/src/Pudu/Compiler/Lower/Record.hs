@@ -18,7 +18,7 @@ type LowerExpression = LowerState -> Located Expression -> (LowerState, Maybe (C
     or a sum when the name is one of its record variants. -}
 lowerRecord :: LowerExpression -> LowerState -> Span -> Text -> [Located FieldInit] -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerRecord lower state at name fields = case typeForSpan types at of
-  Just kind@(CoreRecordType _) -> built kind CoreRecord
+  Just kind@(CoreRecordType _ _) -> built kind CoreRecord
   Just kind@(CoreSumType _ _)
     | Just variants <- sumVariants types kind
     , any (\variant -> coreVariantName variant == name && coreVariantRecord variant) variants ->
@@ -42,14 +42,14 @@ lowerRecordUpdate lower state at source fields = case lower state source of
     (final, Just written)
       | any ((== CoreNeverType) . coreExpressionType) (base : map snd written) ->
           (final, Just (stopped at (base : map snd written), CoreNeverType))
-      | CoreRecordType _ <- kind -> (final, Just (CoreExpression at kind (CoreRecordUpdate base written), kind))
+      | CoreRecordType _ _ <- kind -> (final, Just (CoreExpression at kind (CoreRecordUpdate base written), kind))
       | otherwise -> halt at ("updating a " <> coreTypeName kind <> " value") final
 
 lowerField :: LowerExpression -> LowerState -> Span -> Located Expression -> Text -> (LowerState, Maybe (CoreExpression, CoreType))
 lowerField lower state at receiver member = case lower state receiver of
   (after, Nothing) -> refused after
   (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
-  (after, Just (core, kind@(CoreRecordType _))) -> case recordFields (contextTypes (lowerContext after)) kind >>= lookup member of
+  (after, Just (core, kind@(CoreRecordType _ _))) -> case recordFields (contextTypes (lowerContext after)) kind >>= lookup member of
     Just fieldKind -> (after, Just (CoreExpression at fieldKind (CoreField member core), fieldKind))
     Nothing -> halt at ("the member '" <> member <> "'") after
   (after, Just (_, kind)) -> halt at ("member access on " <> coreTypeName kind) after

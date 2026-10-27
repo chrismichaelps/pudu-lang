@@ -69,6 +69,10 @@ Separating this package makes the compiler's source distribution self-contained:
 Resolved Grill Log: register [[Backend Method Programs]]; existing consumers
 run it.
 
+## Generic corpus (#552)
+
+Resolved Grill Log: register [[Backend Generic Programs]].
+
 ## Referenced by
 
 [[Derive Graph Spec]] is explicitly registered for real program elaboration,

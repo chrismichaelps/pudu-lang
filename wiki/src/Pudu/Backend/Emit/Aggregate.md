@@ -49,6 +49,12 @@ order; frame metadata and `pudu_drop_cell`/`pudu_retain_cell` use them.
   number, signed zeros equal. Before #522 the interpreter's NaN order
   contradicted itself; native matched it until the repair landed.
 
+## Generic records (#552)
+
+Resolved Grill Log: a record with arguments mangles like a sum,
+`R<n>_<key>_<args>_E`; one without keeps `R_<key>`, so existing output is
+unchanged.
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

@@ -150,7 +150,7 @@ lowerPattern lower state kind bound (Located at shape) = case shape of
   RecordPattern path fields _ -> case (path, recordFields types kind) of
     (Nothing, Just declared) -> recordMembers CoreRecordPattern declared fields
     (Just (ModuleName segments), Just declared)
-      | CoreRecordType name <- kind, displayName name == NonEmpty.last segments -> recordMembers CoreRecordPattern declared fields
+      | CoreRecordType name _ <- kind, displayName name == NonEmpty.last segments -> recordMembers CoreRecordPattern declared fields
     (Just (ModuleName segments), Nothing)
       | Just variant <- variantOf (NonEmpty.last segments), coreVariantRecord variant ->
           recordMembers (CoreVariantPattern (coreVariantName variant)) (coreVariantFields variant) fields

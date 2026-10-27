@@ -89,6 +89,9 @@ the only refusal: the body is never reached.
 
 A method taking `self: &mut Self` refuses the same way, at the parameter type
 of the implementation's member (#551).
+A generic call at a function type refuses at the callee; before #552 it
+lowered `main` to nothing (#552).
+
 The refusal cases lower through `compiledNativeModule`, as the CLI does, so a
 module's methods are visible to them.
 

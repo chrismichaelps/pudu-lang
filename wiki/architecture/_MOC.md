@@ -55,6 +55,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - **Momentum:** depth ↑ · coupling → · debt → (closed lexical vocabulary follows source and diagnostics).
 - **Deepening policy:** SKIP speculative abstraction; deepen only core-path boundaries.
 - [[Native Trait Methods]] — static dispatch of implementation members and defaults (#551).
+- [[Native Generics]] — one copy per type list (#552).
 
 ## Referenced by
 

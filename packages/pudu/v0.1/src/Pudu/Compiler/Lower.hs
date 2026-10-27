@@ -203,7 +203,7 @@ lowerProgram entryName programModules@(rootModule : _)
 
     visit state name
       | Set.member name (contextVisited (lowerContext state)) = state
-      | otherwise = case target name of
+      | otherwise = case target state name of
           Nothing -> state
           Just (owner, function, bindings) ->
             case ensureSignature name function (startFunction (withTypeBindings bindings (inModule owner state)) [] Nothing) of
@@ -224,10 +224,11 @@ lowerProgram entryName programModules@(rootModule : _)
                         }
                       name
 
-    target name = case lookup name table of
+    -- Copies of generic bodies are registered while lowering their callers.
+    target state name = case lookup name table of
       Just (owner, function) -> Just (owner, function, Map.empty)
       Nothing -> (\found -> (instanceModule found, instanceFunction found, instanceBindings found))
-        <$> Map.lookup name instances
+        <$> Map.lookup name (contextInstances (lowerContext state))
 
     markVisited state name =
       state

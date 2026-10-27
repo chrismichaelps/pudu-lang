@@ -85,7 +85,7 @@ lowerTuplePattern lower state at pattern annotation subject = case lower state s
            in case bindings state' projected member of
                 (next, Just declared) -> foldMembers next (declared : collected) rest
                 (next, Nothing) -> (next, Nothing)
-    (RecordPattern _ fields _, kind@(CoreRecordType _)) -> case recordFields (contextTypes (lowerContext current)) kind of
+    (RecordPattern _ fields _, kind@(CoreRecordType _ _)) -> case recordFields (contextTypes (lowerContext current)) kind of
       Just declared -> foldFields declared current [] fields
       Nothing -> halt patternSpan "this record pattern" current
       where

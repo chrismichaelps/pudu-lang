@@ -2,6 +2,8 @@
 module Pudu.Compiler.Lower.Signature (ensureSignature, functionLevelRefusal) where
 
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Compiler.Lower.State
   ( CoreSignature (..), Instance (..), LowerContext (..), LowerState (..), intType, refuse )
@@ -9,7 +11,7 @@ import Pudu.Compiler.Lower.Types (formedCoreTypeIn, lookupScheme, nativeValueTyp
 import Pudu.Type.Value (Scheme (..), Type (FunctionTypeRequiring), requiredCount)
 import Pudu.Core
 import Pudu.Frontend.Syntax
-  ( Function (..), FunctionBody (..), Located (..), Parameter (..) )
+  ( Function (..), FunctionBody (..), Located (..), Parameter (..), TypeParam (..) )
 import Pudu.Source (Span)
 
 {-| Admit each reachable monomorphic signature once, including refusals,
@@ -21,7 +23,7 @@ import Pudu.Source (Span)
 ensureSignature :: Text -> Located Function -> LowerState -> (LowerState, Maybe CoreSignature)
 ensureSignature key located state = case Map.lookup key (contextSignatures context) of
   Just memo -> (state, memo)
-  Nothing -> case functionLevelRefusal function of
+  Nothing -> case boundFunctionRefusal (Map.keysSet (typeBindings (contextTypes context))) function of
     Just (spanValue, construct) -> memoize (refuse spanValue construct state) Nothing
     Nothing | defaulted : _ <- defaults ->
       memoize (refuse (locatedSpan defaulted) "default parameter values" state) Nothing
@@ -81,15 +83,21 @@ ensureSignature key located state = case Map.lookup key (contextSignatures conte
         )
 
 functionLevelRefusal :: Function -> Maybe (Span, Text)
-functionLevelRefusal function
-  | not (null (functionTypeParams function)) = Just (atName, "type parameters")
+functionLevelRefusal = boundFunctionRefusal Set.empty
+
+{-| A copy of a generic function knows its type parameters, and checking
+    proved its constraints for them, so neither refuses there. -}
+boundFunctionRefusal :: Set Text -> Function -> Maybe (Span, Text)
+boundFunctionRefusal bound function
+  | not specialized = Just (atName, "type parameters")
   | functionAsync function = Just (atName, "async functions")
   | Just _ <- functionUnsafe function = Just (atName, "unsafe functions")
   | functionComptime function = Just (atName, "comptime functions")
-  | not (null (functionConstraints function)) = Just (atName, "function constraints")
+  | not (null (functionConstraints function)) && null (functionTypeParams function) = Just (atName, "function constraints")
   | otherwise = case functionBody function of
       Nothing -> Just (atName, "a function without a body")
       Just (Located bodySpan (ExpressionBody _)) -> Just (bodySpan, "an expression-bodied function")
       Just (Located _ (BlockBody _)) -> Nothing
   where
     atName = locatedSpan (functionName function)
+    specialized = all ((`Set.member` bound) . locatedValue . typeParamName . locatedValue) (functionTypeParams function)

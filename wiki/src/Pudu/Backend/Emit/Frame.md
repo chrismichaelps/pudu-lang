@@ -32,6 +32,10 @@ come from actual emitted functions. No frontend/compiler import or inference.
 
 - **Q:** Which runtime parts does a sum pull in? **A:** Its own helpers and those of every type its layout reaches; showing a sum also needs text printing (#525).
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

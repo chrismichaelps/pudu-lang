@@ -28,6 +28,10 @@ Export lowerTuple, lowerTupleIndex and lowerTuplePattern.
   later reads of the names would have nothing to lower against; it stays an
   honest E6001 boundary.
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Native Tuple Delivery]] · [[src/_MOC]]

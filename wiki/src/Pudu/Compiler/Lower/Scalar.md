@@ -65,6 +65,10 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 
 - **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreVariantName` (#525).
 
+## Generic records (#552)
+
+Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

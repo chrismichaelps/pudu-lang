@@ -307,6 +307,14 @@ refusalCases =
       , "  return count.n"
       , "}"
       ], "&mut Self) -> () {")
+  , ("a generic call at a type without a native form", Text.unlines
+      [ "module Refuse"
+      , "fn keep[T](value: T) -> Int { 1 }"
+      , "fn main() -> Int {"
+      , "  let kept = keep(fn(n: Int) -> Int => n)"
+      , "  return kept"
+      , "}"
+      ], "keep(fn")
   , ("a module without main", Text.unlines
       [ "module Refuse"
       , ""

@@ -39,6 +39,7 @@ aliases: [Program Compiler Module Map]
 
 Dependency direction: Library → Program. Only [[Compiler Program]] reads files.
 - [[Compiler Lower Method]] — implementation members and trait defaults as direct calls (#551).
+- [[Compiler Lower Generic]] — specialization of generic bodies (#552).
 
 ## Referenced by
 
