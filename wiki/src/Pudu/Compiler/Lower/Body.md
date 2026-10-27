@@ -158,6 +158,10 @@ on names in call position, which the checker enforces.
 `mapOf` and `setOf` (when the names are the prelude's), `#{...}` and map and
 set methods go to [[Compiler Lower Keyed]]; an entry may return a map or set.
 
+## charFromCode (#562)
+
+`charFromCode`, when the name is the prelude's, goes to [[Compiler Lower Convert]].
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

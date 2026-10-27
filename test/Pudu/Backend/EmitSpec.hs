@@ -286,7 +286,7 @@ refusalCases =
   , ("bytes", bindingProgram "var raw = bytesOf([1u8, 2u8])", "bytesOf([1u8, 2u8])")
   , ("decimal values", bindingProgram "var ratio = 1.5d", "1.5d")
   , ("ownership-bearing break result", statementProgram "loop { break print(\"x\") }", "print(")
-  , ("charFromCode", bindingProgram "var letter = charFromCode(97)", "charFromCode(97)")
+  , ("readLine", bindingProgram "var line = readLine()", "readLine()")
   , ("range values", bindingProgram "var span = 0..3", "0..3")
   , ("mutable borrows", Text.unlines
       [ "module Refuse"

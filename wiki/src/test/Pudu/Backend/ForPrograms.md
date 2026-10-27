@@ -18,6 +18,12 @@ walked to `None`, an empty one, and a `return` from inside a sequence loop.
 The refusal is an overflow inside a range body, after the elements before it
 printed.
 
+## Str, tuples and payloads (#562)
+
+Adds `for` over accented text, a tuple, `Some`, `None` and one- and
+two-field variants, and `charFromCode` at 97, a surrogate, one past the last
+scalar, a negative, an emoji and NUL (which `show` writes raw).
+
 ## Referenced by
 
 [[Backend Module Programs]] · [[Backend Text Leak Tests]]

@@ -29,6 +29,11 @@ the call.
 
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]]
 
+## charFromCode (#562)
+
+`lowerCharFromCode` puts the code in a local, tests 0 through 0x10FFFF outside
+the surrogates, and builds `Some(CoreCharOfCode code)` or `None`.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[src/Pudu/Compiler/_MOC]]

@@ -76,6 +76,10 @@ The conversion shapes lower their operand, then become one frame value.
 Keyed operations lower their arguments before their receiver, as array
 methods do; a map or set result gets a slot like any box.
 
+## Char from a code (#562)
+
+`CoreCharOfCode` lowers its operand into one frame value.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

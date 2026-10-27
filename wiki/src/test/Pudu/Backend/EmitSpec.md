@@ -110,6 +110,11 @@ The array refusal case became a set case; sets are still unsupported.
 Set literals are native now, so the set case gave way to Bytes construction,
 which still refuses at its call.
 
+## Refusal cases (#562)
+
+`charFromCode` is native now; `readLine()` takes its place as a construct that
+still refuses at its call.
+
 ## Referenced by
 
 [[Repository Test Runner]] · [[src/_MOC]] · [[src/Pudu/Backend/_MOC]] · [[Backend Emit]] ·

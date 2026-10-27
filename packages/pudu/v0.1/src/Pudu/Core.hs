@@ -165,6 +165,8 @@ data CoreExpressionShape
   | CoreCharCode !CoreExpression
   {-| Whether an integer lies inside the kind's bounds. -}
   | CoreIntegerFits !IntegerKind !CoreExpression
+  {-| The Char with this code, once it is known to be a scalar value. -}
+  | CoreCharOfCode !CoreExpression
   {-| The same integer at the kind; only built where it fits. -}
   | CoreIntegerConvert !IntegerKind !CoreExpression
   {-| Members in source order, which is the order they run. -}

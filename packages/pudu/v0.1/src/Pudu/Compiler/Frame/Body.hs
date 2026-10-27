@@ -67,6 +67,7 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
   CoreCharLiteral character -> value (FrameCharLiteral character)
   CoreCharCode operand -> rendered FrameCharCode operand
   CoreIntegerFits kind' operand -> rendered (FrameIntegerFits kind') operand
+  CoreCharOfCode operand -> rendered FrameCharOfCode operand
   CoreIntegerConvert kind' operand -> rendered (FrameIntegerConvert kind') operand
   CoreTuple members -> do
     operands <- lowerOperands members
