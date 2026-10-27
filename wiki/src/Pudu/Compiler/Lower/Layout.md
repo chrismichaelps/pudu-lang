@@ -33,6 +33,10 @@ collected.
 A sequence pattern contributes its items' locals and its bound rest's.
 `CoreFailText`'s computed help is walked like its message.
 
+## Integer conversion (#560)
+
+The conversion shapes contribute their operand's locals.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]

@@ -146,6 +146,13 @@ Lower Array]], and assignments pass through `takeReceiver`. Direct calls and
 `IndexExpression` tries [[Compiler Lower Slice]] first, then array and Str
 indexing, then tuples.
 
+## Type applications (#560)
+
+A call through a type application lowers as the call it wraps, since the
+checker solved its copy at that span; `convertInteger[T]`, when the name is
+the prelude's, goes to [[Compiler Lower Convert]]. Type arguments only appear
+on names in call position, which the checker enforces.
+
 ## Referenced by
 
 [[src/Pudu/Compiler/_MOC]] · [[src/Pudu/_MOC]] · [[Compiler Lower]] ·

@@ -109,6 +109,7 @@ library
     Pudu.Backend.Runtime.Integer.Wide.Value
     Pudu.Backend.Runtime.Integer.Wide.Operations
     Pudu.Backend.Runtime.Integer.Wide.Display
+    Pudu.Backend.Runtime.Integer.Convert
     Pudu.Backend.Runtime.Integer.Arithmetic
     Pudu.Backend.Runtime.Integer.Bits
     Pudu.Backend.Runtime.Text
@@ -142,6 +143,7 @@ library
     Pudu.Compiler.Lower.Array
     Pudu.Compiler.Lower.Sort
     Pudu.Compiler.Lower.Slice
+    Pudu.Compiler.Lower.Convert
     Pudu.Compiler.Lower.Control
     Pudu.Compiler.Lower.State
     Pudu.Compiler.Lower.Layout

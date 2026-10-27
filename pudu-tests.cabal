@@ -100,6 +100,7 @@ test-suite pudu-test
     Pudu.Backend.ArrayPrograms
     Pudu.Backend.ArrayPatternPrograms
     Pudu.Backend.TextCollectionPrograms
+    Pudu.Backend.ConvertPrograms
     Pudu.Backend.TextCaseSpec
     Pudu.Backend.TuplePrograms
     Pudu.Backend.TextLeakSpec

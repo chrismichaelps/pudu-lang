@@ -42,6 +42,27 @@ frameValue state value = case frameValueShape value of
     plain ("pudu_text_literal(" <> cString text <> ", " <> textOfInt (cStringBytes text) <> ")") ["text_literal"]
   FrameCharLiteral character -> done state ("UINT32_C(0x" <> Text.pack (showHex (fromEnum character) "") <> ")") []
   FrameCharCode slot -> slotText slot >>= \scalar -> plain ("pudu_make((uint64_t)" <> scalar <> ", 0)") ["make"]
+  FrameIntegerFits target slot -> do
+    source <- slotText slot
+    kind <- maybe (refused "a conversion to an unrepresented integer kind") Right (integerKindText target)
+    case (frameSlotType slot, isWideInteger target) of
+      (CoreIntegerType from, wideTarget) ->
+        let helper = case (isWideInteger from, wideTarget) of
+              (False, False) -> "int_fits"
+              (False, True) -> "int_fits_wide"
+              (True, False) -> "wide_fits_int"
+              (True, True) -> "wide_fits"
+         in plain ("pudu_" <> helper <> "(" <> source <> ", " <> kind <> ")") [helper]
+      _ -> refused "a conversion from a value that is not an integer"
+  FrameIntegerConvert target slot -> do
+    source <- slotText slot
+    case frameSlotType slot of
+      CoreIntegerType from -> case (isWideInteger from, isWideInteger target) of
+        (False, False) -> plain ("pudu_normal(" <> source <> ")") ["normal"]
+        (False, True) -> plain ("pudu_int_to_wide(" <> source <> ")") ["int_to_wide"]
+        (True, False) -> plain ("pudu_wide_to_int(" <> source <> ")") ["wide_to_int"]
+        (True, True) -> plain ("pudu_wide_normal(" <> source <> ")") ["wide_normal"]
+      _ -> refused "a conversion from a value that is not an integer"
   FrameRead slot -> slotText slot >>= \text -> uncurry plain (retained (frameSlotType slot) text)
   FrameAggregate members -> do
     operands <- traverse slotText members

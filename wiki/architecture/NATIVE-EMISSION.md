@@ -18,12 +18,12 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Loop control and scalar loop results | Implemented (#489) | Preserve labels, transfers, Never joins and condition-scope evidence |
 | Unit values, parameters and operations | Implemented (#492, #493) | Preserve effect-first temporaries, display/equality and #494 E7001 runtime refusals |
 | Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
-| Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
+| Complete numeric families | Partial (#495, #497, #500, #507, #512, #560) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted, with `convertInteger` between every integer kind (#560); BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518, #559) | Owned Str values, Char values, operators, rendering, printing, entries, charAt, every Int/Bool/Str-result method (trim and case mapping included), `split`, `lines`, `chars`, `toInt` and `toFloat` match the interpreter (#559); Bytes (`toBytes`), `toDecimal` and print Result remain |
 | Records, tuples, sums and collections | Partial (#521, #525, #552, #556, #558) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; collections (Map, Set, Bytes, Range) remain; arrays are native, `sortBy` and slicing by a written range included (#556, #558) |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554, #558) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges and sequence types (#554); sequence patterns are native (#558); range values, `for` over Str, tuples and collections remain |
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
-| Callables and generic code | Partial (#551, #552, #555) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
+| Callables and generic code | Partial (#551, #552, #555, #560) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list) with or without written type arguments (#560), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
 | Accepted operations with runtime refusals | Partial (#494, #512) | Represented Unit/Bool/float operators retain E7001; remaining runtime types/operators still need equivalent coverage |
 | Errors, references and resources | Partial (#544, #553) | Shared borrows, dereference and `?` on Result and Option match the interpreter; mutable loans with writeback, moves, drop and all unwind paths remain |
 | Host services and concurrency | Pending | Explicit runtime adapters, FFI, tasks, scopes, cancellation and platform evidence |
@@ -412,4 +412,12 @@ refuses. [[Backend Array Pattern Programs]] holds the evidence.
 ([[Native Text Pieces]]); `toInt` and `toFloat` validate as
 `Eval.Builtin.TextNumber` does and build their Option in Core
 ([[Native Text Number]]). [[Backend Text Collection Programs]] holds the
+evidence.
+
+## Type applications and integer conversion (#560)
+
+A call written with type arguments calls the copy the checker solved for it.
+`convertInteger[T]` tests the value against `T`'s bounds and builds
+`Some`/`None` in Core ([[Compiler Lower Convert]],
+[[Native Integer Conversion]]). [[Backend Convert Programs]] holds the
 evidence.

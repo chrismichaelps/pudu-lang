@@ -9,15 +9,17 @@ import Pudu.Backend.Runtime.Integer.Word128 (word128RuntimeParts, word128Runtime
 import Pudu.Backend.Runtime.Integer.Wide.Value (wideValueRuntimeParts, wideValueRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer.Wide.Operations (wideOperationRuntimeParts, wideOperationRuntimeDependencies)
 import Pudu.Backend.Runtime.Integer.Wide.Display (wideDisplayRuntimeParts, wideDisplayRuntimeDependencies)
+import Pudu.Backend.Runtime.Integer.Convert (integerConversionRuntimeParts, integerConversionRuntimeDependencies)
 
 integerRuntimeParts :: [(Text, [Text])]
 integerRuntimeParts = valueRuntimeParts <> arithmeticRuntimeParts <> bitRuntimeParts
-  <> word128RuntimeParts <> wideValueRuntimeParts <> wideOperationRuntimeParts <> wideDisplayRuntimeParts
+  <> word128RuntimeParts <> wideValueRuntimeParts <> wideOperationRuntimeParts <> wideDisplayRuntimeParts <> integerConversionRuntimeParts
 
 integerRuntimeDependencies :: Text -> [Text]
 integerRuntimeDependencies part = maybe [] id (lookup part dependencies)
   <> word128RuntimeDependencies part <> wideValueRuntimeDependencies part
   <> wideOperationRuntimeDependencies part <> wideDisplayRuntimeDependencies part
+  <> integerConversionRuntimeDependencies part
  where
   dependencies =
     [ ("fail", ["site", "colored", "cleanup", "error_io", "process_io"])
