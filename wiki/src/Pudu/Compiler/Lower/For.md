@@ -50,6 +50,11 @@ match skips the body, as `matchPattern` does in the evaluator.
 [[Compiler Lower Control]] · [[Compiler Lower Match]] · [[Compiler Lower Method]] ·
 [[Compiler Lower State]] · [[Compiler Lower Types]] · [[Core IR]]
 
+## Arrays (#556)
+
+Resolved Grill Log: an array runs once, its length is read once, and each turn
+declares the next item, as walking the evaluator's item list does.
+
 ## Referenced by
 
 [[Compiler Lower Body]]

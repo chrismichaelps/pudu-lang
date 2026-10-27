@@ -54,6 +54,14 @@ instruction (state, needs) operation = case operation of
                 <> " " <> destination <> " = pudu_next; }"
           | otherwise = "      " <> destination <> " = " <> expression <> ";"
     pure (line after stored, Set.union needs selected)
+  FrameMove target source -> do
+    destination <- slotText target
+    origin <- slotText source
+    let kind = frameSlotType target
+        emptied = if kind == CoreTextType then "(pudu_text){NULL, 0, NULL}" else "NULL"
+    pure ( line state ("      { " <> cType kind <> " pudu_moved = " <> origin <> "; " <> origin <> " = " <> emptied <> "; "
+             <> released kind destination <> " " <> destination <> " = pudu_moved; }")
+         , needs )
   FramePrintLiteral _ text -> printed "print_str" (cString text <> ", " <> textOfInt (cStringBytes text))
   FramePrintUnit _ -> printed "print_str" "\"()\", 2"
   FramePrintSlot at slot -> do

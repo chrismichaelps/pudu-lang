@@ -32,6 +32,7 @@ aliases: [Backend Module Map]
 - [[Backend Try Programs]] — native `?` (#553).
 - [[Backend For Programs]] — native `for` (#554).
 - [[Backend Closure Programs]] — native closures (#555).
+- [[Backend Emit Array]] · [[Backend Emit Cell]] · [[Backend Runtime Array]] · [[Backend Array Programs]] — native arrays (#556).
 
 ## Referenced by
 

@@ -63,6 +63,11 @@ compare and one maker per lifted function, switching on cell 0. A
 members order through their own compare helpers: records field by field, sums
 by variant name and then payload. Before this they compared by pointer.
 
+## Arrays (#556)
+
+Resolved Grill Log: array types get [[Backend Emit Array]]'s helpers; the cell
+vocabulary moved to [[Backend Emit Cell]].
+
 ## Referenced by
 
 [[Backend Frame Runtime]] · [[Backend Frame Values]] · [[Native Tuple Delivery]] · [[src/_MOC]]

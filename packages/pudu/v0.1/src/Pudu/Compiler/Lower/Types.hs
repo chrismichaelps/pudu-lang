@@ -85,6 +85,7 @@ ownerKeyOf kind = case kind of
   CoreTextType -> Just "Str"
   CoreCharType -> Just "Char"
   CoreUnitType -> Just "()"
+  CoreArrayType _ -> Just "Array"
   _ -> Nothing
 
 formedWith :: Shapes -> [CoreType] -> Map Text CoreType -> Type -> Maybe CoreType
@@ -116,6 +117,9 @@ formedWith shapes seen parameters value = case value of
     argument held = case held of
       VariableType _ -> Just CoreUnitType
       _ -> formedWith shapes seen parameters held
+  NominalType (NominalId Nothing "Array") [element] -> do
+    formed <- formedWith shapes seen parameters element
+    if nativeValueType formed then Just (CoreArrayType formed) else Nothing
   -- An async function is a task-maker, which native code has no form for.
   FunctionTypeRequiring False inputs _ result -> do
     formedInputs <- traverse (formedWith shapes seen parameters) inputs
@@ -198,4 +202,5 @@ nativeValueType (CoreTupleType members) = length members >= 2 && all nativeValue
 nativeValueType (CoreRecordType _ _) = True
 nativeValueType (CoreSumType _ _) = True
 nativeValueType (CoreFunctionType _ _) = True
+nativeValueType (CoreArrayType _) = True
 nativeValueType other = nativeScalarType other

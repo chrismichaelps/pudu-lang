@@ -24,6 +24,12 @@ body; any failed test falls through to the next arm.
   checking requires every match to cover its subject. It is kept so the native
   path refuses exactly as the evaluator would if it were reached.
 
+## Moves (#556)
+
+Resolved Grill Log: arm results move into the match's destination. Binding a
+pattern from the subject still copies, because a failed guard tests the subject
+again.
+
 ## Referenced by
 
 [[Compiler Frame Lowering]] · [[Compiler Lower Match]] · [[src/_MOC]]

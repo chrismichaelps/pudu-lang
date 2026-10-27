@@ -7,7 +7,7 @@ import Pudu.Compiler.Frame.Match (MatchLowering (..), lowerMatch)
 import Pudu.Compiler.Frame.State
   ( Build, BuildState (buildFunctions, buildLayouts), Flow (..), LoopTarget (..), begin
   , bindLocal, emit, fault, findLoop, finish, freshLabel, freshSlot, getState
-  , isOpen, readLocal, saveValue, storeValue, withLoop )
+  , isOpen, moveValue, readLocal, saveValue, storeValue, withLoop )
 import Pudu.Core
   ( CoreBinaryOperator (..), CoreBlock (..), CoreExpression (..)
   , CoreExpressionShape (..), CoreFunction (..), CoreLayout (..), CoreLocal (..), CoreParameter (..)
@@ -33,12 +33,12 @@ lowerStatement (CoreStatement at shape) = case shape of
     value <- lowerExpression expression
     case value of
       Stopped -> pure ()
-      Completed payload -> bindLocal at local >>= \slot -> storeValue at slot payload
+      Completed payload -> bindLocal at local >>= \slot -> moveValue at slot payload
   CoreAssign local expression -> do
     value <- lowerExpression expression
     case value of
       Stopped -> pure ()
-      Completed payload -> readLocal at local >>= \slot -> storeValue at slot payload
+      Completed payload -> readLocal at local >>= \slot -> moveValue at slot payload
   CoreEvaluate expression -> lowerExpression expression >> pure ()
   CoreIf condition yes no -> lowerIf at CoreUnitType condition yes no >> pure ()
   CoreReturn expression -> do
@@ -55,7 +55,7 @@ lowerStatement (CoreStatement at shape) = case shape of
       Stopped -> pure ()
       Completed payload -> do
         target <- findLoop at identity
-        maybe (pure ()) (\slot -> storeValue at slot payload) (targetResult target)
+        maybe (pure ()) (\slot -> moveValue at slot payload) (targetResult target)
         finish (FrameJump (Just at) (targetBreak target))
 
 lowerExpression :: CoreExpression -> Build Flow
@@ -184,6 +184,28 @@ lowerExpression expression@(CoreExpression at kind shape) = case shape of
         begin resume
         pure (Completed destination)
       _ -> fault (Just at) "a call through a value that is not a function"
+  CoreArray members -> do
+    operands <- lowerOperands members
+    maybe (pure Stopped) (value . FrameArray) operands
+  CoreArrayMethod name receiver arguments -> do
+    -- The evaluator reads the arguments before the receiver.
+    operands <- lowerOperands (arguments <> [receiver])
+    case operands of
+      Nothing -> pure Stopped
+      Just slots -> case reverse slots of
+        target : backwards -> value (FrameArrayMethod name target (reverse backwards))
+        [] -> fault (Just at) "an array method without its receiver"
+  CoreIndex container index -> do
+    operands <- lowerOperands [container, index]
+    case operands of
+      Just [array, position] -> value (FrameIndex array position)
+      Just _ -> fault (Just at) "an index without its array"
+      Nothing -> pure Stopped
+  CoreTakeLocal local -> do
+    source <- readLocal at local
+    target <- freshSlot at "$taken" (coreLocalType local)
+    emit (FrameMove target source)
+    pure (Completed (Just target))
   CoreOperatorFailure message operands -> do
     flow <- effects operands
     case flow of
@@ -291,6 +313,7 @@ resultSlot at kind = case kind of
   CoreRecordType _ _ -> Just <$> freshSlot at "$result" kind
   CoreSumType _ _ -> Just <$> freshSlot at "$result" kind
   CoreFunctionType _ _ -> Just <$> freshSlot at "$result" kind
+  CoreArrayType _ -> Just <$> freshSlot at "$result" kind
 
 lowerPrint :: Span -> CoreExpression -> Build Flow
 lowerPrint at operand = case coreExpressionShape operand of
@@ -335,7 +358,7 @@ lowerIf at kind condition yes no = do
     close join destination flow = case flow of
       Stopped -> pure False
       Completed payload -> do
-        maybe (pure ()) (\target -> storeValue at target payload) destination
+        maybe (pure ()) (\target -> moveValue at target payload) destination
         finish (FrameJump Nothing join)
         pure True
 
@@ -359,6 +382,6 @@ logical at operator left right = do
       rhs <- lowerScalar right
       case rhs of
         Stopped -> pure ()
-        Completed payload -> storeValue at destination payload >> finish (FrameJump Nothing join)
+        Completed payload -> moveValue at destination payload >> finish (FrameJump Nothing join)
       begin join
       pure (Completed (Just destination))

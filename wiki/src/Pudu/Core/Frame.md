@@ -52,6 +52,12 @@ Resolved Grill Log: `FrameClosure` and `FrameCapture` values, the
 `FrameCallValue` terminator (closure first, then arguments), and the module's
 closure information.
 
+## Arrays and moves (#556)
+
+Resolved Grill Log: `FrameArray`, `FrameArrayMethod`, `FrameIndex` and the
+`FrameMove` instruction, which moves one slot's value into another and leaves
+the source empty.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

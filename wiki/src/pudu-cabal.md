@@ -119,6 +119,12 @@ Resolved Grill Log: register [[Compiler Lower For]]; no new dependency.
 
 Resolved Grill Log: register [[Compiler Lower Lambda]]; no new dependency.
 
+## Arrays (#556)
+
+Resolved Grill Log: register [[Compiler Lower Array]], [[Compiler Lower Call]],
+[[Backend Emit Array]], [[Backend Emit Cell]] and [[Backend Runtime Array]]; no
+new dependency.
+
 ## Referenced by
 
 The library exposes [[Resolve Canonical]] for the scoped generated-Impl resolver

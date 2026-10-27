@@ -11,6 +11,7 @@ import Pudu.Backend.Emit.Support (integerHelper, isWideInteger)
 import Pudu.Backend.Emit.State (EmitState (..), emptyEmitState, renderSites, textOfInt)
 import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Frame (frameTypes, frameEngine)
+import Pudu.Backend.Runtime.Array (arrayRuntimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -45,6 +46,7 @@ emitFrameProgram version sources source = do
     kind@(CoreRecordType _ _) -> Right (shownBox kind)
     kind@(CoreSumType _ _) -> Right (shownBox kind)
     kind@(CoreFunctionType _ _) -> Right (shownBox kind)
+    kind@(CoreArrayType _) -> Right (shownBox kind)
     CoreCharType -> Right
       [ "  pudu_text pudu_shown = pudu_char_show(pudu_run_frames(" <> textOfInt entryId <> ").character);"
       , "  pudu_print_text(pudu_shown);"
@@ -71,6 +73,7 @@ emitFrameProgram version sources source = do
         kind@(CoreRecordType _ _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreSumType _ _) -> [aggregateNeed "show" kind, "print_text"]
         kind@(CoreFunctionType _ _) -> [aggregateNeed "show" kind, "print_text"]
+        kind@(CoreArrayType _) -> [aggregateNeed "show" kind, "print_text"]
         _ -> []
       identities = Map.fromList (zip (map frameFunctionName functions) [0 ..])
       (aggregates, aggregateNeeds) = aggregateSection identities (frameModuleLayouts source) tuples (Set.fromList (Set.toList roots <> entryNeeds))
@@ -83,6 +86,7 @@ emitFrameProgram version sources source = do
         <> ["static const pudu_function pudu_functions[] = {"]
         <> map definition indexed <> ["};"]
   pure $ Text.unlines (header <> runtime <> frameTypes wide text boxes
+    <> concat [lines' <> [""] | (name, lines') <- arrayRuntimeParts, Set.member name selected]
     <> renderSites (reverse (emitSites emitted)) <> aggregates <> ownership <> reverse (emitOutput emitted)
     <> metadata <> frameEngine owned <> ["int main(void) {", "  pudu_prepare_io();"] <> ending <> ["}"])
   where
@@ -152,6 +156,7 @@ mentions layouts wanted = go []
     | kind `elem` seen = False
     | otherwise = case (kind, Map.lookup kind layouts) of
         (CoreTupleType members, _) -> any (go (kind : seen)) members
+        (CoreArrayType element, _) -> go (kind : seen) element
         (_, Just (CoreRecordLayout fields)) -> any (go (kind : seen) . snd) fields
         (_, Just (CoreSumLayout variants)) -> any (go (kind : seen) . snd) (concatMap coreVariantFields variants)
         _ -> False

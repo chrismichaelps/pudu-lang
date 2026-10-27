@@ -38,6 +38,10 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
       (afterStart, _) -> (afterStart, Nothing)
   RangeExpression{} -> halt (locatedSpan iterated) "a for loop over a range without both ends" state
   _ -> case typeForSpan (contextTypes (lowerContext state)) (locatedSpan iterated) of
+    Just kind@(CoreArrayType itemKind) -> case lower state iterated of
+      (after, Just (core, CoreNeverType)) -> (after, Just (core, CoreNeverType))
+      (after, Just (core, _)) -> walkArray after core kind itemKind
+      (after, Nothing) -> refused after
     Just kind
       | Just owner <- ownerKeyOf kind
       , Just begin <- Map.lookup (owner, "begin") (contextMethods (lowerContext state))
@@ -105,6 +109,27 @@ lowerFor lower block state at label binder iterated body = case locatedValue ite
             , statement (CoreIf (binary CoreEqual CoreBoolType (reading nextLocal) lastOne)
                 (CoreBlock [statement (CoreAssign moreLocal (expression CoreBoolType (CoreBoolLiteral False)))] Nothing)
                 (Just (expression CoreUnitType (CoreBlockValue (CoreBlock [statement (CoreAssign nextLocal (binary CoreAdd intType (reading nextLocal) one))] Nothing)))))
+            , matched ])
+     in looped withItem prefix turn
+
+  -- The array runs once and its length is read once; each turn reads the
+  -- next item, as walking the evaluator's list of items does.
+  walkArray current core kind itemKind =
+    let (withArray, arrayLocal) = hidden current kind
+        (withLength, lengthLocal) = hidden withArray intType
+        (withNext, nextLocal) = hidden withLength intType
+        (withItem, itemLocal) = hidden withNext itemKind
+        prefix =
+          [ statement (CoreDeclare arrayLocal core)
+          , statement (CoreDeclare lengthLocal (expression intType (CoreArrayMethod ArrayLengthOf (reading arrayLocal) [])))
+          , statement (CoreDeclare nextLocal (expression intType (CoreIntegerLiteral PlatformSigned 0))) ]
+        turn pushed identity = case element pushed itemLocal of
+          (after, Nothing) -> (after, Nothing)
+          (after, Just matched) -> (after, Just
+            [ statement (CoreIf (binary CoreGreaterOrEqual CoreBoolType (reading nextLocal) (reading lengthLocal))
+                (CoreBlock [statement (CoreBreak identity Nothing)] Nothing) Nothing)
+            , statement (CoreDeclare itemLocal (expression itemKind (CoreIndex (reading arrayLocal) (reading nextLocal))))
+            , statement (CoreAssign nextLocal (binary CoreAdd intType (reading nextLocal) one))
             , matched ])
      in looped withItem prefix turn
 

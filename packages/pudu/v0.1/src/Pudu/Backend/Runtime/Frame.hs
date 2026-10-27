@@ -10,10 +10,11 @@ import Pudu.Comptime.Limits (callDepthLimit)
 frameTypes :: Bool -> Bool -> Bool -> [Text]
 frameTypes wide text boxes =
   [ "typedef struct pudu_box pudu_box;" | boxes ] <>
+  [ "typedef struct pudu_items pudu_items;" | boxes ] <>
   [ "typedef union { pudu_int integer; int scalar; uint32_t character; uint64_t floating; "
       <> (if wide then "pudu_wide_int wide; " else "")
       <> (if text then "pudu_text text; " else "")
-      <> (if boxes then "pudu_box *box; " else "") <> "} pudu_cell;"
+      <> (if boxes then "pudu_box *box; pudu_items *items; " else "") <> "} pudu_cell;"
   ] <> (if boxes then
   [ "/* An aggregate: a reference count and its members. */"
   , "struct pudu_box { size_t count; pudu_cell fields[]; };"

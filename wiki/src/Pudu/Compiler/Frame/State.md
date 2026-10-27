@@ -42,6 +42,11 @@ limit, larger host stack, permanent refusal or interpreted fallback repairs
 
 - **Q:** What does the frame builder expose for match? **A:** The slot, label and value helpers `Compiler Frame Match` needs to chain tests over one subject (#525).
 
+## Moves (#556)
+
+Resolved Grill Log: `moveValue` stores an owned value from a temporary nothing
+reads again by moving it, so a buffer built in a loop keeps one owner.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

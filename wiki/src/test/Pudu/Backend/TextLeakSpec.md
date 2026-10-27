@@ -45,6 +45,11 @@ are released.
 
 Resolved Grill Log: include closureSuccessPrograms, so closures and their captures are released.
 
+## Array lifetimes (#556)
+
+Resolved Grill Log: include arraySuccessPrograms, so moved, grown and copied
+buffers are all released.
+
 ## Referenced by
 
 [[Backend Text Programs]] · [[Native Text Runtime]] · [[src/_MOC]]

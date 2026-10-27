@@ -69,6 +69,11 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 
 Pattern update only: `CoreRecordType` has an argument list; behavior is unchanged.
 
+## Kinds in messages (#556)
+
+Resolved Grill Log: arrays are `array` and function values `function` in
+operator failures, as `valueKind` names them.
+
 ## Referenced by
 
 [[Compiler Lower Body]] · [[Pudu Cabal Manifest]] · [[Native Emission Coverage]]

@@ -48,6 +48,11 @@ Resolved Grill Log: the step's callee is the closure's cell 0 and the closure
 is argument 0. The function-number table goes into the emit state for closure
 makers.
 
+## Moves (#556)
+
+Resolved Grill Log: `FrameMove` releases the destination's old value, stores
+the source's and empties the source (an empty text for text).
+
 ## Referenced by
 
 [[src/_MOC]] · [[Native Frame Pressure Repair]]

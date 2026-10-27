@@ -6,7 +6,7 @@ module Pudu.Compiler.Frame.Match (MatchLowering (..), lowerMatch) where
 import qualified Data.Map.Strict as Map
 import Pudu.Compiler.Frame.State
   ( Build, BuildState (..), Flow (..), begin, bindLocal, fault, finish, freshLabel
-  , getState, saveValue, storeValue )
+  , getState, moveValue, saveValue, storeValue )
 import Pudu.Core
 import Pudu.Core.Frame
   ( FrameLabel, FrameSlot (..), FrameTerminator (..), FrameValue (..)
@@ -63,7 +63,7 @@ lowerMatch lowering at kind subject arms = do
         case flow of
           Stopped -> pure False
           Completed payload -> do
-            maybe (pure ()) (\target -> storeValue armSpan target payload) destination
+            maybe (pure ()) (\target -> moveValue armSpan target payload) destination
             finish (FrameJump Nothing join)
             pure True
       begin next

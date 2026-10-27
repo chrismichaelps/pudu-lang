@@ -27,6 +27,7 @@ module Pudu.Core
   , CoreStatement (..)
   , CoreStatementShape (..)
   , CoreTextMethodName (..)
+  , CoreArrayMethodName (..)
   , CoreType (..)
   , coreTypeName
   , displayName
@@ -188,6 +189,16 @@ data CoreExpressionShape
   | CoreCapture !Int !CoreExpression
   {-| A call through a function value: the callee runs, then the arguments. -}
   | CoreCallValue !CoreExpression ![CoreExpression]
+  {-| Members in source order, which is the order they run. -}
+  | CoreArray ![CoreExpression]
+  {-| A built-in array method; the arguments run before the receiver. -}
+  | CoreArrayMethod !CoreArrayMethodName !CoreExpression ![CoreExpression]
+  {-| `array[index]`: the array, then the index. The expression's span is the
+      index's, where an index out of range reports. -}
+  | CoreIndex !CoreExpression !CoreExpression
+  {-| The local's value, leaving the local empty: the read is its last before
+      it is assigned again, so a uniquely held buffer stays unique. -}
+  | CoreTakeLocal !CoreLocal
   {-| Operands finish in order before E7001; this expression never returns. -}
   | CoreOperatorFailure !Text ![CoreExpression]
   | CoreBlockValue !CoreBlock
@@ -217,6 +228,24 @@ data CoreTextMethodName
   | TextToUpper
   | TextToLower
   | TextCharAt
+  deriving stock (Eq, Show)
+
+{-| The array methods native implements in the runtime, named as the
+    evaluator names them; map, filter and reduce lower to loops instead. -}
+data CoreArrayMethodName
+  = ArrayLengthOf
+  | ArrayIsEmptyOf
+  | ArrayGetAt
+  | ArrayIndexOfValue
+  | ArrayContainsValue
+  | ArrayPushValue
+  | ArrayPopLast
+  | ArrayInsertAt
+  | ArrayRemoveAt
+  | ArraySliceOf
+  | ArrayConcatWith
+  | ArrayJoinWith
+  | ArrayReversed
   deriving stock (Eq, Show)
 
 {-| @Core.BinaryOperator — the operator vocabulary, already resolved from
@@ -262,6 +291,8 @@ data CoreType
   | CoreRecordType !Text ![CoreType]
   {-| A sum at concrete type arguments: Option[Int] and Option[Str] differ. -}
   | CoreSumType !Text ![CoreType]
+  {-| An array: a box holding a growable buffer of items of one type. -}
+  | CoreArrayType !CoreType
   {-| A function value: a closure box whose first cell names what it runs. -}
   | CoreFunctionType ![CoreType] !CoreType
   | CoreUnitType
@@ -280,6 +311,7 @@ coreTypeName coreType = case coreType of
   CoreRecordType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreSumType name [] -> displayName name
   CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
+  CoreArrayType element -> "Array[" <> coreTypeName element <> "]"
   CoreFunctionType inputs result -> "fn(" <> Text.intercalate ", " (map coreTypeName inputs) <> ") -> " <> coreTypeName result
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"

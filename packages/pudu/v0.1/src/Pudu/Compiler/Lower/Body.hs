@@ -15,7 +15,8 @@ import Pudu.Compiler.Lower.State
 import Pudu.Compiler.Lower.Signature (functionLevelRefusal)
 import Pudu.Compiler.Lower.Text (lowerTextMethod)
 import Pudu.Compiler.Lower.Method (lowerMethodCall, lowerQualifiedMethod)
-import Pudu.Compiler.Lower.Generic (admitCallee)
+import Pudu.Compiler.Lower.Call (lowerFunctionCall, lowerPrint, lowerRendered)
+import Pudu.Compiler.Lower.Array (lowerArrayIndex, lowerArrayLiteral, lowerArrayMethod, takeReceiver)
 import Pudu.Compiler.Lower.Try (lowerTry)
 import Pudu.Compiler.Lower.For (lowerFor)
 import Pudu.Compiler.Lower.Lambda (lowerFunctionValue, lowerLambda, lowerValueCall)
@@ -59,6 +60,7 @@ lowerEntryBody located state
                 kind@(CoreRecordType _ _) -> built after coreBlock kind
                 kind@(CoreSumType _ _) -> built after coreBlock kind
                 kind@(CoreFunctionType _ _) -> built after coreBlock kind
+                kind@(CoreArrayType _) -> built after coreBlock kind
                 CoreNeverType -> built after coreBlock CoreUnitType
                 CoreUnitType
                   | printValued coreBlock ->
@@ -140,7 +142,7 @@ lowerBlockResult state located@(Located expressionSpan expression) = case expres
               (refuse expressionSpan "assigning a Result[(), Str] value" after, [], Nothing, CoreUnitType)
           | coreType == coreLocalType local || coreType == CoreNeverType ->
               ( after
-              , [CoreStatement{coreStatementSpan = expressionSpan, coreStatementShape = CoreAssign local coreRight}]
+              , [CoreStatement{coreStatementSpan = expressionSpan, coreStatementShape = CoreAssign local (takeReceiver local coreRight)}]
               , Nothing
               , CoreUnitType
               )
@@ -224,7 +226,7 @@ lowerStatement state (Located statementSpan statement) = case statement of
                 , Just
                     CoreStatement
                       { coreStatementSpan = statementSpan
-                      , coreStatementShape = CoreAssign local coreRight
+                      , coreStatementShape = CoreAssign local (takeReceiver local coreRight)
                       }
                 )
             | otherwise -> halt statementSpan "an assignment whose value has a different type" after
@@ -311,6 +313,7 @@ allowedResultType declared operand = case declared of
     CoreRecordType _ _ -> True
     CoreSumType _ _ -> True
     CoreFunctionType _ _ -> True
+    CoreArrayType _ -> True
     _ -> operand `elem` [CoreBoolType, CoreTextType, CoreCharType, CoreUnitType, CoreNeverType]
 
 lowerExpression :: LowerState -> Located Expression -> (LowerState, Maybe (CoreExpression, CoreType))
@@ -348,31 +351,26 @@ lowerExpression state (Located spanValue expression) = case expression of
   BinaryExpression left operator right -> lowerBinary lowerExpression state spanValue left operator right
   CallExpression (Located callee (NameExpression (name :| []))) arguments
     | Just _ <- lookupLocal state name -> lowerValueCall lowerExpression state spanValue (Located callee (NameExpression (name :| []))) arguments
-    | Just key <- resolveFunction state [name] -> callFunction key callee arguments
+    | Just key <- resolveFunction state [name] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue name arguments -> lowered
-    | name == "print" -> case arguments of
-        [argument] -> case lowerExpression state argument of
-          (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
-          (after, Just (coreArgument, CoreTextType)) -> typed after (CorePrint coreArgument) CoreUnitType
-          (after, Just (_, coreType)) ->
-            halt spanValue ("printing a " <> coreTypeName coreType <> " value") after
-          (after, Nothing) -> refused after
-        _ -> halt spanValue "a call to print with this many arguments" state
-    | name == "display" -> rendered CoreDisplay
-    | name == "show" -> rendered CoreShow
+    | name == "print" -> lowerPrint lowerExpression state spanValue arguments
+    | name == "display" -> lowerRendered lowerExpression state spanValue name CoreDisplay arguments
+    | name == "show" -> lowerRendered lowerExpression state spanValue name CoreShow arguments
     | otherwise -> halt spanValue ("calls to '" <> name <> "'") state
   CallExpression (Located callee (MemberExpression receiver@(Located _ (NameExpression (owner :| []))) (Located _ member))) arguments
-    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> callFunction key callee arguments
+    | isModuleQualifier state owner, Just key <- resolveFunction state [owner, member] -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | qualifier receiver, Just lowered <- lowerQualifiedMethod lowerExpression state spanValue callee owner member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
+    | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (MemberExpression receiver (Located _ member))) arguments
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member arguments -> lowered
     | Just lowered <- lowerMethodCall lowerExpression state spanValue callee receiver member arguments -> lowered
+    | Just lowered <- lowerArrayMethod lowerExpression state spanValue receiver member arguments -> lowered
     | otherwise -> lowerTextMethod lowerExpression state spanValue receiver member arguments
   CallExpression (Located callee (NameExpression (first :| rest@(_ : _)))) arguments
-    | Just key <- resolveFunction state (first : rest) -> callFunction key callee arguments
+    | Just key <- resolveFunction state (first : rest) -> lowerFunctionCall lowerExpression state spanValue key callee arguments
     | Just lowered <- lowerVariant lowerExpression state spanValue (last rest) arguments -> lowered
     | otherwise -> halt spanValue ("calls to '" <> Text.intercalate "." (first : rest) <> "'") state
   CallExpression callee arguments -> lowerValueCall lowerExpression state spanValue callee arguments
@@ -381,14 +379,15 @@ lowerExpression state (Located spanValue expression) = case expression of
     , Just lowered <- lowerConstant state spanValue [owner, member] -> lowered
     | qualifier receiver, Just lowered <- lowerVariant lowerExpression state spanValue member [] -> lowered
     | otherwise -> lowerField lowerExpression state spanValue receiver member
-  IndexExpression receiver key -> lowerTupleIndex lowerExpression state spanValue receiver key
+  IndexExpression receiver key -> maybe (lowerTupleIndex lowerExpression state spanValue receiver key) id
+    (lowerArrayIndex lowerExpression state spanValue receiver key)
   RangeExpression{} -> halt spanValue "ranges" state
   TryExpression operand -> lowerTry lowerExpression state spanValue operand
   AwaitExpression{} -> halt spanValue "await" state
   TupleExpression [] -> value (CoreBlockValue (CoreBlock [] Nothing)) CoreUnitType
   TupleExpression members@(_ : _ : _) -> lowerTuple lowerExpression state spanValue members
   TupleExpression{} -> halt spanValue "tuples" state
-  ArrayExpression{} -> halt spanValue "arrays" state
+  ArrayExpression members -> lowerArrayLiteral lowerExpression state spanValue members
   SetExpression{} -> halt spanValue "sets" state
   UnsafeExpression{} -> halt spanValue "unsafe blocks" state
   MacroCall{} -> halt spanValue "macro calls" state
@@ -435,55 +434,9 @@ lowerExpression state (Located spanValue expression) = case expression of
   ComptimeForExpression{} -> halt spanValue "comptime for" state
   InvalidExpression -> halt spanValue "this expression" state
   where
-    rendered shape = case expression of
-      CallExpression (Located _ (NameExpression (name :| []))) [argument] -> case lowerExpression state argument of
-        (after, Just (coreArgument, CoreNeverType)) -> (after, Just (coreArgument, CoreNeverType))
-        (after, Just (coreArgument, _))
-          | expressionIsPrintValued coreArgument -> halt spanValue (name <> " of a Result[(), Str] value") after
-        (after, Just (coreArgument, operandType))
-          | nativeValueType operandType -> typed after (shape coreArgument) CoreTextType
-          | otherwise -> halt spanValue (name <> " of a " <> coreTypeName operandType <> " value") after
-        (after, Nothing) -> refused after
-      CallExpression (Located _ (NameExpression (name :| []))) _ ->
-        halt spanValue ("a call to " <> name <> " with this many arguments") state
-      _ -> halt spanValue "this call" state
     typed after shape coreType = (after, Just (CoreExpression spanValue coreType shape, coreType))
     value shape coreType = (state, Just (CoreExpression spanValue coreType shape, coreType))
 
     -- `Shape.Circle(3)`: the receiver names a type, not a local.
     qualifier (Located _ (NameExpression (owner :| []))) = lookupLocal state owner == Nothing
     qualifier _ = False
-
-    lowerArguments current collected arguments = case arguments of
-      [] -> (current, Just (reverse collected))
-      argument : rest -> case lowerExpression current argument of
-        (after, Just (core, _))
-          | expressionIsPrintValued core -> halt (locatedSpan argument) "a Result[(), Str] call argument" after
-          | otherwise -> lowerArguments after (core : collected) rest
-        (after, Nothing) -> (after, Nothing)
-
-    -- A call to a function of any module: its signature is admitted under
-    -- that module's facts, then the arguments run here, in the caller's.
-    callFunction key callee arguments = case lookup key (contextTable (lowerContext state)) of
-      Nothing -> halt spanValue "this call" state
-      Just entry
-        | key == contextEntry (lowerContext state) -> halt spanValue "a call to the entry function" state
-        | otherwise ->
-            case admitCallee state key callee entry of
-                  (back, Nothing) -> refused back
-                  (back, Just (target, found)) -> case lowerArguments back [] arguments of
-                    (final, Just coreArguments)
-                      | any ((== CoreNeverType) . coreExpressionType) coreArguments ->
-                          typed final (CoreBlockValue (CoreBlock
-                            [CoreStatement (coreExpressionSpan argument) (CoreEvaluate argument) | argument <- coreArguments] Nothing)) CoreNeverType
-                      | otherwise ->
-                          typed (recordCall target final) (CoreCall target coreArguments) (eagerType (signatureResult found) coreArguments)
-                    (final, Nothing) -> refused final
-
-    recordCall name current =
-      current
-        { lowerContext =
-            context{contextQueue = name : contextQueue context}
-        }
-      where
-        context = lowerContext current

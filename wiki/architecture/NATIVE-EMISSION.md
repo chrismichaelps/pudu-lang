@@ -20,7 +20,7 @@ Compile ordinary checked Pudu programs into portable C11 with interpreter-identi
 | Entry result reporting | Partial (#512, #521, #525) | Integer statuses, unit silence, and Bool/Float/Str/Char/tuple/record/sum rendering match `pudu run`; an entry returning print's Result remains |
 | Complete numeric families | Partial (#495, #497, #500, #507, #512) | Fixed integers, Int128/UInt128 and Float32/Float64 are admitted; BigInt and Decimal remain |
 | Text and bytes | Partial (#515, #516, #517, #518) | Owned Str values, Char values, operators, rendering, printing, entries, charAt and every Int/Bool/Str-result method (trim and case mapping included) match the interpreter; Bytes, Array/Option-result methods and print Result remain |
-| Records, tuples, sums and collections | Partial (#521, #525, #552) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; collections (Array, Map, Set, Bytes, Range) remain |
+| Records, tuples, sums and collections | Partial (#521, #525, #552, #556) | Tuples, records and sums of every module, generic ones at each instantiation, and the built-in Option/Result are boxed, refcounted values with construction, field, position and payload reads, equality, ordering (tuples), rendering and run-time E7001 naming held variants; collections (Map, Set, Bytes, Range) remain; arrays are native (#556) apart from `sortBy` and slicing by range |
 | Pattern matching and iteration | Partial (#525, #540, #541, #554) | `match`, `if let` (with `else if` chains) and `while let` (with labels, `break` and `continue`) lower every pattern form in order with guards, bindings, literals, ranges, tuples, constructors, records and alternatives; `let ... else` retains bindings in the enclosing block (#541); `for` walks written ranges and sequence types (#554); range values, `for` over Str, tuples and collections, and sequence patterns remain |
 | Modules and constants | Partial (#539, #543) | Calls through selective imports, aliases and qualifiers, functions of every reachable module, and records and sums by canonical identity match the interpreter; folded scalar/tuple/record/sum constants now preserve canonical solved identity; callable and unrepresented constant families remain |
 | Callables and generic code | Partial (#551, #552, #555) | Implementation members, inherited defaults, type- and trait-qualified calls, `toText()`, generic functions and implementations (one copy per type list), lambdas with captures, named functions as values and calls through values match the interpreter; default parameter values, method values, higher-kinded parameters and `dynamic` values remain |
@@ -386,3 +386,12 @@ functions become forwarders, and calls through values reuse the frame call
 path. Ordering tuples now follows `comparableValue` and `compareValues` for
 held functions, records and sums. [[Backend Closure Programs]] holds the
 evidence.
+
+## Arrays (#556)
+
+[[Native Arrays]] carries arrays as boxes around growable buffers with the
+evaluator's method semantics. `map`, `filter` and `reduce` are loops, and
+updates that replace their own variable take it, so building an array stays
+linear. Found on the way: #557, unannotated lambda parameters' members are not
+checked when the lambda is an argument, and such lambdas refuse natively.
+[[Backend Array Programs]] holds the evidence.

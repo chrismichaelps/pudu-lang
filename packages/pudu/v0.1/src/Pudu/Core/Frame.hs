@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.FloatLiteral (FloatWidth)
 import Data.Map.Strict (Map)
-import Pudu.Core (CoreBinaryOperator (..), CoreClosureInfo, CoreLayout, CoreTextMethodName, CoreType)
+import Pudu.Core (CoreArrayMethodName, CoreBinaryOperator (..), CoreClosureInfo, CoreLayout, CoreTextMethodName, CoreType)
 import Pudu.IntegerLiteral (IntegerKind)
 import Pudu.Source (Span)
 
@@ -56,6 +56,8 @@ data FrameInstruction
   | FramePrintLiteral !Span !Text
   | FramePrintSlot !Span !FrameSlot
   | FramePrintUnit !Span
+  {-| The second slot's value moves into the first, and the second is left empty. -}
+  | FrameMove !FrameSlot !FrameSlot
   deriving stock (Eq, Show)
 
 {-| A call saves its destination and resume block before the dispatcher enters its callee. -}
@@ -103,6 +105,11 @@ data FrameValueShape
   | FrameClosure !Text ![FrameSlot]
   {-| Capture number i of the closure in the slot. -}
   | FrameCapture !Int !FrameSlot
+  | FrameArray ![FrameSlot]
+  {-| An array method on the receiver slot with these arguments. -}
+  | FrameArrayMethod !CoreArrayMethodName !FrameSlot ![FrameSlot]
+  {-| The array's item at the index, or E7004 at the value's span. -}
+  | FrameIndex !FrameSlot !FrameSlot
   | FrameRead !FrameSlot
   | FrameUnary !FrameUnaryOperator !FrameSlot
   | FrameBinary !FrameScalarOperator !FrameSlot !FrameSlot

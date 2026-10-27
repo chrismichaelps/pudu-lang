@@ -56,6 +56,12 @@ Resolved Grill Log: a closure's captures and a call through a value lower like
 other operands, and the call checks its argument and result types against the
 function type.
 
+## Arrays and moves (#556)
+
+Resolved Grill Log: arrays, their methods and indexing lower like other
+operands; a take reads the local into a fresh slot with a move. Declarations,
+assignments, break values and branch results move out of their temporaries.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Program Compiler Module Map]] · [[Native Frame Pressure Repair]]

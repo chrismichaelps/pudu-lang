@@ -9,6 +9,7 @@ import Pudu.Backend.GenericPrograms (genericSuccessPrograms, genericRefusalProgr
 import Pudu.Backend.TryPrograms (trySuccessPrograms, tryRefusalPrograms)
 import Pudu.Backend.ForPrograms (forSuccessPrograms, forRefusalPrograms)
 import Pudu.Backend.ClosurePrograms (closureSuccessPrograms, closureRefusalPrograms)
+import Pudu.Backend.ArrayPrograms (arraySuccessPrograms, arrayRefusalPrograms)
 
 geometry :: (FilePath, Text)
 geometry = ("Geometry.pudu", Text.unlines
@@ -52,7 +53,7 @@ layout = ("Layout.pudu", Text.unlines
 
 modulePrograms :: [(String, [(FilePath, Text)], Text, Text)]
 modulePrograms =
-  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms] <>
+  [(label, [], source, answer) | (label, source, answer) <- constantPrograms <> referenceSuccessPrograms <> methodSuccessPrograms <> genericSuccessPrograms <> trySuccessPrograms <> forSuccessPrograms <> closureSuccessPrograms <> arraySuccessPrograms] <>
   [ ( "calls through a selective import, an alias and a module that imports another"
     , [geometry, layout]
     , program
@@ -152,7 +153,7 @@ constantPrograms =
     imported function reports at its own module's source. -}
 moduleRefusalPrograms :: [(String, [(FilePath, Text)], Text)]
 moduleRefusalPrograms =
-  [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms] <>
+  [(label, [], source) | (label, source) <- referenceRefusalPrograms <> methodRefusalPrograms <> genericRefusalPrograms <> tryRefusalPrograms <> forRefusalPrograms <> closureRefusalPrograms <> arrayRefusalPrograms] <>
   [ ( "a constant read preserves the runtime overflow operation's span"
     , [], program
         [ "const MAX = 9223372036854775807", "fn main() -> Int {"

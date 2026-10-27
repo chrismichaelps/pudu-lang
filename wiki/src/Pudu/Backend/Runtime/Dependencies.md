@@ -25,6 +25,10 @@ parts and callers perform their existing cycle-safe visited-set closure.
 
 [[Backend Runtime Integer]] · [[Native Floating Runtime]] · [[Backend Emit Support]] · [[Backend Frame Program]] · [[Native Floating Runtime Tests]]
 
+## Arrays (#556)
+
+Resolved Grill Log: includes the array parts' prerequisites.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Runtime Delivery]]

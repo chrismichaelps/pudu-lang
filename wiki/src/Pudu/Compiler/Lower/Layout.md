@@ -23,6 +23,11 @@ mentions, closed over the layouts they reach, for `coreModuleLayouts`.
 Resolved Grill Log: every function type met gets a `CoreClosureLayout` of the
 lifted functions whose closure has that type, empty when none was made.
 
+## Arrays (#556)
+
+Resolved Grill Log: an array type's element and the new Core shapes are
+collected.
+
 ## Referenced by
 
 [[Compiler Lower]] · [[Core IR]] · [[src/_MOC]]
