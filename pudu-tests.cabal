@@ -73,6 +73,7 @@ test-suite pudu-test
     Pudu.Backend.FrameEmitSpec
     Pudu.Backend.FrameRuntimeSpec
     Pudu.Backend.Word128Spec
+    Pudu.Backend.WideValueSpec
     Pudu.Cli.MemorySpec
     Pudu.Backend.NativeSpec
     Pudu.Backend.FunctionPrograms
