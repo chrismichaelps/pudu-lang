@@ -123,6 +123,8 @@ imports it.
 
 ## Grill Log
 
+- **Q:** How does lowering cross modules? **A:** It takes every module of the compiled program with its own checked facts (`programNativeModules`), keys every function by its canonical name (`Module.function`), and lowers on demand from the root's entry, entering each function's module first. Records and sums come from each module's own declarations and are named by canonical identity, so two modules' `Point`s never meet (#539).
+
 - **Q:** Where do sum shapes come from? **A:** `declaredSums` and `declaredRecords` from the checked module become the lowering's shapes, and `moduleLayouts` closes every layout the lowered functions mention (#525).
 
 - **Q:** Why refuse `Text` locals but allow string literals? **A:** Printing a

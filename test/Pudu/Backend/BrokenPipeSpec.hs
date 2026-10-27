@@ -7,7 +7,7 @@ import qualified Data.Text.IO as TextIO
 import Pudu.Backend.Emit (emitProgram)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Diagnostic (hasErrors)
 import Pudu.Source (SourceName (..), newSource)
@@ -45,7 +45,7 @@ testPipe
       source <- newSource (SourceName "Main.pudu") ("module Main\n" <> body <> "\n")
       checked <- runCompile source
       case (hasErrors (compileDiagnostics checked), compileModule checked) of
-        (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+        (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
           Lowered core -> case lowerFrames core >>= emitProgram "pipe-test" [source] of
             Left failure -> pure (counterexample (show failure) (False === True))
             Right emitted -> do

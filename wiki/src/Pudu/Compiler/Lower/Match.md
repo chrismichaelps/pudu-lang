@@ -23,6 +23,8 @@ in a scope of its own, as `CoreMatch`.
 
 ## Grill Log
 
+- **Q:** How does a record pattern's written type match? **A:** Against the record's display name, since Core names it by canonical key (#539).
+
 - **Q:** Why build integer literals at the subject's kind? **A:** The
   evaluator compares integers by value whatever their kinds, so a literal
   outside the kind's range is a pattern that never matches, not a refusal.

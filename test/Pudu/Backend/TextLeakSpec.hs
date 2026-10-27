@@ -13,7 +13,7 @@ import Pudu.Backend.SumPrograms (sumSuccessPrograms)
 import Pudu.Backend.TextPrograms (textSuccessPrograms)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Diagnostic (hasErrors)
 import Pudu.Source (SourceName (..), newSource)
@@ -43,7 +43,7 @@ testLeaks = do
     source <- newSource (SourceName "Main.pudu") text
     checked <- runCompile source
     case (hasErrors (compileDiagnostics checked), compileModule checked) of
-      (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+      (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
         Lowered core -> case lowerFrames core >>= emitProgram "text-leak-test" [source] of
           Left failure -> pure (counterexample (label <> ": " <> show failure) (False === True))
           Right emitted -> do

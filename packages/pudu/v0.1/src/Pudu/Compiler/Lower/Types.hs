@@ -1,6 +1,6 @@
 {-| @Pudu.Compiler.Lower.Types — settled checker facts for native representation. -}
 module Pudu.Compiler.Lower.Types
-  ( LowerTypes, nativeTypes, withShapes, lookupScheme, typeForSpan, formedCoreType, formedCoreTypeIn
+  ( LowerTypes, emptyTypes, nativeTypes, withShapes, lookupScheme, typeForSpan, formedCoreType, formedCoreTypeIn
   , layoutOf, recordFields, sumVariants, nativeIntegerKind, nativeScalarType, nativeValueType ) where
 
 import Data.Map.Strict (Map)
@@ -13,7 +13,7 @@ import Pudu.IntegerLiteral (IntegerKind (PlatformSigned, PlatformUnsigned, Signe
 import Pudu.Source (Span)
 import Pudu.Type (TypeInfo (..), typeAt)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme, Type (..), boolType, charType, stringType )
+  ( NominalId (..), Scheme, Type (..), boolType, charType, nominalKey, stringType )
 
 {-| Facts from one checked module; complete spans retain generated identity.
     The shapes are the records and sums the root module can name, by nominal
@@ -27,6 +27,10 @@ data Shapes = Shapes
 
 nativeTypes :: Maybe TypeInfo -> [(Text, Scheme)] -> Maybe LowerTypes
 nativeTypes info schemes = (\types -> LowerTypes types (Map.fromList schemes) noShapes) <$> info
+
+{-| No facts at all, for a module the program does not reach. -}
+emptyTypes :: LowerTypes
+emptyTypes = LowerTypes (TypeInfo Map.empty Map.empty) Map.empty noShapes
 
 noShapes :: Shapes
 noShapes = Shapes Map.empty Map.empty
@@ -55,7 +59,7 @@ formedWith shapes seen parameters value = case value of
   RigidType name | Just bound <- Map.lookup name parameters -> Just bound
   NominalType identity []
     | Just ([], fields) <- Map.lookup identity (shapeRecords shapes) ->
-        let self = CoreRecordType (nominalName identity)
+        let self = CoreRecordType (nominalKey identity)
          in if self `elem` seen then Just self else do
               members <- traverse (formedWith shapes (self : seen) Map.empty . snd) fields
               if all nativeValueType members then Just self else Nothing
@@ -63,7 +67,7 @@ formedWith shapes seen parameters value = case value of
     | Just (names, variants) <- Map.lookup identity (shapeSums shapes)
     , length names == length arguments -> do
         formedArguments <- traverse argument arguments
-        let self = CoreSumType (nominalName identity) formedArguments
+        let self = CoreSumType (nominalKey identity) formedArguments
             bound = Map.fromList (zip names formedArguments)
         if self `elem` seen then Just self else do
           payloads <- traverse (\(_, payload, _) -> traverse (formedWith shapes (self : seen) bound) payload) variants
@@ -107,12 +111,11 @@ layoutOf (LowerTypes _ _ shapes) kind = case kind of
     members <- traverse (form bound) payload
     let labels = maybe (map (Text.pack . show) [0 .. length members - 1]) id fields
     Just (CoreVariant name (zip labels members) (fields /= Nothing))
-  -- The root module's own declaration wins over a builtin of the same name.
-  named name table = case [entry | (identity, entry) <- Map.toList table, nominalName identity == name, nominalModule identity /= Nothing] of
+  -- Core names a record or sum by its canonical key, so two modules' types of
+  -- one spelling stay apart.
+  named key table = case [entry | (identity, entry) <- Map.toList table, nominalKey identity == key] of
     entry : _ -> Just entry
-    [] -> case [entry | (identity, entry) <- Map.toList table, nominalName identity == name] of
-      entry : _ -> Just entry
-      [] -> Nothing
+    [] -> Nothing
 
 builtin :: Type -> Maybe CoreType
 builtin value

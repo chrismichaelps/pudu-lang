@@ -18,7 +18,7 @@ import Pudu.Core.Frame (FrameFault (..))
 import Pudu.Diagnostic.Native (nativeRefusal)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Lower.Types (nativeTypes)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Core
   ( CoreBlock (..)
   , CoreExpressionShape (..)
@@ -91,7 +91,7 @@ compileAndLower text = do
     then Left (compileDiagnostics result)
     else case compileModule result of
       Nothing -> Left (compileDiagnostics result)
-      Just parsed -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
+      Just parsed -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
         LowerRefused refusals -> Left refusals
         Lowered core -> Right (source, core)
 
@@ -132,7 +132,7 @@ testSupportedLowering = do
       [ coreModuleName core === "Supported"
       , case coreModuleFunctions core of
           [function] -> conjoin
-            [ coreFunctionName function === "main"
+            [ coreFunctionName function === "Supported.main"
             , coreFunctionResult function === CoreIntegerType PlatformSigned
             , property (any declaresLocal (coreBlockStatements (coreFunctionBody function)))
             , property (any isWhile (coreBlockStatements (coreFunctionBody function)))
@@ -170,7 +170,7 @@ testDivergentEntries = conjoin <$> mapM check ["loop {}", "return loop {}"]
       Left diagnostics -> counterexample
         (Text.unpack ending <> ": " <> show diagnostics) False
       Right (_, core) ->
-        map coreFunctionName (coreModuleFunctions core) === ["main"]
+        map coreFunctionName (coreModuleFunctions core) === ["Divergent.main"]
 
 testUnitValues :: IO Property
 testUnitValues = do
@@ -213,7 +213,7 @@ testEntryOnly = do
       counterexample ("refused: " <> show (map diagnosticMessage refusals)) False
     Right (_, core) ->
       counterexample "exactly the entry is carried"
-        (map coreFunctionName (coreModuleFunctions core) === ["main"])
+        (map coreFunctionName (coreModuleFunctions core) === ["Entryonly.main"])
  where
   entryWithOther =
     Text.unlines
@@ -253,7 +253,7 @@ testReachableFunctions = do
   pure $ case compiled of
     Left refusals -> counterexample (show refusals) False
     Right (_, core) -> conjoin
-      [ map coreFunctionName (coreModuleFunctions core) === ["second", "main", "first"]
+      [ map coreFunctionName (coreModuleFunctions core) === ["Reachable.second", "Reachable.main", "Reachable.first"]
       , [ (coreFunctionResult function, map (coreLocalType . coreParameterLocal) (coreFunctionParameters function))
         | function <- coreModuleFunctions core
         ] === [(CoreBoolType, [CoreBoolType]), (CoreIntegerType PlatformSigned, []),
@@ -329,7 +329,7 @@ refusalOutcome (label, sourceText', marker) = do
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
     (True, _) -> counterexample (label <> ": compile errors: " <> show (compileDiagnostics result)) False
     (_, Nothing) -> counterexample (label <> ": the program did not compile") False
-    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
+    (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample (label <> ": lowered, but a refusal was expected") False
       LowerRefused refusals -> conjoin
         [ counterexample
@@ -353,7 +353,7 @@ testLocalFunctionRefusal = do
     ]
   result <- runCompile source
   pure $ case (hasErrors (compileDiagnostics result), compileModule result) of
-    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
+    (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes result) (compileSchemes result)) parsed of
       Lowered _ -> counterexample "indirect call unexpectedly lowered" False
       LowerRefused refusals -> conjoin
         [ map (diagnosticCodeText . diagnosticCode) refusals === ["E6001"]

@@ -28,6 +28,7 @@ module Pudu.Core
   , CoreTextMethodName (..)
   , CoreType (..)
   , coreTypeName
+  , displayName
   ) where
 
 import Data.Map.Strict (Map)
@@ -236,7 +237,7 @@ data CoreType
   | CoreTextType
   | CoreCharType
   | CoreTupleType ![CoreType]
-  {-| A record of the root module: its name and its fields in declaration order. -}
+  {-| A record, by its canonical key; its fields are its layout. -}
   | CoreRecordType !Text
   {-| A sum at concrete type arguments: Option[Int] and Option[Str] differ. -}
   | CoreSumType !Text ![CoreType]
@@ -252,11 +253,18 @@ coreTypeName coreType = case coreType of
   CoreTextType -> "Str"
   CoreCharType -> "Char"
   CoreTupleType members -> "(" <> Text.intercalate ", " (map coreTypeName members) <> ")"
-  CoreRecordType name -> name
-  CoreSumType name [] -> name
-  CoreSumType name arguments -> name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
+  CoreRecordType name -> displayName name
+  CoreSumType name [] -> displayName name
+  CoreSumType name arguments -> displayName name <> "[" <> Text.intercalate ", " (map coreTypeName arguments) <> "]"
   CoreUnitType -> "Unit"
   CoreNeverType -> "Never"
+
+{-| A record or sum as a program writes it: the last segment of its canonical
+    key (`Main.Point` is `Point`), which is how the evaluator renders it. -}
+displayName :: Text -> Text
+displayName key = case Text.splitOn "." key of
+  [] -> key
+  segments -> last segments
 
 {-| A record's fields, or a sum's variants, in declaration order. -}
 data CoreLayout

@@ -169,6 +169,8 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 
 ## Grill Log
 
+- **Q:** Which modules does `pudu build --native` lower? **A:** Every module of the compiled program, through `programNativeModules`; a construct still outside the native subset in any of them refuses at its own span (#539).
+
 - **Q:** Reduce server runtime capabilities to accelerate serial loops? **A:**
   Keep worker parallelism and limit the separate collection budget. Validate
   concurrent request behavior and ordinary CLI gates after linking the default.

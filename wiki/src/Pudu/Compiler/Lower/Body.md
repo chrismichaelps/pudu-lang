@@ -86,6 +86,8 @@ Requires [[Compiler Lower Control]], [[Compiler Lower State]], [[Compiler Lower 
 
 ## Grill Log
 
+- **Q:** How is a call to another module's function lowered? **A:** `callFunction` admits its signature under that module's facts, then lowers the arguments in the caller's module and emits `CoreCall` by canonical name. A qualifier that names a module is tried before any variant reading of it (#539).
+
 - **Q:** How does the body lowering reach sums? **A:** A name or call is a variant through [[Compiler Lower Sum]], `match` through [[Compiler Lower Match]], and a sum result gets a destination slot like any boxed value (#525).
 
 - **Q:** Why keep blocks and expressions together? **A:** Their mutual recursion

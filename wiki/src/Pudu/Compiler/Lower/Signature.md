@@ -50,6 +50,8 @@ No host exceptions, semantic rechecking, global mutable state, or backend emissi
 
 ## Grill Log
 
+- **Q:** Why memoize by canonical name? **A:** Two modules may each declare a function of one name; the scheme itself is still read by bare name from the function's own module's facts (#539).
+
 - **Q:** Why extract this responsibility? **A:** State ownership and signature admission are stable boundaries independent of mutually recursive expression/block traversal. Each remains reviewable below 500 lines. _Rejected:_ an oversized body module or a circular expression split.
 - **Q:** Can refactoring alter accepted semantics? **A:** No; only explicit corrections preventing invalid Core returns and Result erasure are permitted. Signature refusals and scope resolution retain their source provenance. _Rejected:_ backend inference or approximation.
 

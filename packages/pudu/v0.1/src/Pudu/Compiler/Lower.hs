@@ -13,21 +13,26 @@
 -}
 module Pudu.Compiler.Lower
   ( LowerResult (..)
+  , NativeModule (..)
+  , lowerModule
   , lowerProgram
+  , programNativeModules
   ) where
 
-import Data.List (sortOn)
+import Data.List (find, sortOn)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
 import qualified Data.Map.Strict as Map
 import Pudu.Compiler.Lower.Layout (moduleLayouts)
-import Pudu.Compiler.Lower.Types (LowerTypes, withShapes)
+import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Lower.Types (LowerTypes, emptyTypes, nativeTypes, withShapes)
+import Pudu.Compiler.Program (ProgramResult (..), rootCompileResult)
 import Pudu.Type (declaredRecords, declaredSums)
 import Pudu.Type.Value (NominalId (..))
 import Pudu.Compiler.Lower.Body (lowerEntryBody, lowerFunctionBody)
 import Pudu.Compiler.Lower.State
-  ( CoreSignature (..), LowerContext (..), LowerState (..), emptyContext, startFunction )
+  ( CoreSignature (..), LowerContext (..), LowerState (..), ModuleScope (..), emptyContext, inModule, startFunction )
 import Pudu.Compiler.Lower.Signature (ensureSignature)
 import Pudu.Core
 import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
@@ -36,9 +41,11 @@ import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Function (..)
   , Located (..)
+  , Import (..)
   , Module (..)
   , moduleNameText
   )
+import Pudu.Frontend.Syntax.Name (moduleQualifier)
 
 {-| @Compiler.Lower.Result — the lowered module, or every refusal. A refusal
     never coexists with a module: a program lowers or it does not. -}
@@ -47,18 +54,52 @@ data LowerResult
   | LowerRefused ![Diagnostic]
   deriving stock (Eq, Show)
 
+{-| A module of the program as native lowering reads it: its name, its
+    checked syntax and its checked facts. -}
+data NativeModule = NativeModule
+  { nativeModuleName :: !Text
+  , nativeModuleSyntax :: !Module
+  , nativeModuleTypes :: !(Maybe LowerTypes)
+  }
+
+{-| Every module of a compiled program as native lowering reads it, the root
+    first and the rest in the order the program was compiled; nothing when the
+    root produced no module. -}
+programNativeModules :: ProgramResult -> Maybe [NativeModule]
+programNativeModules program = do
+  rootResult <- rootCompileResult program
+  parsed <- compileModule rootResult
+  pure $
+    native (moduleNameText (locatedValue (moduleName parsed))) parsed rootResult
+      : [ native (moduleNameText name) syntax result
+        | name <- programOrder program
+        , Just name /= programRoot program
+        , Just result <- [Map.lookup name (programModules program)]
+        , Just syntax <- [compileModule result]
+        ]
+ where
+  native name syntax result = NativeModule name syntax (nativeTypes (compileTypes result) (compileSchemes result))
+
+{-| Lower a program of one module. -}
+lowerModule :: Text -> Maybe LowerTypes -> Module -> LowerResult
+lowerModule entryName types parsed =
+  lowerProgram entryName [NativeModule (moduleNameText (locatedValue (moduleName parsed))) parsed types]
+
 {-| Lower the root module's entry function and every function reachable from
-    it. -}
-lowerProgram :: Text -> Maybe LowerTypes -> Module -> LowerResult
-lowerProgram _ Nothing parsed =
-  LowerRefused [nativeRefusal (moduleSpan parsed) "missing solved native type facts"]
-lowerProgram entryName (Just checked) parsed
-  | not (null (moduleImports parsed)) =
-      LowerRefused [nativeRefusal (moduleSpan parsed) "imports"]
+    it, in whichever module each is declared. The root comes first. -}
+lowerProgram :: Text -> [NativeModule] -> LowerResult
+lowerProgram _ [] = LowerRefused []
+lowerProgram entryName programModules@(rootModule : _)
+  | Just missing <- find (null . nativeModuleTypes) programModules =
+      LowerRefused [nativeRefusal (moduleSpan (nativeModuleSyntax missing)) "missing solved native type facts"]
   | otherwise = case findEntry of
       Left refusal -> LowerRefused [refusal]
       Right entry -> settle (runWorklist entry)
   where
+    parsed = nativeModuleSyntax rootModule
+    rootName = nativeModuleName rootModule
+    entryKey = rootName <> "." <> entryName
+
     findEntry = case entryFunctions of
       function : _ -> Right function
       [] -> Left firstDeclarationRefusal
@@ -77,23 +118,50 @@ lowerProgram entryName (Just checked) parsed
       Located declarationSpan _ : _ -> nativeRefusal declarationSpan "this declaration"
       [] -> nativeRefusal (locatedSpan (moduleName parsed)) "programs without a main function"
 
-    table =
+    functionsOf native =
       [ (locatedValue (functionName function), Located (locatedSpan declaration) function)
-      | declaration@(Located _ (FunctionDeclaration function)) <- moduleDeclarations parsed
+      | declaration@(Located _ (FunctionDeclaration function)) <- moduleDeclarations (nativeModuleSyntax native)
       ]
 
-    -- The root module's own records and sums, plus the built-in sums; imports
-    -- are refused above.
-    root identity = nominalModule identity == Just (locatedValue (moduleName parsed))
-    types = withShapes
-      (Map.filterWithKey (\identity _ -> root identity) (declaredRecords parsed))
-      (Map.filterWithKey (\identity _ -> root identity || nominalModule identity == Nothing) (declaredSums parsed))
-      checked
+    table =
+      [ (nativeModuleName native <> "." <> name, (nativeModuleName native, function))
+      | native <- programModules
+      , (name, function) <- functionsOf native
+      ]
+
+    -- Each module's own records and sums, and the built-in sums once; a type
+    -- is named by its canonical identity, so modules' types never meet.
+    owns native identity = nominalModule identity == Just (locatedValue (moduleName (nativeModuleSyntax native)))
+    records = Map.unions
+      [ Map.filterWithKey (\identity _ -> owns native identity) (declaredRecords (nativeModuleSyntax native))
+      | native <- programModules ]
+    sums = Map.unions
+      [ Map.filterWithKey (\identity _ -> owns native identity || nominalModule identity == Nothing)
+          (declaredSums (nativeModuleSyntax native))
+      | native <- programModules ]
+
+    scopes = Map.fromList
+      [ ( nativeModuleName native
+        , ModuleScope
+            { scopeTypes = maybe emptyTypes (withShapes records sums) (nativeModuleTypes native)
+            , scopeFunctions = Set.fromList (map fst (functionsOf native))
+            , scopeSelected = Map.fromList
+                [ (locatedValue item, moduleNameText (locatedValue (importModule value)))
+                | Located _ value <- moduleImports (nativeModuleSyntax native)
+                , item <- importItems value ]
+            , scopeQualifiers = Map.fromList
+                [ ( maybe (moduleQualifier (locatedValue (importModule value))) locatedValue (importAlias value)
+                  , moduleNameText (locatedValue (importModule value)) )
+                | Located _ value <- moduleImports (nativeModuleSyntax native)
+                , null (importItems value) ]
+            }
+        )
+      | native <- programModules ]
 
     runWorklist entry =
       let initial =
             LowerState
-              { lowerContext = emptyContext entryName types table
+              { lowerContext = emptyContext rootName entryKey scopes table
               , lowerNextLoop = 0
               , lowerLoops = []
               , lowerNextLocal = 0
@@ -101,8 +169,8 @@ lowerProgram entryName (Just checked) parsed
               , lowerFunctionResult = Nothing
               }
           (afterEntry, entryFunction) = lowerEntryBody entry (startFunction initial [] Nothing)
-          marked = markVisited afterEntry entryName
-       in (drain marked, entryFunction)
+          marked = markVisited afterEntry entryKey
+       in (drain marked, (\function -> function{coreFunctionName = entryKey}) <$> entryFunction)
 
     drain state = case contextQueue (lowerContext state) of
       [] -> state
@@ -113,8 +181,8 @@ lowerProgram entryName (Just checked) parsed
       | Set.member name (contextVisited (lowerContext state)) = state
       | otherwise = case lookup name table of
           Nothing -> state
-          Just function ->
-            case ensureSignature function (startFunction state [] Nothing) of
+          Just (owner, function) ->
+            case ensureSignature name function (startFunction (inModule owner state) [] Nothing) of
               (afterSignature, Nothing) -> markVisited afterSignature name
               (afterSignature, Just signature) ->
                 case lowerFunctionBody
@@ -127,7 +195,7 @@ lowerProgram entryName (Just checked) parsed
                       final
                         { lowerContext =
                             (lowerContext final)
-                              { contextFunctions = coreFunction : contextFunctions (lowerContext final)
+                              { contextFunctions = coreFunction{coreFunctionName = name} : contextFunctions (lowerContext final)
                               }
                         }
                       name
@@ -147,9 +215,9 @@ lowerProgram entryName (Just checked) parsed
            in Lowered
             CoreModule
               { coreModuleName = moduleNameText (locatedValue (moduleName parsed))
-              , coreModuleEntry = entryName
+              , coreModuleEntry = entryKey
               , coreModuleFunctions = functions
-              , coreModuleLayouts = moduleLayouts types functions
+              , coreModuleLayouts = moduleLayouts (maybe emptyTypes scopeTypes (Map.lookup rootName scopes)) functions
               }
         Nothing -> LowerRefused [nativeRefusal (moduleSpan parsed) "this program"]
       refusals -> LowerRefused refusals

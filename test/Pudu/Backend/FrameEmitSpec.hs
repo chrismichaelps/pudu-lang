@@ -17,7 +17,7 @@ import Pudu.Backend.Runtime (RuntimePart (..), runtimeParts)
 import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Compiler.Frame (lowerFrames)
-import Pudu.Compiler.Lower (LowerResult (..), lowerProgram)
+import Pudu.Compiler.Lower (LowerResult (..), lowerModule)
 import Pudu.Compiler.Lower.Types (nativeTypes)
 import Pudu.Comptime.Limits (callDepthLimit)
 import Pudu.Core (CoreType (..))
@@ -77,7 +77,7 @@ testBodies = do
       source <- newSource (SourceName "Main.pudu") text
       checked <- runCompile source
       case (hasErrors (compileDiagnostics checked), compileModule checked) of
-        (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+        (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
           Lowered core -> case lowerFrames core of
             Left failure -> pure (counterexample (show failure) (False === True))
             Right frames -> case emitFrameBodies (emptyEmitState [source]) frames of
@@ -106,7 +106,7 @@ testCalls = do
     "module Main\nfn one() -> Int { 1 }\nfn sum(a: Int, b: Int) -> Int { a + b }\nfn main() -> Int { sum(one(), one()) }\n"
   checked <- runCompile source
   pure $ case (hasErrors (compileDiagnostics checked), compileModule checked) of
-    (False, Just parsed) -> case lowerProgram "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
+    (False, Just parsed) -> case lowerModule "main" (nativeTypes (compileTypes checked) (compileSchemes checked)) parsed of
       Lowered core -> case lowerFrames core >>= emitFrameBodies (emptyEmitState [source]) of
         Right (emitted, _) ->
           let output = reverse (emitOutput emitted)

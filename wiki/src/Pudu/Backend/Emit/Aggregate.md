@@ -34,6 +34,8 @@ order; frame metadata and `pudu_drop_cell`/`pudu_retain_cell` use them.
 
 ## Grill Log
 
+- **Q:** How does a canonical key become a C identifier? **A:** `mangleKey` writes each segment after its length, so `A.B_C` and `A_B.C` stay distinct; rendering uses the display name (#539).
+
 - **Q:** How is a sum emitted? **A:** As a `pudu_box` whose first cell is the variant tag, then that variant's payload. Each concrete sum gets make, drop, show and equal helpers, written only when used, the same way tuples and records do (#525).
 
 - **Q:** Why name helpers by a mangled type rather than an index? **A:** The

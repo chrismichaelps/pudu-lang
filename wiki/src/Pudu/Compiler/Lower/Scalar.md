@@ -61,6 +61,8 @@ Consumed by [[Compiler Lower Body]]; registered in [[Pudu Cabal Manifest]].
 
 ## Grill Log
 
+- **Q:** Which record name appears in a run-time message? **A:** Its display name, as the evaluator writes it (#539).
+
 - **Q:** How does an operator failure on a sum name its operands? **A:** By the variant each holds at run time, as the evaluator's `valueKind` does. `namedFailure` runs each operand once into a temporary, then builds the shared message with each sum's kind read by `CoreVariantName` (#525).
 
 ## Referenced by

@@ -80,6 +80,8 @@ Consumed by [[Compiler Lower]], [[Compiler Lower State]],
 
 ## Grill Log
 
+- **Q:** How does Core name a record or sum? **A:** By canonical key (`Main.Point`; a built-in sum keeps its bare name), and `layoutOf` finds the layout by that key (#539).
+
 - **Q:** What layout does a sum's unconstrained type argument get? **A:** Unit. A variable checking left unconstrained names a payload no value holds, such as the error of `Ok(1)` that is never `Err`, so the representation is unobservable. Elsewhere an unresolved type still refuses (#525).
 
 - **Q:** Reconstruct private signatures from annotations? **A:** No; consume final schemes, which already include inference and aliases. Rejected: a second native inference pass.
