@@ -67,3 +67,5 @@ aliases: [Backend Module Map]
 - [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] — exact decimal text (#509).
 
 - [[Native Floating Values]] · [[Native Floating Value Tests]] — exact bit transport and arithmetic (#510).
+
+- [[Native Floating Runtime]] · [[Native Runtime Dependencies]] · [[Native Floating Runtime Tests]] — actual catalogue integration (#511).

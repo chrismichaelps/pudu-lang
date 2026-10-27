@@ -257,3 +257,5 @@ tags: [moc, module]
 - [[Native Binary64 Formatter]] · [[Native Binary64 Formatter Tests]] · [[Native Floating Notices]].
 
 - [[Native Floating Values]] · [[Native Floating Value Tests]] — raw floating arithmetic (#510).
+
+- [[Native Floating Runtime]] · [[Native Runtime Dependencies]] · [[Native Floating Runtime Tests]] — selected floating output (#511).

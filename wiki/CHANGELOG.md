@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-10-18 — Selected floating runtime and output (#511)
+
+- [[Native Floating Runtime]] publishes exact buffered floating output; [[Native Runtime Dependencies]] serves both runtime selectors while preserving integer compatibility. [[Native Floating Runtime Tests]] passes 1,042 raw output encodings, 19 minimal roots, six counted IO outcomes and 18 closed-pipe cases under Clang/GCC/ASan/UBSan. All 20 clean gates/689 groups pass. Source admission and the Core/frame bridge remain open; progress stays 4/14 (28%).
+
 ## 2026-10-18 — Floating values and arithmetic (#510)
 
 - [[Native Floating Values]] preserves raw transport, per-operation rounding, unordered predicates and target NaN propagation without source admission. [[Native Floating Value Tests]] exercises 54,344 operand/width rows, all 15 helper roots and unsafe-policy/ABI refusals. Locked runtime normalization avoids a reproduced GHC constant-folding discrepancy; a NaN-only noncommutative path repairs observed Clang/GCC payload reordering. Clang/GCC 15 at -O2/-O0 and ASan/UBSan pass, as do all 20 clean gates/685 groups and 351 strict frame translations; completed-area progress stays 4/14 (28%).

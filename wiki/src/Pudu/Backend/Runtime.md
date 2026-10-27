@@ -63,6 +63,7 @@ pudu_int pudu_rem(pudu_int, pudu_int, const pudu_site *zero);
 pudu_int pudu_neg(pudu_int, pudu_int_kind, const pudu_site *);
 void pudu_print_int(pudu_int);
 void pudu_print_bool(int);
+void pudu_print_float(uint64_t);
 void pudu_print_str(const char *bytes, size_t length);
 int pudu_status(pudu_int);
 ```
@@ -125,9 +126,9 @@ int pudu_status(pudu_int);
 Consumed by [[Backend Emit]], which selects and concatenates the runtime parts
 into every generated translation unit. It depends on nothing in Pudu: the C
 side includes only `<inttypes.h>`, `<stdint.h>`, `<signal.h>`, `<stdio.h>`,
-`<stdlib.h>`, `<string.h>`, and
+`<stdlib.h>`, `<string.h>`, selected `<float.h>`/`<limits.h>`, and
 `<unistd.h>` or `<io.h>` for `isatty`. Its Haskell side imports `Data.Text`
-and [[Compile Time Limits]] plus [[Backend Runtime Integer]] — pure constants, no frontend, semantic, or
+and [[Compile Time Limits]] plus [[Backend Runtime Integer]] and [[Native Floating Runtime]] — pure constants, no frontend, semantic, or
 evaluator module — so the depth bound is the evaluator's own.
 
 ## Grill Log
@@ -219,3 +220,9 @@ transferred to a surviving error owner before unwinding frames.
 ## Wide frame bridge (#506)
 
 Revision 7 records the optional wide frame ABI described by [[Native Wide Frame Bridge]]. Preserve the revision-6 process IO policy. Resolved Grill Log: changing frame payload representation requires an artifact revision; helper-only prerequisites did not admit source kinds.
+
+## Floating catalogue integration (#511)
+
+Append [[Native Floating Runtime]] parts after integer parts; retain existing
+printer/process behavior and revision 7. Resolved Grill Log: additive helper
+publication precedes Core/frame/source admission and no represented ABI changes.

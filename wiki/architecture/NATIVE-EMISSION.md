@@ -186,3 +186,8 @@ source; typed arithmetic and Core/frame/source integration remain required.
 54,344 raw-result/predicate rows (#510, all 20 clean gates/685 groups pass). It remains a helper
 prerequisite: Core/frame/source admission, entry reporting, target conformance
 and full numeric-family coverage remain required. Progress stays 4/14 (28%).
+
+[[Native Floating Runtime]] connects actual runtime catalogue/dependency selection
+and exact output (#511, all 20 clean gates/689 groups pass). Closed-pipe and counted IO
+checks pass both compilers/sanitizers. Core/frame/source transport remains open;
+this prerequisite does not change the completed-area count.

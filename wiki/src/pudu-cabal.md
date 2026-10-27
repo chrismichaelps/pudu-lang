@@ -400,3 +400,10 @@ Register [[Native Floating Values]] and [[Native Floating Value Tests]] in their
 production/test components using existing dependencies. Resolved Grill Log:
 raw-bit arithmetic evidence precedes source admission; runtime selection and
 ABI revision remain unchanged in this prerequisite.
+
+## Floating runtime selection (#511)
+
+Register [[Native Floating Runtime]], [[Native Runtime Dependencies]] and
+[[Native Floating Runtime Tests]] in the appropriate components with existing
+dependencies. Resolved Grill Log: execute actual catalogue/output evidence
+without changing source admission or the represented runtime ABI.

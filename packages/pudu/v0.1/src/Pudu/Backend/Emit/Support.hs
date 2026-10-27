@@ -11,7 +11,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Numeric (showHex)
-import Pudu.Backend.Runtime.Integer (integerRuntimeDependencies)
+import Pudu.Backend.Runtime.Dependencies (runtimeDependencies)
 import Pudu.Backend.Emit.State (textOfInt)
 import Pudu.Core
 import Pudu.IntegerLiteral (IntegerKind (..), integerKindBounds, integerKindWidth, integerKindSigned)
@@ -36,7 +36,7 @@ closeNeeds initial = foldl' visit Set.empty (Set.toList initial)
  where
   visit found part
     | Set.member part found = found
-    | otherwise = foldl' visit (Set.insert part found) (integerRuntimeDependencies part)
+    | otherwise = foldl' visit (Set.insert part found) (runtimeDependencies part)
 
 needFunction :: Set.Set Text -> CoreFunction -> Set.Set Text
 needFunction needs function = needBlock typed (coreFunctionBody function)

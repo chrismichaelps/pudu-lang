@@ -42,3 +42,9 @@ source execution after ignored print errors. [[Native Closed Pipe Semantics]].
 ## Wide frame bridge (#506)
 
 Export frameUsesWideCells :: FrameModule -> Bool, inspecting every function result, parameter and slot type. Include wide_value and pass that flag to frameTypes when needed. Wide entry results select wide_status and the wide member; startup policy remains unchanged. Resolved Grill Log: literal-only and unused-wide slots still require ABI types, while narrow programs retain their layout. [[Native Wide Frame Bridge]].
+
+## General runtime prerequisites (#511)
+
+Use [[Native Runtime Dependencies]] in the existing visited-set traversal.
+Frame layout, entry behavior and selected roots remain unchanged. Resolved Grill
+Log: share the production dependency contract without premature float admission.

@@ -81,3 +81,9 @@ parity or authorize resetting the process floating environment.
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Module Map]] · [[Native Floating Value Delivery]]
+
+## Selected target headers (#511)
+
+float_target owns float.h and limits.h includes before its assertions. Runtime
+selection supplies other standard prelude headers. Resolved Grill Log: selecting
+arithmetic must be self-contained; formatting raw bits needs no host arithmetic.
